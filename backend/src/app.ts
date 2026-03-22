@@ -1,8 +1,18 @@
 import express from 'express';
+import cors, { CorsOptions } from 'cors';
 import actionsRouter from './api/routes/actions.router';
 
 const app = express();
 
+const corsOptions: CorsOptions = {
+  origin: '*',
+  credentials: false,
+  methods: ['*'],
+  allowedHeaders: ['*'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

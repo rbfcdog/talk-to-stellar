@@ -10,7 +10,7 @@ services:
     plan: starter
     autoDeploy: true
     envVars:
-      - key: PYTHON_UNBUOONED
+      - key: PYTHONUNBUFFERED
         value: 1
       - key: OPENAI_API_KEY
         sync: false
@@ -18,6 +18,8 @@ services:
         value: https://your-node-backend.onrender.com
       - key: INTERNAL_API_SECRET
         sync: false
+      - key: AGENT_CORS_ORIGINS
+        value: https://your-frontend.vercel.app,http://localhost:3000
       - key: STELLAR_PUBLIC_KEY
         value: GAW7MQA7YLQLJZF7GD6M7JZWQCB4EGPPC46YSZAXQ7Z5LKLKNYFFOIGU
       - key: PHONE_NUMBER
