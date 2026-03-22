@@ -1,8 +1,0 @@
-{
-  "message": "Adicionando Bob aos meus contatos com a chave pública GABCD1234EFGH5678",
-  "task": "add_contact",
-  "params": {
-    "contactName": "Bob",
-    "publicKey": "GABCD1234EFGH5678"
-  }
-}

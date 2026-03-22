@@ -82,7 +82,7 @@ export function CTASection() {
                   Use blockchain através do app de mensagens mais popular do Brasil. Interface familiar e intuitiva.
                 </p>
                 {/* ▼▼▼ AQUI ESTÁ O LINK 1 ▼▼▼ */}
-                <a href="https://hackmeridian-chat-stellar.vercel.app/" target="_blank" rel="noopener noreferrer">
+                <a href="https://localhost://3001/" target="_blank" rel="noopener noreferrer">
                   <Button className="w-full bg-gray-800 hover:bg-gray-900 text-white transition-all duration-300 hover:scale-105 active:scale-95 rounded-full py-3 cursor-pointer">
                     Ir para o Chat
                   </Button>

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: talktostellar-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "3001"
+      - key: STELLAR_NETWORK
+        value: testnet
+      - key: DATABASE_URL
+        sync: false
+      - key: INTERNAL_API_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false

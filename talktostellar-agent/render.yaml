@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: talktostellar-agent
+    env: python
+    pythonVersion: 3.11
+    buildCommand: >
+      curl -LsSf https://astral.sh/uv/install.sh | sh &&
+      ~/.cargo/bin/uv sync --frozen
+    startCommand: ~/.cargo/bin/uv run main.py
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_UNBUOONED
+        value: 1
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: NODE_API_BASE_URL
+        value: https://your-node-backend.onrender.com
+      - key: INTERNAL_API_SECRET
+        sync: false
+      - key: STELLAR_PUBLIC_KEY
+        value: GAW7MQA7YLQLJZF7GD6M7JZWQCB4EGPPC46YSZAXQ7Z5LKLKNYFFOIGU
+      - key: PHONE_NUMBER
+        value: "100000000"

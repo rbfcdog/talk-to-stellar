@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "nodeVersion": "18.x",
+  "env": {
+    "NEXT_PUBLIC_PYTHON_API_URL": {
+      "description": "Python Agent API URL",
+      "example": "https://your-agent.onrender.com/api/actions/query"
+    }
+  }
+}

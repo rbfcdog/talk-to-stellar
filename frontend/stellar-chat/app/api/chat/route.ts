@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 
 // Pega a URL da sua API Python a partir de uma variável de ambiente
-const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:5000/agent";
+const PYTHON_API_URL = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000/api/actions/query";
 
 export async function POST(req: Request) {
   try {

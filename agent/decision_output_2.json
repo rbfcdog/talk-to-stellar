@@ -1,7 +1,0 @@
-{
-  "message": "Buscando informações sobre a transação com a chave pública fornecida.",
-  "task": "lookup_contact",
-  "params": {
-    "contactName": "SDIUUO4N7SSV5NJRL2DAZ2JCLOJ6Y2B3UQKWLARVADJLQU5R5KSBKSLR"
-  }
-}
