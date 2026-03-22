@@ -61,11 +61,15 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+          session_id: `web-${chatId}`,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Falha na resposta da API');
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || 'Falha na resposta da API');
       }
 
       const data = await response.json();
@@ -73,7 +77,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       const botMessage: Message = {
         id: `bot-${Date.now()}`,
         role: 'assistant',
-        content: data.content,
+        content: data.content || 'No response content returned by the agent.',
         createdAt: new Date(),
       };
 

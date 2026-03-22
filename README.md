@@ -95,8 +95,6 @@ This monorepo has three main applications:
 	- Purpose: business logic, Stellar operations, data access
 	- Runtime: Node.js + TypeScript
 
-There is also a landing page app in [frontend/landing-page](frontend/landing-page).
-
 ## Current architecture
 
 High-level request flow:
@@ -168,11 +166,12 @@ Default URL: `http://localhost:3000`
 
 Use:
 
-- `NEXT_PUBLIC_PYTHON_API_URL` → points to agent query endpoint
+- `PYTHON_API_URL` (preferred) → server-side API URL used by the Next.js route
+- `NEXT_PUBLIC_PYTHON_API_URL` (optional fallback)
 
 Local example:
 
-- `NEXT_PUBLIC_PYTHON_API_URL=http://localhost:8000/api/actions/query`
+- `PYTHON_API_URL=http://localhost:8000/api/actions/query`
 
 ### Agent ([talktostellar-agent](talktostellar-agent))
 
@@ -214,8 +213,7 @@ hackmeridian/
 ├── backend/                 # Node.js/Express/Stellar backend
 ├── talktostellar-agent/     # Python FastAPI + LangChain agent
 ├── frontend/
-│   ├── stellar-chat/        # Main chat frontend
-│   └── landing-page/        # Marketing landing page
+│   └── stellar-chat/        # Unified frontend (landing + chat)
 ├── stellarBots/             # Discord/Telegram bot adapters
 ├── BUSINESS_OVERVIEW.md
 ├── TECHNICAL_OVERVIEW.md
@@ -224,7 +222,6 @@ hackmeridian/
 
 ## Deprecated/legacy note
 
-The old [agent](agent) folder is considered legacy.
 The active agent implementation is [talktostellar-agent](talktostellar-agent).
 
 ## Useful endpoints

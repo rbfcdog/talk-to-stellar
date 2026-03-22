@@ -1,48 +1,50 @@
-// src/app/api/chat/route.ts
-
 import { NextResponse } from "next/server";
 
-// Pega a URL da sua API Python a partir de uma variável de ambiente
-const PYTHON_API_URL = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000/api/actions/query";
+const PYTHON_API_URL =
+  process.env.PYTHON_API_URL ||
+  process.env.NEXT_PUBLIC_PYTHON_API_URL ||
+  "http://localhost:8000/api/actions/query";
 
 export async function POST(req: Request) {
   try {
-    // 1. Pega a mensagem que o frontend enviou
-    const { messages } = await req.json();
-    const userMessage = messages[messages.length - 1]; // Pega a última mensagem (a do usuário)
+    const { messages, session_id } = await req.json();
+    const userMessage = messages?.[messages.length - 1];
 
-    // 2. Prepara os dados para enviar para a API Python (no formato que ela espera)
+    if (!userMessage?.content) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
     const dataToSend = {
-      query: userMessage.content, // Corrigido de 'message_text' para 'query'
-      session_id: "web-session-illustrative" // Corrigido e usando um ID fixo ilustrativo
+      query: userMessage.content,
+      session_id: session_id || "web-session-default",
     };
 
-    // 3. Repassa a requisição para a sua API Python usando fetch
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
     const pythonApiResponse = await fetch(PYTHON_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dataToSend),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!pythonApiResponse.ok) {
-      // Se a API Python der erro, repassa o erro para o frontend
       const errorText = await pythonApiResponse.text();
       throw new Error(`Python API Error: ${errorText}`);
     }
 
-    // 4. Pega a resposta da API Python
     const pythonApiData = await pythonApiResponse.json();
+    const botResponse =
+      pythonApiData?.result?.message ||
+      pythonApiData?.message ||
+      "No valid response received from the agent API.";
 
-    // 5. Envia a resposta de volta para o frontend
-    // O ideal é que sua API Python retorne um JSON com uma chave "message"
-    // Ex: {"result": {"message": "Olá! Processado."}}
-    // Vamos adaptar para ler a resposta corretamente.
-    const botResponse = pythonApiData.result?.message || "Não recebi uma resposta válida da API.";
-    
     return NextResponse.json({ content: botResponse });
-
   } catch (error) {
-    console.error("Next.js API proxy error:", error);
-    return new Response("Internal Server Error", { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("Next.js API proxy error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
