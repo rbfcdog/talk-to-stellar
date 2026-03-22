@@ -1,8 +1,7 @@
 """Core agent implementation for TalkToStellar."""
 
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import create_agent
 from typing import Optional, Dict, Any
 import re
 
@@ -265,28 +264,46 @@ For payment transactions:
 - Once secret key is provided, call sign_and_submit_xdr
 
 Always respond in Portuguese and be helpful."""
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", message),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        agent = create_tool_calling_agent(self.llm, self.tools, prompt)
-        agent_executor = AgentExecutor(
-            agent=agent,
+
+        agent = create_agent(
+            model=self.llm,
             tools=self.tools,
-            verbose=self.config.verbose,
-            max_iterations=self.config.max_iterations
+            system_prompt=system_prompt,
         )
-        
+
         try:
-            result = agent_executor.invoke({
-                "input": message,
-                "agent_scratchpad": []
+            result = agent.invoke({
+                "messages": [{"role": "user", "content": message}],
             })
-            
-            output = result.get("output", "Ação realizada com sucesso.")
+
+            output = "Ação realizada com sucesso."
+            if isinstance(result, dict):
+                if isinstance(result.get("output"), str) and result.get("output"):
+                    output = result["output"]
+                else:
+                    messages = result.get("messages")
+                    if isinstance(messages, list) and messages:
+                        last_message = messages[-1]
+
+                        # LangChain message objects
+                        content = getattr(last_message, "content", None)
+                        if isinstance(content, str) and content:
+                            output = content
+                        elif isinstance(content, list):
+                            text_parts = [
+                                chunk.get("text", "")
+                                for chunk in content
+                                if isinstance(chunk, dict) and chunk.get("type") == "text"
+                            ]
+                            joined = "\n".join(part for part in text_parts if part)
+                            if joined:
+                                output = joined
+
+                        # Fallback for dict-style messages
+                        if output == "Ação realizada com sucesso." and isinstance(last_message, dict):
+                            dict_content = last_message.get("content")
+                            if isinstance(dict_content, str) and dict_content:
+                                output = dict_content
             
             # Handle payment intent specially
             if intent == IntentType.PAYMENT and "build_payment_xdr" in str(output):
