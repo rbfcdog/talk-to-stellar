@@ -56,38 +56,32 @@ class SimpleAgent:
     def run(self, query: QueryRequest, session_id: str = "default_session") -> AgentResponse:
         """
         Main agent loop that:
-        1. Detects user intent
-        2. Calls appropriate tools via agent
-        3. Returns conversational response
+        1. Auto-creates session if needed
+        2. Detects user intent
+        3. Calls appropriate tools via agent
+        4. Returns conversational response
         """
         user_message = query.query
+        
+        # Auto-create session if it doesn't exist
+        session_data = SESSION_STORAGE.get(session_id)
+        if not session_data:
+            session_data = SessionData(
+                session_token="auto_session_token",
+                user_id="auto_user_id",
+                email="auto_user@app.local"
+            )
+            SESSION_STORAGE[session_id] = session_data
         
         # Check if user is providing secret key for pending payment
         secret_key = self._extract_secret_key(user_message)
         if secret_key and self.pending_payment_session.get(session_id):
             return self._complete_payment(session_id, secret_key)
         
-        # Check authentication for protected operations
-        session_data = SESSION_STORAGE.get(session_id)
-        intent = self._detect_intent(user_message, bool(session_data))
+        # Detect intent and run agent directly
+        intent = self._detect_intent(user_message, True)
         
-        # Public operations (no auth needed)
-        if intent == IntentType.LOGIN:
-            return self._handle_login(user_message, session_id)
-        
-        if intent == IntentType.ONBOARD:
-            return self._handle_onboard(user_message)
-        
-        # Protected operations (auth required)
-        if not session_data or not session_data.session_token:
-            return AgentResponse(
-                message="Você precisa fazer login primeiro. Por favor, envie seu email.",
-                task=IntentType.LOGIN.value,
-                params={"requires_login": True},
-                success=False
-            )
-        
-        # Run agent for protected operations
+        # Let LLM handle all intents directly
         return self._run_agent(user_message, session_id, session_data.session_token, intent)
 
     def _detect_intent(self, message: str, authenticated: bool) -> IntentType:
