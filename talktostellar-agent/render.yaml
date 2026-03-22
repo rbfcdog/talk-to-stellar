@@ -3,10 +3,8 @@ services:
     name: talktostellar-agent
     env: python
     pythonVersion: 3.11
-    buildCommand: >
-      curl -LsSf https://astral.sh/uv/install.sh | sh &&
-      ~/.cargo/bin/uv sync --frozen
-    startCommand: ~/.cargo/bin/uv run main.py
+    buildCommand: pip install --upgrade pip && pip install .
+    startCommand: python main.py
     plan: starter
     autoDeploy: true
     envVars:
