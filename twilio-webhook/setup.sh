@@ -1,0 +1,40 @@
+#!/bin/bash
+# Quick setup script for Twilio Webhook Service
+
+echo "🚀 Setting up Twilio Webhook Service"
+echo ""
+
+# Step 1: Install dependencies
+echo "📦 Installing dependencies..."
+npm install
+
+echo ""
+echo "✅ Installation complete!"
+echo ""
+echo "📋 Next steps:"
+echo "1. Copy .env.example to .env:"
+echo "   cp .env.example .env"
+echo ""
+echo "2. Add your Twilio credentials to .env:"
+echo "   TWILIO_ACCOUNT_SID=your_sid"
+echo "   TWILIO_AUTH_TOKEN=your_token"
+echo ""
+echo "3. Configure API URLs in .env:"
+echo "   AGENT_API_URL=http://localhost:8000/api/actions/query"
+echo "   BACKEND_API_URL=http://localhost:3000"
+echo ""
+echo "4. Start the service:"
+echo "   npm run dev"
+echo ""
+echo "5. Get your public URL (for local testing):"
+echo "   npm install -g ngrok"
+echo "   ngrok http 3001"
+echo ""
+echo "6. Configure Twilio webhook URL:"
+echo "   https://your-ngrok-url/message"
+echo ""
+echo "7. Start other services:"
+echo "   - Backend: cd ../backend && npm run dev"
+echo "   - Agent: cd ../talktostellar-agent && python main.py"
+echo ""
+echo "📚 For more info, see: README.md"

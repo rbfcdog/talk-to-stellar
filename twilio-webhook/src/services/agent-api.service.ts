@@ -1,17 +1,17 @@
 import axios, { AxiosError } from 'axios';
+import config from '../config';
 import { AgentQueryRequest, AgentResponse, TwilioMessage } from '../types';
 
 /**
- * Service to communicate with TalkToStellar agent
+ * Service to communicate with TalkToStellar agent API
  */
-export class TwilioAgentService {
-  private pythonApiUrl: string;
-  private pythonApiTimeout: number;
+export class AgentApiService {
+  private agentApiUrl: string;
+  private agentApiTimeout: number;
 
   constructor() {
-    this.pythonApiUrl =
-      process.env.PYTHON_API_URL || 'http://localhost:8000/api/actions/query';
-    this.pythonApiTimeout = parseInt(process.env.PYTHON_API_TIMEOUT || '30000', 10);
+    this.agentApiUrl = config.agentApiUrl;
+    this.agentApiTimeout = config.agentApiTimeout;
   }
 
   /**
@@ -30,33 +30,35 @@ export class TwilioAgentService {
         source: 'whatsapp-webhook',
       };
 
-      console.log('Sending to agent:', {
+      console.log('📨 Sending to agent:', {
         sessionId,
         query: twilioMessage.Body,
         from: twilioMessage.From,
+        agentUrl: this.agentApiUrl,
       });
 
       const response = await axios.post<AgentResponse>(
-        this.pythonApiUrl,
+        this.agentApiUrl,
         agentRequest,
         {
-          timeout: this.pythonApiTimeout,
+          timeout: this.agentApiTimeout,
           headers: {
             'Content-Type': 'application/json',
           },
         }
       );
 
-      console.log('Agent response received:', response.data);
+      console.log('✓ Agent response received:', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
       const errorMessage = axiosError.message || 'Unknown error';
       const errorData = axiosError.response?.data || {};
 
-      console.error('Agent communication error:', {
+      console.error('❌ Agent communication error:', {
         message: errorMessage,
         status: axiosError.response?.status,
+        url: this.agentApiUrl,
         data: errorData,
       });
 
@@ -72,7 +74,7 @@ export class TwilioAgentService {
   private generateSessionId(phoneNumber: string): string {
     // Remove + and format to remove special characters
     const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
-    return `whatsapp-${cleanNumber}-${process.env.NODE_ENV || 'dev'}`;
+    return `whatsapp-${cleanNumber}-${config.nodeEnv || 'dev'}`;
   }
 
   /**

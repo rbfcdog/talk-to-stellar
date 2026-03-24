@@ -1,7 +1,7 @@
 {
-  "name": "backend",
+  "name": "twilio-webhook",
   "version": "1.0.0",
-  "description": "Backend API para projeto Meridian com Stellar SDK",
+  "description": "Standalone Twilio WhatsApp webhook service",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
@@ -9,32 +9,25 @@
     "dev": "nodemon src/server.ts"
   },
   "keywords": [
-    "stellar",
-    "blockchain",
-    "api",
-    "typescript"
+    "twilio",
+    "whatsapp",
+    "webhook",
+    "stellar"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@stellar/stellar-sdk": "^14.1.1",
-    "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.12.2",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2",
-    "stellar-base": "^13.1.0",
-    "toml": "^3.0.0",
-    "zod": "^4.1.8"
+    "twilio": "^4.10.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.23",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.14",
     "nodemon": "^3.1.10",
-    "supabase": "^2.40.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }

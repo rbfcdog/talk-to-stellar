@@ -48,3 +48,13 @@ export interface WebhookSession {
   authenticated: boolean;
   userId?: string;
 }
+
+export interface ApiConfig {
+  agentApiUrl: string;
+  backendApiUrl: string;
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  agentApiTimeout: number;
+  port: number;
+  nodeEnv: string;
+}
