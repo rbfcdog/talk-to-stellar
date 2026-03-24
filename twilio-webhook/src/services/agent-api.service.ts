@@ -131,15 +131,18 @@ export class AgentApiService {
    * @returns Formatted message text
    */
   public formatResponseForTwilio(agentResponse: AgentResponse): string {
-    if (!agentResponse || !agentResponse.result) {
-      return 'I apologize, but I was unable to process your message.';
+    // Check for errors first
+    if (agentResponse?.error) {
+      return `Sorry, I encountered an error: ${agentResponse.error}`;
     }
 
-    const message = agentResponse.result.message || agentResponse.result.response || 'No response received';
-    
+    // Try to get message from result.message or top-level message
+    const message = agentResponse?.result?.message || agentResponse?.message || 'No response received from the agent.';
+
     // Ensure message is not too long for WhatsApp (WhatsApp has a 4096 character limit per message)
-    if (message.length > 4096) {
-      return message.substring(0, 4093) + '...';
+    const maxLength = 4096;
+    if (message.length > maxLength) {
+      return message.substring(0, maxLength - 3) + '...';
     }
 
     return message;
@@ -160,29 +163,5 @@ export class AgentApiService {
     }
 
     return content;
-  }
-
-  /**
-   * Format agent response for Twilio
-   * @param agentResponse - Response from agent
-   * @returns Formatted text message
-   */
-  public formatResponseForTwilio(agentResponse: AgentResponse): string {
-    if (agentResponse.error) {
-      return `Sorry, I encountered an error: ${agentResponse.error}`;
-    }
-
-    const message =
-      agentResponse.result?.message ||
-      agentResponse.message ||
-      'No response received from the agent.';
-
-    // Twilio has message length limits, truncate if needed
-    const maxLength = 1600;
-    if (message.length > maxLength) {
-      return message.substring(0, maxLength - 3) + '...';
-    }
-
-    return message;
   }
 }
