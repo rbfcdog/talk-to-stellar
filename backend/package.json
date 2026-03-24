@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "stellar-base": "^13.1.0",
     "toml": "^3.0.0",
+    "twilio": "^4.10.0",
     "zod": "^4.1.8"
   },
   "devDependencies": {

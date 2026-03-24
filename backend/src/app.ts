@@ -1,6 +1,7 @@
 import express from 'express';
 import cors, { CorsOptions } from 'cors';
 import actionsRouter from './api/routes/actions.router';
+import twilioRouter from './agent_webhook/routes/twilio.router';
 
 const app = express();
 
@@ -21,6 +22,9 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/actions', actionsRouter);
+
+// Twilio WhatsApp webhook endpoint
+app.use('/agent-webhook', twilioRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
