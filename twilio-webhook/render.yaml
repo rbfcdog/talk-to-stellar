@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: twilio-webhook
+    env: node
+    region: oregon
+    plan: free
+    
+    # Build the TypeScript
+    buildCommand: npm install --production=false && npm run build
+    
+    # Start the compiled app (must happen AFTER build)
+    startCommand: node dist/server.js
+    
+    # Environment Variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: AGENT_API_URL
+        value: http://talktostellar-agent.onrender.com/api/actions/query
+      - key: BACKEND_API_URL
+        value: http://backend.onrender.com
