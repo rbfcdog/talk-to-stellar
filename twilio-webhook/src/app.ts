@@ -13,9 +13,11 @@ const corsOptions = {
   allowedHeaders: ['*'],
 };
 
-// Middleware
+// Middleware - IMPORTANT: Order matters for Twilio signature validation  
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Parse the body
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

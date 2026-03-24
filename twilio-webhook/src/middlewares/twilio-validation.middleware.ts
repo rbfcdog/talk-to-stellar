@@ -24,19 +24,35 @@ export const validateTwilioSignature = (req: Request, res: Response, next: NextF
 
   const twilioSignature = req.headers['x-twilio-signature'] as string;
   const requestUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  const body = req.body as Record<string, unknown>;
 
-  // Twilio signature validation algorithm
-  const signature = generateTwilioSignature(requestUrl, req.body, twilioAuthToken);
+  // Debug logging
+  console.log('🔍 Signature Validation Debug:');
+  console.log(`   URL: ${requestUrl}`);
+  console.log(`   Host Header: ${req.get('host')}`);
+  console.log(`   Protocol: ${req.protocol}`);
+  console.log(`   Original URL: ${req.originalUrl}`);
+  console.log(`   Body Keys:`, Object.keys(body).sort());
+  console.log(`   Auth Token: ${twilioAuthToken.substring(0, 4)}...${twilioAuthToken.substring(twilioAuthToken.length - 4)}`);
+  console.log(`   Received Signature: ${twilioSignature}`);
+
+  // Generate signature from parsed body
+  const signature = generateTwilioSignature(requestUrl, body, twilioAuthToken);
+
+  console.log(`   Calculated Signature: ${signature}`);
+  console.log(`   Match: ${signature === twilioSignature ? '✓ YES' : '✗ NO'}`);
 
   if (signature !== twilioSignature) {
-    console.warn(
-      `⚠️  Invalid Twilio signature. Expected: ${signature}, Got: ${twilioSignature}`
-    );
+    console.warn(`⚠️  Invalid Twilio signature!`);
+    console.warn(`   The signature doesn't match. This usually means:`);
+    console.warn(`   1. TWILIO_AUTH_TOKEN is incorrect`);
+    console.warn(`   2. Request URL doesn't match (check protocol/host)`);
+    console.warn(`   3. Body parameters have changed`);
     res.status(401).json({ error: 'Invalid Twilio signature' });
     return;
   }
 
-  console.log('✓ Twilio signature validated');
+  console.log('✓ Twilio signature validated successfully');
   next();
 };
 
