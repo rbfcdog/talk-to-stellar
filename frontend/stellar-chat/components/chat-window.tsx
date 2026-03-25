@@ -20,6 +20,35 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
+  
+  // --- Initialize session ID on mount ---
+  useEffect(() => {
+    // Generate a UUID for this chat session
+    const generateSessionId = (): string => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+
+    // Try to get from sessionStorage, or generate new
+    const storedSessionId = typeof window !== 'undefined' 
+      ? sessionStorage.getItem(`chat-session-${chatId}`)
+      : null;
+    
+    const newSessionId = storedSessionId || generateSessionId();
+    setSessionId(newSessionId);
+
+    // Store it for subsequent messages
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    }
+  }, [chatId]);
   
   // --- Refs para controlar os elementos da tela ---
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,7 +73,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !sessionId) return;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -58,12 +87,13 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     setIsLoading(true);
 
     try {
+      // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...messages, userMessage],
-          session_id: `web-${chatId}`,
+          session_id: sessionId,
         }),
       });
 
@@ -111,7 +141,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10"><AvatarImage src="/stellar-logo.png" /><AvatarFallback className="bg-[#00a884] text-white">SA</AvatarFallback></Avatar>
           <div>
-            <h2 className="font-normal text-[#e9edef] text-[17px]">TalkToStellar</h2>
+            <h2 className="font-normal text-[#e9edef] text-[17px]">Stellar AI</h2>
             <p className="text-xs text-[#8696a0]">{isLoading ? "digitando..." : "online"}</p>
           </div>
         </div>

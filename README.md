@@ -3,6 +3,40 @@
 TalkToStellar is a conversational payments product built on Stellar.
 It combines a web chat interface, an AI agent, and a Stellar backend to let users do things like login, manage contacts, check balances, and send payments using natural language.
 
+## 🚀 Quick Start
+
+### Option 1: Local Development (Recommended for Development)
+
+Run backend + frontend directly on your machine (no Docker):
+
+```bash
+chmod +x start-local.sh
+./start-local.sh
+```
+
+📖 **[LOCAL_SETUP.md](LOCAL_SETUP.md)** - Complete guide for local development without Docker
+
+### Option 2: Docker (Recommended for Deployment/Testing)
+
+Run in Docker containers:
+
+```bash
+docker-compose up -d backend frontend
+```
+
+📖 **[QUICKSTART.md](QUICKSTART.md)** - Docker setup and commands
+
+### Services Available At
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:3001
+- **Health Check**: http://localhost:3001/health
+
+### Additional Resources
+
+- 🐛 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+- ⚙️ **[ENV_CONFIGURATION.md](ENV_CONFIGURATION.md)** - Environment variables explained
+
 ## Business overview
 
 ### Vision
