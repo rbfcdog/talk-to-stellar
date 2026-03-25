@@ -11,7 +11,7 @@ export class OperationRepository {
 
     if (error) {
       console.error('Supabase error creating operation:', error.message);
-      throw new Error('Failed to create operation record in database.');
+      throw new Error(`Failed to create operation record in database: ${error.message}`);
     }
     return data;
   }

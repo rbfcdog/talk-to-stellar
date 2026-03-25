@@ -122,11 +122,16 @@ export class StellarService {
         let operationId: string | undefined;
         
         try {
-            const operationRecord = await OperationRepository.create({
-                ...operationData,
-                status: 'PENDING'
-            });
-            operationId = operationRecord.id;
+            // Operation history persistence should not block payment execution.
+            try {
+                const operationRecord = await OperationRepository.create({
+                    ...operationData,
+                    status: 'PENDING'
+                });
+                operationId = operationRecord.id;
+            } catch (persistError) {
+                console.warn('Warning: could not persist operation before submission:', persistError);
+            }
 
             const transaction = TransactionBuilder.fromXDR(unsignedXdr, Networks.TESTNET);
 
@@ -135,10 +140,12 @@ export class StellarService {
 
             const result = await server.submitTransaction(transaction);
 
-            await OperationRepository.update(operationId, {
-                status: 'COMPLETED',
-                stellar_transaction_hash: result.hash
-            });
+            if (operationId) {
+                await OperationRepository.update(operationId, {
+                    status: 'COMPLETED',
+                    stellar_transaction_hash: result.hash
+                });
+            }
 
             return {
                 success: true,

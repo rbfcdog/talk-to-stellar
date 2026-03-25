@@ -6,7 +6,17 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "nodemon src/server.ts"
+    "dev": "nodemon src/server.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:wallet": "jest wallet.test.ts",
+    "test:api": "jest api-integration.test.ts",
+    "test:stellar": "jest stellar-sdk.test.ts",
+    "test:agent": "jest agent-ai.test.ts",
+    "test:e2e": "jest e2e.test.ts",
+    "test:ci": "jest --coverage --bail --forceExit",
+    "seed:users": "ts-node scripts/seed-users.ts --count"
   },
   "keywords": [
     "stellar",
@@ -17,6 +27,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@langchain/core": "^0.1.50",
+    "@langchain/langgraph": "^1.2.5",
+    "@langchain/openai": "^0.0.20",
     "@stellar/stellar-sdk": "^14.1.1",
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.12.2",
@@ -24,17 +37,23 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "langchain": "^1.2.37",
     "stellar-base": "^13.1.0",
     "toml": "^3.0.0",
+    "uuid": "^9.0.1",
     "zod": "^4.1.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.23",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.14",
+    "@types/uuid": "^9.0.7",
+    "jest": "^30.3.0",
     "nodemon": "^3.1.10",
     "supabase": "^2.40.7",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }

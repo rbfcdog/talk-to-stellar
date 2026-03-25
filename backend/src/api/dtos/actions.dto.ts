@@ -8,13 +8,15 @@ export const loginSchema = z.object({
 
 export const onboardUserSchema = z.object({
   body: z.object({
+    name: z.string().optional(),
     email: z.string().email().optional(),
     phoneNumber: z.string().optional(),
     publicKey: z.string().length(56, 'Invalid public key format').optional(),
+    secretKey: z.string().optional(),
   }).refine(
-    (data) => data.email || data.phoneNumber,
+    (data) => data.email || data.phoneNumber || data.publicKey || data.secretKey,
     {
-      message: 'Either email or phoneNumber is required',
+      message: 'Provide at least one of: email, phoneNumber, publicKey, or secretKey',
       path: ['email'],
     }
   ),

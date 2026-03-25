@@ -1,11 +1,17 @@
 import { supabase } from '../../config/supabase';
 import { StellarService } from './stellar.service';
 import { AuthService } from './auth.service';
+import { StellarService as StellarBlockchainService } from '../../services/stellar.service';
+import { WalletRepository } from '../../repositories/wallet.repository';
+import { v4 as uuidv4 } from 'uuid';
+import { Keypair } from '@stellar/stellar-sdk';
 
 export interface OnboardUserPayload {
+  name?: string;
   email?: string;
   phoneNumber?: string;
   publicKey?: string;
+  secretKey?: string;
 }
 
 export interface AddContactPayload {
@@ -25,16 +31,78 @@ interface ListContactsPayload {
 
 export class UserService {
 
+  private static deriveWalletName(input: OnboardUserPayload): string {
+    if (input.name && input.name.trim()) {
+      return input.name.trim();
+    }
+
+    if (input.email && input.email.includes('@')) {
+      return input.email.split('@')[0];
+    }
+
+    if (input.phoneNumber && input.phoneNumber.trim()) {
+      return `wallet_${input.phoneNumber.replace(/\D/g, '').slice(-6)}`;
+    }
+
+    return `wallet_${Date.now()}`;
+  }
+
+  private static isMissingTableError(error: any): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes('could not find the table') || message.includes('relation') && message.includes('does not exist');
+  }
+
+  private static async saveAgentSession(sessionRecord: any): Promise<void> {
+    const { data: existing, error: selectError } = await supabase
+      .from('agent_sessions')
+      .select('id')
+      .eq('session_id', sessionRecord.session_id)
+      .single();
+
+    if (selectError && selectError.code !== 'PGRST116') {
+      throw new Error(`Database error: ${selectError.message}`);
+    }
+
+    if (existing) {
+      const { error: updateError } = await supabase
+        .from('agent_sessions')
+        .update(sessionRecord)
+        .eq('session_id', sessionRecord.session_id);
+
+      if (updateError) {
+        throw new Error(`Database error: ${updateError.message}`);
+      }
+      return;
+    }
+
+    const { error: insertError } = await supabase
+      .from('agent_sessions')
+      .insert(sessionRecord);
+
+    if (insertError) {
+      throw new Error(`Database error: ${insertError.message}`);
+    }
+  }
+
   static async onboardUser(input: OnboardUserPayload): Promise<{ 
     userId: string; 
     publicKey: string; 
     sessionToken: string; 
     secretKey?: string;
+    initialBalance?: string;
   }> {
     let publicKey: string;
     let secretKey: string | undefined;
 
-    if (input.publicKey) {
+    if (input.secretKey) {
+      try {
+        const keypair = Keypair.fromSecret(input.secretKey);
+        publicKey = keypair.publicKey();
+        secretKey = input.secretKey;
+      } catch (error) {
+        throw new Error('Invalid Stellar private key (secret key).');
+      }
+    } else if (input.publicKey) {
       publicKey = input.publicKey;
       secretKey = undefined;
     } else {
@@ -49,6 +117,9 @@ export class UserService {
       stellar_public_key: publicKey,
     };
 
+    let userId: string;
+    let sessionId: string;
+
     const { data, error } = await supabase
       .from('users')
       .insert(userToCreate)
@@ -59,15 +130,81 @@ export class UserService {
       if (error.code === '23505') {
         throw new Error('User with this email or public key already exists.');
       }
-      throw new Error(`Database error: ${error.message}`);
+
+      // Fallback for schema setups that only have agent_sessions/wallets tables
+      if (this.isMissingTableError(error)) {
+        userId = uuidv4();
+        sessionId = uuidv4();
+
+        const sessionToken = AuthService.generateTokenForUser(userId);
+        const dbSessionToken = uuidv4();
+        const sessionRecord = {
+          session_id: sessionId,
+          user_id: userId,
+          email: input.email || `${userId}@local.test`,
+          session_token: dbSessionToken,
+          public_key: publicKey,
+          phone_number: input.phoneNumber || null,
+          created_at: new Date().toISOString(),
+          last_activity: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        await this.saveAgentSession(sessionRecord);
+      } else {
+        throw new Error(`Database error: ${error.message}`);
+      }
+    } else {
+      userId = data.id;
+      sessionId = uuidv4();
+
+      const sessionToken = AuthService.generateTokenForUser(userId);
+      const dbSessionToken = uuidv4();
+      const sessionRecord = {
+        session_id: sessionId,
+        user_id: userId,
+        email: input.email || `${userId}@local.test`,
+        session_token: dbSessionToken,
+        public_key: publicKey,
+        phone_number: input.phoneNumber || null,
+        created_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      await this.saveAgentSession(sessionRecord);
     }
 
-    const sessionToken = AuthService.generateTokenForUser(data.id);
+    // Fetch initial balance from Stellar and save wallet info
+    let initialBalance = '0';
+    try {
+      const stellarService = new StellarBlockchainService();
+      const accountInfo = await stellarService.getAccount(publicKey);
+      const xlmBalance = accountInfo.balances.find((b) => b.asset_type === 'native');
+      initialBalance = xlmBalance?.balance || '0';
+
+      // Save wallet information to database using session_id schema
+      const walletRepository = new WalletRepository(supabase);
+      await walletRepository.saveWallet({
+        session_id: sessionId,
+        public_key: publicKey,
+        name: this.deriveWalletName(input),
+        balance: accountInfo.balances,
+        sequence: accountInfo.sequence,
+        account_data: accountInfo,
+      });
+    } catch (walletError) {
+      // Log the error but don't fail the onboarding
+      console.warn('Warning: Could not fetch account balance or save wallet info:', walletError);
+    }
+
+    const sessionToken = AuthService.generateTokenForUser(userId);
 
     return {
-      userId: data.id,
+      userId,
       publicKey,
       sessionToken,
+      initialBalance,
       ...(secretKey && { secretKey }) 
     };
   }
