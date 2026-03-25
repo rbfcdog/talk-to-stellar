@@ -1,5 +1,5 @@
 import express from 'express';
-import cors, { CorsOptions } from 'cors';
+import cors from 'cors';
 import actionsRouter from './api/routes/actions.router';
 import { supabase } from './config/supabase';
 import { AgentRepository } from './repositories/agent.repository';
@@ -15,15 +15,8 @@ runMigrations(supabase).catch((error) => {
   logger.error(`Failed to run migrations: ${errorMessage}`);
 });
 
-const corsOptions: CorsOptions = {
-  origin: '*',
-  credentials: false,
-  methods: ['*'],
-  allowedHeaders: ['*'],
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors());
+app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
