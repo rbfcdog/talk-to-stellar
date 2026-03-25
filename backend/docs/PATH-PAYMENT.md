@@ -6,6 +6,23 @@ Esta documentação explica as novas funcionalidades de Path Payment implementad
 
 O **Path Payment Strict Receive** é uma operação especial da Stellar que permite enviar um ativo e garantir que o destinatário receba uma quantia exata de um ativo diferente. O sistema automaticamente encontra o melhor caminho de conversão através da DEX (Decentralized Exchange) da Stellar.
 
+## Status Atual: Ponte BRL -> USD via XLM
+
+### O que já está implementado
+- Busca de rota de conversão usando `strictReceivePaths` no Horizon.
+- Seleção do caminho com menor `source_amount` (otimização básica por preço).
+- Construção de transação `pathPaymentStrictReceive`.
+- Fluxo de depósito com âncora (SEP-24) para entrada de fiat (ex.: PIX/BRL), via `AnchorService`.
+
+### O que ainda não está completo para uma ponte BRL -> USD otimizada fim a fim
+- Quote formal de BRL -> USD com proteção de slippage antes da assinatura.
+- Fluxo completo de saída para USD fiat (withdraw) no mesmo pipeline.
+- Estratégia avançada de roteamento (liquidez, impacto de preço, fallback entre caminhos).
+- Monitoramento consolidado de taxa efetiva BRL/USD e custo total da operação.
+
+### Conclusão prática
+O projeto já possui a base técnica de conversão on-chain via XLM e path payment. No entanto, ainda não oferece uma ponte BRL -> USD totalmente otimizada ponta a ponta em nível de produto.
+
 ## Casos de Uso
 
 ### Cenário Típico
@@ -61,6 +78,8 @@ Content-Type: application/json
 ### 2. `/api/actions/execute-path-payment` (POST)
 
 **Descrição:** Executa um path payment de forma custodial.
+
+> Observação: dependendo da versão da API em execução, este fluxo pode estar representado por `build-path-payment-xdr` + `sign-and-submit-xdr`.
 
 **Headers:**
 ```
@@ -201,3 +220,5 @@ Ou teste diretamente com as validações no projeto.
 3. **Cache de caminhos** para melhor performance
 4. **Estimativa de fees** mais precisa
 5. **Suporte a múltiplos path** para maximizar liquidez
+6. **Quote BRL -> USD pré-transação** com taxa estimada, impacto e validade
+7. **Pipeline completo BRL in / USD out** com rastreamento ponta a ponta
