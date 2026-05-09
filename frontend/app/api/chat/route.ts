@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   let sessionId: string | null = null;
 
   try {
-    const { messages, session_id } = await req.json();
+    const { messages, session_id, source, metadata } = await req.json();
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -51,6 +51,8 @@ export async function POST(req: Request) {
     const dataToSend = {
       query: userMessage.content,
       session_id: sessionId,
+      source: source || "web",
+      metadata: metadata || {},
     };
 
     const controller = new AbortController();

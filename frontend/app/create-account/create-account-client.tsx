@@ -39,6 +39,10 @@ export default function CreateAccountClient({
   const [status, setStatus] = useState("ready")
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
+  const [existingEmail, setExistingEmail] = useState("")
+  const [existingPin, setExistingPin] = useState("")
+  const [existingStatus, setExistingStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
+  const [existingError, setExistingError] = useState("")
   const [validation] = useState<any>(initialValidation)
 
   useEffect(() => {
@@ -152,6 +156,57 @@ export default function CreateAccountClient({
     } catch (err: any) {
       setPasskeyStatus('error')
       setResult({ success: false, error: String(err?.message || err) })
+    }
+  }
+
+  function generateBrowserId(): string {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID()
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+      const r = (Math.random() * 16) | 0
+      const v = c === "x" ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+  }
+
+  async function handleLinkExisting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setExistingStatus("submitting")
+    setExistingError("")
+
+    try {
+      let browserId = localStorage.getItem("talk-to-stellar.browserId")
+      if (!browserId) {
+        browserId = generateBrowserId()
+        localStorage.setItem("talk-to-stellar.browserId", browserId)
+      }
+
+      const response = await fetch(`${getBackendBaseUrl()}/api/external/link-existing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "web",
+          provider_user_id: browserId,
+          email: existingEmail,
+          pin: existingPin,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || "Não foi possível entrar com e-mail e PIN.")
+      }
+
+      if (payload?.sessionId) {
+        localStorage.setItem("talk-to-stellar.sessionId", String(payload.sessionId))
+      }
+
+      setExistingStatus("done")
+      window.location.href = "/chat"
+    } catch (error) {
+      setExistingStatus("error")
+      setExistingError(error instanceof Error ? error.message : "Falha ao entrar com e-mail e PIN.")
     }
   }
 
@@ -276,6 +331,36 @@ export default function CreateAccountClient({
               {passkeyStatus === 'done' && result?.passkeySessionToken && (
                 <p className="mt-2 break-all text-emerald-300">Acesso seguro ativado com sucesso.</p>
               )}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+              <p className="font-medium text-white">Já tenho conta</p>
+              <form className="mt-3 space-y-3" onSubmit={handleLinkExisting}>
+                <input
+                  value={existingEmail}
+                  onChange={(event) => setExistingEmail(event.target.value)}
+                  type="email"
+                  placeholder="Seu e-mail"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+                <input
+                  value={existingPin}
+                  onChange={(event) => setExistingPin(event.target.value)}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Seu PIN"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+                {existingError && <p className="text-rose-300">{existingError}</p>}
+                <button
+                  type="submit"
+                  disabled={existingStatus === "submitting" || !existingEmail.trim() || !existingPin.trim()}
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {existingStatus === "submitting" ? "Entrando..." : "Entrar com e-mail + PIN"}
+                </button>
+              </form>
             </div>
           </section>
         </div>
