@@ -120,9 +120,13 @@ function formatMoney(value: number | null, asset: 'USDC' | 'BRL') {
 
 function normalizeAssetInput(code: any, issuer: any) {
   const normalizedCode = String(code || 'XLM').trim().toUpperCase();
+  const fallbackIssuer =
+    normalizedCode === 'USDC' ? String(process.env.USDC_ISSUER || '').trim() :
+    normalizedCode === 'BRL' ? String(process.env.BRL_ISSUER || '').trim() :
+    '';
   return normalizedCode === 'XLM' || normalizedCode === 'NATIVE'
     ? { code: 'XLM' }
-    : { code: normalizedCode, issuer: issuer ? String(issuer).trim() : undefined };
+    : { code: normalizedCode, issuer: issuer ? String(issuer).trim() : (fallbackIssuer || undefined) };
 }
 
 function formatConversionLoss(quote: any) {

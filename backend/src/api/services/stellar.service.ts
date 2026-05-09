@@ -213,6 +213,31 @@ function assetIssuer(asset: Asset): string | undefined {
     return asset.isNative() ? undefined : asset.getIssuer();
 }
 
+function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): string {
+    const sourceCode = assetCode(sourceAssetObj);
+    const destCode = assetCode(destAssetObj);
+    const sourceIssuer = assetIssuer(sourceAssetObj);
+    const destIssuer = assetIssuer(destAssetObj);
+    const hints: string[] = [];
+
+    if (destCode === 'USDC' && !process.env.USDC_ISSUER) {
+        hints.push('USDC_ISSUER não configurado no backend');
+    }
+    if (destCode === 'BRL' && !process.env.BRL_ISSUER) {
+        hints.push('BRL_ISSUER não configurado no backend');
+    }
+
+    hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');
+    hints.push('Confirme trustline do ativo de destino na wallet');
+    hints.push('Se estiver em testnet, rode backend/scripts/setup-xlm-usdc-liquidity.ts para provisionar ofertas');
+
+    return [
+        `Não foi encontrado caminho de conversão entre ${sourceCode} e ${destCode}.`,
+        `source_issuer=${sourceIssuer || 'native'}; dest_issuer=${destIssuer || 'native'}.`,
+        `Diagnóstico: ${hints.join(' | ')}.`,
+    ].join(' ');
+}
+
 export class StellarService {
   private static fundedAccounts = new Set<string>();
 
@@ -520,7 +545,7 @@ export class StellarService {
         ).call();
 
         if (!pathsResponse.records || pathsResponse.records.length === 0) {
-            throw new Error('Não foi encontrado um caminho de conversão entre os ativos.');
+            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
         let bestPath = pathsResponse.records[0];
@@ -590,7 +615,7 @@ export class StellarService {
         ).call();
 
         if (!pathsResponse.records || pathsResponse.records.length === 0) {
-            throw new Error('Não foi encontrado um caminho de conversão entre os ativos.');
+            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
         let bestPath = pathsResponse.records[0];
