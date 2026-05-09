@@ -43,6 +43,11 @@ function getBackendBaseUrl() {
   return explicitBase.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "")
 }
 
+type RecoveryResult =
+  | { mode: "token"; token: string }
+  | { mode: "existing"; sessionId?: string; sessionToken?: string }
+  | { mode: "none" }
+
 export default function CreateAccountClient({
   initialToken = '',
   initialValidation = null,
@@ -69,7 +74,7 @@ export default function CreateAccountClient({
   const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
 
-  async function recoverTokenFromBackend(): Promise<string> {
+  async function recoverOnboardingContextFromBackend(): Promise<RecoveryResult> {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
     if (!browserId) {
       browserId = generateBrowserId()
@@ -85,8 +90,19 @@ export default function CreateAccountClient({
       }),
     })
     const payload = await response.json().catch(() => ({}))
+    if (payload?.exists === true) {
+      return {
+        mode: "existing",
+        sessionId: payload?.sessionId ? String(payload.sessionId) : undefined,
+        sessionToken: payload?.sessionToken ? String(payload.sessionToken) : undefined,
+      }
+    }
     const creationUrl = String(payload?.creationUrl || "")
-    return extractTokenFromUrl(creationUrl)
+    const recoveredToken = extractTokenFromUrl(creationUrl)
+    if (recoveredToken) {
+      return { mode: "token", token: recoveredToken }
+    }
+    return { mode: "none" }
   }
 
   useEffect(() => {
@@ -114,10 +130,21 @@ export default function CreateAccountClient({
     async function recoverTokenWhenMissing() {
       if (token.trim()) return
       try {
-        const recoveredToken = await recoverTokenFromBackend()
+        const recovered = await recoverOnboardingContextFromBackend()
 
-        if (recoveredToken) {
-          setToken(recoveredToken)
+        if (recovered.mode === "existing") {
+          if (recovered.sessionId) {
+            localStorage.setItem("talk-to-stellar.sessionId", recovered.sessionId)
+          }
+          if (recovered.sessionToken) {
+            localStorage.setItem("talk-to-stellar.sessionToken", recovered.sessionToken)
+          }
+          window.location.href = "/chat"
+          return
+        }
+
+        if (recovered.mode === "token") {
+          setToken(recovered.token)
           setValidation({ success: true, valid: true, message: "Link recuperado automaticamente." })
         }
       } catch {
@@ -147,8 +174,19 @@ export default function CreateAccountClient({
     try {
       let finalToken = token
       if (!finalToken.trim()) {
-        finalToken = await recoverTokenFromBackend()
-        if (finalToken) {
+        const recovered = await recoverOnboardingContextFromBackend()
+        if (recovered.mode === "existing") {
+          if (recovered.sessionId) {
+            localStorage.setItem("talk-to-stellar.sessionId", recovered.sessionId)
+          }
+          if (recovered.sessionToken) {
+            localStorage.setItem("talk-to-stellar.sessionToken", recovered.sessionToken)
+          }
+          window.location.href = "/chat"
+          return
+        }
+        if (recovered.mode === "token") {
+          finalToken = recovered.token
           setToken(finalToken)
         }
       }
