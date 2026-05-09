@@ -10,6 +10,8 @@ import { ALL_TOOLS } from "./tools";
 import { AgentRepository } from "../repositories/agent.repository";
 import { logger } from "../utils/logger";
 import { getStellarService } from "../services/stellar.service";
+import ExternalService from "../services/external.service";
+import { supabase } from "../config/supabase";
 
 const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a digital bank and wallet experience.
 
@@ -151,6 +153,7 @@ export function createAgentRoutes(
 ): Router {
   const router = Router();
   const agentGraph = new AgentGraph(repository, openaiApiKey, TALKTOSTELLAR_SYSTEM_PROMPT);
+  const externalService = new ExternalService(supabase as any);
 
   /**
    * POST /api/agent/query
@@ -162,7 +165,7 @@ export function createAgentRoutes(
     next: NextFunction
   ) => {
     try {
-      const { query, session_id } = req.body;
+      const { query, session_id, source, metadata } = req.body;
 
       if (!query || typeof query !== "string") {
         return res.status(400).json({ 
@@ -171,15 +174,43 @@ export function createAgentRoutes(
         });
       }
 
+      // Backend-only onboarding gate for browser channel:
+      // if user is not linked, return onboarding link from backend directly.
+      const normalizedSource = String(source || "").trim().toLowerCase();
+      if (normalizedSource === "web") {
+        const providerUserId = String(metadata?.browser_id || metadata?.provider_user_id || "").trim();
+        if (providerUserId) {
+          const existing = await externalService.checkExternalAccount("web", providerUserId);
+          if (!existing) {
+            const { url } = externalService.createOnboardUrl("web", providerUserId);
+            return res.status(200).json({
+              session_id: session_id || null,
+              success: true,
+              onboardingRequired: true,
+              creationUrl: url,
+              message:
+                `Para continuar, você precisa criar sua conta.\n` +
+                `Abra este link: ${url}\n\n` +
+                `Se você já tem conta, use a opção "Já tenho conta" dentro da página de cadastro.`,
+            });
+          }
+
+          if (existing?.session_id && !session_id) {
+            req.body.session_id = String(existing.session_id);
+          }
+        }
+      }
+
       // Generate or validate session ID
       let sessionId: string;
-      if (session_id) {
-        if (!isValidUUID(session_id)) {
+      const inputSessionId = String(req.body.session_id || session_id || "").trim();
+      if (inputSessionId) {
+        if (!isValidUUID(inputSessionId)) {
           return res.status(400).json({ 
             error: "Invalid session_id format. Must be a valid UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)" 
           });
         }
-        sessionId = session_id;
+        sessionId = inputSessionId;
       } else {
         sessionId = uuidv4();
       }
