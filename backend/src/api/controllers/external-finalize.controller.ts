@@ -99,6 +99,7 @@ export default class ExternalFinalizeController {
   static async finalize(req: Request, res: Response) {
     try {
       const { token, name, email, pin } = req.body;
+      const browserId = String(req.body?.browser_id || '').trim();
       // Accept public_key coming from POST body or URL query (confirm link may include it)
       const publicKeyFromBody = String(req.body?.public_key || req.query?.public_key || '').trim() || undefined;
       if (!token) return res.status(400).json({ success: false, message: 'token is required' });
@@ -355,6 +356,14 @@ export default class ExternalFinalizeController {
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
 
         if (existingSession && existingWallet) {
+          if (browserId) {
+            await externalRepo.createMapping({
+              provider: 'web',
+              provider_user_id: browserId,
+              session_id: String(existingAccount.session_id),
+              user_id: String(existingAccount.user_id),
+            });
+          }
           return res.status(200).json({
             success: true,
             sessionId: existingAccount.session_id,
@@ -445,6 +454,15 @@ export default class ExternalFinalizeController {
         session_id: sessionId,
         user_id: userId,
       });
+
+      if (browserId) {
+        await externalRepo.createMapping({
+          provider: 'web',
+          provider_user_id: browserId,
+          session_id: sessionId,
+          user_id: userId,
+        });
+      }
 
       return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}` });
     } catch (error: any) {
