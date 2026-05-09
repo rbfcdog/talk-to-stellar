@@ -14,6 +14,26 @@ type FinalizeResponse = {
   error?: string
 }
 
+function generateBrowserId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0
+    const v = c === "x" ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+function extractTokenFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return String(parsed.searchParams.get("token") || "")
+  } catch {
+    return ""
+  }
+}
+
 function getBackendBaseUrl() {
   const explicitBase = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_AGENT_API_URL
   if (!explicitBase) {
@@ -36,6 +56,10 @@ export default function CreateAccountClient({
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [pin, setPin] = useState("")
+  const [pinConfirm, setPinConfirm] = useState("")
+  const [pinError, setPinError] = useState("")
+  const [requestPasskey, setRequestPasskey] = useState(true)
   const [status, setStatus] = useState("ready")
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
@@ -53,9 +77,9 @@ export default function CreateAccountClient({
 
   useEffect(() => {
     async function validateToken() {
-      if (!tokenFromUrl) return
+      if (!token) return
       try {
-        const response = await fetch(`${getBackendBaseUrl()}/api/external/validate-token?token=${encodeURIComponent(tokenFromUrl)}`)
+        const response = await fetch(`${getBackendBaseUrl()}/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         setValidation(payload)
       } catch (error) {
@@ -64,10 +88,55 @@ export default function CreateAccountClient({
     }
 
     validateToken()
-  }, [tokenFromUrl])
+  }, [token])
+
+  useEffect(() => {
+    async function recoverTokenWhenMissing() {
+      if (token.trim()) return
+      try {
+        let browserId = localStorage.getItem("talk-to-stellar.browserId")
+        if (!browserId) {
+          browserId = generateBrowserId()
+          localStorage.setItem("talk-to-stellar.browserId", browserId)
+        }
+
+        const response = await fetch(`${getBackendBaseUrl()}/api/external/check-account`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "web",
+            provider_user_id: browserId,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        const creationUrl = String(payload?.creationUrl || "")
+        const recoveredToken = extractTokenFromUrl(creationUrl)
+
+        if (recoveredToken) {
+          setToken(recoveredToken)
+          setValidation({ success: true, valid: true, message: "Link recuperado automaticamente." })
+        }
+      } catch {
+        // keep page usable for manual retry
+      }
+    }
+
+    recoverTokenWhenMissing()
+  }, [token])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setPinError("")
+
+    if (!/^\d{4,8}$/.test(pin)) {
+      setPinError("PIN deve conter de 4 a 8 dígitos numéricos.")
+      return
+    }
+    if (pin !== pinConfirm) {
+      setPinError("PIN e confirmação precisam ser iguais.")
+      return
+    }
+
     setStatus("submitting")
     setResult(null)
 
@@ -79,6 +148,7 @@ export default function CreateAccountClient({
           token,
           name: name || undefined,
           email: email || undefined,
+          pin,
         }),
       })
 
@@ -93,6 +163,10 @@ export default function CreateAccountClient({
           // ignore storage failures
         }
       }
+
+      if (response.ok && payload.success && requestPasskey) {
+        await registerAndSignInWithPasskey(payload)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao finalizar conta"
       setResult({ success: false, error: message })
@@ -100,8 +174,9 @@ export default function CreateAccountClient({
     }
   }
 
-  async function registerAndSignInWithPasskey() {
-    const userId = result?.userId || result?.sessionId
+  async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse) {
+    const currentResult = baseResult || result
+    const userId = currentResult?.userId || currentResult?.sessionId
     if (!userId) {
       setResult({ success: false, error: 'Não foi possível iniciar o acesso seguro no momento' })
       return
@@ -163,8 +238,8 @@ export default function CreateAccountClient({
       setResult({
         success: true,
         userId,
-        sessionId: result?.sessionId,
-        sessionToken: result?.sessionToken,
+        sessionId: currentResult?.sessionId,
+        sessionToken: currentResult?.sessionToken,
         passkeySessionToken: authCompletePayload.sessionToken,
         message: 'Acesso seguro ativado e entrada concluída com sucesso',
       })
@@ -172,17 +247,6 @@ export default function CreateAccountClient({
       setPasskeyStatus('error')
       setResult({ success: false, error: String(err?.message || err) })
     }
-  }
-
-  function generateBrowserId(): string {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) {
-      return crypto.randomUUID()
-    }
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-      const r = (Math.random() * 16) | 0
-      const v = c === "x" ? r : (r & 0x3) | 0x8
-      return v.toString(16)
-    })
   }
 
   async function handleLinkExisting(event: FormEvent<HTMLFormElement>) {
@@ -304,9 +368,47 @@ export default function CreateAccountClient({
                 />
               </label>
 
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">PIN (4 a 8 dígitos)</span>
+                <input
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Crie seu PIN"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">Confirmar PIN</span>
+                <input
+                  value={pinConfirm}
+                  onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, ""))}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Confirme seu PIN"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={requestPasskey}
+                  onChange={(event) => setRequestPasskey(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
+                />
+                <span>Ativar passkey agora (recomendado para login rápido e seguro).</span>
+              </label>
+
+              {pinError && <p className="text-rose-300">{pinError}</p>}
+
               <button
                 type="submit"
-                disabled={status === "submitting" || !token.trim()}
+                disabled={status === "submitting" || !token.trim() || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? "Finalizando conta..." : "Finalizar conta"}

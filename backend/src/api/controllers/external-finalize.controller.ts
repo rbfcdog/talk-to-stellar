@@ -98,7 +98,7 @@ export default class ExternalFinalizeController {
   // body: { token, name?, email? }
   static async finalize(req: Request, res: Response) {
     try {
-      const { token, name, email } = req.body;
+      const { token, name, email, pin } = req.body;
       // Accept public_key coming from POST body or URL query (confirm link may include it)
       const publicKeyFromBody = String(req.body?.public_key || req.query?.public_key || '').trim() || undefined;
       if (!token) return res.status(400).json({ success: false, message: 'token is required' });
@@ -335,6 +335,17 @@ export default class ExternalFinalizeController {
         return res.status(400).json({ success: false, message: 'token missing provider data' });
       }
 
+      const providedPin = String(pin || '').trim();
+      if (!providedPin) {
+        return res.status(400).json({ success: false, message: 'PIN é obrigatório para criar a conta.' });
+      }
+      if (!/^\d{4,8}$/.test(providedPin)) {
+        return res.status(400).json({ success: false, message: 'PIN deve conter de 4 a 8 dígitos numéricos.' });
+      }
+      const pinHash = crypto
+        .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+        .toString('hex');
+
       // create deterministic user id for external users, or use email if provided
       const userId = email ? String(email) : `external:${provider}:${provider_user_id}`;
 
@@ -414,6 +425,8 @@ export default class ExternalFinalizeController {
         session_token: sessionToken,
         public_key: publicKey,
         phone_number: undefined,
+        password_hash: pinHash,
+        session_password_hash: pinHash,
         created_at: now,
         last_activity: now,
       });

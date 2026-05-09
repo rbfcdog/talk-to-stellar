@@ -113,6 +113,7 @@ describe('ExternalFinalizeController', () => {
         token: 'signed-token',
         name: 'User Example',
         email: 'user@example.com',
+        pin: '1234',
       },
     } as any;
 

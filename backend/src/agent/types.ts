@@ -9,6 +9,7 @@ export interface SessionData {
   public_key?: string;
   phone_number?: string;
   password_hash?: string;
+  session_password_hash?: string;
   created_at: string;
   last_activity: string;
 }

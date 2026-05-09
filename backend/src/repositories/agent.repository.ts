@@ -23,6 +23,7 @@ export class AgentRepository {
           public_key: sessionData.public_key,
           phone_number: sessionData.phone_number,
           password_hash: sessionData.password_hash,
+          session_password_hash: sessionData.session_password_hash,
           created_at: sessionData.created_at,
           last_activity: new Date().toISOString(),
           updated_at: new Date().toISOString(),
