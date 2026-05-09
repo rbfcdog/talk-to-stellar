@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
@@ -10,7 +11,6 @@ import { StellarService } from '../services/stellar.service';
 import { logger } from '../../utils/logger';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
-import PasskeyService from '../../services/passkey.service';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -28,6 +28,68 @@ function isValidStellarPublicKey(value?: string) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function sendTelegramPaymentNotification(input: {
+  sessionId: string;
+  userId: string;
+  amount: string;
+  assetCode: string;
+  destinationName?: string;
+  destination: string;
+  hash?: string;
+}) {
+  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!botToken) {
+    return;
+  }
+
+  try {
+    const { data: mappingBySession } = await supabase
+      .from('external_accounts')
+      .select('provider, provider_user_id')
+      .eq('provider', 'telegram')
+      .eq('session_id', input.sessionId)
+      .limit(1)
+      .maybeSingle();
+
+    let providerUserId = String(mappingBySession?.provider_user_id || '').trim();
+
+    if (!providerUserId) {
+      const { data: mappingByUser } = await supabase
+        .from('external_accounts')
+        .select('provider, provider_user_id')
+        .eq('provider', 'telegram')
+        .eq('user_id', input.userId)
+        .limit(1)
+        .maybeSingle();
+      providerUserId = String(mappingByUser?.provider_user_id || '').trim();
+    }
+
+    if (!providerUserId) {
+      return;
+    }
+
+    const chatId = providerUserId;
+    const destinationLabel = input.destinationName || input.destination;
+    const text =
+      `Pagamento confirmado.\n` +
+      `Valor: ${input.amount} ${input.assetCode}\n` +
+      `Destino: ${destinationLabel}\n` +
+      `${input.hash ? `Hash: ${input.hash}` : ''}`;
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[telegram-notify] failed to send payment confirmation message: ${message}`);
   }
 }
 
@@ -192,27 +254,23 @@ export default class ExternalFinalizeController {
           memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
         });
 
-        const passkeyAuth = req.body?.passkey;
-        if (!passkeyAuth?.challenge_id || !passkeyAuth?.credential) {
-          return res.status(428).json({
+        const providedPin = String(req.body?.pin || '').trim();
+        if (!providedPin) {
+          return res.status(400).json({
             success: false,
-            passkeyRequired: true,
-            message: 'Passkey authorization is required before this payment can be signed.',
+            message: 'PIN é obrigatório para confirmar o pagamento.',
           });
         }
 
-        try {
-          await PasskeyService.verifyTransactionAuthorization({
-            token,
-            publicKey: publicKeyFromBody,
-            challengeId: String(passkeyAuth.challenge_id),
-            response: passkeyAuth.credential,
-          });
-        } catch (error: any) {
+        const pinHash = crypto
+          .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+          .toString('hex');
+
+        const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
+        if (!sessionPinHash || pinHash !== sessionPinHash) {
           return res.status(401).json({
             success: false,
-            passkeyRequired: true,
-            message: error?.message || 'Passkey authorization failed',
+            message: 'PIN inválido. Tente novamente.',
           });
         }
 
@@ -249,6 +307,16 @@ export default class ExternalFinalizeController {
             message: result.error || 'Could not submit payment',
           });
         }
+
+        await sendTelegramPaymentNotification({
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+          amount: String(amount),
+          assetCode: 'XLM',
+          destinationName: destination_contact?.contact_name || destination_name,
+          destination: resolvedDestination,
+          hash: result.hash,
+        });
 
         return res.status(200).json({
           success: true,

@@ -1,295 +1,214 @@
-# TalkToStellar (HackMeridian)
+# TalkToStellar
 
-TalkToStellar is a conversational payments product built on Stellar.
-It combines a web chat interface, an AI agent, and a Stellar backend to let users do things like login, manage contacts, check balances, and send payments using natural language.
+TalkToStellar é uma carteira conversacional construída sobre Stellar.
+O usuário conversa em linguagem natural (Web ou Telegram) para consultar saldo, gerenciar contatos e confirmar pagamentos.
 
-## 🚀 Quick Start
+## Descrição completa do projeto (business + técnico)
 
-### Option 1: Local Development (Recommended for Development)
+TalkToStellar resolve um problema central de produtos cripto: a fricção de uso.
+Em vez de exigir que o usuário entenda detalhes de blockchain, o produto traduz intenção em ação com um fluxo conversacional.
 
-Run backend + frontend directly on your machine (no Docker):
+Exemplo prático: em vez de navegar por múltiplas telas para enviar valor, o usuário pode confirmar uma operação por mensagem e PIN.
+Isso reduz abandono, acelera onboarding e melhora conversão em primeira transação.
+
+No nível de negócio, o projeto posiciona Stellar como infraestrutura de liquidação e a camada de conversa como diferencial de experiência.
+No nível técnico, ele organiza frontend, backend e canais externos (Telegram) em uma arquitetura orientada a fluxos seguros de identidade e autorização.
+
+## Visão de negócio
+
+### Problema que atacamos
+
+- UX de carteiras e pagamentos digitais ainda é complexa para público geral.
+- Onboarding tradicional tende a ter queda antes do primeiro pagamento.
+- Recuperação de acesso (PIN/credenciais) costuma ser frágil e gerar suporte alto.
+- Canais de relacionamento (mensageria) e motor transacional normalmente ficam separados.
+
+### Proposta de valor
+
+- Conversa como interface principal para operações financeiras.
+- Menos passos para completar tarefas críticas (criar conta, resetar PIN, confirmar pagamento).
+- Segurança por PIN e sessões controladas, sem exigir conhecimento técnico do usuário.
+- Operação omnicanal (web + Telegram) com continuidade de contexto.
+
+### Público-alvo
+
+- Usuários finais que querem enviar/receber com simplicidade.
+- PMEs e profissionais que precisam de fluxo rápido de pagamentos recorrentes.
+- Times que desejam integrar uma camada conversacional sobre trilhos de pagamento.
+
+### Métricas de produto sugeridas
+
+- Taxa de onboarding concluído.
+- Tempo até primeira transação.
+- Taxa de sucesso de confirmação de pagamento.
+- Taxa de recuperação de conta/PIN.
+- Retenção por canal (web vs Telegram).
+
+## Escopo funcional atual
+
+- Chat com assistente para operações de carteira.
+- Onboarding por link seguro (`/create-account`).
+- Redefinição de PIN (`/change-pin`).
+- Confirmação de pagamento por link (`/confirm-payment`) com validação de PIN.
+- Integração com Telegram para atendimento e notificações transacionais.
+- Geração de links seguros no backend para onboarding e confirmação.
+
+## Arquitetura (visão prática)
+
+### 1) Frontend (`frontend/`)
+
+Aplicação Next.js com:
+
+- Landing page
+- Chat web
+- Fluxos de onboarding, reset de PIN e confirmação de pagamento
+- Rota proxy para chat em `app/api/chat/route.ts`
+
+### 2) Backend (`backend/`)
+
+API Node.js/TypeScript responsável por:
+
+- Sessão e identidade (`agent_sessions`, `external_accounts`)
+- Lógica de pagamentos Stellar
+- Geração/validação de links de onboarding e confirmação
+- PIN reset e segurança
+- Execução do agente e ferramentas
+
+### 3) Bot Telegram (`telegram/`)
+
+Adaptador do Telegram que:
+
+- Valida conta externa
+- Encaminha mensagens para o backend
+- Mantém sessão por usuário Telegram
+
+## Arquitetura técnica detalhada
+
+### Camadas e responsabilidades
+
+1. Canal/UI:
+- Frontend web renderiza jornadas de onboarding, confirmação de pagamento e reset de PIN.
+- Telegram atua como canal de entrada conversacional.
+
+2. Orquestração:
+- Backend centraliza sessão, identidade externa, validações e regras de autorização.
+- Ferramentas do agente executam operações de negócio com contexto de sessão.
+
+3. Liquidação:
+- Serviços Stellar constroem e submetem operações na rede.
+- Operações e auditoria ficam registradas para rastreabilidade.
+
+### Modelo de identidade e sessão
+
+- `agent_sessions`: estado de sessão do usuário.
+- `external_accounts`: vínculo entre identidade externa (ex: Telegram `provider_user_id`) e sessão interna.
+- PIN armazenado como hash (`session_password_hash` e compatibilidade com `password_hash`).
+
+### Segurança aplicada nos fluxos
+
+- Links assinados para onboarding e confirmação.
+- Validação de expiração e payload dos tokens.
+- Confirmação de pagamento protegida por PIN.
+- Reset de PIN com token temporário e invalidação de uso.
+- Logs de auditoria para eventos críticos.
+
+### Fluxo de pagamento confirmado (resumo técnico)
+
+1. Backend cria token de confirmação com payload de pagamento.
+2. Frontend abre `/confirm-payment` via link assinado.
+3. Usuário informa PIN.
+4. Backend valida PIN contra sessão.
+5. Backend constrói/submete transação Stellar.
+6. Backend responde hash da transação e pode notificar Telegram.
+
+### Fluxo de reset de PIN (resumo técnico)
+
+1. Usuário solicita reset.
+2. Backend gera token curto e URL de mudança.
+3. Frontend valida token e coleta novo PIN.
+4. Backend aplica hash novo na sessão e marca token como usado.
+
+## Fluxos principais do produto
+
+### Onboarding
+
+1. Usuário recebe link de criação de conta.
+2. Finaliza dados em `/create-account`.
+3. Sessão/carteira ficam ativas para uso no chat.
+
+### Reset de PIN
+
+1. Usuário pede redefinição.
+2. Backend gera link temporário.
+3. Usuário define novo PIN em `/change-pin`.
+
+### Confirmação de pagamento
+
+1. Backend gera link de confirmação.
+2. Usuário revisa dados em `/confirm-payment`.
+3. Confirma com PIN.
+4. Pagamento é submetido e pode disparar mensagem no Telegram.
+
+## Operação e deploy
+
+### Ambientes
+
+- Local: execução com `start-local.sh`.
+- Containerizado: `docker-compose`.
+- Produção: recomendado separar frontend, backend e bot por serviço.
+
+### Dependências externas
+
+- Stellar (rede e Horizon).
+- Supabase/Postgres para persistência.
+- OpenAI para inteligência conversacional.
+- Telegram Bot API para canal e notificações.
+
+### Observabilidade mínima recomendada
+
+- Log estruturado por `session_id`.
+- Monitoramento de falha em `check-account` e confirmação de pagamento.
+- Alertas para erros em finalização de PIN e assinatura/submissão na Stellar.
+
+## Como rodar localmente
+
+Pré-requisitos:
+
+- Node.js 18+
+- npm
+
+### Subida completa (recomendado)
 
 ```bash
 chmod +x start-local.sh
 ./start-local.sh
 ```
 
-📖 **[LOCAL_SETUP.md](LOCAL_SETUP.md)** - Complete guide for local development without Docker
+Serviços:
 
-### Option 2: Docker (Recommended for Deployment/Testing)
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:3001`
 
-Run in Docker containers:
-
-```bash
-docker-compose up -d backend frontend
-```
-
-📖 **[QUICKSTART.md](QUICKSTART.md)** - Docker setup and commands
-
-### Services Available At
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:3001
-- **Health Check**: http://localhost:3001/health
-
-### Additional Resources
-
-- 🐛 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
-- ⚙️ **[ENV_CONFIGURATION.md](ENV_CONFIGURATION.md)** - Environment variables explained
-
-## Business overview
-
-## Latest Product Upgrades (Brazil UX)
-
-- Phone-first identity continuity via `external_accounts` mappings (`whatsapp` + canonical `phone`).
-- Contact invite growth loop: backend can generate WhatsApp onboarding invite links that auto-create contacts after onboarding.
-- Recovery flow via WhatsApp OTP:
-	- `POST /api/external/recovery-init`
-	- `POST /api/external/recovery-complete`
-	- WhatsApp command: `recuperar conta` then `codigo 123456 pin 4321`.
-- Payment confirmation now supports destination-asset differentiation (`XLM`, `USDC`, `BRL`, etc.) in `prepare_payment_confirmation` and token payload (`destAsset`).
-- Path payment quote transparency for cross-asset payments (network fee + estimated conversion loss/slippage) surfaced in chat and confirmation UI.
-- Contact model extended for `phone_number` and `pix_key` lookup.
-- Stored BRL/USDC snapshots at operation execution time (`operations.amount_brl`, `operations.amount_usdc`) and surfaced in history aggregation.
-
-
-### Vision
-
-Make blockchain payments feel as simple as messaging, so users in emerging markets can move value globally without needing deep crypto knowledge.
-
-### Problem we solve
-
-- Most users do not understand wallets, keys, assets, and network fees.
-- Existing crypto UX is too technical for daily financial use.
-- Cross-border and digital-dollar transfers are still fragmented and expensive for many users and small businesses.
-- Teams that want to build on Stellar still need to implement complex payment flows and user onboarding.
-
-### Our solution
-
-TalkToStellar turns payment operations into conversation.
-
-Instead of navigating multiple screens and technical terms, users can type what they want (for example, “send 20 USDC to Ana”), and the platform handles intent detection, validation, transaction building, and submission.
-
-### Target users
-
-Primary segments:
-
-1. **Retail users in LatAm**
-	- Need simpler dollarized digital payments.
-	- Benefit from a chat-first experience and local context (including PIX-related flows).
-
-2. **Freelancers and micro-businesses**
-	- Need faster global settlement and simpler contact-based transfers.
-	- Benefit from lower friction for repeat payments.
-
-3. **Developers and fintech builders**
-	- Need reusable AI + payment infrastructure on Stellar.
-	- Benefit from modular backend endpoints and agent orchestration.
-
-### Value proposition
-
-- **For end users:** simpler UX, less confusion, faster task completion.
-- **For businesses:** lower support overhead and better conversion from onboarding to first transaction.
-- **For ecosystem partners:** more transaction volume enabled by better usability.
-
-### Why now
-
-- Stablecoin usage is growing fast in emerging markets.
-- AI assistants are changing how users interact with financial apps.
-- Stellar already provides fast and efficient settlement rails; the missing layer is mainstream UX.
-
-### Business model (current hypothesis)
-
-- Transaction-based fee on premium payment actions.
-- B2B/API plans for fintechs that want embedded conversational payments.
-- Premium features for businesses (analytics, workflow automation, multi-user controls).
-
-### Go-to-market strategy
-
-- Start with focused LatAm payment use cases and Telegram/Discord/web channels.
-- Partner with local communities, fintech operators, and Stellar ecosystem programs.
-- Use developer-friendly APIs to attract integrators and ecosystem builders.
-
-### Success metrics
-
-- Onboarding completion rate
-- First transaction rate
-- Time-to-first-payment
-- Monthly active transacting users
-- Transaction success rate
-- Retention (week 4 / month 3)
-
-### Why this team
-
-We combine product execution speed, technical depth across AI + blockchain, and local market understanding.
-The project is already delivered as an end-to-end working stack (frontend, AI agent, and Stellar backend), which lets us iterate quickly from prototype to production.
-
-## What this repository contains
-
-This monorepo has three main applications:
-
-1. **Frontend (Next.js)**
-	- Path: [frontend/stellar-chat](frontend/stellar-chat)
-	- Purpose: chat UI for users
-	- Runtime: Node.js
-
-2. **AI Agent (Python + FastAPI + LangChain)**
-	- Path: [talktostellar-agent](talktostellar-agent)
-	- Purpose: detect intent and orchestrate actions
-	- Runtime: Python 3.9+
-
-3. **Core Backend (Node.js + Express + Stellar SDK)**
-	- Path: [backend](backend)
-	- Purpose: business logic, Stellar operations, data access
-	- Runtime: Node.js + TypeScript
-
-## Current architecture
-
-High-level request flow:
-
-1. User sends message in frontend chat.
-2. Frontend API route proxies the message to the Python agent.
-3. Agent interprets the intent and calls the required backend endpoint(s).
-4. Node backend executes Stellar/payment logic and returns results.
-5. Agent formats response and frontend renders it.
-
-Key integration points:
-
-- Frontend chat proxy: [frontend/stellar-chat/app/api/chat/route.ts](frontend/stellar-chat/app/api/chat/route.ts)
-- Agent API routes: [talktostellar-agent/api/routes.py](talktostellar-agent/api/routes.py)
-- Agent tools calling backend: [talktostellar-agent/src/talktostellar_agent/tools.py](talktostellar-agent/src/talktostellar_agent/tools.py)
-- Backend action routes: [backend/src/api/routes/actions.router.ts](backend/src/api/routes/actions.router.ts)
-
-## Tech stack
-
-- **Frontend:** Next.js 14, React 19, TypeScript
-- **Agent:** FastAPI, LangChain, OpenAI API, uv package manager
-- **Backend:** Express, TypeScript, Stellar SDK, Supabase client
-
-## Local development setup
-
-### Prerequisites
-
-- Node.js 18+
-- npm
-- Python 3.9+
-- uv (recommended for the agent)
-
-### 1) Start backend (Node)
-
-From [backend](backend):
+### Docker Compose
 
 ```bash
-npm install
-npm run dev
+docker-compose up --build
 ```
 
-Default URL: `http://localhost:3001`
-
-### 2) Start AI agent (Python)
-
-From [talktostellar-agent](talktostellar-agent):
-
-```bash
-uv sync
-uv run main.py
-```
-
-Default URL: `http://localhost:8000`
-
-### 3) Start frontend chat (Next.js)
-
-From [frontend/stellar-chat](frontend/stellar-chat):
-
-```bash
-npm install
-npm run dev
-```
-
-Default URL: `http://localhost:3000`
-
-## Environment variables
-
-### Frontend ([frontend/stellar-chat](frontend/stellar-chat))
-
-Use:
-
-- `PYTHON_API_URL` (preferred) → server-side API URL used by the Next.js route
-- `NEXT_PUBLIC_PYTHON_API_URL` (optional fallback)
-
-Local example:
-
-- `PYTHON_API_URL=http://localhost:8000/api/actions/query`
-
-### Agent ([talktostellar-agent](talktostellar-agent))
-
-Main variables:
-
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `TEMPERATURE`
-- `NODE_API_BASE_URL` (usually `http://localhost:3001` locally)
-- `INTERNAL_API_SECRET`
-
-### Backend ([backend](backend))
-
-Main variables depend on your deployment/data providers, typically:
-
-- `PORT`
-- `STELLAR_NETWORK`
-- `DATABASE_URL`
-- `INTERNAL_API_SECRET`
-- `JWT_SECRET`
-- `SUPABASE_URL`
-- `SUPABASE_KEY`
-
-## Deployment model (recommended)
-
-- **Frontend** on Vercel
-- **Agent** on Render
-- **Backend** on Render
-
-Guides already available:
-
-- [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-- [QUICK_DEPLOYMENT.md](QUICK_DEPLOYMENT.md)
-
-## Repository structure
+## Estrutura do repositório
 
 ```text
-hackmeridian/
-├── backend/                 # Node.js/Express/Stellar backend
-├── talktostellar-agent/     # Python FastAPI + LangChain agent
-├── frontend/
-│   └── stellar-chat/        # Unified frontend (landing + chat)
-├── stellarBots/             # Discord/Telegram bot adapters
-├── BUSINESS_OVERVIEW.md
-├── TECHNICAL_OVERVIEW.md
-└── README.md
+talk-to-stellar/
+├── backend/          # API e lógica de negócio
+├── frontend/         # Next.js app (chat + fluxos)
+├── telegram/         # Bot Telegram
+├── docker-compose.yml
+└── start-local.sh
 ```
 
-## Deprecated/legacy note
+## Notas de operação
 
-The active agent implementation is [talktostellar-agent](talktostellar-agent).
-
-## Useful endpoints
-
-### Backend (Node)
-
-- Health: `/health`
-- Actions base: `/api/actions/*`
-
-### Agent (Python)
-
-- Health: `/api/actions/health`
-- Query: `POST /api/actions/query`
-- Docs: `/docs`
-
-## Project status
-
-- ✅ Modular architecture in place
-- ✅ Frontend-agent-backend connection implemented
-- ✅ Cloud deployment configs prepared (Vercel + Render)
-- ✅ Agent migrated to LangChain tool-based orchestration
-
-
+- O backend precisa das variáveis de ambiente de Stellar, Supabase e OpenAI.
+- O bot Telegram precisa de `TELEGRAM_BOT_TOKEN`.
+- Para confirmação de pagamento com PIN, garanta que o schema tenha `session_password_hash` em `agent_sessions`.
+- Se houver migração de schema, rode as migrations antes de testar fluxos de segurança.
