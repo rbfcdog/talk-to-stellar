@@ -1,0 +1,16 @@
+{
+  "name": "blindpay",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^15.0.0",
+    "stellar-sdk": "^13.3.0"
+  }
+}

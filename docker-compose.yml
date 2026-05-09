@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  # Backend API (Node.js/Express + Integrated LangGraph Agent)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: talktostellar-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - STELLAR_NETWORK=${STELLAR_NETWORK:-TESTNET}
+      - STELLAR_HORIZON_URL=${STELLAR_HORIZON_URL:-https://horizon-testnet.stellar.org}
+      - STELLAR_FRIENDBOT_URL=${STELLAR_FRIENDBOT_URL:-https://friendbot.stellar.org}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
+      - TEMPERATURE=${TEMPERATURE:-0.5}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-dev-secret}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    networks:
+      - talktostellar-network
+    command: npm run dev
+    restart: unless-stopped
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend/stellar-chat
+      dockerfile: Dockerfile
+    container_name: talktostellar-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:3001}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    volumes:
+      - ./frontend/stellar-chat/app:/app/app
+      - ./frontend/stellar-chat/components:/app/components
+      - ./frontend/stellar-chat/lib:/app/lib
+      - ./frontend/stellar-chat/styles:/app/styles
+      - ./frontend/stellar-chat/public:/app/public
+      - /app/node_modules
+    networks:
+      - talktostellar-network
+    command: npm run dev
+    restart: unless-stopped
+    # Don't wait for backend - they start in parallel
+
+networks:
+  talktostellar-network:
+    driver: bridge
+
+volumes:
+  backend-logs:
+    driver: local

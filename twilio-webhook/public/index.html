@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Twilio Webhook Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #16161f;
+      --border: #1e1e2e;
+      --accent: #c084fc;
+      --accent2: #38bdf8;
+      --green: #4ade80;
+      --red: #f87171;
+      --amber: #fbbf24;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --sms-color: #38bdf8;
+      --voice-color: #c084fc;
+      --out-color: #4ade80;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 24px;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      grid-column: 1 / -1;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+      border-radius: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat:first-child { border-radius: 16px 0 0 16px; }
+    .stat:last-child  { border-radius: 0 16px 16px 0; }
+    .stat + .stat { border-left: none; }
+
+    .stat::before {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 2px; width: 100%;
+    }
+    .stat:nth-child(1)::before { background: var(--sms-color); }
+    .stat:nth-child(2)::before { background: var(--voice-color); }
+    .stat:nth-child(3)::before { background: var(--out-color); }
+
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .stat:nth-child(1) .stat-value { color: var(--sms-color); }
+    .stat:nth-child(2) .stat-value { color: var(--voice-color); }
+    .stat:nth-child(3) .stat-value { color: var(--out-color); }
+
+    /* ── Controls ── */
+    .controls { display: flex; flex-direction: column; }
+
+    .form-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea { min-height: 72px; }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #a855f7);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+
+    .endpoint-list {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .endpoint {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .endpoint:hover { border-color: var(--accent2); }
+
+    .method-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent2);
+      flex-shrink: 0;
+    }
+
+    .endpoint-path { color: var(--text); flex: 1; }
+    .endpoint-desc { color: var(--muted); font-size: 11px; }
+
+    /* ── Event Log ── */
+    .log-panel { display: flex; flex-direction: column; }
+
+    .log-toolbar {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .filter-btn {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--surface2);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .clear-btn {
+      margin-left: auto;
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .clear-btn:hover { color: var(--red); border-color: var(--red); }
+
+    .log-list {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: calc(100vh - 280px);
+      overflow-y: auto;
+    }
+
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-track { background: transparent; }
+    .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .event-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      animation: slideIn 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .event-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+    }
+    .event-card.sms::before         { background: var(--sms-color); }
+    .event-card.voice::before       { background: var(--voice-color); }
+    .event-card.voice_status::before{ background: var(--amber); }
+    .event-card.outbound_sms::before{ background: var(--out-color); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .event-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .event-type {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .event-type.sms          { background: rgba(56,189,248,0.15); color: var(--sms-color); }
+    .event-type.voice        { background: rgba(192,132,252,0.15); color: var(--voice-color); }
+    .event-type.voice_status { background: rgba(251,191,36,0.15); color: var(--amber); }
+    .event-type.outbound_sms { background: rgba(74,222,128,0.15); color: var(--out-color); }
+
+    .event-ts {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .event-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 8px;
+    }
+
+    .field {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
+    .field-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+
+    .field-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state p { font-size: 14px; line-height: 1.6; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 999;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-color: var(--green); }
+    .toast.error   { border-color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    Twilio Webhook Tester
+  </div>
+  <div class="status-pill">
+    <span class="dot"></span>
+    <span id="uptime">server online</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Stats bar -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">SMS Received</div>
+      <div class="stat-value" id="count-sms">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Voice Calls</div>
+      <div class="stat-value" id="count-voice">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Outbound Sent</div>
+      <div class="stat-value" id="count-out">0</div>
+    </div>
+  </div>
+
+  <!-- Left panel: controls -->
+  <div>
+    <!-- Send SMS -->
+    <div class="panel controls" style="margin-bottom: 20px;">
+      <div class="panel-header">📤 Send Test SMS</div>
+      <div class="form-body">
+        <div>
+          <label>To (your real phone)</label>
+          <input id="sms-to" type="tel" placeholder="+55119XXXXXXXX" />
+        </div>
+        <div>
+          <label>Message</label>
+          <textarea id="sms-body" placeholder="Hello from Twilio webhook tester!">Hello from Twilio webhook tester!</textarea>
+        </div>
+        <button class="btn btn-primary" onclick="sendSMS()">
+          <span>⚡</span> Send SMS
+        </button>
+      </div>
+    </div>
+
+    <!-- Endpoints reference -->
+    <div class="panel">
+      <div class="panel-header">🔌 Webhook Endpoints</div>
+      <div class="endpoint-list">
+        <div class="endpoint" onclick="copyEndpoint('/webhook/sms')">
+          <span class="method-badge">POST</span>
+          <span class="endpoint-path">/webhook/sms</span>
+          <span class="endpoint-desc">📋</span>
+        </div>
+        <div class="endpoint" onclick="copyEndpoint('/webhook/voice')">
+          <span class="method-badge">POST</span>
+          <span class="endpoint-path">/webhook/voice</span>
+          <span class="endpoint-desc">📋</span>
+        </div>
+        <div class="endpoint" onclick="copyEndpoint('/webhook/voice/status')">
+          <span class="method-badge">POST</span>
+          <span class="endpoint-path">/webhook/voice/status</span>
+          <span class="endpoint-desc">📋</span>
+        </div>
+      </div>
+      <hr class="divider" />
+      <div style="padding: 14px 20px;">
+        <button class="btn btn-secondary" style="width:100%" onclick="copyNgrokCommand()">
+          📎 Copy ngrok command
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel: event log -->
+  <div class="panel log-panel">
+    <div class="panel-header">📋 Live Event Log</div>
+    <div class="log-toolbar">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" data-filter="sms" onclick="setFilter('sms', this)">SMS</button>
+      <button class="filter-btn" data-filter="voice" onclick="setFilter('voice', this)">Voice</button>
+      <button class="filter-btn" data-filter="outbound_sms" onclick="setFilter('outbound_sms', this)">Outbound</button>
+      <button class="clear-btn" onclick="clearLog()">✕ Clear</button>
+    </div>
+    <div class="log-list" id="log-list">
+      <div class="empty-state">
+        <div class="icon">📡</div>
+        <p>Waiting for events…<br/>Send an SMS or call your Twilio number.</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let events = [];
+  let currentFilter = 'all';
+
+  // ── Polling ───────────────────────────────────────────────────────────────
+  async function fetchEvents() {
+    try {
+      const res = await fetch('/api/events');
+      const data = await res.json();
+      if (data.length !== events.length) {
+        events = data;
+        renderLog();
+        updateStats();
+      }
+    } catch (e) { /* server might be restarting */ }
+  }
+
+  async function fetchHealth() {
+    try {
+      const res = await fetch('/health');
+      const data = await res.json();
+      document.getElementById('uptime').textContent = `up ${data.uptime}`;
+    } catch (e) {}
+  }
+
+  setInterval(fetchEvents, 1500);
+  setInterval(fetchHealth, 5000);
+  fetchEvents();
+  fetchHealth();
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function renderLog() {
+    const list = document.getElementById('log-list');
+    const filtered = currentFilter === 'all' ? events : events.filter(e => e.type === currentFilter);
+
+    if (filtered.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="icon">📡</div><p>No ${currentFilter === 'all' ? '' : currentFilter + ' '}events yet.</p></div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(ev => {
+      const fields = Object.entries(ev.data)
+        .filter(([k, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `<div class="field"><div class="field-key">${k}</div><div class="field-val">${v}</div></div>`)
+        .join('');
+
+      const time = new Date(ev.ts).toLocaleTimeString();
+
+      return `<div class="event-card ${ev.type}">
+        <div class="event-top">
+          <span class="event-type ${ev.type}">${ev.type.replace('_', ' ')}</span>
+          <span class="event-ts">${time}</span>
+        </div>
+        <div class="event-fields">${fields}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function updateStats() {
+    document.getElementById('count-sms').textContent   = events.filter(e => e.type === 'sms').length;
+    document.getElementById('count-voice').textContent = events.filter(e => e.type === 'voice').length;
+    document.getElementById('count-out').textContent   = events.filter(e => e.type === 'outbound_sms').length;
+  }
+
+  // ── Filter ────────────────────────────────────────────────────────────────
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderLog();
+  }
+
+  function clearLog() {
+    events = [];
+    renderLog();
+    updateStats();
+  }
+
+  // ── Send SMS ──────────────────────────────────────────────────────────────
+  async function sendSMS() {
+    const to = document.getElementById('sms-to').value.trim();
+    const body = document.getElementById('sms-body').value.trim();
+    if (!to || !body) return showToast('Fill in both fields', 'error');
+
+    try {
+      const res = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body })
+      });
+      const data = await res.json();
+      if (data.error) showToast('Error: ' + data.error, 'error');
+      else showToast('✅ SMS sent! SID: ' + data.sid.slice(0, 16) + '…', 'success');
+      fetchEvents();
+    } catch (e) {
+      showToast('Request failed', 'error');
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function copyEndpoint(path) {
+    const url = window.location.origin + path;
+    navigator.clipboard.writeText(url);
+    showToast('📋 Copied: ' + url, 'success');
+  }
+
+  function copyNgrokCommand() {
+    navigator.clipboard.writeText('ngrok http 3000');
+    showToast('📋 Copied: ngrok http 3000', 'success');
+  }
+
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+</body>
+</html>
