@@ -1,0 +1,19 @@
+{
+  "name": "twilio-webhook",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "whatsapp": "node whatsapp.js",
+    "dev": "node --watch whatsapp.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "twilio": "^6.0.0"
+  }
+}
