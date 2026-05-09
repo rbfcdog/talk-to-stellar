@@ -141,6 +141,12 @@ export default function CreateAccountClient({
     setResult(null)
 
     try {
+      let browserId = localStorage.getItem("talk-to-stellar.browserId")
+      if (!browserId) {
+        browserId = generateBrowserId()
+        localStorage.setItem("talk-to-stellar.browserId", browserId)
+      }
+
       const response = await fetch(`${getBackendBaseUrl()}/api/external/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,6 +155,7 @@ export default function CreateAccountClient({
           name: name || undefined,
           email: email || undefined,
           pin,
+          browser_id: browserId,
         }),
       })
 
@@ -163,9 +170,23 @@ export default function CreateAccountClient({
           // ignore storage failures
         }
       }
+      if (response.ok && payload.sessionId) {
+        try {
+          localStorage.setItem('talk-to-stellar.sessionId', payload.sessionId)
+        } catch (storageError) {
+          // ignore storage failures
+        }
+      }
 
       if (response.ok && payload.success && requestPasskey) {
         await registerAndSignInWithPasskey(payload)
+        window.location.href = "/chat"
+        return
+      }
+
+      if (response.ok && payload.success) {
+        window.location.href = "/chat"
+        return
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao finalizar conta"
