@@ -34,15 +34,6 @@ function extractTokenFromUrl(url: string): string {
   }
 }
 
-function getBackendBaseUrl() {
-  const explicitBase = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_AGENT_API_URL
-  if (!explicitBase) {
-    return "http://localhost:3001"
-  }
-
-  return explicitBase.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "")
-}
-
 type RecoveryResult =
   | { mode: "token"; token: string }
   | { mode: "existing"; sessionId?: string; sessionToken?: string }
@@ -81,7 +72,7 @@ export default function CreateAccountClient({
       localStorage.setItem("talk-to-stellar.browserId", browserId)
     }
 
-    const response = await fetch(`${getBackendBaseUrl()}/api/external/check-account`, {
+    const response = await fetch(`/api/external/check-account`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -115,7 +106,7 @@ export default function CreateAccountClient({
     async function validateToken() {
       if (!token) return
       try {
-        const response = await fetch(`${getBackendBaseUrl()}/api/external/validate-token?token=${encodeURIComponent(token)}`)
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         setValidation(payload)
       } catch (error) {
@@ -200,7 +191,7 @@ export default function CreateAccountClient({
         localStorage.setItem("talk-to-stellar.browserId", browserId)
       }
 
-      const response = await fetch(`${getBackendBaseUrl()}/api/external/finalize`, {
+      const response = await fetch(`/api/external/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,7 +250,7 @@ export default function CreateAccountClient({
     setPasskeyStatus('registering')
 
     try {
-      const initRes = await fetch(`${getBackendBaseUrl()}/api/passkeys/register-init`, {
+      const initRes = await fetch(`/api/passkeys/register-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -270,7 +261,7 @@ export default function CreateAccountClient({
       const credential = await startRegistration({ optionsJSON: initPayload.options })
 
       setPasskeyStatus('registering')
-      const completeRes = await fetch(`${getBackendBaseUrl()}/api/passkeys/register-complete`, {
+      const completeRes = await fetch(`/api/passkeys/register-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, attestationResponse: credential }),
@@ -279,7 +270,7 @@ export default function CreateAccountClient({
       if (!completeRes.ok || !completePayload.success) throw new Error(completePayload.message || 'Falha ao concluir configuração de acesso seguro')
 
       setPasskeyStatus('authenticating')
-      const authInitRes = await fetch(`${getBackendBaseUrl()}/api/passkeys/auth-init`, {
+      const authInitRes = await fetch(`/api/passkeys/auth-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -288,7 +279,7 @@ export default function CreateAccountClient({
       if (!authInitRes.ok || !authInitPayload.success) throw new Error(authInitPayload.message || 'Falha ao iniciar entrada com acesso seguro')
 
       const authCredential = await startAuthentication({ optionsJSON: authInitPayload.options })
-      const authCompleteRes = await fetch(`${getBackendBaseUrl()}/api/passkeys/auth-complete`, {
+      const authCompleteRes = await fetch(`/api/passkeys/auth-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -335,7 +326,7 @@ export default function CreateAccountClient({
         localStorage.setItem("talk-to-stellar.browserId", browserId)
       }
 
-      const response = await fetch(`${getBackendBaseUrl()}/api/external/link-existing`, {
+      const response = await fetch(`/api/external/link-existing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
