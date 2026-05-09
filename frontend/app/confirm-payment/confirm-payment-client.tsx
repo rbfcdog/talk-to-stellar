@@ -49,7 +49,7 @@ export default function ConfirmPaymentClient({
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
-  const [validation] = useState<ValidationResult>(initialValidation)
+  const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
 
   useEffect(() => {
     if (tokenFromUrl) {
@@ -64,6 +64,21 @@ export default function ConfirmPaymentClient({
         // ignore in environments where router/window aren't available
       }
     }
+  }, [tokenFromUrl])
+
+  useEffect(() => {
+    async function validateToken() {
+      if (!tokenFromUrl) return
+      try {
+        const response = await fetch(`${getBackendBaseUrl()}/api/external/validate-token?token=${encodeURIComponent(tokenFromUrl)}`)
+        const payload = await response.json().catch(() => ({}))
+        setValidation(payload)
+      } catch (error) {
+        setValidation({ success: false, valid: false, message: "Não foi possível validar o link agora." })
+      }
+    }
+
+    validateToken()
   }, [tokenFromUrl])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

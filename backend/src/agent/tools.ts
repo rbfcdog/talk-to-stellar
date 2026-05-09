@@ -564,6 +564,20 @@ export const toolDefinitions = [
       required: ["session_id"],
     },
   },
+  {
+    name: "logout_session",
+    description: "Logout da sessão atual do usuário, encerrando o contexto ativo do chat/wallet.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID",
+        },
+      },
+      required: ["session_id"],
+    },
+  },
 ];
 
 /**
@@ -604,6 +618,8 @@ export async function executeTool(
         return await executeRestartOnboarding(toolInput);
       case "reset_pin":
         return await executeResetPin(toolInput);
+      case "logout_session":
+        return await executeLogoutSession(toolInput);
       default:
         return JSON.stringify({
           success: false,
@@ -613,6 +629,38 @@ export async function executeTool(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Tool execution error in ${toolName}: ${errorMessage}`);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executeLogoutSession(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || '').trim();
+    if (!sessionId) {
+      return JSON.stringify({
+        success: false,
+        error: "session_id é obrigatório",
+      });
+    }
+
+    const { error } = await supabase
+      .from('agent_sessions')
+      .delete()
+      .eq('session_id', sessionId);
+
+    if (error) {
+      throw new Error(error.message || 'Falha ao encerrar sessão');
+    }
+
+    return JSON.stringify({
+      success: true,
+      message: "Sessão encerrada com sucesso.",
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
       error: errorMessage,
