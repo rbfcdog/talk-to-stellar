@@ -9,8 +9,43 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function resolveBaseUrl(candidates: Array<string | undefined>, fallbackDev: string): string {
+  const firstValid = candidates
+    .map((value) => String(value || '').trim())
+    .find((value) => value.length > 0);
+
+  if (firstValid) {
+    return firstValid.replace(/\/$/, '');
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Frontend base URL is not configured for production environment');
+  }
+
+  return fallbackDev;
+}
+
 function getCreateAccountBase() {
-  return process.env.CREATE_ACCOUNT_BASE || process.env.FRONTEND_URL || 'http://localhost:3000';
+  return resolveBaseUrl(
+    [
+      process.env.CREATE_ACCOUNT_BASE,
+      process.env.FRONTEND_URL,
+      process.env.PUBLIC_APP_URL,
+    ],
+    'http://localhost:3000'
+  );
+}
+
+function getPaymentConfirmBase() {
+  return resolveBaseUrl(
+    [
+      process.env.PAYMENT_CONFIRM_BASE,
+      process.env.CREATE_ACCOUNT_BASE,
+      process.env.FRONTEND_URL,
+      process.env.PUBLIC_APP_URL,
+    ],
+    'http://localhost:3000'
+  );
 }
 
 function isValidStellarPublicKey(value?: string) {
@@ -74,7 +109,7 @@ export class ExternalService {
     const token = jwt.sign(payload, getJwtSecret(), { expiresIn: '24h' });
 
     // Dynamic URL: frontend can read token and complete onboarding flow
-    const url = `${getCreateAccountBase().replace(/\/$/, '')}/create-account?token=${encodeURIComponent(token)}`;
+    const url = `${getCreateAccountBase()}/create-account?token=${encodeURIComponent(token)}`;
 
     return { token, url };
   }
@@ -120,7 +155,7 @@ export class ExternalService {
         .trim()
         .toLowerCase();
 
-    const base = getCreateAccountBase().replace(/\/$/, '');
+    const base = getPaymentConfirmBase();
 
     const tryResolveFromOwner = async (): Promise<string | null> => {
       if (!lookupName || !ownerId) return null;

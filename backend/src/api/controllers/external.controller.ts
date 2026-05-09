@@ -1,13 +1,16 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import ExternalService from '../../services/external.service';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
 import PasskeyService from '../../services/passkey.service';
+import { ExternalRepository } from '../../repositories/external.repository';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
+const externalRepo = new ExternalRepository(supabase);
 
 async function hasOnboardingCredentials(sessionId: string, userId: string): Promise<boolean> {
   const session = await agentRepo.getSession(sessionId);
@@ -104,6 +107,70 @@ export class ExternalController {
         reason: 'missing_credentials',
         creationUrl: url,
         token,
+      });
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      return res.status(500).json({ success: false, message });
+    }
+  }
+
+  // POST /api/external/link-existing
+  // body: { provider, provider_user_id, email, pin }
+  static async linkExistingAccount(req: Request, res: Response) {
+    try {
+      const provider = String(req.body?.provider || '').trim().toLowerCase();
+      const providerUserId = String(req.body?.provider_user_id || '').trim();
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const pin = String(req.body?.pin || '').trim();
+
+      if (!provider || !providerUserId || !email || !pin) {
+        return res.status(400).json({
+          success: false,
+          message: 'provider, provider_user_id, email e pin são obrigatórios',
+        });
+      }
+
+      const { data: sessions, error: sessionError } = await supabase
+        .from('agent_sessions')
+        .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+        .eq('email', email)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+
+      if (sessionError) {
+        return res.status(500).json({ success: false, message: sessionError.message });
+      }
+
+      const pinHash = crypto
+        .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+        .toString('hex');
+
+      const matched = (sessions || []).find((session: any) => {
+        const s1 = String(session?.session_password_hash || '').trim();
+        const s2 = String(session?.password_hash || '').trim();
+        return (s1 && s1 === pinHash) || (s2 && s2 === pinHash);
+      });
+
+      if (!matched?.session_id) {
+        return res.status(401).json({
+          success: false,
+          message: 'E-mail ou PIN inválido.',
+        });
+      }
+
+      await externalRepo.createMapping({
+        provider,
+        provider_user_id: providerUserId,
+        session_id: String(matched.session_id),
+        user_id: String(matched.user_id || email),
+      });
+
+      return res.status(200).json({
+        success: true,
+        linked: true,
+        exists: true,
+        sessionId: String(matched.session_id),
+        userId: String(matched.user_id || email),
       });
     } catch (error: any) {
       const message = error?.message || String(error);
