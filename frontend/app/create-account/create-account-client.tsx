@@ -69,6 +69,26 @@ export default function CreateAccountClient({
   const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
 
+  async function recoverTokenFromBackend(): Promise<string> {
+    let browserId = localStorage.getItem("talk-to-stellar.browserId")
+    if (!browserId) {
+      browserId = generateBrowserId()
+      localStorage.setItem("talk-to-stellar.browserId", browserId)
+    }
+
+    const response = await fetch(`${getBackendBaseUrl()}/api/external/check-account`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "web",
+        provider_user_id: browserId,
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    const creationUrl = String(payload?.creationUrl || "")
+    return extractTokenFromUrl(creationUrl)
+  }
+
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
@@ -94,23 +114,7 @@ export default function CreateAccountClient({
     async function recoverTokenWhenMissing() {
       if (token.trim()) return
       try {
-        let browserId = localStorage.getItem("talk-to-stellar.browserId")
-        if (!browserId) {
-          browserId = generateBrowserId()
-          localStorage.setItem("talk-to-stellar.browserId", browserId)
-        }
-
-        const response = await fetch(`${getBackendBaseUrl()}/api/external/check-account`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider: "web",
-            provider_user_id: browserId,
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        const creationUrl = String(payload?.creationUrl || "")
-        const recoveredToken = extractTokenFromUrl(creationUrl)
+        const recoveredToken = await recoverTokenFromBackend()
 
         if (recoveredToken) {
           setToken(recoveredToken)
@@ -141,6 +145,17 @@ export default function CreateAccountClient({
     setResult(null)
 
     try {
+      let finalToken = token
+      if (!finalToken.trim()) {
+        finalToken = await recoverTokenFromBackend()
+        if (finalToken) {
+          setToken(finalToken)
+        }
+      }
+      if (!finalToken.trim()) {
+        throw new Error("Não foi possível validar seu link agora. Solicite um novo acesso no Telegram e tente novamente.")
+      }
+
       let browserId = localStorage.getItem("talk-to-stellar.browserId")
       if (!browserId) {
         browserId = generateBrowserId()
@@ -151,7 +166,7 @@ export default function CreateAccountClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token,
+          token: finalToken,
           name: name || undefined,
           email: email || undefined,
           pin,
@@ -429,7 +444,7 @@ export default function CreateAccountClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || !token.trim() || !pin.trim() || !pinConfirm.trim()}
+                disabled={status === "submitting" || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? "Finalizando conta..." : "Finalizar conta"}
