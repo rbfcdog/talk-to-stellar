@@ -38,7 +38,7 @@ services:
   # Frontend (Next.js)
   frontend:
     build:
-      context: ./frontend/stellar-chat
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: talktostellar-frontend
     ports:
@@ -48,11 +48,11 @@ services:
       - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:3001}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     volumes:
-      - ./frontend/stellar-chat/app:/app/app
-      - ./frontend/stellar-chat/components:/app/components
-      - ./frontend/stellar-chat/lib:/app/lib
-      - ./frontend/stellar-chat/styles:/app/styles
-      - ./frontend/stellar-chat/public:/app/public
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/lib:/app/lib
+      - ./frontend/styles:/app/styles
+      - ./frontend/public:/app/public
       - /app/node_modules
     networks:
       - talktostellar-network

@@ -242,6 +242,18 @@ export class AgentGraph {
     sessionId?: string,
     maxRounds: number = 3
   ): Promise<string> {
+    const isUuid = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    const isSessionPlaceholder = (value: string) => {
+      const normalized = String(value || "").trim().toLowerCase();
+      return (
+        normalized === "current_session" ||
+        normalized === "session_atual" ||
+        normalized === "current session" ||
+        normalized === "current-session"
+      );
+    };
+
     // Some LangChain LLM wrappers provide `bindTools`; fall back if not present.
     const maybeBind = (this.llm as any).bindTools;
     const toolAwareLlm =
@@ -275,9 +287,17 @@ export class AgentGraph {
       conversation.push(response as any);
 
       for (const toolCall of toolCalls) {
-        // Inject session_id into tool args if available and tool expects it
+        // Normalize session_id in tool args using current runtime context.
         const toolArgs = toolCall.args || {};
-        if (sessionId && !toolArgs.session_id) {
+        const incomingSessionId = String(toolArgs.session_id || "").trim();
+        if (
+          sessionId &&
+          (
+            !incomingSessionId ||
+            isSessionPlaceholder(incomingSessionId) ||
+            !isUuid(incomingSessionId)
+          )
+        ) {
           toolArgs.session_id = sessionId;
         }
         

@@ -61,9 +61,8 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         try {
           checkResult = await externalCheck({ provider: 'telegram', provider_user_id: providerUserId });
         } catch (err) {
-          logger.warn('[telegram] external check failed, blocking agent forwarding', err?.message || err);
-          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
-          return;
+          logger.warn(`[telegram] external check failed, continuing with existing session: ${err?.message || err}`);
+          checkResult = null;
         }
 
         if (checkResult && checkResult.exists === false) {
@@ -93,18 +92,15 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
             if (payload && payload.exists && payload.sessionId) {
               sessionId = payload.sessionId;
               ctx.session.sessionId = sessionId;
-            } else {
-              await ctx.reply('Voce ainda nao possui conta cadastrada. Faça seu cadastro para continuar.');
+            } else if (payload && payload.exists === false) {
+              await ctx.reply(`Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
               return;
             }
           } else {
-            await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
-            return;
+            logger.warn('[telegram] external check returned non-200, continuing with existing session');
           }
         } catch (err) {
-          logger.warn('[telegram] external check failed, blocking agent forwarding', err?.message || err);
-          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
-          return;
+          logger.warn(`[telegram] external check failed, continuing with existing session: ${err?.message || err}`);
         }
       }
 
