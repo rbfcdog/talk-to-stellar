@@ -142,6 +142,21 @@ export class AgentGraph {
     };
   }
 
+  private getOnboardingOrLoginMessage(): string {
+    const base =
+      process.env.CREATE_ACCOUNT_BASE ||
+      process.env.FRONTEND_URL ||
+      process.env.PUBLIC_APP_URL ||
+      "http://localhost:3000";
+    const normalizedBase = String(base).trim().replace(/\/$/, "");
+    const onboardingUrl = `${normalizedBase}/create-account`;
+
+    return `Você precisa entrar na sua conta para continuar.
+
+Abra este link para criar conta ou entrar em uma conta existente:
+${onboardingUrl}`;
+  }
+
   private async extractPaymentIntentWithLlm(userMessage: string, userId?: string): Promise<{
     recipient_query?: string;
     amount?: string;
@@ -515,13 +530,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
 
       // If no email/phone provided, ask for it
       if (!email && !phoneNumber) {
-        state.response_message = `Para criar ou entrar na sua carteira Stellar, envie uma destas opções:
-
-1️⃣ **Email:** Seu endereço de e-mail
-2️⃣ **Telefone:** Seu número de telefone com DDD (ex: +55 11 999999999)
-3️⃣ **Chave privada (secret key):** para entrar/importar uma carteira existente
-
-Por favor, envie uma dessas informações para continuarmos!`;
+        state.response_message = this.getOnboardingOrLoginMessage();
         state.waiting_for_wallet_input = true;
         state.action_params = {
           ...state.action_params,
@@ -655,7 +664,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private wantsLogoutWallet(text: string): boolean {
     const normalized = text.toLowerCase();
     return (
-      (normalized.includes('sair') || normalized.includes('logout') || normalized.includes('desconectar')) &&
+      (normalized.includes('sair') || normalized.includes('logout') || normalized.includes('desconectar') || normalized.includes('deslogar')) &&
       (normalized.includes('wallet') || normalized.includes('carteira'))
     );
   }
@@ -759,7 +768,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = 'Você precisa entrar em uma wallet antes de consultar saldo.';
+      state.response_message = this.getOnboardingOrLoginMessage();
     } else {
       const toolResultRaw = await executeTool('get_balance', {
         public_key: state.session_data.public_key,
@@ -794,7 +803,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleHistoryCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = 'Você precisa entrar em uma wallet antes de consultar transações.';
+      state.response_message = this.getOnboardingOrLoginMessage();
     } else {
       const toolResultRaw = await executeTool('get_transaction_history', {
         public_key: state.session_data.public_key,
@@ -916,7 +925,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = 'Você precisa entrar em uma wallet antes de converter ativos.';
+      state.response_message = this.getOnboardingOrLoginMessage();
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const parsed = llmParsed.sourceAmount && llmParsed.sourceAssetCode && llmParsed.destAssetCode
@@ -1122,7 +1131,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       if (state.action_type === ActionType.BUILD_PAYMENT) {
         if (!state.session_data?.public_key) {
           state.success = false;
-          state.response_message = 'Você precisa entrar em uma wallet antes de enviar pagamentos.';
+          state.response_message = this.getOnboardingOrLoginMessage();
         } else {
           const paymentIntent = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
 
