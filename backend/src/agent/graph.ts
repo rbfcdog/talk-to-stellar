@@ -96,6 +96,15 @@ export class AgentGraph {
         return byPix;
       }
 
+      // Support positional aliases like "contato 1" / "contact 1"
+      const aliasMatch = normalizedQuery.match(/^(?:contato|contact)\s*(\d{1,3})$/);
+      if (aliasMatch) {
+        const idx = Number(aliasMatch[1]);
+        if (Number.isFinite(idx) && idx >= 1 && idx <= contacts.length) {
+          return contacts[idx - 1];
+        }
+      }
+
       return contacts.find((c: any) =>
         String(c.contact_name || c.name || '').trim().toLowerCase() === normalizedQuery
       );
