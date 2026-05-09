@@ -43,12 +43,27 @@ export default function CreateAccountClient({
   const [existingPin, setExistingPin] = useState("")
   const [existingStatus, setExistingStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [existingError, setExistingError] = useState("")
-  const [validation] = useState<any>(initialValidation)
+  const [validation, setValidation] = useState<any>(initialValidation)
 
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
     }
+  }, [tokenFromUrl])
+
+  useEffect(() => {
+    async function validateToken() {
+      if (!tokenFromUrl) return
+      try {
+        const response = await fetch(`${getBackendBaseUrl()}/api/external/validate-token?token=${encodeURIComponent(tokenFromUrl)}`)
+        const payload = await response.json().catch(() => ({}))
+        setValidation(payload)
+      } catch (error) {
+        setValidation({ success: false, valid: false, message: "Não foi possível validar o link agora." })
+      }
+    }
+
+    validateToken()
   }, [tokenFromUrl])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
