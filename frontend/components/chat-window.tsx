@@ -16,6 +16,25 @@ type Message = {
   createdAt?: Date;
 };
 
+function getBackendBaseUrl() {
+  const explicitBase = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_AGENT_API_URL;
+  if (!explicitBase) {
+    return "http://localhost:3001";
+  }
+  return explicitBase.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
+}
+
+function generateBrowserId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function ChatWindow({ chatId }: { chatId: string }) {
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
     agent: {
@@ -55,6 +74,11 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingUrl, setOnboardingUrl] = useState<string>('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPin, setLoginPin] = useState('');
+  const [loginError, setLoginError] = useState('');
   
   // --- Initialize session ID on mount ---
   useEffect(() => {
@@ -86,6 +110,11 @@ export function ChatWindow({ chatId }: { chatId: string }) {
 
   useEffect(() => {
     setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
+    setNeedsOnboarding(false);
+    setOnboardingUrl('');
+    setLoginEmail('');
+    setLoginPin('');
+    setLoginError('');
   }, [chatId]);
   
   // --- Refs para controlar os elementos da tela ---
@@ -146,13 +175,58 @@ export function ChatWindow({ chatId }: { chatId: string }) {
         return;
       }
 
+      const storedSessionId = typeof window !== "undefined"
+        ? localStorage.getItem("talk-to-stellar.sessionId")
+        : null;
+
+      let resolvedSessionId = storedSessionId || sessionId;
+
+      if (!storedSessionId) {
+        let browserId = localStorage.getItem("talk-to-stellar.browserId");
+        if (!browserId) {
+          browserId = generateBrowserId();
+          localStorage.setItem("talk-to-stellar.browserId", browserId);
+        }
+
+        const checkResponse = await fetch(`${getBackendBaseUrl()}/api/external/check-account`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "web",
+            provider_user_id: browserId,
+          }),
+        });
+
+        const checkPayload = await checkResponse.json().catch(() => ({}));
+        if (checkPayload?.exists && checkPayload?.sessionId) {
+          resolvedSessionId = String(checkPayload.sessionId);
+          localStorage.setItem("talk-to-stellar.sessionId", resolvedSessionId);
+        } else if (checkPayload?.onboardingRequired && checkPayload?.creationUrl) {
+          setNeedsOnboarding(true);
+          setOnboardingUrl(String(checkPayload.creationUrl));
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `onboarding-${Date.now()}`,
+              role: "assistant",
+              content:
+                `Para continuar, você precisa criar sua conta.\n` +
+                `Abra este link: ${String(checkPayload.creationUrl)}\n\n` +
+                `Se já tem conta, use a opção abaixo para entrar com e-mail + PIN.`,
+              createdAt: new Date(),
+            },
+          ]);
+          return;
+        }
+      }
+
       // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...messages, userMessage],
-          session_id: sessionId,
+          session_id: resolvedSessionId,
         }),
       });
 
@@ -199,6 +273,73 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     if (!timestamp) return "";
     return timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
+
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    return (
+      <p className="whitespace-pre-wrap">
+        {parts.map((part, idx) => {
+          if (/^https?:\/\/[^\s]+$/i.test(part)) {
+            return (
+              <a key={idx} href={part} target="_blank" rel="noopener noreferrer" className="underline text-cyan-300 break-all">
+                {part}
+              </a>
+            );
+          }
+          return <React.Fragment key={idx}>{part}</React.Fragment>;
+        })}
+      </p>
+    );
+  };
+
+  const handleLinkExisting = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    try {
+      let browserId = localStorage.getItem("talk-to-stellar.browserId");
+      if (!browserId) {
+        browserId = generateBrowserId();
+        localStorage.setItem("talk-to-stellar.browserId", browserId);
+      }
+
+      const response = await fetch(`${getBackendBaseUrl()}/api/external/link-existing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "web",
+          provider_user_id: browserId,
+          email: loginEmail,
+          pin: loginPin,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || 'Não foi possível entrar com e-mail e PIN.');
+      }
+
+      if (payload?.sessionId) {
+        const linkedSessionId = String(payload.sessionId);
+        localStorage.setItem("talk-to-stellar.sessionId", linkedSessionId);
+        setSessionId(linkedSessionId);
+      }
+
+      setNeedsOnboarding(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `linked-${Date.now()}`,
+          role: "assistant",
+          content: "Conta vinculada com sucesso. Agora você pode continuar no chat.",
+          createdAt: new Date(),
+        },
+      ]);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Falha ao vincular conta.');
+    }
+  };
   
   return (
     <div className="flex flex-col h-full bg-[#0b141a] relative">
@@ -224,11 +365,54 @@ export function ChatWindow({ chatId }: { chatId: string }) {
             {messages.map((m) => (
               <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[65%] rounded-lg px-3 py-2 text-[14.2px] shadow-md ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
-                  <p className="whitespace-pre-wrap">{m.content}</p>
+                  {renderMessageContent(m.content)}
                   <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
                 </div>
               </div>
             ))}
+            {needsOnboarding && chatId === "agent" && (
+              <div className="flex justify-start">
+                <div className="max-w-[75%] rounded-lg px-3 py-3 text-[14.2px] shadow-md bg-[#202c33] text-white space-y-3">
+                  {onboardingUrl && (
+                    <a
+                      href={onboardingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-400"
+                    >
+                      Criar conta agora
+                    </a>
+                  )}
+                  <form onSubmit={handleLinkExisting} className="space-y-2">
+                    <p className="text-sm text-slate-300">Já tenho conta</p>
+                    <Input
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      type="email"
+                      placeholder="Seu e-mail"
+                      className="bg-[#2a3942] border-none text-[#e9edef] placeholder:text-[#8696a0] h-9"
+                    />
+                    <Input
+                      value={loginPin}
+                      onChange={(event) => setLoginPin(event.target.value)}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="Seu PIN"
+                      className="bg-[#2a3942] border-none text-[#e9edef] placeholder:text-[#8696a0] h-9"
+                    />
+                    {loginError && <p className="text-xs text-rose-300">{loginError}</p>}
+                    <Button
+                      type="submit"
+                      className="h-9 rounded-lg bg-emerald-500 px-3 text-sm font-semibold text-white hover:bg-emerald-400"
+                      disabled={!loginEmail.trim() || !loginPin.trim()}
+                    >
+                      Entrar com e-mail + PIN
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </ScrollArea>
