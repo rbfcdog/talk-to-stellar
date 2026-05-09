@@ -166,6 +166,11 @@ export function createAgentRoutes(
   ) => {
     try {
       const { query, session_id, source, metadata } = req.body;
+      const requestedSessionId = String(req.body.session_id || session_id || "").trim();
+      const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
+      const requestedSessionData = hasValidRequestedSessionId
+        ? await repository.getSession(requestedSessionId)
+        : null;
 
       if (!query || typeof query !== "string") {
         return res.status(400).json({ 
@@ -182,6 +187,10 @@ export function createAgentRoutes(
         if (providerUserId) {
           const existing = await externalService.checkExternalAccount("web", providerUserId);
           if (!existing) {
+            // If the browser already sent a valid, existing session_id, do not force onboarding again.
+            if (requestedSessionData) {
+              req.body.session_id = requestedSessionId;
+            } else {
             const { url } = externalService.createOnboardUrl("web", providerUserId);
             return res.status(200).json({
               session_id: session_id || null,
@@ -193,6 +202,7 @@ export function createAgentRoutes(
                 `Abra este link: ${url}\n\n` +
                 `Se você já tem conta, use a opção "Já tenho conta" dentro da página de cadastro.`,
             });
+            }
           }
 
           if (existing?.session_id && !session_id) {
