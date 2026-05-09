@@ -4,22 +4,83 @@ import { ExternalRepository } from '../repositories/external.repository';
 import { ContactRepository } from '../api/repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
+import { logger } from '../utils/logger';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function isLocalhostUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(String(url || '').trim());
+}
+
+function ensureHttpProtocol(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function getHostedPublicFrontendBase(): string {
+  const explicitHosted =
+    process.env.PUBLIC_APP_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.CREATE_ACCOUNT_BASE ||
+    process.env.PAYMENT_CONFIRM_BASE ||
+    '';
+
+  const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? ensureHttpProtocol(process.env.RAILWAY_PUBLIC_DOMAIN)
+    : '';
+  const renderUrl = process.env.RENDER_EXTERNAL_URL
+    ? ensureHttpProtocol(process.env.RENDER_EXTERNAL_URL)
+    : '';
+  const vercelUrl = process.env.VERCEL_URL
+    ? ensureHttpProtocol(process.env.VERCEL_URL)
+    : '';
+
+  const hosted = [explicitHosted, railwayUrl, renderUrl, vercelUrl]
+    .map((value) => ensureHttpProtocol(String(value || '').trim()))
+    .find((value) => value && !isLocalhostUrl(value));
+
+  return hosted ? hosted.replace(/\/$/, '') : '';
+}
+
+function isHostedEnvironment(): boolean {
+  return Boolean(
+    process.env.RAILWAY_PUBLIC_DOMAIN ||
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.VERCEL_URL ||
+    process.env.FLY_APP_NAME ||
+    process.env.NODE_ENV === 'production'
+  );
+}
+
 function resolveBaseUrl(candidates: Array<string | undefined>, fallbackDev: string): string {
+  const hostedBase = getHostedPublicFrontendBase();
+  if (hostedBase) {
+    logger.info(`[external-url] using hosted frontend base: ${hostedBase}`);
+    return hostedBase;
+  }
+
   const firstValid = candidates
-    .map((value) => String(value || '').trim())
+    .map((value) => ensureHttpProtocol(String(value || '').trim()))
     .find((value) => value.length > 0);
 
-  if (firstValid) {
+  if (firstValid && !isLocalhostUrl(firstValid)) {
     return firstValid.replace(/\/$/, '');
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Frontend base URL is not configured for production environment');
+  if (firstValid && isLocalhostUrl(firstValid) && isHostedEnvironment()) {
+    throw new Error(`Invalid frontend base URL for hosted environment: ${firstValid}`);
+  }
+
+  if (isHostedEnvironment()) {
+    throw new Error('Frontend base URL is not configured for hosted environment');
+  }
+
+  if (firstValid && isLocalhostUrl(firstValid)) {
+    return firstValid.replace(/\/$/, '');
   }
 
   return fallbackDev;
