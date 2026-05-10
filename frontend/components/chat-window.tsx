@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
 
 type Message = {
   id: string;
@@ -28,7 +28,7 @@ function generateBrowserId(): string {
   });
 }
 
-export function ChatWindow({ chatId }: { chatId: string }) {
+export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
     agent: {
       title: "TalkToStellar",
@@ -316,29 +316,41 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0b141a] relative">
-       {/* Header (Fixo no topo) */}
-       <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-[#202c33] border-l border-[#313d45]">
-        <div className="flex items-center gap-3">
+    <div className="relative flex h-full min-h-0 flex-col bg-[#0b141a]">
+       <div className="flex-shrink-0 flex items-center justify-between gap-3 border-l border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#aebac1] hover:bg-white/5 md:hidden"
+            aria-label="Voltar para a lista de contatos"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <Avatar className="h-10 w-10">
             <AvatarImage src={selectedMeta.avatar} />
             <AvatarFallback className="bg-[#00a884] text-white">●</AvatarFallback>
           </Avatar>
-          <div>
-            <h2 className="font-normal text-[#e9edef] text-[17px]">{selectedMeta.title}</h2>
+          <div className="min-w-0">
+            <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
             <p className="text-xs text-[#8696a0]">{isLoading ? "digitando..." : "online"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-5 text-[#aebac1]"><Video className="h-5 w-5 cursor-pointer"/><Phone className="h-5 w-5 cursor-pointer"/><Search className="h-5 w-5 cursor-pointer"/><MoreVertical className="h-5 w-5 cursor-pointer"/></div>
+        <div className="flex items-center gap-4 text-[#aebac1] sm:gap-5">
+          <Video className="h-5 w-5 cursor-pointer"/>
+          <Phone className="h-5 w-5 cursor-pointer"/>
+          <Search className="h-5 w-5 cursor-pointer"/>
+          <MoreVertical className="h-5 w-5 cursor-pointer"/>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: `url('/bg-chat-tile-light.png')`, backgroundRepeat: 'repeat' }}>
         {/* Adicionamos a ref diretamente ao Viewport da ScrollArea */}
         <div ref={scrollAreaViewportRef} className="h-full w-full overflow-y-auto">
-          <div className="p-4 space-y-2">
+          <div className="space-y-2 p-3 sm:p-4">
             {messages.map((m) => (
               <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[65%] rounded-lg px-3 py-2 text-[14.2px] shadow-md ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
+                <div className={`max-w-[84%] rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
                   {renderMessageContent(m.content)}
                   <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
                 </div>
@@ -349,24 +361,24 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       </ScrollArea>
 
       {/* Input de Mensagem (Fixo embaixo) */}
-      <div className="flex-shrink-0 px-4 py-3 bg-[#202c33]">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <Smile className="h-6 w-6 text-[#8696a0]" />
-          <Paperclip className="h-6 w-6 text-[#8696a0]" />
+      <div className="flex-shrink-0 bg-[#202c33] px-3 py-3 sm:px-4">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3">
+          <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />
+          <Paperclip className="hidden h-6 w-6 text-[#8696a0] sm:block" />
           <Input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Digite uma mensagem"
-            className="flex-1 bg-[#2a3942] border-none text-[#e9edef] placeholder:text-[#8696a0] rounded-lg h-10 px-4"
+            className="h-11 flex-1 rounded-lg border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0]"
             disabled={isLoading}
           />
           {input.trim() ? (
-            <Button type="submit" size="icon" className="bg-transparent hover:bg-transparent text-[#8696a0] rounded-full h-10 w-10" disabled={isLoading}>
+            <Button type="submit" size="icon" className="h-10 w-10 rounded-full bg-transparent text-[#8696a0] hover:bg-transparent" disabled={isLoading}>
               <Send className="h-6 w-6" />
             </Button>
           ) : (
-            <Mic className="h-6 w-6 text-[#8696a0]" />
+            <Mic className="h-6 w-6 shrink-0 text-[#8696a0]" />
           )}
         </form>
       </div>

@@ -107,38 +107,50 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   );
 
   return (
-    <div className="fixed left-0 top-0 h-full w-[400px] flex flex-col bg-[#111b21] border-r border-[#313d45]">
-      <div className="flex items-center justify-between px-4 py-4 bg-[#202c33]">
-        <h1 className="text-[#e9edef] text-[19px] font-bold">TalkToStellar</h1>
-        <div className="flex items-center gap-5 text-[#aebac1]"><Users className="h-5 w-5" /><MessageCircle className="h-5 w-5" /><MoreVertical className="h-5 w-5" /></div>
+    <div className="flex h-full min-h-0 w-full flex-col border-r border-[#313d45] bg-[#111b21]">
+      <div className="flex items-center justify-between gap-3 bg-[#202c33] px-4 py-4">
+        <h1 className="text-[19px] font-bold text-[#e9edef]">TalkToStellar</h1>
+        <div className="flex items-center gap-4 text-[#aebac1]">
+          <Users className="h-5 w-5" />
+          <MessageCircle className="h-5 w-5" />
+          <MoreVertical className="h-5 w-5" />
+        </div>
       </div>
-      <div className="px-3 py-3 bg-[#0b141a]">
-        <div className="relative"><Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#8696a0]" /><Input placeholder="Pesquisar contatos da carteira..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-12 pr-4 py-2 bg-[#202c33] border-none rounded-lg h-9" /></div>
+      <div className="bg-[#0b141a] px-3 py-3">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8696a0]" />
+          <Input
+            placeholder="Pesquisar contatos da carteira..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 rounded-lg border-none bg-[#202c33] pl-12 pr-4 text-sm text-[#e9edef] placeholder:text-[#8696a0]"
+          />
+        </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="space-y-0">
           {filteredConversations.map((chat) => (
             <div
               key={chat.id}
               onClick={() => onSelectChat(chat.id)}
-              className={`flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-[#202c33] border-b border-[#313d45]/20 ${
+              className={`flex cursor-pointer items-center gap-3 border-b border-[#313d45]/20 px-3 py-3 hover:bg-[#202c33] ${
                 selectedChat === chat.id ? "bg-[#2a3942]" : ""
               }`}
             >
-              <Avatar className="h-12 w-12">
+              <Avatar className="h-12 w-12 shrink-0">
                 <AvatarImage src={chat.avatar} />
                 <AvatarFallback className={chat.isBot ? "bg-[#00a884] text-white" : "bg-[#6b7280] text-white flex items-center justify-center"}>
                   {chat.isBot ? (
-                    <span className="text-xl">💬</span>
+                    <span className="text-xl">T</span>
                   ) : (
                     <User className="h-6 w-6" />
                   )}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <div className="flex justify-between">
-                  <h3 className="font-normal text-[#e9edef] truncate text-[17px]">{chat.title}</h3>
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="truncate text-[17px] font-normal text-[#e9edef]">{chat.title}</h3>
                   <span className="text-xs text-[#8696a0]">{formatTime(chat.lastMessageTime)}</span>
                 </div>
                 <p className="text-sm text-[#8696a0] truncate">{chat.lastMessage}</p>
