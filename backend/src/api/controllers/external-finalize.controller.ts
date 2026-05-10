@@ -145,6 +145,81 @@ async function sendTelegramPaymentNotification(input: {
   }
 }
 
+async function sendTelegramConversionNotification(input: {
+  sessionId: string;
+  userId: string;
+  sourceAmount: string;
+  sourceAssetCode: string;
+  destinationAmount: string;
+  destinationAssetCode: string;
+  feeXlm?: string;
+  hash?: string;
+}) {
+  const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
+  const text =
+    `Conversão confirmada.\n` +
+    `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n` +
+    `Destino recebeu: ${input.destinationAmount} ${input.destinationAssetCode}\n` +
+    feeLine +
+    `${input.hash ? `Hash: ${input.hash}` : ''}`;
+
+  try {
+    await agentRepo.saveMessage(input.sessionId, 'assistant', text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[conversion-notify] failed to save conversion confirmation message: ${message}`);
+  }
+
+  try {
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    if (!botToken) {
+      logger.warn('[telegram-notify] TELEGRAM_BOT_TOKEN is not configured; conversion confirmation saved to chat history only');
+      return;
+    }
+
+    const { data: mappingBySession } = await supabase
+      .from('external_accounts')
+      .select('provider, provider_user_id')
+      .eq('provider', 'telegram')
+      .eq('session_id', input.sessionId)
+      .limit(1)
+      .maybeSingle();
+
+    let providerUserId = String(mappingBySession?.provider_user_id || '').trim();
+
+    if (!providerUserId) {
+      const { data: mappingByUser } = await supabase
+        .from('external_accounts')
+        .select('provider, provider_user_id')
+        .eq('provider', 'telegram')
+        .eq('user_id', input.userId)
+        .limit(1)
+        .maybeSingle();
+      providerUserId = String(mappingByUser?.provider_user_id || '').trim();
+    }
+
+    if (!providerUserId) {
+      logger.warn(`[telegram-notify] telegram chat mapping not found for conversion session ${input.sessionId}`);
+      return;
+    }
+
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: providerUserId,
+        text,
+      }),
+    });
+    if (!telegramResponse.ok) {
+      logger.warn(`[telegram-notify] conversion sendMessage failed with status ${telegramResponse.status}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[telegram-notify] failed to send conversion confirmation message: ${message}`);
+  }
+}
+
 async function ensureDestinationCanReceiveAsset(input: {
   destination: string;
   destinationWallet: any;
@@ -353,11 +428,318 @@ export default class ExternalFinalizeController {
         logger.warn(`[external-finalize] payment confirmation token reused: ${tokenHash.substring(0, 16)}...`);
         return res.status(400).json({
           success: false,
-          message: 'Este link de confirmação já foi utilizado. Por favor, solicite um novo pagamento.'
+          message: 'Este link de confirmação já foi utilizado. Solicite uma nova confirmação.'
         });
       }
 
       const tokenSub = String((payload as any)?.sub || '');
+      if (tokenSub === 'external_conversion_confirm') {
+        const {
+          session_id,
+          owner_id,
+          source_amount,
+          source_asset_code,
+          source_asset_issuer,
+          dest_amount,
+          dest_asset_code,
+          dest_asset_issuer,
+          quote: tokenQuote,
+        } = payload as any;
+
+        if (!session_id || !dest_amount || !source_asset_code || !dest_asset_code) {
+          return res.status(400).json({ success: false, message: 'token missing conversion data' });
+        }
+
+        const sourceAssetCode = normalizeAssetCode(source_asset_code);
+        const destAssetCode = normalizeAssetCode(dest_asset_code);
+        const sourceAssetIssuer = resolveAssetIssuer(sourceAssetCode, source_asset_issuer);
+        const destAssetIssuer = resolveAssetIssuer(destAssetCode, dest_asset_issuer);
+
+        if (sourceAssetCode !== 'XLM' && !sourceAssetIssuer) {
+          return res.status(400).json({
+            success: false,
+            message: `${sourceAssetCode}_ISSUER não está configurado no backend.`,
+          });
+        }
+        if (destAssetCode !== 'XLM' && !destAssetIssuer) {
+          return res.status(400).json({
+            success: false,
+            message: `${destAssetCode}_ISSUER não está configurado no backend.`,
+          });
+        }
+
+        const wallet = await walletRepo.getWalletBySession(String(session_id));
+        if (!wallet?.public_key || !wallet?.vault_secret_id) {
+          return res.status(400).json({ success: false, message: 'wallet not found for conversion confirmation' });
+        }
+
+        const session = await agentRepo.getSession(String(session_id));
+        if (!session?.user_id) {
+          return res.status(400).json({ success: false, message: 'session not found for conversion confirmation' });
+        }
+
+        const providedPin = String(req.body?.pin || '').trim();
+        if (!providedPin) {
+          return res.status(400).json({
+            success: false,
+            message: 'PIN é obrigatório para confirmar a conversão.',
+          });
+        }
+
+        const pinHash = crypto
+          .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+          .toString('hex');
+
+        const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
+        if (!sessionPinHash || pinHash !== sessionPinHash) {
+          return res.status(401).json({
+            success: false,
+            message: 'PIN inválido. Tente novamente.',
+          });
+        }
+
+        await ensureDestinationCanReceiveAsset({
+          destination: wallet.public_key,
+          destinationWallet: wallet,
+          assetCode: destAssetCode,
+          assetIssuer: destAssetIssuer,
+          userId: String(session.user_id),
+        });
+
+        const usesStrictSend = Boolean(String(source_amount || '').trim());
+        const quote = usesStrictSend
+          ? await StellarService.quoteStrictSendConversion({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              sourceAmount: String(source_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            })
+          : await StellarService.quotePathPayment({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              destAmount: String(dest_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            });
+
+        const tokenClaimed = await claimPaymentToken(
+          tokenHash,
+          String(session_id),
+          String(session.user_id),
+          wallet.public_key,
+          String(dest_amount),
+          destAssetCode,
+          {
+            type: 'conversion',
+            owner_id: owner_id || String(session.user_id),
+            source_asset_code: sourceAssetCode,
+            source_asset_issuer: sourceAssetIssuer || null,
+            source_amount: String(source_amount || ''),
+            dest_asset_code: destAssetCode,
+            dest_asset_issuer: destAssetIssuer || null,
+            dest_amount: String(dest_amount),
+            token_quote: tokenQuote || null,
+            quote,
+            browser_id: browserId || null,
+          }
+        );
+
+        if (!tokenClaimed) {
+          return res.status(400).json({
+            success: false,
+            message: 'Este link de confirmação já foi utilizado. Solicite uma nova confirmação.',
+          });
+        }
+
+        await logPaymentDetails(
+          String(session_id),
+          String(session.user_id),
+          wallet.public_key,
+          wallet.public_key,
+          String(quote.sourceAmount),
+          String(quote.sourceAsset.code),
+          quote.sourceAsset.code === 'XLM' ? undefined : quote.sourceAsset.issuer,
+          String(quote.destinationAmount),
+          String(quote.destinationAsset.code),
+          quote.destinationAsset.code === 'XLM' ? undefined : quote.destinationAsset.issuer,
+          String(quote.networkFeeXlm || '0.001'),
+          undefined,
+          usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
+          'pending',
+          undefined,
+          quote.path,
+          {
+            token_hash: tokenHash,
+            token_quote: tokenQuote || null,
+            quote,
+          }
+        );
+
+        const unsignedXdr = usesStrictSend
+          ? await StellarService.buildStrictSendConversionXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              sourceAmount: String(source_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            })
+          : await StellarService.buildPathPaymentXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              destAmount: String(dest_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            });
+
+        const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
+        const operationType = usesStrictSend ? 'PATH_PAYMENT_STRICT_SEND' : 'PATH_PAYMENT_STRICT_RECEIVE';
+        const result = await StellarService.signAndSubmitXdr(
+          String(session.user_id),
+          secretKey,
+          unsignedXdr,
+          {
+            user_id: String(session.user_id),
+            type: operationType,
+            destination_key: wallet.public_key,
+            asset_code: destAssetCode,
+            amount: Number(quote.destinationAmount),
+            context:
+              `Conversão interna confirmada: ${quote.sourceAmount} ${quote.sourceAsset.code} ` +
+              `para ${quote.destinationAmount} ${quote.destinationAsset.code}.`,
+            source_public_key: wallet.public_key,
+            source_session_id: wallet.session_id,
+            destination_session_id: wallet.session_id,
+          }
+        );
+
+        if (!result.success) {
+          await updatePaymentTokenStatus(
+            tokenHash,
+            undefined,
+            'failed',
+            {
+              type: 'conversion',
+              quote,
+              error: result.error || 'Could not submit conversion',
+            }
+          );
+
+          await logPaymentDetails(
+            String(session_id),
+            String(session.user_id),
+            wallet.public_key,
+            wallet.public_key,
+            String(quote.sourceAmount),
+            String(quote.sourceAsset.code),
+            quote.sourceAsset.code === 'XLM' ? undefined : quote.sourceAsset.issuer,
+            String(quote.destinationAmount),
+            String(quote.destinationAsset.code),
+            quote.destinationAsset.code === 'XLM' ? undefined : quote.destinationAsset.issuer,
+            String(quote.networkFeeXlm || '0.001'),
+            undefined,
+            usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
+            'failed',
+            result.error || 'Could not submit conversion',
+            quote.path,
+            {
+              token_hash: tokenHash,
+              type: 'conversion',
+              quote,
+              error: result.error || 'Could not submit conversion',
+            }
+          );
+
+          return res.status(400).json({
+            success: false,
+            message: result.error || 'Could not submit conversion',
+          });
+        }
+
+        const submittedDetails = result.hash
+          ? await StellarService.getSubmittedPaymentDetails(result.hash)
+          : null;
+
+        const transferDetails = submittedDetails
+          ? {
+              ...submittedDetails,
+              exact: true,
+            }
+          : {
+              sourceAmount: String(quote.sourceAmount),
+              sourceAssetCode: String(quote.sourceAsset.code),
+              sourceAssetIssuer: quote.sourceAsset.issuer,
+              destinationAmount: String(quote.destinationAmount),
+              destinationAssetCode: String(quote.destinationAsset.code),
+              destinationAssetIssuer: quote.destinationAsset.issuer,
+              feeXlm: String(quote.networkFeeXlm || ''),
+              exact: false,
+            };
+
+        await sendTelegramConversionNotification({
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+          sourceAmount: String(transferDetails.sourceAmount || quote.sourceAmount),
+          sourceAssetCode: String(transferDetails.sourceAssetCode || quote.sourceAsset.code),
+          destinationAmount: String(transferDetails.destinationAmount || quote.destinationAmount),
+          destinationAssetCode: String(transferDetails.destinationAssetCode || quote.destinationAsset.code),
+          feeXlm: String(transferDetails.feeXlm || quote.networkFeeXlm || ''),
+          hash: result.hash,
+        });
+
+        await logPaymentDetails(
+          String(session_id),
+          String(session.user_id),
+          wallet.public_key,
+          wallet.public_key,
+          String(transferDetails.sourceAmount || quote.sourceAmount),
+          String(transferDetails.sourceAssetCode || quote.sourceAsset.code),
+          String(transferDetails.sourceAssetCode || quote.sourceAsset.code).toUpperCase() === 'XLM'
+            ? undefined
+            : (transferDetails as any).sourceAssetIssuer || quote.sourceAsset.issuer,
+          String(transferDetails.destinationAmount || quote.destinationAmount),
+          String(transferDetails.destinationAssetCode || quote.destinationAsset.code),
+          String(transferDetails.destinationAssetCode || quote.destinationAsset.code).toUpperCase() === 'XLM'
+            ? undefined
+            : (transferDetails as any).destinationAssetIssuer || quote.destinationAsset.issuer,
+          String(transferDetails.feeXlm || quote.networkFeeXlm || ''),
+          result.hash,
+          usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
+          'success',
+          undefined,
+          quote.path,
+          {
+            token_hash: tokenHash,
+            type: 'conversion',
+            token_quote: tokenQuote || null,
+            quote,
+            transferDetails,
+          }
+        );
+
+        await updatePaymentTokenStatus(
+          tokenHash,
+          result.hash,
+          'completed',
+          {
+            type: 'conversion',
+            quote,
+            transferDetails,
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          conversionConfirmed: true,
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+          sourceAssetCode,
+          destAssetCode,
+          hash: result.hash,
+          transferDetails,
+        });
+      }
+
       if (tokenSub === 'external_payment_confirm') {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
         const assetCode = normalizeAssetCode((payload as any)?.asset_code || 'XLM');

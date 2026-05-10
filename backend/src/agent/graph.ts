@@ -1144,18 +1144,37 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
             state.success = false;
             state.response_message = `Não consegui cotar essa conversão: ${toolResult.error || 'erro desconhecido'}`;
           } else {
-            state.pending_conversion = {
+            const conversionDestAmount = String(toolResult.quote?.destinationAmount || '').trim();
+            const conversionPrepareRaw = await executeTool('prepare_conversion_confirmation', {
+              session_id: state.session_id,
+              owner_id: state.session_data.user_id,
+              source_amount: finalSourceAmount,
               source_asset_code: finalSourceAssetCode,
               source_asset_issuer: sourceIssuer,
-              source_amount: finalSourceAmount,
+              dest_amount: conversionDestAmount,
               dest_asset_code: finalDestAssetCode,
               dest_asset_issuer: destIssuer,
-              dest_amount: toolResult.quote?.destinationAmount,
               quote: toolResult.quote,
-            };
-            state.success = true;
-            state.response_message =
-              `${toolResult.message}\n\nConfirme para executar a conversão interna. Responda "confirmar" para converter ou qualquer outra coisa para cancelar.`;
+            });
+
+            let conversionPrepare: any;
+            try {
+              conversionPrepare = JSON.parse(conversionPrepareRaw);
+            } catch {
+              conversionPrepare = { success: false, error: 'Failed to parse conversion confirmation response' };
+            }
+
+            if (!conversionPrepare.success || !conversionPrepare.url) {
+              state.success = false;
+              state.response_message = `Não consegui gerar um link de confirmação para a conversão agora: ${conversionPrepare.error || 'erro desconhecido'}`;
+            } else {
+              state.pending_conversion = undefined;
+              state.success = true;
+              const sourceLabel = this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
+              const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
+              state.response_message =
+                `${toolResult.message}\n\nPara confirmar a conversão de ${sourceLabel} para aproximadamente ${destLabel}, abra o link:\n\n${conversionPrepare.url}`;
+            }
           }
           }
         }

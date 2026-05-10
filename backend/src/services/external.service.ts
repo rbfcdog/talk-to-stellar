@@ -273,6 +273,45 @@ export class ExternalService {
     throw new Error('createPaymentConfirmUrl: could not resolve destination public key automatically — include `destination` as a Stellar public key or provide `destination_contact` with `stellar_public_key` or call with owner_id + exact destination_name.');
   }
 
+  createConversionConfirmUrl(payload: {
+    session_id: string;
+    owner_id?: string;
+    source_amount?: string;
+    source_asset_code: string;
+    source_asset_issuer?: string;
+    dest_amount: string;
+    dest_asset_code: string;
+    dest_asset_issuer?: string;
+    quote?: any;
+    nonce?: string;
+  }, extra = {}) {
+    const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || 'XLM');
+    const destAssetCode = normalizeAssetCode(payload.dest_asset_code || 'XLM');
+    const sourceAssetIssuer = getAssetIssuer(sourceAssetCode, payload.source_asset_issuer);
+    const destAssetIssuer = getAssetIssuer(destAssetCode, payload.dest_asset_issuer);
+
+    const tokenPayload = {
+      sub: 'external_conversion_confirm',
+      session_id: payload.session_id,
+      owner_id: payload.owner_id || null,
+      source_amount: payload.source_amount || null,
+      source_asset_code: sourceAssetCode,
+      source_asset_issuer: sourceAssetIssuer || null,
+      dest_amount: payload.dest_amount,
+      dest_asset_code: destAssetCode,
+      dest_asset_issuer: destAssetIssuer || null,
+      quote: payload.quote || null,
+      nonce: payload.nonce || uuidv4(),
+      ...extra,
+    };
+
+    const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
+    const base = getPaymentConfirmBase();
+    const url = `${base}/confirm-conversion?token=${encodeURIComponent(token)}`;
+
+    return { token, url };
+  }
+
   // Create mapping row for external account (optional pre-provision)
   async provisionExternalAccount(provider: string, providerUserId: string, userId?: string) {
     const sessionId = uuidv4();

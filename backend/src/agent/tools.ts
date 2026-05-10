@@ -290,6 +290,52 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "prepare_conversion_confirmation",
+    description: "Create a one-time conversion confirmation link for a wallet self-conversion.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID",
+        },
+        owner_id: {
+          type: "string",
+          description: "Current user ID",
+        },
+        source_amount: {
+          type: "string",
+          description: "Exact source amount to spend (strict-send).",
+        },
+        source_asset_code: {
+          type: "string",
+          description: "Source asset code (XLM, USDC, BRL).",
+        },
+        source_asset_issuer: {
+          type: "string",
+          description: "Source asset issuer for non-native assets.",
+        },
+        dest_amount: {
+          type: "string",
+          description: "Destination amount expected from quote.",
+        },
+        dest_asset_code: {
+          type: "string",
+          description: "Destination asset code (XLM, USDC, BRL).",
+        },
+        dest_asset_issuer: {
+          type: "string",
+          description: "Destination asset issuer for non-native assets.",
+        },
+        quote: {
+          type: "object",
+          description: "Optional quote details to embed in token context.",
+        },
+      },
+      required: ["session_id", "owner_id", "dest_amount", "source_asset_code", "dest_asset_code"],
+    },
+  },
+  {
     name: "submit_transaction",
     description: "Submit a signed transaction to the Stellar network",
     parameters: {
@@ -464,6 +510,8 @@ export async function executeTool(
         return await executeEnsureTrustline(toolInput);
       case "prepare_payment_confirmation":
         return await executePreparePaymentConfirmation(toolInput);
+      case "prepare_conversion_confirmation":
+        return await executePrepareConversionConfirmation(toolInput);
       case "submit_transaction":
         return await executeSubmitTransaction(toolInput);
       case "get_transaction_history":
@@ -1012,6 +1060,49 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       url,
       asset: asset.code,
       message: `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link de confirmação:\n\n${url}`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executePrepareConversionConfirmation(input: any): Promise<string> {
+  try {
+    logger.debug(`Tool: Preparing conversion confirmation for session ${input.session_id}`);
+    const externalService = new ExternalService(supabase as any);
+
+    const sourceAsset = normalizeAssetInput(
+      input.source_asset_code || input.sourceAssetCode || 'XLM',
+      input.source_asset_issuer || input.sourceAssetIssuer
+    );
+    const destAsset = normalizeAssetInput(
+      input.dest_asset_code || input.destAssetCode || 'XLM',
+      input.dest_asset_issuer || input.destAssetIssuer
+    );
+
+    const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
+    const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
+
+    const { url } = externalService.createConversionConfirmUrl({
+      session_id: String(input.session_id || input.sessionId || '').trim(),
+      owner_id: String(input.owner_id || input.ownerId || '').trim(),
+      source_amount: sourceAmount,
+      source_asset_code: sourceAsset.code,
+      source_asset_issuer: sourceAsset.issuer,
+      dest_amount: destAmount,
+      dest_asset_code: destAsset.code,
+      dest_asset_issuer: destAsset.issuer,
+      quote: input.quote || null,
+    });
+
+    return JSON.stringify({
+      success: true,
+      url,
+      message: `Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
