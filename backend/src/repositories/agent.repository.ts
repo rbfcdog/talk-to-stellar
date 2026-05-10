@@ -8,28 +8,45 @@ import { SessionData, AgentState } from '../agent/types';
 export class AgentRepository {
   constructor(private supabase: SupabaseClient) {}
 
+  private isMissingColumnError(error: any, column: string): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.includes('column') &&
+      message.includes(column.toLowerCase()) &&
+      (message.includes('does not exist') || message.includes('could not find'))
+    );
+  }
+
   /**
    * Create or update session data
    */
   async saveSession(sessionId: string, sessionData: SessionData): Promise<void> {
-    const { error } = await this.supabase
+    const sessionRecord = {
+      session_id: sessionId,
+      user_id: sessionData.user_id,
+      email: sessionData.email,
+      session_token: sessionData.session_token,
+      public_key: sessionData.public_key,
+      phone_number: sessionData.phone_number,
+      pix_key: sessionData.pix_key,
+      password_hash: sessionData.password_hash,
+      session_password_hash: sessionData.session_password_hash,
+      created_at: sessionData.created_at,
+      last_activity: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error } = await this.supabase
       .from('agent_sessions')
-      .upsert(
-        {
-          session_id: sessionId,
-          user_id: sessionData.user_id,
-          email: sessionData.email,
-          session_token: sessionData.session_token,
-          public_key: sessionData.public_key,
-          phone_number: sessionData.phone_number,
-          password_hash: sessionData.password_hash,
-          session_password_hash: sessionData.session_password_hash,
-          created_at: sessionData.created_at,
-          last_activity: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'session_id' }
-      );
+      .upsert(sessionRecord, { onConflict: 'session_id' });
+
+    if (error && this.isMissingColumnError(error, 'pix_key')) {
+      const { pix_key, ...sessionRecordWithoutPix } = sessionRecord;
+      const retry = await this.supabase
+        .from('agent_sessions')
+        .upsert(sessionRecordWithoutPix, { onConflict: 'session_id' });
+      error = retry.error;
+    }
 
     if (error) {
       throw new Error(`Failed to save session: ${error.message || JSON.stringify(error)}`);

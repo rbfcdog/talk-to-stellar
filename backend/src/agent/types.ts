@@ -8,6 +8,7 @@ export interface SessionData {
   email: string;
   public_key?: string;
   phone_number?: string;
+  pix_key?: string;
   password_hash?: string;
   session_password_hash?: string;
   created_at: string;

@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const isTestnet = process.env.STELLAR_NETWORK === 'TESTNET';
+const isTestnet = String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() !== 'PUBLIC';
 
 export const stellarConfig = {
   network: isTestnet ? Networks.TESTNET : Networks.PUBLIC,

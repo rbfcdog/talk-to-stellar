@@ -14,6 +14,10 @@ import { supabase } from "../config/supabase";
 import { WalletRepository } from "../repositories/wallet.repository";
 import VaultService from "../services/vault.service";
 import ExternalService from "../services/external.service";
+import { normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
+import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
+import { BalanceAlertService } from "../api/services/balance-alert.service";
+import { AutoConversionService } from "../api/services/auto-conversion.service";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -115,18 +119,11 @@ function formatMoney(value: number | null, asset: 'USDC' | 'BRL') {
   if (value === null || !Number.isFinite(value)) return null;
   return asset === 'BRL'
     ? `R$ ${value.toFixed(2)}`
-    : `${value.toFixed(2)} USDC`;
+    : `US$ ${value.toFixed(2)}`;
 }
 
 function normalizeAssetInput(code: any, issuer: any) {
-  const normalizedCode = String(code || 'XLM').trim().toUpperCase();
-  const fallbackIssuer =
-    normalizedCode === 'USDC' ? String(process.env.USDC_ISSUER || '').trim() :
-    normalizedCode === 'BRL' ? String(process.env.BRL_ISSUER || '').trim() :
-    '';
-  return normalizedCode === 'XLM' || normalizedCode === 'NATIVE'
-    ? { code: 'XLM' }
-    : { code: normalizedCode, issuer: issuer ? String(issuer).trim() : (fallbackIssuer || undefined) };
+  return resolveConfiguredAsset(code || 'XLM', issuer);
 }
 
 function formatConversionLoss(quote: any) {
@@ -141,84 +138,6 @@ function formatConversionLoss(quote: any) {
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(' / ') : 'indisponível';
-}
-
-const MOCKED_WALLET_CONTACTS = [
-  { contact_name: "Ana Silva", stellar_public_key: "GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP" },
-  { contact_name: "Carlos Souza", stellar_public_key: "GCIWWXXCVYF63AMC7PX3C4SAMNPLHVZRPPGJXM4S3D5IJV4NOCJ32HLV" },
-  { contact_name: "Marina Costa", stellar_public_key: "GCZCBCZE5HJVNN474RRZWAIHOCO334WK3TNBBKBRY764UYEB2NZXAILQ" },
-  { contact_name: "Fernando Oliveira", stellar_public_key: "GC6QATSYXJSOZ57UAB6L7MLLVX3P7IA7SIBWQMNMGIH3SP5WJN5CSEPJ" },
-  { contact_name: "Juliana Lima", stellar_public_key: "GAPPIDQ7WST32W6IEWGYQ2Z5KT4CCWEO7SI2JTD3GX6LCH6Z25EAKA6P" },
-];
-
-const LEGACY_MOCKED_WALLET_CONTACT_KEYS: Record<string, string> = {
-  "Ana Silva": "GBRPYHIL2CI3FV4BMSXVQQ2C4RFRO6DOUEBLN3EJVL2RNQYWCYPSTJP",
-  "Carlos Souza": "GCZST3XVCDTUJ76ZAV2HA72KYSL4JGLXQRBLWHF23UROVPYM7VEZSMC",
-  "Marina Costa": "GBVJZKQXS2ZUHQW7CQW7QALTOQM2YGSF6BZZJHJ37F7P2EKCTQJRYGP",
-  "Fernando Oliveira": "GCJVKABVKJUWBWVVVZVLMOVQX5SCWRVVVEVVVUPVMLTDNC4ZBZZ2AKS",
-  "Juliana Lima": "GDZSTLYKACSUW6YL3VZ4OHJXSX45XGAJZLKTCN2IXOITCQC7SGRWSXY",
-};
-
-function repairLegacyMockedContactKey(publicKey: string) {
-  const match = MOCKED_WALLET_CONTACTS.find(
-    (contact) => LEGACY_MOCKED_WALLET_CONTACT_KEYS[contact.contact_name] === publicKey
-  );
-
-  return match?.stellar_public_key || publicKey;
-}
-
-async function fundMockedContactsOnTestnet(): Promise<void> {
-  await Promise.allSettled(
-    MOCKED_WALLET_CONTACTS.map((contact) =>
-      ApiStellarService.ensureTestnetAccountFunded(contact.stellar_public_key)
-    )
-  );
-}
-
-async function seedMockedContactsIfEmpty(userId: string): Promise<void> {
-  const { data: existingContacts, error: existingError } = await supabase
-    .from("contacts")
-    .select("id")
-    .eq("owner_id", userId)
-    .limit(1);
-
-  if (existingError) {
-    throw new Error(existingError.message || "Failed to check existing contacts");
-  }
-
-  if ((existingContacts || []).length > 0) {
-    for (const contact of MOCKED_WALLET_CONTACTS) {
-      const legacyKey = LEGACY_MOCKED_WALLET_CONTACT_KEYS[contact.contact_name];
-      const { error: repairError } = await supabase
-        .from("contacts")
-        .update({ stellar_public_key: contact.stellar_public_key })
-        .eq("owner_id", userId)
-        .eq("contact_name", contact.contact_name)
-        .eq("stellar_public_key", legacyKey);
-
-      if (repairError) {
-        throw new Error(repairError.message || "Failed to repair mocked contact");
-      }
-    }
-    await fundMockedContactsOnTestnet();
-    return;
-  }
-
-  const mockedRows = MOCKED_WALLET_CONTACTS.map((contact) => ({
-    owner_id: userId,
-    contact_name: contact.contact_name,
-    stellar_public_key: contact.stellar_public_key,
-  }));
-
-  const { error: insertError } = await supabase
-    .from("contacts")
-    .upsert(mockedRows, { onConflict: "owner_id,contact_name" });
-
-  if (insertError) {
-    throw new Error(insertError.message || "Failed to seed mocked contacts");
-  }
-
-  await fundMockedContactsOnTestnet();
 }
 
 /**
@@ -402,6 +321,36 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "ensure_trustline",
+    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the vault-backed session wallet.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID",
+        },
+        user_id: {
+          type: "string",
+          description: "Current user ID",
+        },
+        public_key: {
+          type: "string",
+          description: "Wallet public key",
+        },
+        asset_code: {
+          type: "string",
+          description: "Asset code, e.g. USDC or BRL",
+        },
+        asset_issuer: {
+          type: "string",
+          description: "Issuer public key for non-XLM assets",
+        },
+      },
+      required: ["session_id", "user_id", "public_key", "asset_code"],
+    },
+  },
+  {
     name: "prepare_payment_confirmation",
     description: "Create a one-time payment confirmation link for a confirmed recipient and amount.",
     parameters: {
@@ -473,7 +422,7 @@ export const toolDefinitions = [
   },
   {
     name: "add_contact",
-    description: "Add a new contact with their Stellar public key",
+    description: "Add a new contact with their Stellar public key or TalkToStellar Pix key",
     parameters: {
       type: "object",
       properties: {
@@ -489,8 +438,12 @@ export const toolDefinitions = [
           type: "string",
           description: "Contact's Stellar public key",
         },
+        pix_key: {
+          type: "string",
+          description: "Contact's TalkToStellar Pix key",
+        },
       },
-      required: ["user_id", "contact_name", "public_key"],
+      required: ["user_id", "contact_name"],
     },
   },
   {
@@ -606,6 +559,8 @@ export async function executeTool(
         return await executeQuoteAssetTransfer(toolInput);
       case "convert_assets":
         return await executeConvertAssets(toolInput);
+      case "ensure_trustline":
+        return await executeEnsureTrustline(toolInput);
       case "prepare_payment_confirmation":
         return await executePreparePaymentConfirmation(toolInput);
       case "submit_transaction":
@@ -624,6 +579,12 @@ export async function executeTool(
         return await executeResetPin(toolInput);
       case "logout_session":
         return await executeLogoutSession(toolInput);
+      case "set_alert_threshold":
+        return await executeSetAlertThreshold(toolInput);
+      case "get_conversion_rules":
+        return await executeGetConversionRules(toolInput);
+      case "disable_conversion_rule":
+        return await executeDisableConversionRule(toolInput);
       default:
         return JSON.stringify({
           success: false,
@@ -685,6 +646,43 @@ async function executeLogoutSession(input: any): Promise<string> {
       error: errorMessage,
     });
   }
+}
+
+async function executeSetAlertThreshold(input: any): Promise<string> {
+  const walletId = Number(input.wallet_id || input.walletId);
+  const threshold = Number(input.threshold_usdc || input.thresholdUsdc || input.threshold);
+  const success = await BalanceAlertService.setAlertThreshold(walletId, threshold);
+  return JSON.stringify({
+    success,
+    wallet_id: walletId,
+    threshold_usdc: threshold,
+  });
+}
+
+async function executeGetConversionRules(input: any): Promise<string> {
+  const walletId = Number(input.wallet_id || input.walletId);
+  const rules = await AutoConversionService.getWalletConversionRules(walletId);
+  return JSON.stringify({
+    success: true,
+    wallet_id: walletId,
+    rules: (rules || []).map((rule: any) => ({
+      id: rule.id,
+      from_asset: rule.from_asset_code,
+      to_asset: rule.to_asset_code,
+      min_amount: rule.min_amount,
+      trigger: rule.trigger_type,
+      enabled: rule.enabled,
+    })),
+  });
+}
+
+async function executeDisableConversionRule(input: any): Promise<string> {
+  const ruleId = String(input.rule_id || input.ruleId || '').trim();
+  const success = await AutoConversionService.disableConversionRule(ruleId);
+  return JSON.stringify({
+    success,
+    rule_id: ruleId,
+  });
 }
 
 /**
@@ -971,6 +969,94 @@ async function executeConvertAssets(input: any): Promise<string> {
   }
 }
 
+async function executeEnsureTrustline(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const userId = String(input.user_id || input.userId || '').trim();
+    const requestedPublicKey = String(input.public_key || input.publicKey || '').trim();
+    const asset = normalizeAssetInput(input.asset_code || input.assetCode || input.asset, input.asset_issuer || input.assetIssuer);
+
+    if (asset.code === 'XLM') {
+      return JSON.stringify({ success: true, asset_code: 'XLM' });
+    }
+
+    if (!asset.issuer) {
+      throw new Error(`${asset.code}_ISSUER não está configurado no backend.`);
+    }
+
+    const wallet = sessionId
+      ? await walletRepo.getWalletBySession(sessionId)
+      : await walletRepo.getWalletByPublicKey(requestedPublicKey);
+
+    if (!wallet?.public_key || !wallet?.vault_secret_id) {
+      throw new Error('Wallet with vault-backed private key not found for this session.');
+    }
+
+    const publicKey = requestedPublicKey || wallet.public_key;
+    if (wallet.public_key !== publicKey) {
+      throw new Error('A chave pública informada não pertence à sessão atual.');
+    }
+
+    const balances = await ApiStellarService.getAccountBalance(publicKey);
+    const hasTrustline = balances.some((balance: any) =>
+      String(balance.asset_code || '').toUpperCase() === asset.code &&
+      String(balance.asset_issuer || '') === asset.issuer
+    );
+
+    if (hasTrustline) {
+      return JSON.stringify({
+        success: true,
+        asset_code: asset.code,
+        asset_issuer: asset.issuer,
+        message: `Trustline de ${asset.code} já está ativa.`,
+      });
+    }
+
+    const trustlineXdr = await ApiStellarService.buildTrustlineXdr({
+      sourcePublicKey: publicKey,
+      assetCode: asset.code,
+      assetIssuer: asset.issuer,
+    });
+    const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
+    const result = await ApiStellarService.signAndSubmitXdr(
+      userId,
+      secretKey,
+      trustlineXdr,
+      {
+        user_id: userId,
+        type: 'TRUSTLINE',
+        asset_code: asset.code,
+        source_public_key: publicKey,
+        source_session_id: wallet.session_id,
+        context: `Trustline ${asset.code}`,
+      }
+    );
+
+    if (!result.success) {
+      return JSON.stringify({
+        success: false,
+        asset_code: asset.code,
+        asset_issuer: asset.issuer,
+        error: result.error || `Could not create ${asset.code} trustline`,
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      asset_code: asset.code,
+      asset_issuer: asset.issuer,
+      hash: result.hash,
+      message: `Trustline de ${asset.code} criada.`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
 /**
  * Tool: Prepare Payment Confirmation
  */
@@ -989,7 +1075,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       undefined;
 
     let normalizedDestination = destinationCandidate ? String(destinationCandidate).trim() : '';
-    normalizedDestination = repairLegacyMockedContactKey(normalizedDestination);
+    normalizedDestination = repairLegacyStarterContactKey(normalizedDestination);
     const normalizedAmount = input.amount ? String(input.amount).trim() : '';
 
     // Resolve a friendly name for the destination when possible
@@ -998,18 +1084,19 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       destinationName = input.destination_contact.contact_name || input.destination_contact.name;
     }
 
-    // Try seeded mock contacts lookup
-    if (!destinationName && MOCKED_WALLET_CONTACTS && normalizedDestination) {
-      const found = MOCKED_WALLET_CONTACTS.find(c => c.stellar_public_key === normalizedDestination);
-      if (found) destinationName = found.contact_name;
+    if (normalizedDestination && !/^G[A-Z2-7]{55}$/i.test(normalizedDestination)) {
+      const resolvedByPix = await resolveContactPublicKeyByPixKey(normalizedDestination);
+      if (resolvedByPix.publicKey) {
+        normalizedDestination = resolvedByPix.publicKey;
+        destinationName = destinationName || resolvedByPix.name || normalizedDestination;
+      }
     }
 
-    // Try database lookup by public key if still missing
     if (!destinationName && normalizedDestination) {
       try {
         const { data: contactRows, error } = await supabase
           .from('contacts')
-          .select('contact_name, stellar_public_key')
+          .select('contact_name, stellar_public_key, pix_key')
           .eq('stellar_public_key', normalizedDestination)
           .limit(1);
         if (!error && contactRows && contactRows.length > 0) {
@@ -1020,10 +1107,13 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       }
     }
 
+    const assetCode = normalizeAssetCode(input.asset_code || input.asset || input.currency || 'XLM');
+    const asset = normalizeAssetInput(assetCode, input.asset_issuer || input.assetIssuer);
+
     const { url } = externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
-      asset_code: input.asset_code || input.asset || input.currency || 'XLM',
-      asset_issuer: input.asset_issuer || input.assetIssuer,
+      asset_code: asset.code,
+      asset_issuer: asset.issuer,
       destination: normalizedDestination,
       destination_name: destinationName,
       destination_contact: input.destination_contact || undefined,
@@ -1034,7 +1124,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       url,
-      asset: String(input.asset_code || input.asset || input.currency || 'XLM').toUpperCase().replace(/^USD$/, 'USDC'),
+      asset: asset.code,
       message: `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link de confirmação:\n\n${url}`,
     });
   } catch (error) {
@@ -1129,16 +1219,71 @@ async function executeGetHistory(input: any): Promise<string> {
 /**
  * Tool: Add Contact
  */
+async function resolveContactPublicKeyByPixKey(pixKey: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
+  const normalizedPixKey = String(pixKey || '').trim().toLowerCase();
+  if (!normalizedPixKey) return {};
+
+  const { data: walletRow, error: walletError } = await supabase
+    .from('wallets')
+    .select('public_key, name, pix_key')
+    .ilike('pix_key', normalizedPixKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (walletError) {
+    throw new Error(walletError.message || 'Failed to lookup wallet Pix key');
+  }
+
+  if (walletRow?.public_key) {
+    return {
+      publicKey: String(walletRow.public_key),
+      name: walletRow.name || undefined,
+      pixKey: walletRow.pix_key || normalizedPixKey,
+    };
+  }
+
+  const { data: contactRow, error: contactError } = await supabase
+    .from('contacts')
+    .select('contact_name, stellar_public_key, pix_key')
+    .ilike('pix_key', normalizedPixKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (contactError) {
+    throw new Error(contactError.message || 'Failed to lookup contact Pix key');
+  }
+
+  return {
+    publicKey: contactRow?.stellar_public_key || undefined,
+    name: contactRow?.contact_name || undefined,
+    pixKey: contactRow?.pix_key || normalizedPixKey,
+  };
+}
+
 async function executeAddContact(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Adding contact ${input.contact_name}`);
+    const contactKey = String(input.public_key || input.stellar_public_key || input.pix_key || input.contact_key || '').trim();
+    const isPublicKey = /^G[A-Z2-7]{55}$/i.test(contactKey);
+    const pixKeyInput = String(input.pix_key || (!isPublicKey ? contactKey : '') || '').trim().toLowerCase();
+    const resolved = pixKeyInput ? await resolveContactPublicKeyByPixKey(pixKeyInput) : {};
+    const publicKey = isPublicKey ? contactKey : String(resolved.publicKey || '').trim();
+
+    if (!publicKey) {
+      throw new Error('Informe uma chave pública Stellar válida ou uma chave Pix TalkToStellar existente.');
+    }
+
+    const contactName = String(input.contact_name || resolved.name || pixKeyInput || publicKey).trim();
+
     const { data, error } = await supabase
       .from("contacts")
-      .insert({
+      .upsert({
         owner_id: input.user_id,
-        contact_name: input.contact_name,
-        stellar_public_key: input.public_key,
-      })
+        contact_name: contactName,
+        stellar_public_key: publicKey,
+        pix_key: pixKeyInput || resolved.pixKey || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'owner_id,contact_name' })
       .select()
       .single();
 
@@ -1148,7 +1293,7 @@ async function executeAddContact(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       contact: data,
-      message: `Contact "${input.contact_name}" added successfully!`,
+      message: `Contato "${contactName}" adicionado com sucesso.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1168,15 +1313,15 @@ async function executeListContacts(input: any): Promise<string> {
 
     if (input.user_id) {
       try {
-        await seedMockedContactsIfEmpty(input.user_id);
+        await ContactSeedService.ensureStarterContactsForUser(input.user_id);
       } catch (seedError) {
-        logger.warn(`Tool: Could not seed mocked contacts for user ${input.user_id}: ${seedError instanceof Error ? seedError.message : String(seedError)}`);
+        logger.warn(`Tool: Could not seed starter contacts for user ${input.user_id}: ${seedError instanceof Error ? seedError.message : String(seedError)}`);
       }
     }
 
     let query = supabase
       .from("contacts")
-      .select("id, owner_id, contact_name, stellar_public_key, created_at")
+      .select("id, owner_id, contact_name, stellar_public_key, phone_number, pix_key, created_at")
       .order("contact_name", { ascending: true });
 
     if (input.user_id) {

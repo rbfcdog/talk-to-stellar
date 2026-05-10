@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     session_token UUID NOT NULL,
     public_key TEXT,
     phone_number TEXT,
+    pix_key TEXT,
     password_hash TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -27,11 +28,13 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id ON agent_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_created_at ON agent_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_pix_key_lower ON agent_sessions ((lower(pix_key))) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
 CREATE TABLE IF NOT EXISTS wallets (
     id BIGSERIAL PRIMARY KEY,
     session_id UUID UNIQUE NOT NULL,
     name TEXT,
     public_key TEXT UNIQUE NOT NULL,
+    pix_key TEXT,
     vault_secret_id UUID,
     balance JSONB DEFAULT '[]',
     sequence TEXT,
@@ -45,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_wallets_public_key ON wallets(public_key);
 CREATE INDEX IF NOT EXISTS idx_wallets_session_id ON wallets(session_id);
 CREATE INDEX IF NOT EXISTS idx_wallets_last_synced ON wallets(last_synced);
 CREATE INDEX IF NOT EXISTS idx_wallets_vault_secret_id ON wallets(vault_secret_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallets_pix_key_lower_unique ON wallets ((lower(pix_key))) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
 CREATE TABLE IF NOT EXISTS operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,
@@ -150,6 +154,8 @@ CREATE INDEX IF NOT EXISTS idx_contacts_owner_id ON contacts(owner_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_stellar_public_key ON contacts(stellar_public_key);
 CREATE INDEX IF NOT EXISTS idx_contacts_phone_number ON contacts(phone_number);
 CREATE INDEX IF NOT EXISTS idx_contacts_pix_key ON contacts(pix_key);
+CREATE INDEX IF NOT EXISTS idx_contacts_pix_key_lower ON contacts ((lower(pix_key))) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_owner_pix_key_lower_unique ON contacts (owner_id, lower(pix_key)) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
 CREATE TABLE IF NOT EXISTS recovery_otps (
     id BIGSERIAL PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -167,6 +173,10 @@ CREATE INDEX IF NOT EXISTS idx_recovery_otps_expires_at ON recovery_otps(expires
 -- --------------------------------------------------------------------------
 ALTER TABLE agent_sessions
 ADD COLUMN IF NOT EXISTS opt_out_weekly_summary BOOLEAN DEFAULT false;
+ALTER TABLE agent_sessions
+ADD COLUMN IF NOT EXISTS pix_key TEXT;
+ALTER TABLE wallets
+ADD COLUMN IF NOT EXISTS pix_key TEXT;
 ALTER TABLE wallets
 ADD COLUMN IF NOT EXISTS alert_threshold_usdc NUMERIC DEFAULT 5.00;
 ALTER TABLE wallets

@@ -96,6 +96,11 @@ export class AgentGraph {
         return byPix;
       }
 
+      const globalPix = await this.lookupGlobalContactByPixKey(normalizedQuery);
+      if (globalPix) {
+        return globalPix;
+      }
+
       // Support positional aliases like "contato 1" / "contact 1"
       const aliasMatch = normalizedQuery.match(/^(?:contato|contact)\s*(\d{1,3})$/);
       if (aliasMatch) {
@@ -112,6 +117,43 @@ export class AgentGraph {
       logger.debug(`[getContactByPublicKeyOrName] Error: ${error}`);
       return undefined;
     }
+  }
+
+  private async lookupGlobalContactByPixKey(pixKey: string): Promise<any | undefined> {
+    const normalizedPixKey = String(pixKey || '').trim().toLowerCase();
+    if (!normalizedPixKey) return undefined;
+
+    try {
+      const { data: walletRow, error: walletError } = await supabase
+        .from('wallets')
+        .select('public_key, name, pix_key')
+        .ilike('pix_key', normalizedPixKey)
+        .limit(1)
+        .maybeSingle();
+
+      if (!walletError && walletRow?.public_key) {
+        return {
+          contact_name: walletRow.name || normalizedPixKey,
+          stellar_public_key: walletRow.public_key,
+          pix_key: walletRow.pix_key || normalizedPixKey,
+        };
+      }
+
+      const { data: contactRow, error: contactError } = await supabase
+        .from('contacts')
+        .select('contact_name, stellar_public_key, pix_key')
+        .ilike('pix_key', normalizedPixKey)
+        .limit(1)
+        .maybeSingle();
+
+      if (!contactError && contactRow?.stellar_public_key) {
+        return contactRow;
+      }
+    } catch (error) {
+      logger.debug(`[lookupGlobalContactByPixKey] Error: ${error}`);
+    }
+
+    return undefined;
   }
 
   private async fetchContacts(userId?: string): Promise<any[]> {
@@ -1139,7 +1181,10 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
             state.response_message = "Você ainda não tem contatos salvos.";
           } else {
             const formatted = contacts
-              .map((c: any, idx: number) => `${idx + 1}. ${c.contact_name || c.name} - ${c.stellar_public_key || c.public_key}`)
+              .map((c: any, idx: number) => {
+                const pix = c.pix_key ? ` - chave: ${c.pix_key}` : '';
+                return `${idx + 1}. ${c.contact_name || c.name} - ${c.stellar_public_key || c.public_key}${pix}`;
+              })
               .join("\n");
             state.response_message = `Seus contatos salvos:\n${formatted}`;
           }
