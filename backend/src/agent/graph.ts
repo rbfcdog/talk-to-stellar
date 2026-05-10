@@ -510,6 +510,74 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     return undefined;
   }
 
+  private isOwnReceivingKeyRequest(message: string): boolean {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const selfRef = /\b(minha|minhas|meu|meus|my|da minha conta|da minha carteira)\b/.test(normalized);
+    const keyRef =
+      /\b(chave|chave pix|pix|public key|chave publica|chave pública|endereco|endereço)\b/.test(normalized);
+    const transferRef = /\b(transfer|pagar|mandar|enviar|receber|depositar)\b/.test(normalized);
+
+    return selfRef && keyRef && !transferRef;
+  }
+
+  private async resolveOwnReceivingKeys(state: AgentState): Promise<{ publicKey?: string; pixKey?: string }> {
+    let publicKey = String(state.session_data?.public_key || '').trim();
+    let pixKey = String(state.session_data?.pix_key || '').trim();
+
+    try {
+      if (!publicKey || !pixKey) {
+        const { data: walletBySession } = await supabase
+          .from('wallets')
+          .select('public_key, pix_key')
+          .eq('session_id', state.session_id)
+          .limit(1)
+          .maybeSingle();
+
+        if (walletBySession?.public_key && !publicKey) {
+          publicKey = String(walletBySession.public_key).trim();
+        }
+        if (walletBySession?.pix_key && !pixKey) {
+          pixKey = String(walletBySession.pix_key).trim();
+        }
+      }
+
+      if (publicKey && !pixKey) {
+        const { data: walletByPublicKey } = await supabase
+          .from('wallets')
+          .select('pix_key')
+          .eq('public_key', publicKey)
+          .limit(1)
+          .maybeSingle();
+
+        if (walletByPublicKey?.pix_key) {
+          pixKey = String(walletByPublicKey.pix_key).trim();
+        }
+      }
+
+      if (state.session_data && (publicKey || pixKey)) {
+        const shouldPersist =
+          (publicKey && state.session_data.public_key !== publicKey) ||
+          (pixKey && state.session_data.pix_key !== pixKey);
+        if (shouldPersist) {
+          state.session_data.public_key = publicKey || state.session_data.public_key;
+          state.session_data.pix_key = pixKey || state.session_data.pix_key;
+          await this.repository.saveSession(state.session_id, state.session_data);
+        }
+      }
+    } catch (error) {
+      logger.warn(`[resolveOwnReceivingKeys] Failed to resolve keys: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return {
+      publicKey: publicKey || undefined,
+      pixKey: pixKey || undefined,
+    };
+  }
+
   /**
    * Handle wallet creation flow
    */
@@ -1130,6 +1198,39 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         state.action_type = ActionType.CREATE_WALLET;
         state.detected_intent = IntentType.WALLET;
         return await this.handleWalletCreation(state);
+      }
+
+      if (this.isOwnReceivingKeyRequest(state.current_input)) {
+        const keys = await this.resolveOwnReceivingKeys(state);
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
+
+        state.detected_intent = IntentType.PIX;
+        state.action_type = ActionType.INITIATE_PIX;
+
+        if (!keys.publicKey && !keys.pixKey) {
+          state.success = false;
+          state.response_message = this.getOnboardingOrLoginMessage();
+        } else if (keys.pixKey) {
+          state.success = true;
+          state.response_message = keys.publicKey
+            ? `Sua chave para receber pagamentos é:\n${keys.pixKey}\n\nChave pública da carteira:\n${keys.publicKey}`
+            : `Sua chave para receber pagamentos é:\n${keys.pixKey}`;
+        } else {
+          state.success = true;
+          state.response_message = `Sua conta ainda não tem chave PIX disponível. Use sua chave pública da carteira para receber:\n${keys.publicKey}`;
+        }
+
+        await this.repository.saveMessage(
+          state.session_id,
+          "assistant",
+          state.response_message
+        );
+        await this.repository.saveState(state.session_id, state);
+        return state;
       }
 
       // Detect intent
