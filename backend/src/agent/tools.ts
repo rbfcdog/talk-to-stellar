@@ -23,121 +23,13 @@ const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
 const vaultService = new VaultService(supabase);
 
-type MarketRates = {
-  xlmUsd?: number;
-  xlmBrl?: number;
-  usdBrl?: number;
-};
-
-let cachedMarketRates: { value: MarketRates; expiresAt: number } | null = null;
-
-async function getMarketRates(): Promise<MarketRates> {
-  const now = Date.now();
-  if (cachedMarketRates && cachedMarketRates.expiresAt > now) {
-    return cachedMarketRates.value;
-  }
-
-  const fallbackRates: MarketRates = {
-    xlmUsd: process.env.XLM_USD_PRICE ? Number(process.env.XLM_USD_PRICE) : undefined,
-    xlmBrl: process.env.XLM_BRL_PRICE ? Number(process.env.XLM_BRL_PRICE) : undefined,
-    usdBrl: process.env.USD_BRL_RATE ? Number(process.env.USD_BRL_RATE) : undefined,
-  };
-
-  try {
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=stellar,usd-coin&vs_currencies=usd,brl',
-      { signal: AbortSignal.timeout(5000) }
-    );
-
-    if (!response.ok) {
-      throw new Error(`price lookup failed: ${response.status}`);
-    }
-
-    const prices = await response.json() as any;
-    const xlmUsd = Number(prices?.stellar?.usd);
-    const xlmBrl = Number(prices?.stellar?.brl);
-    const usdcBrl = Number(prices?.['usd-coin']?.brl);
-
-    const value: MarketRates = {
-      xlmUsd: Number.isFinite(xlmUsd) ? xlmUsd : fallbackRates.xlmUsd,
-      xlmBrl: Number.isFinite(xlmBrl) ? xlmBrl : fallbackRates.xlmBrl,
-      usdBrl: Number.isFinite(usdcBrl) ? usdcBrl : fallbackRates.usdBrl,
-    };
-
-    cachedMarketRates = { value, expiresAt: now + 60_000 };
-    return value;
-  } catch (error) {
-    logger.warn(`Price lookup unavailable: ${error instanceof Error ? error.message : String(error)}`);
-    cachedMarketRates = { value: fallbackRates, expiresAt: now + 30_000 };
-    return fallbackRates;
-  }
-}
-
 function getAssetCode(value: any): string {
   if (value?.asset_type === 'native') return 'XLM';
   return String(value?.asset_code || value?.asset || 'UNKNOWN').toUpperCase();
 }
 
-function estimateAssetValue(amountValue: string | number | undefined, assetCodeValue: string | undefined, rates: MarketRates) {
-  const amount = Number(amountValue);
-  const assetCode = String(assetCodeValue || '').toUpperCase();
-
-  if (!Number.isFinite(amount)) {
-    return { usdc: null, brl: null };
-  }
-
-  if (assetCode === 'XLM') {
-    const usdc = rates.xlmUsd !== undefined ? amount * rates.xlmUsd : null;
-    const brl = rates.xlmBrl !== undefined ? amount * rates.xlmBrl : (
-      usdc !== null && rates.usdBrl !== undefined ? usdc * rates.usdBrl : null
-    );
-    return { usdc, brl };
-  }
-
-  if (assetCode === 'USDC' || assetCode === 'USD') {
-    return {
-      usdc: amount,
-      brl: rates.usdBrl !== undefined ? amount * rates.usdBrl : null,
-    };
-  }
-
-  if (assetCode === 'BRL') {
-    return {
-      usdc: rates.usdBrl ? amount / rates.usdBrl : null,
-      brl: amount,
-    };
-  }
-
-  return { usdc: null, brl: null };
-}
-
-function roundMoney(value: number | null) {
-  return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(2));
-}
-
-function formatMoney(value: number | null, asset: 'USDC' | 'BRL') {
-  if (value === null || !Number.isFinite(value)) return null;
-  return asset === 'BRL'
-    ? `R$ ${value.toFixed(2)}`
-    : `US$ ${value.toFixed(2)}`;
-}
-
 function normalizeAssetInput(code: any, issuer: any) {
   return resolveConfiguredAsset(code || 'XLM', issuer);
-}
-
-function formatConversionLoss(quote: any) {
-  const loss = quote?.conversionLoss || {};
-  const lostUsdc = loss.lostUsdc === null || loss.lostUsdc === undefined ? null : Number(loss.lostUsdc);
-  const lostBrl = loss.lostBrl === null || loss.lostBrl === undefined ? null : Number(loss.lostBrl);
-  const lostPercent = loss.lostPercent === null || loss.lostPercent === undefined ? null : Number(loss.lostPercent);
-  const parts = [
-    formatMoney(lostUsdc, 'USDC'),
-    formatMoney(lostBrl, 'BRL'),
-    lostPercent !== null && Number.isFinite(lostPercent) ? `${lostPercent.toFixed(2)}%` : null,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(' / ') : 'indisponível';
 }
 
 /**
@@ -722,25 +614,15 @@ async function executeCreateWallet(input: any): Promise<string> {
 async function executeGetBalance(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Getting balance for ${input.public_key}`);
-    const [account, rates] = await Promise.all([
-      stellarService.getAccount(input.public_key),
-      getMarketRates(),
-    ]);
+    const account = await stellarService.getAccount(input.public_key);
 
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
-      const estimate = estimateAssetValue(balance.balance, asset, rates);
       return {
         asset,
         balance: balance.balance,
         asset_type: balance.asset_type,
         asset_issuer: balance.asset_issuer,
-        estimated_usdc: roundMoney(estimate.usdc),
-        estimated_brl: roundMoney(estimate.brl),
-        display_value: {
-          usdc: formatMoney(estimate.usdc, 'USDC'),
-          brl: formatMoney(estimate.brl, 'BRL'),
-        },
       };
     });
 
@@ -751,7 +633,6 @@ async function executeGetBalance(input: any): Promise<string> {
       balance: nativeBalance?.balance || "0",
       asset: "XLM",
       balances,
-      rates,
       message: `Account balances retrieved: ${balances.length} asset(s)`,
     });
   } catch (error) {
@@ -769,33 +650,18 @@ async function executeGetBalance(input: any): Promise<string> {
 async function executeGetAccount(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Getting account details for ${input.public_key}`);
-    const [account, rates] = await Promise.all([
-      stellarService.getAccount(input.public_key),
-      getMarketRates(),
-    ]);
+    const account = await stellarService.getAccount(input.public_key);
     const balances = account.balances.map((b: any) => ({
       asset: getAssetCode(b),
       balance: b.balance,
       type: b.asset_type,
       asset_issuer: b.asset_issuer,
-      ...(() => {
-        const estimate = estimateAssetValue(b.balance, getAssetCode(b), rates);
-        return {
-          estimated_usdc: roundMoney(estimate.usdc),
-          estimated_brl: roundMoney(estimate.brl),
-          display_value: {
-            usdc: formatMoney(estimate.usdc, 'USDC'),
-            brl: formatMoney(estimate.brl, 'BRL'),
-          },
-        };
-      })(),
     }));
     return JSON.stringify({
       success: true,
       account_id: account.id,
       sequence: account.sequence,
       balances,
-      rates,
       message: "Account details retrieved",
     });
   } catch (error) {
@@ -868,8 +734,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         (sourceAmount
           ? `Cotação: converter ${quote.sourceAmount} ${quote.sourceAsset.code} deve entregar aproximadamente ${quote.destinationAmount} ${quote.destinationAsset.code}. `
           : `Cotação: para receber ${quote.destinationAmount} ${quote.destinationAsset.code}, serão usados aproximadamente ${quote.sourceAmount} ${quote.sourceAsset.code}. `) +
-        `Taxa da rede: ${quote.networkFeeXlm} XLM. ` +
-        `Perda estimada na conversão: ${formatConversionLoss(quote)}.`,
+        `Taxa da rede: ${quote.networkFeeXlm} XLM.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -934,8 +799,7 @@ async function executeConvertAssets(input: any): Promise<string> {
         amount: Number(quote.destinationAmount),
         context:
           `Conversão interna: ${quote.sourceAmount} ${quote.sourceAsset.code} ` +
-          `para ${quote.destinationAmount} ${quote.destinationAsset.code}. ` +
-          `Perda estimada: ${formatConversionLoss(quote)}.`,
+          `para ${quote.destinationAmount} ${quote.destinationAsset.code}.`,
         source_public_key: wallet.public_key,
         source_session_id: wallet.session_id,
         destination_session_id: wallet.session_id,
@@ -950,15 +814,24 @@ async function executeConvertAssets(input: any): Promise<string> {
       });
     }
 
+    const submittedDetails = result.hash
+      ? await ApiStellarService.getSubmittedPaymentDetails(result.hash)
+      : null;
+    const sourceAmount = submittedDetails?.sourceAmount || quote.sourceAmount;
+    const sourceAssetCode = submittedDetails?.sourceAssetCode || quote.sourceAsset.code;
+    const destinationAmount = submittedDetails?.destinationAmount || quote.destinationAmount;
+    const destinationAssetCode = submittedDetails?.destinationAssetCode || quote.destinationAsset.code;
+    const feeLine = submittedDetails?.feeXlm ? ` Taxa da rede: ${submittedDetails.feeXlm} XLM.` : '';
+
     return JSON.stringify({
       success: true,
       hash: result.hash,
       quote,
+      transferDetails: submittedDetails,
       message:
-        `Conversão concluída: ${quote.sourceAmount} ${quote.sourceAsset.code} ` +
-        `para ${quote.destinationAmount} ${quote.destinationAsset.code}. ` +
-        `Taxa da rede: ${quote.networkFeeXlm} XLM. ` +
-        `Perda estimada: ${formatConversionLoss(quote)}. Hash: ${result.hash}`,
+        `Conversão concluída: ${sourceAmount} ${sourceAssetCode} ` +
+        `para ${destinationAmount} ${destinationAssetCode}.` +
+        `${feeLine} Hash: ${result.hash}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1163,18 +1036,14 @@ async function executeSubmitTransaction(input: any): Promise<string> {
 async function executeGetHistory(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Getting transaction history for ${input.public_key}`);
-    const [operations, rates] = await Promise.all([
-      stellarService.getOperationHistory(
-        input.public_key,
-        input.limit || 10
-      ),
-      getMarketRates(),
-    ]);
+    const operations = await stellarService.getOperationHistory(
+      input.public_key,
+      input.limit || 10
+    );
 
     const formattedOps = operations.map((op: any) => {
       const asset = getAssetCode(op);
       const amount = op.amount || op.starting_balance || op.source_amount || op.amount_in || op.amount_out;
-      const estimate = estimateAssetValue(amount, asset, rates);
       const from = op.from || op.source_account || op.funder || op.account;
       const to = op.to || op.account || op.into;
       const direction = to === input.public_key ? 'received' : from === input.public_key ? 'sent' : 'related';
@@ -1191,12 +1060,6 @@ async function executeGetHistory(input: any): Promise<string> {
         asset,
         amount: amount ? String(amount) : undefined,
         asset_issuer: op.asset_issuer,
-        estimated_usdc: roundMoney(estimate.usdc),
-        estimated_brl: roundMoney(estimate.brl),
-        display_value: {
-          usdc: formatMoney(estimate.usdc, 'USDC'),
-          brl: formatMoney(estimate.brl, 'BRL'),
-        },
       };
     });
     return JSON.stringify({
@@ -1204,7 +1067,6 @@ async function executeGetHistory(input: any): Promise<string> {
       public_key: input.public_key,
       transaction_count: operations.length,
       transactions: formattedOps,
-      rates,
       message: `Found ${operations.length} transactions`,
     });
   } catch (error) {

@@ -5,6 +5,7 @@ const testPublicKey = testKeypair.publicKey();
 const testSecretKey = testKeypair.secret();
 
 const finalizeSaveSessionMock = jest.fn();
+const finalizeSaveMessageMock = jest.fn();
 const finalizeSaveWalletMock = jest.fn();
 const finalizeLinkSessionMock = jest.fn();
 const finalizeStoreSecretMock = jest.fn();
@@ -22,6 +23,7 @@ const finalizeQuotePathPaymentMock = jest.fn();
 const finalizeBuildTrustlineXdrMock = jest.fn();
 const finalizeGetAccountBalanceMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
+const finalizeGetSubmittedPaymentDetailsMock = jest.fn();
 const finalizeCreateDefaultTrustlinesMock = jest.fn();
 const finalizeEnsureStarterContactsForUserMock = jest.fn();
 const testnetUsdcIssuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
@@ -49,6 +51,7 @@ jest.mock('../src/api/services/stellar.service', () => ({
     buildTrustlineXdr: finalizeBuildTrustlineXdrMock,
     getAccountBalance: finalizeGetAccountBalanceMock,
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
+    getSubmittedPaymentDetails: finalizeGetSubmittedPaymentDetailsMock,
   },
 }));
 
@@ -65,6 +68,7 @@ jest.mock('../src/api/services/contact-seed.service', () => ({
 jest.mock('../src/repositories/agent.repository', () => ({
   AgentRepository: jest.fn().mockImplementation(() => ({
     saveSession: finalizeSaveSessionMock,
+    saveMessage: finalizeSaveMessageMock,
     getSession: finalizeGetSessionMock,
   })),
 }));
@@ -99,6 +103,7 @@ jest.mock('jsonwebtoken', () => ({
 describe('ExternalFinalizeController', () => {
   beforeEach(() => {
     finalizeSaveSessionMock.mockReset();
+    finalizeSaveMessageMock.mockReset();
     finalizeSaveWalletMock.mockReset();
     finalizeLinkSessionMock.mockReset();
     finalizeStoreSecretMock.mockReset();
@@ -116,9 +121,11 @@ describe('ExternalFinalizeController', () => {
     finalizeBuildTrustlineXdrMock.mockReset();
     finalizeGetAccountBalanceMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
+    finalizeGetSubmittedPaymentDetailsMock.mockReset();
     finalizeCreateDefaultTrustlinesMock.mockReset();
     finalizeEnsureStarterContactsForUserMock.mockReset();
     finalizeSaveSessionMock.mockResolvedValue(undefined);
+    finalizeSaveMessageMock.mockResolvedValue(undefined);
     finalizeSaveWalletMock.mockResolvedValue(undefined);
     finalizeLinkSessionMock.mockResolvedValue(undefined);
     finalizeStoreSecretMock.mockResolvedValue('vault-secret-id-1');
@@ -132,12 +139,18 @@ describe('ExternalFinalizeController', () => {
       sourceAmount: '11.2',
       sourceMax: '11.4',
       networkFeeXlm: '0.001',
-      conversionLoss: {},
       path: [],
     });
     finalizeBuildTrustlineXdrMock.mockResolvedValue('trustline-xdr');
     finalizeGetAccountBalanceMock.mockResolvedValue([]);
     finalizeSignAndSubmitXdrMock.mockResolvedValue({ success: true, hash: 'tx-123' });
+    finalizeGetSubmittedPaymentDetailsMock.mockResolvedValue({
+      sourceAmount: '11.9234567',
+      sourceAssetCode: 'XLM',
+      destinationAmount: '10.0000000',
+      destinationAssetCode: 'USDC',
+      feeXlm: '0.0000100',
+    });
     finalizeCreateDefaultTrustlinesMock.mockResolvedValue({ success: true, assets: ['USDC'], errors: [] });
     finalizeEnsureStarterContactsForUserMock.mockResolvedValue({ created: 0, updated: 0, skipped: 0, errors: [] });
     finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
@@ -248,11 +261,12 @@ describe('ExternalFinalizeController', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         transferDetails: expect.objectContaining({
-          destinationAmount: '10',
+          destinationAmount: '10.0000000',
           destinationAssetCode: 'USDC',
-          sourceAmount: '11.2',
+          sourceAmount: '11.9234567',
           sourceAssetCode: 'XLM',
-          feeXlm: '0.001',
+          feeXlm: '0.0000100',
+          exact: true,
         }),
       })
     );

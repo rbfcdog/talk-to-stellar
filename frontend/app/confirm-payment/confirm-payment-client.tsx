@@ -26,6 +26,7 @@ type ConfirmResponse = {
     destinationAmount?: string
     destinationAssetCode?: string
     feeXlm?: string
+    exact?: boolean
   }
   message?: string
   error?: string
@@ -236,7 +237,8 @@ export default function ConfirmPaymentClient({
                   )}
                   {result.transferDetails?.sourceAmount && (
                     <p>
-                      Origem enviou: {formatPaymentAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
+                      Origem debitada: {formatPaymentAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
+                      {result.transferDetails.exact === false ? " (não confirmado no Horizon)" : ""}
                     </p>
                   )}
                   {result.transferDetails?.feeXlm && (

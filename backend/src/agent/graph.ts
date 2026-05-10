@@ -816,12 +816,6 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
   private formatAssetLine(balance: any, index: number): string {
     const asset = balance.asset || balance.asset_code || 'UNKNOWN';
-    const usdc = balance.display_value?.usdc;
-    const brl = balance.display_value?.brl;
-    const values = [brl, usdc].filter(Boolean).join(' / ');
-    if (values) {
-      return `${index + 1}. ${asset}: ${values}`;
-    }
     const amount = balance.balance || '0';
     return `${index + 1}. ${asset}: ${amount}`;
   }
@@ -832,13 +826,10 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       transaction.direction === 'received' ? 'Recebido' :
       'Relacionado';
     const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
-    const values = [transaction.display_value?.brl, transaction.display_value?.usdc].filter(Boolean).join(' / ');
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
     const hash = transaction.hash ? `\nHash: ${transaction.hash}` : '';
 
-    return values
-      ? `${index + 1}. ${directionLabel}: ${amount} (${values})\nData: ${date}${hash}`
-      : `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}${hash}`;
+    return `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}${hash}`;
   }
 
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
@@ -862,17 +853,15 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         state.response_message = `Não consegui consultar seu saldo agora: ${toolResult.error || 'erro desconhecido'}`;
       } else {
         const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
-        const visibleBalances = balances.filter((balance: any) => String(balance.asset || balance.asset_code || '').toUpperCase() !== 'XLM');
-        const brlTotal = balances.reduce((sum: number, balance: any) => sum + (Number(balance?.estimated_brl) || 0), 0);
-        const usdcTotal = balances.reduce((sum: number, balance: any) => sum + (Number(balance?.estimated_usdc) || 0), 0);
-        const formattedBalances = visibleBalances.length > 0
-          ? visibleBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n')
-          : 'Nenhum saldo encontrado.';
+        const byAsset = new Map<string, any>();
+        for (const balance of balances) {
+          byAsset.set(String(balance.asset || balance.asset_code || '').toUpperCase(), balance);
+        }
+        const exactBalances = ['BRL', 'USDC', 'XLM'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+        const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
 
         state.success = true;
-        state.response_message = visibleBalances.length > 0
-          ? `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}\n\nDetalhes da conta:\n${formattedBalances}`
-          : `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}`;
+        state.response_message = `Saldo exato na Stellar:\n${formattedBalances}`;
       }
     }
 
@@ -1262,16 +1251,6 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
                 `Para confirmar o envio de ${this.formatMoneyByAsset(finalAmount, assetLabel)} para ${destinationName}, abra o link de confirmação:\n\n${toolResultParsed.url}`;
               if (assetLabel !== 'XLM') {
                 state.response_message += `\n\nO destinatário receberá exatamente ${this.formatMoneyByAsset(finalAmount, assetLabel)}.`;
-              }
-              if (toolResultParsed.quote) {
-                const quote = toolResultParsed.quote;
-                const loss = quote?.conversionLoss || {};
-                state.response_message +=
-                  `\n\nCotação estimada:\n` +
-                  `- Você envia aprox.: ${this.formatMoneyByAsset(String(quote.sourceAmount || '0'), String(quote.sourceAsset?.code || 'XLM'))}\n` +
-                  `- Destino recebe: ${this.formatMoneyByAsset(String(quote.destinationAmount || '0'), String(quote.destinationAsset?.code || assetLabel))}\n` +
-                  `- Taxa de rede: ${quote.networkFeeXlm} XLM\n` +
-                  `- Perda estimada: R$ ${loss.lostBrl ?? 'n/d'} / US$ ${loss.lostUsdc ?? 'n/d'} (${loss.lostPercent ?? 'n/d'}%)`;
               }
             } else {
               const toolError = String(toolResultParsed.error || toolResultParsed.message || '').trim();

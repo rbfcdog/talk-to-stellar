@@ -74,12 +74,33 @@ async function sendTelegramPaymentNotification(input: {
   destination: string;
   hash?: string;
 }) {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-  if (!botToken) {
-    return;
+  const destinationLabel = input.destinationName || input.destination;
+  const sourceLine = input.sourceAmount && input.sourceAssetCode
+    ? `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n`
+    : '';
+  const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
+  const text =
+    `Pagamento confirmado.\n` +
+    `Destino recebeu: ${input.amount} ${input.assetCode}\n` +
+    sourceLine +
+    feeLine +
+    `Destino: ${destinationLabel}\n` +
+    `${input.hash ? `Hash: ${input.hash}` : ''}`;
+
+  try {
+    await agentRepo.saveMessage(input.sessionId, 'assistant', text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[payment-notify] failed to save payment confirmation message: ${message}`);
   }
 
   try {
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    if (!botToken) {
+      logger.warn('[telegram-notify] TELEGRAM_BOT_TOKEN is not configured; payment confirmation saved to chat history only');
+      return;
+    }
+
     const { data: mappingBySession } = await supabase
       .from('external_accounts')
       .select('provider, provider_user_id')
@@ -102,24 +123,12 @@ async function sendTelegramPaymentNotification(input: {
     }
 
     if (!providerUserId) {
+      logger.warn(`[telegram-notify] telegram chat mapping not found for session ${input.sessionId}`);
       return;
     }
 
     const chatId = providerUserId;
-    const destinationLabel = input.destinationName || input.destination;
-    const sourceLine = input.sourceAmount && input.sourceAssetCode
-      ? `Origem (enviado): ${input.sourceAmount} ${input.sourceAssetCode}\n`
-      : '';
-    const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
-    const text =
-      `Pagamento confirmado.\n` +
-      `Destino (recebido): ${input.amount} ${input.assetCode}\n` +
-      sourceLine +
-      feeLine +
-      `Destino: ${destinationLabel}\n` +
-      `${input.hash ? `Hash: ${input.hash}` : ''}`;
-
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -127,6 +136,9 @@ async function sendTelegramPaymentNotification(input: {
         text,
       }),
     });
+    if (!telegramResponse.ok) {
+      logger.warn(`[telegram-notify] telegram sendMessage failed with status ${telegramResponse.status}`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[telegram-notify] failed to send payment confirmation message: ${message}`);
@@ -450,27 +462,28 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const transferDetails = assetCode === 'XLM'
+        const submittedPaymentDetails = result.hash
+          ? await StellarService.getSubmittedPaymentDetails(result.hash)
+          : null;
+        const transferDetails = submittedPaymentDetails
           ? {
-              sourceAmount: String(amount),
-              sourceAssetCode: 'XLM',
-              destinationAmount: String(amount),
-              destinationAssetCode: 'XLM',
-              feeXlm: '0.001',
+              ...submittedPaymentDetails,
+              exact: true,
             }
           : {
-              sourceAmount: String(quote?.sourceAmount || ''),
-              sourceAssetCode: String(quote?.sourceAsset?.code || 'XLM'),
-              destinationAmount: String(quote?.destinationAmount || amount),
-              destinationAssetCode: String(quote?.destinationAsset?.code || assetCode),
-              feeXlm: String(quote?.networkFeeXlm || '0.001'),
+              sourceAmount: assetCode === 'XLM' ? String(amount) : String(quote?.sourceAmount || ''),
+              sourceAssetCode: assetCode === 'XLM' ? 'XLM' : String(quote?.sourceAsset?.code || 'XLM'),
+              destinationAmount: assetCode === 'XLM' ? String(amount) : String(quote?.destinationAmount || amount),
+              destinationAssetCode: assetCode === 'XLM' ? 'XLM' : String(quote?.destinationAsset?.code || assetCode),
+              feeXlm: String(quote?.networkFeeXlm || ''),
+              exact: false,
             };
 
         await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
-          amount: String(amount),
-          assetCode,
+          amount: transferDetails.destinationAmount,
+          assetCode: transferDetails.destinationAssetCode,
           sourceAmount: transferDetails.sourceAmount,
           sourceAssetCode: transferDetails.sourceAssetCode,
           feeXlm: transferDetails.feeXlm,
