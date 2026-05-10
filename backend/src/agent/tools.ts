@@ -1022,6 +1022,8 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
 
     const { url } = externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
+      asset_code: input.asset_code || input.asset || input.currency || 'XLM',
+      asset_issuer: input.asset_issuer || input.assetIssuer,
       destination: normalizedDestination,
       destination_name: destinationName,
       destination_contact: input.destination_contact || undefined,
@@ -1032,7 +1034,8 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       url,
-      message: `Para confirmar o envio de ${normalizedAmount} XLM para ${destinationName || normalizedDestination}, abra o link de confirmação:\n\n${url}`,
+      asset: String(input.asset_code || input.asset || input.currency || 'XLM').toUpperCase().replace(/^USD$/, 'USDC'),
+      message: `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link de confirmação:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
