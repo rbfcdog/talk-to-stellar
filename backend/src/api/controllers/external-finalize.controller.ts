@@ -31,6 +31,15 @@ function isValidStellarPublicKey(value?: string) {
   }
 }
 
+function resolveAssetIssuer(assetCode: string, provided?: string): string | undefined {
+  const normalized = String(assetCode || '').toUpperCase().replace(/^USD$/, 'USDC');
+  if (normalized === 'XLM') return undefined;
+  if (provided && String(provided).trim()) return String(provided).trim();
+  if (normalized === 'USDC') return String(process.env.USDC_ISSUER || '').trim() || undefined;
+  if (normalized === 'BRL') return String(process.env.BRL_ISSUER || '').trim() || undefined;
+  return undefined;
+}
+
 async function sendTelegramPaymentNotification(input: {
   sessionId: string;
   userId: string;
@@ -93,6 +102,54 @@ async function sendTelegramPaymentNotification(input: {
   }
 }
 
+async function ensureDestinationCanReceiveAsset(input: {
+  destination: string;
+  destinationWallet: any;
+  assetCode: string;
+  assetIssuer?: string;
+  userId: string;
+}) {
+  if (input.assetCode === 'XLM') return;
+  if (!input.assetIssuer) {
+    throw new Error(`${input.assetCode}_ISSUER não está configurado no backend.`);
+  }
+
+  const balances = await StellarService.getAccountBalance(input.destination);
+  const hasTrustline = balances.some((balance: any) =>
+    String(balance.asset_code || '').toUpperCase() === input.assetCode &&
+    String(balance.asset_issuer || '') === input.assetIssuer
+  );
+
+  if (hasTrustline) return;
+
+  if (!input.destinationWallet?.vault_secret_id) {
+    throw new Error(`O destinatário ainda não pode receber ${input.assetCode}. Ele precisa ativar recebimento em ${input.assetCode} antes dessa transferência.`);
+  }
+
+  const destinationSecret = await vaultService.getSecret(String(input.destinationWallet.vault_secret_id));
+  const trustlineXdr = await StellarService.buildTrustlineXdr({
+    sourcePublicKey: input.destination,
+    assetCode: input.assetCode,
+    assetIssuer: input.assetIssuer,
+  });
+  const trustlineResult = await StellarService.signAndSubmitXdr(
+    input.userId,
+    destinationSecret,
+    trustlineXdr,
+    {
+      user_id: input.userId,
+      type: 'TRUSTLINE',
+      asset_code: input.assetCode,
+      source_public_key: input.destination,
+      context: `Auto trustline before incoming ${input.assetCode} payment`,
+    }
+  );
+
+  if (!trustlineResult.success) {
+    throw new Error(`Não consegui ativar recebimento em ${input.assetCode} para o destinatário: ${trustlineResult.error || 'erro desconhecido'}`);
+  }
+}
+
 export default class ExternalFinalizeController {
   // POST /api/external/finalize
   // body: { token, name?, email? }
@@ -114,9 +171,17 @@ export default class ExternalFinalizeController {
       const tokenSub = String((payload as any)?.sub || '');
       if (tokenSub === 'external_payment_confirm') {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
+        const assetCode = String((payload as any)?.asset_code || 'XLM').toUpperCase().replace(/^USD$/, 'USDC');
+        const assetIssuer = resolveAssetIssuer(assetCode, (payload as any)?.asset_issuer);
 
         if (!amount || !destination || !session_id) {
           return res.status(400).json({ success: false, message: 'token missing payment data' });
+        }
+        if (assetCode !== 'XLM' && !assetIssuer) {
+          return res.status(400).json({
+            success: false,
+            message: `${assetCode}_ISSUER não está configurado no backend.`,
+          });
         }
 
         const wallet = await walletRepo.getWalletBySession(String(session_id));
@@ -247,14 +312,6 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const unsignedXdr = await StellarService.buildPaymentXdr({
-          sourcePublicKey: wallet.public_key,
-          destination: resolvedDestination,
-          amount: String(amount),
-          assetCode: 'XLM',
-          memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
-        });
-
         const providedPin = String(req.body?.pin || '').trim();
         if (!providedPin) {
           return res.status(400).json({
@@ -285,17 +342,43 @@ export default class ExternalFinalizeController {
           // ignore lookup errors; destination may be external
         }
 
+        await ensureDestinationCanReceiveAsset({
+          destination: resolvedDestination,
+          destinationWallet,
+          assetCode,
+          assetIssuer,
+          userId: String(session.user_id),
+        });
+
+        const unsignedXdr = assetCode === 'XLM'
+          ? await StellarService.buildPaymentXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              amount: String(amount),
+              assetCode: 'XLM',
+              memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
+            })
+          : await StellarService.buildPathPaymentXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              destAsset: { code: assetCode, issuer: assetIssuer },
+              destAmount: String(amount),
+              sourceAsset: { code: 'XLM' },
+            });
+
         const result = await StellarService.signAndSubmitXdr(
           String(session.user_id),
           secretKey,
           unsignedXdr,
           {
             user_id: String(session.user_id),
-            type: 'PAYMENT',
+            type: assetCode === 'XLM' ? 'PAYMENT' : 'PATH_PAYMENT_STRICT_RECEIVE',
             destination_key: resolvedDestination,
-            asset_code: 'XLM',
+            asset_code: assetCode,
             amount: parseFloat(String(amount)),
-            context: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
+            context: assetCode === 'XLM'
+              ? `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`
+              : `Pagamento em ${assetCode} para ${destination_contact?.contact_name || destination_name || destination}; origem liquidada em XLM`,
             source_public_key: wallet.public_key,
             source_session_id: wallet.session_id,
             destination_session_id: destinationWallet?.session_id || undefined,
@@ -313,7 +396,7 @@ export default class ExternalFinalizeController {
           sessionId: String(session_id),
           userId: String(session.user_id),
           amount: String(amount),
-          assetCode: 'XLM',
+          assetCode,
           destinationName: destination_contact?.contact_name || destination_name,
           destination: resolvedDestination,
           hash: result.hash,
@@ -327,6 +410,7 @@ export default class ExternalFinalizeController {
           destination: resolvedDestination,
           destinationName: destination_contact?.contact_name || destination_name || destination,
           amount: String(amount),
+          assetCode,
           hash: result.hash,
         });
       }

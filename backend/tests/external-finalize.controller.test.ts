@@ -17,6 +17,9 @@ const finalizeFindByProviderAndIdMock = jest.fn();
 const finalizeCreateMappingMock = jest.fn();
 const finalizeGetSecretMock = jest.fn();
 const finalizeBuildPaymentXdrMock = jest.fn();
+const finalizeBuildPathPaymentXdrMock = jest.fn();
+const finalizeBuildTrustlineXdrMock = jest.fn();
+const finalizeGetAccountBalanceMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
 
 jest.mock('../src/services/vault.service', () => ({
@@ -37,6 +40,9 @@ jest.mock('../src/api/services/stellar.service', () => ({
       secret: testSecretKey,
     })),
     buildPaymentXdr: finalizeBuildPaymentXdrMock,
+    buildPathPaymentXdr: finalizeBuildPathPaymentXdrMock,
+    buildTrustlineXdr: finalizeBuildTrustlineXdrMock,
+    getAccountBalance: finalizeGetAccountBalanceMock,
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
   },
 }));
@@ -90,6 +96,9 @@ describe('ExternalFinalizeController', () => {
     finalizeCreateMappingMock.mockReset();
     finalizeGetSecretMock.mockReset();
     finalizeBuildPaymentXdrMock.mockReset();
+    finalizeBuildPathPaymentXdrMock.mockReset();
+    finalizeBuildTrustlineXdrMock.mockReset();
+    finalizeGetAccountBalanceMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
     finalizeSaveSessionMock.mockResolvedValue(undefined);
     finalizeSaveWalletMock.mockResolvedValue(undefined);
@@ -97,6 +106,9 @@ describe('ExternalFinalizeController', () => {
     finalizeStoreSecretMock.mockResolvedValue('vault-secret-id-1');
     finalizeGetSecretMock.mockResolvedValue(testSecretKey);
     finalizeBuildPaymentXdrMock.mockResolvedValue('unsigned-xdr');
+    finalizeBuildPathPaymentXdrMock.mockResolvedValue('path-xdr');
+    finalizeBuildTrustlineXdrMock.mockResolvedValue('trustline-xdr');
+    finalizeGetAccountBalanceMock.mockResolvedValue([]);
     finalizeSignAndSubmitXdrMock.mockResolvedValue({ success: true, hash: 'tx-123' });
     finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
     finalizeFindByProviderAndIdMock.mockResolvedValue(null);
@@ -134,6 +146,75 @@ describe('ExternalFinalizeController', () => {
         userId: 'user@example.com',
       })
     );
+  });
+
+  it('confirms USDC payment with XLM source path payment', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.USDC_ISSUER = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'USDC',
+      destination: testPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([
+      { asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0' },
+    ]);
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeBuildPaymentXdrMock).not.toHaveBeenCalled();
+    expect(finalizeBuildPathPaymentXdrMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePublicKey: testPublicKey,
+        destination: testPublicKey,
+        destAsset: { code: 'USDC', issuer: testPublicKey },
+        destAmount: '10',
+        sourceAsset: { code: 'XLM' },
+      })
+    );
+    expect(finalizeSignAndSubmitXdrMock).toHaveBeenCalledWith(
+      'user@example.com',
+      testSecretKey,
+      'path-xdr',
+      expect.objectContaining({
+        type: 'PATH_PAYMENT_STRICT_RECEIVE',
+        asset_code: 'USDC',
+        amount: 10,
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
 });
