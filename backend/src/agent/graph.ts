@@ -828,9 +828,9 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
           : 'Nenhum saldo encontrado.';
 
         state.success = true;
-        state.response_message =
-          `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}\n\n` +
-          `Detalhes da conta:\n${formattedBalances}`;
+        state.response_message = visibleBalances.length > 0
+          ? `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}\n\nDetalhes da conta:\n${formattedBalances}`
+          : `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}`;
       }
     }
 
