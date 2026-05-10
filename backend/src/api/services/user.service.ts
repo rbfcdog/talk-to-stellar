@@ -294,7 +294,7 @@ export class UserService {
     }
 
     if (!public_key) {
-      throw new Error('A Stellar public key or an existing TalkToStellar Pix key is required.');
+      throw new Error('A Stellar public key or an existing TalkToStellar transfer key is required.');
     }
 
     const { data: newContact, error: insertError } = await supabase
