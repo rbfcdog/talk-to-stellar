@@ -7,6 +7,17 @@ import VaultService from '../../services/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { ContactSeedService } from './contact-seed.service';
+import { getAssetIssuer, getStellarNetworkName } from '../../config/assets';
+
+function toFixed7Floor(value: number): string {
+  const floored = Math.floor(value * 1e7) / 1e7;
+  return floored.toFixed(7);
+}
+
+function parsePositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(String(value || '').trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export interface OnboardUserPayload {
   name?: string;
@@ -33,6 +44,77 @@ interface ListContactsPayload {
 }
 
 export class UserService {
+  private static async autoConvertInitialFundingToUsdc(input: {
+    userId: string;
+    publicKey: string;
+    secretKey?: string;
+    sessionId: string;
+  }): Promise<void> {
+    const enabledFlag = String(process.env.ONBOARDING_AUTO_CONVERT_TO_USDC || 'true').trim().toLowerCase();
+    const enabled = enabledFlag !== 'false' && enabledFlag !== '0' && enabledFlag !== 'no';
+    if (!enabled) return;
+    if (!input.secretKey) return;
+    if (getStellarNetworkName() !== 'TESTNET') return;
+
+    const usdcIssuer = getAssetIssuer('USDC');
+    if (!usdcIssuer) return;
+
+    try {
+      const stellarReadService = new StellarBlockchainService();
+      const accountInfoBefore = await stellarReadService.getAccount(input.publicKey);
+      const nativeBalance = accountInfoBefore.balances.find((b: any) => b.asset_type === 'native');
+      const xlmBalance = Number(nativeBalance?.balance || '0');
+
+      const keepXlm = parsePositiveNumber(process.env.ONBOARDING_KEEP_XLM, 50);
+      const sendAmount = xlmBalance - keepXlm;
+      if (!Number.isFinite(sendAmount) || sendAmount <= 0.01) {
+        return;
+      }
+
+      const sourceAmount = toFixed7Floor(sendAmount);
+      const quote = await StellarService.quoteStrictSendConversion({
+        sourcePublicKey: input.publicKey,
+        destination: input.publicKey,
+        sourceAmount,
+        sourceAsset: { code: 'XLM' },
+        destAsset: { code: 'USDC', issuer: usdcIssuer },
+      });
+
+      const conversionXdr = await StellarService.buildStrictSendConversionXdr({
+        sourcePublicKey: input.publicKey,
+        destination: input.publicKey,
+        sourceAmount,
+        sourceAsset: { code: 'XLM' },
+        destAsset: { code: 'USDC', issuer: usdcIssuer },
+      });
+
+      const result = await StellarService.signAndSubmitXdr(
+        input.userId,
+        input.secretKey,
+        conversionXdr,
+        {
+          user_id: input.userId,
+          type: 'PATH_PAYMENT_STRICT_SEND',
+          destination_key: input.publicKey,
+          asset_code: 'USDC',
+          amount: Number(quote.destinationAmount),
+          context: `Onboarding auto-funding conversion: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`,
+          source_public_key: input.publicKey,
+          source_session_id: input.sessionId,
+          destination_session_id: input.sessionId,
+        }
+      );
+
+      if (!result.success) {
+        console.warn(`[onboarding-usdc] auto-conversion failed for ${input.publicKey}: ${result.error || 'unknown error'}`);
+      } else {
+        console.info(`[onboarding-usdc] auto-conversion succeeded for ${input.publicKey}: ${sourceAmount} XLM -> ~${quote.destinationAmount} USDC`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[onboarding-usdc] auto-conversion skipped for ${input.publicKey}: ${message}`);
+    }
+  }
 
   private static deriveWalletName(input: OnboardUserPayload): string {
     if (input.name && input.name.trim()) {
@@ -213,11 +295,6 @@ export class UserService {
     // Fetch initial balance from Stellar and save wallet info
     let initialBalance = '0';
     try {
-      const stellarService = new StellarBlockchainService();
-      const accountInfo = await stellarService.getAccount(publicKey);
-      const xlmBalance = accountInfo.balances.find((b) => b.asset_type === 'native');
-      initialBalance = xlmBalance?.balance || '0';
-
       // Save wallet information to database using session_id schema
       const walletRepository = new WalletRepository(supabase);
       if (secretKey) {
@@ -229,6 +306,21 @@ export class UserService {
         );
       }
 
+      if (secretKey) {
+        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId);
+        await this.autoConvertInitialFundingToUsdc({
+          userId,
+          publicKey,
+          secretKey,
+          sessionId,
+        });
+      }
+
+      const stellarService = new StellarBlockchainService();
+      const accountInfo = await stellarService.getAccount(publicKey);
+      const xlmBalance = accountInfo.balances.find((b) => b.asset_type === 'native');
+      initialBalance = xlmBalance?.balance || '0';
+
       await walletRepository.saveWallet({
         session_id: sessionId,
         public_key: publicKey,
@@ -239,10 +331,6 @@ export class UserService {
         sequence: accountInfo.sequence,
         account_data: accountInfo,
       });
-
-      if (secretKey) {
-        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId);
-      }
     } catch (walletError) {
       console.warn('Warning: Could not fetch account balance or save wallet info:', walletError);
     }
