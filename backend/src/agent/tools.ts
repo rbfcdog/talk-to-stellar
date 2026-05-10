@@ -792,7 +792,8 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           ? `Cotação: converter ${quote.sourceAmount} ${quote.sourceAsset.code} deve entregar aproximadamente ${quote.destinationAmount} ${quote.destinationAsset.code}. `
           : `Cotação: para receber ${quote.destinationAmount} ${quote.destinationAsset.code}, serão usados aproximadamente ${quote.sourceAmount} ${quote.sourceAsset.code}. `) +
         `Rota usada: ${formatQuotePath(quote.path)}. ` +
-        `Taxa da rede: ${quote.networkFeeXlm} XLM.`,
+        `Taxa da rede: ${quote.networkFeeXlm} XLM. ` +
+        `Fonte: path quote em tempo real no Horizon.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

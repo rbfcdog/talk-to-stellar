@@ -203,6 +203,16 @@ function hopAssetIsTrusted(pathAsset: any): boolean {
 }
 
 function selectTrustedConversionPaths(records: any[], sourceAssetObj: Asset, destAssetObj: Asset): any[] {
+    const enforceTrusted =
+        String(process.env.STELLAR_ENFORCE_TRUSTED_PATH_ASSETS || 'false').trim().toLowerCase() === 'true';
+    if (!enforceTrusted) {
+        const candidates = Array.isArray(records) ? records : [];
+        const preferDirect = String(process.env.STELLAR_PREFER_DIRECT_PATHS || 'true').trim().toLowerCase() !== 'false';
+        if (!preferDirect) return candidates;
+        const direct = candidates.filter((record) => !Array.isArray(record?.path) || record.path.length === 0);
+        return direct.length > 0 ? direct : candidates;
+    }
+
     const trusted = (Array.isArray(records) ? records : []).filter((record) => {
         const source = recordAsset(record, 'source');
         const destination = recordAsset(record, 'destination');

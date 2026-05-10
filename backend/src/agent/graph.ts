@@ -811,11 +811,25 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   }
 
   private wantsLogoutWallet(text: string): boolean {
-    const normalized = text.toLowerCase();
+    const normalized = text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
     return (
       (normalized.includes('sair') || normalized.includes('logout') || normalized.includes('desconectar') || normalized.includes('deslogar')) &&
-      (normalized.includes('wallet') || normalized.includes('carteira'))
+      (normalized.includes('wallet') || normalized.includes('carteira') || normalized.includes('conta') || normalized.includes('account'))
     );
+  }
+
+  private getLogoutConfirmationMessage(): string {
+    const base =
+      process.env.FRONTEND_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.CREATE_ACCOUNT_BASE ||
+      "http://localhost:3000";
+    const normalizedBase = String(base).trim().replace(/\/$/, "");
+    const logoutUrl = `${normalizedBase}/logout`;
+    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl}`;
   }
 
   private async handleWalletLogout(state: AgentState): Promise<AgentState> {
@@ -1200,9 +1214,18 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       const incomingSecret = this.extractSecretKey(state.current_input);
 
       if (this.wantsLogoutWallet(state.current_input)) {
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
         state.action_type = ActionType.LOGOUT_WALLET;
         state.detected_intent = IntentType.WALLET_LOGOUT;
-        return await this.handleWalletLogout(state);
+        state.success = true;
+        state.response_message = this.getLogoutConfirmationMessage();
+        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
       }
 
       if (state.pending_payment && incomingSecret) {

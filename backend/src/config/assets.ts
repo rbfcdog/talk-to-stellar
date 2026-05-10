@@ -53,7 +53,9 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 }
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
-  return ['USDC', 'BRL']
+  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'false').trim().toLowerCase() === 'true';
+  const assetCodes = includeBrl ? ['USDC', 'BRL'] : ['USDC'];
+  return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
 }
