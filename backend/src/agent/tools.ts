@@ -130,7 +130,7 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a cross-asset transfer or conversion, including source amount required, network fee, path, and estimated conversion loss in USDC and BRL.",
+    description: "Preview a cross-asset transfer or conversion using Horizon path data, including source amount, destination amount, network fee, and path.",
     parameters: {
       type: "object",
       properties: {

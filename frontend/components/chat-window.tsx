@@ -11,6 +11,7 @@ import { MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from 
 
 type Message = {
   id: string;
+  backendId?: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt?: Date;
@@ -102,6 +103,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   // --- Refs para controlar os elementos da tela ---
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null); // Ref para a área de scroll
+  const pollInFlightRef = useRef(false);
 
   // --- CORREÇÃO DE AUTO-SCROLL (MAIS ROBUSTO) ---
   useEffect(() => {
@@ -119,6 +121,69 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     // Limpamos o timeout se o componente for desmontado para evitar erros.
     return () => clearTimeout(timer);
   }, [messages, isLoading]); // Roda sempre que as mensagens ou o estado de 'loading' mudam.
+
+  const mergeServerMessages = (serverMessages: any[]) => {
+    if (!Array.isArray(serverMessages) || serverMessages.length === 0) return;
+
+    setMessages((prev) => {
+      const backendIds = new Set(prev.map((message) => message.backendId).filter(Boolean));
+      const contentKeys = new Set(prev.map((message) => `${message.role}:${message.content}`));
+      const nextMessages = serverMessages
+        .map((message) => ({
+          id: `server-${message.id}`,
+          backendId: String(message.id),
+          role: message.role === "user" ? "user" : "assistant",
+          content: String(message.content || ""),
+          createdAt: message.created_at ? new Date(message.created_at) : new Date(),
+        } as Message))
+        .filter((message) => {
+          if (!message.content) return false;
+          if (backendIds.has(message.backendId)) return false;
+          if (contentKeys.has(`${message.role}:${message.content}`)) return false;
+          return true;
+        });
+
+      return nextMessages.length > 0 ? [...prev, ...nextMessages] : prev;
+    });
+  };
+
+  const fetchServerMessages = async () => {
+    if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
+
+    const storedSessionId = typeof window !== "undefined"
+      ? localStorage.getItem("talk-to-stellar.sessionId")
+      : null;
+    const resolvedSessionId = storedSessionId || sessionId;
+    if (!resolvedSessionId) return;
+
+    pollInFlightRef.current = true;
+    try {
+      const response = await fetch(`/api/chat?session_id=${encodeURIComponent(resolvedSessionId)}&limit=50`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      mergeServerMessages(data.messages || []);
+    } catch (error) {
+      console.error("Erro ao sincronizar mensagens:", error);
+    } finally {
+      pollInFlightRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (chatId !== "agent" || !sessionId) return;
+
+    fetchServerMessages();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchServerMessages();
+      }
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, [chatId, sessionId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -187,6 +252,11 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       }
 
       const data = await response.json();
+      if (data.session_id && typeof window !== "undefined") {
+        localStorage.setItem("talk-to-stellar.sessionId", data.session_id);
+        sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
+        setSessionId(data.session_id);
+      }
       
       // Handle error responses that still return 200
       if (data.error) {
@@ -203,6 +273,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       };
 
       setMessages(prev => [...prev, botMessage]);
+      fetchServerMessages();
 
     } catch (error) {
       console.error("Erro no handleSubmit:", error);

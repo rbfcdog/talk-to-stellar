@@ -17,6 +17,13 @@ const getAgentApiUrl = () => {
 
 const AGENT_API_URL = getAgentApiUrl();
 
+const getAgentMessagesUrl = (sessionId: string, limit = 50) => {
+  const queryUrl = new URL(AGENT_API_URL);
+  queryUrl.pathname = queryUrl.pathname.replace(/\/query$/, `/messages/${sessionId}`);
+  queryUrl.search = `limit=${limit}`;
+  return queryUrl.toString();
+};
+
 /**
  * Generate a UUID v4 for session tracking
  */
@@ -89,5 +96,34 @@ export async function POST(req: Request) {
       content: `Error: ${message}`,
       session_id: sessionId || null 
     }, { status: 500 });
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const sessionId = url.searchParams.get("session_id");
+    const limit = url.searchParams.get("limit") || "50";
+
+    if (!sessionId) {
+      return NextResponse.json({ error: "session_id is required" }, { status: 400 });
+    }
+
+    const agentApiResponse = await fetch(getAgentMessagesUrl(sessionId, Number(limit) || 50), {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    });
+
+    if (!agentApiResponse.ok) {
+      const errorText = await agentApiResponse.text();
+      throw new Error(`Agent API Error: ${errorText}`);
+    }
+
+    return NextResponse.json(await agentApiResponse.json());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("Next.js API messages proxy error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
