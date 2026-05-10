@@ -578,7 +578,7 @@ async function executeLogoutSession(input: any): Promise<string> {
     await supabase
       .from('agent_states')
       .update({
-        action_params: {},
+        action_params: { force_logged_out: true },
         pending_payment: null,
         updated_at: new Date().toISOString(),
       })

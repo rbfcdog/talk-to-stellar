@@ -242,8 +242,12 @@ export function createAgentRoutes(
         await repository.saveSession(sessionId, sessionData);
       }
 
+      // Get previous state before hydration checks (used to honor explicit logout marker).
+      const previousState = await repository.getState(sessionId);
+      const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out);
+
       // Hydrate missing public_key from wallet record to avoid false "login required" during active sessions.
-      if (!sessionData.public_key) {
+      if (!sessionData.public_key && !forceLoggedOut) {
         try {
           const wallet = await walletRepo.getWalletBySession(sessionId);
           if (wallet?.public_key) {
@@ -259,8 +263,6 @@ export function createAgentRoutes(
       // This ensures secret keys are only visible once and are not kept in conversation history.
       await repository.deletePrivateKeyMessages(sessionId);
 
-      // Get previous state
-      const previousState = await repository.getState(sessionId);
       const previousMessages = await repository.getMessages(sessionId, 10);
 
       // Initialize state
