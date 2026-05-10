@@ -73,6 +73,17 @@ export class AgentRepository {
    * Save agent state
    */
   async saveState(sessionId: string, state: Partial<AgentState>): Promise<void> {
+    const currentActionParams =
+      state.action_params && typeof state.action_params === 'object'
+        ? state.action_params
+        : {};
+
+    const actionParamsWithPending = {
+      ...currentActionParams,
+      pending_payment: state.pending_payment ?? null,
+      pending_conversion: state.pending_conversion ?? null,
+    };
+
     const { error } = await this.supabase
       .from('agent_states')
       .upsert(
@@ -80,7 +91,7 @@ export class AgentRepository {
           session_id: sessionId,
           detected_intent: state.detected_intent,
           action_type: state.action_type,
-          action_params: state.action_params,
+          action_params: actionParamsWithPending,
           pending_payment: state.pending_payment,
           response_message: state.response_message,
           success: state.success,
