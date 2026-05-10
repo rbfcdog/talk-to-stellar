@@ -180,6 +180,15 @@ Abra este link para criar conta ou entrar em uma conta existente:
 ${onboardingUrl}`;
   }
 
+  private formatMoneyByAsset(amount: string, assetCode: string): string {
+    const n = Number(String(amount || '0').replace(',', '.'));
+    if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
+    const upper = String(assetCode || '').toUpperCase();
+    if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
+    if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
+    return `${n.toFixed(2)} ${upper || 'XLM'}`;
+  }
+
   private async extractPaymentIntentWithLlm(userMessage: string, userId?: string): Promise<{
     recipient_query?: string;
     amount?: string;
@@ -759,7 +768,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
     state.pending_payment = undefined;
     state.success = true;
-    state.response_message = `Pagamento enviado com sucesso.\n\nValor: ${sentAmount} XLM\nDestino: ${destinationLabel}\nHash: ${submit.hash}`;
+    state.response_message = `Pagamento enviado com sucesso.\n\nValor: ${this.formatMoneyByAsset(sentAmount, 'XLM')}\nDestino: ${destinationLabel}\nHash: ${submit.hash}`;
     return state;
   }
 
@@ -1204,11 +1213,18 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
             if (toolResultParsed.success && toolResultParsed.url) {
               const assetLabel = String(toolResultParsed.asset || finalAssetCode || 'XLM').toUpperCase();
-              state.response_message = `Para confirmar o envio de ${finalAmount} ${assetLabel} para ${destinationName}, abra o link de confirmação:\n\n${toolResultParsed.url}`;
+              state.response_message =
+                `Para confirmar o envio de ${this.formatMoneyByAsset(finalAmount, assetLabel)} para ${destinationName}, abra o link de confirmação:\n\n${toolResultParsed.url}` +
+                `\n\nDetalhe técnico: ativo liquidado em ${assetLabel}.`;
               if (toolResultParsed.quote) {
                 const quote = toolResultParsed.quote;
                 const loss = quote?.conversionLoss || {};
-                state.response_message += `\n\nCotação estimada:\n- Você envia aprox.: ${quote.sourceAmount} ${quote.sourceAsset?.code || 'XLM'}\n- Destino recebe: ${quote.destinationAmount} ${quote.destinationAsset?.code || assetLabel}\n- Taxa de rede: ${quote.networkFeeXlm} XLM\n- Perda estimada: ${loss.lostBrl ?? 'n/d'} BRL / ${loss.lostUsdc ?? 'n/d'} USDC (${loss.lostPercent ?? 'n/d'}%)`;
+                state.response_message +=
+                  `\n\nCotação estimada:\n` +
+                  `- Você envia aprox.: ${this.formatMoneyByAsset(String(quote.sourceAmount || '0'), String(quote.sourceAsset?.code || 'XLM'))}\n` +
+                  `- Destino recebe: ${this.formatMoneyByAsset(String(quote.destinationAmount || '0'), String(quote.destinationAsset?.code || assetLabel))}\n` +
+                  `- Taxa de rede: ${quote.networkFeeXlm} XLM\n` +
+                  `- Perda estimada: R$ ${loss.lostBrl ?? 'n/d'} / US$ ${loss.lostUsdc ?? 'n/d'} (${loss.lostPercent ?? 'n/d'}%)`;
               }
             } else {
               const toolError = String(toolResultParsed.error || toolResultParsed.message || '').trim();

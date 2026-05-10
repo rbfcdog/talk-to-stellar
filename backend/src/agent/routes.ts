@@ -8,6 +8,7 @@ import { AgentState, IntentType, ActionType, SessionData } from "./types";
 import { AgentGraph } from "./graph";
 import { ALL_TOOLS } from "./tools";
 import { AgentRepository } from "../repositories/agent.repository";
+import { WalletRepository } from "../repositories/wallet.repository";
 import { logger } from "../utils/logger";
 import { getStellarService } from "../services/stellar.service";
 import ExternalService from "../services/external.service";
@@ -154,6 +155,7 @@ export function createAgentRoutes(
   const router = Router();
   const agentGraph = new AgentGraph(repository, openaiApiKey, TALKTOSTELLAR_SYSTEM_PROMPT);
   const externalService = new ExternalService(supabase as any);
+  const walletRepo = new WalletRepository(supabase as any);
 
   /**
    * POST /api/agent/query
@@ -237,6 +239,19 @@ export function createAgentRoutes(
           last_activity: new Date().toISOString(),
         };
         await repository.saveSession(sessionId, sessionData);
+      }
+
+      // Hydrate missing public_key from wallet record to avoid false "login required" during active sessions.
+      if (!sessionData.public_key) {
+        try {
+          const wallet = await walletRepo.getWalletBySession(sessionId);
+          if (wallet?.public_key) {
+            sessionData.public_key = wallet.public_key;
+            await repository.saveSession(sessionId, sessionData);
+          }
+        } catch {
+          // ignore hydration failures
+        }
       }
 
       // On every new user message, remove previous assistant messages containing private keys.
