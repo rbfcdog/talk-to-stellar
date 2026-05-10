@@ -18,6 +18,7 @@ const finalizeCreateMappingMock = jest.fn();
 const finalizeGetSecretMock = jest.fn();
 const finalizeBuildPaymentXdrMock = jest.fn();
 const finalizeBuildPathPaymentXdrMock = jest.fn();
+const finalizeQuotePathPaymentMock = jest.fn();
 const finalizeBuildTrustlineXdrMock = jest.fn();
 const finalizeGetAccountBalanceMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
@@ -44,6 +45,7 @@ jest.mock('../src/api/services/stellar.service', () => ({
     })),
     buildPaymentXdr: finalizeBuildPaymentXdrMock,
     buildPathPaymentXdr: finalizeBuildPathPaymentXdrMock,
+    quotePathPayment: finalizeQuotePathPaymentMock,
     buildTrustlineXdr: finalizeBuildTrustlineXdrMock,
     getAccountBalance: finalizeGetAccountBalanceMock,
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
@@ -110,6 +112,7 @@ describe('ExternalFinalizeController', () => {
     finalizeGetSecretMock.mockReset();
     finalizeBuildPaymentXdrMock.mockReset();
     finalizeBuildPathPaymentXdrMock.mockReset();
+    finalizeQuotePathPaymentMock.mockReset();
     finalizeBuildTrustlineXdrMock.mockReset();
     finalizeGetAccountBalanceMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
@@ -122,6 +125,16 @@ describe('ExternalFinalizeController', () => {
     finalizeGetSecretMock.mockResolvedValue(testSecretKey);
     finalizeBuildPaymentXdrMock.mockResolvedValue('unsigned-xdr');
     finalizeBuildPathPaymentXdrMock.mockResolvedValue('path-xdr');
+    finalizeQuotePathPaymentMock.mockResolvedValue({
+      sourceAsset: { code: 'XLM' },
+      destinationAsset: { code: 'USDC', issuer: testPublicKey },
+      destinationAmount: '10',
+      sourceAmount: '11.2',
+      sourceMax: '11.4',
+      networkFeeXlm: '0.001',
+      conversionLoss: {},
+      path: [],
+    });
     finalizeBuildTrustlineXdrMock.mockResolvedValue('trustline-xdr');
     finalizeGetAccountBalanceMock.mockResolvedValue([]);
     finalizeSignAndSubmitXdrMock.mockResolvedValue({ success: true, hash: 'tx-123' });
@@ -232,6 +245,17 @@ describe('ExternalFinalizeController', () => {
       })
     );
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transferDetails: expect.objectContaining({
+          destinationAmount: '10',
+          destinationAssetCode: 'USDC',
+          sourceAmount: '11.2',
+          sourceAssetCode: 'XLM',
+          feeXlm: '0.001',
+        }),
+      })
+    );
   });
 
   it('uses official testnet USDC issuer when env is not set', async () => {

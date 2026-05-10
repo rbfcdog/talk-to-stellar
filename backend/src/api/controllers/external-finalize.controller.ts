@@ -67,6 +67,9 @@ async function sendTelegramPaymentNotification(input: {
   userId: string;
   amount: string;
   assetCode: string;
+  sourceAmount?: string;
+  sourceAssetCode?: string;
+  feeXlm?: string;
   destinationName?: string;
   destination: string;
   hash?: string;
@@ -104,9 +107,15 @@ async function sendTelegramPaymentNotification(input: {
 
     const chatId = providerUserId;
     const destinationLabel = input.destinationName || input.destination;
+    const sourceLine = input.sourceAmount && input.sourceAssetCode
+      ? `Origem (enviado): ${input.sourceAmount} ${input.sourceAssetCode}\n`
+      : '';
+    const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
     const text =
       `Pagamento confirmado.\n` +
-      `Valor: ${input.amount} ${input.assetCode}\n` +
+      `Destino (recebido): ${input.amount} ${input.assetCode}\n` +
+      sourceLine +
+      feeLine +
       `Destino: ${destinationLabel}\n` +
       `${input.hash ? `Hash: ${input.hash}` : ''}`;
 
@@ -389,6 +398,16 @@ export default class ExternalFinalizeController {
           userId: String(session.user_id),
         });
 
+        const quote = assetCode === 'XLM'
+          ? null
+          : await StellarService.quotePathPayment({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              destAsset: { code: assetCode, issuer: assetIssuer },
+              destAmount: String(amount),
+              sourceAsset: { code: 'XLM' },
+            });
+
         const unsignedXdr = assetCode === 'XLM'
           ? await StellarService.buildPaymentXdr({
               sourcePublicKey: wallet.public_key,
@@ -431,11 +450,30 @@ export default class ExternalFinalizeController {
           });
         }
 
+        const transferDetails = assetCode === 'XLM'
+          ? {
+              sourceAmount: String(amount),
+              sourceAssetCode: 'XLM',
+              destinationAmount: String(amount),
+              destinationAssetCode: 'XLM',
+              feeXlm: '0.001',
+            }
+          : {
+              sourceAmount: String(quote?.sourceAmount || ''),
+              sourceAssetCode: String(quote?.sourceAsset?.code || 'XLM'),
+              destinationAmount: String(quote?.destinationAmount || amount),
+              destinationAssetCode: String(quote?.destinationAsset?.code || assetCode),
+              feeXlm: String(quote?.networkFeeXlm || '0.001'),
+            };
+
         await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
           amount: String(amount),
           assetCode,
+          sourceAmount: transferDetails.sourceAmount,
+          sourceAssetCode: transferDetails.sourceAssetCode,
+          feeXlm: transferDetails.feeXlm,
           destinationName: destination_contact?.contact_name || destination_name,
           destination: resolvedDestination,
           hash: result.hash,
@@ -451,6 +489,7 @@ export default class ExternalFinalizeController {
           amount: String(amount),
           assetCode,
           hash: result.hash,
+          transferDetails,
         });
       }
 
