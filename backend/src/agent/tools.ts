@@ -323,7 +323,7 @@ export const toolDefinitions = [
   },
   {
     name: "add_contact",
-    description: "Add a new contact with their Stellar public key or TalkToStellar Pix key",
+    description: "Add a new contact with their Stellar public key or TalkToStellar transfer key",
     parameters: {
       type: "object",
       properties: {
@@ -341,7 +341,7 @@ export const toolDefinitions = [
         },
         pix_key: {
           type: "string",
-          description: "Contact's TalkToStellar Pix key",
+          description: "Contact's TalkToStellar transfer key",
         },
       },
       required: ["user_id", "contact_name"],
@@ -1106,7 +1106,7 @@ async function resolveContactPublicKeyByPixKey(pixKey: string): Promise<{ public
     .maybeSingle();
 
   if (walletError) {
-    throw new Error(walletError.message || 'Failed to lookup wallet Pix key');
+    throw new Error(walletError.message || 'Failed to lookup wallet transfer key');
   }
 
   if (walletRow?.public_key) {
@@ -1125,7 +1125,7 @@ async function resolveContactPublicKeyByPixKey(pixKey: string): Promise<{ public
     .maybeSingle();
 
   if (contactError) {
-    throw new Error(contactError.message || 'Failed to lookup contact Pix key');
+    throw new Error(contactError.message || 'Failed to lookup contact transfer key');
   }
 
   return {
@@ -1145,7 +1145,7 @@ async function executeAddContact(input: any): Promise<string> {
     const publicKey = isPublicKey ? contactKey : String(resolved.publicKey || '').trim();
 
     if (!publicKey) {
-      throw new Error('Informe uma chave pública Stellar válida ou uma chave Pix TalkToStellar existente.');
+      throw new Error('Informe uma chave pública Stellar válida ou uma chave de transferência TalkToStellar existente.');
     }
 
     const contactName = String(input.contact_name || resolved.name || pixKeyInput || publicKey).trim();

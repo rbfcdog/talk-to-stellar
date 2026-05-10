@@ -244,7 +244,7 @@ ${onboardingUrl}`;
       content: [
         'Extraia apenas o intento de pagamento em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
-        '- recipient_query deve ser o nome, telefone, PIX ou chave pública mais útil para identificar o destinatário.',
+        '- recipient_query deve ser o nome, telefone, chave de transferência ou chave pública mais útil para identificar o destinatário.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
         '- asset_code deve ser USDC, BRL ou XLM quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
@@ -1217,11 +1217,11 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         } else if (keys.pixKey) {
           state.success = true;
           state.response_message = keys.publicKey
-            ? `Sua chave para receber pagamentos é:\n${keys.pixKey}\n\nChave pública da carteira:\n${keys.publicKey}`
-            : `Sua chave para receber pagamentos é:\n${keys.pixKey}`;
+            ? `Sua chave de transferência para receber pagamentos é:\n${keys.pixKey}\n\nChave pública da carteira:\n${keys.publicKey}`
+            : `Sua chave de transferência para receber pagamentos é:\n${keys.pixKey}`;
         } else {
           state.success = true;
-          state.response_message = `Sua conta ainda não tem chave PIX disponível. Use sua chave pública da carteira para receber:\n${keys.publicKey}`;
+          state.response_message = `Sua conta ainda não tem chave de transferência disponível. Use sua chave pública da carteira para receber:\n${keys.publicKey}`;
         }
 
         await this.repository.saveMessage(
@@ -1272,7 +1272,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
           } else {
             const formatted = contacts
               .map((c: any, idx: number) => {
-                const pix = c.pix_key ? ` - chave: ${c.pix_key}` : '';
+                const pix = c.pix_key ? ` - chave de transferência: ${c.pix_key}` : '';
                 return `${idx + 1}. ${c.contact_name || c.name} - ${c.stellar_public_key || c.public_key}${pix}`;
               })
               .join("\n");

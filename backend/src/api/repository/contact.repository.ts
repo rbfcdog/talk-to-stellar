@@ -61,8 +61,8 @@ export class ContactRepository {
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      console.error('Supabase error finding contact by Pix key:', error.message);
-      throw new Error('Failed to retrieve contact by Pix key.');
+      console.error('Supabase error finding contact by transfer key:', error.message);
+      throw new Error('Failed to retrieve contact by transfer key.');
     }
 
     return data || null;

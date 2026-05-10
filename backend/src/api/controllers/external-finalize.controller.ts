@@ -1016,7 +1016,7 @@ export default class ExternalFinalizeController {
         });
       }
 
-      return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, pixKey });
+      return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
     } catch (error: any) {
       const message = error?.message || String(error);
       return res.status(500).json({ success: false, message });
