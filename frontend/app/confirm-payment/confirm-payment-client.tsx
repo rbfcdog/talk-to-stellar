@@ -20,6 +20,13 @@ type ConfirmResponse = {
   amount?: string
   assetCode?: string
   hash?: string
+  transferDetails?: {
+    sourceAmount?: string
+    sourceAssetCode?: string
+    destinationAmount?: string
+    destinationAssetCode?: string
+    feeXlm?: string
+  }
   message?: string
   error?: string
 }
@@ -219,6 +226,19 @@ export default function ConfirmPaymentClient({
               {status === "done" && result?.success && (
                 <div className="mt-2 space-y-1 text-emerald-300">
                   <p>Pagamento confirmado com sucesso.</p>
+                  {result.transferDetails?.destinationAmount && (
+                    <p>
+                      Destino recebeu: {formatPaymentAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
+                    </p>
+                  )}
+                  {result.transferDetails?.sourceAmount && (
+                    <p>
+                      Origem enviou: {formatPaymentAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
+                    </p>
+                  )}
+                  {result.transferDetails?.feeXlm && (
+                    <p>Taxa da rede: {result.transferDetails.feeXlm} XLM</p>
+                  )}
                   <p className="break-all font-mono text-xs">Hash: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </div>
