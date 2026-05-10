@@ -195,6 +195,9 @@ export default function ConfirmPaymentClient({
                 <p className="font-medium text-white">Resumo</p>
                 <p className="mt-2 text-slate-300">Valor: {amountLabel}</p>
                 <p className="text-slate-300">Destino: {destinationLabel}</p>
+                {assetCode !== "XLM" && (
+                  <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
+                )}
               </div>
 
               <div className="space-y-2">
