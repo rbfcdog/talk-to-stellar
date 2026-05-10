@@ -162,6 +162,33 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
     ].join(' ');
 }
 
+function selectTrustedConversionPaths(records: any[], sourceCode: string, destCode: string): any[] {
+    const allowedCodes = new Set(['XLM', 'USDC', 'BRL']);
+    const pathRequiresBrl = (sourceCode === 'XLM' && destCode === 'USDC') || (sourceCode === 'USDC' && destCode === 'XLM');
+
+    return (Array.isArray(records) ? records : []).filter((record) => {
+        const pathCodes = Array.isArray(record?.path)
+            ? record.path
+                .map((pathAsset: any) => pathAsset?.asset_type === 'native' ? 'XLM' : String(pathAsset?.asset_code || '').toUpperCase())
+                .filter(Boolean)
+            : [];
+
+        if (pathCodes.length === 0) {
+            return !pathRequiresBrl;
+        }
+
+        if (!pathCodes.every((code: string) => allowedCodes.has(code))) {
+            return false;
+        }
+
+        if (pathRequiresBrl && !pathCodes.includes('BRL')) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
 export class StellarService {
   private static fundedAccounts = new Set<string>();
 
@@ -526,8 +553,15 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
-        let bestPath = pathsResponse.records[0];
-        for (const path of pathsResponse.records) {
+        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
+        const candidatePaths = trustedPaths.length > 0 ? trustedPaths : pathsResponse.records;
+
+        if (trustedPaths.length === 0 && (assetCode(sourceAssetObj) === 'XLM' || assetCode(destAssetObj) === 'XLM' || assetCode(sourceAssetObj) === 'USDC' || assetCode(destAssetObj) === 'USDC' || assetCode(sourceAssetObj) === 'BRL' || assetCode(destAssetObj) === 'BRL')) {
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}.`);
+        }
+
+        let bestPath = candidatePaths[0];
+        for (const path of candidatePaths) {
             if (parseFloat(path.source_amount) < parseFloat(bestPath.source_amount)) {
                 bestPath = path;
             }
@@ -576,8 +610,15 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
-        let bestPath = pathsResponse.records[0];
-        for (const path of pathsResponse.records) {
+        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
+        const candidatePaths = trustedPaths.length > 0 ? trustedPaths : pathsResponse.records;
+
+        if (trustedPaths.length === 0 && (assetCode(sourceAssetObj) === 'XLM' || assetCode(destAssetObj) === 'XLM' || assetCode(sourceAssetObj) === 'USDC' || assetCode(destAssetObj) === 'USDC' || assetCode(sourceAssetObj) === 'BRL' || assetCode(destAssetObj) === 'BRL')) {
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}.`);
+        }
+
+        let bestPath = candidatePaths[0];
+        for (const path of candidatePaths) {
             if (parseFloat(path.destination_amount) > parseFloat(bestPath.destination_amount)) {
                 bestPath = path;
             }
