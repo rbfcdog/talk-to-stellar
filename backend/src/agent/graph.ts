@@ -540,11 +540,9 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
 
     const publicKeyMatch = raw.match(/\bG[A-Z2-7]{55}\b/i);
     const transferKeyMatch = raw.match(/\b[a-z0-9._%+-]+@talktostellar\b/i);
-    const key = (publicKeyMatch?.[0] || transferKeyMatch?.[0] || '').trim();
-
-    if (!key) {
-      return {};
-    }
+    const emailMatch = raw.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
+    const cpfMatch = raw.match(/\b\d{3}\.?\d{3}\.?\d{3}\-?\d{2}\b/);
+    const phoneMatch = raw.match(/(?:\+?\d[\d\s().-]{7,}\d)/);
 
     const normalized = raw
       .normalize('NFD')
@@ -553,9 +551,22 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
 
     const addIntent =
       /\b(adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\b/.test(normalized) &&
-      /\b(contato|beneficiario|beneficiario|contacts?)\b/.test(normalized);
+      /\b(contato|beneficiario|contacts?)\b/.test(normalized);
 
     if (!addIntent) {
+      return {};
+    }
+
+    let key = (publicKeyMatch?.[0] || transferKeyMatch?.[0] || emailMatch?.[0] || cpfMatch?.[0] || phoneMatch?.[0] || '').trim();
+
+    if (!key) {
+      const genericKeyMatch =
+        raw.match(/(?:contatos?|beneficiarios?)\s+(?:o|a|um|uma)?\s*([^\n\r,;]+)/i) ||
+        raw.match(/(?:adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\s+(?:nos?\s+meus?\s+)?(?:contatos?|beneficiarios?)\s+(?:o|a|um|uma)?\s*([^\n\r,;]+)/i);
+      key = String(genericKeyMatch?.[1] || '').trim();
+    }
+
+    if (!key) {
       return {};
     }
 
@@ -572,7 +583,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       .trim();
 
     return {
-      key,
+      key: key.replace(/\s+/g, ' ').trim(),
       contactName: cleanedName || undefined,
     };
   }
@@ -1393,7 +1404,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
             user_id: userId,
             contact_name: addPayload.contactName || fallbackName,
             public_key: isPublicKey ? addPayload.key : undefined,
-            pix_key: isPublicKey ? undefined : addPayload.key,
+            contact_key: isPublicKey ? undefined : addPayload.key,
           });
 
           let addToolResult: any;

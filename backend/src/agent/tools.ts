@@ -389,6 +389,10 @@ export const toolDefinitions = [
           type: "string",
           description: "Contact's TalkToStellar transfer key",
         },
+        contact_key: {
+          type: "string",
+          description: "Generic contact key: transfer key, email, phone, CPF or public key reference",
+        },
       },
       required: ["user_id", "contact_name"],
     },
@@ -1186,45 +1190,199 @@ async function executeGetHistory(input: any): Promise<string> {
 /**
  * Tool: Add Contact
  */
-async function resolveContactPublicKeyByPixKey(pixKey: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
-  const normalizedPixKey = String(pixKey || '').trim().toLowerCase();
-  if (!normalizedPixKey) return {};
+function normalizeDigits(value: string): string {
+  return String(value || '').replace(/\D+/g, '');
+}
 
-  const { data: walletRow, error: walletError } = await supabase
+async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
+  const rawRef = String(contactRef || '').trim();
+  const normalizedRef = rawRef.toLowerCase();
+  if (!normalizedRef) return {};
+
+  const isPublicKey = /^G[A-Z2-7]{55}$/i.test(rawRef);
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawRef);
+  const numericRef = normalizeDigits(rawRef);
+
+  if (isPublicKey) {
+    return { publicKey: rawRef.toUpperCase() };
+  }
+
+  const { data: walletByPix, error: walletPixError } = await supabase
     .from('wallets')
-    .select('public_key, name, pix_key')
-    .ilike('pix_key', normalizedPixKey)
+    .select('public_key, name, pix_key, session_id')
+    .ilike('pix_key', normalizedRef)
     .limit(1)
     .maybeSingle();
 
-  if (walletError) {
-    throw new Error(walletError.message || 'Failed to lookup wallet transfer key');
+  if (walletPixError) {
+    throw new Error(walletPixError.message || 'Failed to lookup wallet transfer key');
   }
 
-  if (walletRow?.public_key) {
+  if (walletByPix?.public_key) {
     return {
-      publicKey: String(walletRow.public_key),
-      name: walletRow.name || undefined,
-      pixKey: walletRow.pix_key || normalizedPixKey,
+      publicKey: String(walletByPix.public_key),
+      name: walletByPix.name || undefined,
+      pixKey: walletByPix.pix_key || normalizedRef,
     };
   }
 
-  const { data: contactRow, error: contactError } = await supabase
+  const { data: contactByPix, error: contactPixError } = await supabase
     .from('contacts')
     .select('contact_name, stellar_public_key, pix_key')
-    .ilike('pix_key', normalizedPixKey)
+    .ilike('pix_key', normalizedRef)
     .limit(1)
     .maybeSingle();
 
-  if (contactError) {
-    throw new Error(contactError.message || 'Failed to lookup contact transfer key');
+  if (contactPixError) {
+    throw new Error(contactPixError.message || 'Failed to lookup contact transfer key');
   }
 
-  return {
-    publicKey: contactRow?.stellar_public_key || undefined,
-    name: contactRow?.contact_name || undefined,
-    pixKey: contactRow?.pix_key || normalizedPixKey,
-  };
+  if (contactByPix?.stellar_public_key) {
+    return {
+      publicKey: contactByPix.stellar_public_key,
+      name: contactByPix.contact_name || undefined,
+      pixKey: contactByPix.pix_key || normalizedRef,
+    };
+  }
+
+  const { data: walletByPublicKey, error: walletPublicError } = await supabase
+    .from('wallets')
+    .select('public_key, name, pix_key, session_id')
+    .eq('public_key', rawRef.toUpperCase())
+    .limit(1)
+    .maybeSingle();
+
+  if (walletPublicError) {
+    throw new Error(walletPublicError.message || 'Failed to lookup wallet by public key');
+  }
+
+  if (walletByPublicKey?.public_key) {
+    return {
+      publicKey: String(walletByPublicKey.public_key),
+      name: walletByPublicKey.name || undefined,
+      pixKey: walletByPublicKey.pix_key || undefined,
+    };
+  }
+
+  const { data: contactByPublicKey, error: contactPublicError } = await supabase
+    .from('contacts')
+    .select('contact_name, stellar_public_key, pix_key')
+    .eq('stellar_public_key', rawRef.toUpperCase())
+    .limit(1)
+    .maybeSingle();
+
+  if (contactPublicError) {
+    throw new Error(contactPublicError.message || 'Failed to lookup contact by public key');
+  }
+
+  if (contactByPublicKey?.stellar_public_key) {
+    return {
+      publicKey: contactByPublicKey.stellar_public_key,
+      name: contactByPublicKey.contact_name || undefined,
+      pixKey: contactByPublicKey.pix_key || undefined,
+    };
+  }
+
+  if (isEmail) {
+    const { data: sessionByEmail, error: sessionEmailError } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email')
+      .ilike('email', normalizedRef)
+      .limit(1)
+      .maybeSingle();
+
+    if (sessionEmailError) {
+      throw new Error(sessionEmailError.message || 'Failed to lookup user by email');
+    }
+
+    if (sessionByEmail?.session_id) {
+      const { data: walletBySession, error: walletSessionError } = await supabase
+        .from('wallets')
+        .select('public_key, name, pix_key')
+        .eq('session_id', sessionByEmail.session_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (walletSessionError) {
+        throw new Error(walletSessionError.message || 'Failed to lookup wallet by session');
+      }
+
+      if (walletBySession?.public_key) {
+        return {
+          publicKey: walletBySession.public_key,
+          name: walletBySession.name || sessionByEmail.user_id || sessionByEmail.email || undefined,
+          pixKey: walletBySession.pix_key || undefined,
+        };
+      }
+    }
+  }
+
+  if (numericRef.length >= 8) {
+    const candidates = Array.from(
+      new Set([
+        numericRef,
+        numericRef.slice(-11),
+        numericRef.slice(-10),
+        numericRef.slice(-9),
+        numericRef.slice(-8),
+      ].filter((value) => value.length >= 8))
+    );
+
+    for (const candidate of candidates) {
+      const { data: contactByPhone, error: contactPhoneError } = await supabase
+        .from('contacts')
+        .select('contact_name, stellar_public_key, pix_key, phone_number')
+        .ilike('phone_number', `%${candidate}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (contactPhoneError) {
+        throw new Error(contactPhoneError.message || 'Failed to lookup contact by phone');
+      }
+
+      if (contactByPhone?.stellar_public_key) {
+        return {
+          publicKey: contactByPhone.stellar_public_key,
+          name: contactByPhone.contact_name || undefined,
+          pixKey: contactByPhone.pix_key || undefined,
+        };
+      }
+
+      const { data: sessionByPhone, error: sessionPhoneError } = await supabase
+        .from('agent_sessions')
+        .select('session_id, user_id, email, phone_number')
+        .ilike('phone_number', `%${candidate}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionPhoneError) {
+        throw new Error(sessionPhoneError.message || 'Failed to lookup user by phone');
+      }
+
+      if (sessionByPhone?.session_id) {
+        const { data: walletBySession, error: walletSessionError } = await supabase
+          .from('wallets')
+          .select('public_key, name, pix_key')
+          .eq('session_id', sessionByPhone.session_id)
+          .limit(1)
+          .maybeSingle();
+
+        if (walletSessionError) {
+          throw new Error(walletSessionError.message || 'Failed to lookup wallet by session phone');
+        }
+
+        if (walletBySession?.public_key) {
+          return {
+            publicKey: walletBySession.public_key,
+            name: walletBySession.name || sessionByPhone.user_id || sessionByPhone.email || undefined,
+            pixKey: walletBySession.pix_key || undefined,
+          };
+        }
+      }
+    }
+  }
+
+  return {};
 }
 
 async function executeAddContact(input: any): Promise<string> {
@@ -1237,7 +1395,7 @@ async function executeAddContact(input: any): Promise<string> {
     const publicKey = isPublicKey ? contactKey : String(resolved.publicKey || '').trim();
 
     if (!publicKey) {
-      throw new Error('Informe uma chave pública Stellar válida ou uma chave de transferência TalkToStellar existente.');
+      throw new Error('Informe uma chave válida (pública, transferência, e-mail ou telefone) já cadastrada.');
     }
 
     const contactName = String(input.contact_name || resolved.name || pixKeyInput || publicKey).trim();
