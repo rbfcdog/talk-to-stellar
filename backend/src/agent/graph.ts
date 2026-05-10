@@ -523,6 +523,10 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       return IntentType.CONVERSION;
     }
 
+    if (this.wantsLogoutWallet(message)) {
+      return IntentType.WALLET_LOGOUT;
+    }
+
     // PIN reset intent
     const pinResetWords = ['redefinir pin', 'resetar pin', 'esqueci pin', 'esqueci o pin', 'mudar pin', 'alterar pin', 'change pin', 'reset pin', 'forgot pin', 'pin reset'];
     if (pinResetWords.some((word) => normalized.includes(word))) {
@@ -896,8 +900,8 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
     return (
-      (normalized.includes('sair') || normalized.includes('logout') || normalized.includes('desconectar') || normalized.includes('deslogar')) &&
-      (normalized.includes('wallet') || normalized.includes('carteira') || normalized.includes('conta') || normalized.includes('account'))
+      /\b(sair|logout|desconectar|deslogar|deslogar-me|logoff)\b/.test(normalized) ||
+      /\b(encerrar|fechar)\b/.test(normalized) && /\b(sessao|session|conta|wallet|carteira)\b/.test(normalized)
     );
   }
 
