@@ -1194,6 +1194,32 @@ function normalizeDigits(value: string): string {
   return String(value || '').replace(/\D+/g, '');
 }
 
+async function resolveWalletBySessionId(sessionId: string, fallbackName?: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
+  const normalizedSessionId = String(sessionId || '').trim();
+  if (!normalizedSessionId) return {};
+
+  const { data: walletBySession, error: walletSessionError } = await supabase
+    .from('wallets')
+    .select('public_key, name, pix_key')
+    .eq('session_id', normalizedSessionId)
+    .limit(1)
+    .maybeSingle();
+
+  if (walletSessionError) {
+    throw new Error(walletSessionError.message || 'Failed to lookup wallet by session');
+  }
+
+  if (!walletBySession?.public_key) {
+    return {};
+  }
+
+  return {
+    publicKey: walletBySession.public_key,
+    name: walletBySession.name || fallbackName || undefined,
+    pixKey: walletBySession.pix_key || undefined,
+  };
+}
+
 async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
   const rawRef = String(contactRef || '').trim();
   const normalizedRef = rawRef.toLowerCase();
@@ -1284,37 +1310,92 @@ async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ pu
   }
 
   if (isEmail) {
-    const { data: sessionByEmail, error: sessionEmailError } = await supabase
+    const { data: sessionsByEmail, error: sessionEmailError } = await supabase
       .from('agent_sessions')
       .select('session_id, user_id, email')
       .ilike('email', normalizedRef)
-      .limit(1)
-      .maybeSingle();
+      .order('updated_at', { ascending: false })
+      .limit(5);
 
     if (sessionEmailError) {
       throw new Error(sessionEmailError.message || 'Failed to lookup user by email');
     }
 
-    if (sessionByEmail?.session_id) {
-      const { data: walletBySession, error: walletSessionError } = await supabase
-        .from('wallets')
-        .select('public_key, name, pix_key')
-        .eq('session_id', sessionByEmail.session_id)
-        .limit(1)
-        .maybeSingle();
+    const { data: sessionsByUserId, error: sessionUserIdError } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email')
+      .ilike('user_id', normalizedRef)
+      .order('updated_at', { ascending: false })
+      .limit(5);
 
-      if (walletSessionError) {
-        throw new Error(walletSessionError.message || 'Failed to lookup wallet by session');
-      }
+    if (sessionUserIdError) {
+      throw new Error(sessionUserIdError.message || 'Failed to lookup user by user_id');
+    }
 
-      if (walletBySession?.public_key) {
-        return {
-          publicKey: walletBySession.public_key,
-          name: walletBySession.name || sessionByEmail.user_id || sessionByEmail.email || undefined,
-          pixKey: walletBySession.pix_key || undefined,
-        };
+    const sessionCandidates = [...(sessionsByEmail || []), ...(sessionsByUserId || [])];
+    const seenSessionIds = new Set<string>();
+    for (const sessionCandidate of sessionCandidates) {
+      const candidateSessionId = String(sessionCandidate?.session_id || '').trim();
+      if (!candidateSessionId || seenSessionIds.has(candidateSessionId)) continue;
+      seenSessionIds.add(candidateSessionId);
+
+      const resolved = await resolveWalletBySessionId(
+        candidateSessionId,
+        sessionCandidate?.user_id || sessionCandidate?.email || normalizedRef
+      );
+      if (resolved.publicKey) {
+        logger.info(`[add_contact] resolved email ${normalizedRef} via agent_sessions session_id=${candidateSessionId}`);
+        return resolved;
       }
     }
+
+    const { data: externalByUserId, error: externalUserIdError } = await supabase
+      .from('external_accounts')
+      .select('session_id, user_id, data')
+      .ilike('user_id', normalizedRef)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (externalUserIdError) {
+      throw new Error(externalUserIdError.message || 'Failed to lookup external account by user_id');
+    }
+
+    for (const externalCandidate of externalByUserId || []) {
+      const resolved = await resolveWalletBySessionId(
+        String(externalCandidate?.session_id || ''),
+        String(externalCandidate?.user_id || normalizedRef)
+      );
+      if (resolved.publicKey) {
+        logger.info(`[add_contact] resolved email ${normalizedRef} via external_accounts.user_id`);
+        return resolved;
+      }
+    }
+
+    const { data: externalRows, error: externalRowsError } = await supabase
+      .from('external_accounts')
+      .select('session_id, user_id, data')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (externalRowsError) {
+      throw new Error(externalRowsError.message || 'Failed to lookup external account data');
+    }
+
+    for (const row of externalRows || []) {
+      const dataEmail = String((row as any)?.data?.email || '').trim().toLowerCase();
+      if (dataEmail !== normalizedRef) continue;
+
+      const resolved = await resolveWalletBySessionId(
+        String((row as any)?.session_id || ''),
+        String((row as any)?.user_id || dataEmail)
+      );
+      if (resolved.publicKey) {
+        logger.info(`[add_contact] resolved email ${normalizedRef} via external_accounts.data.email`);
+        return resolved;
+      }
+    }
+
+    logger.warn(`[add_contact] could not resolve email ${normalizedRef} to a wallet`);
   }
 
   if (numericRef.length >= 8) {
