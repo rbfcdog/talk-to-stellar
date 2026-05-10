@@ -32,6 +32,15 @@ function normalizeAssetInput(code: any, issuer: any) {
   return resolveConfiguredAsset(code || 'XLM', issuer);
 }
 
+function formatQuotePath(path: Array<{ code?: string; type?: string }>): string {
+  if (!Array.isArray(path) || path.length === 0) {
+    return 'rota direta';
+  }
+
+  const route = ['XLM', ...path.map((step) => String(step.code || '').toUpperCase()).filter(Boolean)];
+  return route.join(' → ');
+}
+
 /**
  * Tool definitions for OpenAI function calling
  */
@@ -734,6 +743,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         (sourceAmount
           ? `Cotação: converter ${quote.sourceAmount} ${quote.sourceAsset.code} deve entregar aproximadamente ${quote.destinationAmount} ${quote.destinationAsset.code}. `
           : `Cotação: para receber ${quote.destinationAmount} ${quote.destinationAsset.code}, serão usados aproximadamente ${quote.sourceAmount} ${quote.sourceAsset.code}. `) +
+        `Rota usada: ${formatQuotePath(quote.path)}. ` +
         `Taxa da rede: ${quote.networkFeeXlm} XLM.`,
     });
   } catch (error) {
@@ -833,6 +843,7 @@ async function executeConvertAssets(input: any): Promise<string> {
       message:
         `Conversão concluída: ${sourceAmount} ${sourceAssetCode} ` +
         `para ${destinationAmount} ${destinationAssetCode}.` +
+        ` Rota usada: ${formatQuotePath(quote.path)}.` +
         `${feeLine} Hash: ${result.hash}`,
     });
   } catch (error) {
