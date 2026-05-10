@@ -650,18 +650,33 @@ async function executeLogoutSession(input: any): Promise<string> {
       });
     }
 
+    // Do not delete agent_sessions row; agent_messages references session_id via FK.
+    // Deleting here causes subsequent message persistence to fail in the same request flow.
     const { error } = await supabase
       .from('agent_sessions')
-      .delete()
+      .update({
+        public_key: null,
+        last_activity: new Date().toISOString(),
+      })
       .eq('session_id', sessionId);
 
     if (error) {
       throw new Error(error.message || 'Falha ao encerrar sessão');
     }
 
+    // Clear runtime state tied to wallet/payment context.
+    await supabase
+      .from('agent_states')
+      .update({
+        action_params: {},
+        pending_payment: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('session_id', sessionId);
+
     return JSON.stringify({
       success: true,
-      message: "Sessão encerrada com sucesso.",
+      message: "Sessão encerrada com sucesso. Você pode entrar novamente quando quiser.",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
