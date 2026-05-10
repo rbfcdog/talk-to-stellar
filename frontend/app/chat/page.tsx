@@ -10,11 +10,13 @@ export default function ChatPage() {
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden bg-[#111b21] text-white md:flex-row">
-      <div className={`${selectedChat ? "hidden md:flex" : "flex"} w-full md:w-[400px] md:flex-shrink-0`}>
-        <ChatSidebar selectedChat={selectedChat} onSelectChat={setSelectedChat} />
+      <div className="w-full md:w-96 md:flex-shrink-0">
+        <div className="h-full min-h-0">
+          <ChatSidebar selectedChat={selectedChat} onSelectChat={setSelectedChat} />
+        </div>
       </div>
 
-      <div className={`${selectedChat ? "flex" : "hidden md:flex"} flex-1 min-w-0 flex-col`}>
+      <div className="flex-1 min-w-0 flex flex-col">
         {selectedChat ? (
           <ChatWindow chatId={selectedChat} onBack={() => setSelectedChat(null)} />
         ) : (
