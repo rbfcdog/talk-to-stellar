@@ -130,22 +130,72 @@ export class ExternalController {
         });
       }
 
-      const { data: sessions, error: sessionError } = await supabase
-        .from('agent_sessions')
-        .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
-        .eq('email', email)
-        .order('updated_at', { ascending: false })
+      const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
+        supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .eq('email', email)
+          .order('updated_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .eq('user_id', email)
+          .order('updated_at', { ascending: false })
+          .limit(20),
+      ]);
+
+      if (sessionsByEmailResp.error) {
+        return res.status(500).json({ success: false, message: sessionsByEmailResp.error.message });
+      }
+      if (sessionsByUserIdResp.error) {
+        return res.status(500).json({ success: false, message: sessionsByUserIdResp.error.message });
+      }
+
+      const dedupeBySessionId = new Map<string, any>();
+      for (const row of [...(sessionsByEmailResp.data || []), ...(sessionsByUserIdResp.data || [])]) {
+        if (row?.session_id) {
+          dedupeBySessionId.set(String(row.session_id), row);
+        }
+      }
+
+      // Fallback: recover sessions from existing external mappings by user_id/email
+      const { data: mappedRows } = await supabase
+        .from('external_accounts')
+        .select('session_id, user_id')
+        .eq('user_id', email)
         .limit(20);
 
-      if (sessionError) {
-        return res.status(500).json({ success: false, message: sessionError.message });
+      const mappedSessionIds = (mappedRows || [])
+        .map((row: any) => String(row?.session_id || '').trim())
+        .filter(Boolean);
+
+      if (mappedSessionIds.length > 0) {
+        const { data: mappedSessions } = await supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .in('session_id', mappedSessionIds)
+          .order('updated_at', { ascending: false })
+          .limit(20);
+
+        for (const row of mappedSessions || []) {
+          if (row?.session_id) {
+            dedupeBySessionId.set(String(row.session_id), row);
+          }
+        }
       }
+
+      const sessions = Array.from(dedupeBySessionId.values()).sort((a: any, b: any) => {
+        const aTime = new Date(a?.updated_at || a?.created_at || 0).getTime();
+        const bTime = new Date(b?.updated_at || b?.created_at || 0).getTime();
+        return bTime - aTime;
+      });
 
       const pinHash = crypto
         .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
 
-      const matched = (sessions || []).find((session: any) => {
+      const matched = sessions.find((session: any) => {
         const s1 = String(session?.session_password_hash || '').trim();
         const s2 = String(session?.password_hash || '').trim();
         return (s1 && s1 === pinHash) || (s2 && s2 === pinHash);
