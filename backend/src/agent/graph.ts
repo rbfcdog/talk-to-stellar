@@ -207,7 +207,7 @@ export class AgentGraph {
     };
   }
 
-  private getOnboardingOrLoginMessage(): string {
+  private getOnboardingOrLoginMessage(preferLogin: boolean = false): string {
     const base =
       process.env.CREATE_ACCOUNT_BASE ||
       process.env.FRONTEND_URL ||
@@ -216,10 +216,32 @@ export class AgentGraph {
     const normalizedBase = String(base).trim().replace(/\/$/, "");
     const onboardingUrl = `${normalizedBase}/create-account`;
 
+    if (preferLogin) {
+      return `Sua sessão não está ativa no momento.
+
+Abra este link para entrar na sua conta:
+${onboardingUrl}
+
+Na página, use a opção "Já tenho conta".`;
+    }
+
     return `Você precisa entrar na sua conta para continuar.
 
 Abra este link para criar conta ou entrar em uma conta existente:
 ${onboardingUrl}`;
+  }
+
+  private shouldPreferLogin(state: AgentState): boolean {
+    const forceLoggedOut = Boolean((state.action_params as any)?.force_logged_out);
+    if (forceLoggedOut) return true;
+
+    const email = String(state.session_data?.email || '').trim().toLowerCase();
+    if (email && email !== 'unknown@example.com') return true;
+
+    const userId = String(state.session_data?.user_id || '').trim().toLowerCase();
+    if (userId && !userId.startsWith('user_')) return true;
+
+    return false;
   }
 
   private formatMoneyByAsset(amount: string, assetCode: string): string {
@@ -677,7 +699,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
 
       // If no email/phone provided, ask for it
       if (!email && !phoneNumber) {
-        state.response_message = this.getOnboardingOrLoginMessage();
+        state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
         state.waiting_for_wallet_input = true;
         state.action_params = {
           ...state.action_params,
@@ -925,7 +947,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage();
+      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
       const toolResultRaw = await executeTool('get_balance', {
         public_key: state.session_data.public_key,
@@ -963,7 +985,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleHistoryCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage();
+      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
       const toolResultRaw = await executeTool('get_transaction_history', {
         public_key: state.session_data.public_key,
@@ -1085,7 +1107,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage();
+      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const parsed = llmParsed.sourceAmount && llmParsed.sourceAssetCode && llmParsed.destAssetCode
@@ -1263,7 +1285,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
         if (!keys.publicKey && !keys.pixKey) {
           state.success = false;
-          state.response_message = this.getOnboardingOrLoginMessage();
+          state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
         } else if (keys.pixKey) {
           state.success = true;
           state.response_message = keys.publicKey
@@ -1355,7 +1377,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       if (state.action_type === ActionType.BUILD_PAYMENT) {
         if (!state.session_data?.public_key) {
           state.success = false;
-          state.response_message = this.getOnboardingOrLoginMessage();
+          state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
         } else {
           const paymentIntent = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
 
