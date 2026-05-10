@@ -19,7 +19,17 @@ const server = new Horizon.Server(horizonUrl);
 const USDC_CODE = 'USDC';
 const issuanceAmount = Number(process.env.USDC_ISSUANCE_AMOUNT || '100000');
 const liquidityAmount = Number(process.env.USDC_LIQUIDITY_AMOUNT || '2000');
-const xlmPerUsdc = Number(process.env.USDC_XLM_PRICE || '10');
+const usdcPerXlmInput = Number(process.env.USDC_PER_XLM || '');
+const xlmPerUsdcInput = Number(process.env.USDC_XLM_PRICE || '');
+const defaultUsdcPerXlm = 0.1715;
+const xlmPerUsdc =
+  Number.isFinite(usdcPerXlmInput) && usdcPerXlmInput > 0
+    ? 1 / usdcPerXlmInput
+    : (
+      Number.isFinite(xlmPerUsdcInput) && xlmPerUsdcInput > 0
+        ? xlmPerUsdcInput
+        : (1 / defaultUsdcPerXlm)
+    );
 
 type LoadedKeypair = { keypair: Keypair; generated: boolean };
 type OperationInput = Parameters<typeof TransactionBuilder.prototype.addOperation>[0];
@@ -138,6 +148,7 @@ async function topUpBalance(source: Keypair, destination: string, asset: Asset, 
 async function main(): Promise<void> {
   console.log('Setting up USDC liquidity on Stellar testnet...');
   console.log(`Horizon URL: ${horizonUrl}`);
+  console.log(`Price config: 1 USDC = ${xlmPerUsdc.toFixed(7)} XLM (1 XLM = ${(1 / xlmPerUsdc).toFixed(7)} USDC)`);
 
   const issuer = loadOrCreateKeypair('USDC issuer', 'USDC_ISSUER_SECRET', 'USDC_ISSUER');
   const distributor = loadOrCreateKeypair('USDC distributor', 'USDC_DISTRIBUTOR_SECRET', 'USDC_DISTRIBUTOR_PUBLIC');
@@ -155,7 +166,8 @@ async function main(): Promise<void> {
   await topUpBalance(issuer.keypair, distributor.keypair.publicKey(), usdc, issuanceAmount);
   await topUpBalance(distributor.keypair, marketMaker.keypair.publicKey(), usdc, liquidityAmount);
 
-  // Price is XLM per USDC. Example: 10 means 1 USDC costs 10 XLM.
+  // manageSellOffer.price is BUYING/SELLING, so with selling=USDC and buying=XLM:
+  // price must be XLM per USDC.
   await submitTransaction(marketMaker.keypair, [
     Operation.manageSellOffer({
       selling: usdc,

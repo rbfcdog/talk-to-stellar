@@ -162,31 +162,62 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
     ].join(' ');
 }
 
-function selectTrustedConversionPaths(records: any[], sourceCode: string, destCode: string): any[] {
-    const allowedCodes = new Set(['XLM', 'USDC', 'BRL']);
-    // For XLM↔USDC conversions, allow both direct paths AND BRL-backed paths
-    // Direct paths: [] or [USDC] for XLM→USDC, or [XLM] for USDC→XLM
-    // BRL paths: [BRL] or [BRL, USDC] or [BRL, XLM]
+function codeFromRecordAsset(type?: string, code?: string): string {
+    return type === 'native' ? 'XLM' : String(code || '').toUpperCase();
+}
 
-    return (Array.isArray(records) ? records : []).filter((record) => {
-        const pathCodes = Array.isArray(record?.path)
-            ? record.path
-                .map((pathAsset: any) => pathAsset?.asset_type === 'native' ? 'XLM' : String(pathAsset?.asset_code || '').toUpperCase())
-                .filter(Boolean)
-            : [];
+function recordAsset(record: any, side: 'source' | 'destination'): { code: string; issuer?: string } {
+    const typeKey = `${side}_asset_type`;
+    const codeKey = `${side}_asset_code`;
+    const issuerKey = `${side}_asset_issuer`;
+    const type = String(record?.[typeKey] || '').toLowerCase();
 
-        // Empty path is OK for direct conversions (source → dest with no intermediate hops)
-        if (pathCodes.length === 0) {
-            return true;
-        }
+    if (type === 'native') {
+        return { code: 'XLM' };
+    }
 
-        // All assets in path must be in trusted set (XLM, USDC, BRL)
-        if (!pathCodes.every((code: string) => allowedCodes.has(code))) {
-            return false;
-        }
+    const code = codeFromRecordAsset(type, record?.[codeKey]);
+    const issuer = String(record?.[issuerKey] || '').trim() || undefined;
+    return { code, issuer };
+}
 
-        return true;
+function assetMatchesExpected(actual: { code: string; issuer?: string }, expected: Asset): boolean {
+    const expectedCode = assetCode(expected);
+    const expectedIssuer = assetIssuer(expected);
+    if (actual.code !== expectedCode) return false;
+    if (expectedCode === 'XLM') return true;
+    return String(actual.issuer || '') === String(expectedIssuer || '');
+}
+
+function hopAssetIsTrusted(pathAsset: any): boolean {
+    const type = String(pathAsset?.asset_type || '').toLowerCase();
+    if (type === 'native') return true;
+
+    const code = String(pathAsset?.asset_code || '').toUpperCase();
+    if (!code || !['USDC', 'BRL'].includes(code)) return false;
+
+    const expectedIssuer = getAssetIssuer(code);
+    const actualIssuer = String(pathAsset?.asset_issuer || '').trim();
+    if (!expectedIssuer || !actualIssuer) return false;
+    return actualIssuer === expectedIssuer;
+}
+
+function selectTrustedConversionPaths(records: any[], sourceAssetObj: Asset, destAssetObj: Asset): any[] {
+    const trusted = (Array.isArray(records) ? records : []).filter((record) => {
+        const source = recordAsset(record, 'source');
+        const destination = recordAsset(record, 'destination');
+        if (!assetMatchesExpected(source, sourceAssetObj)) return false;
+        if (!assetMatchesExpected(destination, destAssetObj)) return false;
+
+        const hops = Array.isArray(record?.path) ? record.path : [];
+        return hops.every((pathAsset: any) => hopAssetIsTrusted(pathAsset));
     });
+
+    const preferDirect = String(process.env.STELLAR_PREFER_DIRECT_PATHS || 'true').trim().toLowerCase() !== 'false';
+    if (!preferDirect) return trusted;
+
+    const direct = trusted.filter((record) => !Array.isArray(record?.path) || record.path.length === 0);
+    return direct.length > 0 ? direct : trusted;
 }
 
 export class StellarService {
@@ -558,7 +589,7 @@ export class StellarService {
         }
 
         // Filter paths to only use trusted assets (XLM, USDC, BRL)
-        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
+        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, sourceAssetObj, destAssetObj);
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
@@ -616,7 +647,7 @@ export class StellarService {
         }
 
         // Filter paths to only use trusted assets (XLM, USDC, BRL)
-        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
+        const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, sourceAssetObj, destAssetObj);
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
