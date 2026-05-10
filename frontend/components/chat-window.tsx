@@ -273,7 +273,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       };
 
       setMessages(prev => [...prev, botMessage]);
-      fetchServerMessages();
 
     } catch (error) {
       console.error("Erro no handleSubmit:", error);
