@@ -5,11 +5,16 @@ import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'TalkToStellar - Onboarding',
-  description: 'Tela de onboarding para criar ou entrar na sua carteira Stellar e conectar ao backend.',
+  title: {
+    default: 'TalkToStellar',
+    template: '%s | TalkToStellar',
+  },
+  description: 'Carteira digital para enviar, receber e converter ativos na Stellar.',
   generator: 'v0.app',
   icons: {
-    icon: '/stellar-logo.png',
+    icon: '/talktostellar.png',
+    shortcut: '/talktostellar.png',
+    apple: '/talktostellar.png',
   },
 }
 
