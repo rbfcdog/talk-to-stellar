@@ -122,8 +122,10 @@ export class ExternalController {
       const providerUserId = String(req.body?.provider_user_id || '').trim();
       const email = String(req.body?.email || '').trim().toLowerCase();
       const pin = String(req.body?.pin || '').trim();
+      const reqTag = `[link-existing provider=${provider || 'n/a'} user=${email || 'n/a'} provider_user_id=${providerUserId ? providerUserId.slice(0, 8) + '***' : 'n/a'}]`;
 
       if (!provider || !providerUserId || !email || !pin) {
+        console.warn(`${reqTag} missing required fields`);
         return res.status(400).json({
           success: false,
           message: 'provider, provider_user_id, email e pin são obrigatórios',
@@ -146,9 +148,11 @@ export class ExternalController {
       ]);
 
       if (sessionsByEmailResp.error) {
+        console.error(`${reqTag} sessionsByEmail query error: ${sessionsByEmailResp.error.message}`);
         return res.status(500).json({ success: false, message: sessionsByEmailResp.error.message });
       }
       if (sessionsByUserIdResp.error) {
+        console.error(`${reqTag} sessionsByUserId query error: ${sessionsByUserIdResp.error.message}`);
         return res.status(500).json({ success: false, message: sessionsByUserIdResp.error.message });
       }
 
@@ -190,6 +194,7 @@ export class ExternalController {
         const bTime = new Date(b?.updated_at || b?.created_at || 0).getTime();
         return bTime - aTime;
       });
+      console.info(`${reqTag} candidates resolved: email=${(sessionsByEmailResp.data || []).length}, user_id=${(sessionsByUserIdResp.data || []).length}, mapped=${mappedSessionIds.length}, merged=${sessions.length}`);
 
       const pinHash = crypto
         .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
@@ -202,11 +207,20 @@ export class ExternalController {
       });
 
       if (!matched?.session_id) {
+        const hashPresence = sessions.slice(0, 5).map((session: any) => ({
+          session_id: String(session?.session_id || ''),
+          has_session_password_hash: Boolean(String(session?.session_password_hash || '').trim()),
+          has_password_hash: Boolean(String(session?.password_hash || '').trim()),
+          email: String(session?.email || ''),
+          user_id: String(session?.user_id || ''),
+        }));
+        console.warn(`${reqTag} pin mismatch for ${sessions.length} candidate session(s). top_candidates=${JSON.stringify(hashPresence)}`);
         return res.status(401).json({
           success: false,
           message: 'E-mail ou PIN inválido.',
         });
       }
+      console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
 
       await externalRepo.createMapping({
         provider,
