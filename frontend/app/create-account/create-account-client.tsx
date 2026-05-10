@@ -66,6 +66,8 @@ export default function CreateAccountClient({
   const [existingStatus, setExistingStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
+  const [existingAccountDetected, setExistingAccountDetected] = useState(false)
+  const shouldShowLoginOnly = existingAccountDetected && !token.trim()
 
   async function recoverOnboardingContextFromBackend(): Promise<RecoveryResult> {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
@@ -135,6 +137,7 @@ export default function CreateAccountClient({
         const recovered = await recoverOnboardingContextFromBackend()
 
         if (recovered.mode === "existing") {
+          setExistingAccountDetected(true)
           setValidation({
             success: true,
             valid: false,
@@ -144,6 +147,7 @@ export default function CreateAccountClient({
         }
 
         if (recovered.mode === "token") {
+          setExistingAccountDetected(false)
           setToken(recovered.token)
           setValidation({ success: true, valid: true, message: "Link recuperado automaticamente." })
         }
@@ -176,9 +180,11 @@ export default function CreateAccountClient({
       if (!finalToken.trim()) {
         const recovered = await recoverOnboardingContextFromBackend()
         if (recovered.mode === "existing") {
+          setExistingAccountDetected(true)
           throw new Error('Conta encontrada neste navegador. Use "Já tenho conta" para entrar com e-mail e PIN.')
         }
         if (recovered.mode === "token") {
+          setExistingAccountDetected(false)
           finalToken = recovered.token
           setToken(finalToken)
         }
@@ -367,14 +373,16 @@ export default function CreateAccountClient({
         <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.1fr_0.9fr] md:p-10">
           <section className="space-y-6">
             <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
-              Criar conta
+              {shouldShowLoginOnly ? "Entrar" : "Criar conta"}
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Finalize sua conta TalkToStellar
+                {shouldShowLoginOnly ? "Entre na sua conta TalkToStellar" : "Finalize sua conta TalkToStellar"}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Preencha seus dados para concluir o cadastro e começar a usar sua carteira com segurança.
+                {shouldShowLoginOnly
+                  ? "Use seu e-mail e PIN para reativar a sessão desta carteira."
+                  : "Preencha seus dados para concluir o cadastro e começar a usar sua carteira com segurança."}
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
@@ -392,13 +400,19 @@ export default function CreateAccountClient({
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">1. Acesse</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Abra o link recebido para iniciar o processo de criação da conta.
+                  {shouldShowLoginOnly
+                    ? "Informe o e-mail usado no cadastro."
+                    : "Abra o link recebido para iniciar o processo de criação da conta."}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">2. Conclua</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">
+                  {shouldShowLoginOnly ? "2. Confirme" : "2. Conclua"}
+                </p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Informe nome, e-mail, telefone e CPF para ativar sua conta.
+                  {shouldShowLoginOnly
+                    ? "Digite seu PIN para voltar ao chat com a sessão ativa."
+                    : "Informe nome, e-mail, telefone e CPF para ativar sua conta."}
                 </p>
               </div>
             </div>
@@ -412,6 +426,7 @@ export default function CreateAccountClient({
           </section>
 
           <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+            {!shouldShowLoginOnly && (
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
                 Verificação do link:
@@ -509,7 +524,9 @@ export default function CreateAccountClient({
                 {status === "submitting" ? "Finalizando conta..." : "Finalizar conta"}
               </button>
             </form>
+            )}
 
+            {!shouldShowLoginOnly && (
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Status</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Aguardando validação do link.</p>}
@@ -544,8 +561,9 @@ export default function CreateAccountClient({
                 <p className="mt-2 break-all text-emerald-300">Acesso seguro ativado com sucesso.</p>
               )}
             </div>
+            )}
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+            <div className={`${shouldShowLoginOnly ? "mt-0 border-emerald-400/30 bg-emerald-400/10" : "mt-5 border-white/10 bg-black/30"} rounded-2xl border p-4 text-sm text-slate-200`}>
               <p className="font-medium text-white">Já tenho conta</p>
               <form className="mt-3 space-y-3" onSubmit={handleLinkExisting}>
                 <input
