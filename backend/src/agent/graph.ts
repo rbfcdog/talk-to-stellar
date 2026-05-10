@@ -644,6 +644,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
         state.action_params = {
           ...state.action_params,
           waiting_for_wallet_input: false,
+          force_logged_out: false,
           created: true,
           publicKey: walletResult.publicKey,
           wallet_info: state.wallet_info,
@@ -711,6 +712,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
       state.action_params = {
         ...state.action_params,
         waiting_for_wallet_input: false,
+        force_logged_out: false,
       };
 
       // Update session with public key
@@ -738,6 +740,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       state.action_params = {
         ...state.action_params,
         created: true,
+        force_logged_out: false,
         publicKey: walletResult.publicKey,
         wallet_info: state.wallet_info,
       };
@@ -823,6 +826,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       ...state.action_params,
       wallet_info: undefined,
       waiting_for_wallet_input: false,
+      force_logged_out: true,
     };
 
     if (state.session_data) {

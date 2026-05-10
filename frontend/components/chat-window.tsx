@@ -66,21 +66,20 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+
+  const generateSessionId = (): string => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
   
   // --- Initialize session ID on mount ---
   useEffect(() => {
-    // Generate a UUID for this chat session
-    const generateSessionId = (): string => {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-      }
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = (Math.random() * 16) | 0;
-        const v = c === 'x' ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      });
-    };
-
     // Try to get from sessionStorage, or generate new
     const storedSessionId = typeof window !== 'undefined' 
       ? sessionStorage.getItem(`chat-session-${chatId}`)
@@ -184,6 +183,28 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     return () => window.clearInterval(interval);
   }, [chatId, sessionId]);
 
+  const resetClientSession = () => {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("talk-to-stellar.sessionId");
+    localStorage.removeItem("talk-to-stellar.sessionToken");
+    const newSessionId = generateSessionId();
+    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setSessionId(newSessionId);
+  };
+
+  const isLogoutResponse = (message: string, action?: string | null) => {
+    if (String(action || "").toLowerCase() === "logout_wallet") return true;
+    const normalized = String(message || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    return (
+      normalized.includes("deslogado com sucesso") ||
+      normalized.includes("sessao encerrada com sucesso") ||
+      normalized.includes("voce saiu da wallet")
+    );
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -272,6 +293,21 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       };
 
       setMessages(prev => [...prev, botMessage]);
+
+      if (isLogoutResponse(botResponse, data.action)) {
+        try {
+          await fetch('/api/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: resolvedSessionId,
+            }),
+          });
+        } catch {
+          // ignore, client reset below is still required
+        }
+        resetClientSession();
+      }
 
     } catch (error) {
       console.error("Erro no handleSubmit:", error);

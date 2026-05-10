@@ -87,6 +87,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       content: botResponse,
       session_id: agentApiData?.session_id || sessionId,
+      action: agentApiData?.action || null,
+      intent: agentApiData?.intent || null,
+      success: typeof agentApiData?.success === "boolean" ? agentApiData.success : true,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
