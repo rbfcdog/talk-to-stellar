@@ -558,6 +558,10 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         }
       }
 
+      if (publicKey && !pixKey) {
+        pixKey = publicKey;
+      }
+
       if (state.session_data && (publicKey || pixKey)) {
         const shouldPersist =
           (publicKey && state.session_data.public_key !== publicKey) ||

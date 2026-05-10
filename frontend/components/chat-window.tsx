@@ -6,7 +6,6 @@ import React, { useState, useEffect, useRef, FormEvent } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
 
 type Message = {
@@ -343,24 +342,25 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: `url('/bg-chat-tile-light.png')`, backgroundRepeat: 'repeat' }}>
-        {/* Adicionamos a ref diretamente ao Viewport da ScrollArea */}
-        <div ref={scrollAreaViewportRef} className="h-full w-full overflow-y-auto">
-          <div className="space-y-2 p-3 sm:p-4">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[84%] rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
-                  {renderMessageContent(m.content)}
-                  <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
-                </div>
+      <div
+        ref={scrollAreaViewportRef}
+        className="flex-1 min-h-0 overflow-y-auto"
+        style={{ backgroundImage: `url('/bg-chat-tile-light.png')`, backgroundRepeat: "repeat" }}
+      >
+        <div className="space-y-2 p-3 sm:p-4">
+          {messages.map((m) => (
+            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[84%] rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
+                {renderMessageContent(m.content)}
+                <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input de Mensagem (Fixo embaixo) */}
-      <div className="flex-shrink-0 bg-[#202c33] px-3 py-3 sm:px-4">
+      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
         <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3">
           <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />
           <Paperclip className="hidden h-6 w-6 text-[#8696a0] sm:block" />
