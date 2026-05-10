@@ -193,6 +193,141 @@ async function ensureDestinationCanReceiveAsset(input: {
   }
 }
 
+async function hashPaymentToken(token: string): Promise<string> {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function checkPaymentTokenUsed(tokenHash: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('payment_confirmations')
+      .select('id')
+      .eq('token_hash', tokenHash)
+      .limit(1);
+    return Array.isArray(data) && data.length > 0;
+  } catch (err: any) {
+    logger.warn(`[payment-idempotency] error checking token usage: ${err?.message || String(err)}`);
+    return false; // fail open if DB check fails
+  }
+}
+
+async function claimPaymentToken(
+  tokenHash: string,
+  sessionId: string,
+  userId: string,
+  destination: string,
+  amount: string,
+  assetCode: string,
+  details?: any
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('payment_confirmations')
+      .insert({
+        token_hash: tokenHash,
+        session_id: sessionId,
+        user_id: userId,
+        destination,
+        amount,
+        asset_code: assetCode,
+        status: 'pending',
+        completed_at: null,
+        details,
+      });
+
+    if (error) {
+      if (String(error.code || '') === '23505') {
+        return false;
+      }
+      logger.warn(`[payment-idempotency] error claiming token: ${error?.message || String(error)}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    logger.warn(`[payment-idempotency] error in claimPaymentToken: ${err?.message || String(err)}`);
+    return false;
+  }
+}
+
+async function updatePaymentTokenStatus(
+  tokenHash: string,
+  paymentHash: string | undefined,
+  status: 'completed' | 'failed',
+  details?: any
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('payment_confirmations')
+      .update({
+        payment_hash: paymentHash,
+        status,
+        completed_at: new Date().toISOString(),
+        details,
+      })
+      .eq('token_hash', tokenHash);
+
+    if (error) {
+      logger.warn(`[payment-idempotency] error updating token status: ${error?.message || String(error)}`);
+    }
+  } catch (err: any) {
+    logger.warn(`[payment-idempotency] error in updatePaymentTokenStatus: ${err?.message || String(err)}`);
+  }
+}
+
+async function logPaymentDetails(
+  sessionId: string,
+  userId: string,
+  sourcePublicKey: string,
+  destinationPublicKey: string,
+  sourceAmount: string,
+  sourceAssetCode: string,
+  sourceAssetIssuer: string | undefined,
+  destinationAmount: string,
+  destinationAssetCode: string,
+  destinationAssetIssuer: string | undefined,
+  feeXlm: string,
+  paymentHash: string | undefined,
+  operationType: string,
+  status: 'pending' | 'success' | 'failed',
+  errorMessage?: string,
+  routePath?: any,
+  metadata?: any
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('payment_logs')
+      .insert({
+        session_id: sessionId,
+        user_id: userId,
+        source_public_key: sourcePublicKey,
+        destination_public_key: destinationPublicKey,
+        source_amount: sourceAmount,
+        source_asset_code: sourceAssetCode,
+        source_asset_issuer: sourceAssetIssuer,
+        destination_amount: destinationAmount,
+        destination_asset_code: destinationAssetCode,
+        destination_asset_issuer: destinationAssetIssuer,
+        fee_xlm: feeXlm,
+        payment_hash: paymentHash,
+        operation_type: operationType,
+        status,
+        error_message: errorMessage,
+        route_path: routePath,
+        metadata,
+        created_at: new Date().toISOString(),
+        completed_at: status === 'success' ? new Date().toISOString() : null,
+      });
+
+    if (error) {
+      logger.warn(`[payment-logging] error logging payment details: ${error?.message || String(error)}`);
+    } else {
+      logger.info(`[payment-logging] Payment logged: ${paymentHash || 'pending'} - ${status}`);
+    }
+  } catch (err: any) {
+    logger.error(`[payment-logging] error in logPaymentDetails: ${err?.message || String(err)}`);
+  }
+}
+
 export default class ExternalFinalizeController {
   // POST /api/external/finalize
   // body: { token, name?, email? }
@@ -209,6 +344,17 @@ export default class ExternalFinalizeController {
         payload = jwt.verify(token, getJwtSecret());
       } catch (err: any) {
         return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+      }
+
+      // Check token idempotency - prevent reuse of payment links
+      const tokenHash = await hashPaymentToken(token);
+      const tokenWasUsed = await checkPaymentTokenUsed(tokenHash);
+      if (tokenWasUsed) {
+        logger.warn(`[external-finalize] payment confirmation token reused: ${tokenHash.substring(0, 16)}...`);
+        return res.status(400).json({
+          success: false,
+          message: 'Este link de confirmação já foi utilizado. Por favor, solicite um novo pagamento.'
+        });
       }
 
       const tokenSub = String((payload as any)?.sub || '');
@@ -446,6 +592,69 @@ export default class ExternalFinalizeController {
               sourceAsset: actualSourceAsset,
             });
 
+        const tokenClaimed = await claimPaymentToken(
+          tokenHash,
+          String(session_id),
+          String(session.user_id),
+          resolvedDestination,
+          String(amount),
+          assetCode,
+          {
+            destinationName: destination_contact?.contact_name || destination_name,
+            destinationContact: destination_contact || null,
+            sourcePublicKey: wallet.public_key,
+            sourceAsset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            sourceAssetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            destAsset: assetCode,
+            destAssetIssuer: assetIssuer,
+            isDirectPayment,
+            browserId: browserId || null,
+            publicKeyFromBody: publicKeyFromBody || null,
+            quote,
+          }
+        );
+
+        if (!tokenClaimed) {
+          return res.status(400).json({
+            success: false,
+            message: 'Este link de confirmação já foi utilizado. Por favor, solicite um novo pagamento.',
+          });
+        }
+
+        await logPaymentDetails(
+          String(session_id),
+          String(session.user_id),
+          wallet.public_key,
+          resolvedDestination,
+          senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'pending'),
+          senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+          senderHasDestinationAsset ? assetIssuer : undefined,
+          amount,
+          assetCode,
+          assetIssuer,
+          quote?.networkFeeXlm || '0.001',
+          undefined,
+          isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
+          'pending',
+          undefined,
+          quote?.path,
+          {
+            token_hash: tokenHash,
+            destination_name: destination_contact?.contact_name || destination_name,
+            destination_contact,
+            source_public_key: wallet.public_key,
+            destination_public_key: resolvedDestination,
+            isDirectPayment,
+            source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            destination_asset: assetCode,
+            destination_asset_issuer: assetIssuer,
+            browser_id: browserId || null,
+            public_key_from_body: publicKeyFromBody || null,
+            quote,
+          }
+        );
+
         const unsignedXdr = isDirectPayment
           ? await StellarService.buildPaymentXdr({
               sourcePublicKey: wallet.public_key,
@@ -462,6 +671,9 @@ export default class ExternalFinalizeController {
               destAmount: String(amount),
               sourceAsset: actualSourceAsset,
             });
+
+        // Log payment attempt with full details
+        logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}`);
 
         const result = await StellarService.signAndSubmitXdr(
           String(session.user_id),
@@ -483,6 +695,64 @@ export default class ExternalFinalizeController {
         );
 
         if (!result.success) {
+          await updatePaymentTokenStatus(
+            tokenHash,
+            undefined,
+            'failed',
+            {
+              destination_name: destination_contact?.contact_name || destination_name,
+              destination_contact,
+              source_public_key: wallet.public_key,
+              destination_public_key: resolvedDestination,
+              isDirectPayment,
+              source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+              source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+              destination_asset: assetCode,
+              destination_asset_issuer: assetIssuer,
+              browser_id: browserId || null,
+              public_key_from_body: publicKeyFromBody || null,
+              quote,
+              error: result.error || 'Could not submit payment',
+            }
+          );
+
+          await logPaymentDetails(
+            String(session_id),
+            String(session.user_id),
+            wallet.public_key,
+            resolvedDestination,
+            senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'unknown'),
+            senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            senderHasDestinationAsset ? assetIssuer : undefined,
+            amount,
+            assetCode,
+            assetIssuer,
+            quote?.networkFeeXlm || '0.001',
+            undefined,
+            isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
+            'failed',
+            result.error || 'Could not submit payment',
+            quote?.path,
+            {
+              token_hash: tokenHash,
+              destination_name: destination_contact?.contact_name || destination_name,
+              destination_contact,
+              source_public_key: wallet.public_key,
+              destination_public_key: resolvedDestination,
+              isDirectPayment,
+              source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+              source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+              destination_asset: assetCode,
+              destination_asset_issuer: assetIssuer,
+              browser_id: browserId || null,
+              public_key_from_body: publicKeyFromBody || null,
+              quote,
+              error: result.error || 'Could not submit payment',
+            }
+          );
+
+          logger.error(`[external-finalize] Payment failed: sessionId=${session_id}, error=${result.error}, dest=${resolvedDestination}`);
+
           return res.status(400).json({
             success: false,
             message: result.error || 'Could not submit payment',
@@ -517,8 +787,67 @@ export default class ExternalFinalizeController {
           destinationName: destination_contact?.contact_name || destination_name,
           destination: resolvedDestination,
           hash: result.hash,
+
         });
 
+        // Log successful payment
+        await logPaymentDetails(
+          String(session_id),
+          String(session.user_id),
+          wallet.public_key,
+          resolvedDestination,
+          transferDetails.sourceAmount,
+          transferDetails.sourceAssetCode,
+          transferDetails.sourceAssetCode === 'XLM' ? undefined : assetIssuer,
+          transferDetails.destinationAmount,
+          transferDetails.destinationAssetCode,
+          assetIssuer,
+          transferDetails.feeXlm,
+          result.hash,
+          isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
+          'success',
+          undefined,
+          quote?.path,
+          {
+            token_hash: tokenHash,
+            destination_name: destination_contact?.contact_name || destination_name,
+            destination_contact,
+            source_public_key: wallet.public_key,
+            destination_public_key: resolvedDestination,
+            isDirectPayment,
+            source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            destination_asset: assetCode,
+            destination_asset_issuer: assetIssuer,
+            browser_id: browserId || null,
+            public_key_from_body: publicKeyFromBody || null,
+            quote,
+            transferDetails,
+          }
+        );
+
+        await updatePaymentTokenStatus(
+          tokenHash,
+          result.hash,
+          'completed',
+          {
+            destination_name: destination_contact?.contact_name || destination_name,
+            destination_contact,
+            source_public_key: wallet.public_key,
+            destination_public_key: resolvedDestination,
+            isDirectPayment,
+            source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            destination_asset: assetCode,
+            destination_asset_issuer: assetIssuer,
+            browser_id: browserId || null,
+            public_key_from_body: publicKeyFromBody || null,
+            quote,
+            transferDetails,
+          }
+        );
+
+        logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${transferDetails.destinationAmount}, destinationAsset=${transferDetails.destinationAssetCode}`);
         return res.status(200).json({
           success: true,
           paymentConfirmed: true,

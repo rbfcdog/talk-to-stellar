@@ -50,6 +50,7 @@ jest.mock('../src/api/services/stellar.service', () => ({
     quotePathPayment: finalizeQuotePathPaymentMock,
     buildTrustlineXdr: finalizeBuildTrustlineXdrMock,
     getAccountBalance: finalizeGetAccountBalanceMock,
+    loadAccount: jest.fn(async () => ({ balances: [] })),
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
     getSubmittedPaymentDetails: finalizeGetSubmittedPaymentDetailsMock,
   },
