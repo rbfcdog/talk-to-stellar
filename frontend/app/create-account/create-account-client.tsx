@@ -52,6 +52,8 @@ export default function CreateAccountClient({
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [cpf, setCpf] = useState("")
   const [pin, setPin] = useState("")
   const [pinConfirm, setPinConfirm] = useState("")
   const [pinError, setPinError] = useState("")
@@ -207,6 +209,8 @@ export default function CreateAccountClient({
           token: finalToken,
           name: name || undefined,
           email: email || undefined,
+          phone_number: phoneNumber || undefined,
+          cpf: cpf || undefined,
           pin,
           browser_id: browserId,
         }),
@@ -400,7 +404,7 @@ export default function CreateAccountClient({
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">2. Conclua</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Informe nome e e-mail para ativar sua conta.
+                  Informe nome, e-mail, telefone e CPF para ativar sua conta.
                 </p>
               </div>
             </div>
@@ -438,6 +442,29 @@ export default function CreateAccountClient({
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
                   placeholder="voce@exemplo.com"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">Telefone</span>
+                <input
+                  value={phoneNumber}
+                  onChange={(event) => setPhoneNumber(event.target.value)}
+                  type="tel"
+                  placeholder="+55 11 99999-9999"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">CPF</span>
+                <input
+                  value={cpf}
+                  onChange={(event) => setCpf(event.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>

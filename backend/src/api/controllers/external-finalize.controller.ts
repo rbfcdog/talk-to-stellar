@@ -409,6 +409,10 @@ export default class ExternalFinalizeController {
   static async finalize(req: Request, res: Response) {
     try {
       const { token, name, email, pin } = req.body;
+      const rawPhoneNumber = String(req.body?.phone_number || req.body?.phoneNumber || '').trim();
+      const rawCpf = String(req.body?.cpf || '').trim();
+      const normalizedPhoneNumber = rawPhoneNumber ? rawPhoneNumber.replace(/\D+/g, '') : '';
+      const normalizedCpf = rawCpf ? rawCpf.replace(/\D+/g, '') : '';
       const browserId = String(req.body?.browser_id || '').trim();
       // Accept public_key coming from POST body or URL query (confirm link may include it)
       const publicKeyFromBody = String(req.body?.public_key || req.query?.public_key || '').trim() || undefined;
@@ -1256,6 +1260,12 @@ export default class ExternalFinalizeController {
       if (!/^\d{4,8}$/.test(providedPin)) {
         return res.status(400).json({ success: false, message: 'PIN deve conter de 4 a 8 dígitos numéricos.' });
       }
+      if (normalizedPhoneNumber && (normalizedPhoneNumber.length < 10 || normalizedPhoneNumber.length > 15)) {
+        return res.status(400).json({ success: false, message: 'Telefone inválido. Informe DDD + número (com ou sem +55).' });
+      }
+      if (normalizedCpf && normalizedCpf.length !== 11) {
+        return res.status(400).json({ success: false, message: 'CPF inválido. Informe 11 dígitos.' });
+      }
       const pinHash = crypto
         .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
@@ -1269,10 +1279,29 @@ export default class ExternalFinalizeController {
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
 
         if (existingSession && existingWallet) {
+          await agentRepo.saveSession(String(existingAccount.session_id), {
+            ...existingSession,
+            email: email || existingSession.email || '',
+            phone_number: normalizedPhoneNumber || existingSession.phone_number,
+          } as any);
+
           await configureWalletAssetsAndContacts({
             userId: String(existingAccount.user_id),
             publicKey: existingWallet.public_key,
             vaultSecretId: existingWallet.vault_secret_id,
+          });
+
+          await externalRepo.createMapping({
+            provider,
+            provider_user_id,
+            session_id: String(existingAccount.session_id),
+            user_id: String(existingAccount.user_id),
+            data: {
+              name: name || null,
+              email: email || null,
+              phone_number: normalizedPhoneNumber || null,
+              cpf: normalizedCpf || null,
+            },
           });
 
           if (browserId) {
@@ -1281,6 +1310,12 @@ export default class ExternalFinalizeController {
               provider_user_id: browserId,
               session_id: String(existingAccount.session_id),
               user_id: String(existingAccount.user_id),
+              data: {
+                name: name || null,
+                email: email || null,
+                phone_number: normalizedPhoneNumber || null,
+                cpf: normalizedCpf || null,
+              },
             });
           }
           return res.status(200).json({
@@ -1324,6 +1359,12 @@ export default class ExternalFinalizeController {
         const existingSession = await agentRepo.getSession(existingWallet.session_id);
 
         if (existingSession) {
+          await agentRepo.saveSession(existingWallet.session_id, {
+            ...existingSession,
+            email: email || existingSession.email || '',
+            phone_number: normalizedPhoneNumber || existingSession.phone_number,
+          } as any);
+
           await configureWalletAssetsAndContacts({
             userId,
             publicKey,
@@ -1335,6 +1376,12 @@ export default class ExternalFinalizeController {
             provider_user_id,
             session_id: existingWallet.session_id,
             user_id: userId,
+            data: {
+              name: name || null,
+              email: email || null,
+              phone_number: normalizedPhoneNumber || null,
+              cpf: normalizedCpf || null,
+            },
           });
 
           return res.status(200).json({
@@ -1359,7 +1406,7 @@ export default class ExternalFinalizeController {
         email: email || '',
         session_token: sessionToken,
         public_key: publicKey,
-        phone_number: undefined,
+        phone_number: normalizedPhoneNumber || undefined,
         pix_key: pixKey,
         password_hash: pinHash,
         session_password_hash: pinHash,
@@ -1387,6 +1434,12 @@ export default class ExternalFinalizeController {
         provider_user_id,
         session_id: sessionId,
         user_id: userId,
+        data: {
+          name: name || null,
+          email: email || null,
+          phone_number: normalizedPhoneNumber || null,
+          cpf: normalizedCpf || null,
+        },
       });
 
       if (browserId) {
@@ -1395,6 +1448,12 @@ export default class ExternalFinalizeController {
           provider_user_id: browserId,
           session_id: sessionId,
           user_id: userId,
+          data: {
+            name: name || null,
+            email: email || null,
+            phone_number: normalizedPhoneNumber || null,
+            cpf: normalizedCpf || null,
+          },
         });
       }
 
