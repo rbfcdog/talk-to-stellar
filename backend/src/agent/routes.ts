@@ -57,7 +57,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - Use 'create_wallet' for creating or importing a wallet.
 - Use 'get_balance' to show current wallet balance.
 - Use 'get_account' to show account details, balances, and related account information.
-- Use 'quote_asset_transfer' before cross-asset transfers or conversions to show source amount, destination amount, network fee, and estimated conversion loss.
+- Use 'quote_asset_transfer' before cross-asset transfers or conversions to show path quote source amount, destination amount, and network fee.
 - Use 'convert_assets' only after the user explicitly confirms an internal conversion.
 - If the user already has a wallet, do not suggest creating another one unless they ask for a new wallet explicitly.
 - If the user is already authenticated and has a session, prefer that wallet context first.
@@ -81,8 +81,8 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - If the destination cannot be resolved, ask the user for the public key or exact saved contact name.
 - If the amount is missing or ambiguous, ask a short clarification.
 - When confirming a payment, show the amount, asset, and destination in plain language.
-- Always show quote transparency for cross-asset payments: estimated rate, network fee, and slippage/perda estimada.
-- For transfers from one asset to another, always show the estimated conversion loss and Stellar network fee before asking for confirmation.
+- Always show quote transparency for cross-asset payments using Horizon path data only: source amount, destination amount, network fee, and whether the receiver amount is guaranteed.
+- Do not use hardcoded fiat conversion rates or loss estimates.
 - After a payment is built, return the XDR or transfer details and wait for confirmation before submission.
 - Never submit a payment automatically without explicit confirmation.
 
@@ -334,6 +334,45 @@ export function createAgentRoutes(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error in /session endpoint: ${errorMessage}`);
+      next(error);
+    }
+  }) as RequestHandler);
+
+  router.get('/messages/:session_id', (async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { session_id } = req.params;
+      const limitValue = Number(req.query.limit || 50);
+      const limit = Number.isFinite(limitValue) ? Math.min(Math.max(limitValue, 1), 100) : 50;
+
+      if (!isValidUUID(session_id)) {
+        return res.status(400).json({
+          error: "Invalid session_id format. Must be a valid UUID."
+        });
+      }
+
+      const sessionData = await repository.getSession(session_id);
+      if (!sessionData) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const messages = await repository.getMessages(session_id, limit);
+
+      return res.status(200).json({
+        session_id,
+        messages: messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          created_at: message.created_at,
+        })),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error in /messages endpoint: ${errorMessage}`);
       next(error);
     }
   }) as RequestHandler);
