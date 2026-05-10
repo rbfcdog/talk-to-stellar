@@ -135,13 +135,13 @@ export class ExternalController {
       const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
         supabase
           .from('agent_sessions')
-          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
           .eq('email', email)
           .order('updated_at', { ascending: false })
           .limit(20),
         supabase
           .from('agent_sessions')
-          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
           .eq('user_id', email)
           .order('updated_at', { ascending: false })
           .limit(20),
@@ -177,7 +177,7 @@ export class ExternalController {
       if (mappedSessionIds.length > 0) {
         const { data: mappedSessions } = await supabase
           .from('agent_sessions')
-          .select('session_id, user_id, email, password_hash, session_password_hash, updated_at, created_at')
+          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
           .in('session_id', mappedSessionIds)
           .order('updated_at', { ascending: false })
           .limit(20);
@@ -222,6 +222,28 @@ export class ExternalController {
       }
       console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
 
+      const wallet = await walletRepo.getWalletBySession(String(matched.session_id));
+      await agentRepo.saveSession(String(matched.session_id), {
+        ...matched,
+        user_id: String(matched.user_id || email),
+        email: String(matched.email || email),
+        public_key: wallet?.public_key || undefined,
+      } as any);
+
+      await supabase
+        .from('agent_states')
+        .update({
+          action_params: {
+            force_logged_out: false,
+            waiting_for_wallet_input: false,
+            pending_payment: null,
+            pending_conversion: null,
+          },
+          pending_payment: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('session_id', String(matched.session_id));
+
       await externalRepo.createMapping({
         provider,
         provider_user_id: providerUserId,
@@ -234,7 +256,9 @@ export class ExternalController {
         linked: true,
         exists: true,
         sessionId: String(matched.session_id),
+        sessionToken: String(matched.session_token || ''),
         userId: String(matched.user_id || email),
+        publicKey: wallet?.public_key || undefined,
       });
     } catch (error: any) {
       const message = error?.message || String(error);
