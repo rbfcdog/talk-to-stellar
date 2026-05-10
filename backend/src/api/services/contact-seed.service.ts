@@ -143,7 +143,6 @@ export class ContactSeedService {
     }
 
     const walletRepo = new WalletRepository(supabase);
-    const vaultService = new VaultService(supabase);
 
     for (const contact of STARTER_CONTACTS) {
       const pixKey = this.deriveStarterPixKey(ownerId, contact.pix_prefix);
@@ -177,9 +176,6 @@ export class ContactSeedService {
           } else {
             result.skipped += 1;
           }
-
-          const secretKey = await vaultService.getSecret(String(existingWallet.vault_secret_id));
-          await this.createDefaultTrustlines(existingPublicKey, secretKey, String(existingWallet.session_id || pixKey));
           continue;
         }
 

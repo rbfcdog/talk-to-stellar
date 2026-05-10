@@ -65,7 +65,20 @@ async function ensureAccountFunded(keypair: Keypair, label: string): Promise<voi
   await fundWithFriendbot(keypair.publicKey());
 }
 
-async function submitTransaction(source: Keypair, operations: OperationInput[]): Promise<void> {
+function formatHorizonError(error: any): string {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+  const resultCodes = data?.extras?.result_codes;
+  const resultXdr = data?.extras?.result_xdr;
+  const detail = [
+    status ? `status=${status}` : '',
+    resultCodes ? `result_codes=${JSON.stringify(resultCodes)}` : '',
+    resultXdr ? `result_xdr=${resultXdr}` : '',
+  ].filter(Boolean).join(' ');
+  return detail || (error instanceof Error ? error.message : String(error));
+}
+
+async function submitTransaction(source: Keypair, operations: OperationInput[], label: string): Promise<void> {
   const account = await server.loadAccount(source.publicKey());
   let builder = new TransactionBuilder(account, {
     fee: BASE_FEE,
@@ -78,7 +91,11 @@ async function submitTransaction(source: Keypair, operations: OperationInput[]):
 
   const tx = builder.setTimeout(180).build();
   tx.sign(source);
-  await server.submitTransaction(tx);
+  try {
+    await server.submitTransaction(tx);
+  } catch (error) {
+    throw new Error(`${label} failed: ${formatHorizonError(error)}`);
+  }
 }
 
 function getBalanceForAsset(account: Horizon.AccountResponse, asset: Asset): number {
@@ -105,7 +122,7 @@ async function ensureTrustline(owner: Keypair, asset: Asset): Promise<void> {
   });
 
   if (hasTrustline) return;
-  await submitTransaction(owner, [Operation.changeTrust({ asset })]);
+  await submitTransaction(owner, [Operation.changeTrust({ asset })], `changeTrust ${asset.getCode()}`);
 }
 
 async function topUpBalance(source: Keypair, destination: string, asset: Asset, targetAmount: number): Promise<void> {
@@ -119,7 +136,7 @@ async function topUpBalance(source: Keypair, destination: string, asset: Asset, 
       asset,
       amount: (targetAmount - currentBalance).toFixed(7),
     }),
-  ]);
+  ], `payment ${asset.isNative() ? 'XLM' : asset.getCode()} to ${destination}`);
 }
 
 async function topUpUsdcWithPathPayment(owner: Keypair, usdc: Asset, targetAmount: number): Promise<void> {
@@ -152,7 +169,7 @@ async function topUpUsdcWithPathPayment(owner: Keypair, usdc: Asset, targetAmoun
       destAmount: amountToReceive.toFixed(7),
       path: pathAssets,
     }),
-  ]);
+  ], 'topUpUsdcWithPathPayment');
 }
 
 async function main(): Promise<void> {
@@ -187,27 +204,13 @@ async function main(): Promise<void> {
       offerId: 0,
     }),
     Operation.manageSellOffer({
-      selling: Asset.native(),
-      buying: brl,
-      amount: '2000.0000000',
-      price: brlPerXlm.toFixed(7),
-      offerId: 0,
-    }),
-    Operation.manageSellOffer({
       selling: brl,
       buying: usdc,
       amount: (brlLiquidityAmount / 2).toFixed(7),
       price: (1 / brlPerUsdc).toFixed(7),
       offerId: 0,
     }),
-    Operation.manageSellOffer({
-      selling: usdc,
-      buying: brl,
-      amount: (usdcLiquidityAmount / 2).toFixed(7),
-      price: brlPerUsdc.toFixed(7),
-      offerId: 0,
-    }),
-  ]);
+  ], 'create BRL offers');
 
   console.log('BRL liquidity setup complete. Use these env values:');
   console.log(`BRL_ISSUER="${brlIssuer.keypair.publicKey()}"`);
