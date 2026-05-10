@@ -135,13 +135,11 @@ export default function CreateAccountClient({
         const recovered = await recoverOnboardingContextFromBackend()
 
         if (recovered.mode === "existing") {
-          if (recovered.sessionId) {
-            localStorage.setItem("talk-to-stellar.sessionId", recovered.sessionId)
-          }
-          if (recovered.sessionToken) {
-            localStorage.setItem("talk-to-stellar.sessionToken", recovered.sessionToken)
-          }
-          window.location.href = "/chat"
+          setValidation({
+            success: true,
+            valid: false,
+            message: 'Conta encontrada neste navegador. Use "Já tenho conta" para entrar com e-mail e PIN.',
+          })
           return
         }
 
@@ -178,14 +176,7 @@ export default function CreateAccountClient({
       if (!finalToken.trim()) {
         const recovered = await recoverOnboardingContextFromBackend()
         if (recovered.mode === "existing") {
-          if (recovered.sessionId) {
-            localStorage.setItem("talk-to-stellar.sessionId", recovered.sessionId)
-          }
-          if (recovered.sessionToken) {
-            localStorage.setItem("talk-to-stellar.sessionToken", recovered.sessionToken)
-          }
-          window.location.href = "/chat"
-          return
+          throw new Error('Conta encontrada neste navegador. Use "Já tenho conta" para entrar com e-mail e PIN.')
         }
         if (recovered.mode === "token") {
           finalToken = recovered.token
@@ -357,6 +348,9 @@ export default function CreateAccountClient({
 
       if (payload?.sessionId) {
         localStorage.setItem("talk-to-stellar.sessionId", String(payload.sessionId))
+      }
+      if (payload?.sessionToken) {
+        localStorage.setItem("talk-to-stellar.sessionToken", String(payload.sessionToken))
       }
 
       setExistingStatus("done")

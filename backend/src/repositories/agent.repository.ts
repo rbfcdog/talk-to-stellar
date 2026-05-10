@@ -186,11 +186,37 @@ export class AgentRepository {
   async clearSession(sessionId: string): Promise<void> {
     const { error } = await this.supabase
       .from('agent_sessions')
-      .delete()
+      .update({
+        public_key: null,
+        last_activity: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('session_id', sessionId);
 
     if (error) {
       throw new Error(`Failed to clear session: ${error.message || JSON.stringify(error)}`);
+    }
+
+    const { error: stateError } = await this.supabase
+      .from('agent_states')
+      .upsert(
+        {
+          session_id: sessionId,
+          action_params: {
+            force_logged_out: true,
+            waiting_for_wallet_input: false,
+            pending_payment: null,
+            pending_conversion: null,
+          },
+          pending_payment: null,
+          success: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'session_id' }
+      );
+
+    if (stateError) {
+      throw new Error(`Failed to mark session logged out: ${stateError.message || JSON.stringify(stateError)}`);
     }
   }
 
