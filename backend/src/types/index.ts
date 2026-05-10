@@ -12,6 +12,8 @@ export interface Contact {
   owner_id: string;
   contact_name: string;
   stellar_public_key: string;
+  phone_number?: string;
+  pix_key?: string;
   created_at: string;
   updated_at: string;
 }

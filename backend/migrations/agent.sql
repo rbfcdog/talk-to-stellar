@@ -12,18 +12,21 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     session_token UUID NOT NULL,
     public_key TEXT,
     phone_number TEXT,
+    pix_key TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id ON agent_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_created_at ON agent_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_pix_key_lower ON agent_sessions ((lower(pix_key))) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
 -- Create wallets table to store Stellar account information
 CREATE TABLE IF NOT EXISTS wallets (
     id BIGSERIAL PRIMARY KEY,
     session_id UUID UNIQUE NOT NULL,
     name TEXT,
     public_key TEXT UNIQUE NOT NULL,
+    pix_key TEXT,
     vault_secret_id UUID,
     balance JSONB DEFAULT '[]',
     sequence TEXT,
@@ -37,6 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_wallets_public_key ON wallets(public_key);
 CREATE INDEX IF NOT EXISTS idx_wallets_session_id ON wallets(session_id);
 CREATE INDEX IF NOT EXISTS idx_wallets_last_synced ON wallets(last_synced);
 CREATE INDEX IF NOT EXISTS idx_wallets_vault_secret_id ON wallets(vault_secret_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallets_pix_key_lower_unique ON wallets ((lower(pix_key))) WHERE pix_key IS NOT NULL AND btrim(pix_key) <> '';
 -- Create operations table for transaction history and status tracking
 CREATE TABLE IF NOT EXISTS operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,6 +64,10 @@ CREATE INDEX IF NOT EXISTS idx_operations_status ON operations(status);
 -- Ensure name column exists for existing environments
 ALTER TABLE wallets
 ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE wallets
+ADD COLUMN IF NOT EXISTS pix_key TEXT;
+ALTER TABLE agent_sessions
+ADD COLUMN IF NOT EXISTS pix_key TEXT;
 -- Ensure operations has wallet fields for existing environments
 ALTER TABLE operations
 ADD COLUMN IF NOT EXISTS source_public_key TEXT;

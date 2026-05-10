@@ -2,6 +2,7 @@ import { Keypair, Operation, Asset, Memo, Networks, TransactionBuilder } from '@
 import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
+import { getAssetIssuer } from '../../config/assets';
 
 interface BuildPaymentInput {
   sourcePublicKey: string;
@@ -220,16 +221,20 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
     const destIssuer = assetIssuer(destAssetObj);
     const hints: string[] = [];
 
-    if (destCode === 'USDC' && !process.env.USDC_ISSUER) {
+    if (destCode === 'USDC' && !getAssetIssuer('USDC')) {
         hints.push('USDC_ISSUER não configurado no backend');
     }
-    if (destCode === 'BRL' && !process.env.BRL_ISSUER) {
+    if (destCode === 'BRL' && !getAssetIssuer('BRL')) {
         hints.push('BRL_ISSUER não configurado no backend');
     }
 
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');
     hints.push('Confirme trustline do ativo de destino na wallet');
-    hints.push('Se estiver em testnet, rode backend/scripts/setup-xlm-usdc-liquidity.ts para provisionar ofertas');
+    if (sourceCode === 'BRL' || destCode === 'BRL') {
+        hints.push('Se estiver em testnet, rode npm run stellar:setup-brl-liquidity para provisionar ofertas BRL/XLM e BRL/USDC');
+    } else {
+        hints.push('Se estiver em testnet, confirme a liquidez XLM/USDC no issuer configurado');
+    }
 
     return [
         `Não foi encontrado caminho de conversão entre ${sourceCode} e ${destCode}.`,
@@ -351,7 +356,7 @@ export class StellarService {
 
             let transactionBuilder = new TransactionBuilder(sourceAccount, {
                 fee: '10000',
-                networkPassphrase: Networks.TESTNET
+                networkPassphrase: stellarConfig.network
             });
 
             transactionBuilder = transactionBuilder.addOperation(
@@ -391,7 +396,7 @@ export class StellarService {
 
             const transactionBuilder = new TransactionBuilder(sourceAccount, {
                 fee: '10000',
-                networkPassphrase: Networks.TESTNET,
+                networkPassphrase: stellarConfig.network,
             }).addOperation(
                 Operation.changeTrust({
                     asset,
@@ -425,7 +430,7 @@ export class StellarService {
                 console.warn('Warning: could not persist operation before submission:', persistError);
             }
 
-            const transaction = TransactionBuilder.fromXDR(unsignedXdr, Networks.TESTNET);
+            const transaction = TransactionBuilder.fromXDR(unsignedXdr, stellarConfig.network);
 
             const sourceKeypair = Keypair.fromSecret(secretKey);
             transaction.sign(sourceKeypair);
@@ -508,7 +513,7 @@ export class StellarService {
 
             const transactionBuilder = new TransactionBuilder(sourceAccount, {
                 fee: '10000',
-                networkPassphrase: Networks.TESTNET
+                networkPassphrase: stellarConfig.network
             });
 
             transactionBuilder.addOperation(
@@ -698,7 +703,7 @@ export class StellarService {
 
             const transaction = new TransactionBuilder(sourceAccount, {
                 fee: '10000',
-                networkPassphrase: Networks.TESTNET
+                networkPassphrase: stellarConfig.network
             })
                 .addOperation(
                     Operation.pathPaymentStrictSend({

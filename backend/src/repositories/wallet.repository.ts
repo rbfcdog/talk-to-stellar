@@ -9,6 +9,7 @@ export interface WalletInfo {
   public_key: string;
   vault_secret_id?: string;
   name?: string;
+  pix_key?: string;
   balance?: Array<{
     balance: string;
     asset_type: string;
@@ -22,11 +23,11 @@ export interface WalletInfo {
 export class WalletRepository {
   constructor(private supabase: SupabaseClient) {}
 
-  private isMissingNameColumnError(error: any): boolean {
+  private isMissingColumnError(error: any, column: string): boolean {
     const message = String(error?.message || '').toLowerCase();
     return (
       message.includes('column') &&
-      message.includes('name') &&
+      message.includes(column.toLowerCase()) &&
       (message.includes('does not exist') || message.includes('could not find'))
     );
   }
@@ -47,6 +48,7 @@ export class WalletRepository {
       public_key: walletInfo.public_key,
       vault_secret_id: walletInfo.vault_secret_id,
       name: walletInfo.name,
+      pix_key: walletInfo.pix_key,
       balance: walletInfo.balance || [],
       sequence: walletInfo.sequence,
       account_data: walletInfo.account_data,
@@ -55,6 +57,18 @@ export class WalletRepository {
     };
 
     const walletDataWithoutName = {
+      session_id: walletInfo.session_id,
+      public_key: walletInfo.public_key,
+      vault_secret_id: walletInfo.vault_secret_id,
+      pix_key: walletInfo.pix_key,
+      balance: walletInfo.balance || [],
+      sequence: walletInfo.sequence,
+      account_data: walletInfo.account_data,
+      last_synced: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const walletDataWithoutNameOrPix = {
       session_id: walletInfo.session_id,
       public_key: walletInfo.public_key,
       vault_secret_id: walletInfo.vault_secret_id,
@@ -74,24 +88,38 @@ export class WalletRepository {
         .eq('session_id', walletInfo.session_id);
       error = result.error;
 
-      if (error && this.isMissingNameColumnError(error)) {
+      if (error && this.isMissingColumnError(error, 'name')) {
         const retry = await this.supabase
           .from('wallets')
           .update(walletDataWithoutName)
           .eq('session_id', walletInfo.session_id);
         error = retry.error;
       }
+
+      if (error && this.isMissingColumnError(error, 'pix_key')) {
+        const retry = await this.supabase
+          .from('wallets')
+          .update(walletDataWithoutNameOrPix)
+          .eq('session_id', walletInfo.session_id);
+        error = retry.error;
+      }
     } else {
-      // Insert new wallet
       const result = await this.supabase
         .from('wallets')
         .insert(walletData);
       error = result.error;
 
-      if (error && this.isMissingNameColumnError(error)) {
+      if (error && this.isMissingColumnError(error, 'name')) {
         const retry = await this.supabase
           .from('wallets')
           .insert(walletDataWithoutName);
+        error = retry.error;
+      }
+
+      if (error && this.isMissingColumnError(error, 'pix_key')) {
+        const retry = await this.supabase
+          .from('wallets')
+          .insert(walletDataWithoutNameOrPix);
         error = retry.error;
       }
     }

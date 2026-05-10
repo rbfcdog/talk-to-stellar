@@ -17,7 +17,8 @@
     "test:e2e": "jest e2e.test.ts",
     "test:ci": "jest --coverage --bail --forceExit",
     "seed:users": "ts-node scripts/seed-users.ts --count",
-    "stellar:first-tx": "ts-node scripts/first-testnet-transaction.ts"
+    "stellar:first-tx": "ts-node scripts/first-testnet-transaction.ts",
+    "stellar:setup-brl-liquidity": "ts-node scripts/setup-testnet-brl-liquidity.ts"
   },
   "keywords": [
     "stellar",

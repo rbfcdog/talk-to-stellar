@@ -6,6 +6,7 @@ import { WalletRepository } from '../../repositories/wallet.repository';
 import VaultService from '../../services/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
+import { ContactSeedService } from './contact-seed.service';
 
 export interface OnboardUserPayload {
   name?: string;
@@ -18,7 +19,8 @@ export interface OnboardUserPayload {
 export interface AddContactPayload {
   userId: string;
   contact_name: string;
-  public_key: string;
+  public_key?: string;
+  pix_key?: string;
 }
 
 interface LookupContactPayload {
@@ -29,14 +31,6 @@ interface LookupContactPayload {
 interface ListContactsPayload {
   userId: string;
 }
-
-const STARTER_WALLET_CONTACTS = [
-  { contact_name: 'Conta Reserva', stellar_public_key: 'G' + 'A'.repeat(54) + 'B' },
-  { contact_name: 'Tesouraria', stellar_public_key: 'G' + 'A'.repeat(54) + 'C' },
-  { contact_name: 'Cobranças', stellar_public_key: 'G' + 'A'.repeat(54) + 'D' },
-  { contact_name: 'Freelance', stellar_public_key: 'G' + 'A'.repeat(54) + 'E' },
-  { contact_name: 'Empresa', stellar_public_key: 'G' + 'A'.repeat(54) + 'F' },
-];
 
 export class UserService {
 
@@ -61,6 +55,15 @@ export class UserService {
     return message.includes('could not find the table') || message.includes('relation') && message.includes('does not exist');
   }
 
+  private static isMissingColumnError(error: any, column: string): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.includes('column') &&
+      message.includes(column.toLowerCase()) &&
+      (message.includes('does not exist') || message.includes('could not find'))
+    );
+  }
+
   private static async saveAgentSession(sessionRecord: any): Promise<void> {
     const { data: existing, error: selectError } = await supabase
       .from('agent_sessions')
@@ -73,10 +76,19 @@ export class UserService {
     }
 
     if (existing) {
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from('agent_sessions')
         .update(sessionRecord)
         .eq('session_id', sessionRecord.session_id);
+
+      if (updateError && this.isMissingColumnError(updateError, 'pix_key')) {
+        const { pix_key, ...sessionRecordWithoutPix } = sessionRecord;
+        const retry = await supabase
+          .from('agent_sessions')
+          .update(sessionRecordWithoutPix)
+          .eq('session_id', sessionRecord.session_id);
+        updateError = retry.error;
+      }
 
       if (updateError) {
         throw new Error(`Database error: ${updateError.message}`);
@@ -84,39 +96,17 @@ export class UserService {
       return;
     }
 
-    const { error: insertError } = await supabase
+    let { error: insertError } = await supabase
       .from('agent_sessions')
       .insert(sessionRecord);
 
-    if (insertError) {
-      throw new Error(`Database error: ${insertError.message}`);
+    if (insertError && this.isMissingColumnError(insertError, 'pix_key')) {
+      const { pix_key, ...sessionRecordWithoutPix } = sessionRecord;
+      const retry = await supabase
+        .from('agent_sessions')
+        .insert(sessionRecordWithoutPix);
+      insertError = retry.error;
     }
-  }
-
-  private static async seedStarterContacts(userId: string): Promise<void> {
-    const { data: existingContacts, error: existingError } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1);
-
-    if (existingError) {
-      throw new Error(`Database error: ${existingError.message}`);
-    }
-
-    if (existingContacts && existingContacts.length > 0) {
-      return;
-    }
-
-    const starterContacts = STARTER_WALLET_CONTACTS.map((contact) => ({
-      owner_id: userId,
-      contact_name: contact.contact_name,
-      stellar_public_key: contact.stellar_public_key,
-    }));
-
-    const { error: insertError } = await supabase
-      .from('contacts')
-      .upsert(starterContacts, { onConflict: 'owner_id,contact_name' });
 
     if (insertError) {
       throw new Error(`Database error: ${insertError.message}`);
@@ -159,6 +149,7 @@ export class UserService {
 
     let userId: string;
     let sessionId: string;
+    let pixKey = '';
 
     const { data, error } = await supabase
       .from('users')
@@ -178,6 +169,7 @@ export class UserService {
 
         const sessionToken = AuthService.generateTokenForUser(userId);
         const dbSessionToken = uuidv4();
+        pixKey = ContactSeedService.derivePixKey(userId, input.email, input.name);
         const sessionRecord = {
           session_id: sessionId,
           user_id: userId,
@@ -185,6 +177,7 @@ export class UserService {
           session_token: dbSessionToken,
           public_key: publicKey,
           phone_number: input.phoneNumber || null,
+          pix_key: pixKey,
           created_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -200,6 +193,7 @@ export class UserService {
 
       const sessionToken = AuthService.generateTokenForUser(userId);
       const dbSessionToken = uuidv4();
+      pixKey = ContactSeedService.derivePixKey(userId, input.email, input.name);
       const sessionRecord = {
         session_id: sessionId,
         user_id: userId,
@@ -207,6 +201,7 @@ export class UserService {
         session_token: dbSessionToken,
         public_key: publicKey,
         phone_number: input.phoneNumber || null,
+        pix_key: pixKey,
         created_at: new Date().toISOString(),
         last_activity: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -239,17 +234,21 @@ export class UserService {
         public_key: publicKey,
         vault_secret_id: vaultSecretId,
         name: this.deriveWalletName(input),
+        pix_key: pixKey || undefined,
         balance: accountInfo.balances,
         sequence: accountInfo.sequence,
         account_data: accountInfo,
       });
+
+      if (secretKey) {
+        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId);
+      }
     } catch (walletError) {
-      // Log the error but don't fail the onboarding
       console.warn('Warning: Could not fetch account balance or save wallet info:', walletError);
     }
 
     try {
-      await this.seedStarterContacts(userId);
+      await ContactSeedService.ensureStarterContactsForUser(userId);
     } catch (contactSeedError) {
       console.warn('Warning: Could not seed starter contacts:', contactSeedError);
     }
@@ -266,7 +265,8 @@ export class UserService {
   }
 
   static async addContact(payload: AddContactPayload): Promise<any> {
-    const { userId, contact_name, public_key } = payload;
+    const { userId, contact_name, pix_key } = payload;
+    let public_key = payload.public_key;
 
     const { data: user, error: userError } = await supabase
       .from('users')
@@ -278,12 +278,32 @@ export class UserService {
       throw new Error(`User with ID ${userId} not found.`);
     }
 
+    if (!public_key && pix_key) {
+      const { data: walletByPix, error: walletPixError } = await supabase
+        .from('wallets')
+        .select('public_key')
+        .ilike('pix_key', pix_key.trim().toLowerCase())
+        .limit(1)
+        .maybeSingle();
+
+      if (walletPixError) {
+        throw new Error(`Database error: ${walletPixError.message}`);
+      }
+
+      public_key = walletByPix?.public_key;
+    }
+
+    if (!public_key) {
+      throw new Error('A Stellar public key or an existing TalkToStellar Pix key is required.');
+    }
+
     const { data: newContact, error: insertError } = await supabase
       .from('contacts')
       .insert({
         owner_id: userId,
         contact_name: contact_name,
         stellar_public_key: public_key,
+        pix_key: pix_key || null,
       })
       .select()
       .single();

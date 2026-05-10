@@ -1,5 +1,3 @@
-import { executeTool } from '../src/agent/tools';
-
 const mockSetAlertThreshold = jest.fn().mockResolvedValue(true);
 const mockGetWalletConversionRules = jest.fn().mockResolvedValue([
   {
@@ -27,6 +25,12 @@ jest.mock('../src/api/services/auto-conversion.service', () => ({
 }));
 
 describe('Agent tool execution', () => {
+  let executeTool: (toolName: string, toolInput: Record<string, any>) => Promise<string>;
+
+  beforeAll(() => {
+    ({ executeTool } = require('../src/agent/tools'));
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

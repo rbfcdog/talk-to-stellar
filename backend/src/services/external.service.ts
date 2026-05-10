@@ -5,6 +5,7 @@ import { ContactRepository } from '../api/repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { logger } from '../utils/logger';
+import { getAssetIssuer, normalizeAssetCode } from '../config/assets';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -177,11 +178,14 @@ export class ExternalService {
 
   // Create a one-time JWT + URL to confirm a payment from an external channel
   createPaymentConfirmUrl(payload: { amount: string; destination: string; destination_name?: string; destination_contact?: Record<string, any>; session_id?: string; owner_id?: string; asset_code?: string; asset_issuer?: string; nonce?: string }, extra = {}) {
+    const assetCode = normalizeAssetCode(payload.asset_code || 'XLM');
+    const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
+
     const tokenPayload = {
       sub: 'external_payment_confirm',
       amount: payload.amount,
-      asset_code: String(payload.asset_code || 'XLM').toUpperCase().replace(/^USD$/, 'USDC'),
-      asset_issuer: payload.asset_issuer || null,
+      asset_code: assetCode,
+      asset_issuer: assetIssuer || null,
       destination: payload.destination,
       destination_name: payload.destination_name,
       destination_contact: payload.destination_contact,

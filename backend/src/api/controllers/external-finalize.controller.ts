@@ -8,7 +8,9 @@ import { ExternalRepository } from '../../repositories/external.repository';
 import { ContactRepository } from '../../api/repository/contact.repository';
 import { VaultService } from '../../services/vault.service';
 import { StellarService } from '../services/stellar.service';
+import { ContactSeedService } from '../services/contact-seed.service';
 import { logger } from '../../utils/logger';
+import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,12 +34,32 @@ function isValidStellarPublicKey(value?: string) {
 }
 
 function resolveAssetIssuer(assetCode: string, provided?: string): string | undefined {
-  const normalized = String(assetCode || '').toUpperCase().replace(/^USD$/, 'USDC');
+  const normalized = normalizeAssetCode(assetCode);
   if (normalized === 'XLM') return undefined;
-  if (provided && String(provided).trim()) return String(provided).trim();
-  if (normalized === 'USDC') return String(process.env.USDC_ISSUER || '').trim() || undefined;
-  if (normalized === 'BRL') return String(process.env.BRL_ISSUER || '').trim() || undefined;
-  return undefined;
+  return getAssetIssuer(normalized, provided);
+}
+
+async function configureWalletAssetsAndContacts(input: {
+  userId: string;
+  publicKey: string;
+  vaultSecretId?: string | null;
+}) {
+  if (input.vaultSecretId) {
+    try {
+      const secretKey = await vaultService.getSecret(String(input.vaultSecretId));
+      await ContactSeedService.createDefaultTrustlines(input.publicKey, secretKey, input.userId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[external-finalize] default trustline setup failed for ${input.userId}: ${message}`);
+    }
+  }
+
+  try {
+    await ContactSeedService.ensureStarterContactsForUser(input.userId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[external-finalize] starter contact setup failed for ${input.userId}: ${message}`);
+  }
 }
 
 async function sendTelegramPaymentNotification(input: {
@@ -171,7 +193,7 @@ export default class ExternalFinalizeController {
       const tokenSub = String((payload as any)?.sub || '');
       if (tokenSub === 'external_payment_confirm') {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
-        const assetCode = String((payload as any)?.asset_code || 'XLM').toUpperCase().replace(/^USD$/, 'USDC');
+        const assetCode = normalizeAssetCode((payload as any)?.asset_code || 'XLM');
         const assetIssuer = resolveAssetIssuer(assetCode, (payload as any)?.asset_issuer);
 
         if (!amount || !destination || !session_id) {
@@ -221,6 +243,14 @@ export default class ExternalFinalizeController {
             }
 
             const contacts = await ContactRepository.findByOwnerId(candidateOwnerId);
+            const pixMatch = contacts.find((contact) =>
+              String((contact as any).pix_key || '').trim().toLowerCase() === normalizedQuery
+            );
+
+            if (pixMatch?.stellar_public_key) {
+              return String(pixMatch.stellar_public_key).trim();
+            }
+
             const exactMatch = contacts.find((contact) => {
               const contactName = normalize(String(contact.contact_name || ''));
               return contactName === normalizedQuery;
@@ -279,6 +309,15 @@ export default class ExternalFinalizeController {
         if (publicKeyFromBody && typeof publicKeyFromBody === 'string' && isValidStellarPublicKey(publicKeyFromBody)) {
           resolvedDestination = publicKeyFromBody.trim();
         }
+
+        if (!isValidStellarPublicKey(resolvedDestination)) {
+          const lookupValue = String(destination_name || destination || '').trim();
+          const resolvedFromOwners = lookupValue ? await resolveContactFromOwners(lookupValue) : null;
+          if (resolvedFromOwners) {
+            resolvedDestination = resolvedFromOwners;
+          }
+        }
+
         const isValidPublicKey = isValidStellarPublicKey(resolvedDestination);
 
         if (!isValidPublicKey) {
@@ -440,6 +479,12 @@ export default class ExternalFinalizeController {
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
 
         if (existingSession && existingWallet) {
+          await configureWalletAssetsAndContacts({
+            userId: String(existingAccount.user_id),
+            publicKey: existingWallet.public_key,
+            vaultSecretId: existingWallet.vault_secret_id,
+          });
+
           if (browserId) {
             await externalRepo.createMapping({
               provider: 'web',
@@ -489,6 +534,12 @@ export default class ExternalFinalizeController {
         const existingSession = await agentRepo.getSession(existingWallet.session_id);
 
         if (existingSession) {
+          await configureWalletAssetsAndContacts({
+            userId,
+            publicKey,
+            vaultSecretId: existingWallet.vault_secret_id,
+          });
+
           await externalRepo.createMapping({
             provider,
             provider_user_id,
@@ -510,6 +561,7 @@ export default class ExternalFinalizeController {
       // create session and session token
       const sessionId = uuidv4();
       const sessionToken = uuidv4();
+      const pixKey = ContactSeedService.derivePixKey(userId, email, name);
 
       const now = new Date().toISOString();
       await agentRepo.saveSession(sessionId, {
@@ -518,6 +570,7 @@ export default class ExternalFinalizeController {
         session_token: sessionToken,
         public_key: publicKey,
         phone_number: undefined,
+        pix_key: pixKey,
         password_hash: pinHash,
         session_password_hash: pinHash,
         created_at: now,
@@ -529,7 +582,14 @@ export default class ExternalFinalizeController {
         public_key: publicKey,
         vault_secret_id: vaultSecretId,
         name: name || `Wallet for ${userId}`,
+        pix_key: pixKey,
       } as any);
+
+      await configureWalletAssetsAndContacts({
+        userId,
+        publicKey,
+        vaultSecretId,
+      });
 
       // link external_accounts mapping
       await externalRepo.createMapping({
@@ -548,7 +608,7 @@ export default class ExternalFinalizeController {
         });
       }
 
-      return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}` });
+      return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, pixKey });
     } catch (error: any) {
       const message = error?.message || String(error);
       return res.status(500).json({ success: false, message });

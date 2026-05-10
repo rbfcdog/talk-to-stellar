@@ -46,4 +46,25 @@ export class ContactRepository {
 
     return data || null;
   }
+
+  static async findByPixKey(pixKey: string, ownerId?: string): Promise<Contact | null> {
+    let query = supabase
+      .from('contacts')
+      .select('*')
+      .ilike('pix_key', String(pixKey || '').trim().toLowerCase())
+      .limit(1);
+
+    if (ownerId) {
+      query = query.eq('owner_id', ownerId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      console.error('Supabase error finding contact by Pix key:', error.message);
+      throw new Error('Failed to retrieve contact by Pix key.');
+    }
+
+    return data || null;
+  }
 }

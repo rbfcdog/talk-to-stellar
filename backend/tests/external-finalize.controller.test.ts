@@ -21,6 +21,9 @@ const finalizeBuildPathPaymentXdrMock = jest.fn();
 const finalizeBuildTrustlineXdrMock = jest.fn();
 const finalizeGetAccountBalanceMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
+const finalizeCreateDefaultTrustlinesMock = jest.fn();
+const finalizeEnsureStarterContactsForUserMock = jest.fn();
+const testnetUsdcIssuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
 jest.mock('../src/services/vault.service', () => ({
   VaultService: jest.fn().mockImplementation(() => ({
@@ -45,6 +48,16 @@ jest.mock('../src/api/services/stellar.service', () => ({
     getAccountBalance: finalizeGetAccountBalanceMock,
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
   },
+}));
+
+jest.mock('../src/api/services/contact-seed.service', () => ({
+  ContactSeedService: {
+    derivePixKey: jest.fn((userId: string) => `${String(userId).replace(/[^a-z0-9]/gi, '.').toLowerCase()}.test@talktostellar`),
+    createDefaultTrustlines: finalizeCreateDefaultTrustlinesMock,
+    ensureStarterContactsForUser: finalizeEnsureStarterContactsForUserMock,
+  },
+  repairLegacyStarterContactKey: jest.fn((publicKey: string) => publicKey),
+  STARTER_CONTACTS: [],
 }));
 
 jest.mock('../src/repositories/agent.repository', () => ({
@@ -100,6 +113,8 @@ describe('ExternalFinalizeController', () => {
     finalizeBuildTrustlineXdrMock.mockReset();
     finalizeGetAccountBalanceMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
+    finalizeCreateDefaultTrustlinesMock.mockReset();
+    finalizeEnsureStarterContactsForUserMock.mockReset();
     finalizeSaveSessionMock.mockResolvedValue(undefined);
     finalizeSaveWalletMock.mockResolvedValue(undefined);
     finalizeLinkSessionMock.mockResolvedValue(undefined);
@@ -110,6 +125,8 @@ describe('ExternalFinalizeController', () => {
     finalizeBuildTrustlineXdrMock.mockResolvedValue('trustline-xdr');
     finalizeGetAccountBalanceMock.mockResolvedValue([]);
     finalizeSignAndSubmitXdrMock.mockResolvedValue({ success: true, hash: 'tx-123' });
+    finalizeCreateDefaultTrustlinesMock.mockResolvedValue({ success: true, assets: ['USDC'], errors: [] });
+    finalizeEnsureStarterContactsForUserMock.mockResolvedValue({ created: 0, updated: 0, skipped: 0, errors: [] });
     finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
     finalizeFindByProviderAndIdMock.mockResolvedValue(null);
     finalizeCreateMappingMock.mockResolvedValue(undefined);
@@ -212,6 +229,61 @@ describe('ExternalFinalizeController', () => {
         type: 'PATH_PAYMENT_STRICT_RECEIVE',
         asset_code: 'USDC',
         amount: 10,
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('uses official testnet USDC issuer when env is not set', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    delete process.env.USDC_ISSUER;
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'USDC',
+      destination: testPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([
+      { asset_code: 'USDC', asset_issuer: testnetUsdcIssuer, balance: '0' },
+    ]);
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeBuildPathPaymentXdrMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destAsset: { code: 'USDC', issuer: testnetUsdcIssuer },
       })
     );
     expect(res.status).toHaveBeenCalledWith(200);
