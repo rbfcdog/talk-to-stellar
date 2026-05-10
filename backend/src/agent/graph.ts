@@ -134,13 +134,27 @@ export class AgentGraph {
   ): { amount: string; assetCode?: string } {
     const amountText = String(rawAmount || '').trim();
     const hinted = String(hintedAsset || '').trim().toUpperCase();
+    const normalizedText = amountText
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const explicitAsset =
+      /\b(usdc|usd|dolar|dolares|dollar|dollars)\b/i.test(normalizedText) || /\$\s*\d/.test(amountText)
+        ? 'USDC'
+        : /\b(brl|real|reais)\b/i.test(normalizedText) || /r\$\s*\d/i.test(normalizedText)
+          ? 'BRL'
+          : /\bxlm|lumens?\b/i.test(normalizedText)
+            ? 'XLM'
+            : undefined;
 
     const assetMatches = amountText.match(/\b(USDC|USD|BRL|XLM)\b/gi) || [];
-    const normalizedAsset = assetMatches.length > 0
-      ? String(assetMatches[0]).toUpperCase().replace(/^USD$/, 'USDC')
-      : (hinted ? hinted.replace(/^USD$/, 'USDC') : undefined);
+    const normalizedAsset = explicitAsset ||
+      (assetMatches.length > 0
+        ? String(assetMatches[0]).toUpperCase().replace(/^USD$/, 'USDC')
+        : (hinted ? hinted.replace(/^USD$/, 'USDC') : undefined));
 
-    const numericMatch = amountText.match(/[0-9]+(?:\.[0-9]+)?/);
+    const numericMatch = amountText.replace(',', '.').match(/[0-9]+(?:\.[0-9]+)?/);
     const cleanedAmount = numericMatch
       ? numericMatch[0]
       : amountText.replace(/\b(USDC|USD|BRL|XLM)\b/gi, '').trim();
@@ -751,12 +765,14 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
   private formatAssetLine(balance: any, index: number): string {
     const asset = balance.asset || balance.asset_code || 'UNKNOWN';
+    const usdc = balance.display_value?.usdc;
+    const brl = balance.display_value?.brl;
+    const values = [brl, usdc].filter(Boolean).join(' / ');
+    if (values) {
+      return `${index + 1}. ${asset}: ${values}`;
+    }
     const amount = balance.balance || '0';
-    const values = [balance.display_value?.usdc, balance.display_value?.brl].filter(Boolean).join(' / ');
-
-    return values
-      ? `${index + 1}. ${amount} ${asset} (${values})`
-      : `${index + 1}. ${amount} ${asset}`;
+    return `${index + 1}. ${asset}: ${amount}`;
   }
 
   private formatTransactionLine(transaction: any, index: number): string {
@@ -765,7 +781,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       transaction.direction === 'received' ? 'Recebido' :
       'Relacionado';
     const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
-    const values = [transaction.display_value?.usdc, transaction.display_value?.brl].filter(Boolean).join(' / ');
+    const values = [transaction.display_value?.brl, transaction.display_value?.usdc].filter(Boolean).join(' / ');
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
     const hash = transaction.hash ? `\nHash: ${transaction.hash}` : '';
 
@@ -795,12 +811,17 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         state.response_message = `Não consegui consultar seu saldo agora: ${toolResult.error || 'erro desconhecido'}`;
       } else {
         const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
-        const formattedBalances = balances.length > 0
-          ? balances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n')
+        const visibleBalances = balances.filter((balance: any) => String(balance.asset || balance.asset_code || '').toUpperCase() !== 'XLM');
+        const brlTotal = balances.reduce((sum: number, balance: any) => sum + (Number(balance?.estimated_brl) || 0), 0);
+        const usdcTotal = balances.reduce((sum: number, balance: any) => sum + (Number(balance?.estimated_usdc) || 0), 0);
+        const formattedBalances = visibleBalances.length > 0
+          ? visibleBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n')
           : 'Nenhum saldo encontrado.';
 
         state.success = true;
-        state.response_message = `Saldo atual da sua wallet:\n${formattedBalances}`;
+        state.response_message =
+          `Saldo disponível: R$ ${brlTotal.toFixed(2)} / US$ ${usdcTotal.toFixed(2)}\n\n` +
+          `Detalhes da conta:\n${formattedBalances}`;
       }
     }
 

@@ -4,6 +4,9 @@ function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
   if (fromBackend) return fromBackend.replace(/\/$/, "");
 
+  const fromAgent = process.env.AGENT_API_URL;
+  if (fromAgent) return fromAgent.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
+
   const fromPublic =
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_AGENT_API_URL ||
@@ -40,7 +43,7 @@ async function proxy(req: NextRequest, path: string[]) {
     return NextResponse.json(
       {
         success: false,
-        message: error?.message || "Proxy error",
+        message: `Proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL on frontend deployment.`,
         target,
       },
       { status: 502 }
