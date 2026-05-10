@@ -532,6 +532,51 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     return undefined;
   }
 
+  private extractAddContactPayload(message: string): { key?: string; contactName?: string } {
+    const raw = String(message || '').trim();
+    if (!raw) {
+      return {};
+    }
+
+    const publicKeyMatch = raw.match(/\bG[A-Z2-7]{55}\b/i);
+    const transferKeyMatch = raw.match(/\b[a-z0-9._%+-]+@talktostellar\b/i);
+    const key = (publicKeyMatch?.[0] || transferKeyMatch?.[0] || '').trim();
+
+    if (!key) {
+      return {};
+    }
+
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const addIntent =
+      /\b(adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\b/.test(normalized) &&
+      /\b(contato|beneficiario|beneficiario|contacts?)\b/.test(normalized);
+
+    if (!addIntent) {
+      return {};
+    }
+
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const withoutKey = raw.replace(new RegExp(escapedKey, 'i'), ' ');
+    const nameMatch =
+      withoutKey.match(/(?:nome\s+(?:do|da)\s+contato\s*[:=-]?\s*)([^\n\r,;]+)/i) ||
+      withoutKey.match(/(?:contato\s+(?:chamado|nome)\s*[:=-]?\s*)([^\n\r,;]+)/i) ||
+      withoutKey.match(/(?:adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\s+(?:o|a|um|uma|meu|minha)?\s*(?:contato|beneficiario)?\s*([^\n\r,;]+)/i);
+
+    const cleanedName = String(nameMatch?.[1] || '')
+      .replace(/\b(nos|nosso|nossos|minha|minhas|meu|meus|em|na|no|de)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return {
+      key,
+      contactName: cleanedName || undefined,
+    };
+  }
+
   private isOwnReceivingKeyRequest(message: string): boolean {
     const normalized = String(message || '')
       .normalize('NFD')
@@ -1323,6 +1368,61 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
       // Execute contacts listing tool directly
       if (state.action_type === ActionType.LIST_CONTACTS) {
+        const addPayload = this.extractAddContactPayload(state.current_input);
+
+        if (addPayload.key) {
+          const userId = String(state.session_data?.user_id || '').trim();
+          if (!userId) {
+            state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+            state.success = false;
+            await this.repository.saveMessage(
+              state.session_id,
+              "assistant",
+              state.response_message
+            );
+            await this.repository.saveState(state.session_id, state);
+            return state;
+          }
+
+          const isPublicKey = /^G[A-Z2-7]{55}$/i.test(addPayload.key);
+          const fallbackName = isPublicKey
+            ? `Contato ${addPayload.key.slice(0, 6)}`
+            : `Contato ${addPayload.key.split('@')[0]}`;
+
+          const addToolResultRaw = await executeTool("add_contact", {
+            user_id: userId,
+            contact_name: addPayload.contactName || fallbackName,
+            public_key: isPublicKey ? addPayload.key : undefined,
+            pix_key: isPublicKey ? undefined : addPayload.key,
+          });
+
+          let addToolResult: any;
+          try {
+            addToolResult = JSON.parse(addToolResultRaw);
+          } catch {
+            addToolResult = { success: false, error: "Failed to parse tool response" };
+          }
+
+          if (!addToolResult.success) {
+            state.response_message = `Não consegui adicionar este contato agora: ${addToolResult.error || 'erro desconhecido'}`;
+            state.success = false;
+          } else {
+            const added = addToolResult.contact || {};
+            const contactName = added.contact_name || addPayload.contactName || fallbackName;
+            const contactKey = added.stellar_public_key || addPayload.key;
+            state.response_message = `Contato adicionado com sucesso.\nNome: ${contactName}\nChave: ${contactKey}`;
+            state.success = true;
+          }
+
+          await this.repository.saveMessage(
+            state.session_id,
+            "assistant",
+            state.response_message
+          );
+          await this.repository.saveState(state.session_id, state);
+          return state;
+        }
+
         const toolResultRaw = await executeTool("list_contacts", {
           user_id: state.session_data?.user_id,
         });
