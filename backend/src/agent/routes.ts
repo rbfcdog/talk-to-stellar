@@ -58,6 +58,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - Use 'get_balance' to show current wallet balance.
 - Use 'get_account' to show account details, balances, and related account information.
 - Use 'quote_asset_transfer' before cross-asset transfers or conversions to show path quote source amount, destination amount, and network fee.
+- For conversions involving XLM, USDC, or BRL, use the configured issuer from environment and the real Stellar path quote, never a simulated price.
 - Use 'convert_assets' only after the user explicitly confirms an internal conversion.
 - If the user already has a wallet, do not suggest creating another one unless they ask for a new wallet explicitly.
 - If the user is already authenticated and has a session, prefer that wallet context first.

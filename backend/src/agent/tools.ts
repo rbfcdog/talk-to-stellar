@@ -130,7 +130,7 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a cross-asset transfer or conversion using Horizon path data, including source amount, destination amount, network fee, and path.",
+    description: "Preview a real Stellar cross-asset transfer or wallet conversion using Horizon path data, including source amount, destination amount, network fee, and path. Use the configured issuers for USDC/BRL when the caller does not provide one.",
     parameters: {
       type: "object",
       properties: {
@@ -172,7 +172,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a Stellar path payment to self. Uses the vault-backed session wallet.",
+    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the vault-backed session wallet and the configured issuers for XLM, USDC, and BRL.",
     parameters: {
       type: "object",
       properties: {
@@ -786,6 +786,7 @@ async function executeConvertAssets(input: any): Promise<string> {
           sourceAsset: quoteInput.sourceAsset,
         })
       : await ApiStellarService.buildPathPaymentXdr(quoteInput);
+      const operationType = usesStrictSend ? 'PATH_PAYMENT_STRICT_SEND' : 'PATH_PAYMENT_STRICT_RECEIVE';
     const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
     const result = await ApiStellarService.signAndSubmitXdr(
       userId,
@@ -793,13 +794,13 @@ async function executeConvertAssets(input: any): Promise<string> {
       unsignedXdr,
       {
         user_id: userId,
-        type: 'PATH_PAYMENT_STRICT_RECEIVE',
+          type: operationType,
         destination_key: wallet.public_key,
         asset_code: quote.destinationAsset.code,
         amount: Number(quote.destinationAmount),
         context:
-          `Conversão interna: ${quote.sourceAmount} ${quote.sourceAsset.code} ` +
-          `para ${quote.destinationAmount} ${quote.destinationAsset.code}.`,
+            `Conversão interna real: ${quote.sourceAmount} ${quote.sourceAsset.code} ` +
+            `para ${quote.destinationAmount} ${quote.destinationAsset.code}.`,
         source_public_key: wallet.public_key,
         source_session_id: wallet.session_id,
         destination_session_id: wallet.session_id,
@@ -828,6 +829,7 @@ async function executeConvertAssets(input: any): Promise<string> {
       hash: result.hash,
       quote,
       transferDetails: submittedDetails,
+      operation_type: operationType,
       message:
         `Conversão concluída: ${sourceAmount} ${sourceAssetCode} ` +
         `para ${destinationAmount} ${destinationAssetCode}.` +
