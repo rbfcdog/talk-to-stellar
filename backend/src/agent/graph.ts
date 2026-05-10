@@ -578,6 +578,8 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       withoutKey.match(/(?:adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\s+(?:o|a|um|uma|meu|minha)?\s*(?:contato|beneficiario)?\s*([^\n\r,;]+)/i);
 
     const cleanedName = String(nameMatch?.[1] || '')
+      .replace(/\bcomo\s+(meu|minha|um|uma)?\s*contato\b/gi, ' ')
+      .replace(/\bcomo\s+(meu|minha|um|uma)?\s*beneficiario\b/gi, ' ')
       .replace(/\b(nos|nosso|nossos|minha|minhas|meu|meus|em|na|no|de)\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();

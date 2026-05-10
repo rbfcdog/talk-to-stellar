@@ -1395,6 +1395,62 @@ async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ pu
       }
     }
 
+    const { data: paymentLogRows, error: paymentLogError } = await supabase
+      .from('payment_logs')
+      .select('source_public_key, destination_public_key, created_at')
+      .ilike('user_id', normalizedRef)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (paymentLogError) {
+      const message = String(paymentLogError.message || '').toLowerCase();
+      if (!message.includes('payment_logs') && !message.includes('does not exist') && !message.includes('schema cache')) {
+        throw new Error(paymentLogError.message || 'Failed to lookup payment logs by user_id');
+      }
+    }
+
+    for (const row of paymentLogRows || []) {
+      const publicKey =
+        String((row as any)?.source_public_key || '').trim() ||
+        String((row as any)?.destination_public_key || '').trim();
+      if (/^G[A-Z2-7]{55}$/i.test(publicKey)) {
+        logger.info(`[add_contact] resolved email ${normalizedRef} via payment_logs.user_id`);
+        return {
+          publicKey,
+          name: normalizedRef,
+          pixKey: undefined,
+        };
+      }
+    }
+
+    const { data: operationRows, error: operationError } = await supabase
+      .from('operations')
+      .select('source_public_key, destination_key, created_at')
+      .ilike('user_id', normalizedRef)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (operationError) {
+      const message = String(operationError.message || '').toLowerCase();
+      if (!message.includes('operations') && !message.includes('does not exist') && !message.includes('schema cache')) {
+        throw new Error(operationError.message || 'Failed to lookup operations by user_id');
+      }
+    }
+
+    for (const row of operationRows || []) {
+      const publicKey =
+        String((row as any)?.source_public_key || '').trim() ||
+        String((row as any)?.destination_key || '').trim();
+      if (/^G[A-Z2-7]{55}$/i.test(publicKey)) {
+        logger.info(`[add_contact] resolved email ${normalizedRef} via operations.user_id`);
+        return {
+          publicKey,
+          name: normalizedRef,
+          pixKey: undefined,
+        };
+      }
+    }
+
     logger.warn(`[add_contact] could not resolve email ${normalizedRef} to a wallet`);
   }
 
