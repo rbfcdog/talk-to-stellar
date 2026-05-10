@@ -1260,6 +1260,9 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
               const assetLabel = String(toolResultParsed.asset || finalAssetCode || 'XLM').toUpperCase();
               state.response_message =
                 `Para confirmar o envio de ${this.formatMoneyByAsset(finalAmount, assetLabel)} para ${destinationName}, abra o link de confirmação:\n\n${toolResultParsed.url}`;
+              if (assetLabel !== 'XLM') {
+                state.response_message += `\n\nO destinatário receberá exatamente ${this.formatMoneyByAsset(finalAmount, assetLabel)}.`;
+              }
               if (toolResultParsed.quote) {
                 const quote = toolResultParsed.quote;
                 const loss = quote?.conversionLoss || {};
