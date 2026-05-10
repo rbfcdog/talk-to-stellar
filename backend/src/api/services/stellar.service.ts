@@ -49,13 +49,6 @@ interface PathPaymentQuote {
   sourceAmount: string;
   sourceMax: string;
   networkFeeXlm: string;
-  conversionLoss: {
-    sourceValueUsdc: number | null;
-    destinationValueUsdc: number | null;
-    lostUsdc: number | null;
-    lostBrl: number | null;
-    lostPercent: number | null;
-  };
   path: Array<{
     code: string;
     issuer?: string;
@@ -76,13 +69,6 @@ interface StrictSendConversionQuote {
   destinationAmount: string;
   destinationMin: string;
   networkFeeXlm: string;
-  conversionLoss: {
-    sourceValueUsdc: number | null;
-    destinationValueUsdc: number | null;
-    lostUsdc: number | null;
-    lostBrl: number | null;
-    lostPercent: number | null;
-  };
   path: Array<{
     code: string;
     issuer?: string;
@@ -90,81 +76,14 @@ interface StrictSendConversionQuote {
   }>;
 }
 
-type MarketRates = {
-    xlmUsd?: number;
-    xlmBrl?: number;
-    usdBrl?: number;
-};
-
-let cachedMarketRates: { value: MarketRates; expiresAt: number } | null = null;
-
-async function getMarketRates(): Promise<MarketRates> {
-    const now = Date.now();
-    if (cachedMarketRates && cachedMarketRates.expiresAt > now) {
-        return cachedMarketRates.value;
-    }
-
-    const fallbackRates: MarketRates = {
-        xlmUsd: process.env.XLM_USD_PRICE ? Number(process.env.XLM_USD_PRICE) : undefined,
-        xlmBrl: process.env.XLM_BRL_PRICE ? Number(process.env.XLM_BRL_PRICE) : undefined,
-        usdBrl: process.env.USD_BRL_RATE ? Number(process.env.USD_BRL_RATE) : undefined,
-    };
-
-    try {
-        const response = await fetch(
-            'https://api.coingecko.com/api/v3/simple/price?ids=stellar,usd-coin&vs_currencies=usd,brl',
-            { signal: AbortSignal.timeout(5000) }
-        );
-
-        if (!response.ok) {
-            throw new Error(`price lookup failed: ${response.status}`);
-        }
-
-        const prices = await response.json() as any;
-        const xlmUsd = Number(prices?.stellar?.usd);
-        const xlmBrl = Number(prices?.stellar?.brl);
-        const usdcBrl = Number(prices?.['usd-coin']?.brl);
-        const value: MarketRates = {
-            xlmUsd: Number.isFinite(xlmUsd) ? xlmUsd : fallbackRates.xlmUsd,
-            xlmBrl: Number.isFinite(xlmBrl) ? xlmBrl : fallbackRates.xlmBrl,
-            usdBrl: Number.isFinite(usdcBrl) ? usdcBrl : fallbackRates.usdBrl,
-        };
-
-        cachedMarketRates = { value, expiresAt: now + 60_000 };
-        return value;
-    } catch {
-        cachedMarketRates = { value: fallbackRates, expiresAt: now + 30_000 };
-        return fallbackRates;
-    }
-}
-
-function estimateAssetValue(amountValue: string | number | undefined, assetCodeValue: string | undefined, rates: MarketRates) {
-    const amount = Number(amountValue);
-    const assetCode = String(assetCodeValue || '').toUpperCase();
-
-    if (!Number.isFinite(amount)) return { usdc: null, brl: null };
-
-    if (assetCode === 'XLM') {
-        const usdc = rates.xlmUsd !== undefined ? amount * rates.xlmUsd : null;
-        const brl = rates.xlmBrl !== undefined ? amount * rates.xlmBrl : (
-            usdc !== null && rates.usdBrl !== undefined ? usdc * rates.usdBrl : null
-        );
-        return { usdc, brl };
-    }
-
-    if (assetCode === 'USDC' || assetCode === 'USD') {
-        return { usdc: amount, brl: rates.usdBrl !== undefined ? amount * rates.usdBrl : null };
-    }
-
-    if (assetCode === 'BRL') {
-        return { usdc: rates.usdBrl ? amount / rates.usdBrl : null, brl: amount };
-    }
-
-    return { usdc: null, brl: null };
-}
-
-function roundMoney(value: number | null) {
-    return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(2));
+interface SubmittedPaymentDetails {
+    sourceAmount: string;
+    sourceAssetCode: string;
+    sourceAssetIssuer?: string;
+    destinationAmount: string;
+    destinationAssetCode: string;
+    destinationAssetIssuer?: string;
+    feeXlm: string;
 }
 
 function sanitizeMemoText(value: string): string | undefined {
@@ -471,6 +390,60 @@ export class StellarService {
         }
     }
 
+    private static horizonAssetCode(type?: string, code?: string): string {
+        return type === 'native' ? 'XLM' : String(code || 'UNKNOWN').toUpperCase();
+    }
+
+    private static stroopsToXlm(value: string | number | undefined): string {
+        const stroops = Number(value || 0);
+        if (!Number.isFinite(stroops)) return '0.0000000';
+        return (stroops / 10000000).toFixed(7);
+    }
+
+    static async getSubmittedPaymentDetails(transactionHash: string): Promise<SubmittedPaymentDetails | null> {
+        try {
+            const [transaction, operations] = await Promise.all([
+                server.transactions().transaction(transactionHash).call(),
+                server.operations().forTransaction(transactionHash).call(),
+            ]);
+
+            const paymentOperation = (operations.records || []).find((operation: any) =>
+                operation.type === 'payment' ||
+                operation.type === 'path_payment_strict_receive' ||
+                operation.type === 'path_payment_strict_send'
+            ) as any;
+
+            if (!paymentOperation) return null;
+
+            if (paymentOperation.type === 'payment') {
+                const amount = String(paymentOperation.amount || '0');
+                const assetCode = this.horizonAssetCode(paymentOperation.asset_type, paymentOperation.asset_code);
+                return {
+                    sourceAmount: amount,
+                    sourceAssetCode: assetCode,
+                    sourceAssetIssuer: paymentOperation.asset_issuer,
+                    destinationAmount: amount,
+                    destinationAssetCode: assetCode,
+                    destinationAssetIssuer: paymentOperation.asset_issuer,
+                    feeXlm: this.stroopsToXlm((transaction as any).fee_charged),
+                };
+            }
+
+            return {
+                sourceAmount: String(paymentOperation.source_amount || paymentOperation.send_amount || '0'),
+                sourceAssetCode: this.horizonAssetCode(paymentOperation.source_asset_type, paymentOperation.source_asset_code),
+                sourceAssetIssuer: paymentOperation.source_asset_issuer,
+                destinationAmount: String(paymentOperation.amount || paymentOperation.destination_amount || '0'),
+                destinationAssetCode: this.horizonAssetCode(paymentOperation.asset_type || paymentOperation.destination_asset_type, paymentOperation.asset_code || paymentOperation.destination_asset_code),
+                destinationAssetIssuer: paymentOperation.asset_issuer || paymentOperation.destination_asset_issuer,
+                feeXlm: this.stroopsToXlm((transaction as any).fee_charged),
+            };
+        } catch (error) {
+            console.warn('Warning: could not fetch submitted payment details:', error);
+            return null;
+        }
+    }
+
     static async buildPathPaymentXdr(input: BuildPathPaymentInput): Promise<string> {
         try {
             const { sourcePublicKey, destination, destAsset, destAmount, sourceAsset } = input;
@@ -561,19 +534,6 @@ export class StellarService {
         }
 
         const networkFeeXlm = '0.001';
-        const rates = await getMarketRates();
-        const sourceValue = estimateAssetValue(bestPath.source_amount, assetCode(sourceAssetObj), rates);
-        const destinationValue = estimateAssetValue(destAmount, assetCode(destAssetObj), rates);
-        const feeValue = estimateAssetValue(networkFeeXlm, 'XLM', rates);
-        const sourceValueUsdc = sourceValue.usdc;
-        const destinationValueUsdc = destinationValue.usdc;
-        const lostUsdc = sourceValueUsdc !== null && destinationValueUsdc !== null
-            ? Math.max(0, sourceValueUsdc - destinationValueUsdc + (feeValue.usdc || 0))
-            : null;
-        const lostBrl = lostUsdc !== null && rates.usdBrl !== undefined ? lostUsdc * rates.usdBrl : null;
-        const lostPercent = lostUsdc !== null && sourceValueUsdc && sourceValueUsdc > 0
-            ? (lostUsdc / sourceValueUsdc) * 100
-            : null;
 
         // Add 2% slippage to sourceMax to handle price fluctuations during path payment
         const slippagePercent = 1.02;
@@ -592,13 +552,6 @@ export class StellarService {
             sourceAmount: String(bestPath.source_amount),
             sourceMax: sourceMaxWithSlippage,
             networkFeeXlm,
-            conversionLoss: {
-                sourceValueUsdc: roundMoney(sourceValueUsdc),
-                destinationValueUsdc: roundMoney(destinationValueUsdc),
-                lostUsdc: roundMoney(lostUsdc),
-                lostBrl: roundMoney(lostBrl),
-                lostPercent: lostPercent === null || !Number.isFinite(lostPercent) ? null : Number(lostPercent.toFixed(4)),
-            },
             path: (bestPath.path || []).map((pathAsset: any) => ({
                 code: pathAsset.asset_type === 'native' ? 'XLM' : pathAsset.asset_code,
                 issuer: pathAsset.asset_issuer,
@@ -631,19 +584,6 @@ export class StellarService {
         }
 
         const networkFeeXlm = '0.001';
-        const rates = await getMarketRates();
-        const sourceValue = estimateAssetValue(sourceAmount, assetCode(sourceAssetObj), rates);
-        const destinationValue = estimateAssetValue(bestPath.destination_amount, assetCode(destAssetObj), rates);
-        const feeValue = estimateAssetValue(networkFeeXlm, 'XLM', rates);
-        const sourceValueUsdc = sourceValue.usdc;
-        const destinationValueUsdc = destinationValue.usdc;
-        const lostUsdc = sourceValueUsdc !== null && destinationValueUsdc !== null
-            ? Math.max(0, sourceValueUsdc - destinationValueUsdc + (feeValue.usdc || 0))
-            : null;
-        const lostBrl = lostUsdc !== null && rates.usdBrl !== undefined ? lostUsdc * rates.usdBrl : null;
-        const lostPercent = lostUsdc !== null && sourceValueUsdc && sourceValueUsdc > 0
-            ? (lostUsdc / sourceValueUsdc) * 100
-            : null;
 
         // Apply 2% slippage to destinationMin to handle price fluctuations during path payment
         const slippagePercent = 0.98;
@@ -662,13 +602,6 @@ export class StellarService {
             destinationAmount: String(bestPath.destination_amount),
             destinationMin: destinationMinWithSlippage,
             networkFeeXlm,
-            conversionLoss: {
-                sourceValueUsdc: roundMoney(sourceValueUsdc),
-                destinationValueUsdc: roundMoney(destinationValueUsdc),
-                lostUsdc: roundMoney(lostUsdc),
-                lostBrl: roundMoney(lostBrl),
-                lostPercent: lostPercent === null || !Number.isFinite(lostPercent) ? null : Number(lostPercent.toFixed(4)),
-            },
             path: (bestPath.path || []).map((pathAsset: any) => ({
                 code: pathAsset.asset_type === 'native' ? 'XLM' : pathAsset.asset_code,
                 issuer: pathAsset.asset_issuer,
@@ -727,21 +660,15 @@ export class StellarService {
 
     static async getAccountBalance(publicKey: string): Promise<any[]> {
         try {
-            const [account, rates] = await Promise.all([
-                server.loadAccount(publicKey),
-                getMarketRates(),
-            ]);
+            const account = await server.loadAccount(publicKey);
             
             const formattedBalances = account.balances.map(balance => {
                 const assetCode = balance.asset_type === 'native' ? 'XLM' : String((balance as any).asset_code || 'UNKNOWN').toUpperCase();
-                const estimate = estimateAssetValue(balance.balance, assetCode, rates);
                 return {
                     balance: balance.balance,
                     asset_type: balance.asset_type,
                     asset_code: assetCode,
                     asset_issuer: (balance as any).asset_issuer,
-                    estimated_usdc: roundMoney(estimate.usdc),
-                    estimated_brl: roundMoney(estimate.brl),
                 };
             });
 
