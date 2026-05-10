@@ -164,7 +164,9 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
 
 function selectTrustedConversionPaths(records: any[], sourceCode: string, destCode: string): any[] {
     const allowedCodes = new Set(['XLM', 'USDC', 'BRL']);
-    const pathRequiresBrl = (sourceCode === 'XLM' && destCode === 'USDC') || (sourceCode === 'USDC' && destCode === 'XLM');
+    // For XLM↔USDC conversions, allow both direct paths AND BRL-backed paths
+    // Direct paths: [] or [USDC] for XLM→USDC, or [XLM] for USDC→XLM
+    // BRL paths: [BRL] or [BRL, USDC] or [BRL, XLM]
 
     return (Array.isArray(records) ? records : []).filter((record) => {
         const pathCodes = Array.isArray(record?.path)
@@ -173,15 +175,13 @@ function selectTrustedConversionPaths(records: any[], sourceCode: string, destCo
                 .filter(Boolean)
             : [];
 
+        // Empty path is OK for direct conversions (source → dest with no intermediate hops)
         if (pathCodes.length === 0) {
-            return !pathRequiresBrl;
+            return true;
         }
 
+        // All assets in path must be in trusted set (XLM, USDC, BRL)
         if (!pathCodes.every((code: string) => allowedCodes.has(code))) {
-            return false;
-        }
-
-        if (pathRequiresBrl && !pathCodes.includes('BRL')) {
             return false;
         }
 
@@ -259,6 +259,10 @@ export class StellarService {
     }
 
     return error instanceof Error ? error.message : String(error);
+  }
+
+  static async loadAccount(publicKey: string) {
+    return await server.loadAccount(publicKey);
   }
 
     static async buildPaymentXdr(input: BuildPaymentInput): Promise<string> {
@@ -553,15 +557,16 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
+        // Filter paths to only use trusted assets (XLM, USDC, BRL)
         const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
-        const candidatePaths = trustedPaths.length > 0 ? trustedPaths : pathsResponse.records;
-
-        if (trustedPaths.length === 0 && (assetCode(sourceAssetObj) === 'XLM' || assetCode(destAssetObj) === 'XLM' || assetCode(sourceAssetObj) === 'USDC' || assetCode(destAssetObj) === 'USDC' || assetCode(sourceAssetObj) === 'BRL' || assetCode(destAssetObj) === 'BRL')) {
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}.`);
+        
+        if (trustedPaths.length === 0) {
+            // All returned paths use assets outside our trusted set - reject them
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas XLM, USDC e BRL.`);
         }
 
-        let bestPath = candidatePaths[0];
-        for (const path of candidatePaths) {
+        let bestPath = trustedPaths[0];
+        for (const path of trustedPaths) {
             if (parseFloat(path.source_amount) < parseFloat(bestPath.source_amount)) {
                 bestPath = path;
             }
@@ -610,15 +615,16 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
         }
 
+        // Filter paths to only use trusted assets (XLM, USDC, BRL)
         const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, assetCode(sourceAssetObj), assetCode(destAssetObj));
-        const candidatePaths = trustedPaths.length > 0 ? trustedPaths : pathsResponse.records;
-
-        if (trustedPaths.length === 0 && (assetCode(sourceAssetObj) === 'XLM' || assetCode(destAssetObj) === 'XLM' || assetCode(sourceAssetObj) === 'USDC' || assetCode(destAssetObj) === 'USDC' || assetCode(sourceAssetObj) === 'BRL' || assetCode(destAssetObj) === 'BRL')) {
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}.`);
+        
+        if (trustedPaths.length === 0) {
+            // All returned paths use assets outside our trusted set - reject them
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas XLM, USDC e BRL.`);
         }
 
-        let bestPath = candidatePaths[0];
-        for (const path of candidatePaths) {
+        let bestPath = trustedPaths[0];
+        for (const path of trustedPaths) {
             if (parseFloat(path.destination_amount) > parseFloat(bestPath.destination_amount)) {
                 bestPath = path;
             }

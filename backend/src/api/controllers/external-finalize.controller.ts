@@ -410,22 +410,49 @@ export default class ExternalFinalizeController {
           userId: String(session.user_id),
         });
 
-        const quote = assetCode === 'XLM'
+        // Determine actual source asset: if sender has the destination asset, use it directly
+        // This avoids unnecessary XLM→USDC conversions when user already has USDC
+        let actualSourceAsset: any = { code: 'XLM' };
+        let senderHasDestinationAsset = false;
+
+        if (assetCode !== 'XLM') {
+          try {
+            const senderAccount = await StellarService.loadAccount(wallet.public_key);
+            const destAssetBalance = senderAccount.balances.find((b: any) => 
+              b.asset_type !== 'native' && 
+              b.asset_code === assetCode && 
+              b.asset_issuer === assetIssuer
+            );
+            
+            if (destAssetBalance && parseFloat(destAssetBalance.balance) >= parseFloat(amount)) {
+              actualSourceAsset = { code: assetCode, issuer: assetIssuer };
+              senderHasDestinationAsset = true;
+            }
+          } catch (err) {
+            // If account lookup fails, fall back to XLM source (will be tried later)
+            console.warn('[external-finalize] could not check sender asset balance, will attempt XLM source:', err);
+          }
+        }
+
+        // Build quote and XDR using actual source asset
+        const isDirectPayment = assetCode === 'XLM' || senderHasDestinationAsset;
+        const quote = isDirectPayment
           ? null
           : await StellarService.quotePathPayment({
               sourcePublicKey: wallet.public_key,
               destination: resolvedDestination,
               destAsset: { code: assetCode, issuer: assetIssuer },
               destAmount: String(amount),
-              sourceAsset: { code: 'XLM' },
+              sourceAsset: actualSourceAsset,
             });
 
-        const unsignedXdr = assetCode === 'XLM'
+        const unsignedXdr = isDirectPayment
           ? await StellarService.buildPaymentXdr({
               sourcePublicKey: wallet.public_key,
               destination: resolvedDestination,
               amount: String(amount),
-              assetCode: 'XLM',
+              assetCode: senderHasDestinationAsset ? assetCode : 'XLM',
+              assetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
               memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
             })
           : await StellarService.buildPathPaymentXdr({
@@ -433,7 +460,7 @@ export default class ExternalFinalizeController {
               destination: resolvedDestination,
               destAsset: { code: assetCode, issuer: assetIssuer },
               destAmount: String(amount),
-              sourceAsset: { code: 'XLM' },
+              sourceAsset: actualSourceAsset,
             });
 
         const result = await StellarService.signAndSubmitXdr(
