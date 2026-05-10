@@ -1,6 +1,7 @@
 import {
   getAssetIssuer,
   normalizeAssetCode,
+  PUBLIC_BRL_ISSUER_NTOKENS,
   PUBLIC_USDC_ISSUER,
   TESTNET_USDC_ISSUER,
 } from '../src/config/assets';
@@ -30,10 +31,25 @@ describe('asset config', () => {
     expect(getAssetIssuer('USDC')).toBe(PUBLIC_USDC_ISSUER);
   });
 
-  it('requires explicit BRL issuer', () => {
+  it('uses nTokens BRL issuer by default on public network', () => {
     delete process.env.BRL_ISSUER;
+    delete process.env.BRL_ISSUER_PUBLIC;
+    process.env.STELLAR_NETWORK = 'PUBLIC';
+    expect(getAssetIssuer('BRL')).toBe(PUBLIC_BRL_ISSUER_NTOKENS);
+  });
+
+  it('uses testnet BRL issuer only when configured', () => {
+    delete process.env.BRL_ISSUER;
+    delete process.env.BRL_ISSUER_TESTNET;
+    process.env.STELLAR_NETWORK = 'TESTNET';
     expect(getAssetIssuer('BRL')).toBeUndefined();
-    process.env.BRL_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    process.env.BRL_ISSUER_TESTNET = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
     expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
+  });
+
+  it('prefers legacy BRL_ISSUER when provided', () => {
+    process.env.BRL_ISSUER = 'GLEGACYBRLISSUEREXAMPLE123456789012345678901234567890123';
+    process.env.STELLAR_NETWORK = 'PUBLIC';
+    expect(getAssetIssuer('BRL')).toBe('GLEGACYBRLISSUEREXAMPLE123456789012345678901234567890123');
   });
 });

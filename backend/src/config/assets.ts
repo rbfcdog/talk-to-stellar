@@ -7,6 +7,7 @@ export interface AssetConfig {
 
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
 
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
@@ -24,15 +25,25 @@ export function normalizeAssetCode(value: unknown): string {
 export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string | undefined {
   const code = normalizeAssetCode(assetCode);
   const provided = String(providedIssuer || '').trim();
+  const network = getStellarNetworkName();
   if (code === 'XLM') return undefined;
   if (provided) return provided;
   if (code === 'USDC') {
     const configured = String(process.env.USDC_ISSUER || '').trim();
     if (configured) return configured;
-    return getStellarNetworkName() === 'PUBLIC' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
+    return network === 'PUBLIC' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
   }
   if (code === 'BRL') {
-    return String(process.env.BRL_ISSUER || '').trim() || undefined;
+    const legacy = String(process.env.BRL_ISSUER || '').trim();
+    if (legacy) return legacy;
+
+    if (network === 'PUBLIC') {
+      const configuredPublic = String(process.env.BRL_ISSUER_PUBLIC || '').trim();
+      return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
+    }
+
+    const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
+    return configuredTestnet || undefined;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
