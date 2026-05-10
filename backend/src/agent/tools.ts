@@ -1311,14 +1311,6 @@ async function executeListContacts(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Listing contacts from database for user ${input.user_id}`);
 
-    if (input.user_id) {
-      try {
-        await ContactSeedService.ensureStarterContactsForUser(input.user_id);
-      } catch (seedError) {
-        logger.warn(`Tool: Could not seed starter contacts for user ${input.user_id}: ${seedError instanceof Error ? seedError.message : String(seedError)}`);
-      }
-    }
-
     let query = supabase
       .from("contacts")
       .select("id, owner_id, contact_name, stellar_public_key, phone_number, pix_key, created_at")
