@@ -84,6 +84,7 @@ export enum IntentType {
   BALANCE = "balance",
   HISTORY = "history",
   CONVERSION = "conversion",
+  PRICE_QUOTE = "price_quote",
   PIX = "pix",
   GENERAL = "general",
 }
@@ -98,6 +99,7 @@ export enum ActionType {
   GET_BALANCE = "get_account_balance",
   GET_HISTORY = "get_operations_history",
   CONVERT_ASSETS = "convert_assets",
+  GET_PRICE_QUOTE = "get_price_quote",
   LOOKUP_CONTACT = "lookup_contact",
   BUILD_PAYMENT = "build_payment_xdr",
   SIGN_PAYMENT = "sign_and_submit_xdr",
