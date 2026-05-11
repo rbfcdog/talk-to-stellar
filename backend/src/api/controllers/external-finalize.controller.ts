@@ -254,9 +254,9 @@ async function sendTelegramPaymentNotification(input: {
 }) {
   const destinationLabel = input.destinationName || input.destination;
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : 'Taxa total: R$ 0,00\n';
+  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : '';
   const text =
-    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${destinationLabel} em poucos segundos.\n` +
+    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${destinationLabel} em 3 segundos.\n` +
     feeLine +
     `Recibo disponível no seu histórico.`;
 
@@ -268,52 +268,13 @@ async function sendTelegramPaymentNotification(input: {
   }
 
   try {
-    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-    if (!botToken) {
-      logger.warn('[telegram-notify] TELEGRAM_BOT_TOKEN is not configured; payment confirmation saved to chat history only');
-      return;
-    }
-
-    let providerUserId = String(input.providerUserId || '').trim();
-
-    const { data: mappingBySession } = await supabase
-      .from('external_accounts')
-      .select('provider, provider_user_id')
-      .eq('provider', 'telegram')
-      .eq('session_id', input.sessionId)
-      .limit(1)
-      .maybeSingle();
-
-    providerUserId = providerUserId || String(mappingBySession?.provider_user_id || '').trim();
-
-    if (!providerUserId) {
-      const { data: mappingByUser } = await supabase
-        .from('external_accounts')
-        .select('provider, provider_user_id')
-        .eq('provider', 'telegram')
-        .eq('user_id', input.userId)
-        .limit(1)
-        .maybeSingle();
-      providerUserId = String(mappingByUser?.provider_user_id || '').trim();
-    }
-
-    if (!providerUserId) {
-      logger.warn(`[telegram-notify] telegram chat mapping not found for session ${input.sessionId}`);
-      return;
-    }
-
-    const chatId = providerUserId;
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-      }),
+    await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      provider: input.provider,
+      providerUserId: input.providerUserId,
+      text,
     });
-    if (!telegramResponse.ok) {
-      logger.warn(`[telegram-notify] telegram sendMessage failed with status ${telegramResponse.status}`);
-    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[telegram-notify] failed to send payment confirmation message: ${message}`);
@@ -333,9 +294,9 @@ async function sendTelegramConversionNotification(input: {
   hash?: string;
 }) {
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : 'Taxa total: R$ 0,00\n';
+  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : '';
   const text =
-    `${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)} convertidos para ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)} em poucos segundos.\n` +
+    `${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)} convertidos para ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)} em 3 segundos.\n` +
     feeLine +
     `Recibo disponível no seu histórico.`;
 
@@ -347,51 +308,13 @@ async function sendTelegramConversionNotification(input: {
   }
 
   try {
-    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-    if (!botToken) {
-      logger.warn('[telegram-notify] TELEGRAM_BOT_TOKEN is not configured; conversion confirmation saved to chat history only');
-      return;
-    }
-
-    let providerUserId = String(input.providerUserId || '').trim();
-
-    const { data: mappingBySession } = await supabase
-      .from('external_accounts')
-      .select('provider, provider_user_id')
-      .eq('provider', 'telegram')
-      .eq('session_id', input.sessionId)
-      .limit(1)
-      .maybeSingle();
-
-    providerUserId = providerUserId || String(mappingBySession?.provider_user_id || '').trim();
-
-    if (!providerUserId) {
-      const { data: mappingByUser } = await supabase
-        .from('external_accounts')
-        .select('provider, provider_user_id')
-        .eq('provider', 'telegram')
-        .eq('user_id', input.userId)
-        .limit(1)
-        .maybeSingle();
-      providerUserId = String(mappingByUser?.provider_user_id || '').trim();
-    }
-
-    if (!providerUserId) {
-      logger.warn(`[telegram-notify] telegram chat mapping not found for conversion session ${input.sessionId}`);
-      return;
-    }
-
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: providerUserId,
-        text,
-      }),
+    await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      provider: input.provider,
+      providerUserId: input.providerUserId,
+      text,
     });
-    if (!telegramResponse.ok) {
-      logger.warn(`[telegram-notify] conversion sendMessage failed with status ${telegramResponse.status}`);
-    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[telegram-notify] failed to send conversion confirmation message: ${message}`);
