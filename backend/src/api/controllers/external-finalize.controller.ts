@@ -1461,6 +1461,8 @@ export default class ExternalFinalizeController {
             sessionId: String(existingAccount.session_id),
             userId: String(existingAccount.user_id),
             name: name || email || existingSession.email || null,
+            provider,
+            providerUserId: provider_user_id,
           });
 
           return res.status(200).json({
@@ -1533,6 +1535,8 @@ export default class ExternalFinalizeController {
             sessionId: existingWallet.session_id,
             userId,
             name: name || email || existingSession.email || null,
+            provider,
+            providerUserId: provider_user_id,
           });
 
           return res.status(200).json({
@@ -1612,6 +1616,8 @@ export default class ExternalFinalizeController {
         sessionId,
         userId,
         name: name || email || null,
+        provider,
+        providerUserId: provider_user_id,
       });
 
       return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
