@@ -7,6 +7,7 @@ import { WalletRepository } from '../../repositories/wallet.repository';
 import { VaultService } from '../../services/vault.service';
 import ExternalService from '../../services/external.service';
 import { StellarService } from '../services/stellar.service';
+import { TransferNotificationService } from '../services/transfer-notification.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
 
@@ -362,6 +363,17 @@ export default class PayLinkController {
         recipient_session_id: recipientSessionId,
         recipient_user_id: recipientSession.user_id,
         transferDetails,
+      });
+
+      await TransferNotificationService.notifyIncomingTransfer({
+        recipientSessionId,
+        recipientUserId: String(recipientSession.user_id),
+        senderLabel: String(payload.sender_name || (senderSession as any).email || senderSession.user_id || 'TalkToStellar'),
+        amount: String(transferDetails?.destinationAmount || amount),
+        assetCode: String(transferDetails?.destinationAssetCode || destinationAssetCode),
+        sourceAmount: String(transferDetails?.sourceAmount || amount),
+        sourceAssetCode: String(transferDetails?.sourceAssetCode || sourceAssetCode),
+        hash: result.hash,
       });
 
       return res.status(200).json({
