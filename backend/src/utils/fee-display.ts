@@ -29,6 +29,14 @@ async function fetchBinancePrice(symbol: string): Promise<number | undefined> {
   }
 }
 
+async function fetchFirstBinancePrice(symbols: string[]): Promise<{ price?: number; symbol?: string }> {
+  for (const symbol of symbols) {
+    const price = await fetchBinancePrice(symbol);
+    if (price) return { price, symbol };
+  }
+  return {};
+}
+
 function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   if (!Number.isFinite(value) || value < 0) return `${currency} indisponivel`;
   const decimals = value > 0 && value < 0.01 ? 6 : 2;
@@ -39,29 +47,34 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
   const fee = Number(String(feeXlm || '').replace(',', '.'));
   if (!Number.isFinite(fee) || fee < 0) {
     return {
-      display: 'taxa estimada em R$/US$ indisponivel agora',
+      display: '',
       source: 'unavailable',
     };
   }
 
-  const xlmUsdc = await fetchBinancePrice('XLMUSDC') || await fetchBinancePrice('XLMUSDT');
-  const usdcBrl = await fetchBinancePrice(String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase());
+  const xlmUsdQuote = await fetchFirstBinancePrice(['XLMUSDC', 'XLMUSDT']);
+  const brlSymbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
+  const usdBrlQuote = await fetchFirstBinancePrice([brlSymbol, 'USDCBRL', 'USDTBRL']);
 
-  if (!xlmUsdc || !usdcBrl) {
+  if (!xlmUsdQuote.price) {
     return {
-      display: 'taxa estimada em R$/US$ indisponivel agora',
+      display: '',
       source: 'unavailable',
     };
   }
 
-  const feeUsdc = fee * xlmUsdc;
-  const feeBrl = feeUsdc * usdcBrl;
+  const feeUsdc = fee * xlmUsdQuote.price;
+  const feeBrl = usdBrlQuote.price ? feeUsdc * usdBrlQuote.price : undefined;
 
   return {
-    display: `${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')}`,
+    display: feeBrl
+      ? `${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')}`
+      : formatSmallCurrency(feeUsdc, 'US$'),
     fee_usdc: feeUsdc.toFixed(8),
-    fee_brl: feeBrl.toFixed(8),
-    source: 'binance',
+    fee_brl: feeBrl ? feeBrl.toFixed(8) : undefined,
+    source: usdBrlQuote.symbol
+      ? `binance:${xlmUsdQuote.symbol}/${usdBrlQuote.symbol}`
+      : `binance:${xlmUsdQuote.symbol}`,
   };
 }
 
