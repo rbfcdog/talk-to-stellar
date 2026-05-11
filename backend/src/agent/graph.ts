@@ -12,6 +12,7 @@ import { ALL_TOOLS, executeTool } from "./tools";
 import { logger } from "../utils/logger";
 import ExternalService from '../services/external.service';
 import { supabase } from '../config/supabase';
+import { getAssetIssuer } from '../config/assets';
 
 
 export class AgentGraph {
@@ -424,8 +425,8 @@ ${onboardingUrl}`;
     let sourceAssetIssuerForConfirmation: string | undefined;
 
     if (receiveAssetCode && receiveAssetCode !== assetCode) {
-      const sourceIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, assetCode);
-      let destIssuer = await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
+      const sourceIssuer = getAssetIssuer(assetCode) || await this.resolveWalletAssetIssuer(state.session_data.public_key, assetCode);
+      let destIssuer = getAssetIssuer(receiveAssetCode) || await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
       if (receiveAssetCode !== 'XLM' && !destIssuer) {
         const trustlineResultRaw = await executeTool('ensure_trustline', {
           session_id: contact?.session_id,
@@ -480,6 +481,9 @@ ${onboardingUrl}`;
       source_amount: sourceAmountForConfirmation,
       source_asset_code: sourceAssetCodeForConfirmation,
       source_asset_issuer: sourceAssetIssuerForConfirmation,
+      destination_amount: quote?.destinationAmount,
+      destination_asset_code: quote?.destinationAsset?.code,
+      destination_asset_issuer: quote?.destinationAsset?.issuer,
       memo: llmParsed.memo,
     });
 
