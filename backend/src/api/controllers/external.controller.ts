@@ -6,6 +6,7 @@ import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
 import PasskeyService from '../../services/passkey.service';
 import { ExternalRepository } from '../../repositories/external.repository';
+import { TransferNotificationService } from '../services/transfer-notification.service';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
@@ -250,6 +251,12 @@ export class ExternalController {
         provider_user_id: providerUserId,
         session_id: String(matched.session_id),
         user_id: String(matched.user_id || email),
+      });
+
+      void TransferNotificationService.notifySessionWelcome({
+        sessionId: String(matched.session_id),
+        userId: String(matched.user_id || email),
+        name: String(matched.email || email),
       });
 
       return res.status(200).json({

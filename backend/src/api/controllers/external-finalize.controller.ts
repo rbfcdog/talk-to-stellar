@@ -1456,6 +1456,13 @@ export default class ExternalFinalizeController {
               },
             });
           }
+
+          void TransferNotificationService.notifySessionWelcome({
+            sessionId: String(existingAccount.session_id),
+            userId: String(existingAccount.user_id),
+            name: name || email || existingSession.email || null,
+          });
+
           return res.status(200).json({
             success: true,
             sessionId: existingAccount.session_id,
@@ -1520,6 +1527,12 @@ export default class ExternalFinalizeController {
               phone_number: normalizedPhoneNumber || null,
               cpf: normalizedCpf || null,
             },
+          });
+
+          void TransferNotificationService.notifySessionWelcome({
+            sessionId: existingWallet.session_id,
+            userId,
+            name: name || email || existingSession.email || null,
           });
 
           return res.status(200).json({
@@ -1594,6 +1607,12 @@ export default class ExternalFinalizeController {
           },
         });
       }
+
+      void TransferNotificationService.notifySessionWelcome({
+        sessionId,
+        userId,
+        name: name || email || null,
+      });
 
       return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
     } catch (error: any) {
