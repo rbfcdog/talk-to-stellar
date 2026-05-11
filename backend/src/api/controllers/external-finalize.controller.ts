@@ -26,6 +26,109 @@ const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
 const vaultService = new VaultService(supabase);
 
+type IdentityCollision = {
+  field: 'email' | 'phone_number' | 'cpf';
+  value: string;
+  sessionId?: string;
+  userId?: string;
+};
+
+function normalizePhoneForCompare(value?: string): string {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function normalizeEmailForCompare(value?: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isUniqueViolation(error: any): boolean {
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    code === '23505' ||
+    message.includes('duplicate key') ||
+    message.includes('unique constraint') ||
+    message.includes('already exists')
+  );
+}
+
+async function detectIdentityCollision(input: {
+  email?: string;
+  phoneNumber?: string;
+  cpf?: string;
+  allowedSessionIds?: string[];
+  allowedUserIds?: string[];
+}): Promise<IdentityCollision | null> {
+  const normalizedEmail = normalizeEmailForCompare(input.email);
+  const normalizedPhone = normalizePhoneForCompare(input.phoneNumber);
+  const normalizedCpf = String(input.cpf || '').replace(/\D+/g, '');
+  const allowedSessionIds = new Set((input.allowedSessionIds || []).map((value) => String(value || '').trim()).filter(Boolean));
+  const allowedUserIds = new Set((input.allowedUserIds || []).map((value) => String(value || '').trim()).filter(Boolean));
+
+  const isAllowed = (sessionId?: string, userId?: string) => {
+    const sid = String(sessionId || '').trim();
+    const uid = String(userId || '').trim();
+    return (sid && allowedSessionIds.has(sid)) || (uid && allowedUserIds.has(uid));
+  };
+
+  if (normalizedEmail) {
+    const { data, error } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email')
+      .eq('email', normalizedEmail)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const sessionId = String((data as any)?.session_id || '').trim();
+    const userId = String((data as any)?.user_id || '').trim();
+    if ((sessionId || userId) && !isAllowed(sessionId, userId)) {
+      return { field: 'email', value: normalizedEmail, sessionId, userId };
+    }
+  }
+
+  if (normalizedPhone) {
+    const { data, error } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, phone_number')
+      .eq('phone_number', normalizedPhone)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const sessionId = String((data as any)?.session_id || '').trim();
+    const userId = String((data as any)?.user_id || '').trim();
+    if ((sessionId || userId) && !isAllowed(sessionId, userId)) {
+      return { field: 'phone_number', value: normalizedPhone, sessionId, userId };
+    }
+  }
+
+  if (normalizedCpf) {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('session_id, user_id, data')
+      .not('data', 'is', null)
+      .order('id', { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+
+    for (const row of data || []) {
+      const rowCpf = String((row as any)?.data?.cpf || '').replace(/\D+/g, '');
+      if (!rowCpf || rowCpf !== normalizedCpf) continue;
+      const sessionId = String((row as any)?.session_id || '').trim();
+      const userId = String((row as any)?.user_id || '').trim();
+      if (!isAllowed(sessionId, userId)) {
+        return { field: 'cpf', value: normalizedCpf, sessionId, userId };
+      }
+    }
+  }
+
+  return null;
+}
+
 function isValidStellarPublicKey(value?: string) {
   if (!value) return false;
   try {
@@ -1445,16 +1548,35 @@ export default class ExternalFinalizeController {
 
       // create deterministic user id for external users, or use email if provided
       const userId = email ? String(email) : `external:${provider}:${provider_user_id}`;
+      const normalizedEmail = normalizeEmailForCompare(email);
 
       const existingAccount = await externalRepo.findByProviderAndId(provider, provider_user_id);
       if (existingAccount?.session_id && existingAccount?.user_id) {
         const existingSession = await agentRepo.getSession(String(existingAccount.session_id));
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
+        const collision = await detectIdentityCollision({
+          email: normalizedEmail || undefined,
+          phoneNumber: normalizedPhoneNumber || undefined,
+          cpf: normalizedCpf || undefined,
+          allowedSessionIds: [String(existingAccount.session_id)],
+          allowedUserIds: [String(existingAccount.user_id)],
+        });
+        if (collision) {
+          const fieldLabel = collision.field === 'phone_number' ? 'telefone' : collision.field.toUpperCase();
+          return res.status(409).json({
+            success: false,
+            message: `Não foi possível concluir: ${fieldLabel} já está vinculado a outra conta.`,
+            collision: {
+              field: collision.field,
+              value: collision.value,
+            },
+          });
+        }
 
         if (existingSession && existingWallet) {
           await agentRepo.saveSession(String(existingAccount.session_id), {
             ...existingSession,
-            email: email || existingSession.email || '',
+            email: normalizedEmail || existingSession.email || '',
             phone_number: normalizedPhoneNumber || existingSession.phone_number,
           } as any);
 
@@ -1511,6 +1633,25 @@ export default class ExternalFinalizeController {
         }
       }
 
+      const newAccountCollision = await detectIdentityCollision({
+        email: normalizedEmail || undefined,
+        phoneNumber: normalizedPhoneNumber || undefined,
+        cpf: normalizedCpf || undefined,
+      });
+      if (newAccountCollision) {
+        const fieldLabel = newAccountCollision.field === 'phone_number'
+          ? 'telefone'
+          : newAccountCollision.field.toUpperCase();
+        return res.status(409).json({
+          success: false,
+          message: `Não foi possível concluir: ${fieldLabel} já está vinculado a outra conta.`,
+          collision: {
+            field: newAccountCollision.field,
+            value: newAccountCollision.value,
+          },
+        });
+      }
+
       let publicKey = '';
       let secretKey = '';
 
@@ -1543,7 +1684,7 @@ export default class ExternalFinalizeController {
         if (existingSession) {
           await agentRepo.saveSession(existingWallet.session_id, {
             ...existingSession,
-            email: email || existingSession.email || '',
+            email: normalizedEmail || existingSession.email || '',
             phone_number: normalizedPhoneNumber || existingSession.phone_number,
           } as any);
 
@@ -1593,7 +1734,7 @@ export default class ExternalFinalizeController {
       const now = new Date().toISOString();
       await agentRepo.saveSession(sessionId, {
         user_id: userId,
-        email: email || '',
+        email: normalizedEmail || '',
         session_token: sessionToken,
         public_key: publicKey,
         phone_number: normalizedPhoneNumber || undefined,
@@ -1657,6 +1798,12 @@ export default class ExternalFinalizeController {
 
       return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
     } catch (error: any) {
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({
+          success: false,
+          message: 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).',
+        });
+      }
       const message = error?.message || String(error);
       return res.status(500).json({ success: false, message });
     }
