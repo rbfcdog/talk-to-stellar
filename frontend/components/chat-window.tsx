@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
-import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin } from "@/lib/session";
+import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
 
 type Message = {
   id: string;
@@ -98,6 +98,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     // Store it for subsequent messages
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+      if (chatId === "agent") {
+        touchClientSessionActivity();
+      }
     }
   }, [chatId]);
 
@@ -290,6 +293,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         localStorage.setItem("talk-to-stellar.sessionId", data.session_id);
         sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
         setSessionId(data.session_id);
+        touchClientSessionActivity();
       }
       
       // Handle error responses that still return 200
@@ -312,6 +316,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         );
         return alreadyRendered ? prev : [...prev, botMessage];
       });
+      touchClientSessionActivity();
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
