@@ -202,6 +202,7 @@ export function createAgentRoutes(
       // Backend-only onboarding gate for browser channel:
       // if user is not linked, return onboarding link from backend directly.
       const normalizedSource = String(source || "").trim().toLowerCase();
+      let runtimeExternalContext: Record<string, string> = {};
       if (normalizedSource === "telegram") {
         const providerUserId = String(
           metadata?.from_id ||
@@ -211,6 +212,11 @@ export function createAgentRoutes(
         ).trim();
 
         if (providerUserId) {
+          runtimeExternalContext = {
+            external_provider: "telegram",
+            external_provider_user_id: providerUserId,
+            external_source: "telegram",
+          };
           const existing = await externalService.checkExternalAccount("telegram", providerUserId);
 
           if (!existing) {
@@ -313,6 +319,13 @@ export function createAgentRoutes(
 
       const previousMessages = await repository.getMessages(sessionId, 10);
 
+      const actionParams = { ...(previousState?.action_params || {}) };
+      if (Object.keys(runtimeExternalContext).length === 0) {
+        delete (actionParams as any).external_provider;
+        delete (actionParams as any).external_provider_user_id;
+        delete (actionParams as any).external_source;
+      }
+
       // Initialize state
       const state: AgentState = {
         session_id: sessionId,
@@ -321,7 +334,10 @@ export function createAgentRoutes(
         current_input: query,
         detected_intent: IntentType.GENERAL,
         action_type: ActionType.NONE,
-        action_params: previousState?.action_params || {},
+        action_params: {
+          ...actionParams,
+          ...runtimeExternalContext,
+        },
         pending_payment: previousState?.pending_payment || (previousState?.action_params as any)?.pending_payment,
         pending_conversion: (previousState as any)?.pending_conversion || (previousState?.action_params as any)?.pending_conversion,
         wallet_info: (previousState?.action_params as any)?.wallet_info,
