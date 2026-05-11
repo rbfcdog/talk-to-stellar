@@ -1019,7 +1019,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
       const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
-      const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_account' : 'get_balance', {
+      const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_saldo_tecnico' : 'get_balance', {
         public_key: state.session_data.public_key,
       });
 
@@ -1124,7 +1124,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       return undefined;
     }
 
-    const toolResultRaw = await executeTool('get_account', { public_key: publicKey });
+    const toolResultRaw = await executeTool('get_saldo_tecnico', { public_key: publicKey });
     const toolResult = JSON.parse(toolResultRaw);
     const balances = Array.isArray(toolResult?.balances) ? toolResult.balances : [];
     const balance = balances.find((item: any) => String(item.asset || item.asset_code || '').toUpperCase() === normalizedAssetCode);

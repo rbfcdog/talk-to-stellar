@@ -39,7 +39,7 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
       return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
     }
     const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
-    return configuredTestnet || configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
+    return configuredTestnet || PUBLIC_BRL_ISSUER_NTOKENS;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }

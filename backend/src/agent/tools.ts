@@ -14,7 +14,7 @@ import { supabase } from "../config/supabase";
 import { WalletRepository } from "../repositories/wallet.repository";
 import VaultService from "../services/vault.service";
 import ExternalService from "../services/external.service";
-import { normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
+import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
@@ -98,6 +98,20 @@ export const toolDefinitions = [
         public_key: {
           type: "string",
           description: "Stellar public key to look up",
+        },
+      },
+      required: ["public_key"],
+    },
+  },
+  {
+    name: "get_saldo_tecnico",
+    description: "Get technical wallet balances focused on XLM, USDC, and BRL (with issuer details).",
+    parameters: {
+      type: "object",
+      properties: {
+        public_key: {
+          type: "string",
+          description: "Stellar public key to inspect technical balances for",
         },
       },
       required: ["public_key"],
@@ -512,6 +526,8 @@ export async function executeTool(
         return await executeGetBalance(toolInput);
       case "get_account":
         return await executeGetAccount(toolInput);
+      case "get_saldo_tecnico":
+        return await executeGetSaldoTecnico(toolInput);
       case "build_payment":
         return await executeBuildPayment(toolInput);
       case "quote_asset_transfer":
@@ -739,6 +755,51 @@ async function executeGetAccount(input: any): Promise<string> {
       balances,
       technical_balances: balances,
       message: "Account details retrieved",
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executeGetSaldoTecnico(input: any): Promise<string> {
+  try {
+    logger.debug(`Tool: Getting technical balances for ${input.public_key}`);
+    const account = await stellarService.getAccount(input.public_key);
+
+    const mappedBalances = account.balances.map((balance: any) => ({
+      asset: getAssetCode(balance),
+      balance: String(balance.balance || '0.0000000'),
+      type: balance.asset_type,
+      asset_issuer: balance.asset_issuer,
+    }));
+
+    const balanceByAsset = new Map<string, any>();
+    for (const item of mappedBalances) {
+      balanceByAsset.set(String(item.asset || '').toUpperCase(), item);
+    }
+
+    const technicalAssets = ['XLM', 'USDC', 'BRL'].map((assetCode) => {
+      const existing = balanceByAsset.get(assetCode);
+      if (existing) return existing;
+      return {
+        asset: assetCode,
+        balance: '0.0000000',
+        type: assetCode === 'XLM' ? 'native' : 'credit_alphanum4',
+        asset_issuer: assetCode === 'XLM' ? undefined : getAssetIssuer(assetCode),
+      };
+    });
+
+    return JSON.stringify({
+      success: true,
+      public_key: input.public_key,
+      account_id: account.id,
+      sequence: account.sequence,
+      balances: technicalAssets,
+      message: "Technical balances retrieved for XLM, USDC, BRL",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
