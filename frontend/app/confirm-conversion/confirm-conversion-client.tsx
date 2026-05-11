@@ -61,6 +61,13 @@ function hasUsableFeeDisplay(value?: string) {
   return Boolean(normalized && !normalized.includes("indispon"))
 }
 
+function getProviderLabel(provider?: string) {
+  const normalized = String(provider || "").trim().toLowerCase()
+  if (normalized === "telegram") return "Telegram"
+  if (normalized === "whatsapp" || normalized === "phone") return "WhatsApp"
+  return normalized ? normalized : ""
+}
+
 export default function ConfirmConversionClient({
   initialToken = '',
   initialValidation = null,
@@ -142,6 +149,9 @@ export default function ConfirmConversionClient({
   }
 
   const payload = validation?.payload || decodeJwtPayload(token)
+  const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
+  const providerLabel = getProviderLabel(externalProvider)
+  const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
   const sourceAssetCode = String(payload.source_asset_code || payload.sourceAssetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
   const destAssetCode = String(payload.dest_asset_code || payload.destAssetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
@@ -247,6 +257,7 @@ export default function ConfirmConversionClient({
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
+                  {returnMessage && <p>{returnMessage}</p>}
                   <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                 </div>
               )}

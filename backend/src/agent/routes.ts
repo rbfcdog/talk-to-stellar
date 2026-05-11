@@ -13,6 +13,8 @@ import { logger } from "../utils/logger";
 import { getStellarService } from "../services/stellar.service";
 import ExternalService from "../services/external.service";
 import { supabase } from "../config/supabase";
+import { isSessionExpired } from "../utils/session-expiry";
+import { TransferNotificationService } from "../api/services/transfer-notification.service";
 
 const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a digital bank and wallet experience.
 
@@ -188,8 +190,11 @@ export function createAgentRoutes(
       const { query, session_id, source, metadata } = req.body;
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
-      const requestedSessionData = hasValidRequestedSessionId
+      const rawRequestedSessionData = hasValidRequestedSessionId
         ? await repository.getSession(requestedSessionId)
+        : null;
+      const requestedSessionData = rawRequestedSessionData && !isSessionExpired(rawRequestedSessionData)
+        ? rawRequestedSessionData
         : null;
 
       if (!query || typeof query !== "string") {
@@ -234,6 +239,24 @@ export function createAgentRoutes(
           }
 
           if (existing?.session_id) {
+            const externalSession = await repository.getSession(String(existing.session_id));
+            if (!externalSession || isSessionExpired(externalSession)) {
+              if (externalSession) {
+                await repository.clearSession(String(existing.session_id));
+              }
+              const { url } = externalService.createOnboardUrl("telegram", providerUserId);
+              return res.status(200).json({
+                session_id: session_id || null,
+                success: true,
+                onboardingRequired: true,
+                reason: "session_expired",
+                creationUrl: url,
+                message:
+                  `Sua sessão expirou.\n\n` +
+                  `Abra este link para entrar novamente:\n${url}\n\n` +
+                  `Na página, use a opção "Já tenho conta".`,
+              });
+            }
             req.body.session_id = String(existing.session_id);
           }
         }
@@ -263,7 +286,10 @@ export function createAgentRoutes(
           }
 
           if (existing?.session_id && !session_id) {
-            req.body.session_id = String(existing.session_id);
+            const externalSession = await repository.getSession(String(existing.session_id));
+            if (externalSession && !isSessionExpired(externalSession)) {
+              req.body.session_id = String(existing.session_id);
+            }
           }
         }
       }
@@ -283,6 +309,27 @@ export function createAgentRoutes(
       }
 
       let sessionData = await repository.getSession(sessionId);
+      if (sessionData && isSessionExpired(sessionData)) {
+        await repository.clearSession(sessionId);
+        const provider = String(runtimeExternalContext.external_provider || '').trim();
+        const providerUserId = String(runtimeExternalContext.external_provider_user_id || '').trim();
+        const fallbackProviderUserId = String(metadata?.browser_id || metadata?.provider_user_id || sessionId).trim();
+        const { url } = provider && providerUserId
+          ? externalService.createOnboardUrl(provider, providerUserId)
+          : externalService.createOnboardUrl("web", fallbackProviderUserId);
+
+        return res.status(200).json({
+          session_id: sessionId,
+          success: true,
+          onboardingRequired: true,
+          reason: "session_expired",
+          creationUrl: url,
+          message:
+            `Sua sessão expirou.\n\n` +
+            `Abra este link para entrar novamente:\n${url}\n\n` +
+            `Na página, use a opção "Já tenho conta".`,
+        });
+      }
 
       // Initialize session if not exists
       if (!sessionData) {
@@ -471,7 +518,14 @@ export function createAgentRoutes(
         });
       }
 
+      const sessionData = await repository.getSession(session_id);
       await repository.clearSession(session_id);
+      void TransferNotificationService.notifySessionLogout({
+        sessionId: session_id,
+        userId: String(sessionData?.user_id || ''),
+        provider: String(req.body?.provider || '').trim() || undefined,
+        providerUserId: String(req.body?.provider_user_id || '').trim() || undefined,
+      });
       logger.info(`Session cleared: ${session_id}`);
 
       return res.status(200).json({ success: true });

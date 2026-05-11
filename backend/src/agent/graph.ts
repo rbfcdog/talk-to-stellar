@@ -1297,15 +1297,20 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     );
   }
 
-  private getLogoutConfirmationMessage(): string {
+  private getLogoutConfirmationMessage(state?: AgentState): string {
     const base =
       process.env.FRONTEND_URL ||
       process.env.PUBLIC_APP_URL ||
       process.env.CREATE_ACCOUNT_BASE ||
       "http://localhost:3000";
     const normalizedBase = String(base).trim().replace(/\/$/, "");
-    const logoutUrl = `${normalizedBase}/logout`;
-    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl}`;
+    const logoutUrl = new URL(`${normalizedBase}/logout`);
+    const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
+    if (externalProvider) logoutUrl.searchParams.set('provider', externalProvider);
+    if (externalProviderUserId) logoutUrl.searchParams.set('provider_user_id', externalProviderUserId);
+    if (externalProvider) logoutUrl.searchParams.set('source', externalProvider);
+    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl.toString()}`;
   }
 
   private async handleWalletLogout(state: AgentState): Promise<AgentState> {
@@ -1325,7 +1330,15 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     }
 
     state.success = true;
-    state.response_message = 'Você saiu da wallet atual com sucesso. Agora você pode criar ou importar outra carteira quando quiser.';
+    const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const providerLabel = externalProvider === 'telegram'
+      ? 'Telegram'
+      : externalProvider === 'whatsapp' || externalProvider === 'phone'
+        ? 'WhatsApp'
+        : '';
+    state.response_message = providerLabel
+      ? `Logout concluido. Sua conta foi desconectada. Volte ao ${providerLabel} para continuar.`
+      : 'Logout concluido. Você saiu da wallet atual com sucesso. Agora você pode criar ou importar outra carteira quando quiser.';
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
     await this.repository.saveState(state.session_id, state);

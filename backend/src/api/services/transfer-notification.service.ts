@@ -28,6 +28,13 @@ export type SessionWelcomeNotification = {
   providerUserId?: string | null;
 };
 
+export type SessionLogoutNotification = {
+  sessionId?: string | null;
+  userId?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
+};
+
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
 
@@ -51,13 +58,39 @@ export class TransferNotificationService {
         : 'Bem-vindo ao TalkToStellar.';
     const text =
       `${greeting}\n` +
-      `Sua conta esta conectada. Agora voce pode consultar saldo, enviar pagamentos e receber transferencias por aqui.`;
+      `Login concluido. Sua conta esta conectada. Agora voce pode consultar saldo, enviar pagamentos e receber transferencias por aqui.`;
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[session-welcome] failed to save chat message: ${message}`);
+    }
+
+    await Promise.all([
+      this.sendTelegramToMappings(mappings, text),
+      this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
+    ]);
+  }
+
+  static async notifySessionLogout(input: SessionLogoutNotification): Promise<void> {
+    const sessionId = String(input.sessionId || '').trim();
+    if (!sessionId) return;
+
+    const session = await this.safeGetSession(sessionId);
+    const userId = String(input.userId || session?.user_id || '').trim();
+    const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const mappings = this.dedupeMappings([
+      ...(directMapping ? [directMapping] : []),
+      ...(await this.findExternalMappings(sessionId, userId)),
+    ]);
+    const text = 'Logout concluido. Sua conta foi desconectada deste canal.';
+
+    try {
+      await this.agentRepo.saveMessage(sessionId, 'assistant', text);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[session-logout] failed to save chat message: ${message}`);
     }
 
     await Promise.all([

@@ -124,6 +124,7 @@ describe('ExternalController', () => {
       session_id: 'session-123',
       user_id: 'user-123',
       password_hash: null,
+      last_activity: new Date().toISOString(),
     });
     getUserPasskeysMock.mockResolvedValue([]);
     createOnboardUrlMock.mockReturnValue({

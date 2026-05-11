@@ -18,6 +18,8 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const sessionId = String(body?.session_id || "").trim();
+    const provider = String(body?.provider || "").trim();
+    const providerUserId = String(body?.provider_user_id || "").trim();
     if (!sessionId) {
       return NextResponse.json({ success: false, error: "session_id is required" }, { status: 400 });
     }
@@ -25,7 +27,11 @@ export async function POST(req: Request) {
     const response = await fetch(AGENT_LOGOUT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({
+        session_id: sessionId,
+        provider: provider || undefined,
+        provider_user_id: providerUserId || undefined,
+      }),
     });
 
     const payload = await response.json().catch(() => ({}));
@@ -42,4 +48,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
-
