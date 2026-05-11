@@ -353,7 +353,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
     return (
-      <p className="whitespace-pre-wrap">
+      <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
         {parts.map((part, idx) => {
           if (/^https?:\/\/[^\s]+$/i.test(part)) {
             return (
@@ -405,7 +405,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         <div className="space-y-2 p-3 sm:p-4">
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[84%] rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
+              <div className={`min-w-0 max-w-[84%] overflow-hidden rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
                 {renderMessageContent(m.content)}
                 <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
               </div>
