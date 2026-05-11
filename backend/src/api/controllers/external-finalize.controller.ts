@@ -148,9 +148,10 @@ async function sendTelegramPaymentNotification(input: {
   const sourceLine = input.sourceAmount && input.sourceAssetCode
     ? `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n`
     : '';
-  const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
+  const feeLine = input.feeXlm ? `Taxa de rede baixa aplicada: ${input.feeXlm} XLM\n` : '';
   const text =
     `Pagamento confirmado.\n` +
+    `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
     `Destino recebeu: ${input.amount} ${input.assetCode}\n` +
     sourceLine +
     feeLine +
@@ -225,9 +226,10 @@ async function sendTelegramConversionNotification(input: {
   feeXlm?: string;
   hash?: string;
 }) {
-  const feeLine = input.feeXlm ? `Taxa da rede: ${input.feeXlm} XLM\n` : '';
+  const feeLine = input.feeXlm ? `Taxa de rede baixa aplicada: ${input.feeXlm} XLM\n` : '';
   const text =
     `Conversão confirmada.\n` +
+    `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
     `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n` +
     `Destino recebeu: ${input.destinationAmount} ${input.destinationAssetCode}\n` +
     feeLine +

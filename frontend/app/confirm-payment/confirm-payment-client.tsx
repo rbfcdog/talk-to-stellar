@@ -242,8 +242,9 @@ export default function ConfirmPaymentClient({
                     </p>
                   )}
                   {result.transferDetails?.feeXlm && (
-                    <p>Taxa da rede: {result.transferDetails.feeXlm} XLM</p>
+                    <p>Taxa de rede baixa aplicada: {result.transferDetails.feeXlm} XLM</p>
                   )}
+                  <p>Cotação conferida antes da confirmação para evitar surpresa no valor final.</p>
                   <p className="break-all font-mono text-xs">Hash: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </div>
