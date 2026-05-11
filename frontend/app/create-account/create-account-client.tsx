@@ -307,7 +307,7 @@ export default function CreateAccountClient({
 
   async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse) {
     const currentResult = baseResult || result
-    const userId = currentResult?.userId || currentResult?.sessionId
+    const userId = currentResult?.userId
     if (!userId) {
       setResult({ success: false, error: 'Não foi possível iniciar o acesso seguro no momento' })
       return
