@@ -35,6 +35,7 @@ export class ExternalController {
   static async checkAccount(req: Request, res: Response) {
     try {
       const { provider } = req.body;
+      const forceNewAccount = Boolean(req.body?.force_new_account || req.body?.forceNewAccount);
       const normalizeExternalId = (prov: string, value: string) => {
         if (String(prov || '').toLowerCase() === 'whatsapp' || String(prov || '').toLowerCase() === 'phone') {
           return String(value || '').replace(/\D+/g, '');
@@ -65,7 +66,7 @@ export class ExternalController {
         }
       }
 
-      if (existing) {
+      if (existing && !forceNewAccount) {
         const hasLinkedSession = Boolean(existing.session_id);
         const hasLinkedUser = Boolean(existing.user_id);
         let linkedWallet = null;
