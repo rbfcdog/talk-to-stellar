@@ -68,13 +68,12 @@ export default function CreateAccountClient({
   const [validation, setValidation] = useState<any>(initialValidation)
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
 
-  async function recoverOnboardingContextFromBackend(forceNewAccount = false): Promise<RecoveryResult> {
-    let browserId = localStorage.getItem("talk-to-stellar.browserId")
+  async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
+    let browserId = browserIdOverride || localStorage.getItem("talk-to-stellar.browserId")
     if (!browserId) {
       browserId = generateBrowserId()
       localStorage.setItem("talk-to-stellar.browserId", browserId)
     }
-
     const response = await fetch(`/api/external/check-account`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -98,6 +97,16 @@ export default function CreateAccountClient({
       return { mode: "token", token: recoveredToken }
     }
     return { mode: "none" }
+  }
+
+  async function recoverFreshOnboardingToken(): Promise<{ token?: string; browserId?: string }> {
+    const freshBrowserId = generateBrowserId()
+    const recovered = await recoverOnboardingContextFromBackend(true, freshBrowserId)
+    if (recovered.mode === "token" && recovered.token) {
+      localStorage.setItem("talk-to-stellar.browserId", freshBrowserId)
+      return { token: recovered.token, browserId: freshBrowserId }
+    }
+    return {}
   }
 
   useEffect(() => {
@@ -178,15 +187,22 @@ export default function CreateAccountClient({
     try {
       let finalToken = token
       if (!finalToken.trim()) {
-        const recovered = await recoverOnboardingContextFromBackend(true)
-        if (recovered.mode === "existing") {
-          setExistingAccountDetected(true)
-          throw new Error("Não foi possível gerar um novo link de criação agora. Tente novamente ou use a opção \"Já tenho conta\" para entrar.")
-        }
-        if (recovered.mode === "token") {
+        const fresh = await recoverFreshOnboardingToken()
+        if (fresh.token) {
           setExistingAccountDetected(false)
-          finalToken = recovered.token
+          finalToken = fresh.token
           setToken(finalToken)
+        } else {
+          const recovered = await recoverOnboardingContextFromBackend(true)
+          if (recovered.mode === "existing") {
+            setExistingAccountDetected(true)
+            throw new Error("Não foi possível gerar um novo link de criação agora. Tente novamente ou use a opção \"Já tenho conta\" para entrar.")
+          }
+          if (recovered.mode === "token") {
+            setExistingAccountDetected(false)
+            finalToken = recovered.token
+            setToken(finalToken)
+          }
         }
       }
       if (!finalToken.trim()) {
