@@ -20,8 +20,40 @@ export type IncomingTransferNotification = {
   hash?: string | null;
 };
 
+export type SessionWelcomeNotification = {
+  sessionId?: string | null;
+  userId?: string | null;
+  name?: string | null;
+};
+
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
+
+  static async notifySessionWelcome(input: SessionWelcomeNotification): Promise<void> {
+    const sessionId = String(input.sessionId || '').trim();
+    if (!sessionId) return;
+
+    const session = await this.safeGetSession(sessionId);
+    const userId = String(input.userId || session?.user_id || '').trim();
+    const name = String(input.name || session?.email || '').trim();
+    const greeting = name ? `Bem-vindo, ${name}.` : 'Bem-vindo ao TalkToStellar.';
+    const text =
+      `${greeting}\n` +
+      `Sua conta esta conectada. Agora voce pode consultar saldo, enviar pagamentos e receber transferencias por aqui.`;
+
+    try {
+      await this.agentRepo.saveMessage(sessionId, 'assistant', text);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[session-welcome] failed to save chat message: ${message}`);
+    }
+
+    const mappings = await this.findExternalMappings(sessionId, userId);
+    await Promise.all([
+      this.sendTelegramToMappings(mappings, text),
+      this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
+    ]);
+  }
 
   static async notifyIncomingTransfer(input: IncomingTransferNotification): Promise<void> {
     const recipientSessionId = String(input.recipientSessionId || '').trim();

@@ -35,6 +35,18 @@ function extractTokenFromUrl(url: string): string {
   }
 }
 
+function decodeJwtPayload(token: string): any {
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return {}
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
+    return JSON.parse(atob(padded))
+  } catch {
+    return {}
+  }
+}
+
 type RecoveryResult =
   | { mode: "token"; token: string }
   | { mode: "existing"; sessionId?: string; sessionToken?: string }
@@ -361,13 +373,18 @@ export default function CreateAccountClient({
         browserId = generateBrowserId()
         localStorage.setItem("talk-to-stellar.browserId", browserId)
       }
+      const tokenPayload = validation?.payload || decodeJwtPayload(token)
+      const externalProvider = String(tokenPayload?.provider || "").trim().toLowerCase()
+      const externalProviderUserId = String(tokenPayload?.provider_user_id || "").trim()
+      const linkProvider = externalProvider && externalProviderUserId ? externalProvider : "web"
+      const linkProviderUserId = externalProvider && externalProviderUserId ? externalProviderUserId : browserId
 
       const response = await fetch(`/api/external/link-existing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider: "web",
-          provider_user_id: browserId,
+          provider: linkProvider,
+          provider_user_id: linkProviderUserId,
           email: existingEmail,
           pin: existingPin,
         }),
