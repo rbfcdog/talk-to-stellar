@@ -37,10 +37,13 @@ describe('asset config', () => {
     expect(getAssetIssuer('BRL')).toBe(PUBLIC_BRL_ISSUER_NTOKENS);
   });
 
-  it('uses testnet BRL issuer only when configured', () => {
+  it('uses public BRL issuer fallback on testnet when BRL_ISSUER_TESTNET is not configured', () => {
+    delete process.env.BRL_ISSUER_PUBLIC;
     delete process.env.BRL_ISSUER_TESTNET;
     process.env.STELLAR_NETWORK = 'TESTNET';
-    expect(getAssetIssuer('BRL')).toBeUndefined();
+    expect(getAssetIssuer('BRL')).toBe(PUBLIC_BRL_ISSUER_NTOKENS);
+    process.env.BRL_ISSUER_PUBLIC = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
     process.env.BRL_ISSUER_TESTNET = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
     expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
   });
