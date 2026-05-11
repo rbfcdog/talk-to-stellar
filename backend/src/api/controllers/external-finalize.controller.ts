@@ -253,18 +253,12 @@ async function sendTelegramPaymentNotification(input: {
   hash?: string;
 }) {
   const destinationLabel = input.destinationName || input.destination;
-  const sourceLine = input.sourceAmount && input.sourceAssetCode
-    ? `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
-    : '';
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
+  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : 'Taxa total: R$ 0,00\n';
   const text =
-    `Pagamento confirmado.\n` +
-    `Destino recebeu: ${formatCustomerAssetAmount(input.amount, input.assetCode)}\n` +
-    sourceLine +
+    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${destinationLabel} em poucos segundos.\n` +
     feeLine +
-    `Destino: ${destinationLabel}\n` +
-    `${input.hash ? `Codigo da operacao: ${input.hash}` : ''}`;
+    `Recibo disponível no seu histórico.`;
 
   try {
     await agentRepo.saveMessage(input.sessionId, 'assistant', text);
@@ -339,13 +333,11 @@ async function sendTelegramConversionNotification(input: {
   hash?: string;
 }) {
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
+  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : 'Taxa total: R$ 0,00\n';
   const text =
-    `Conversão confirmada.\n` +
-    `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n` +
-    `Destino recebeu: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}\n` +
+    `${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)} convertidos para ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)} em poucos segundos.\n` +
     feeLine +
-    `${input.hash ? `Codigo da operacao: ${input.hash}` : ''}`;
+    `Recibo disponível no seu histórico.`;
 
   try {
     await agentRepo.saveMessage(input.sessionId, 'assistant', text);

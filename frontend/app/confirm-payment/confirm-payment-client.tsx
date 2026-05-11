@@ -60,7 +60,14 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
 
 function hasUsableFeeDisplay(value?: string) {
   const normalized = String(value || "").trim().toLowerCase()
-  return Boolean(normalized && !normalized.includes("indispon"))
+  if (!normalized || normalized.includes("indispon")) return false
+  const compact = normalized.replace(/\s+/g, "")
+  const looksLikeZeroOnly =
+    compact.includes("us$0") ||
+    compact.includes("r$0") ||
+    compact.includes("0%") ||
+    compact.includes("0,0%")
+  return !looksLikeZeroOnly
 }
 
 function parseNumber(value?: string) {
@@ -131,6 +138,7 @@ function buildFeeSummary(input: {
 
   const fallback = hasUsableFeeDisplay(input.feeDisplay) ? input.feeDisplay : ""
   if (primaryAmount === undefined) return fallback
+  if (primaryAmount <= 0) return ""
 
   const equivalents: string[] = []
   if (primaryAsset !== "BRL" && feeBrl !== undefined) equivalents.push(formatFeeAmount(feeBrl, "BRL"))
@@ -140,7 +148,8 @@ function buildFeeSummary(input: {
     equivalents.push(formatFeePercent((primaryAmount / sourceAmount) * 100))
   }
 
-  return `${formatFeeAmount(primaryAmount, primaryAsset)}${equivalents.length ? ` (${equivalents.join(", ")})` : ""}`
+  const nonZeroEquivalents = equivalents.filter((item) => !/^(r\$|us\$)\s*0([.,]0+)?$|^0([.,]0+)?%$/i.test(item.trim()))
+  return `${formatFeeAmount(primaryAmount, primaryAsset)}${nonZeroEquivalents.length ? ` (${nonZeroEquivalents.join(", ")})` : ""}`
 }
 
 function getProviderLabel(provider?: string) {
@@ -331,7 +340,7 @@ export default function ConfirmPaymentClient({
                 )}
                 <p className="text-slate-300">Destino: {destinationLabel}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Taxa estimada: {estimatedFeeSummary}</p>
+                  <p className="text-slate-300">Taxa total estimada: {estimatedFeeSummary}</p>
                 )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
                   <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>

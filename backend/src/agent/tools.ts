@@ -1141,7 +1141,7 @@ async function executeConvertAssets(input: any): Promise<string> {
     const destinationAmount = submittedDetails?.destinationAmount || quote.destinationAmount;
     const destinationAssetCode = submittedDetails?.destinationAssetCode || quote.destinationAsset.code;
     const feeDisplay = await formatNetworkFeeForCustomer(submittedDetails?.feeXlm || quote.networkFeeXlm);
-    const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm ? ` Taxa estimada/aplicada: ${feeDisplay.display}.` : '';
+    const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm ? ` Taxa total: ${feeDisplay.display}.` : ' Taxa total: R$ 0,00.';
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
 
@@ -1162,9 +1162,8 @@ async function executeConvertAssets(input: any): Promise<string> {
       } : submittedDetails,
       operation_type: operationType,
       message:
-        `Conversão concluída: ${sourceLabel} para ${destinationLabel}.` +
-        ` Rota usada: ${formatQuotePath(quote.path)}.` +
-        `${feeLine} Código da operação: ${result.hash}`,
+        `${sourceLabel} convertidos para ${destinationLabel} em poucos segundos.` +
+        `${feeLine} Recibo disponível no seu histórico.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

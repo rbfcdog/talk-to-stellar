@@ -108,14 +108,13 @@ export class TransferNotificationService {
     const senderLabel = String(input.senderLabel || 'Alguem').trim();
     const receivedLabel = formatCustomerAssetAmount(input.amount, input.assetCode);
     const sourceLine = input.sourceAmount && input.sourceAssetCode && input.sourceAssetCode !== input.assetCode
-      ? `Remetente enviou: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
+      ? `Valor de origem: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
       : '';
     const text =
-      `Voce recebeu uma transferencia.\n` +
-      `Valor recebido: ${receivedLabel}\n` +
+      `${receivedLabel} recebidos em poucos segundos.\n` +
       sourceLine +
       `De: ${senderLabel}\n` +
-      `${input.hash ? `Codigo da operacao: ${input.hash}` : ''}`;
+      `Recibo disponível no seu histórico.`;
 
     try {
       await this.agentRepo.saveMessage(recipientSessionId, 'assistant', text);
