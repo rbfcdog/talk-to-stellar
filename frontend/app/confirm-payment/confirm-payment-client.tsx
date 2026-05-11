@@ -26,6 +26,9 @@ type ConfirmResponse = {
     destinationAmount?: string
     destinationAssetCode?: string
     feeXlm?: string
+    feeDisplay?: string
+    feeUsdc?: string
+    feeBrl?: string
     exact?: boolean
   }
   message?: string
@@ -50,6 +53,7 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   if (!Number.isFinite(n)) return "Valor indisponível"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
+  if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }
 
@@ -146,6 +150,7 @@ export default function ConfirmPaymentClient({
   const assetCode = String(payload.asset_code || payload.assetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
   const destinationLabel = payload.destination_name || payload.destination || "Destinatário indisponível"
+  const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -196,6 +201,9 @@ export default function ConfirmPaymentClient({
                 <p className="font-medium text-white">Resumo</p>
                 <p className="mt-2 text-slate-300">Valor: {amountLabel}</p>
                 <p className="text-slate-300">Destino: {destinationLabel}</p>
+                {estimatedFeeDisplay && (
+                  <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
+                )}
                 {assetCode !== "XLM" && (
                   <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
                 )}
@@ -238,14 +246,14 @@ export default function ConfirmPaymentClient({
                   {result.transferDetails?.sourceAmount && (
                     <p>
                       Origem debitada: {formatPaymentAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
-                      {result.transferDetails.exact === false ? " (não confirmado no Horizon)" : ""}
+                      {result.transferDetails.exact === false ? " (valor estimado)" : ""}
                     </p>
                   )}
                   {result.transferDetails?.feeXlm && (
-                    <p>Taxa de rede baixa aplicada: {result.transferDetails.feeXlm} XLM</p>
+                    <p>Taxa baixa aplicada: {result.transferDetails.feeDisplay || "valor em R$/US$ indisponível"}</p>
                   )}
                   <p>Cotação conferida antes da confirmação para evitar surpresa no valor final.</p>
-                  <p className="break-all font-mono text-xs">Hash: {result.hash}</p>
+                  <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </div>
               )}

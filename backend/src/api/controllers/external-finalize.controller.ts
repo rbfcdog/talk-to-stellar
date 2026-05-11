@@ -11,6 +11,7 @@ import { StellarService } from '../services/stellar.service';
 import { ContactSeedService } from '../services/contact-seed.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -146,17 +147,18 @@ async function sendTelegramPaymentNotification(input: {
 }) {
   const destinationLabel = input.destinationName || input.destination;
   const sourceLine = input.sourceAmount && input.sourceAssetCode
-    ? `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n`
+    ? `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
     : '';
-  const feeLine = input.feeXlm ? `Taxa de rede baixa aplicada: ${input.feeXlm} XLM\n` : '';
+  const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+  const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Pagamento confirmado.\n` +
     `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
-    `Destino recebeu: ${input.amount} ${input.assetCode}\n` +
+    `Destino recebeu: ${formatCustomerAssetAmount(input.amount, input.assetCode)}\n` +
     sourceLine +
     feeLine +
     `Destino: ${destinationLabel}\n` +
-    `${input.hash ? `Hash: ${input.hash}` : ''}`;
+    `${input.hash ? `Codigo da operacao: ${input.hash}` : ''}`;
 
   try {
     await agentRepo.saveMessage(input.sessionId, 'assistant', text);
@@ -226,14 +228,15 @@ async function sendTelegramConversionNotification(input: {
   feeXlm?: string;
   hash?: string;
 }) {
-  const feeLine = input.feeXlm ? `Taxa de rede baixa aplicada: ${input.feeXlm} XLM\n` : '';
+  const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+  const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Conversão confirmada.\n` +
     `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
-    `Origem debitada: ${input.sourceAmount} ${input.sourceAssetCode}\n` +
-    `Destino recebeu: ${input.destinationAmount} ${input.destinationAssetCode}\n` +
+    `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n` +
+    `Destino recebeu: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}\n` +
     feeLine +
-    `${input.hash ? `Hash: ${input.hash}` : ''}`;
+    `${input.hash ? `Codigo da operacao: ${input.hash}` : ''}`;
 
   try {
     await agentRepo.saveMessage(input.sessionId, 'assistant', text);
@@ -751,15 +754,22 @@ export default class ExternalFinalizeController {
               feeXlm: String(quote.networkFeeXlm || ''),
               exact: false,
             };
+        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || quote.networkFeeXlm || ''));
+        const publicTransferDetails = {
+          ...transferDetails,
+          feeDisplay: feeDisplay.display,
+          feeUsdc: feeDisplay.fee_usdc,
+          feeBrl: feeDisplay.fee_brl,
+        };
 
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
-          sourceAmount: String(transferDetails.sourceAmount || quote.sourceAmount),
-          sourceAssetCode: String(transferDetails.sourceAssetCode || quote.sourceAsset.code),
-          destinationAmount: String(transferDetails.destinationAmount || quote.destinationAmount),
-          destinationAssetCode: String(transferDetails.destinationAssetCode || quote.destinationAsset.code),
-          feeXlm: String(transferDetails.feeXlm || quote.networkFeeXlm || ''),
+          sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
+          sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
+          destinationAmount: String(publicTransferDetails.destinationAmount || quote.destinationAmount),
+          destinationAssetCode: String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code),
+          feeXlm: String(publicTransferDetails.feeXlm || quote.networkFeeXlm || ''),
           hash: result.hash,
         });
 
@@ -768,17 +778,17 @@ export default class ExternalFinalizeController {
           String(session.user_id),
           wallet.public_key,
           wallet.public_key,
-          String(transferDetails.sourceAmount || quote.sourceAmount),
-          String(transferDetails.sourceAssetCode || quote.sourceAsset.code),
-          String(transferDetails.sourceAssetCode || quote.sourceAsset.code).toUpperCase() === 'XLM'
+          String(publicTransferDetails.sourceAmount || quote.sourceAmount),
+          String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
+          String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code).toUpperCase() === 'XLM'
             ? undefined
-            : (transferDetails as any).sourceAssetIssuer || quote.sourceAsset.issuer,
-          String(transferDetails.destinationAmount || quote.destinationAmount),
-          String(transferDetails.destinationAssetCode || quote.destinationAsset.code),
-          String(transferDetails.destinationAssetCode || quote.destinationAsset.code).toUpperCase() === 'XLM'
+            : (publicTransferDetails as any).sourceAssetIssuer || quote.sourceAsset.issuer,
+          String(publicTransferDetails.destinationAmount || quote.destinationAmount),
+          String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code),
+          String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code).toUpperCase() === 'XLM'
             ? undefined
-            : (transferDetails as any).destinationAssetIssuer || quote.destinationAsset.issuer,
-          String(transferDetails.feeXlm || quote.networkFeeXlm || ''),
+            : (publicTransferDetails as any).destinationAssetIssuer || quote.destinationAsset.issuer,
+          String(publicTransferDetails.feeXlm || quote.networkFeeXlm || ''),
           result.hash,
           usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
           'success',
@@ -789,7 +799,7 @@ export default class ExternalFinalizeController {
             type: 'conversion',
             token_quote: tokenQuote || null,
             quote,
-            transferDetails,
+            transferDetails: publicTransferDetails,
           }
         );
 
@@ -800,7 +810,7 @@ export default class ExternalFinalizeController {
           {
             type: 'conversion',
             quote,
-            transferDetails,
+            transferDetails: publicTransferDetails,
           }
         );
 
@@ -812,7 +822,7 @@ export default class ExternalFinalizeController {
           sourceAssetCode,
           destAssetCode,
           hash: result.hash,
-          transferDetails,
+          transferDetails: publicTransferDetails,
         });
       }
 
@@ -1233,15 +1243,22 @@ export default class ExternalFinalizeController {
               feeXlm: String(quote?.networkFeeXlm || ''),
               exact: false,
             };
+        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || quote?.networkFeeXlm || ''));
+        const publicTransferDetails = {
+          ...transferDetails,
+          feeDisplay: feeDisplay.display,
+          feeUsdc: feeDisplay.fee_usdc,
+          feeBrl: feeDisplay.fee_brl,
+        };
 
         await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
-          amount: transferDetails.destinationAmount,
-          assetCode: transferDetails.destinationAssetCode,
-          sourceAmount: transferDetails.sourceAmount,
-          sourceAssetCode: transferDetails.sourceAssetCode,
-          feeXlm: transferDetails.feeXlm,
+          amount: publicTransferDetails.destinationAmount,
+          assetCode: publicTransferDetails.destinationAssetCode,
+          sourceAmount: publicTransferDetails.sourceAmount,
+          sourceAssetCode: publicTransferDetails.sourceAssetCode,
+          feeXlm: publicTransferDetails.feeXlm,
           destinationName: destination_contact?.contact_name || destination_name,
           destination: resolvedDestination,
           hash: result.hash,
@@ -1254,13 +1271,13 @@ export default class ExternalFinalizeController {
           String(session.user_id),
           wallet.public_key,
           resolvedDestination,
-          transferDetails.sourceAmount,
-          transferDetails.sourceAssetCode,
-          transferDetails.sourceAssetCode === 'XLM' ? undefined : assetIssuer,
-          transferDetails.destinationAmount,
-          transferDetails.destinationAssetCode,
+          publicTransferDetails.sourceAmount,
+          publicTransferDetails.sourceAssetCode,
+          publicTransferDetails.sourceAssetCode === 'XLM' ? undefined : assetIssuer,
+          publicTransferDetails.destinationAmount,
+          publicTransferDetails.destinationAssetCode,
           assetIssuer,
-          transferDetails.feeXlm,
+          publicTransferDetails.feeXlm,
           result.hash,
           isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
           'success',
@@ -1280,7 +1297,7 @@ export default class ExternalFinalizeController {
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
             quote,
-            transferDetails,
+            transferDetails: publicTransferDetails,
           }
         );
 
@@ -1301,7 +1318,7 @@ export default class ExternalFinalizeController {
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
             quote,
-            transferDetails,
+            transferDetails: publicTransferDetails,
           }
         );
 
@@ -1313,7 +1330,7 @@ export default class ExternalFinalizeController {
           destinationContact: destination_contact,
         });
 
-        logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${transferDetails.destinationAmount}, destinationAsset=${transferDetails.destinationAssetCode}`);
+        logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
         return res.status(200).json({
           success: true,
           paymentConfirmed: true,
@@ -1324,7 +1341,7 @@ export default class ExternalFinalizeController {
           amount: String(amount),
           assetCode,
           hash: result.hash,
-          transferDetails,
+          transferDetails: publicTransferDetails,
         });
       }
 
