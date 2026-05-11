@@ -280,11 +280,7 @@ async function sendTelegramPaymentNotification(input: {
       return;
     }
 
-    let providerUserId = String(
-      String(input.provider || '').toLowerCase() === 'telegram'
-        ? input.providerUserId || ''
-        : ''
-    ).trim();
+    let providerUserId = String(input.providerUserId || '').trim();
 
     const { data: mappingBySession } = await supabase
       .from('external_accounts')
@@ -365,11 +361,7 @@ async function sendTelegramConversionNotification(input: {
       return;
     }
 
-    let providerUserId = String(
-      String(input.provider || '').toLowerCase() === 'telegram'
-        ? input.providerUserId || ''
-        : ''
-    ).trim();
+    let providerUserId = String(input.providerUserId || '').trim();
 
     const { data: mappingBySession } = await supabase
       .from('external_accounts')
