@@ -508,6 +508,18 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
 
+    const addContactWords = ['adicionar', 'adiciona', 'salvar', 'salva', 'guardar', 'inclui', 'incluir', 'cadastrar', 'cadastre', 'add'];
+    const contactWords = ['contato', 'contatos', 'beneficiario', 'beneficiarios', 'contact', 'contacts'];
+    const hasContactKey = /\bG[A-Z2-7]{55}\b/i.test(message) || /\b[a-z0-9._%+-]+@talktostellar\b/i.test(message);
+    if (addContactWords.some((word) => normalized.includes(word)) && (contactWords.some((word) => normalized.includes(word)) || hasContactKey)) {
+      return IntentType.CONTACTS;
+    }
+
+    const technicalBalanceWords = ['saldo tecnico', 'saldo tecnico completo', 'saldo tecnico detalhado', 'saldo completo', 'detalhe da conta', 'balanco tecnico', 'balance technical'];
+    if (technicalBalanceWords.some((word) => normalized.includes(word))) {
+      return IntentType.BALANCE;
+    }
+
     const balanceWords = ['saldo', 'balance', 'balanco', 'quanto tenho', 'quanto eu tenho'];
     if (balanceWords.some((word) => normalized.includes(word))) {
       return IntentType.BALANCE;
@@ -553,9 +565,10 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
 
-    const addIntent =
-      /\b(adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\b/.test(normalized) &&
-      /\b(contato|beneficiario|contacts?)\b/.test(normalized);
+    const hasAddVerb = /\b(adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\b/.test(normalized);
+    const hasContactWord = /\b(contato|contatos|beneficiario|beneficiarios|contacts?)\b/.test(normalized);
+    const hasResolvableKey = Boolean(publicKeyMatch || transferKeyMatch || emailMatch || cpfMatch || phoneMatch);
+    const addIntent = hasAddVerb && (hasContactWord || hasResolvableKey);
 
     if (!addIntent) {
       return {};
@@ -1011,7 +1024,8 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       state.success = false;
       state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
-      const toolResultRaw = await executeTool('get_balance', {
+      const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
+      const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_account' : 'get_balance', {
         public_key: state.session_data.public_key,
       });
 
@@ -1031,11 +1045,15 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         for (const balance of balances) {
           byAsset.set(String(balance.asset || balance.asset_code || '').toUpperCase(), balance);
         }
-        const exactBalances = ['BRL', 'USDC', 'XLM'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+        const exactBalances = wantsTechnicalBalance
+          ? balances
+          : ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
 
         state.success = true;
-        state.response_message = `Saldo exato na Stellar:\n${formattedBalances}`;
+        state.response_message = wantsTechnicalBalance
+          ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
+          : `Saldo na Stellar:\n${formattedBalances}\n\nPara ver o saldo técnico completo, peça "saldo técnico".`;
       }
     }
 
@@ -1112,7 +1130,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       return undefined;
     }
 
-    const toolResultRaw = await executeTool('get_balance', { public_key: publicKey });
+    const toolResultRaw = await executeTool('get_account', { public_key: publicKey });
     const toolResult = JSON.parse(toolResultRaw);
     const balances = Array.isArray(toolResult?.balances) ? toolResult.balances : [];
     const balance = balances.find((item: any) => String(item.asset || item.asset_code || '').toUpperCase() === normalizedAssetCode);
@@ -1164,6 +1182,21 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
     await this.repository.saveState(state.session_id, state);
     return state;
+  }
+
+  private wantsTechnicalBalance(message: string): boolean {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return (
+      normalized.includes('saldo tecnico') ||
+      normalized.includes('saldo completo') ||
+      normalized.includes('detalhe da conta') ||
+      normalized.includes('balanco tecnico') ||
+      normalized.includes('balance technical')
+    );
   }
 
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
