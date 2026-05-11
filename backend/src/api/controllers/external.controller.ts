@@ -281,13 +281,19 @@ export class ExternalController {
         user_id: String(matched.user_id || email),
       });
 
-      void TransferNotificationService.notifySessionWelcome({
+      const shouldAwaitWelcome = provider === 'telegram';
+      const welcomePromise = TransferNotificationService.notifySessionWelcome({
         sessionId: String(matched.session_id),
         userId: String(matched.user_id || email),
         name: String(matched.email || email),
         provider,
         providerUserId,
       });
+      if (shouldAwaitWelcome) {
+        await welcomePromise;
+      } else {
+        void welcomePromise;
+      }
 
       return res.status(200).json({
         success: true,
@@ -372,13 +378,19 @@ export class ExternalController {
         })
         .eq('session_id', sessionId);
 
-      void TransferNotificationService.notifySessionWelcome({
+      const shouldAwaitWelcome = provider === 'telegram';
+      const welcomePromise = TransferNotificationService.notifySessionWelcome({
         sessionId,
         userId: String(session.user_id),
         name: String(session.email || session.user_id),
         provider,
         providerUserId,
       });
+      if (shouldAwaitWelcome) {
+        await welcomePromise;
+      } else {
+        void welcomePromise;
+      }
 
       return res.status(200).json({
         success: true,

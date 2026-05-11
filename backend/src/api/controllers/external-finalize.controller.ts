@@ -1614,13 +1614,19 @@ export default class ExternalFinalizeController {
             });
           }
 
-          void TransferNotificationService.notifySessionWelcome({
+          const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
+          const welcomePromise = TransferNotificationService.notifySessionWelcome({
             sessionId: String(existingAccount.session_id),
             userId: String(existingAccount.user_id),
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
           });
+          if (shouldAwaitWelcome) {
+            await welcomePromise;
+          } else {
+            void welcomePromise;
+          }
 
           return res.status(200).json({
             success: true,
@@ -1707,13 +1713,19 @@ export default class ExternalFinalizeController {
             },
           });
 
-          void TransferNotificationService.notifySessionWelcome({
+          const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
+          const welcomePromise = TransferNotificationService.notifySessionWelcome({
             sessionId: existingWallet.session_id,
             userId,
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
           });
+          if (shouldAwaitWelcome) {
+            await welcomePromise;
+          } else {
+            void welcomePromise;
+          }
 
           return res.status(200).json({
             success: true,
@@ -1788,13 +1800,19 @@ export default class ExternalFinalizeController {
         });
       }
 
-      void TransferNotificationService.notifySessionWelcome({
+      const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
+      const welcomePromise = TransferNotificationService.notifySessionWelcome({
         sessionId,
         userId,
         name: name || email || null,
         provider,
         providerUserId: provider_user_id,
       });
+      if (shouldAwaitWelcome) {
+        await welcomePromise;
+      } else {
+        void welcomePromise;
+      }
 
       return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
     } catch (error: any) {
