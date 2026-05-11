@@ -1451,7 +1451,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
     state.pending_payment = undefined;
     state.success = true;
-    state.response_message = `Pagamento enviado com sucesso.\n\nValor: ${this.formatMoneyByAsset(sentAmount, 'XLM')}\nDestino: ${destinationLabel}\nCódigo da operação: ${submit.hash}`;
+    state.response_message = `${this.formatMoneyByAsset(sentAmount, 'XLM')} enviados para ${destinationLabel} em poucos segundos.\nTaxa total: R$ 0,00\nRecibo disponível no seu histórico.`;
     return state;
   }
 
@@ -1468,9 +1468,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       'Relacionado';
     const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
-    const hash = transaction.hash ? `\nCódigo da operação: ${transaction.hash}` : '';
-
-    return `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}${hash}`;
+    return `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}`;
   }
 
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
@@ -1615,7 +1613,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.response_message = `Não consegui converter os ativos: ${toolResult.error || 'erro desconhecido'}`;
     } else {
       state.success = true;
-      state.response_message = toolResult.message || `Conversão concluída. Código da operação: ${toolResult.hash}`;
+      state.response_message = toolResult.message || 'Conversão concluída em poucos segundos. Recibo disponível no seu histórico.';
     }
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);

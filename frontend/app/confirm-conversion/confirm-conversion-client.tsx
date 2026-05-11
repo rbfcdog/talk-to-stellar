@@ -58,7 +58,14 @@ function formatAmount(amount?: string, assetCode?: string) {
 
 function hasUsableFeeDisplay(value?: string) {
   const normalized = String(value || "").trim().toLowerCase()
-  return Boolean(normalized && !normalized.includes("indispon"))
+  if (!normalized || normalized.includes("indispon")) return false
+  const compact = normalized.replace(/\s+/g, "")
+  const looksLikeZeroOnly =
+    compact.includes("us$0") ||
+    compact.includes("r$0") ||
+    compact.includes("0%") ||
+    compact.includes("0,0%")
+  return !looksLikeZeroOnly
 }
 
 function getProviderLabel(provider?: string) {
@@ -211,7 +218,7 @@ export default function ConfirmConversionClient({
                 <p className="mt-2 text-slate-300">Debitar: {formatAmount(sourceAmount, sourceAssetCode)}</p>
                 <p className="text-slate-300">Receber: {formatAmount(destAmount, destAssetCode)}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
+                  <p className="text-slate-300">Taxa total estimada: {estimatedFeeDisplay}</p>
                 )}
               </div>
 
