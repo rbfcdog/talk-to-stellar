@@ -9,23 +9,23 @@ export function WelcomeScreen() {
         <div className="relative mx-auto mb-8 h-56 w-56 sm:h-80 sm:w-80">
           <img
             src="/whatsapp-web-welcome-illustration.jpg"
-            alt="TalkToStellar"
+            alt="WhatsDap"
             className="w-full h-full object-contain opacity-95"
           />
         </div>
       </div>
 
       <h1 className="mb-7 text-[28px] font-light tracking-wide text-[#e9edef] sm:text-[32px]">
-        TalkToStellar
+        WhatsDap
       </h1>
 
       <p className="mb-8 max-w-md text-[14px] leading-[1.5] text-[#8696a0]">
-        Selecione TalkToStellar na barra lateral para consultar saldo, enviar valores e gerenciar seus contatos da carteira.
+        Selecione WhatsDap na barra lateral para consultar saldo, enviar valores e gerenciar seus contatos da carteira.
       </p>
 
       <div className="mb-8 flex items-center gap-1 text-[14px] text-[#8696a0]">
         <Lock className="h-4 w-4" />
-        <span>Suas mensagens são processadas pela sua API local.</span>
+        <span>Suas conversas ficam protegidas enquanto você usa sua carteira.</span>
       </div>
     </div>
   );
