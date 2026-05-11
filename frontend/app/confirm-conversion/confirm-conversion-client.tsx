@@ -24,6 +24,9 @@ type ConfirmResponse = {
     destinationAmount?: string
     destinationAssetCode?: string
     feeXlm?: string
+    feeDisplay?: string
+    feeUsdc?: string
+    feeBrl?: string
     exact?: boolean
   }
   message?: string
@@ -48,6 +51,7 @@ function formatAmount(amount?: string, assetCode?: string) {
   if (!Number.isFinite(n)) return "Valor indisponível"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
+  if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }
 
@@ -131,6 +135,7 @@ export default function ConfirmConversionClient({
   const destAssetCode = String(payload.dest_asset_code || payload.destAssetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
+  const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -181,6 +186,9 @@ export default function ConfirmConversionClient({
                 <p className="font-medium text-white">Resumo</p>
                 <p className="mt-2 text-slate-300">Debitar: {formatAmount(sourceAmount, sourceAssetCode)}</p>
                 <p className="text-slate-300">Receber: {formatAmount(destAmount, destAssetCode)}</p>
+                {estimatedFeeDisplay && (
+                  <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -223,10 +231,10 @@ export default function ConfirmConversionClient({
                     </p>
                   )}
                   {result.transferDetails?.feeXlm && (
-                    <p>Taxa de rede baixa aplicada: {result.transferDetails.feeXlm} XLM</p>
+                    <p>Taxa baixa aplicada: {result.transferDetails.feeDisplay || "valor em R$/US$ indisponível"}</p>
                   )}
                   <p>Cotação conferida antes da confirmação para evitar surpresa no valor final.</p>
-                  <p className="break-all font-mono text-xs">Hash: {result.hash}</p>
+                  <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                 </div>
               )}
               {status === "error" && (

@@ -18,6 +18,7 @@ import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../c
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
+import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -37,8 +38,7 @@ function formatQuotePath(path: Array<{ code?: string; type?: string }>): string 
     return 'rota direta';
   }
 
-  const route = ['XLM', ...path.map((step) => String(step.code || '').toUpperCase()).filter(Boolean)];
-  return route.join(' → ');
+  return `rota otimizada em ${path.length + 1} etapas`;
 }
 
 async function fetchBrlUsdcQuote(): Promise<{
@@ -226,7 +226,7 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a real Stellar cross-asset transfer or wallet conversion using Horizon path data, including source amount, destination amount, network fee, and path. Use the configured issuers for USDC/BRL when the caller does not provide one.",
+    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, destination amount, customer-facing fee, and route. Use the configured issuers for USDC/BRL when the caller does not provide one.",
     parameters: {
       type: "object",
       properties: {
@@ -371,6 +371,10 @@ export const toolDefinitions = [
         owner_id: {
           type: "string",
           description: "Current user ID / owner ID",
+        },
+        quote: {
+          type: "object",
+          description: "Optional quote details returned by quote_asset_transfer, used to show estimated fee before confirmation.",
         },
       },
       required: ["amount", "destination", "session_id", "owner_id"],
@@ -970,17 +974,25 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           destAsset: normalizeAssetInput(input.dest_asset_code || input.destAssetCode, input.dest_asset_issuer || input.destAssetIssuer),
           sourceAsset: normalizeAssetInput(input.source_asset_code || input.sourceAssetCode, input.source_asset_issuer || input.sourceAssetIssuer),
         });
+    const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
+    const sourceLabel = formatCustomerAssetAmount(quote.sourceAmount, quote.sourceAsset.code);
+    const destinationLabel = formatCustomerAssetAmount(quote.destinationAmount, quote.destinationAsset.code);
 
     return JSON.stringify({
       success: true,
-      quote,
+      quote: {
+        ...quote,
+        fee_display: feeDisplay.display,
+        fee_usdc: feeDisplay.fee_usdc,
+        fee_brl: feeDisplay.fee_brl,
+      },
       message:
         (sourceAmount
-          ? `Cotação: converter ${quote.sourceAmount} ${quote.sourceAsset.code} deve entregar aproximadamente ${quote.destinationAmount} ${quote.destinationAsset.code}. `
-          : `Cotação: para receber ${quote.destinationAmount} ${quote.destinationAsset.code}, serão usados aproximadamente ${quote.sourceAmount} ${quote.sourceAsset.code}. `) +
+          ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
+          : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Rota usada: ${formatQuotePath(quote.path)}. ` +
-        `Taxa da rede: ${quote.networkFeeXlm} XLM. ` +
-        `Fonte: path quote em tempo real no Horizon.`,
+        `Taxa estimada: ${feeDisplay.display}. ` +
+        `Fonte: cotação em tempo real.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1068,19 +1080,31 @@ async function executeConvertAssets(input: any): Promise<string> {
     const sourceAssetCode = submittedDetails?.sourceAssetCode || quote.sourceAsset.code;
     const destinationAmount = submittedDetails?.destinationAmount || quote.destinationAmount;
     const destinationAssetCode = submittedDetails?.destinationAssetCode || quote.destinationAsset.code;
-    const feeLine = submittedDetails?.feeXlm ? ` Taxa da rede: ${submittedDetails.feeXlm} XLM.` : '';
+    const feeDisplay = await formatNetworkFeeForCustomer(submittedDetails?.feeXlm || quote.networkFeeXlm);
+    const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm ? ` Taxa estimada/aplicada: ${feeDisplay.display}.` : '';
+    const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
+    const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
 
     return JSON.stringify({
       success: true,
       hash: result.hash,
-      quote,
-      transferDetails: submittedDetails,
+      quote: {
+        ...quote,
+        fee_display: feeDisplay.display,
+        fee_usdc: feeDisplay.fee_usdc,
+        fee_brl: feeDisplay.fee_brl,
+      },
+      transferDetails: submittedDetails ? {
+        ...submittedDetails,
+        feeDisplay: feeDisplay.display,
+        feeUsdc: feeDisplay.fee_usdc,
+        feeBrl: feeDisplay.fee_brl,
+      } : submittedDetails,
       operation_type: operationType,
       message:
-        `Conversão concluída: ${sourceAmount} ${sourceAssetCode} ` +
-        `para ${destinationAmount} ${destinationAssetCode}.` +
+        `Conversão concluída: ${sourceLabel} para ${destinationLabel}.` +
         ` Rota usada: ${formatQuotePath(quote.path)}.` +
-        `${feeLine} Hash: ${result.hash}`,
+        `${feeLine} Código da operação: ${result.hash}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1231,6 +1255,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
 
     const assetCode = normalizeAssetCode(input.asset_code || input.asset || input.currency || 'XLM');
     const asset = normalizeAssetInput(assetCode, input.asset_issuer || input.assetIssuer);
+    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
 
     const { url } = externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
@@ -1241,13 +1266,21 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       destination_contact: input.destination_contact || undefined,
       session_id: String(input.session_id),
       owner_id: String(input.owner_id),
+    }, {
+      estimated_fee_display: feeDisplay.display,
+      estimated_fee_usdc: feeDisplay.fee_usdc || null,
+      estimated_fee_brl: feeDisplay.fee_brl || null,
+      quote: input.quote || null,
     });
 
     return JSON.stringify({
       success: true,
       url,
       asset: asset.code,
-      message: `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link de confirmação:\n\n${url}`,
+      estimated_fee_display: feeDisplay.display,
+      message:
+        `Antes de confirmar: taxa estimada ${feeDisplay.display}. ` +
+        `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1274,6 +1307,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
 
     const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
+    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || '0.001');
 
     const { url } = externalService.createConversionConfirmUrl({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1285,12 +1319,17 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       dest_asset_code: destAsset.code,
       dest_asset_issuer: destAsset.issuer,
       quote: input.quote || null,
+    }, {
+      estimated_fee_display: feeDisplay.display,
+      estimated_fee_usdc: feeDisplay.fee_usdc || null,
+      estimated_fee_brl: feeDisplay.fee_brl || null,
     });
 
     return JSON.stringify({
       success: true,
       url,
-      message: `Para confirmar a conversão, abra:\n\n${url}`,
+      estimated_fee_display: feeDisplay.display,
+      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}. Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1311,7 +1350,7 @@ async function executeSubmitTransaction(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       transaction_hash: txHash,
-      message: `Transaction submitted successfully! Hash: ${txHash}`,
+      message: `Operação enviada com sucesso. Código da operação: ${txHash}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

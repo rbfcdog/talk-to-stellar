@@ -250,6 +250,7 @@ ${onboardingUrl}`;
     const upper = String(assetCode || '').toUpperCase();
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
+    if (upper === 'XLM') return 'saldo da carteira TalkToStellar';
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
   }
 
@@ -439,8 +440,8 @@ ${onboardingUrl}`;
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
-      '- When a quote or payment result has a network fee, say it clearly and frame it as the low network fee used for this route.',
-      '- Do not claim savings without data. Prefer wording like "rota com taxa de rede baixa" or "cotacao em tempo real antes de confirmar".',
+      '- When a quote or payment result has a fee, say it before confirmation in R$ and US$, never in XLM.',
+      '- Do not claim savings without data. Prefer wording like "taxa baixa", "cotacao em tempo real antes de confirmar", and "sem surpresa no valor final".',
       '- For transfers/conversions, emphasize that the user sees the quote before confirming and can avoid surprises.',
     ].join('\n');
   }
@@ -550,8 +551,8 @@ Respond ONLY with the intent name. Examples:
 - "listar transações" → history
 - "show transaction history" → history
 - "see transactions list" → history
-- "converter USDC para XLM" → conversion
-- "trocar 10 USDC por XLM" → conversion
+- "converter dolares para reais" → conversion
+- "trocar 10 usdc por brl" → conversion
 - "convert assets" → conversion
 - "qual a cotação do dólar" → price_quote
 - "cotação brl usdc agora" → price_quote
@@ -809,7 +810,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
 **Chave Pública (Public Key):**
 \`${state.wallet_info.publicKey}\`
 
-Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave pública para receber XLM.`;
+Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave pública para receber valores na sua carteira.`;
         state.success = true;
         await this.repository.saveMessage(
           state.session_id,
@@ -862,7 +863,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
       **Chave Pública:**
       \`${walletResult.publicKey}\`
 
-      Use sua chave pública para receber XLM.`;
+      Use sua chave pública para receber valores na sua carteira.`;
         state.success = true;
 
         await this.repository.saveMessage(
@@ -930,9 +931,9 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
       **SUA CHAVE PRIVADA FOI ARMAZENADA COM SEGURANÇA NO VAULT:**
     -- Ela não será exibida nesta conversa
     -- O backend pode recuperá-la com segurança quando necessário
-    -- Use sua chave pública para receber XLM
+    -- Use sua chave pública para receber valores na sua carteira
 
-Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM para testes!
+Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
     Digite \`entendi\` para confirmar que entendeu que a chave está armazenada com segurança.`;
 
@@ -1100,7 +1101,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
     state.pending_payment = undefined;
     state.success = true;
-    state.response_message = `Pagamento enviado com sucesso.\n\nValor: ${this.formatMoneyByAsset(sentAmount, 'XLM')}\nDestino: ${destinationLabel}\nHash: ${submit.hash}`;
+    state.response_message = `Pagamento enviado com sucesso.\n\nValor: ${this.formatMoneyByAsset(sentAmount, 'XLM')}\nDestino: ${destinationLabel}\nCódigo da operação: ${submit.hash}`;
     return state;
   }
 
@@ -1117,7 +1118,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       'Relacionado';
     const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
-    const hash = transaction.hash ? `\nHash: ${transaction.hash}` : '';
+    const hash = transaction.hash ? `\nCódigo da operação: ${transaction.hash}` : '';
 
     return `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}${hash}`;
   }
@@ -1279,7 +1280,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       state.response_message = `Não consegui converter os ativos: ${toolResult.error || 'erro desconhecido'}`;
     } else {
       state.success = true;
-      state.response_message = toolResult.message || `Conversão concluída. Hash: ${toolResult.hash}`;
+      state.response_message = toolResult.message || `Conversão concluída. Código da operação: ${toolResult.hash}`;
     }
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
@@ -1320,7 +1321,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         state.success = false;
         state.response_message = llmParsed.needs_clarification && llmParsed.clarification_question
           ? llmParsed.clarification_question
-          : 'Me diga a conversão neste formato: converter 10 USDC para XLM.';
+          : 'Me diga a conversão neste formato: converter 10 dólares para reais.';
       } else {
         const sourceIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, finalSourceAssetCode);
         let destIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, finalDestAssetCode);
@@ -1343,14 +1344,14 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
                 destIssuer = trustlineResult.asset_issuer;
               } else if (!trustlineResult.success) {
                 state.success = false;
-                state.response_message = `Não consegui criar a trustline de ${finalDestAssetCode}: ${trustlineResult.error || 'erro desconhecido'}`;
+                state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode}: ${trustlineResult.error || 'erro desconhecido'}`;
                 await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
                 await this.repository.saveState(state.session_id, state);
                 return state;
               }
             } catch {
               state.success = false;
-              state.response_message = `Não consegui criar a trustline de ${finalDestAssetCode} agora.`;
+              state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode} agora.`;
               await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
               await this.repository.saveState(state.session_id, state);
               return state;
@@ -1359,7 +1360,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
 
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             state.success = false;
-            state.response_message = `Não encontrei trustline de ${finalDestAssetCode} na sua wallet. Para receber esse ativo, a wallet precisa ter uma trustline antes.`;
+            state.response_message = `Não encontrei recebimento em ${finalDestAssetCode} ativo na sua carteira. Ative esse recebimento antes de converter.`;
           } else {
           const toolResultRaw = await executeTool('quote_asset_transfer', {
             source_public_key: state.session_data.public_key,
