@@ -21,6 +21,7 @@ export default function LogoutClient() {
   const [message, setMessage] = useState("")
   const provider = String(searchParams.get("provider") || searchParams.get("source") || "").trim().toLowerCase()
   const providerUserId = String(searchParams.get("provider_user_id") || "").trim()
+  const sessionIdFromUrl = String(searchParams.get("session_id") || "").trim()
   const providerLabel = provider === "telegram"
     ? "Telegram"
     : provider === "whatsapp" || provider === "phone"
@@ -28,9 +29,10 @@ export default function LogoutClient() {
       : provider
 
   const currentSessionId = useMemo(() => {
+    if (sessionIdFromUrl) return sessionIdFromUrl
     if (typeof window === "undefined") return ""
     return String(localStorage.getItem("talk-to-stellar.sessionId") || "").trim()
-  }, [])
+  }, [sessionIdFromUrl])
 
   useEffect(() => {
     if (!currentSessionId) {

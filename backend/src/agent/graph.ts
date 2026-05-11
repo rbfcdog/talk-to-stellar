@@ -1357,17 +1357,6 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     );
   }
 
-  private wantsLogoutWallet(text: string): boolean {
-    const normalized = text
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-    return (
-      /\b(sair|logout|desconectar|deslogar|deslogar-me|logoff)\b/.test(normalized) ||
-      /\b(encerrar|fechar)\b/.test(normalized) && /\b(sessao|session|conta|wallet|carteira)\b/.test(normalized)
-    );
-  }
-
   private getLogoutConfirmationMessage(state?: AgentState): string {
     const base =
       process.env.FRONTEND_URL ||
@@ -1378,6 +1367,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     const logoutUrl = new URL(`${normalizedBase}/logout`);
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
+    const sessionId = String(state?.session_id || '').trim();
+    if (sessionId) logoutUrl.searchParams.set('session_id', sessionId);
     if (externalProvider) logoutUrl.searchParams.set('provider', externalProvider);
     if (externalProviderUserId) logoutUrl.searchParams.set('provider_user_id', externalProviderUserId);
     if (externalProvider) logoutUrl.searchParams.set('source', externalProvider);
@@ -1860,6 +1851,14 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.GET_PRICE_QUOTE) {
         return await this.handlePriceQuoteRequest(state);
+      }
+
+      if (state.action_type === ActionType.LOGOUT_WALLET) {
+        state.success = true;
+        state.response_message = this.getLogoutConfirmationMessage(state);
+        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
       }
 
       if (state.action_type === ActionType.LIST_CONTACTS) {
