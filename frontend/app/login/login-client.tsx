@@ -309,7 +309,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             </button>
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              Por segurança, sua sessão dura 1 hora. Depois disso, você entra de novo antes de continuar.
+              Por segurança, sua sessão dura 24 horas. Depois disso, você entra de novo antes de continuar.
             </p>
           </section>
         </div>

@@ -13,6 +13,9 @@ import { logger } from "../utils/logger";
 import ExternalService from '../services/external.service';
 import { supabase } from '../config/supabase';
 import { getAssetIssuer } from '../config/assets';
+import { WalletRepository } from '../repositories/wallet.repository';
+
+const walletRepo = new WalletRepository(supabase as any);
 
 
 export class AgentGraph {
@@ -95,6 +98,14 @@ export class AgentGraph {
         }
       }
 
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedQuery);
+      if (isEmail) {
+        const globalEmail = await this.lookupGlobalContactByEmail(normalizedQuery);
+        if (globalEmail) {
+          return globalEmail;
+        }
+      }
+
       const byPix = contacts.find((c: any) => String(c.pix_key || '').trim().toLowerCase() === normalizedQuery);
       if (byPix) {
         return byPix;
@@ -162,6 +173,66 @@ export class AgentGraph {
       }
     } catch (error) {
       logger.debug(`[lookupGlobalContactByPixKey] Error: ${error}`);
+    }
+
+    return undefined;
+  }
+
+  private async lookupGlobalContactByEmail(email: string): Promise<any | undefined> {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return undefined;
+
+    try {
+      const { data: sessionsByEmail } = await supabase
+        .from('agent_sessions')
+        .select('session_id, user_id, email')
+        .eq('email', normalizedEmail)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      const { data: sessionsByUserId } = await supabase
+        .from('agent_sessions')
+        .select('session_id, user_id, email')
+        .eq('user_id', normalizedEmail)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      const sessionCandidate = [...(sessionsByEmail || []), ...(sessionsByUserId || [])]
+        .find((row: any) => String(row?.session_id || '').trim());
+      if (sessionCandidate?.session_id) {
+        const wallet = await walletRepo.getWalletBySession(String(sessionCandidate.session_id));
+        if (wallet?.public_key) {
+          return {
+            contact_name: String(sessionCandidate.email || sessionCandidate.user_id || normalizedEmail),
+            stellar_public_key: wallet.public_key,
+            session_id: String(sessionCandidate.session_id),
+            email: normalizedEmail,
+          };
+        }
+      }
+
+      const { data: mappings } = await supabase
+        .from('external_accounts')
+        .select('session_id, user_id, data')
+        .limit(200);
+
+      for (const mapping of mappings || []) {
+        const mappingEmail = String((mapping as any)?.data?.email || '').trim().toLowerCase();
+        const mappingUserId = String((mapping as any)?.user_id || '').trim().toLowerCase();
+        if (mappingEmail !== normalizedEmail && mappingUserId !== normalizedEmail) continue;
+        const sessionId = String((mapping as any)?.session_id || '').trim();
+        if (!sessionId) continue;
+        const wallet = await walletRepo.getWalletBySession(sessionId);
+        if (!wallet?.public_key) continue;
+        return {
+          contact_name: String((mapping as any)?.data?.name || (mapping as any)?.user_id || normalizedEmail),
+          stellar_public_key: wallet.public_key,
+          session_id: sessionId,
+          email: normalizedEmail,
+        };
+      }
+    } catch (error) {
+      logger.debug(`[lookupGlobalContactByEmail] Error: ${error}`);
     }
 
     return undefined;
