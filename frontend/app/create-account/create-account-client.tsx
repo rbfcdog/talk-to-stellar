@@ -106,6 +106,17 @@ export default function CreateAccountClient({
   const [telegramDone, setTelegramDone] = useState(false)
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
+  const loginHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (token) {
+      params.set("token", token)
+    }
+    if (rawNextPath && rawNextPath !== "/chat") {
+      params.set("next", rawNextPath)
+    }
+    const query = params.toString()
+    return query ? `/login?${query}` : "/login"
+  }, [rawNextPath, token])
 
   function finishTelegramFlow() {
     setTelegramDone(true)
@@ -634,7 +645,7 @@ export default function CreateAccountClient({
             </div>
 
             <a
-              href="/login"
+              href={loginHref}
               className="mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               Já tenho conta

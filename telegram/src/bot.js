@@ -61,8 +61,9 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         try {
           checkResult = await externalCheck({ provider: 'telegram', provider_user_id: providerUserId });
         } catch (err) {
-          logger.warn(`[telegram] external check failed, continuing with existing session: ${err?.message || err}`);
-          checkResult = null;
+          logger.warn(`[telegram] external check failed: ${err?.message || err}`);
+          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
+          return;
         }
 
         if (checkResult && checkResult.exists === false) {
@@ -100,7 +101,9 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
             logger.warn('[telegram] external check returned non-200, continuing with existing session');
           }
         } catch (err) {
-          logger.warn(`[telegram] external check failed, continuing with existing session: ${err?.message || err}`);
+          logger.warn(`[telegram] external check failed: ${err?.message || err}`);
+          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
+          return;
         }
       }
 
