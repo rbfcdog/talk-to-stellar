@@ -228,14 +228,16 @@ ${onboardingUrl}`;
     return String(base).trim().replace(/\/$/, "");
   }
 
-  private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; recipientName?: string }): string {
+  private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; receiveAssetCode?: string; recipientName?: string }): string {
     const params = new URLSearchParams();
     const amount = String(input.amount || '').trim();
     const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const receiveAssetCode = String(input.receiveAssetCode || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
     const recipientName = String(input.recipientName || '').trim();
 
     if (amount) params.set('amount', amount);
     if (assetCode) params.set('asset', assetCode);
+    if (receiveAssetCode && receiveAssetCode !== assetCode) params.set('receive_asset', receiveAssetCode);
     if (recipientName) params.set('recipient', recipientName);
 
     const qs = params.toString();
@@ -254,17 +256,21 @@ ${onboardingUrl}`;
       );
       const amount = String(amountInfo.amount || '').trim();
       const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
       const recipientName = String(llmParsed.recipient_query || '').trim();
 
       if (llmParsed.needs_clarification && !amount) {
         state.success = false;
         state.response_message = 'Me diga o valor e a moeda para criar o link. Exemplo: criar link de 10 USDC.';
       } else {
-        const url = this.buildPayAnyoneUrl({ amount, assetCode, recipientName });
+        const url = this.buildPayAnyoneUrl({ amount, assetCode, receiveAssetCode, recipientName });
         state.pending_payment = undefined;
         state.success = true;
+        const receiveText = receiveAssetCode && receiveAssetCode !== assetCode
+          ? ` A pessoa recebe em ${receiveAssetCode}.`
+          : '';
         state.response_message =
-          `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.`;
+          `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.${receiveText}`;
       }
     }
 
@@ -318,7 +324,7 @@ ${onboardingUrl}`;
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem chave pública.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
         '- asset_code deve ser o ativo que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
-        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM".',
+        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM". Isso também vale para links de pagamento.',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
         '- needs_clarification deve ser true somente se o destinatário ou o valor estiverem ambíguos.',
@@ -329,6 +335,7 @@ ${onboardingUrl}`;
         '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
+        '- "quero criar um link de transação de 10 usdc pra pessoa receber em brl" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "gerar link de pagamento de 15 dólares" => {"recipient_query":"","amount":"15","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '',
         `Mensagem do usuário: ${userMessage}`,

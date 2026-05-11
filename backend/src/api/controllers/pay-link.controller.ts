@@ -152,6 +152,8 @@ export default class PayLinkController {
       const recipientName = String(req.body?.recipient_name || '').trim();
       const assetCode = normalizeAssetCode(req.body?.asset_code || 'USDC');
       const assetIssuer = getAssetIssuer(assetCode, req.body?.asset_issuer);
+      const destinationAssetCode = normalizeAssetCode(req.body?.destination_asset_code || req.body?.receive_asset_code || assetCode);
+      const destinationAssetIssuer = getAssetIssuer(destinationAssetCode, req.body?.destination_asset_issuer || req.body?.receive_asset_issuer);
 
       if (!sessionId || !sessionToken || !pin || !amount) {
         return res.status(400).json({ success: false, message: 'session_id, session_token, pin e amount são obrigatórios.' });
@@ -164,6 +166,9 @@ export default class PayLinkController {
       }
       if (assetCode !== 'XLM' && !assetIssuer) {
         return res.status(400).json({ success: false, message: `${assetCode}_ISSUER não está configurado no backend.` });
+      }
+      if (destinationAssetCode !== 'XLM' && !destinationAssetIssuer) {
+        return res.status(400).json({ success: false, message: `${destinationAssetCode}_ISSUER não está configurado no backend.` });
       }
 
       const session = await agentRepo.getSession(sessionId);
@@ -189,15 +194,21 @@ export default class PayLinkController {
         owner_id: String(session.user_id),
         asset_code: assetCode,
         asset_issuer: assetIssuer,
+        destination_asset_code: destinationAssetCode,
+        destination_asset_issuer: destinationAssetIssuer,
       });
+
+      const transferLabel = destinationAssetCode === assetCode
+        ? `${amount} ${assetCode}`
+        : `${amount} ${assetCode}, com recebimento em ${destinationAssetCode}`;
 
       return res.status(201).json({
         success: true,
         token,
         url,
         message: recipientName
-          ? `${String((session as any).email || 'Alguém')} enviou ${amount} ${assetCode} para ${recipientName}.`
-          : `${String((session as any).email || 'Alguém')} enviou ${amount} ${assetCode} para você. Ative sua carteira para receber.`,
+          ? `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para ${recipientName}.`
+          : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Ative sua carteira para receber.`,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
@@ -233,14 +244,19 @@ export default class PayLinkController {
       const senderSessionId = String(payload.session_id || '').trim();
       const senderUserId = String(payload.owner_id || '').trim();
       const amount = String(payload.amount || '').trim();
-      const assetCode = normalizeAssetCode(payload.asset_code || 'USDC');
-      const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
+      const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.asset_code || 'USDC');
+      const sourceAssetIssuer = getAssetIssuer(sourceAssetCode, payload.source_asset_issuer || payload.asset_issuer);
+      const destinationAssetCode = normalizeAssetCode(payload.destination_asset_code || sourceAssetCode);
+      const destinationAssetIssuer = getAssetIssuer(destinationAssetCode, payload.destination_asset_issuer);
 
       if (!senderSessionId || !senderUserId || !amount) {
         return res.status(400).json({ success: false, message: 'Link sem dados de pagamento.' });
       }
-      if (assetCode !== 'XLM' && !assetIssuer) {
-        return res.status(400).json({ success: false, message: `${assetCode}_ISSUER não está configurado no backend.` });
+      if (sourceAssetCode !== 'XLM' && !sourceAssetIssuer) {
+        return res.status(400).json({ success: false, message: `${sourceAssetCode}_ISSUER não está configurado no backend.` });
+      }
+      if (destinationAssetCode !== 'XLM' && !destinationAssetIssuer) {
+        return res.status(400).json({ success: false, message: `${destinationAssetCode}_ISSUER não está configurado no backend.` });
       }
 
       const [senderSession, recipientSession] = await Promise.all([
@@ -272,8 +288,8 @@ export default class PayLinkController {
         publicKey: recipientWallet.public_key,
         wallet: recipientWallet,
         userId: String(recipientSession.user_id),
-        assetCode,
-        assetIssuer,
+        assetCode: destinationAssetCode,
+        assetIssuer: destinationAssetIssuer,
       });
 
       const claimed = await claimToken({
@@ -283,12 +299,16 @@ export default class PayLinkController {
         destination: recipientWallet.public_key,
         destinationName: String((recipientSession as any).email || recipientSession.user_id || '').trim(),
         amount,
-        assetCode,
+        assetCode: sourceAssetCode,
         details: {
           recipient_session_id: recipientSessionId,
           recipient_user_id: recipientSession.user_id,
           recipient_name: payload.recipient_name || null,
           sender_name: payload.sender_name || null,
+          source_asset_code: sourceAssetCode,
+          source_asset_issuer: sourceAssetIssuer || null,
+          destination_asset_code: destinationAssetCode,
+          destination_asset_issuer: destinationAssetIssuer || null,
         },
       });
       if (!claimed) {
@@ -296,22 +316,34 @@ export default class PayLinkController {
       }
 
       const senderSecret = await vaultService.getSecret(String(senderWallet.vault_secret_id));
-      const xdr = await StellarService.buildPaymentXdr({
-        sourcePublicKey: senderWallet.public_key,
-        destination: recipientWallet.public_key,
-        amount,
-        assetCode: assetCode === 'XLM' ? undefined : assetCode,
-        assetIssuer: assetCode === 'XLM' ? undefined : assetIssuer,
-        memoText: 'TalkToStellar claim link',
-      });
+      const isCrossAsset = sourceAssetCode !== destinationAssetCode ||
+        String(sourceAssetIssuer || '') !== String(destinationAssetIssuer || '');
+      const xdr = isCrossAsset
+        ? await StellarService.buildStrictSendConversionXdr({
+            sourcePublicKey: senderWallet.public_key,
+            destination: recipientWallet.public_key,
+            sourceAmount: amount,
+            sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+            destAsset: { code: destinationAssetCode, issuer: destinationAssetIssuer },
+          })
+        : await StellarService.buildPaymentXdr({
+            sourcePublicKey: senderWallet.public_key,
+            destination: recipientWallet.public_key,
+            amount,
+            assetCode: sourceAssetCode === 'XLM' ? undefined : sourceAssetCode,
+            assetIssuer: sourceAssetCode === 'XLM' ? undefined : sourceAssetIssuer,
+            memoText: 'TalkToStellar claim link',
+          });
 
       const result = await StellarService.signAndSubmitXdr(String(senderSession.user_id), senderSecret, xdr, {
         user_id: String(senderSession.user_id),
-        type: assetCode === 'XLM' ? 'PAYMENT' : 'PAYMENT',
+        type: isCrossAsset ? 'PATH_PAYMENT_STRICT_SEND' : 'PAYMENT',
         destination_key: recipientWallet.public_key,
-        asset_code: assetCode,
+        asset_code: destinationAssetCode,
         amount: parseFloat(amount),
-        context: `Pay-anyone claim link redeemed by ${recipientSession.user_id}`,
+        context: isCrossAsset
+          ? `Pay-anyone claim link redeemed by ${recipientSession.user_id}; sender pays ${amount} ${sourceAssetCode}; recipient receives ${destinationAssetCode}`
+          : `Pay-anyone claim link redeemed by ${recipientSession.user_id}`,
         source_public_key: senderWallet.public_key,
         source_session_id: senderSessionId,
         destination_session_id: recipientSessionId,
@@ -336,7 +368,9 @@ export default class PayLinkController {
         success: true,
         claimed: true,
         amount,
-        assetCode,
+        assetCode: sourceAssetCode,
+        sourceAssetCode,
+        destinationAssetCode,
         hash: result.hash,
         destination: recipientWallet.public_key,
         transferDetails,

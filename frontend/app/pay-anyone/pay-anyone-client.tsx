@@ -18,6 +18,7 @@ export default function PayAnyoneClient() {
   const [recipientName, setRecipientName] = useState("")
   const [amount, setAmount] = useState("15")
   const [assetCode, setAssetCode] = useState("USDC")
+  const [destinationAssetCode, setDestinationAssetCode] = useState("USDC")
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [result, setResult] = useState<CreatePayLinkResponse | null>(null)
@@ -28,7 +29,9 @@ export default function PayAnyoneClient() {
     setSessionToken(localStorage.getItem("talk-to-stellar.sessionToken") || "")
     setRecipientName(searchParams.get("recipient") || "")
     setAmount(searchParams.get("amount") || "15")
-    setAssetCode((searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC"))
+    const sourceAsset = (searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+    setAssetCode(sourceAsset)
+    setDestinationAssetCode((searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset).toUpperCase().replace(/^USD$/, "USDC"))
   }, [searchParams])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -47,6 +50,7 @@ export default function PayAnyoneClient() {
           recipient_name: recipientName || undefined,
           amount,
           asset_code: assetCode,
+          destination_asset_code: destinationAssetCode,
           pin,
         }),
       })
@@ -121,7 +125,7 @@ export default function PayAnyoneClient() {
               />
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
+            <div className="grid gap-3 sm:grid-cols-[1fr_130px_130px]">
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">Valor</span>
                 <input
@@ -133,7 +137,7 @@ export default function PayAnyoneClient() {
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Ativo</span>
+                <span className="text-sm font-medium text-slate-200">Você paga</span>
                 <select
                   value={assetCode}
                   onChange={(event) => setAssetCode(event.target.value)}
@@ -144,7 +148,25 @@ export default function PayAnyoneClient() {
                   <option value="BRL">BRL</option>
                 </select>
               </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">Recebe em</span>
+                <select
+                  value={destinationAssetCode}
+                  onChange={(event) => setDestinationAssetCode(event.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                >
+                  <option value="USDC">USDC</option>
+                  <option value="BRL">BRL</option>
+                  <option value="XLM">XLM</option>
+                </select>
+              </label>
             </div>
+
+            {destinationAssetCode !== assetCode && (
+              <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
+                O link debita {amount || "0"} {assetCode} da sua carteira e o destinatário recebe em {destinationAssetCode} no resgate.
+              </p>
+            )}
 
             <label className="block space-y-2">
               <span className="text-sm font-medium text-slate-200">Seu PIN</span>

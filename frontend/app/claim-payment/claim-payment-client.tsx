@@ -91,10 +91,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   }
 
   const payload = validation.payload || decodeJwtPayload(token)
-  const amountLabel = useMemo(
+  const sourceAmountLabel = useMemo(
     () => formatAmount(payload.amount, payload.asset_code),
     [payload.amount, payload.asset_code]
   )
+  const destinationAssetCode = String(payload.destination_asset_code || payload.asset_code || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAssetCode = String(payload.asset_code || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+  const isCrossAsset = destinationAssetCode !== sourceAssetCode
+  const receiveLabel = isCrossAsset ? destinationAssetCode : sourceAmountLabel
   const recipientName = String(payload.recipient_name || "você")
   const senderName = String(payload.sender_name || "Alguém")
   const loggedIn = Boolean(sessionId && sessionToken)
@@ -110,10 +114,10 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           </div>
 
           <h1 className="mt-5 text-3xl font-semibold text-white md:text-5xl">
-            {senderName} enviou {amountLabel} para {recipientName}
+            {senderName} criou um link de {sourceAmountLabel} para {recipientName}
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
-            Entre ou crie sua carteira TalkToStellar para resgatar. O dinheiro é enviado para a carteira autenticada nesta página.
+            Entre ou crie sua carteira TalkToStellar para resgatar. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a carteira autenticada nesta página."}
           </p>
 
           <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
@@ -151,13 +155,18 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <CheckCircle2 className="h-4 w-4" />
-              {status === "claiming" ? "Resgatando..." : `Receber ${amountLabel}`}
+              {status === "claiming" ? "Resgatando..." : `Receber ${receiveLabel}`}
             </button>
           )}
 
           {status === "done" && (
             <div className="mt-5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
               Pagamento recebido com sucesso.
+              {result?.transferDetails?.destinationAmount && (
+                <p className="mt-2">
+                  Recebido: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
+                </p>
+              )}
               {result?.hash && <p className="mt-2 break-all font-mono text-xs">Hash: {result.hash}</p>}
             </div>
           )}
