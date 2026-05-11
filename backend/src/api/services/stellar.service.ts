@@ -2,7 +2,7 @@ import { Keypair, Operation, Asset, Memo, Networks, TransactionBuilder } from '@
 import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
-import { getAssetIssuer } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS } from '../../config/assets';
 
 interface BuildPaymentInput {
   sourcePublicKey: string;
@@ -133,7 +133,7 @@ function assetIssuer(asset: Asset): string | undefined {
     return asset.isNative() ? undefined : asset.getIssuer();
 }
 
-function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): string {
+function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extraHints: string[] = []): string {
     const sourceCode = assetCode(sourceAssetObj);
     const destCode = assetCode(destAssetObj);
     const sourceIssuer = assetIssuer(sourceAssetObj);
@@ -149,10 +149,11 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
 
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');
     hints.push('Confirme trustline do ativo de destino na wallet');
-    if (sourceCode === 'BRL' || destCode === 'BRL') {
-        hints.push('Se estiver em testnet, rode npm run stellar:setup-brl-liquidity para provisionar ofertas BRL/XLM e BRL/USDC');
-    } else {
+    if (!(sourceCode === 'BRL' || destCode === 'BRL')) {
         hints.push('Se estiver em testnet, confirme a liquidez XLM/USDC no issuer configurado');
+    }
+    for (const hint of extraHints) {
+        if (hint) hints.push(hint);
     }
 
     return [
@@ -160,6 +161,61 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
         `source_issuer=${sourceIssuer || 'native'}; dest_issuer=${destIssuer || 'native'}.`,
         `Diagnóstico: ${hints.join(' | ')}.`,
     ].join(' ');
+}
+
+const issuerAvailabilityCache = new Map<string, boolean>();
+
+async function issuerExistsOnCurrentNetwork(issuer?: string): Promise<boolean> {
+    const normalizedIssuer = String(issuer || '').trim();
+    if (!normalizedIssuer) return false;
+    if (issuerAvailabilityCache.has(normalizedIssuer)) {
+        return Boolean(issuerAvailabilityCache.get(normalizedIssuer));
+    }
+    try {
+        await server.loadAccount(normalizedIssuer);
+        issuerAvailabilityCache.set(normalizedIssuer, true);
+        return true;
+    } catch (error: any) {
+        const status = Number(error?.response?.status || 0);
+        if (status === 404) {
+            issuerAvailabilityCache.set(normalizedIssuer, false);
+            return false;
+        }
+        issuerAvailabilityCache.set(normalizedIssuer, false);
+        return false;
+    }
+}
+
+async function buildNoPathExtraHints(sourceAssetObj: Asset, destAssetObj: Asset): Promise<string[]> {
+    const hints: string[] = [];
+    const network = getStellarNetworkName();
+    const sourceCode = assetCode(sourceAssetObj);
+    const destCode = assetCode(destAssetObj);
+    const sourceIssuer = assetIssuer(sourceAssetObj);
+    const destIssuer = assetIssuer(destAssetObj);
+
+    if (sourceCode !== 'XLM' && sourceIssuer) {
+        const sourceIssuerExists = await issuerExistsOnCurrentNetwork(sourceIssuer);
+        if (!sourceIssuerExists) {
+            hints.push(`Issuer da origem (${sourceCode}) não foi encontrado na rede ${network}: ${sourceIssuer}.`);
+        }
+    }
+
+    if (destCode !== 'XLM' && destIssuer) {
+        const destIssuerExists = await issuerExistsOnCurrentNetwork(destIssuer);
+        if (!destIssuerExists) {
+            hints.push(`Issuer do destino (${destCode}) não foi encontrado na rede ${network}: ${destIssuer}.`);
+        }
+    }
+
+    if (network === 'TESTNET' && (sourceCode === 'BRL' || destCode === 'BRL')) {
+        const configuredBrlIssuer = String(getAssetIssuer('BRL') || '').trim();
+        if (configuredBrlIssuer === PUBLIC_BRL_ISSUER_NTOKENS) {
+            hints.push('BRL está apontando para o issuer nTokens; confirme se esse issuer/mercado está ativo na TESTNET.');
+        }
+    }
+
+    return hints;
 }
 
 function codeFromRecordAsset(type?: string, code?: string): string {
@@ -595,7 +651,8 @@ export class StellarService {
         ).call();
 
         if (!pathsResponse.records || pathsResponse.records.length === 0) {
-            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
+            const extraHints = await buildNoPathExtraHints(sourceAssetObj, destAssetObj);
+            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj, extraHints));
         }
 
         // Filter paths to only use trusted assets (XLM, USDC, BRL)
@@ -653,7 +710,8 @@ export class StellarService {
         ).call();
 
         if (!pathsResponse.records || pathsResponse.records.length === 0) {
-            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj));
+            const extraHints = await buildNoPathExtraHints(sourceAssetObj, destAssetObj);
+            throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj, extraHints));
         }
 
         // Filter paths to only use trusted assets (XLM, USDC, BRL)
