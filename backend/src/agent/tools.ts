@@ -77,7 +77,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get all balances of a Stellar account, including estimated USDC and BRL values when available",
+    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list.",
     parameters: {
       type: "object",
       properties: {
@@ -91,7 +91,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_account",
-    description: "Get detailed information about a Stellar account including all asset balances",
+    description: "Get technical account details and the full asset balance list for advanced inspection.",
     parameters: {
       type: "object",
       properties: {
@@ -677,6 +677,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${input.public_key}`);
     const account = await stellarService.getAccount(input.public_key);
 
+    const visibleAssets = ['BRL', 'USDC'];
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -687,14 +688,20 @@ async function executeGetBalance(input: any): Promise<string> {
       };
     });
 
-    const nativeBalance = balances.find((balance: any) => balance.asset === 'XLM');
+    const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balance.asset === asset) || {
+      asset,
+      balance: '0.0000000',
+      asset_type: asset === 'BRL' || asset === 'USDC' ? 'credit_alphanum4' : 'native',
+      asset_issuer: undefined,
+    });
     return JSON.stringify({
       success: true,
       public_key: input.public_key,
-      balance: nativeBalance?.balance || "0",
-      asset: "XLM",
-      balances,
-      message: `Account balances retrieved: ${balances.length} asset(s)`,
+      balance: filteredBalances[0]?.balance || "0.0000000",
+      asset: filteredBalances[0]?.asset || "BRL",
+      balances: filteredBalances,
+      technical_balances: balances,
+      message: `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -723,6 +730,7 @@ async function executeGetAccount(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances,
+      technical_balances: balances,
       message: "Account details retrieved",
     });
   } catch (error) {
