@@ -1530,6 +1530,88 @@ async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ pu
   return {};
 }
 
+async function resolveContactProfileByPublicKey(publicKey: string): Promise<{
+  public_key: string;
+  name?: string;
+  pix_key?: string;
+  email?: string;
+  phone_number?: string;
+  cpf?: string;
+  user_id?: string;
+}> {
+  const normalizedPublicKey = String(publicKey || '').trim();
+  if (!normalizedPublicKey) {
+    return { public_key: normalizedPublicKey };
+  }
+
+  let profile: any = { public_key: normalizedPublicKey };
+
+  const { data: walletRow, error: walletError } = await supabase
+    .from('wallets')
+    .select('session_id, public_key, name, pix_key')
+    .eq('public_key', normalizedPublicKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (walletError) {
+    throw new Error(walletError.message || 'Failed to lookup wallet profile');
+  }
+
+  if (walletRow) {
+    profile = {
+      ...profile,
+      name: walletRow.name || undefined,
+      pix_key: walletRow.pix_key || undefined,
+    };
+  }
+
+  const sessionId = String(walletRow?.session_id || '').trim();
+  if (sessionId) {
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from('agent_sessions')
+      .select('user_id, email, phone_number')
+      .eq('session_id', sessionId)
+      .limit(1)
+      .maybeSingle();
+
+    if (sessionError) {
+      throw new Error(sessionError.message || 'Failed to lookup session profile');
+    }
+
+    if (sessionRow) {
+      profile = {
+        ...profile,
+        user_id: sessionRow.user_id || undefined,
+        email: sessionRow.email || undefined,
+        phone_number: sessionRow.phone_number || undefined,
+      };
+    }
+
+    const { data: externalRows, error: externalError } = await supabase
+      .from('external_accounts')
+      .select('data')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (externalError) {
+      const message = String(externalError.message || '').toLowerCase();
+      if (!message.includes('external_accounts') && !message.includes('does not exist') && !message.includes('schema cache')) {
+        throw new Error(externalError.message || 'Failed to lookup external account profile');
+      }
+    } else {
+      for (const row of externalRows || []) {
+        const data = (row as any)?.data || {};
+        if (!profile.email && data?.email) profile.email = String(data.email).trim();
+        if (!profile.phone_number && data?.phone_number) profile.phone_number = String(data.phone_number).trim();
+        if (!profile.cpf && data?.cpf) profile.cpf = String(data.cpf).trim();
+      }
+    }
+  }
+
+  return profile;
+}
+
 async function executeAddContact(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Adding contact ${input.contact_name}`);
@@ -1560,10 +1642,21 @@ async function executeAddContact(input: any): Promise<string> {
     if (error) {
       throw new Error(error.message);
     }
+    const profile = await resolveContactProfileByPublicKey(publicKey);
+    const profileLines = [
+      `Nome: ${contactName}`,
+      `Chave pública: ${publicKey}`,
+      profile.pix_key ? `Chave de transferência: ${profile.pix_key}` : null,
+      profile.email ? `E-mail: ${profile.email}` : null,
+      profile.phone_number ? `Telefone: ${profile.phone_number}` : null,
+      profile.cpf ? `CPF: ${profile.cpf}` : null,
+    ].filter(Boolean);
+
     return JSON.stringify({
       success: true,
       contact: data,
-      message: `Contato "${contactName}" adicionado com sucesso.`,
+      contact_profile: profile,
+      message: `Contato adicionado com sucesso.\n${profileLines.join('\n')}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
