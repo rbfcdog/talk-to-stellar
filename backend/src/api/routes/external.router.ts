@@ -10,6 +10,7 @@ const router = Router();
 // public endpoint used by adapters (telegram, whatsapp) to check if an external user is onboarded
 router.post('/check-account', ExternalController.checkAccount);
 router.post('/link-existing', ExternalController.linkExistingAccount);
+router.post('/link-session', ExternalController.linkSessionToExternalAccount);
 router.post('/finalize', ExternalFinalizeController.finalize);
 router.get('/validate-token', ExternalValidateController.validate);
 router.post('/pay-links', PayLinkController.create);

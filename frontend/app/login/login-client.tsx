@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
@@ -35,14 +35,33 @@ function getPasskeyErrorMessage(error: any): string {
   return message || "Não foi possível entrar com Passkey."
 }
 
+function decodeJwtPayload(token: string): any {
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return {}
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
+    return JSON.parse(atob(padded))
+  } catch {
+    return {}
+  }
+}
+
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const searchParams = useSearchParams()
   const rawNextPath = searchParams.get("next") || "/chat"
   const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
+  const externalToken = searchParams.get("token") || ""
+  const externalPayload = useMemo(() => decodeJwtPayload(externalToken), [externalToken])
+  const externalProvider = String(externalPayload?.provider || "").trim().toLowerCase()
+  const externalProviderUserId = String(externalPayload?.provider_user_id || "").trim()
+  const hasExternalContext = Boolean(externalToken && externalProvider && externalProviderUserId)
+  const isTelegramContext = externalProvider === "telegram"
   const [email, setEmail] = useState("")
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
+  const [externalDone, setExternalDone] = useState(false)
 
   function getBrowserId() {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
@@ -53,18 +72,57 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     return browserId
   }
 
+  function finishLogin() {
+    if (isTelegramContext) {
+      setExternalDone(true)
+      window.setTimeout(() => {
+        window.close()
+      }, 700)
+      return
+    }
+
+    window.location.href = nextPath
+  }
+
+  async function linkExternalSession(sessionId?: string, sessionToken?: string) {
+    if (!hasExternalContext) return
+    if (!sessionId || !sessionToken) {
+      throw new Error("Não foi possível vincular o Telegram a esta sessão.")
+    }
+
+    const response = await fetch(`/api/external/link-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: externalToken,
+        session_id: sessionId,
+        session_token: sessionToken,
+      }),
+    })
+
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.message || "Não foi possível vincular o Telegram a esta sessão.")
+    }
+  }
+
   async function handlePinLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setStatus("pin")
     setError("")
 
     try {
+      if (externalToken && !hasExternalContext) {
+        throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
+      }
+
       const response = await fetch(`/api/external/link-existing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider: "web",
-          provider_user_id: getBrowserId(),
+          provider: hasExternalContext ? externalProvider : "web",
+          provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
+          token: hasExternalContext ? externalToken : undefined,
           email,
           pin,
         }),
@@ -79,7 +137,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         payload?.sessionId ? String(payload.sessionId) : undefined,
         payload?.sessionToken ? String(payload.sessionToken) : undefined
       )
-      window.location.href = nextPath
+      finishLogin()
     } catch (err) {
       setStatus("error")
       setError(err instanceof Error ? err.message : "Falha ao entrar com e-mail e PIN.")
@@ -103,6 +161,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     setError("")
 
     try {
+      if (externalToken && !hasExternalContext) {
+        throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
+      }
+
       const initRes = await fetch(`/api/passkeys/auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -136,11 +198,31 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
       )
       getBrowserId()
-      window.location.href = nextPath
+      await linkExternalSession(
+        completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
+        completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
+      )
+      finishLogin()
     } catch (err: any) {
       setStatus("error")
       setError(getPasskeyErrorMessage(err))
     }
+  }
+
+  if (externalDone) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
+        <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
+          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">
+            {isTelegramContext ? "Telegram conectado" : "Conta conectada"}
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            Volte ao Telegram e envie sua próxima mensagem. Esta tela pode ser fechada.
+          </p>
+        </section>
+      </main>
+    )
   }
 
   return (

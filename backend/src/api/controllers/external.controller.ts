@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { supabase } from '../../config/supabase';
 import ExternalService from '../../services/external.service';
 import { AgentRepository } from '../../repositories/agent.repository';
@@ -12,6 +13,10 @@ const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || 'dev-secret-change-me';
+}
 
 async function hasOnboardingCredentials(sessionId: string, userId: string): Promise<boolean> {
   const session = await agentRepo.getSession(sessionId);
@@ -120,10 +125,28 @@ export class ExternalController {
   // body: { provider, provider_user_id, email, pin }
   static async linkExistingAccount(req: Request, res: Response) {
     try {
-      const provider = String(req.body?.provider || '').trim().toLowerCase();
-      const providerUserId = String(req.body?.provider_user_id || '').trim();
+      let provider = String(req.body?.provider || '').trim().toLowerCase();
+      let providerUserId = String(req.body?.provider_user_id || '').trim();
+      const externalToken = String(req.body?.token || '').trim();
       const email = String(req.body?.email || '').trim().toLowerCase();
       const pin = String(req.body?.pin || '').trim();
+
+      if (externalToken) {
+        let externalPayload: any;
+        try {
+          externalPayload = jwt.verify(externalToken, getJwtSecret());
+        } catch {
+          return res.status(400).json({ success: false, message: 'Token externo inválido ou expirado.' });
+        }
+
+        if (String(externalPayload?.sub || '') !== 'external_onboard') {
+          return res.status(400).json({ success: false, message: 'Token externo inválido.' });
+        }
+
+        provider = String(externalPayload?.provider || '').trim().toLowerCase();
+        providerUserId = String(externalPayload?.provider_user_id || '').trim();
+      }
+
       const reqTag = `[link-existing provider=${provider || 'n/a'} user=${email || 'n/a'} provider_user_id=${providerUserId ? providerUserId.slice(0, 8) + '***' : 'n/a'}]`;
 
       if (!provider || !providerUserId || !email || !pin) {
@@ -267,6 +290,88 @@ export class ExternalController {
         sessionToken: String(matched.session_token || ''),
         userId: String(matched.user_id || email),
         publicKey: wallet?.public_key || undefined,
+      });
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      return res.status(500).json({ success: false, message });
+    }
+  }
+
+  // POST /api/external/link-session
+  // body: { token, session_id, session_token }
+  static async linkSessionToExternalAccount(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || '').trim();
+      const sessionId = String(req.body?.session_id || '').trim();
+      const sessionToken = String(req.body?.session_token || '').trim();
+
+      if (!token || !sessionId || !sessionToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'token, session_id e session_token são obrigatórios',
+        });
+      }
+
+      let payload: any;
+      try {
+        payload = jwt.verify(token, getJwtSecret());
+      } catch {
+        return res.status(400).json({ success: false, message: 'Token externo inválido ou expirado.' });
+      }
+
+      if (String(payload?.sub || '') !== 'external_onboard') {
+        return res.status(400).json({ success: false, message: 'Token externo inválido.' });
+      }
+
+      const provider = String(payload?.provider || '').trim().toLowerCase();
+      const providerUserId = String(payload?.provider_user_id || '').trim();
+      if (!provider || !providerUserId) {
+        return res.status(400).json({ success: false, message: 'Token externo sem provider.' });
+      }
+
+      const session = await agentRepo.getSession(sessionId);
+      if (!session?.user_id) {
+        return res.status(401).json({ success: false, message: 'Sessão não encontrada.' });
+      }
+
+      if (String(session.session_token || '').trim() !== sessionToken) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+      }
+
+      await externalRepo.createMapping({
+        provider,
+        provider_user_id: providerUserId,
+        session_id: sessionId,
+        user_id: String(session.user_id),
+      });
+
+      await supabase
+        .from('agent_states')
+        .update({
+          action_params: {
+            force_logged_out: false,
+            waiting_for_wallet_input: false,
+            pending_payment: null,
+            pending_conversion: null,
+          },
+          pending_payment: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('session_id', sessionId);
+
+      void TransferNotificationService.notifySessionWelcome({
+        sessionId,
+        userId: String(session.user_id),
+        name: String(session.email || session.user_id),
+      });
+
+      return res.status(200).json({
+        success: true,
+        linked: true,
+        exists: true,
+        provider,
+        sessionId,
+        userId: String(session.user_id),
       });
     } catch (error: any) {
       const message = error?.message || String(error);
