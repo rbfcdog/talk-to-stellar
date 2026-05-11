@@ -103,6 +103,16 @@ export default function CreateAccountClient({
   const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
+  const [telegramDone, setTelegramDone] = useState(false)
+  const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
+  const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
+
+  function finishTelegramFlow() {
+    setTelegramDone(true)
+    window.setTimeout(() => {
+      window.close()
+    }, 700)
+  }
 
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
     let browserId = browserIdOverride || localStorage.getItem("talk-to-stellar.browserId")
@@ -295,7 +305,11 @@ export default function CreateAccountClient({
       }
 
       if (response.ok && payload.success) {
-        window.location.href = nextPath
+        if (isTelegramContext) {
+          finishTelegramFlow()
+        } else {
+          window.location.href = nextPath
+        }
         return
       }
     } catch (error) {
@@ -355,7 +369,11 @@ export default function CreateAccountClient({
         passkeySessionToken: currentResult?.sessionToken,
         message: 'Biometria ativada com sucesso',
       })
-      window.location.href = nextPath
+      if (isTelegramContext) {
+        finishTelegramFlow()
+      } else {
+        window.location.href = nextPath
+      }
     } catch (err: any) {
       setPasskeyStatus('error')
       setPasskeyError(getPasskeyErrorMessage(err))
@@ -403,11 +421,29 @@ export default function CreateAccountClient({
       }
 
       setExistingStatus("done")
-      window.location.href = nextPath
+      if (isTelegramContext) {
+        finishTelegramFlow()
+      } else {
+        window.location.href = nextPath
+      }
     } catch (error) {
       setExistingStatus("error")
       setExistingError(error instanceof Error ? error.message : "Falha ao entrar com e-mail e PIN.")
     }
+  }
+
+  if (telegramDone) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
+        <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
+          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">Telegram conectado</p>
+          <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            Volte ao Telegram e envie sua próxima mensagem. Esta tela pode ser fechada.
+          </p>
+        </section>
+      </main>
+    )
   }
 
   return (

@@ -202,6 +202,37 @@ export function createAgentRoutes(
       // Backend-only onboarding gate for browser channel:
       // if user is not linked, return onboarding link from backend directly.
       const normalizedSource = String(source || "").trim().toLowerCase();
+      if (normalizedSource === "telegram") {
+        const providerUserId = String(
+          metadata?.from_id ||
+          metadata?.fromId ||
+          metadata?.provider_user_id ||
+          ""
+        ).trim();
+
+        if (providerUserId) {
+          const existing = await externalService.checkExternalAccount("telegram", providerUserId);
+
+          if (!existing) {
+            const { url } = externalService.createOnboardUrl("telegram", providerUserId);
+            return res.status(200).json({
+              session_id: session_id || null,
+              success: true,
+              onboardingRequired: true,
+              creationUrl: url,
+              message:
+                `Sua sessão não está ativa no momento.\n\n` +
+                `Abra este link para entrar na sua conta:\n${url}\n\n` +
+                `Na página, use a opção "Já tenho conta".`,
+            });
+          }
+
+          if (existing?.session_id) {
+            req.body.session_id = String(existing.session_id);
+          }
+        }
+      }
+
       if (normalizedSource === "web") {
         const providerUserId = String(metadata?.browser_id || metadata?.provider_user_id || "").trim();
         if (providerUserId) {
