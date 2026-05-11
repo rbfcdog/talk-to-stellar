@@ -1270,7 +1270,11 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
 
     let normalizedDestination = destinationCandidate ? String(destinationCandidate).trim() : '';
     normalizedDestination = repairLegacyStarterContactKey(normalizedDestination);
-    const normalizedAmount = input.amount ? String(input.amount).trim() : '';
+    const quote = input.quote && typeof input.quote === 'object' ? input.quote : null;
+    const destinationAmount = input.destination_amount || input.destinationAmount || quote?.destinationAmount;
+    const normalizedAmount = destinationAmount
+      ? String(destinationAmount).trim()
+      : (input.amount ? String(input.amount).trim() : '');
 
     // Resolve a friendly name for the destination when possible
     let destinationName: string | undefined = input.destination_name ? String(input.destination_name).trim() : undefined;
@@ -1301,9 +1305,24 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       }
     }
 
-    const assetCode = normalizeAssetCode(input.asset_code || input.asset || input.currency || 'XLM');
-    const asset = normalizeAssetInput(assetCode, input.asset_issuer || input.assetIssuer);
-    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
+    const assetCode = normalizeAssetCode(
+      input.destination_asset_code ||
+      input.destinationAssetCode ||
+      quote?.destinationAsset?.code ||
+      input.asset_code ||
+      input.asset ||
+      input.currency ||
+      'XLM'
+    );
+    const asset = normalizeAssetInput(
+      assetCode,
+      input.destination_asset_issuer ||
+      input.destinationAssetIssuer ||
+      quote?.destinationAsset?.issuer ||
+      input.asset_issuer ||
+      input.assetIssuer
+    );
+    const feeDisplay = await formatNetworkFeeForCustomer(quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
 
     const { url } = await externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
@@ -1318,13 +1337,13 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
-      quote: input.quote || null,
-      source_amount: input.source_amount || input.sourceAmount || input.quote?.sourceAmount || null,
-      source_asset_code: input.source_asset_code || input.sourceAssetCode || input.quote?.sourceAsset?.code || null,
-      source_asset_issuer: input.source_asset_issuer || input.sourceAssetIssuer || input.quote?.sourceAsset?.issuer || null,
-      destination_amount: input.destination_amount || input.destinationAmount || input.quote?.destinationAmount || normalizedAmount,
-      destination_asset_code: input.destination_asset_code || input.destinationAssetCode || input.quote?.destinationAsset?.code || asset.code,
-      destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || input.quote?.destinationAsset?.issuer || asset.issuer || null,
+      quote: quote || null,
+      source_amount: input.source_amount || input.sourceAmount || quote?.sourceAmount || null,
+      source_asset_code: input.source_asset_code || input.sourceAssetCode || quote?.sourceAsset?.code || null,
+      source_asset_issuer: input.source_asset_issuer || input.sourceAssetIssuer || quote?.sourceAsset?.issuer || null,
+      destination_amount: input.destination_amount || input.destinationAmount || quote?.destinationAmount || normalizedAmount,
+      destination_asset_code: input.destination_asset_code || input.destinationAssetCode || quote?.destinationAsset?.code || asset.code,
+      destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || quote?.destinationAsset?.issuer || asset.issuer || null,
     });
 
     return JSON.stringify({
