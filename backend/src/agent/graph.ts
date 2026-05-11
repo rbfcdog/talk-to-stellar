@@ -659,8 +659,8 @@ ${onboardingUrl}`;
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
       '- When a quote or payment result has a fee, say it before confirmation in R$ and US$, never in XLM.',
-      '- Do not claim savings without data. Prefer wording like "taxa baixa", "cotacao em tempo real antes de confirmar", and "sem surpresa no valor final".',
-      '- For transfers/conversions, emphasize that the user sees the quote before confirming and can avoid surprises.',
+      '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
+      '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
     ].join('\n');
   }
 
