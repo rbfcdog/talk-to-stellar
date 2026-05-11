@@ -77,44 +77,56 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list.",
+    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list. If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+        },
         public_key: {
           type: "string",
           description: "Stellar public key to check balance for",
         },
       },
-      required: ["public_key"],
+      required: [],
     },
   },
   {
     name: "get_account",
-    description: "Get technical account details and the full asset balance list for advanced inspection.",
+    description: "Get technical account details and the full asset balance list for advanced inspection. If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+        },
         public_key: {
           type: "string",
           description: "Stellar public key to look up",
         },
       },
-      required: ["public_key"],
+      required: [],
     },
   },
   {
     name: "get_saldo_tecnico",
-    description: "Get technical wallet balances focused on XLM, USDC, and BRL (with issuer details).",
+    description: "Get technical wallet balances focused on XLM, USDC, and BRL (with issuer details). If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+        },
         public_key: {
           type: "string",
           description: "Stellar public key to inspect technical balances for",
         },
       },
-      required: ["public_key"],
+      required: [],
     },
   },
   {
@@ -369,6 +381,10 @@ export const toolDefinitions = [
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+        },
         public_key: {
           type: "string",
           description: "Stellar public key to get history for",
@@ -378,7 +394,7 @@ export const toolDefinitions = [
           description: "Maximum number of transactions to return (default 10)",
         },
       },
-      required: ["public_key"],
+      required: [],
     },
   },
   {
@@ -698,8 +714,9 @@ async function executeCreateWallet(input: any): Promise<string> {
  */
 async function executeGetBalance(input: any): Promise<string> {
   try {
-    logger.debug(`Tool: Getting balance for ${input.public_key}`);
-    const account = await stellarService.getAccount(input.public_key);
+    const publicKey = await resolveToolPublicKey(input);
+    logger.debug(`Tool: Getting balance for ${publicKey}`);
+    const account = await stellarService.getAccount(publicKey);
 
     const visibleAssets = ['BRL', 'USDC'];
     const balances = account.balances.map((balance: any) => {
@@ -720,7 +737,7 @@ async function executeGetBalance(input: any): Promise<string> {
     });
     return JSON.stringify({
       success: true,
-      public_key: input.public_key,
+      public_key: publicKey,
       balance: filteredBalances[0]?.balance || "0.0000000",
       asset: filteredBalances[0]?.asset || "BRL",
       balances: filteredBalances,
@@ -740,8 +757,9 @@ async function executeGetBalance(input: any): Promise<string> {
  */
 async function executeGetAccount(input: any): Promise<string> {
   try {
-    logger.debug(`Tool: Getting account details for ${input.public_key}`);
-    const account = await stellarService.getAccount(input.public_key);
+    const publicKey = await resolveToolPublicKey(input);
+    logger.debug(`Tool: Getting account details for ${publicKey}`);
+    const account = await stellarService.getAccount(publicKey);
     const balances = account.balances.map((b: any) => ({
       asset: getAssetCode(b),
       balance: b.balance,
@@ -767,8 +785,9 @@ async function executeGetAccount(input: any): Promise<string> {
 
 async function executeGetSaldoTecnico(input: any): Promise<string> {
   try {
-    logger.debug(`Tool: Getting technical balances for ${input.public_key}`);
-    const account = await stellarService.getAccount(input.public_key);
+    const publicKey = await resolveToolPublicKey(input);
+    logger.debug(`Tool: Getting technical balances for ${publicKey}`);
+    const account = await stellarService.getAccount(publicKey);
 
     const mappedBalances = account.balances.map((balance: any) => ({
       asset: getAssetCode(balance),
@@ -795,7 +814,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
 
     return JSON.stringify({
       success: true,
-      public_key: input.public_key,
+      public_key: publicKey,
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
@@ -1220,9 +1239,10 @@ async function executeSubmitTransaction(input: any): Promise<string> {
  */
 async function executeGetHistory(input: any): Promise<string> {
   try {
-    logger.debug(`Tool: Getting transaction history for ${input.public_key}`);
+    const publicKey = await resolveToolPublicKey(input);
+    logger.debug(`Tool: Getting transaction history for ${publicKey}`);
     const operations = await stellarService.getOperationHistory(
-      input.public_key,
+      publicKey,
       input.limit || 10
     );
 
@@ -1231,7 +1251,7 @@ async function executeGetHistory(input: any): Promise<string> {
       const amount = op.amount || op.starting_balance || op.source_amount || op.amount_in || op.amount_out;
       const from = op.from || op.source_account || op.funder || op.account;
       const to = op.to || op.account || op.into;
-      const direction = to === input.public_key ? 'received' : from === input.public_key ? 'sent' : 'related';
+      const direction = to === publicKey ? 'received' : from === publicKey ? 'sent' : 'related';
 
       return {
         id: op.id,
@@ -1249,7 +1269,7 @@ async function executeGetHistory(input: any): Promise<string> {
     });
     return JSON.stringify({
       success: true,
-      public_key: input.public_key,
+      public_key: publicKey,
       transaction_count: operations.length,
       transactions: formattedOps,
       message: `Found ${operations.length} transactions`,
@@ -1322,6 +1342,53 @@ async function resolveToolUserId(input: any): Promise<string> {
   }
 
   return userId;
+}
+
+async function resolveToolPublicKey(input: any): Promise<string> {
+  const directPublicKey = String(input.public_key || input.publicKey || '').trim();
+  if (directPublicKey) return directPublicKey;
+
+  const sessionId = String(input.session_id || input.sessionId || '').trim();
+  if (!sessionId) {
+    throw new Error('Não consegui identificar a wallet nesta sessão. Faça login novamente.');
+  }
+
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from('agent_sessions')
+    .select('public_key')
+    .eq('session_id', sessionId)
+    .limit(1)
+    .maybeSingle();
+
+  if (sessionError) {
+    throw new Error(sessionError.message || 'Falha ao carregar sessão');
+  }
+
+  const sessionPublicKey = String(sessionRow?.public_key || '').trim();
+  if (sessionPublicKey) return sessionPublicKey;
+
+  const { data: walletRow, error: walletError } = await supabase
+    .from('wallets')
+    .select('public_key')
+    .eq('session_id', sessionId)
+    .limit(1)
+    .maybeSingle();
+
+  if (walletError) {
+    throw new Error(walletError.message || 'Falha ao localizar wallet da sessão');
+  }
+
+  const walletPublicKey = String(walletRow?.public_key || '').trim();
+  if (!walletPublicKey) {
+    throw new Error('Wallet não encontrada para esta sessão. Faça login novamente.');
+  }
+
+  await supabase
+    .from('agent_sessions')
+    .update({ public_key: walletPublicKey, last_activity: new Date().toISOString() })
+    .eq('session_id', sessionId);
+
+  return walletPublicKey;
 }
 
 async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
