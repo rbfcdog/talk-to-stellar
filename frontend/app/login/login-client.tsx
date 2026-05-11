@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
+import { KeyRound, LogIn, ShieldCheck } from "lucide-react"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -143,58 +144,93 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   return (
-    <main className="min-h-screen bg-[#07111f] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-xl items-center px-6 py-10">
-        <section className="w-full rounded-2xl border border-white/10 bg-slate-950/80 p-6 shadow-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">TalkToStellar</p>
-          <h1 className="mt-3 text-3xl font-semibold text-white">Entrar na sua conta</h1>
-          {expired && (
-            <p className="mt-3 rounded-md border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
-              Sua sessão expirou.
-            </p>
-          )}
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            Por segurança, sua sessão dura 1 hora. Entre novamente com PIN ou Passkey registrada.
-          </p>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
+      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
+        <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.05fr_0.95fr] md:p-10">
+          <section className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-cyan-200">
+              <ShieldCheck className="h-4 w-4" />
+              TalkToStellar
+            </div>
+            <div className="space-y-4">
+              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
+                Entrar na sua conta
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
+                Use seu PIN ou Passkey para voltar ao chat, confirmar pagamentos e receber links com segurança.
+              </p>
+              {expired && (
+                <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+                  Sua sessão expirou. Entre novamente para continuar.
+                </p>
+              )}
+            </div>
 
-          <form className="mt-6 space-y-3" onSubmit={handlePinLogin}>
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              placeholder="Seu e-mail"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/60"
-            />
-            <input
-              value={pin}
-              onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-              type="password"
-              inputMode="numeric"
-              maxLength={8}
-              placeholder="Seu PIN"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/60"
-            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">PIN</p>
+                <p className="mt-2 text-sm text-slate-200">Acesso rápido para a conta já criada.</p>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Passkey</p>
+                <p className="mt-2 text-sm text-slate-200">Biometria ou desbloqueio do aparelho quando disponível.</p>
+              </div>
+            </div>
+          </section>
 
-            {error && <p className="text-sm text-rose-300">{error}</p>}
+          <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+            <form className="space-y-4" onSubmit={handlePinLogin}>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">E-mail</span>
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  placeholder="voce@exemplo.com"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">PIN</span>
+                <input
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Digite seu PIN"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                />
+              </label>
+
+              {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={status === "pin" || !email.trim() || !pin.trim()}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LogIn className="h-4 w-4" />
+                {status === "pin" ? "Entrando..." : "Entrar com PIN"}
+              </button>
+            </form>
 
             <button
-              type="submit"
-              disabled={status === "pin" || !email.trim() || !pin.trim()}
-              className="w-full rounded-xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              onClick={handlePasskeyLogin}
+              disabled={status === "passkey" || !email.trim()}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {status === "pin" ? "Entrando..." : "Entrar com PIN"}
+              <KeyRound className="h-4 w-4" />
+              {status === "passkey" ? "Abrindo biometria..." : "Entrar com Passkey"}
             </button>
-          </form>
 
-          <button
-            type="button"
-            onClick={handlePasskeyLogin}
-            disabled={status === "passkey" || !email.trim()}
-            className="mt-3 w-full rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {status === "passkey" ? "Abrindo biometria..." : "Entrar com Passkey"}
-          </button>
-        </section>
+            <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
+              Por segurança, sua sessão dura 1 hora. Depois disso, você entra de novo antes de continuar.
+            </p>
+          </section>
+        </div>
       </div>
     </main>
   )
