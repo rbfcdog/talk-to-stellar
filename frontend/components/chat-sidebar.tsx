@@ -109,7 +109,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-[#313d45] bg-[#111b21]">
       <div className="flex items-center justify-between gap-3 bg-[#202c33] px-4 py-4">
-        <h1 className="text-[19px] font-bold text-[#e9edef]">TalkToStellar</h1>
+        <h1 className="text-[19px] font-bold text-[#e9edef]">WhatsDap</h1>
         <div className="flex items-center gap-4 text-[#aebac1]">
           <Users className="h-5 w-5" />
           <MessageCircle className="h-5 w-5" />
@@ -139,7 +139,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
               }`}
             >
               <Avatar className="h-12 w-12 shrink-0">
-                <AvatarImage src={chat.avatar} />
+                {chat.isBot && <AvatarImage src={chat.avatar} />}
                 <AvatarFallback className={chat.isBot ? "bg-[#00a884] text-white" : "bg-[#6b7280] text-white flex items-center justify-center"}>
                   {chat.isBot ? (
                     <span className="text-xl">T</span>
