@@ -35,6 +35,14 @@ export type SessionLogoutNotification = {
   providerUserId?: string | null;
 };
 
+export type ExternalChannelMessageNotification = {
+  sessionId?: string | null;
+  userId?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
+  text: string;
+};
+
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
 
@@ -130,6 +138,21 @@ export class TransferNotificationService {
     ]);
   }
 
+  static async notifyExternalChannelMessage(input: ExternalChannelMessageNotification): Promise<void> {
+    const sessionId = String(input.sessionId || '').trim();
+    const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const session = sessionId ? await this.safeGetSession(sessionId) : null;
+    const userId = String(input.userId || session?.user_id || '').trim();
+    const mappings = this.dedupeMappings([
+      ...(directMapping ? [directMapping] : []),
+      ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
+    ]);
+    await Promise.all([
+      this.sendTelegramToMappings(mappings, input.text),
+      this.sendWhatsAppToMappings(mappings, session?.phone_number, input.text),
+    ]);
+  }
+
   private static async safeGetSession(sessionId: string): Promise<any | null> {
     try {
       return await this.agentRepo.getSession(sessionId);
@@ -209,7 +232,8 @@ export class TransferNotificationService {
           body: JSON.stringify({ chat_id: chatId, text }),
         });
         if (!response.ok) {
-          logger.warn(`[incoming-transfer] telegram sendMessage failed with status ${response.status}`);
+          const payload = await response.text().catch(() => '');
+          logger.warn(`[incoming-transfer] telegram sendMessage failed status=${response.status} body=${payload}`);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
