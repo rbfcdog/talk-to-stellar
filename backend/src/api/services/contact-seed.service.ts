@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
-import { getStellarNetworkName } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName } from '../../config/assets';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
 import { ExternalRepository } from '../../repositories/external.repository';
@@ -75,7 +75,66 @@ export class ContactSeedService {
     if (!result.success) {
       logger.warn(`[contact-seed] default trustlines partially failed for ${publicKey}: ${result.errors.join(' | ')}`);
     }
+    await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId);
     return result;
+  }
+
+  static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string) {
+    const enabledFlag = String(process.env.ONBOARDING_AUTO_CONVERT_TO_USDC || 'true').trim().toLowerCase();
+    const enabled = enabledFlag !== 'false' && enabledFlag !== '0' && enabledFlag !== 'no';
+    if (!enabled || getStellarNetworkName() !== 'TESTNET') return;
+
+    const usdcIssuer = getAssetIssuer('USDC');
+    if (!usdcIssuer) return;
+
+    try {
+      const account = await StellarService.loadAccount(publicKey);
+      const nativeBalance = account.balances.find((balance: any) => balance.asset_type === 'native');
+      const xlmBalance = Number(nativeBalance?.balance || '0');
+      const keepXlm = Number(String(process.env.ONBOARDING_KEEP_XLM || '1.6').trim());
+      const reserve = Number.isFinite(keepXlm) && keepXlm > 0 ? keepXlm : 1.6;
+      const sourceAmountNumber = Math.floor((xlmBalance - reserve) * 1e7) / 1e7;
+
+      if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= 0.01) {
+        return;
+      }
+
+      const sourceAmount = sourceAmountNumber.toFixed(7);
+      const quote = await StellarService.quoteStrictSendConversion({
+        sourcePublicKey: publicKey,
+        destination: publicKey,
+        sourceAmount,
+        sourceAsset: { code: 'XLM' },
+        destAsset: { code: 'USDC', issuer: usdcIssuer },
+      });
+      const xdr = await StellarService.buildStrictSendConversionXdr({
+        sourcePublicKey: publicKey,
+        destination: publicKey,
+        sourceAmount,
+        sourceAsset: { code: 'XLM' },
+        destAsset: { code: 'USDC', issuer: usdcIssuer },
+      });
+
+      const result = await StellarService.signAndSubmitXdr(userId, secretKey, xdr, {
+        user_id: userId,
+        type: 'PATH_PAYMENT_STRICT_SEND',
+        destination_key: publicKey,
+        asset_code: 'USDC',
+        amount: Number(quote.destinationAmount),
+        context: `Friendbot funding sweep: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`,
+        source_public_key: publicKey,
+        source_session_id: sessionId,
+        destination_session_id: sessionId,
+      });
+
+      if (!result.success) {
+        logger.warn(`[contact-seed] funding XLM->USDC sweep failed for ${publicKey}: ${result.error || 'unknown error'}`);
+      } else {
+        logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
+      }
+    } catch (error) {
+      logger.warn(`[contact-seed] funding XLM->USDC sweep skipped for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private static async createInternalContactWallet(ownerId: string, contactName: string, pixKey: string) {

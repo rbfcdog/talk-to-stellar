@@ -830,6 +830,16 @@ export default class ExternalFinalizeController {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
         const assetCode = normalizeAssetCode((payload as any)?.asset_code || 'XLM');
         const assetIssuer = resolveAssetIssuer(assetCode, (payload as any)?.asset_issuer);
+        const requestedSourceAmount = String((payload as any)?.source_amount || '').trim();
+        const requestedSourceAssetCode = normalizeAssetCode((payload as any)?.source_asset_code || '');
+        const requestedSourceAssetIssuer = requestedSourceAssetCode
+          ? resolveAssetIssuer(requestedSourceAssetCode, (payload as any)?.source_asset_issuer)
+          : undefined;
+        const isStrictSendPayment = Boolean(
+          requestedSourceAmount &&
+          requestedSourceAssetCode &&
+          requestedSourceAssetCode !== assetCode
+        );
 
         if (!amount || !destination || !session_id) {
           return res.status(400).json({ success: false, message: 'token missing payment data' });
@@ -1026,10 +1036,12 @@ export default class ExternalFinalizeController {
 
         // Determine actual source asset: if sender has the destination asset, use it directly
         // This avoids unnecessary XLM→USDC conversions when user already has USDC
-        let actualSourceAsset: any = { code: 'XLM' };
+        let actualSourceAsset: any = isStrictSendPayment
+          ? { code: requestedSourceAssetCode, issuer: requestedSourceAssetIssuer }
+          : { code: 'XLM' };
         let senderHasDestinationAsset = false;
 
-        if (assetCode !== 'XLM') {
+        if (!isStrictSendPayment && assetCode !== 'XLM') {
           try {
             const senderAccount = await StellarService.loadAccount(wallet.public_key);
             const destAssetBalance = senderAccount.balances.find((b: any) => 
@@ -1050,7 +1062,15 @@ export default class ExternalFinalizeController {
 
         // Build quote and XDR using actual source asset
         const isDirectPayment = assetCode === 'XLM' || senderHasDestinationAsset;
-        const quote = isDirectPayment
+        const quote = isStrictSendPayment
+          ? await StellarService.quoteStrictSendConversion({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              sourceAmount: requestedSourceAmount,
+              sourceAsset: actualSourceAsset,
+              destAsset: { code: assetCode, issuer: assetIssuer },
+            })
+          : isDirectPayment
           ? null
           : await StellarService.quotePathPayment({
               sourcePublicKey: wallet.public_key,
@@ -1071,8 +1091,8 @@ export default class ExternalFinalizeController {
             destinationName: destination_contact?.contact_name || destination_name,
             destinationContact: destination_contact || null,
             sourcePublicKey: wallet.public_key,
-            sourceAsset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            sourceAssetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            sourceAsset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            sourceAssetIssuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
             destAsset: assetCode,
             destAssetIssuer: assetIssuer,
             isDirectPayment,
@@ -1094,15 +1114,15 @@ export default class ExternalFinalizeController {
           String(session.user_id),
           wallet.public_key,
           resolvedDestination,
-          senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'pending'),
-          senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-          senderHasDestinationAsset ? assetIssuer : undefined,
+          isStrictSendPayment ? requestedSourceAmount : senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'pending'),
+          isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+          isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
           amount,
           assetCode,
           assetIssuer,
           quote?.networkFeeXlm || '0.001',
           undefined,
-          isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
+          isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
           'pending',
           undefined,
           quote?.path,
@@ -1113,8 +1133,8 @@ export default class ExternalFinalizeController {
             source_public_key: wallet.public_key,
             destination_public_key: resolvedDestination,
             isDirectPayment,
-            source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
             destination_asset: assetCode,
             destination_asset_issuer: assetIssuer,
             browser_id: browserId || null,
@@ -1123,7 +1143,15 @@ export default class ExternalFinalizeController {
           }
         );
 
-        const unsignedXdr = isDirectPayment
+        const unsignedXdr = isStrictSendPayment
+          ? await StellarService.buildStrictSendConversionXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              sourceAmount: requestedSourceAmount,
+              sourceAsset: actualSourceAsset,
+              destAsset: { code: assetCode, issuer: assetIssuer },
+            })
+          : isDirectPayment
           ? await StellarService.buildPaymentXdr({
               sourcePublicKey: wallet.public_key,
               destination: resolvedDestination,
@@ -1141,7 +1169,7 @@ export default class ExternalFinalizeController {
             });
 
         // Log payment attempt with full details
-        logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}`);
+        logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}, isStrictSendPayment=${isStrictSendPayment}`);
 
         const result = await StellarService.signAndSubmitXdr(
           String(session.user_id),
@@ -1149,13 +1177,15 @@ export default class ExternalFinalizeController {
           unsignedXdr,
           {
             user_id: String(session.user_id),
-            type: assetCode === 'XLM' ? 'PAYMENT' : 'PATH_PAYMENT_STRICT_RECEIVE',
+            type: isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : assetCode === 'XLM' ? 'PAYMENT' : 'PATH_PAYMENT_STRICT_RECEIVE',
             destination_key: resolvedDestination,
             asset_code: assetCode,
             amount: parseFloat(String(amount)),
             context: assetCode === 'XLM'
               ? `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`
-              : `Pagamento em ${assetCode} para ${destination_contact?.contact_name || destination_name || destination}; origem liquidada em XLM`,
+              : isStrictSendPayment
+                ? `Pagamento com envio exato em ${actualSourceAsset.code} para ${destination_contact?.contact_name || destination_name || destination}; destino recebe ${assetCode}`
+                : `Pagamento em ${assetCode} para ${destination_contact?.contact_name || destination_name || destination}; origem liquidada em XLM`,
             source_public_key: wallet.public_key,
             source_session_id: wallet.session_id,
             destination_session_id: destinationWallet?.session_id || undefined,
@@ -1173,8 +1203,8 @@ export default class ExternalFinalizeController {
               source_public_key: wallet.public_key,
               destination_public_key: resolvedDestination,
               isDirectPayment,
-              source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-              source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+              source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+              source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
               destination_asset: assetCode,
               destination_asset_issuer: assetIssuer,
               browser_id: browserId || null,
@@ -1189,15 +1219,15 @@ export default class ExternalFinalizeController {
             String(session.user_id),
             wallet.public_key,
             resolvedDestination,
-            senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'unknown'),
-            senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            senderHasDestinationAsset ? assetIssuer : undefined,
+            isStrictSendPayment ? requestedSourceAmount : senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'unknown'),
+            isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+            isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
             amount,
             assetCode,
             assetIssuer,
             quote?.networkFeeXlm || '0.001',
             undefined,
-            isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
+            isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
             'failed',
             result.error || 'Could not submit payment',
             quote?.path,
@@ -1208,8 +1238,8 @@ export default class ExternalFinalizeController {
               source_public_key: wallet.public_key,
               destination_public_key: resolvedDestination,
               isDirectPayment,
-              source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-              source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+              source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
+              source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
               destination_asset: assetCode,
               destination_asset_issuer: assetIssuer,
               browser_id: browserId || null,
@@ -1382,7 +1412,7 @@ export default class ExternalFinalizeController {
             phone_number: normalizedPhoneNumber || existingSession.phone_number,
           } as any);
 
-          await configureWalletAssetsAndContacts({
+          void configureWalletAssetsAndContacts({
             userId: String(existingAccount.user_id),
             publicKey: existingWallet.public_key,
             vaultSecretId: existingWallet.vault_secret_id,
@@ -1462,7 +1492,7 @@ export default class ExternalFinalizeController {
             phone_number: normalizedPhoneNumber || existingSession.phone_number,
           } as any);
 
-          await configureWalletAssetsAndContacts({
+          void configureWalletAssetsAndContacts({
             userId,
             publicKey,
             vaultSecretId: existingWallet.vault_secret_id,
@@ -1519,7 +1549,7 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
       } as any);
 
-      await configureWalletAssetsAndContacts({
+      void configureWalletAssetsAndContacts({
         userId,
         publicKey,
         vaultSecretId,

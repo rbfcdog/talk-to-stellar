@@ -74,6 +74,7 @@ export class AgentGraph {
 
       const contacts = await this.fetchContacts(userId);
       const normalizedQuery = query.trim().toLowerCase();
+      const normalizedLookup = this.normalizeLookup(query);
       const normalizePhone = (value: string) => String(value || '').replace(/\D+/g, '');
 
       const isPublicKey = /^G[A-Z2-7]{55}$/i.test(normalizedQuery);
@@ -110,9 +111,16 @@ export class AgentGraph {
         }
       }
 
-      return contacts.find((c: any) =>
-        String(c.contact_name || c.name || '').trim().toLowerCase() === normalizedQuery
-      );
+      return contacts.find((c: any) => {
+        const contactName = String(c.contact_name || c.name || '').trim();
+        const normalizedContactName = this.normalizeLookup(contactName);
+        return (
+          contactName.toLowerCase() === normalizedQuery ||
+          normalizedContactName === normalizedLookup ||
+          normalizedContactName.includes(normalizedLookup) ||
+          normalizedLookup.includes(normalizedContactName)
+        );
+      });
     } catch (error) {
       logger.debug(`[getContactByPublicKeyOrName] Error: ${error}`);
       return undefined;
@@ -176,30 +184,9 @@ export class AgentGraph {
   ): { amount: string; assetCode?: string } {
     const amountText = String(rawAmount || '').trim();
     const hinted = String(hintedAsset || '').trim().toUpperCase();
-    const normalizedText = amountText
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-
-    const explicitAsset =
-      /\b(usdc|usd|dolar|dolares|dollar|dollars)\b/i.test(normalizedText) || /\$\s*\d/.test(amountText)
-        ? 'USDC'
-        : /\b(brl|real|reais)\b/i.test(normalizedText) || /r\$\s*\d/i.test(normalizedText)
-          ? 'BRL'
-          : /\bxlm|lumens?\b/i.test(normalizedText)
-            ? 'XLM'
-            : undefined;
-
-    const assetMatches = amountText.match(/\b(USDC|USD|BRL|XLM)\b/gi) || [];
-    const normalizedAsset = explicitAsset ||
-      (assetMatches.length > 0
-        ? String(assetMatches[0]).toUpperCase().replace(/^USD$/, 'USDC')
-        : (hinted ? hinted.replace(/^USD$/, 'USDC') : undefined));
-
-    const numericMatch = amountText.replace(',', '.').match(/[0-9]+(?:\.[0-9]+)?/);
-    const cleanedAmount = numericMatch
-      ? numericMatch[0]
-      : amountText.replace(/\b(USDC|USD|BRL|XLM)\b/gi, '').trim();
+    const normalizedAsset = hinted === 'USD' ? 'USDC' : (hinted || undefined);
+    const normalizedAmount = amountText.replace(',', '.');
+    const cleanedAmount = Number.isFinite(Number(normalizedAmount)) ? normalizedAmount : amountText;
 
     return {
       amount: cleanedAmount,
@@ -231,6 +218,61 @@ Abra este link para criar conta ou entrar em uma conta existente:
 ${onboardingUrl}`;
   }
 
+  private getFrontendBaseUrl(): string {
+    const base =
+      process.env.PAYMENT_CONFIRM_BASE ||
+      process.env.CREATE_ACCOUNT_BASE ||
+      process.env.FRONTEND_URL ||
+      process.env.PUBLIC_APP_URL ||
+      "http://localhost:3000";
+    return String(base).trim().replace(/\/$/, "");
+  }
+
+  private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; recipientName?: string }): string {
+    const params = new URLSearchParams();
+    const amount = String(input.amount || '').trim();
+    const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const recipientName = String(input.recipientName || '').trim();
+
+    if (amount) params.set('amount', amount);
+    if (assetCode) params.set('asset', assetCode);
+    if (recipientName) params.set('recipient', recipientName);
+
+    const qs = params.toString();
+    return `${this.getFrontendBaseUrl()}/pay-anyone${qs ? `?${qs}` : ''}`;
+  }
+
+  private async handlePayAnyoneLinkRequest(state: AgentState): Promise<AgentState> {
+    if (!state.session_data?.public_key) {
+      state.success = false;
+      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+    } else {
+      const llmParsed = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+      const amountInfo = this.normalizePaymentAmountAndAsset(
+        String(llmParsed.amount || ''),
+        llmParsed.asset_code
+      );
+      const amount = String(amountInfo.amount || '').trim();
+      const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const recipientName = String(llmParsed.recipient_query || '').trim();
+
+      if (llmParsed.needs_clarification && !amount) {
+        state.success = false;
+        state.response_message = 'Me diga o valor e a moeda para criar o link. Exemplo: criar link de 10 USDC.';
+      } else {
+        const url = this.buildPayAnyoneUrl({ amount, assetCode, recipientName });
+        state.pending_payment = undefined;
+        state.success = true;
+        state.response_message =
+          `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.`;
+      }
+    }
+
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private shouldPreferLogin(state: AgentState): boolean {
     const forceLoggedOut = Boolean((state.action_params as any)?.force_logged_out);
     if (forceLoggedOut) return true;
@@ -258,8 +300,10 @@ ${onboardingUrl}`;
     recipient_query?: string;
     amount?: string;
     asset_code?: string;
+    receive_asset_code?: string;
     category?: string;
     memo?: string;
+    is_payment_link?: boolean;
     needs_clarification?: boolean;
     clarification_question?: string;
   }> {
@@ -267,19 +311,30 @@ ${onboardingUrl}`;
       content: [
         'Extraia apenas o intento de pagamento em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
+        '- is_payment_link deve ser true quando o usuário pedir para criar/gerar/fazer/montar link de pagamento, link de transação, link de transferência ou link para alguém receber dinheiro.',
+        '- Quando is_payment_link=true, não exija destinatário, contato ou chave pública.',
         '- recipient_query deve ser o nome, telefone, chave de transferência ou chave pública mais útil para identificar o destinatário.',
+        '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
+        '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem chave pública.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser USDC, BRL ou XLM quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
+        '- asset_code deve ser o ativo que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
+        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
         '- needs_clarification deve ser true somente se o destinatário ou o valor estiverem ambíguos.',
         '- clarification_question deve estar em pt-BR e curto quando needs_clarification for true.',
         '- Se não houver ambiguidades, clarification_question deve ser string vazia.',
         '',
+        'Exemplos:',
+        '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
+        '- "gerar link de pagamento de 15 dólares" => {"recipient_query":"","amount":"15","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
+        '',
         `Mensagem do usuário: ${userMessage}`,
         '',
         'Formato esperado:',
-        '{"recipient_query":"Ana Silva","amount":"10","asset_code":"USDC","category":"aluguel","memo":"Pagamento do aluguel de maio","needs_clarification":false,"clarification_question":""}',
+        '{"recipient_query":"Ana Silva","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"aluguel","memo":"Pagamento do aluguel de maio","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
       ].join('\n'),
     });
 
@@ -292,14 +347,156 @@ ${onboardingUrl}`;
         recipient_query: parsed.recipient_query || parsed.destination || parsed.recipient,
         amount: parsed.amount,
         asset_code: parsed.asset_code || parsed.asset || parsed.currency,
+        receive_asset_code: parsed.receive_asset_code || parsed.dest_asset_code || parsed.destination_asset || parsed.receive_asset,
         category: parsed.category || parsed.reason || parsed.purpose,
         memo: parsed.memo || parsed.note || parsed.description,
+        is_payment_link: Boolean(parsed.is_payment_link || parsed.payment_link || parsed.pay_anyone),
         needs_clarification: Boolean(parsed.needs_clarification),
         clarification_question: parsed.clarification_question || '',
       };
     } catch {
       return {};
     }
+  }
+
+  private async handlePaymentRequest(state: AgentState): Promise<AgentState> {
+    if (!state.session_data?.public_key) {
+      state.success = false;
+      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const llmParsed = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+    const recipientQuery = String(llmParsed.recipient_query || '').trim();
+    const amountInfo = this.normalizePaymentAmountAndAsset(
+      String(llmParsed.amount || ''),
+      llmParsed.asset_code
+    );
+    const amount = String(amountInfo.amount || '').trim();
+    const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode)
+      .trim()
+      .toUpperCase()
+      .replace(/^USD$/, 'USDC');
+
+    if (llmParsed.is_payment_link) {
+      return await this.handlePayAnyoneLinkRequest(state);
+    }
+
+    if (llmParsed.needs_clarification || !recipientQuery || !amount || !assetCode) {
+      state.success = false;
+      state.response_message = llmParsed.clarification_question || 'Me diga o destinatário, valor e moeda. Exemplo: mandar para Ana Silva 3 USDC.';
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const contact = await this.getContactByPublicKeyOrName(recipientQuery, state.session_data.user_id);
+    const destination = String(
+      contact?.stellar_public_key ||
+      contact?.public_key ||
+      (/^G[A-Z2-7]{55}$/i.test(recipientQuery) ? recipientQuery : '')
+    ).trim();
+    const destinationName = String(contact?.contact_name || contact?.name || recipientQuery).trim();
+
+    if (!destination) {
+      state.success = false;
+      state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie a chave pública ou salve esse contato antes de transferir.`;
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    let quote: any = null;
+    let confirmationAmount = amount;
+    let confirmationAssetCode = assetCode;
+    let sourceAmountForConfirmation: string | undefined;
+    let sourceAssetCodeForConfirmation: string | undefined;
+    let sourceAssetIssuerForConfirmation: string | undefined;
+
+    if (receiveAssetCode && receiveAssetCode !== assetCode) {
+      const sourceIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, assetCode);
+      let destIssuer = await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
+      if (receiveAssetCode !== 'XLM' && !destIssuer) {
+        const trustlineResultRaw = await executeTool('ensure_trustline', {
+          session_id: contact?.session_id,
+          public_key: destination,
+          asset_code: receiveAssetCode,
+        });
+        try {
+          const trustlineResult = JSON.parse(trustlineResultRaw);
+          if (trustlineResult.success && trustlineResult.asset_issuer) {
+            destIssuer = trustlineResult.asset_issuer;
+          }
+        } catch {
+          // ignore, quote will fail with a clearer error if issuer is missing
+        }
+      }
+
+      const quoteRaw = await executeTool('quote_asset_transfer', {
+        source_public_key: state.session_data.public_key,
+        destination,
+        source_amount: amount,
+        source_asset_code: assetCode,
+        source_asset_issuer: sourceIssuer,
+        dest_asset_code: receiveAssetCode,
+        dest_asset_issuer: destIssuer,
+      });
+      const quoteResult = JSON.parse(quoteRaw);
+      if (!quoteResult.success) {
+        state.success = false;
+        state.response_message = `Não consegui cotar esse pagamento: ${quoteResult.error || 'erro desconhecido'}`;
+        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      quote = quoteResult.quote;
+      confirmationAmount = String(quote.destinationAmount || '').trim();
+      confirmationAssetCode = receiveAssetCode;
+      sourceAmountForConfirmation = amount;
+      sourceAssetCodeForConfirmation = assetCode;
+      sourceAssetIssuerForConfirmation = sourceIssuer;
+    }
+
+    const prepareRaw = await executeTool('prepare_payment_confirmation', {
+      session_id: state.session_id,
+      owner_id: state.session_data.user_id,
+      amount: confirmationAmount,
+      asset_code: confirmationAssetCode,
+      destination,
+      destination_name: destinationName,
+      destination_contact: contact || undefined,
+      quote,
+      source_amount: sourceAmountForConfirmation,
+      source_asset_code: sourceAssetCodeForConfirmation,
+      source_asset_issuer: sourceAssetIssuerForConfirmation,
+      memo: llmParsed.memo,
+    });
+
+    let prepare: any;
+    try {
+      prepare = JSON.parse(prepareRaw);
+    } catch {
+      prepare = { success: false, error: 'Failed to parse payment confirmation response' };
+    }
+
+    if (!prepare.success || !prepare.url) {
+      state.success = false;
+      state.response_message = `Não consegui gerar o link de confirmação do pagamento agora: ${prepare.error || 'erro desconhecido'}`;
+    } else {
+      state.pending_payment = undefined;
+      state.success = true;
+      state.response_message = receiveAssetCode !== assetCode
+        ? `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}. Para confirmar, abra o link:\n\n${prepare.url}`
+        : (prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`);
+    }
+
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
   }
 
   private async extractConversionIntentWithLlm(userMessage: string): Promise<{
@@ -319,6 +516,10 @@ ${onboardingUrl}`;
         '- Se o usuário usar USD, normalize para USDC.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
+        '',
+        'Exemplos:',
+        '- "quero converter 3 usdc pra brl" => {"sourceAmount":"3","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
+        '- "trocar 10 brl por usdc" => {"sourceAmount":"10","sourceAssetCode":"BRL","destAssetCode":"USDC","needs_clarification":false,"clarification_question":""}',
         '',
         `Mensagem do usuário: ${userMessage}`,
         '',
@@ -353,6 +554,16 @@ ${onboardingUrl}`;
     if (!value) return 'indisponivel';
     if (value.length <= 14) return value;
     return `${value.slice(0, 8)}...${value.slice(-6)}`;
+  }
+
+  private normalizeLookup(value: string): string {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w\s@.+-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
   private async buildRuntimeContext(userId?: string, sessionId?: string): Promise<string> {
@@ -540,7 +751,7 @@ ${onboardingUrl}`;
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar digital wallet assistant.
 Analyze the user message and classify it into ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, balance, history, conversion, price_quote, pix, or general
+login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, conversion, price_quote, pix, or general
 
 Respond ONLY with the intent name. Examples:
 - "Check my balance" → balance
@@ -552,19 +763,26 @@ Respond ONLY with the intent name. Examples:
 - "show transaction history" → history
 - "see transactions list" → history
 - "converter dolares para reais" → conversion
+- "quero converter 3 usdc pra brl" → conversion
 - "trocar 10 usdc por brl" → conversion
 - "convert assets" → conversion
 - "qual a cotação do dólar" → price_quote
 - "cotação brl usdc agora" → price_quote
 - "Send 100 XLM" → payment
+- "quero mandar 10 usdc pra o Rodrigo receber em brl" → payment
+- "quero criar um link de transacao de 10 usdc" → payment_link
+- "gerar link de pagamento de 15 dólares" → payment_link
+- "cria um link para alguém receber 20 usdc" → payment_link
+- "rodrigobfcdog@gmail.com nos meus contatos" → contacts
 - "Create account" → onboard
 - "Create wallet" → wallet
 - "I need a wallet" → wallet
 - "Entrar na wallet" → wallet
-- "Importar carteira com chave privada" → wallet
+- "Importar carteira existente" → wallet
 - "Sair da wallet" → wallet_logout
 - "Desconectar carteira" → wallet_logout
 
+Prioritize 'payment_link' when the user asks to create/generate a payment/transaction link, especially when no recipient public key or saved contact is provided.
 Prioritize 'wallet' for messages about creating/generating wallets, accounts, or getting started.
 Prefer 'contacts' when the user asks about contact list, wallet contacts, favorites, or saved beneficiaries.`;
 
@@ -582,6 +800,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         wallet_logout: IntentType.WALLET_LOGOUT,
         contacts: IntentType.CONTACTS,
         payment: IntentType.PAYMENT,
+        payment_link: IntentType.PAYMENT_LINK,
         balance: IntentType.BALANCE,
         history: IntentType.HISTORY,
         conversion: IntentType.CONVERSION,
@@ -601,114 +820,134 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     }
   }
 
-  private detectIntentByKeyword(message: string): IntentType | undefined {
-    const normalized = message
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
+  private async extractContactIntentWithLlm(userMessage: string): Promise<{
+    action?: 'add' | 'list';
+    contact_key?: string;
+    contact_name?: string;
+    needs_clarification?: boolean;
+    clarification_question?: string;
+  }> {
+    const prompt = new HumanMessage({
+      content: [
+        'Extraia apenas o intento de contatos em JSON válido, sem markdown e sem texto extra.',
+        'Regras:',
+        '- action deve ser "add" quando o usuário quer salvar/adicionar/incluir algo nos contatos.',
+        '- action deve ser "list" quando o usuário quer ver/listar contatos.',
+        '- contact_key deve ser a chave pública, chave de transferência, e-mail, telefone, CPF ou identificador informado para salvar.',
+        '- contact_name deve ser o nome do contato quando explicitamente informado; se não houver nome, use string vazia.',
+        '- needs_clarification deve ser true somente se faltar o dado necessário para a ação.',
+        '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
+        '',
+        'Exemplos:',
+        '- "rodrigobfcdog@gmail.com nos meus contatos" => {"action":"add","contact_key":"rodrigobfcdog@gmail.com","contact_name":"","needs_clarification":false,"clarification_question":""}',
+        '- "adiciona Rodrigo pelo email rodrigobfcdog@gmail.com" => {"action":"add","contact_key":"rodrigobfcdog@gmail.com","contact_name":"Rodrigo","needs_clarification":false,"clarification_question":""}',
+        '',
+        `Mensagem do usuário: ${userMessage}`,
+        '',
+        'Formato esperado:',
+        '{"action":"add","contact_key":"rodrigo@example.com","contact_name":"Rodrigo","needs_clarification":false,"clarification_question":""}',
+      ].join('\n'),
+    });
 
-    const addContactWords = ['adicionar', 'adiciona', 'salvar', 'salva', 'guardar', 'inclui', 'incluir', 'cadastrar', 'cadastre', 'add'];
-    const contactWords = ['contato', 'contatos', 'beneficiario', 'beneficiarios', 'contact', 'contacts'];
-    const hasContactKey = /\bG[A-Z2-7]{55}\b/i.test(message) || /\b[a-z0-9._%+-]+@talktostellar\b/i.test(message);
-    if (addContactWords.some((word) => normalized.includes(word)) && (contactWords.some((word) => normalized.includes(word)) || hasContactKey)) {
-      return IntentType.CONTACTS;
+    const response = await this.llm.invoke([prompt]);
+    const text = typeof response.content === 'string' ? response.content.trim() : JSON.stringify(response.content || {});
+
+    try {
+      const parsed = JSON.parse(text);
+      return {
+        action: parsed.action === 'add' || parsed.action === 'list' ? parsed.action : undefined,
+        contact_key: parsed.contact_key || parsed.key || parsed.email || parsed.phone || parsed.public_key || parsed.pix_key,
+        contact_name: parsed.contact_name || parsed.name || '',
+        needs_clarification: Boolean(parsed.needs_clarification),
+        clarification_question: parsed.clarification_question || '',
+      };
+    } catch {
+      return {};
     }
-
-    const technicalBalanceWords = ['saldo tecnico', 'saldo tecnico completo', 'saldo tecnico detalhado', 'saldo completo', 'detalhe da conta', 'balanco tecnico', 'balance technical'];
-    if (technicalBalanceWords.some((word) => normalized.includes(word))) {
-      return IntentType.BALANCE;
-    }
-
-    const balanceWords = ['saldo', 'balance', 'balanco', 'quanto tenho', 'quanto eu tenho'];
-    if (balanceWords.some((word) => normalized.includes(word))) {
-      return IntentType.BALANCE;
-    }
-
-    const historyWords = ['historico', 'extrato', 'transacao', 'transacoes', 'transactions', 'transaction history', 'activity'];
-    if (historyWords.some((word) => normalized.includes(word))) {
-      return IntentType.HISTORY;
-    }
-
-    const conversionWords = ['converter', 'conversao', 'converter asset', 'trocar', 'swap', 'convert'];
-    if (conversionWords.some((word) => normalized.includes(word))) {
-      return IntentType.CONVERSION;
-    }
-
-    const quoteWords = ['cotacao', 'cotação', 'cambio', 'câmbio', 'dolar', 'dólar', 'brl usdc', 'usdc brl', 'exchange rate', 'price quote'];
-    if (quoteWords.some((word) => normalized.includes(word))) {
-      return IntentType.PRICE_QUOTE;
-    }
-
-    if (this.wantsLogoutWallet(message)) {
-      return IntentType.WALLET_LOGOUT;
-    }
-
-    // PIN reset intent
-    const pinResetWords = ['redefinir pin', 'resetar pin', 'esqueci pin', 'esqueci o pin', 'mudar pin', 'alterar pin', 'change pin', 'reset pin', 'forgot pin', 'pin reset'];
-    if (pinResetWords.some((word) => normalized.includes(word))) {
-      return IntentType.GENERAL; // Will be handled by LLM with tools available
-    }
-
-    return undefined;
   }
 
-  private extractAddContactPayload(message: string): { key?: string; contactName?: string } {
-    const raw = String(message || '').trim();
-    if (!raw) {
-      return {};
+  private formatAddedContactMessage(toolResult: any): string {
+    const rawMessage = String(toolResult?.message || '').trim();
+    if (rawMessage) {
+      return rawMessage;
     }
 
-    const publicKeyMatch = raw.match(/\bG[A-Z2-7]{55}\b/i);
-    const transferKeyMatch = raw.match(/\b[a-z0-9._%+-]+@talktostellar\b/i);
-    const emailMatch = raw.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
-    const cpfMatch = raw.match(/\b\d{3}\.?\d{3}\.?\d{3}\-?\d{2}\b/);
-    const phoneMatch = raw.match(/(?:\+?\d[\d\s().-]{7,}\d)/);
+    const contact = toolResult?.contact || {};
+    const profile = toolResult?.contact_profile || {};
+    const lines = [
+      contact.contact_name ? `Nome: ${contact.contact_name}` : null,
+      contact.stellar_public_key ? `Chave pública: ${contact.stellar_public_key}` : null,
+      profile.pix_key || contact.pix_key ? `Chave de transferência: ${profile.pix_key || contact.pix_key}` : null,
+      profile.email ? `E-mail: ${profile.email}` : null,
+      profile.phone_number ? `Telefone: ${profile.phone_number}` : null,
+      profile.cpf ? `CPF: ${profile.cpf}` : null,
+    ].filter(Boolean);
 
-    const normalized = raw
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
+    return `Contato adicionado com sucesso.${lines.length ? `\n${lines.join('\n')}` : ''}`;
+  }
 
-    const hasAddVerb = /\b(adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\b/.test(normalized);
-    const hasContactWord = /\b(contato|contatos|beneficiario|beneficiarios|contacts?)\b/.test(normalized);
-    const hasResolvableKey = Boolean(publicKeyMatch || transferKeyMatch || emailMatch || cpfMatch || phoneMatch);
-    const addIntent = hasAddVerb && (hasContactWord || hasResolvableKey);
+  private async handleContactsRequest(state: AgentState): Promise<AgentState> {
+    const contactIntent = await this.extractContactIntentWithLlm(state.current_input);
+    const contactKey = String(contactIntent.contact_key || '').trim();
 
-    if (!addIntent) {
-      return {};
+    if (contactIntent.needs_clarification) {
+      state.success = false;
+      state.response_message = contactIntent.clarification_question || 'Me diga qual contato você quer salvar ou listar.';
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
     }
 
-    let key = (publicKeyMatch?.[0] || transferKeyMatch?.[0] || emailMatch?.[0] || cpfMatch?.[0] || phoneMatch?.[0] || '').trim();
+    if (contactIntent.action === 'add' && contactKey) {
+      const resultRaw = await executeTool('add_contact', {
+        session_id: state.session_id,
+        user_id: state.session_data?.user_id,
+        contact_name: String(contactIntent.contact_name || '').trim(),
+        contact_key: contactKey,
+      });
 
-    if (!key) {
-      const genericKeyMatch =
-        raw.match(/(?:contatos?|beneficiarios?)\s+(?:o|a|um|uma)?\s*([^\n\r,;]+)/i) ||
-        raw.match(/(?:adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\s+(?:nos?\s+meus?\s+)?(?:contatos?|beneficiarios?)\s+(?:o|a|um|uma)?\s*([^\n\r,;]+)/i);
-      key = String(genericKeyMatch?.[1] || '').trim();
+      let toolResult: any;
+      try {
+        toolResult = JSON.parse(resultRaw);
+      } catch {
+        toolResult = { success: false, error: 'Failed to parse add_contact response' };
+      }
+
+      state.success = Boolean(toolResult.success);
+      state.response_message = toolResult.success
+        ? this.formatAddedContactMessage(toolResult)
+        : `Não consegui adicionar esse contato: ${toolResult.error || 'erro desconhecido'}`;
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
     }
 
-    if (!key) {
-      return {};
+    const resultRaw = await executeTool('list_contacts', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+    });
+
+    let toolResult: any;
+    try {
+      toolResult = JSON.parse(resultRaw);
+    } catch {
+      toolResult = { success: false, error: 'Failed to parse list_contacts response' };
     }
 
-    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const withoutKey = raw.replace(new RegExp(escapedKey, 'i'), ' ');
-    const nameMatch =
-      withoutKey.match(/(?:nome\s+(?:do|da)\s+contato\s*[:=-]?\s*)([^\n\r,;]+)/i) ||
-      withoutKey.match(/(?:contato\s+(?:chamado|nome)\s*[:=-]?\s*)([^\n\r,;]+)/i) ||
-      withoutKey.match(/(?:adicionar|adiciona|salvar|salva|guardar|inclui|incluir|cadastrar|cadastre|add)\s+(?:o|a|um|uma|meu|minha)?\s*(?:contato|beneficiario)?\s*([^\n\r,;]+)/i);
+    if (!toolResult.success) {
+      state.success = false;
+      state.response_message = `Não consegui listar seus contatos: ${toolResult.error || 'erro desconhecido'}`;
+    } else {
+      const contacts = Array.isArray(toolResult.contacts) ? toolResult.contacts : [];
+      state.success = true;
+      state.response_message = contacts.length
+        ? `Seus contatos:\n${contacts.map((contact: any, index: number) => `${index + 1}. ${contact.contact_name || contact.name || 'Contato'}${contact.stellar_public_key ? ` - ${contact.stellar_public_key}` : ''}`).join('\n')}`
+        : 'Você ainda não tem contatos salvos.';
+    }
 
-    const cleanedName = String(nameMatch?.[1] || '')
-      .replace(/\bcomo\s+(meu|minha|um|uma)?\s*contato\b/gi, ' ')
-      .replace(/\bcomo\s+(meu|minha|um|uma)?\s*beneficiario\b/gi, ' ')
-      .replace(/\b(nos|nosso|nossos|minha|minhas|meu|meus|em|na|no|de)\b/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    return {
-      key: key.replace(/\s+/g, ' ').trim(),
-      contactName: cleanedName || undefined,
-    };
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
   }
 
   private isOwnReceivingKeyRequest(message: string): boolean {
@@ -781,6 +1020,26 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       publicKey: publicKey || undefined,
       pixKey: pixKey || undefined,
     };
+  }
+
+  private formatOwnReceivingKeys(publicKey?: string, pixKey?: string): string {
+    const lines: string[] = [];
+
+    if (publicKey) {
+      lines.push(`Chave pública da sua wallet: \`${publicKey}\``);
+    }
+
+    if (pixKey && pixKey !== publicKey) {
+      lines.push(`Chave de recebimento: \`${pixKey}\``);
+    }
+
+    if (!lines.length) {
+      return 'Não encontrei uma chave de recebimento vinculada à sua sessão atual.';
+    }
+
+    return lines.length === 1
+      ? `Sua chave para receber é:\n${lines[0]}`
+      : `Suas chaves para receber são:\n${lines.map((line, index) => `${index + 1}. ${line}`).join('\n')}`;
   }
 
   /**
@@ -858,8 +1117,6 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
 
         state.response_message = `Carteira importada com sucesso.
 
-      Sua chave privada foi armazenada com segurança no Vault.
-
       **Chave Pública:**
       \`${walletResult.publicKey}\`
 
@@ -922,20 +1179,15 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
         await this.repository.saveSession(state.session_id, state.session_data);
       }
 
-        // Prepare response with wallet info and Vault-backed secret storage notice
+      // Prepare response with wallet info
       state.response_message = `Sua carteira foi criada com sucesso.
 
     **Chave Pública (pode compartilhar):**
 \`${walletResult.publicKey}\`
 
-      **SUA CHAVE PRIVADA FOI ARMAZENADA COM SEGURANÇA NO VAULT:**
-    -- Ela não será exibida nesta conversa
-    -- O backend pode recuperá-la com segurança quando necessário
-    -- Use sua chave pública para receber valores na sua carteira
-
 Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
-    Digite \`entendi\` para confirmar que entendeu que a chave está armazenada com segurança.`;
+    Use sua chave pública para receber valores na sua carteira.`;
 
       state.success = true;
       state.action_params = {
@@ -1213,21 +1465,6 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return ['sim', 'confirmo', 'confirmar', 'pode converter', 'converter', 'yes', 'confirm'].includes(normalized);
   }
 
-  private parseConversionRequest(text: string): { sourceAmount?: string; sourceAssetCode?: string; destAssetCode?: string } {
-    const normalized = text.replace(',', '.');
-    const match = normalized.match(/(?:converter|conversao|trocar|swap|convert)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]{2,12})\s+(?:para|por|to|em|into)\s+([a-zA-Z]{2,12})/i);
-
-    if (!match) {
-      return {};
-    }
-
-    return {
-      sourceAmount: match[1],
-      sourceAssetCode: match[2].toUpperCase(),
-      destAssetCode: match[3].toUpperCase(),
-    };
-  }
-
   private async resolveWalletAssetIssuer(publicKey: string, assetCode: string): Promise<string | undefined> {
     const normalizedAssetCode = assetCode.toUpperCase();
     if (normalizedAssetCode === 'XLM') {
@@ -1309,13 +1546,9 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
-      const parsed = llmParsed.sourceAmount && llmParsed.sourceAssetCode && llmParsed.destAssetCode
-        ? llmParsed
-        : this.parseConversionRequest(state.current_input);
-
-      const finalSourceAmount = String(parsed.sourceAmount || '').trim();
-      const finalSourceAssetCode = String(parsed.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-      const finalDestAssetCode = String(parsed.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
+      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const finalDestAssetCode = String(llmParsed.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
 
       if (!finalSourceAmount || !finalSourceAssetCode || !finalDestAssetCode) {
         state.success = false;
@@ -1425,6 +1658,35 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
+  private async handlePriceQuoteRequest(state: AgentState): Promise<AgentState> {
+    const toolResultRaw = await executeTool('get_brl_usdc_quote', {});
+    let toolResult: any;
+    try {
+      toolResult = JSON.parse(toolResultRaw);
+    } catch {
+      toolResult = { success: false, error: 'Failed to parse quote response' };
+    }
+
+    if (!toolResult.success) {
+      state.success = false;
+      state.response_message = `Não consegui consultar a cotação agora: ${toolResult.error || 'erro desconhecido'}`;
+    } else {
+      const brlPerUsdc = Number(toolResult.brl_per_usdc);
+      const usdcPerBrl = Number(toolResult.usdc_per_brl);
+      const brlLabel = Number.isFinite(brlPerUsdc) ? brlPerUsdc.toFixed(4) : String(toolResult.brl_per_usdc);
+      const usdcLabel = Number.isFinite(usdcPerBrl) ? usdcPerBrl.toFixed(8) : String(toolResult.usdc_per_brl);
+      state.success = true;
+      state.response_message =
+        `Cotação agora: 1 USDC = R$ ${brlLabel}.\n` +
+        `Inverso: 1 BRL = US$ ${usdcLabel}.\n` +
+        `Fonte: ${String(toolResult.source || 'mercado').toUpperCase()} (${toolResult.symbol || 'USDCBRL'}).`;
+    }
+
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   /**
    * Process user input through the agent
    */
@@ -1466,6 +1728,35 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.CREATE_WALLET && !hasActiveWallet) {
         return await this.handleWalletCreation(state);
+      }
+
+      if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
+        const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
+        state.response_message = this.formatOwnReceivingKeys(publicKey, pixKey);
+        state.success = true;
+        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      if (state.action_type === ActionType.BUILD_PAYMENT) {
+        return await this.handlePaymentRequest(state);
+      }
+
+      if (state.action_type === ActionType.CREATE_PAYMENT_LINK) {
+        return await this.handlePayAnyoneLinkRequest(state);
+      }
+
+      if (state.action_type === ActionType.CONVERT_ASSETS) {
+        return await this.handleAssetConversion(state);
+      }
+
+      if (state.action_type === ActionType.GET_PRICE_QUOTE) {
+        return await this.handlePriceQuoteRequest(state);
+      }
+
+      if (state.action_type === ActionType.LIST_CONTACTS) {
+        return await this.handleContactsRequest(state);
       }
 
       try {
@@ -1567,6 +1858,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       [IntentType.WALLET_LOGOUT]: ActionType.LOGOUT_WALLET,
       [IntentType.CONTACTS]: ActionType.LIST_CONTACTS,
       [IntentType.PAYMENT]: ActionType.BUILD_PAYMENT,
+      [IntentType.PAYMENT_LINK]: ActionType.CREATE_PAYMENT_LINK,
       [IntentType.BALANCE]: ActionType.GET_BALANCE,
       [IntentType.HISTORY]: ActionType.GET_HISTORY,
       [IntentType.CONVERSION]: ActionType.CONVERT_ASSETS,

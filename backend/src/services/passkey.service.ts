@@ -27,7 +27,19 @@ function getJwtSecret() {
 }
 
 function getRpID() {
-  return process.env.PASSKEY_RP_ID || process.env.WEBAUTHN_RP_ID || 'localhost';
+  const explicitRpId = process.env.PASSKEY_RP_ID || process.env.WEBAUTHN_RP_ID;
+  if (explicitRpId) return explicitRpId;
+
+  const origin = process.env.PASSKEY_ORIGIN || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL;
+  if (origin) {
+    try {
+      return new URL(origin).hostname;
+    } catch {
+      // fall through to local development default
+    }
+  }
+
+  return 'localhost';
 }
 
 function getRpName() {
@@ -107,6 +119,52 @@ export class PasskeyService {
     return (data || []) as StoredPasskey[];
   }
 
+  static async resolveLoginUserId(identifier: string): Promise<string> {
+    const normalized = String(identifier || '').trim().toLowerCase();
+    if (!normalized) {
+      throw new Error('email or user_id is required');
+    }
+
+    const { data, error } = await supabase
+      .from('agent_sessions')
+      .select('user_id, email, updated_at, created_at')
+      .or(`email.eq.${normalized},user_id.eq.${normalized}`)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      throw new Error(`Failed to resolve login user: ${error.message}`);
+    }
+
+    const userId = String(data?.[0]?.user_id || normalized).trim();
+    if (!userId) {
+      throw new Error('Account not found');
+    }
+
+    return userId;
+  }
+
+  static async getLatestSessionForUser(userId: string): Promise<{ sessionId?: string; sessionToken?: string }> {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) return {};
+
+    const { data, error } = await supabase
+      .from('agent_sessions')
+      .select('session_id, session_token, updated_at, created_at')
+      .eq('user_id', normalizedUserId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      throw new Error(`Failed to resolve user session: ${error.message}`);
+    }
+
+    return {
+      sessionId: data?.[0]?.session_id ? String(data[0].session_id) : undefined,
+      sessionToken: data?.[0]?.session_token ? String(data[0].session_token) : undefined,
+    };
+  }
+
   private static async storeChallenge(userId: string, type: string, challenge: string, payload: any) {
     const { data, error } = await supabase
       .from('passkey_challenges')
@@ -184,7 +242,9 @@ export class PasskeyService {
       challenge,
       attestationType: 'none',
       authenticatorSelection: {
-        residentKey: 'preferred',
+        authenticatorAttachment: 'platform',
+        residentKey: 'required',
+        requireResidentKey: true,
         userVerification: 'required',
       },
       excludeCredentials: passkeys.map((passkey) => ({
@@ -309,6 +369,7 @@ export class PasskeyService {
     return {
       verified: true,
       sessionToken: AuthService.generateTokenForUser(userId),
+      ...(await this.getLatestSessionForUser(userId)),
     };
   }
 

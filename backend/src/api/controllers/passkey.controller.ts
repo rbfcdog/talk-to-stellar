@@ -5,8 +5,8 @@ import PasskeyService from '../../services/passkey.service';
 export default class PasskeyController {
   static async registerInit(req: Request, res: Response) {
     try {
-      const userId = req.body?.user_id
-        ? String(req.body.user_id)
+      const userId = req.body?.user_id || req.body?.email
+        ? await PasskeyService.resolveLoginUserId(String(req.body.user_id || req.body.email))
         : await PasskeyService.getUserIdFromExternalPaymentToken(String(req.body?.token || ''));
 
       const result = await PasskeyService.generateRegistration(userId);
@@ -18,8 +18,8 @@ export default class PasskeyController {
 
   static async registerComplete(req: Request, res: Response) {
     try {
-      const userId = req.body?.user_id
-        ? String(req.body.user_id)
+      const userId = req.body?.user_id || req.body?.email
+        ? await PasskeyService.resolveLoginUserId(String(req.body.user_id || req.body.email))
         : await PasskeyService.getUserIdFromExternalPaymentToken(String(req.body?.token || ''));
 
       const result = await PasskeyService.verifyRegistration(
@@ -45,9 +45,11 @@ export default class PasskeyController {
         return res.status(200).json({ success: true, ...result });
       }
 
-      const userId = String(req.body?.user_id || '');
+      const userId = req.body?.user_id || req.body?.email
+        ? await PasskeyService.resolveLoginUserId(String(req.body.user_id || req.body.email))
+        : '';
       if (!userId) {
-        return res.status(400).json({ success: false, message: 'user_id or token is required' });
+        return res.status(400).json({ success: false, message: 'user_id, email or token is required' });
       }
 
       const result = await PasskeyService.generateLoginAuthentication(userId);
@@ -75,9 +77,11 @@ export default class PasskeyController {
         });
       }
 
-      const userId = String(req.body?.user_id || '');
+      const userId = req.body?.user_id || req.body?.email
+        ? await PasskeyService.resolveLoginUserId(String(req.body.user_id || req.body.email))
+        : '';
       if (!userId) {
-        return res.status(400).json({ success: false, message: 'user_id or token is required' });
+        return res.status(400).json({ success: false, message: 'user_id, email or token is required' });
       }
 
       const result = await PasskeyService.verifyLoginAuthentication(

@@ -130,7 +130,7 @@ export const toolDefinitions = [
         },
         secret_key: {
           type: "string",
-          description: "Existing Stellar private key (secret) to import/login wallet",
+          description: "Existing Stellar import credential for wallet import/login",
         },
       },
       required: [],
@@ -192,7 +192,7 @@ export const toolDefinitions = [
   },
   {
     name: "build_payment",
-    description: "Build a Stellar payment transaction (XDR format). Must be signed and submitted separately.",
+    description: "Internal low-level helper to build a Stellar payment XDR. Do not use for normal user chat payment requests; use prepare_payment_confirmation so the user gets a frontend confirmation link.",
     parameters: {
       type: "object",
       properties: {
@@ -226,7 +226,7 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, destination amount, customer-facing fee, and route. Use the configured issuers for USDC/BRL when the caller does not provide one.",
+    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, destination amount, customer-facing fee, and route. For user-facing conversions, follow this with prepare_conversion_confirmation so the user gets a frontend confirmation link.",
     parameters: {
       type: "object",
       properties: {
@@ -268,7 +268,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the vault-backed session wallet and the configured issuers for XLM, USDC, and BRL.",
+    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
     parameters: {
       type: "object",
       properties: {
@@ -310,7 +310,7 @@ export const toolDefinitions = [
   },
   {
     name: "ensure_trustline",
-    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the vault-backed session wallet.",
+    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the current session wallet.",
     parameters: {
       type: "object",
       properties: {
@@ -340,7 +340,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_payment_confirmation",
-    description: "Create a one-time payment confirmation link for a confirmed recipient and amount.",
+    description: "Create a one-time frontend payment confirmation link for a confirmed recipient and amount. Use this for normal user chat payment requests instead of build_payment.",
     parameters: {
       type: "object",
       properties: {
@@ -382,7 +382,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_conversion_confirmation",
-    description: "Create a one-time conversion confirmation link for a wallet self-conversion.",
+    description: "Create a one-time frontend conversion confirmation link for a wallet self-conversion. Use this for normal user chat conversion requests after quoting.",
     parameters: {
       type: "object",
       properties: {
@@ -787,9 +787,8 @@ async function executeCreateWallet(input: any): Promise<string> {
       success: true,
       user_id: result.userId,
       public_key: result.publicKey,
-      vault_secret_id: result.vaultSecretId || null,
       message: input.secret_key
-        ? "Account created successfully! The private key was stored securely in Vault."
+        ? "Account imported successfully!"
         : "Account linked successfully!",
     });
   } catch (error) {
@@ -1013,7 +1012,7 @@ async function executeConvertAssets(input: any): Promise<string> {
     const wallet = await walletRepo.getWalletBySession(sessionId);
 
     if (!wallet?.public_key || !wallet?.vault_secret_id) {
-      throw new Error('Wallet with vault-backed private key not found for this session.');
+      throw new Error('Wallet signing configuration not found for this session.');
     }
 
     const quoteInput = {
@@ -1135,7 +1134,7 @@ async function executeEnsureTrustline(input: any): Promise<string> {
       : await walletRepo.getWalletByPublicKey(requestedPublicKey);
 
     if (!wallet?.public_key || !wallet?.vault_secret_id) {
-      throw new Error('Wallet with vault-backed private key not found for this session.');
+      throw new Error('Wallet signing configuration not found for this session.');
     }
 
     const publicKey = requestedPublicKey || wallet.public_key;
@@ -1257,7 +1256,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
     const asset = normalizeAssetInput(assetCode, input.asset_issuer || input.assetIssuer);
     const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
 
-    const { url } = externalService.createPaymentConfirmUrl({
+    const { url } = await externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
       asset_code: asset.code,
       asset_issuer: asset.issuer,
@@ -1271,6 +1270,12 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
       quote: input.quote || null,
+      source_amount: input.source_amount || input.sourceAmount || input.quote?.sourceAmount || null,
+      source_asset_code: input.source_asset_code || input.sourceAssetCode || input.quote?.sourceAsset?.code || null,
+      source_asset_issuer: input.source_asset_issuer || input.sourceAssetIssuer || input.quote?.sourceAsset?.issuer || null,
+      destination_amount: input.destination_amount || input.destinationAmount || input.quote?.destinationAmount || normalizedAmount,
+      destination_asset_code: input.destination_asset_code || input.destinationAssetCode || input.quote?.destinationAsset?.code || asset.code,
+      destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || input.quote?.destinationAsset?.issuer || asset.issuer || null,
     });
 
     return JSON.stringify({
@@ -2282,7 +2287,6 @@ async function executeRestartOnboarding(input: any): Promise<string> {
     // If no user_id provided, create a new user/wallet
     let finalUserId = userId;
     let publicKey: string | undefined;
-    let vaultSecretId: string | undefined;
 
     if (!userId) {
       try {
@@ -2293,7 +2297,6 @@ async function executeRestartOnboarding(input: any): Promise<string> {
         });
         finalUserId = result.userId;
         publicKey = result.publicKey;
-        vaultSecretId = result.vaultSecretId;
 
         logger.info(`New user created during onboarding restart: ${finalUserId}`);
       } catch (error) {
@@ -2396,7 +2399,6 @@ async function executeRestartOnboarding(input: any): Promise<string> {
       user_id: finalUserId,
       session_id: sessionId,
       public_key: publicKey,
-      vault_secret_id: vaultSecretId,
       passkey_url: passkeyUrl,
       pin_set: true,
       message: messages.join('\n'),

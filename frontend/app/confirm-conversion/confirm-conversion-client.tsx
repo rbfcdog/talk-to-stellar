@@ -46,7 +46,8 @@ function decodeJwtPayload(token: string): any {
 }
 
 function formatAmount(amount?: string, assetCode?: string) {
-  const code = String(assetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
+  if (!String(amount || "").trim()) return "Valor indisponível"
+  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const n = Number(String(amount || "").replace(",", "."))
   if (!Number.isFinite(n)) return "Valor indisponível"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
@@ -89,7 +90,12 @@ export default function ConfirmConversionClient({
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         if (!response.ok || !payload?.valid) {
-          setValidation({ success: true, valid: true, payload: fallbackPayload })
+          setValidation({
+            success: false,
+            valid: false,
+            payload: fallbackPayload,
+            message: payload?.message || "Link inválido ou expirado. Gere um novo link de confirmação.",
+          })
           return
         }
         setValidation(payload?.payload ? payload : { success: true, valid: true, payload: fallbackPayload })
@@ -207,7 +213,7 @@ export default function ConfirmConversionClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || !token.trim() || !pin.trim()}
+                disabled={status === "submitting" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? "Confirmando conversão..." : "Confirmar conversão"}
