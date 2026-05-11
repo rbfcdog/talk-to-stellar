@@ -52,45 +52,94 @@ async function fetchBrlUsdcQuote(): Promise<{
   const symbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
   const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
 
-  if (source !== 'binance') {
-    throw new Error(`Fonte de cotação não suportada: ${source}. Use BRL_USDC_QUOTE_SOURCE=binance.`);
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
-
-  try {
-    const endpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Cotação indisponível na fonte ${source} (${response.status}).`);
-    }
-
-    const payload = await response.json() as { symbol?: string; price?: string };
-    const rawPrice = String(payload?.price || '').trim();
-    const brlPerUsdcNumber = Number(rawPrice);
-    if (!Number.isFinite(brlPerUsdcNumber) || brlPerUsdcNumber <= 0) {
+  const parsePrice = (rawPrice: unknown) => {
+    const price = Number(String(rawPrice || '').trim());
+    if (!Number.isFinite(price) || price <= 0) {
       throw new Error('Resposta de cotação inválida da fonte externa.');
     }
-
-    const usdcPerBrlNumber = 1 / brlPerUsdcNumber;
+    const inverse = 1 / price;
     return {
-      source,
+      brlPerUsdc: price.toFixed(8),
+      usdcPerBrl: inverse.toFixed(8),
+    };
+  };
+
+  const fetchWithTimeout = async (endpoint: string) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      const body = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${body.slice(0, 160)}`);
+      }
+      return JSON.parse(body);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  const tryBinance = async () => {
+    const endpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
+    const payload = await fetchWithTimeout(endpoint) as { symbol?: string; price?: string };
+    const parsed = parsePrice(payload?.price);
+    return {
+      source: 'binance',
       symbol: String(payload?.symbol || symbol).toUpperCase(),
-      brlPerUsdc: brlPerUsdcNumber.toFixed(8),
-      usdcPerBrl: usdcPerBrlNumber.toFixed(8),
+      ...parsed,
       fetchedAt: new Date().toISOString(),
     };
-  } finally {
-    clearTimeout(timeout);
+  };
+
+  const tryAwesomeApi = async () => {
+    const payload = await fetchWithTimeout('https://economia.awesomeapi.com.br/json/last/USD-BRL') as {
+      USDBRL?: { bid?: string; ask?: string; create_date?: string };
+    };
+    const parsed = parsePrice(payload?.USDBRL?.bid || payload?.USDBRL?.ask);
+    return {
+      source: 'awesomeapi',
+      symbol: 'USDBRL',
+      ...parsed,
+      fetchedAt: payload?.USDBRL?.create_date || new Date().toISOString(),
+    };
+  };
+
+  const tryFrankfurter = async () => {
+    const payload = await fetchWithTimeout('https://api.frankfurter.app/latest?from=USD&to=BRL') as {
+      rates?: { BRL?: number };
+      date?: string;
+    };
+    const parsed = parsePrice(payload?.rates?.BRL);
+    return {
+      source: 'frankfurter',
+      symbol: 'USDBRL',
+      ...parsed,
+      fetchedAt: new Date().toISOString(),
+    };
+  };
+
+  const providers = source === 'binance'
+    ? [tryBinance, tryAwesomeApi, tryFrankfurter]
+    : source === 'awesomeapi'
+      ? [tryAwesomeApi, tryFrankfurter, tryBinance]
+      : source === 'frankfurter'
+        ? [tryFrankfurter, tryAwesomeApi, tryBinance]
+        : [tryBinance, tryAwesomeApi, tryFrankfurter];
+
+  const errors: string[] = [];
+  for (const provider of providers) {
+    try {
+      return await provider();
+    } catch (error: any) {
+      errors.push(error?.message || String(error));
+    }
   }
+
+  throw new Error(`Cotação indisponível nas fontes configuradas: ${errors.join(' | ')}`);
 }
 
 /**
