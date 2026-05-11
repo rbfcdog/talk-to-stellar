@@ -11,7 +11,12 @@ describe('External onboarding service', () => {
     const service = new ExternalService({} as any);
     const { token, url } = service.createOnboardUrl('telegram', '123456');
 
-    expect(url).toBe('https://app.example.com/create-account?token=' + encodeURIComponent(token));
+    const parsedUrl = new URL(url);
+    expect(`${parsedUrl.origin}${parsedUrl.pathname}`).toBe('https://app.example.com/create-account');
+    expect(parsedUrl.searchParams.get('token')).toBe(token);
+    expect(parsedUrl.searchParams.get('provider')).toBe('telegram');
+    expect(parsedUrl.searchParams.get('provider_user_id')).toBe('123456');
+    expect(parsedUrl.searchParams.get('source')).toBe('telegram');
 
     const decoded = jwt.decode(token) as jwt.JwtPayload | null;
     expect(decoded).toBeTruthy();

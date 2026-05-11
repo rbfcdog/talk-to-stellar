@@ -215,8 +215,13 @@ export class ExternalService {
     // 24 hours expiration
     const token = jwt.sign(payload, getJwtSecret(), { expiresIn: '24h' });
 
-    // Dynamic URL: frontend can read token and complete onboarding flow
-    const url = `${getCreateAccountBase()}/create-account?token=${encodeURIComponent(token)}`;
+    // Dynamic URL: frontend can read token and preserve the external-channel context.
+    const urlObj = new URL(`${getCreateAccountBase()}/create-account`);
+    urlObj.searchParams.set('token', token);
+    urlObj.searchParams.set('provider', provider);
+    urlObj.searchParams.set('provider_user_id', providerUserId);
+    urlObj.searchParams.set('source', provider);
+    const url = urlObj.toString();
 
     return { token, url };
   }

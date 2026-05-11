@@ -19,10 +19,12 @@ export class AgentGraph {
   private llm: ChatOpenAI;
   private repository: AgentRepository;
   private systemPrompt: string;
+  private externalService: ExternalService;
 
   constructor(repository: AgentRepository, openaiApiKey: string, systemPrompt: string) {
     this.repository = repository;
     this.systemPrompt = systemPrompt;
+    this.externalService = new ExternalService(supabase as any);
     this.llm = new ChatOpenAI({
       openAIApiKey: openaiApiKey,
       temperature: parseFloat(process.env.TEMPERATURE || "0.1"),
@@ -195,14 +197,24 @@ export class AgentGraph {
     };
   }
 
-  private getOnboardingOrLoginMessage(preferLogin: boolean = false): string {
+  private getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): string {
     const base =
       process.env.CREATE_ACCOUNT_BASE ||
       process.env.FRONTEND_URL ||
       process.env.PUBLIC_APP_URL ||
       "http://localhost:3000";
     const normalizedBase = String(base).trim().replace(/\/$/, "");
-    const onboardingUrl = `${normalizedBase}/create-account`;
+    let onboardingUrl = `${normalizedBase}/create-account`;
+    const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
+
+    if (externalProvider && externalProviderUserId) {
+      try {
+        onboardingUrl = this.externalService.createOnboardUrl(externalProvider, externalProviderUserId).url;
+      } catch (error) {
+        logger.warn(`[onboarding-url] failed to create external onboarding URL: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
     if (preferLogin) {
       return `Sua sessão não está ativa no momento.
@@ -248,7 +260,7 @@ ${onboardingUrl}`;
   private async handlePayAnyoneLinkRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
       const amountInfo = this.normalizePaymentAmountAndAsset(
@@ -370,7 +382,7 @@ ${onboardingUrl}`;
   private async handlePaymentRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
       await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
       await this.repository.saveState(state.session_id, state);
       return state;
@@ -1146,7 +1158,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
 
       // If no email/phone provided, ask for it
       if (!email && !phoneNumber) {
-        state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+        state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
         state.waiting_for_wallet_input = true;
         state.action_params = {
           ...state.action_params,
@@ -1389,7 +1401,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
       const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_saldo_tecnico' : 'get_balance', {
@@ -1432,7 +1444,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleHistoryCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const toolResultRaw = await executeTool('get_transaction_history', {
         public_key: state.session_data.public_key,
@@ -1554,7 +1566,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
@@ -1731,7 +1743,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
         state.success = false;
-        state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+        state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
         await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
         await this.repository.saveState(state.session_id, state);
         return state;
