@@ -334,16 +334,25 @@ export class ExternalService {
     owner_id: string;
     asset_code?: string;
     asset_issuer?: string;
+    destination_asset_code?: string;
+    destination_asset_issuer?: string;
     nonce?: string;
   }, extra = {}) {
     const assetCode = normalizeAssetCode(payload.asset_code || 'USDC');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
+    const destinationAssetCode = normalizeAssetCode(payload.destination_asset_code || assetCode);
+    const destinationAssetIssuer = getAssetIssuer(destinationAssetCode, payload.destination_asset_issuer);
 
     const tokenPayload = {
       sub: 'external_payment_claim',
       amount: payload.amount,
       asset_code: assetCode,
       asset_issuer: assetIssuer || null,
+      source_amount: payload.amount,
+      source_asset_code: assetCode,
+      source_asset_issuer: assetIssuer || null,
+      destination_asset_code: destinationAssetCode,
+      destination_asset_issuer: destinationAssetIssuer || null,
       recipient_name: payload.recipient_name || null,
       sender_name: payload.sender_name || null,
       session_id: payload.session_id,
