@@ -8,6 +8,7 @@ export interface AssetConfig {
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
+export const TESTNET_BRL_ISSUER_DEFAULT = 'GDYAZKZBGC2NNI2FYVPJW5FNAGKUVJIIB3WO3JZFCGURG6TDU3JZNLTQ';
 
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
@@ -39,7 +40,7 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
       return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
     }
     const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
-    return configuredTestnet || PUBLIC_BRL_ISSUER_NTOKENS;
+    return configuredTestnet || TESTNET_BRL_ISSUER_DEFAULT;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
