@@ -11,13 +11,13 @@ export class AuthService {
     }
 
     const payload = { userId: user.id };
-    const sessionToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+    const sessionToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 
     return { sessionToken, userId: user.id, publicKey: user.stellar_public_key };
   }
 
   static generateTokenForUser(userId: string): string {
     const payload = { userId };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
   }
 }

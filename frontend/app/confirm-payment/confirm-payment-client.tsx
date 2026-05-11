@@ -48,7 +48,8 @@ function decodeJwtPayload(token: string): any {
 }
 
 function formatPaymentAmount(amount?: string, assetCode?: string) {
-  const code = String(assetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
+  if (!String(amount || "").trim()) return "Valor indisponível"
+  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const n = Number(String(amount || "").replace(",", "."))
   if (!Number.isFinite(n)) return "Valor indisponível"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
@@ -99,7 +100,12 @@ export default function ConfirmPaymentClient({
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         if (!response.ok || !payload?.valid) {
-          setValidation({ success: true, valid: true, payload: fallbackPayload })
+          setValidation({
+            success: false,
+            valid: false,
+            payload: fallbackPayload,
+            message: payload?.message || "Link inválido ou expirado. Gere um novo link de confirmação.",
+          })
           return
         }
         setValidation(payload?.payload ? payload : { success: true, valid: true, payload: fallbackPayload })
@@ -147,8 +153,12 @@ export default function ConfirmPaymentClient({
   }
 
   const payload = validation?.payload || decodeJwtPayload(token)
-  const assetCode = String(payload.asset_code || payload.assetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
+  const assetCode = String(payload.asset_code || payload.assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
+  const sourceAssetCode = String(payload.source_asset_code || payload.quote?.sourceAsset?.code || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAmount = String(payload.source_amount || payload.quote?.sourceAmount || "")
+  const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
+  const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
   const destinationLabel = payload.destination_name || payload.destination || "Destinatário indisponível"
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
 
@@ -183,7 +193,7 @@ export default function ConfirmPaymentClient({
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Pagamento</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  {amountLabel}
+                  {isCrossCurrency ? sourceAmountLabel : amountLabel}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -199,12 +209,17 @@ export default function ConfirmPaymentClient({
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">Resumo</p>
-                <p className="mt-2 text-slate-300">Valor: {amountLabel}</p>
+                <p className="mt-2 text-slate-300">
+                  {isCrossCurrency ? `Você envia: ${sourceAmountLabel}` : `Valor: ${amountLabel}`}
+                </p>
+                {isCrossCurrency && (
+                  <p className="text-slate-300">Destino recebe aproximadamente: {amountLabel}</p>
+                )}
                 <p className="text-slate-300">Destino: {destinationLabel}</p>
                 {estimatedFeeDisplay && (
                   <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
                 )}
-                {assetCode !== "XLM" && (
+                {assetCode !== "XLM" && !isCrossCurrency && (
                   <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
                 )}
               </div>
@@ -225,7 +240,7 @@ export default function ConfirmPaymentClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || !token.trim() || !pin.trim()}
+                disabled={status === "submitting" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? "Confirmando pagamento..." : "Confirmar pagamento"}

@@ -306,7 +306,9 @@ export class StellarService {
   }
 
   static async fundWithFriendbot(publicKey: string): Promise<void> {
-    const response = await fetch(`${stellarConfig.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`);
+    const response = await fetch(`${stellarConfig.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`, {
+      signal: AbortSignal.timeout(Number(process.env.STELLAR_FRIENDBOT_TIMEOUT_MS || 5000)),
+    });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
       throw new Error(`Failed to fund account using Friendbot: ${response.status} ${body}`);

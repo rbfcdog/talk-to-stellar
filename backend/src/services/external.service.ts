@@ -120,6 +120,51 @@ function isValidStellarPublicKey(value?: string) {
   }
 }
 
+function compactContact(contact?: Record<string, any>) {
+  if (!contact || typeof contact !== 'object') return undefined;
+  return {
+    contact_name: contact.contact_name || contact.name || undefined,
+    stellar_public_key: contact.stellar_public_key || contact.public_key || undefined,
+  };
+}
+
+function compactQuote(quote?: any) {
+  if (!quote || typeof quote !== 'object') return null;
+  return {
+    sourceAmount: quote.sourceAmount || undefined,
+    destinationAmount: quote.destinationAmount || undefined,
+    networkFeeXlm: quote.networkFeeXlm || undefined,
+    sourceAsset: quote.sourceAsset
+      ? {
+          code: quote.sourceAsset.code,
+          issuer: quote.sourceAsset.issuer || undefined,
+        }
+      : undefined,
+    destinationAsset: quote.destinationAsset
+      ? {
+          code: quote.destinationAsset.code,
+          issuer: quote.destinationAsset.issuer || undefined,
+        }
+      : undefined,
+    path: Array.isArray(quote.path)
+      ? quote.path.map((asset: any) => ({
+          code: asset.code || asset.asset_code || undefined,
+          issuer: asset.issuer || asset.asset_issuer || undefined,
+          type: asset.type || asset.asset_type || undefined,
+        }))
+      : [],
+  };
+}
+
+function compactExtra(extra: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries({
+      ...extra,
+      quote: compactQuote((extra as any).quote),
+    }).filter(([, value]) => value !== undefined && value !== null && (typeof value !== 'string' || value !== ''))
+  );
+}
+
 export class ExternalService {
   repo: ExternalRepository;
   supabase: SupabaseClient;
@@ -177,7 +222,7 @@ export class ExternalService {
   }
 
   // Create a one-time JWT + URL to confirm a payment from an external channel
-  createPaymentConfirmUrl(payload: { amount: string; destination: string; destination_name?: string; destination_contact?: Record<string, any>; session_id?: string; owner_id?: string; asset_code?: string; asset_issuer?: string; nonce?: string }, extra = {}) {
+  async createPaymentConfirmUrl(payload: { amount: string; destination: string; destination_name?: string; destination_contact?: Record<string, any>; session_id?: string; owner_id?: string; asset_code?: string; asset_issuer?: string; nonce?: string }, extra = {}) {
     const assetCode = normalizeAssetCode(payload.asset_code || 'XLM');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
 
@@ -188,11 +233,11 @@ export class ExternalService {
       asset_issuer: assetIssuer || null,
       destination: payload.destination,
       destination_name: payload.destination_name,
-      destination_contact: payload.destination_contact,
+      destination_contact: compactContact(payload.destination_contact),
       session_id: payload.session_id || null,
       owner_id: payload.owner_id || null,
       nonce: payload.nonce || uuidv4(),
-      ...extra,
+      ...compactExtra(extra as Record<string, any>),
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
@@ -223,43 +268,6 @@ export class ExternalService {
         .toLowerCase();
 
     const base = getPaymentConfirmBase();
-
-    const tryResolveFromOwner = async (): Promise<string | null> => {
-      if (!lookupName || !ownerId) return null;
-      try {
-        const found = await ContactRepository.findByNameForOwner(ownerId, lookupName);
-        if (found?.stellar_public_key && isValidStellarPublicKey(String(found.stellar_public_key).trim())) {
-          return String(found.stellar_public_key).trim();
-        }
-      } catch (err) {
-        // ignore
-      }
-      return null;
-    };
-
-    const tryResolveGlobal = async (): Promise<string | null> => {
-      if (!lookupName) return null;
-      try {
-        const { data: allContacts } = await this.supabase
-          .from('contacts')
-          .select('stellar_public_key, contact_name');
-
-        const normalizedLookup = normalize(lookupName || '');
-        const exactMatches = (allContacts || []).filter((c: any) => {
-          const cName = String(c.contact_name || '');
-          return normalize(cName) === normalizedLookup && c.stellar_public_key;
-        });
-
-        if (exactMatches.length === 1) {
-          const pk = String(exactMatches[0].stellar_public_key).trim();
-          if (isValidStellarPublicKey(pk)) return pk;
-        }
-      } catch (err) {
-        // ignore
-      }
-      return null;
-    };
-
     const buildUrl = (pk: string) => `${base}/confirm-payment?token=${encodeURIComponent(token)}&public_key=${encodeURIComponent(pk)}`;
 
     // If publicKeyForUrl already set, return synchronously
@@ -267,10 +275,88 @@ export class ExternalService {
       return { token, url: buildUrl(publicKeyForUrl) };
     }
 
-    // Otherwise we need to resolve asynchronously — but this function is synchronous
-    // To keep API, we will attempt a best-effort synchronous resolve via direct contact lookup using Supabase is async,
-    // so we will fallback to throwing and require callers to pass public_key or destination_contact with public key.
+    const resolveByOwner = async (): Promise<string | null> => {
+      if (!lookupName || !ownerId) return null;
+      try {
+        const found = await ContactRepository.findByNameForOwner(ownerId, lookupName);
+        if (found?.stellar_public_key && isValidStellarPublicKey(String(found.stellar_public_key).trim())) {
+          return String(found.stellar_public_key).trim();
+        }
+      } catch (err) {
+        // ignore owner lookup failures
+      }
+      return null;
+    };
+
+    const resolveByGlobalLookup = async (): Promise<string | null> => {
+      if (!lookupName) return null;
+      try {
+        const { data: allContacts } = await this.supabase
+          .from('contacts')
+          .select('stellar_public_key, contact_name');
+
+        const normalizedLookup = normalize(lookupName);
+        const exactMatches = (allContacts || []).filter((contact: any) => {
+          const contactName = String(contact.contact_name || '');
+          return normalize(contactName) === normalizedLookup && contact.stellar_public_key;
+        });
+
+        if (exactMatches.length === 1) {
+          const pk = String(exactMatches[0].stellar_public_key).trim();
+          if (isValidStellarPublicKey(pk)) {
+            return pk;
+          }
+        }
+      } catch (err) {
+        // ignore global lookup failures
+      }
+      return null;
+    };
+
+    const resolvedFromOwner = await resolveByOwner();
+    if (resolvedFromOwner) {
+      return { token, url: buildUrl(resolvedFromOwner) };
+    }
+
+    const resolvedGlobally = await resolveByGlobalLookup();
+    if (resolvedGlobally) {
+      return { token, url: buildUrl(resolvedGlobally) };
+    }
+
     throw new Error('createPaymentConfirmUrl: could not resolve destination public key automatically — include `destination` as a Stellar public key or provide `destination_contact` with `stellar_public_key` or call with owner_id + exact destination_name.');
+  }
+
+  createClaimPaymentUrl(payload: {
+    amount: string;
+    recipient_name?: string;
+    sender_name?: string;
+    session_id: string;
+    owner_id: string;
+    asset_code?: string;
+    asset_issuer?: string;
+    nonce?: string;
+  }, extra = {}) {
+    const assetCode = normalizeAssetCode(payload.asset_code || 'USDC');
+    const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
+
+    const tokenPayload = {
+      sub: 'external_payment_claim',
+      amount: payload.amount,
+      asset_code: assetCode,
+      asset_issuer: assetIssuer || null,
+      recipient_name: payload.recipient_name || null,
+      sender_name: payload.sender_name || null,
+      session_id: payload.session_id,
+      owner_id: payload.owner_id,
+      nonce: payload.nonce || uuidv4(),
+      ...compactExtra(extra as Record<string, any>),
+    };
+
+    const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
+    const base = getPaymentConfirmBase();
+    const url = `${base}/claim-payment?token=${encodeURIComponent(token)}`;
+
+    return { token, url };
   }
 
   createConversionConfirmUrl(payload: {
@@ -300,9 +386,9 @@ export class ExternalService {
       dest_amount: payload.dest_amount,
       dest_asset_code: destAssetCode,
       dest_asset_issuer: destAssetIssuer || null,
-      quote: payload.quote || null,
+      quote: compactQuote(payload.quote),
       nonce: payload.nonce || uuidv4(),
-      ...extra,
+      ...compactExtra(extra as Record<string, any>),
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });

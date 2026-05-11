@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
+import { startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
+import { saveClientSession } from "@/lib/session"
 
 type FinalizeResponse = {
   success: boolean
@@ -39,6 +40,26 @@ type RecoveryResult =
   | { mode: "existing"; sessionId?: string; sessionToken?: string }
   | { mode: "none" }
 
+function getPasskeyErrorMessage(error: any): string {
+  const name = String(error?.name || "")
+  const message = String(error?.message || error || "")
+  const normalized = message.toLowerCase()
+
+  if (name === "NotAllowedError") {
+    return "A biometria foi cancelada ou expirou. Toque em \"Ativar biometria\" e confirme com digital/Face ID."
+  }
+
+  if (name === "SecurityError" || normalized.includes("rp id")) {
+    return "A biometria precisa abrir no domínio correto e com HTTPS. Verifique PASSKEY_RP_ID/PASSKEY_ORIGIN no backend."
+  }
+
+  if (normalized.includes("not supported")) {
+    return "Este navegador não liberou Passkey neste contexto. Abra no navegador principal do celular, não em modo anônimo."
+  }
+
+  return message || "Falha ao ativar biometria."
+}
+
 export default function CreateAccountClient({
   initialToken = '',
   initialValidation = null,
@@ -48,6 +69,8 @@ export default function CreateAccountClient({
 }) {
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
+  const rawNextPath = searchParams.get("next") || "/chat"
+  const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
 
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
@@ -60,6 +83,7 @@ export default function CreateAccountClient({
   const [requestPasskey, setRequestPasskey] = useState(true)
   const [status, setStatus] = useState("ready")
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
+  const [passkeyError, setPasskeyError] = useState("")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
   const [existingEmail, setExistingEmail] = useState("")
   const [existingPin, setExistingPin] = useState("")
@@ -240,6 +264,9 @@ export default function CreateAccountClient({
           // ignore storage failures
         }
       }
+      if (response.ok && payload.success) {
+        saveClientSession(payload.sessionId, payload.sessionToken)
+      }
       if (response.ok && payload.sessionId) {
         try {
           localStorage.setItem('talk-to-stellar.sessionId', payload.sessionId)
@@ -249,13 +276,14 @@ export default function CreateAccountClient({
       }
 
       if (response.ok && payload.success && requestPasskey) {
-        await registerAndSignInWithPasskey(payload)
-        window.location.href = "/chat"
+        setPasskeyStatus("registering")
+        setPasskeyError("")
+        void registerAndSignInWithPasskey(payload)
         return
       }
 
       if (response.ok && payload.success) {
-        window.location.href = "/chat"
+        window.location.href = nextPath
         return
       }
     } catch (error) {
@@ -273,7 +301,14 @@ export default function CreateAccountClient({
       return
     }
 
+    if (!window.PublicKeyCredential) {
+      setPasskeyStatus('error')
+      setPasskeyError('Este navegador não suporta Passkey/WebAuthn.')
+      return
+    }
+
     setPasskeyStatus('registering')
+    setPasskeyError("")
 
     try {
       const initRes = await fetch(`/api/passkeys/register-init`, {
@@ -290,40 +325,14 @@ export default function CreateAccountClient({
       const completeRes = await fetch(`/api/passkeys/register-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, attestationResponse: credential }),
+        body: JSON.stringify({
+          user_id: userId,
+          challenge_id: initPayload.challengeId,
+          credential,
+        }),
       })
       const completePayload = await completeRes.json()
       if (!completeRes.ok || !completePayload.success) throw new Error(completePayload.message || 'Falha ao concluir configuração de acesso seguro')
-
-      setPasskeyStatus('authenticating')
-      const authInitRes = await fetch(`/api/passkeys/auth-init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
-      })
-      const authInitPayload = await authInitRes.json()
-      if (!authInitRes.ok || !authInitPayload.success) throw new Error(authInitPayload.message || 'Falha ao iniciar entrada com acesso seguro')
-
-      const authCredential = await startAuthentication({ optionsJSON: authInitPayload.options })
-      const authCompleteRes = await fetch(`/api/passkeys/auth-complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          challenge_id: authInitPayload.challengeId,
-          credential: authCredential,
-        }),
-      })
-      const authCompletePayload = await authCompleteRes.json()
-      if (!authCompleteRes.ok || !authCompletePayload.success) throw new Error(authCompletePayload.message || 'Falha ao concluir entrada com acesso seguro')
-
-      if (authCompletePayload.sessionToken) {
-        try {
-          localStorage.setItem('talk-to-stellar.sessionToken', authCompletePayload.sessionToken)
-        } catch (storageError) {
-          // ignore storage failures
-        }
-      }
 
       setPasskeyStatus('done')
       setResult({
@@ -331,12 +340,13 @@ export default function CreateAccountClient({
         userId,
         sessionId: currentResult?.sessionId,
         sessionToken: currentResult?.sessionToken,
-        passkeySessionToken: authCompletePayload.sessionToken,
-        message: 'Acesso seguro ativado e entrada concluída com sucesso',
+        passkeySessionToken: currentResult?.sessionToken,
+        message: 'Biometria ativada com sucesso',
       })
+      window.location.href = nextPath
     } catch (err: any) {
       setPasskeyStatus('error')
-      setResult({ success: false, error: String(err?.message || err) })
+      setPasskeyError(getPasskeyErrorMessage(err))
     }
   }
 
@@ -376,7 +386,7 @@ export default function CreateAccountClient({
       }
 
       setExistingStatus("done")
-      window.location.href = "/chat"
+      window.location.href = nextPath
     } catch (error) {
       setExistingStatus("error")
       setExistingError(error instanceof Error ? error.message : "Falha ao entrar com e-mail e PIN.")
@@ -549,57 +559,33 @@ export default function CreateAccountClient({
                   <button
                     type="button"
                     onClick={() => registerAndSignInWithPasskey()}
-                    disabled={passkeyStatus === 'registering' || passkeyStatus === 'authenticating'}
+                    disabled={passkeyStatus === 'registering'}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === 'registering'
-                      ? 'Configurando acesso seguro...'
-                      : passkeyStatus === 'authenticating'
-                        ? 'Entrando com acesso seguro...'
-                        : 'Ativar acesso seguro'}
+                      ? 'Abrindo biometria...'
+                      : 'Ativar biometria'}
                   </button>
                   <p className="text-xs text-slate-400">
-                    Ative o acesso seguro para entrar mais rápido nas próximas vezes.
+                    Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.
                   </p>
+                  {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
                 </div>
               )}
               {status === "error" && (
                 <p className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</p>
               )}
               {passkeyStatus === 'done' && result?.passkeySessionToken && (
-                <p className="mt-2 break-all text-emerald-300">Acesso seguro ativado com sucesso.</p>
+                <p className="mt-2 break-all text-emerald-300">Biometria ativada com sucesso.</p>
               )}
             </div>
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">Já tenho conta</p>
-              <form className="mt-3 space-y-3" onSubmit={handleLinkExisting}>
-                <input
-                  value={existingEmail}
-                  onChange={(event) => setExistingEmail(event.target.value)}
-                  type="email"
-                  placeholder="Seu e-mail"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-                <input
-                  value={existingPin}
-                  onChange={(event) => setExistingPin(event.target.value)}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  placeholder="Seu PIN"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-                {existingError && <p className="text-rose-300">{existingError}</p>}
-                <button
-                  type="submit"
-                  disabled={existingStatus === "submitting" || !existingEmail.trim() || !existingPin.trim()}
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {existingStatus === "submitting" ? "Entrando..." : "Entrar com e-mail + PIN"}
-                </button>
-              </form>
-            </div>
+            <a
+              href="/login"
+              className="mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              Já tenho conta
+            </a>
           </section>
         </div>
       </div>

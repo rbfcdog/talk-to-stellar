@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
+import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin } from "@/lib/session";
 
 type Message = {
   id: string;
@@ -81,9 +82,14 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   
   // --- Initialize session ID on mount ---
   useEffect(() => {
+    if (chatId === "agent" && isClientSessionExpired()) {
+      redirectToExpiredLogin();
+      return;
+    }
+
     // Try to get from sessionStorage, or generate new
     const storedSessionId = typeof window !== 'undefined' 
-      ? sessionStorage.getItem(`chat-session-${chatId}`)
+      ? localStorage.getItem("talk-to-stellar.sessionId") || sessionStorage.getItem(`chat-session-${chatId}`)
       : null;
     
     const newSessionId = storedSessionId || generateSessionId();
@@ -148,6 +154,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
   const fetchServerMessages = async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
+    if (isClientSessionExpired()) {
+      redirectToExpiredLogin();
+      return;
+    }
 
     const storedSessionId = typeof window !== "undefined"
       ? localStorage.getItem("talk-to-stellar.sessionId")
@@ -186,8 +196,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
   const resetClientSession = () => {
     if (typeof window === "undefined") return;
-    localStorage.removeItem("talk-to-stellar.sessionId");
-    localStorage.removeItem("talk-to-stellar.sessionToken");
+    clearClientSession();
     const newSessionId = generateSessionId();
     sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
     setSessionId(newSessionId);
@@ -209,6 +218,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    if (chatId === "agent" && isClientSessionExpired()) {
+      redirectToExpiredLogin();
+      return;
+    }
     
     if (!sessionId) {
       const errorMessage: Message = {
@@ -293,7 +306,12 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         createdAt: new Date(),
       };
 
-      setMessages(prev => [...prev, botMessage]);
+      setMessages(prev => {
+        const alreadyRendered = prev.some((message) =>
+          message.role === botMessage.role && message.content === botMessage.content
+        );
+        return alreadyRendered ? prev : [...prev, botMessage];
+      });
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
