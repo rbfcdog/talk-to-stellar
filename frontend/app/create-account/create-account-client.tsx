@@ -68,7 +68,7 @@ export default function CreateAccountClient({
   const [validation, setValidation] = useState<any>(initialValidation)
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
 
-  async function recoverOnboardingContextFromBackend(): Promise<RecoveryResult> {
+  async function recoverOnboardingContextFromBackend(forceNewAccount = false): Promise<RecoveryResult> {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
     if (!browserId) {
       browserId = generateBrowserId()
@@ -81,6 +81,7 @@ export default function CreateAccountClient({
       body: JSON.stringify({
         provider: "web",
         provider_user_id: browserId,
+        force_new_account: forceNewAccount,
       }),
     })
     const payload = await response.json().catch(() => ({}))
@@ -139,7 +140,7 @@ export default function CreateAccountClient({
           setExistingAccountDetected(true)
           setValidation({
             success: true,
-            valid: true,
+            valid: false,
             message: 'Conta encontrada neste navegador. Você pode entrar com e-mail e PIN ou preencher o formulário para criar uma nova conta.',
           })
           return
@@ -177,10 +178,10 @@ export default function CreateAccountClient({
     try {
       let finalToken = token
       if (!finalToken.trim()) {
-        const recovered = await recoverOnboardingContextFromBackend()
+        const recovered = await recoverOnboardingContextFromBackend(true)
         if (recovered.mode === "existing") {
           setExistingAccountDetected(true)
-          throw new Error("Não há link de criação ativo nesta página. Solicite um novo acesso no chat ou use a opção \"Já tenho conta\" para entrar.")
+          throw new Error("Não foi possível gerar um novo link de criação agora. Tente novamente ou use a opção \"Já tenho conta\" para entrar.")
         }
         if (recovered.mode === "token") {
           setExistingAccountDetected(false)
@@ -384,10 +385,12 @@ export default function CreateAccountClient({
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
                   <strong>Status do link: </strong>
-                  {validation.valid ? (
+                  {token && validation.valid ? (
                     <span className="text-emerald-300">Link válido</span>
+                  ) : validation.message ? (
+                    <span className="text-cyan-200">{validation.message}</span>
                   ) : (
-                    <span className="text-rose-300">{validation.message || 'Link inválido ou ausente'}</span>
+                    <span className="text-rose-300">Link inválido ou ausente</span>
                   )}
                 </div>
               )}
@@ -421,7 +424,7 @@ export default function CreateAccountClient({
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
                 Verificação do link:
                 <span className="ml-2 break-all font-mono text-cyan-100">
-                  {token ? 'pronto' : existingAccountDetected ? 'solicite novo link para criar outra conta' : 'link ausente'}
+                  {token ? 'pronto' : existingAccountDetected ? 'novo link será gerado ao finalizar' : 'link ausente'}
                 </span>
               </div>
 
