@@ -14,6 +14,7 @@ dotenv.config();
 const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const server = new Horizon.Server(horizonUrl);
 const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
+const watchMode = process.argv.includes('--watch');
 
 type RateSnapshot = {
   brlPerUsdc: number;
@@ -234,8 +235,24 @@ async function rebalanceOnce() {
 }
 
 async function main() {
-  const result = await rebalanceOnce();
-  console.log(JSON.stringify(result, null, 2));
+  if (!watchMode) {
+    const result = await rebalanceOnce();
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  const intervalSeconds = parsePositiveNumber('MARKET_MAKER_REBALANCE_INTERVAL_SECONDS', 300);
+  console.log(`Starting BRL market rebalance loop every ${intervalSeconds} seconds.`);
+
+  while (true) {
+    try {
+      const result = await rebalanceOnce();
+      console.log(JSON.stringify({ checkedAt: new Date().toISOString(), ...result }, null, 2));
+    } catch (error) {
+      console.error('BRL market rebalance tick failed:', error instanceof Error ? error.message : String(error));
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000));
+  }
 }
 
 main().catch((error) => {
