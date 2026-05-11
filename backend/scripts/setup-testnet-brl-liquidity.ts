@@ -15,6 +15,7 @@ const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.s
 const friendbotUrl = process.env.STELLAR_FRIENDBOT_URL || 'https://friendbot.stellar.org';
 const server = new Horizon.Server(horizonUrl);
 const USDC_ISSUER = process.env.USDC_ISSUER || 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+const useDynamicRates = String(process.env.TESTNET_SETUP_USE_DYNAMIC_RATES || 'true').trim().toLowerCase() !== 'false';
 
 function requirePositiveNumber(name: string): number {
   const raw = String(process.env[name] || '').trim();
@@ -25,11 +26,18 @@ function requirePositiveNumber(name: string): number {
   return value;
 }
 
-const brlIssuanceAmount = requirePositiveNumber('TESTNET_SETUP_BRL_ISSUANCE_AMOUNT');
-const brlLiquidityAmount = requirePositiveNumber('TESTNET_SETUP_BRL_LIQUIDITY_AMOUNT');
-const usdcLiquidityAmount = requirePositiveNumber('TESTNET_SETUP_USDC_BRL_LIQUIDITY_AMOUNT');
-const brlPerXlm = requirePositiveNumber('TESTNET_SETUP_BRL_PER_XLM_PRICE');
-const brlPerUsdc = requirePositiveNumber('TESTNET_SETUP_BRL_PER_USDC_PRICE');
+function parsePositiveNumber(name: string, fallback: number): number {
+  const raw = String(process.env[name] || '').trim();
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
+}
+
+const brlIssuanceAmount = parsePositiveNumber('TESTNET_SETUP_BRL_ISSUANCE_AMOUNT', 100000);
+const brlLiquidityAmount = parsePositiveNumber('TESTNET_SETUP_BRL_LIQUIDITY_AMOUNT', 20000);
+const usdcLiquidityAmount = parsePositiveNumber('TESTNET_SETUP_USDC_BRL_LIQUIDITY_AMOUNT', 2000);
+let brlPerXlm = Number(String(process.env.TESTNET_SETUP_BRL_PER_XLM_PRICE || '').trim());
+let brlPerUsdc = Number(String(process.env.TESTNET_SETUP_BRL_PER_USDC_PRICE || '').trim());
 
 type LoadedKeypair = { keypair: Keypair; generated: boolean };
 type OperationInput = Parameters<typeof TransactionBuilder.prototype.addOperation>[0];
@@ -61,6 +69,41 @@ async function fundWithFriendbot(publicKey: string): Promise<void> {
     const body = await response.text().catch(() => '');
     throw new Error(`Friendbot failed for ${publicKey}: ${response.status} ${body}`);
   }
+}
+
+async function fetchBinancePrice(symbol: string): Promise<number | undefined> {
+  try {
+    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`);
+    if (!response.ok) return undefined;
+    const data = (await response.json().catch(() => null)) as { price?: string } | null;
+    const value = Number(String(data?.price || '').trim());
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveDynamicRates(): Promise<{ brlPerUsdc: number; brlPerXlm: number }> {
+  const usdcBrl = await fetchBinancePrice('USDCBRL');
+  const xlmUsdc = (await fetchBinancePrice('XLMUSDC')) || (await fetchBinancePrice('XLMUSDT'));
+
+  if (!usdcBrl || !xlmUsdc) {
+    throw new Error(
+      `Could not fetch dynamic rates from Binance (USDCBRL=${String(usdcBrl)}, XLMUSDC/XLMUSDT=${String(xlmUsdc)}).`
+    );
+  }
+
+  const computedBrlPerUsdc = usdcBrl;
+  const computedBrlPerXlm = usdcBrl * xlmUsdc;
+
+  if (!Number.isFinite(computedBrlPerUsdc) || computedBrlPerUsdc <= 0 || !Number.isFinite(computedBrlPerXlm) || computedBrlPerXlm <= 0) {
+    throw new Error('Dynamic rate calculation produced invalid values.');
+  }
+
+  return {
+    brlPerUsdc: computedBrlPerUsdc,
+    brlPerXlm: computedBrlPerXlm,
+  };
 }
 
 async function ensureAccountFunded(keypair: Keypair, label: string): Promise<void> {
@@ -185,6 +228,21 @@ async function topUpUsdcWithPathPayment(owner: Keypair, usdc: Asset, targetAmoun
 async function main(): Promise<void> {
   if (process.env.STELLAR_NETWORK === 'PUBLIC') {
     throw new Error('This script is only for Stellar testnet.');
+  }
+
+  if (useDynamicRates) {
+    const dynamicRates = await resolveDynamicRates();
+    brlPerUsdc = dynamicRates.brlPerUsdc;
+    brlPerXlm = dynamicRates.brlPerXlm;
+    console.log(`Dynamic rates loaded: 1 USDC = ${brlPerUsdc.toFixed(7)} BRL; 1 XLM = ${brlPerXlm.toFixed(7)} BRL`);
+  } else {
+    if (!Number.isFinite(brlPerXlm) || brlPerXlm <= 0) {
+      brlPerXlm = requirePositiveNumber('TESTNET_SETUP_BRL_PER_XLM_PRICE');
+    }
+    if (!Number.isFinite(brlPerUsdc) || brlPerUsdc <= 0) {
+      brlPerUsdc = requirePositiveNumber('TESTNET_SETUP_BRL_PER_USDC_PRICE');
+    }
+    console.log(`Manual rates loaded: 1 USDC = ${brlPerUsdc.toFixed(7)} BRL; 1 XLM = ${brlPerXlm.toFixed(7)} BRL`);
   }
 
   const brlIssuer = loadOrCreateKeypair('BRL issuer', 'BRL_ISSUER_SECRET', 'BRL_ISSUER_TESTNET');
