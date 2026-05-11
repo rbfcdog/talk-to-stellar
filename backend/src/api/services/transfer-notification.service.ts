@@ -24,6 +24,8 @@ export type SessionWelcomeNotification = {
   sessionId?: string | null;
   userId?: string | null;
   name?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
 };
 
 export class TransferNotificationService {
@@ -36,7 +38,17 @@ export class TransferNotificationService {
     const session = await this.safeGetSession(sessionId);
     const userId = String(input.userId || session?.user_id || '').trim();
     const name = String(input.name || session?.email || '').trim();
-    const greeting = name ? `Bem-vindo, ${name}.` : 'Bem-vindo ao TalkToStellar.';
+    const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const mappings = this.dedupeMappings([
+      ...(directMapping ? [directMapping] : []),
+      ...(await this.findExternalMappings(sessionId, userId)),
+    ]);
+    const hasTelegram = mappings.some((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram');
+    const greeting = name
+      ? `Bem-vindo, ${name}.`
+      : hasTelegram
+        ? 'Bem-vindo ao TalkToStellar no Telegram.'
+        : 'Bem-vindo ao TalkToStellar.';
     const text =
       `${greeting}\n` +
       `Sua conta esta conectada. Agora voce pode consultar saldo, enviar pagamentos e receber transferencias por aqui.`;
@@ -48,7 +60,6 @@ export class TransferNotificationService {
       logger.warn(`[session-welcome] failed to save chat message: ${message}`);
     }
 
-    const mappings = await this.findExternalMappings(sessionId, userId);
     await Promise.all([
       this.sendTelegramToMappings(mappings, text),
       this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
@@ -123,6 +134,28 @@ export class TransferNotificationService {
       logger.warn(`[incoming-transfer] failed to query external mappings: ${error?.message || String(error)}`);
       return [];
     }
+  }
+
+  private static buildDirectMapping(provider?: string | null, providerUserId?: string | null): ExternalMapping | null {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    const normalizedProviderUserId = String(providerUserId || '').trim();
+    if (!normalizedProvider || !normalizedProviderUserId) return null;
+    return {
+      provider: normalizedProvider,
+      provider_user_id: normalizedProviderUserId,
+    };
+  }
+
+  private static dedupeMappings(mappings: ExternalMapping[]): ExternalMapping[] {
+    const seen = new Set<string>();
+    return mappings.filter((mapping) => {
+      const provider = String(mapping.provider || '').trim().toLowerCase();
+      const providerUserId = String(mapping.provider_user_id || '').trim();
+      const key = `${provider}:${providerUserId}`;
+      if (!provider || !providerUserId || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private static async sendTelegramToMappings(mappings: ExternalMapping[], text: string): Promise<void> {

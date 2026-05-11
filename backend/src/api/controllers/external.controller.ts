@@ -280,6 +280,8 @@ export class ExternalController {
         sessionId: String(matched.session_id),
         userId: String(matched.user_id || email),
         name: String(matched.email || email),
+        provider,
+        providerUserId,
       });
 
       return res.status(200).json({
@@ -363,6 +365,8 @@ export class ExternalController {
         sessionId,
         userId: String(session.user_id),
         name: String(session.email || session.user_id),
+        provider,
+        providerUserId,
       });
 
       return res.status(200).json({
