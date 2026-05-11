@@ -40,6 +40,10 @@ async function fetchFirstBinancePrice(symbols: string[]): Promise<{ price?: numb
 function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   if (!Number.isFinite(value) || value < 0) return `${currency} indisponivel`;
   const decimals = value > 0 && value < 0.01 ? 6 : 2;
+  const threshold = Math.pow(10, -decimals);
+  if (value > 0 && value < threshold) {
+    return `${currency} <${threshold.toFixed(decimals)}`;
+  }
   return `${currency} ${value.toFixed(decimals)}`;
 }
 
