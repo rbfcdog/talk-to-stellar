@@ -56,6 +56,11 @@ function formatAmount(amount?: string, assetCode?: string) {
   return `${n.toFixed(2)} ${code}`
 }
 
+function hasUsableFeeDisplay(value?: string) {
+  const normalized = String(value || "").trim().toLowerCase()
+  return Boolean(normalized && !normalized.includes("indispon"))
+}
+
 export default function ConfirmConversionClient({
   initialToken = '',
   initialValidation = null,
@@ -142,6 +147,9 @@ export default function ConfirmConversionClient({
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
+  const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
+  const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
+  const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -192,7 +200,7 @@ export default function ConfirmConversionClient({
                 <p className="font-medium text-white">Resumo</p>
                 <p className="mt-2 text-slate-300">Debitar: {formatAmount(sourceAmount, sourceAssetCode)}</p>
                 <p className="text-slate-300">Receber: {formatAmount(destAmount, destAssetCode)}</p>
-                {estimatedFeeDisplay && (
+                {showEstimatedFee && (
                   <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
                 )}
               </div>
@@ -236,10 +244,9 @@ export default function ConfirmConversionClient({
                       Destino recebeu: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
                     </p>
                   )}
-                  {result.transferDetails?.feeXlm && (
-                    <p>Taxa baixa aplicada: {result.transferDetails.feeDisplay || "valor em R$/US$ indisponível"}</p>
+                  {showResultFee && (
+                    <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
-                  <p>Cotação conferida antes da confirmação para evitar surpresa no valor final.</p>
                   <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                 </div>
               )}
