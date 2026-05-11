@@ -1334,7 +1334,47 @@ async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ pu
   const numericRef = normalizeDigits(rawRef);
 
   if (isPublicKey) {
-    return { publicKey: rawRef.toUpperCase() };
+    const normalizedPublicKey = rawRef.toUpperCase();
+
+    const { data: walletByPublicKey, error: walletPublicError } = await supabase
+      .from('wallets')
+      .select('public_key, name, pix_key')
+      .eq('public_key', normalizedPublicKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (walletPublicError) {
+      throw new Error(walletPublicError.message || 'Failed to lookup wallet by public key');
+    }
+
+    if (walletByPublicKey?.public_key) {
+      return {
+        publicKey: String(walletByPublicKey.public_key),
+        name: walletByPublicKey.name || undefined,
+        pixKey: walletByPublicKey.pix_key || undefined,
+      };
+    }
+
+    const { data: contactByPublicKey, error: contactPublicError } = await supabase
+      .from('contacts')
+      .select('contact_name, stellar_public_key, pix_key')
+      .eq('stellar_public_key', normalizedPublicKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (contactPublicError) {
+      throw new Error(contactPublicError.message || 'Failed to lookup contact by public key');
+    }
+
+    if (contactByPublicKey?.stellar_public_key) {
+      return {
+        publicKey: String(contactByPublicKey.stellar_public_key),
+        name: contactByPublicKey.contact_name || undefined,
+        pixKey: contactByPublicKey.pix_key || undefined,
+      };
+    }
+
+    return { publicKey: normalizedPublicKey };
   }
 
   const { data: walletByPix, error: walletPixError } = await supabase
