@@ -34,13 +34,12 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     return network === 'PUBLIC' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
   }
   if (code === 'BRL') {
+    const configuredPublic = String(process.env.BRL_ISSUER_PUBLIC || '').trim();
     if (network === 'PUBLIC') {
-      const configuredPublic = String(process.env.BRL_ISSUER_PUBLIC || '').trim();
       return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
     }
-
     const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
-    return configuredTestnet || undefined;
+    return configuredTestnet || configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }

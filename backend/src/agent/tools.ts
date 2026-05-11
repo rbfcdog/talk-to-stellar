@@ -373,6 +373,10 @@ export const toolDefinitions = [
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve current user automatically.",
+        },
         user_id: {
           type: "string",
           description: "Your user ID",
@@ -394,7 +398,7 @@ export const toolDefinitions = [
           description: "Generic contact key: transfer key, email, phone, CPF or public key reference",
         },
       },
-      required: ["user_id", "contact_name"],
+      required: [],
     },
   },
   {
@@ -403,12 +407,16 @@ export const toolDefinitions = [
     parameters: {
       type: "object",
       properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Used to resolve current user automatically.",
+        },
         user_id: {
           type: "string",
           description: "Your user ID",
         },
       },
-      required: ["user_id"],
+      required: [],
     },
   },
   {
@@ -700,7 +708,6 @@ async function executeGetBalance(input: any): Promise<string> {
       balance: filteredBalances[0]?.balance || "0.0000000",
       asset: filteredBalances[0]?.asset || "BRL",
       balances: filteredBalances,
-      technical_balances: balances,
       message: `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
@@ -1228,6 +1235,34 @@ async function resolveWalletBySessionId(sessionId: string, fallbackName?: string
   };
 }
 
+async function resolveToolUserId(input: any): Promise<string> {
+  const directUserId = String(input.user_id || input.userId || input.owner_id || '').trim();
+  if (directUserId) return directUserId;
+
+  const sessionId = String(input.session_id || input.sessionId || '').trim();
+  if (!sessionId) {
+    throw new Error('Não consegui identificar sua conta nesta sessão. Informe session_id ou faça login novamente.');
+  }
+
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from('agent_sessions')
+    .select('user_id, email')
+    .eq('session_id', sessionId)
+    .limit(1)
+    .maybeSingle();
+
+  if (sessionError) {
+    throw new Error(sessionError.message || 'Falha ao identificar usuário da sessão');
+  }
+
+  const userId = String(sessionRow?.user_id || sessionRow?.email || '').trim();
+  if (!userId) {
+    throw new Error('Não consegui identificar sua conta nesta sessão. Faça login novamente.');
+  }
+
+  return userId;
+}
+
 async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ publicKey?: string; name?: string; pixKey?: string }> {
   const rawRef = String(contactRef || '').trim();
   const normalizedRef = rawRef.toLowerCase();
@@ -1615,6 +1650,7 @@ async function resolveContactProfileByPublicKey(publicKey: string): Promise<{
 async function executeAddContact(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Adding contact ${input.contact_name}`);
+    const ownerId = await resolveToolUserId(input);
     const contactKey = String(input.public_key || input.stellar_public_key || input.pix_key || input.contact_key || '').trim();
     const isPublicKey = /^G[A-Z2-7]{55}$/i.test(contactKey);
     const pixKeyInput = String(input.pix_key || (!isPublicKey ? contactKey : '') || '').trim().toLowerCase();
@@ -1625,12 +1661,12 @@ async function executeAddContact(input: any): Promise<string> {
       throw new Error('Informe uma chave válida (pública, transferência, e-mail ou telefone) já cadastrada.');
     }
 
-    const contactName = String(input.contact_name || resolved.name || pixKeyInput || publicKey).trim();
+    const contactName = String(input.contact_name || resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim();
 
     const { data, error } = await supabase
       .from("contacts")
       .upsert({
-        owner_id: input.user_id,
+        owner_id: ownerId,
         contact_name: contactName,
         stellar_public_key: publicKey,
         pix_key: pixKeyInput || resolved.pixKey || null,
@@ -1672,16 +1708,14 @@ async function executeAddContact(input: any): Promise<string> {
  */
 async function executeListContacts(input: any): Promise<string> {
   try {
-    logger.debug(`Tool: Listing contacts from database for user ${input.user_id}`);
+    const ownerId = await resolveToolUserId(input);
+    logger.debug(`Tool: Listing contacts from database for user ${ownerId}`);
 
     let query = supabase
       .from("contacts")
       .select("id, owner_id, contact_name, stellar_public_key, phone_number, pix_key, created_at")
-      .order("contact_name", { ascending: true });
-
-    if (input.user_id) {
-      query = query.eq("owner_id", input.user_id);
-    }
+      .order("contact_name", { ascending: true })
+      .eq("owner_id", ownerId);
 
     const { data: contacts, error } = await query;
 
@@ -1704,7 +1738,7 @@ async function executeListContacts(input: any): Promise<string> {
 
       throw new Error(error.message || "Failed to fetch contacts");
     }
-    logger.debug(`executeListContacts: returning ${((contacts||[]).length)} contacts for user ${input.user_id || '<all>'}`);
+    logger.debug(`executeListContacts: returning ${((contacts||[]).length)} contacts for user ${ownerId}`);
     logger.debug(`executeListContacts: contacts data=${JSON.stringify(contacts?.slice(0,50) || [])}`);
 
     return JSON.stringify({
