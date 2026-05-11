@@ -62,6 +62,76 @@ async function configureWalletAssetsAndContacts(input: {
   }
 }
 
+async function upsertRecentContactFromPayment(input: {
+  ownerId: string;
+  sourcePublicKey: string;
+  destinationPublicKey: string;
+  destinationName?: string;
+  destinationContact?: any;
+}) {
+  const ownerId = String(input.ownerId || '').trim();
+  const destinationPublicKey = String(input.destinationPublicKey || '').trim();
+  const sourcePublicKey = String(input.sourcePublicKey || '').trim();
+  if (!ownerId || !destinationPublicKey || !isValidStellarPublicKey(destinationPublicKey)) return;
+  if (sourcePublicKey && destinationPublicKey === sourcePublicKey) return;
+
+  const explicitName = String(input.destinationContact?.contact_name || input.destinationName || '').trim();
+  const contactName = explicitName || `Contato ${destinationPublicKey.slice(0, 6)}`;
+  const pixKey = String(input.destinationContact?.pix_key || '').trim().toLowerCase() || null;
+
+  const { data: existingContact, error: existingContactError } = await supabase
+    .from('contacts')
+    .select('id, contact_name, pix_key')
+    .eq('owner_id', ownerId)
+    .eq('stellar_public_key', destinationPublicKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingContactError) {
+    logger.warn(`[external-finalize] contact lookup failed for owner=${ownerId}: ${existingContactError.message}`);
+    return;
+  }
+
+  if (existingContact?.id) {
+    const nextName = String(existingContact.contact_name || '').trim() || contactName;
+    const nextPixKey = String(existingContact.pix_key || '').trim() || pixKey;
+    const shouldUpdate =
+      nextName !== String(existingContact.contact_name || '').trim() ||
+      String(nextPixKey || '') !== String(existingContact.pix_key || '').trim();
+
+    if (shouldUpdate) {
+      const { error: updateError } = await supabase
+        .from('contacts')
+        .update({
+          contact_name: nextName,
+          pix_key: nextPixKey,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingContact.id);
+
+      if (updateError) {
+        logger.warn(`[external-finalize] contact update failed for owner=${ownerId}: ${updateError.message}`);
+      }
+    }
+    return;
+  }
+
+  const { error: insertError } = await supabase
+    .from('contacts')
+    .insert({
+      owner_id: ownerId,
+      contact_name: contactName,
+      stellar_public_key: destinationPublicKey,
+      pix_key: pixKey,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+  if (insertError) {
+    logger.warn(`[external-finalize] contact insert failed for owner=${ownerId}: ${insertError.message}`);
+  }
+}
+
 async function sendTelegramPaymentNotification(input: {
   sessionId: string;
   userId: string;
@@ -1232,6 +1302,14 @@ export default class ExternalFinalizeController {
             transferDetails,
           }
         );
+
+        await upsertRecentContactFromPayment({
+          ownerId: String(session.user_id),
+          sourcePublicKey: wallet.public_key,
+          destinationPublicKey: resolvedDestination,
+          destinationName: destination_contact?.contact_name || destination_name || destination,
+          destinationContact: destination_contact,
+        });
 
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${transferDetails.destinationAmount}, destinationAsset=${transferDetails.destinationAssetCode}`);
         return res.status(200).json({
