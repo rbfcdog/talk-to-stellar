@@ -63,6 +63,76 @@ function hasUsableFeeDisplay(value?: string) {
   return Boolean(normalized && !normalized.includes("indispon"))
 }
 
+function parseNumber(value?: string) {
+  const parsed = Number(String(value || "").replace(",", "."))
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+function trimFixed(value: number, decimals: number) {
+  return value.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
+}
+
+function formatFeeAmount(value: number, assetCode: string) {
+  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (code === "BRL") return `R$ ${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)}`
+  if (code === "USDC") return `US$ ${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)}`
+  if (code === "XLM") return `${trimFixed(value, 7)} XLM`
+  return `${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)} ${code}`
+}
+
+function formatFeePercent(percent: number) {
+  if (!Number.isFinite(percent) || percent < 0) return ""
+  if (percent > 0 && percent < 0.000001) return "<0.000001%"
+  return `${trimFixed(percent, percent > 0 && percent < 0.01 ? 6 : 4)}%`
+}
+
+function buildFeeSummary(input: {
+  feeDisplay?: string
+  feeUsdc?: string
+  feeBrl?: string
+  feeXlm?: string
+  sourceAmount?: string
+  sourceAssetCode?: string
+}) {
+  const sourceCode = String(input.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAmount = parseNumber(input.sourceAmount)
+  const feeUsdc = parseNumber(input.feeUsdc)
+  const feeBrl = parseNumber(input.feeBrl)
+  const feeXlm = parseNumber(input.feeXlm)
+
+  let primaryAmount: number | undefined
+  let primaryAsset = sourceCode
+  if (sourceCode === "USDC" && feeUsdc !== undefined) primaryAmount = feeUsdc
+  if (sourceCode === "BRL" && feeBrl !== undefined) primaryAmount = feeBrl
+  if (sourceCode === "XLM" && feeXlm !== undefined) primaryAmount = feeXlm
+
+  if (primaryAmount === undefined && feeUsdc !== undefined) {
+    primaryAmount = feeUsdc
+    primaryAsset = "USDC"
+  }
+  if (primaryAmount === undefined && feeBrl !== undefined) {
+    primaryAmount = feeBrl
+    primaryAsset = "BRL"
+  }
+  if (primaryAmount === undefined && feeXlm !== undefined) {
+    primaryAmount = feeXlm
+    primaryAsset = "XLM"
+  }
+
+  const fallback = hasUsableFeeDisplay(input.feeDisplay) ? input.feeDisplay : ""
+  if (primaryAmount === undefined) return fallback
+
+  const equivalents: string[] = []
+  if (primaryAsset !== "BRL" && feeBrl !== undefined) equivalents.push(formatFeeAmount(feeBrl, "BRL"))
+  if (primaryAsset !== "USDC" && feeUsdc !== undefined) equivalents.push(formatFeeAmount(feeUsdc, "USDC"))
+
+  if (sourceAmount && sourceAmount > 0 && primaryAsset === sourceCode) {
+    equivalents.push(formatFeePercent((primaryAmount / sourceAmount) * 100))
+  }
+
+  return `${formatFeeAmount(primaryAmount, primaryAsset)}${equivalents.length ? ` (${equivalents.join(", ")})` : ""}`
+}
+
 export default function ConfirmPaymentClient({
   initialToken = '',
   initialValidation = null,
@@ -166,9 +236,25 @@ export default function ConfirmPaymentClient({
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
   const destinationLabel = payload.destination_name || payload.destination || "Destinatário indisponível"
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
-  const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
+  const estimatedFeeSummary = buildFeeSummary({
+    feeDisplay: estimatedFeeDisplay,
+    feeUsdc: String(payload.estimated_fee_usdc || payload.quote?.fee_usdc || ""),
+    feeBrl: String(payload.estimated_fee_brl || payload.quote?.fee_brl || ""),
+    feeXlm: String(payload.quote?.networkFeeXlm || ""),
+    sourceAmount: sourceAmount || String(payload.amount || ""),
+    sourceAssetCode: sourceAssetCode || assetCode,
+  })
+  const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeSummary)
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
-  const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
+  const resultFeeSummary = buildFeeSummary({
+    feeDisplay: resultFeeDisplay,
+    feeUsdc: result?.transferDetails?.feeUsdc,
+    feeBrl: result?.transferDetails?.feeBrl,
+    feeXlm: result?.transferDetails?.feeXlm,
+    sourceAmount: result?.transferDetails?.sourceAmount,
+    sourceAssetCode: result?.transferDetails?.sourceAssetCode,
+  })
+  const showResultFee = hasUsableFeeDisplay(resultFeeSummary)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -225,7 +311,7 @@ export default function ConfirmPaymentClient({
                 )}
                 <p className="text-slate-300">Destino: {destinationLabel}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Taxa estimada: {estimatedFeeDisplay}</p>
+                  <p className="text-slate-300">Taxa estimada: {estimatedFeeSummary}</p>
                 )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
                   <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
@@ -273,7 +359,7 @@ export default function ConfirmPaymentClient({
                     </p>
                   )}
                   {showResultFee && (
-                    <p>Taxa aplicada: {resultFeeDisplay}</p>
+                    <p>Taxa aplicada: {resultFeeSummary}</p>
                   )}
                   <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>

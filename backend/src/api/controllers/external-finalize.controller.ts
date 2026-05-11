@@ -8,6 +8,7 @@ import { ExternalRepository } from '../../repositories/external.repository';
 import { ContactRepository } from '../../api/repository/contact.repository';
 import { VaultService } from '../../services/vault.service';
 import { StellarService } from '../services/stellar.service';
+import { TransferNotificationService } from '../services/transfer-notification.service';
 import { ContactSeedService } from '../services/contact-seed.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
@@ -150,7 +151,7 @@ async function sendTelegramPaymentNotification(input: {
     ? `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
     : '';
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
+  const feeLine = feeDisplay?.display ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Pagamento confirmado.\n` +
     `Destino recebeu: ${formatCustomerAssetAmount(input.amount, input.assetCode)}\n` +
@@ -228,7 +229,7 @@ async function sendTelegramConversionNotification(input: {
   hash?: string;
 }) {
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
+  const feeLine = feeDisplay?.display ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Conversão confirmada.\n` +
     `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n` +
@@ -749,10 +750,10 @@ export default class ExternalFinalizeController {
               destinationAmount: String(quote.destinationAmount),
               destinationAssetCode: String(quote.destinationAsset.code),
               destinationAssetIssuer: quote.destinationAsset.issuer,
-              feeXlm: String(quote.networkFeeXlm || ''),
+              feeXlm: '',
               exact: false,
             };
-        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || quote.networkFeeXlm || ''));
+        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || ''));
         const publicTransferDetails = {
           ...transferDetails,
           feeDisplay: feeDisplay.display,
@@ -767,7 +768,7 @@ export default class ExternalFinalizeController {
           sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
           destinationAmount: String(publicTransferDetails.destinationAmount || quote.destinationAmount),
           destinationAssetCode: String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code),
-          feeXlm: String(publicTransferDetails.feeXlm || quote.networkFeeXlm || ''),
+          feeXlm: String(publicTransferDetails.feeXlm || ''),
           hash: result.hash,
         });
 
@@ -786,7 +787,7 @@ export default class ExternalFinalizeController {
           String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code).toUpperCase() === 'XLM'
             ? undefined
             : (publicTransferDetails as any).destinationAssetIssuer || quote.destinationAsset.issuer,
-          String(publicTransferDetails.feeXlm || quote.networkFeeXlm || ''),
+          String(publicTransferDetails.feeXlm || ''),
           result.hash,
           usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
           'success',
@@ -1268,10 +1269,10 @@ export default class ExternalFinalizeController {
               sourceAssetCode: assetCode === 'XLM' ? 'XLM' : String(quote?.sourceAsset?.code || 'XLM'),
               destinationAmount: assetCode === 'XLM' ? String(amount) : String(quote?.destinationAmount || amount),
               destinationAssetCode: assetCode === 'XLM' ? 'XLM' : String(quote?.destinationAsset?.code || assetCode),
-              feeXlm: String(quote?.networkFeeXlm || ''),
+              feeXlm: '',
               exact: false,
             };
-        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || quote?.networkFeeXlm || ''));
+        const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || ''));
         const publicTransferDetails = {
           ...transferDetails,
           feeDisplay: feeDisplay.display,
@@ -1357,6 +1358,18 @@ export default class ExternalFinalizeController {
           destinationName: destination_contact?.contact_name || destination_name || destination,
           destinationContact: destination_contact,
         });
+
+        if (destinationWallet?.session_id && destinationWallet.session_id !== String(session_id)) {
+          await TransferNotificationService.notifyIncomingTransfer({
+            recipientSessionId: destinationWallet.session_id,
+            senderLabel: String((session as any).email || session.user_id || 'TalkToStellar'),
+            amount: publicTransferDetails.destinationAmount,
+            assetCode: publicTransferDetails.destinationAssetCode,
+            sourceAmount: publicTransferDetails.sourceAmount,
+            sourceAssetCode: publicTransferDetails.sourceAssetCode,
+            hash: result.hash,
+          });
+        }
 
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
         return res.status(200).json({
