@@ -5,7 +5,7 @@
 
 import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, AIMessage, ToolMessage, BaseMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage, ToolMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { AgentState, IntentType, ActionType } from "./types";
 import { AgentRepository } from "../repositories/agent.repository";
 import { ALL_TOOLS, executeTool } from "./tools";
@@ -24,7 +24,7 @@ export class AgentGraph {
     this.systemPrompt = systemPrompt;
     this.llm = new ChatOpenAI({
       openAIApiKey: openaiApiKey,
-      temperature: parseFloat(process.env.TEMPERATURE || "0.5"),
+      temperature: parseFloat(process.env.TEMPERATURE || "0.1"),
       modelName: process.env.OPENAI_MODEL || "gpt-4o",
     });
 
@@ -347,6 +347,104 @@ ${onboardingUrl}`;
     return messages;
   }
 
+  private maskPublicKey(publicKey?: string): string {
+    const value = String(publicKey || '').trim();
+    if (!value) return 'indisponivel';
+    if (value.length <= 14) return value;
+    return `${value.slice(0, 8)}...${value.slice(-6)}`;
+  }
+
+  private async buildRuntimeContext(userId?: string, sessionId?: string): Promise<string> {
+    const normalizedSessionId = String(sessionId || '').trim();
+    let sessionData: any = null;
+    let walletData: any = null;
+    let stateData: Partial<AgentState> | null = null;
+    let contacts: any[] = [];
+
+    if (normalizedSessionId) {
+      try {
+        sessionData = await this.repository.getSession(normalizedSessionId);
+      } catch (error) {
+        logger.warn(`[buildRuntimeContext] Failed to load session: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      try {
+        stateData = await this.repository.getState(normalizedSessionId);
+      } catch (error) {
+        logger.warn(`[buildRuntimeContext] Failed to load state: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      try {
+        const { data: walletRow, error: walletError } = await supabase
+          .from('wallets')
+          .select('public_key, name, pix_key, session_id')
+          .eq('session_id', normalizedSessionId)
+          .limit(1)
+          .maybeSingle();
+
+        if (walletError) {
+          logger.warn(`[buildRuntimeContext] Failed to load wallet: ${walletError.message}`);
+        } else {
+          walletData = walletRow;
+        }
+      } catch (error) {
+        logger.warn(`[buildRuntimeContext] Wallet lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    const resolvedUserId = String(userId || sessionData?.user_id || sessionData?.email || '').trim();
+    if (resolvedUserId) {
+      contacts = await this.fetchContacts(resolvedUserId);
+    }
+
+    const publicKey = String(sessionData?.public_key || walletData?.public_key || '').trim();
+    const transferKey = String(sessionData?.pix_key || walletData?.pix_key || '').trim();
+    const email = String(sessionData?.email || '').trim();
+    const phoneNumber = String(sessionData?.phone_number || '').trim();
+    const hasActiveWallet = Boolean(publicKey);
+    const contactLines = contacts.slice(0, 12).map((contact: any, index: number) => {
+      const name = String(contact.contact_name || contact.name || `Contato ${index + 1}`).trim();
+      const key = String(contact.stellar_public_key || contact.public_key || '').trim();
+      const contactTransferKey = String(contact.pix_key || '').trim();
+      return `${index + 1}. ${name} | public_key=${key || 'indisponivel'} | transfer_key=${contactTransferKey || 'indisponivel'}`;
+    });
+
+    const pendingPayment = stateData?.pending_payment || (stateData?.action_params as any)?.pending_payment;
+    const pendingConversion = stateData?.pending_conversion || (stateData?.action_params as any)?.pending_conversion;
+
+    return [
+      '## RUNTIME CONTEXT',
+      `current_time=${new Date().toISOString()}`,
+      `session_id=${normalizedSessionId || 'indisponivel'}`,
+      `user_id=${resolvedUserId || 'indisponivel'}`,
+      `session_active=${hasActiveWallet ? 'true' : 'false'}`,
+      `wallet_public_key=${publicKey || 'indisponivel'}`,
+      `wallet_public_key_display=${this.maskPublicKey(publicKey)}`,
+      `transfer_key=${transferKey || publicKey || 'indisponivel'}`,
+      `email=${email || 'indisponivel'}`,
+      `phone_number=${phoneNumber || 'indisponivel'}`,
+      `contacts_count=${contacts.length}`,
+      contactLines.length ? `contacts:\n${contactLines.join('\n')}` : 'contacts=none',
+      pendingPayment ? `pending_payment=${JSON.stringify(pendingPayment)}` : 'pending_payment=none',
+      pendingConversion ? `pending_conversion=${JSON.stringify(pendingConversion)}` : 'pending_conversion=none',
+      '',
+      '## CONTEXT RULES',
+      '- Treat RUNTIME CONTEXT as authoritative for this turn.',
+      '- If session_active=true, never ask for user_id, session_id, or wallet public key. Use the provided session_id in tools.',
+      '- If session_active=false, do not invent wallet data. Return the login/onboarding link flow.',
+      '- For balances, contacts, history, payments, conversions, reset PIN, and logout, prefer tools over free text.',
+      '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
+      '- When adding/listing contacts, use session_id and the contact key from the user message.',
+      '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
+      '',
+      '## FEES AND SAVINGS UX',
+      '- Talk about fees as transparent and controlled, using exact tool data when available.',
+      '- When a quote or payment result has a network fee, say it clearly and frame it as the low network fee used for this route.',
+      '- Do not claim savings without data. Prefer wording like "rota com taxa de rede baixa" or "cotacao em tempo real antes de confirmar".',
+      '- For transfers/conversions, emphasize that the user sees the quote before confirming and can avoid surprises.',
+    ].join('\n');
+  }
+
   private async invokeWithTools(
     messages: BaseMessage[],
     userId?: string,
@@ -372,7 +470,10 @@ ${onboardingUrl}`;
         ? maybeBind.call(this.llm, ALL_TOOLS as any, { tool_choice: "auto" } as any)
         : this.llm;
 
-    let conversation = messages;
+    let conversation = [
+      new SystemMessage({ content: await this.buildRuntimeContext(userId, sessionId) }),
+      ...messages,
+    ];
 
     for (let round = 0; round < maxRounds; round += 1) {
       logger.debug(`[invokeWithTools] Round ${round + 1}/${maxRounds}`);
@@ -467,7 +568,7 @@ Prioritize 'wallet' for messages about creating/generating wallets, accounts, or
 Prefer 'contacts' when the user asks about contact list, wallet contacts, favorites, or saved beneficiaries.`;
 
       const response = await this.llm.invoke(await this.prependContactsContext([
-        new HumanMessage({ content: systemPrompt }),
+        new SystemMessage({ content: systemPrompt }),
         new HumanMessage({ content: message }),
       ], userId));
 
@@ -1379,7 +1480,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
           );
 
         const preMessages: BaseMessage[] = [
-          new HumanMessage({ content: this.systemPrompt }),
+          new SystemMessage({ content: this.systemPrompt }),
           ...conversationHistory,
           new HumanMessage({ content: state.current_input }),
         ];
@@ -1434,7 +1535,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
   ): Promise<string> {
     try {
       const messages = [
-        new HumanMessage({
+        new SystemMessage({
           content: this.systemPrompt,
         }),
         ...previousMessages.slice(-3).map((m) =>
