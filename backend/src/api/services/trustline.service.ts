@@ -3,6 +3,26 @@ import { logger } from '../../utils/logger';
 import { getDefaultTrustedAssets } from '../../config/assets';
 
 export class TrustlineService {
+  private static issuerReachabilityCache = new Map<string, boolean>();
+
+  private static async isIssuerReachable(issuer: string): Promise<boolean> {
+    const normalizedIssuer = String(issuer || '').trim();
+    if (!normalizedIssuer) return false;
+    if (this.issuerReachabilityCache.has(normalizedIssuer)) {
+      return Boolean(this.issuerReachabilityCache.get(normalizedIssuer));
+    }
+    try {
+      await StellarService.loadAccount(normalizedIssuer);
+      this.issuerReachabilityCache.set(normalizedIssuer, true);
+      return true;
+    } catch (error: any) {
+      const status = Number(error?.response?.status || 0);
+      const reachable = status !== 404;
+      this.issuerReachabilityCache.set(normalizedIssuer, reachable);
+      return reachable;
+    }
+  }
+
   static async createDefaultTrustlines(
     publicKey: string,
     secretKey: string,
@@ -20,6 +40,15 @@ export class TrustlineService {
       if (!asset.issuer) {
         logger.warn(`Skipping ${asset.code} trustline: issuer not configured in env`);
         results.errors.push(`${asset.code} issuer not configured`);
+        continue;
+      }
+
+      const issuerReachable = await this.isIssuerReachable(asset.issuer);
+      if (!issuerReachable) {
+        const errorMsg = `${asset.code} issuer ${asset.issuer} not found on current Stellar network`;
+        logger.warn(`Skipping ${asset.code} trustline for ${publicKey}: ${errorMsg}`);
+        results.errors.push(errorMsg);
+        results.success = false;
         continue;
       }
 
