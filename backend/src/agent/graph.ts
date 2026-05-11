@@ -436,12 +436,6 @@ ${onboardingUrl}`;
    */
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
     try {
-      const keywordIntent = this.detectIntentByKeyword(message);
-      if (keywordIntent) {
-        logger.debug(`Intent keyword match: "${message}" → ${keywordIntent}`);
-        return keywordIntent;
-      }
-
       const systemPrompt = `You are an intent classifier for a TalkToStellar digital wallet assistant.
 Analyze the user message and classify it into ONE of these intents:
 login, onboard, wallet, wallet_logout, contacts, payment, balance, history, conversion, pix, or general
@@ -1328,38 +1322,6 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
     try {
       logger.info(`[Agent] Processing for session: ${state.session_id}`);
 
-      const incomingSecret = this.extractSecretKey(state.current_input);
-
-      if (this.wantsLogoutWallet(state.current_input)) {
-        await this.repository.saveMessage(
-          state.session_id,
-          "user",
-          this.sanitizeUserMessage(state.current_input)
-        );
-        state.action_type = ActionType.LOGOUT_WALLET;
-        state.detected_intent = IntentType.WALLET_LOGOUT;
-        state.success = true;
-        state.response_message = this.getLogoutConfirmationMessage();
-        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      if (state.pending_payment && incomingSecret) {
-        state = await this.executePendingPaymentWithSecret(state, incomingSecret);
-        await this.repository.saveMessage(
-          state.session_id,
-          'assistant',
-          state.response_message
-        );
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      if (state.pending_conversion) {
-        return await this.handlePendingConversionConfirmation(state);
-      }
-
       // Resume wallet creation flow when waiting for user contact input (email/phone)
       if (state.waiting_for_wallet_input) {
         state.action_type = ActionType.CREATE_WALLET;
@@ -1367,232 +1329,32 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         return await this.handleWalletCreation(state);
       }
 
-      if (this.isOwnReceivingKeyRequest(state.current_input)) {
-        const keys = await this.resolveOwnReceivingKeys(state);
-        await this.repository.saveMessage(
-          state.session_id,
-          "user",
-          this.sanitizeUserMessage(state.current_input)
-        );
-
-        state.detected_intent = IntentType.PIX;
-        state.action_type = ActionType.INITIATE_PIX;
-
-        if (!keys.publicKey && !keys.pixKey) {
-          state.success = false;
-          state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
-        } else if (keys.pixKey) {
-          state.success = true;
-          state.response_message = keys.publicKey
-            ? `Sua chave de transferência para receber pagamentos é:\n${keys.pixKey}\n\nChave pública da carteira:\n${keys.publicKey}`
-            : `Sua chave de transferência para receber pagamentos é:\n${keys.pixKey}`;
-        } else {
-          state.success = true;
-          state.response_message = `Sua conta ainda não tem chave de transferência disponível. Use sua chave pública da carteira para receber:\n${keys.publicKey}`;
-        }
-
-        await this.repository.saveMessage(
-          state.session_id,
-          "assistant",
-          state.response_message
-        );
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      // Detect intent
       state.detected_intent = await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
-      // Save user message (with sensitive data masked)
       await this.repository.saveMessage(
         state.session_id,
         "user",
         this.sanitizeUserMessage(state.current_input)
       );
 
-      // Handle wallet creation as a special flow
-      if (state.action_type === ActionType.CREATE_WALLET) {
+      const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
+      const onboardingIntents = new Set<IntentType>([
+        IntentType.WALLET,
+        IntentType.ONBOARD,
+        IntentType.LOGIN,
+      ]);
+
+      if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
+        state.success = false;
+        state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
+        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      if (state.action_type === ActionType.CREATE_WALLET && !hasActiveWallet) {
         return await this.handleWalletCreation(state);
-      }
-
-      // Execute contacts listing tool directly
-      if (state.action_type === ActionType.LIST_CONTACTS) {
-        const addPayload = this.extractAddContactPayload(state.current_input);
-
-        if (addPayload.key) {
-          const userId = String(state.session_data?.user_id || '').trim();
-          if (!userId) {
-            state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
-            state.success = false;
-            await this.repository.saveMessage(
-              state.session_id,
-              "assistant",
-              state.response_message
-            );
-            await this.repository.saveState(state.session_id, state);
-            return state;
-          }
-
-          const isPublicKey = /^G[A-Z2-7]{55}$/i.test(addPayload.key);
-          const fallbackName = isPublicKey
-            ? `Contato ${addPayload.key.slice(0, 6)}`
-            : `Contato ${addPayload.key.split('@')[0]}`;
-
-          const addToolResultRaw = await executeTool("add_contact", {
-            user_id: userId,
-            contact_name: addPayload.contactName || fallbackName,
-            public_key: isPublicKey ? addPayload.key : undefined,
-            contact_key: isPublicKey ? undefined : addPayload.key,
-          });
-
-          let addToolResult: any;
-          try {
-            addToolResult = JSON.parse(addToolResultRaw);
-          } catch {
-            addToolResult = { success: false, error: "Failed to parse tool response" };
-          }
-
-          if (!addToolResult.success) {
-            state.response_message = `Não consegui adicionar este contato agora: ${addToolResult.error || 'erro desconhecido'}`;
-            state.success = false;
-          } else {
-            const added = addToolResult.contact || {};
-            const contactName = added.contact_name || addPayload.contactName || fallbackName;
-            const contactKey = added.stellar_public_key || addPayload.key;
-            state.response_message = `Contato adicionado com sucesso.\nNome: ${contactName}\nChave: ${contactKey}`;
-            state.success = true;
-          }
-
-          await this.repository.saveMessage(
-            state.session_id,
-            "assistant",
-            state.response_message
-          );
-          await this.repository.saveState(state.session_id, state);
-          return state;
-        }
-
-        const toolResultRaw = await executeTool("list_contacts", {
-          user_id: state.session_data?.user_id,
-        });
-
-        let toolResult: any;
-        try {
-          toolResult = JSON.parse(toolResultRaw);
-        } catch {
-          toolResult = { success: false, error: "Failed to parse tool response" };
-        }
-
-        if (!toolResult.success) {
-          state.response_message = `Não consegui listar seus contatos agora: ${toolResult.error || 'erro desconhecido'}`;
-          state.success = false;
-        } else {
-          const contacts = toolResult.contacts || [];
-          if (contacts.length === 0) {
-            state.response_message = "Você ainda não tem contatos salvos.";
-          } else {
-            const formatted = contacts
-              .map((c: any, idx: number) => {
-                const pix = c.pix_key ? ` - chave de transferência: ${c.pix_key}` : '';
-                return `${idx + 1}. ${c.contact_name || c.name} - ${c.stellar_public_key || c.public_key}${pix}`;
-              })
-              .join("\n");
-            state.response_message = `Seus contatos salvos:\n${formatted}`;
-          }
-          state.success = true;
-        }
-
-        await this.repository.saveMessage(
-          state.session_id,
-          "assistant",
-          state.response_message
-        );
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      if (state.action_type === ActionType.GET_BALANCE) {
-        return await this.handleBalanceCheck(state);
-      }
-
-      if (state.action_type === ActionType.GET_HISTORY) {
-        return await this.handleHistoryCheck(state);
-      }
-
-      if (state.action_type === ActionType.CONVERT_ASSETS) {
-        return await this.handleAssetConversion(state);
-      }
-
-      if (state.action_type === ActionType.BUILD_PAYMENT) {
-        if (!state.session_data?.public_key) {
-          state.success = false;
-          state.response_message = this.getOnboardingOrLoginMessage(this.shouldPreferLogin(state));
-        } else {
-          const paymentIntent = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
-
-          if (paymentIntent.needs_clarification) {
-            state.response_message = paymentIntent.clarification_question || 'Preciso de mais detalhes para confirmar esse pagamento.';
-          } else if (!paymentIntent.recipient_query || !paymentIntent.amount) {
-            state.response_message = 'Não consegui identificar claramente o destinatário e o valor. Pode me dizer de novo em uma frase mais direta?';
-          } else {
-            const requestedAssetCode = String(paymentIntent.asset_code || 'XLM').toUpperCase().replace(/^USD$/, 'USDC');
-            const amountStr = String(paymentIntent.amount).trim();
-            const sessionId = state.session_id;
-
-            const destinationContact = await this.getContactByPublicKeyOrName(paymentIntent.recipient_query, state.session_data?.user_id);
-            const destinationName = destinationContact?.contact_name || destinationContact?.name || paymentIntent.recipient_query || 'destinatário';
-            const resolvedDestination = destinationContact?.stellar_public_key || destinationContact?.public_key || paymentIntent.recipient_query;
-
-            const normalizedPayment = this.normalizePaymentAmountAndAsset(amountStr, requestedAssetCode);
-            const finalAmount = normalizedPayment.amount || amountStr;
-            const finalAssetCode = normalizedPayment.assetCode || requestedAssetCode;
-
-            const toolResult = await executeTool('prepare_payment_confirmation', {
-              amount: finalAmount,
-              destination: resolvedDestination,
-              destination_name: destinationName,
-              destination_contact: destinationContact,
-              session_id: sessionId,
-              owner_id: state.session_data.user_id,
-              source_public_key: state.session_data.public_key,
-              asset: finalAssetCode,
-              category: paymentIntent.category,
-              memo: paymentIntent.memo,
-            });
-
-            let toolResultParsed: any;
-            try {
-              toolResultParsed = JSON.parse(toolResult);
-            } catch {
-              toolResultParsed = { success: false, error: 'Failed to parse tool result' };
-            }
-
-            if (toolResultParsed.success && toolResultParsed.url) {
-              const assetLabel = String(toolResultParsed.asset || finalAssetCode || 'XLM').toUpperCase();
-              state.response_message =
-                `Para confirmar o envio de ${this.formatMoneyByAsset(finalAmount, assetLabel)} para ${destinationName}, abra o link de confirmação:\n\n${toolResultParsed.url}`;
-              if (assetLabel !== 'XLM') {
-                state.response_message += `\n\nO destinatário receberá exatamente ${this.formatMoneyByAsset(finalAmount, assetLabel)}.`;
-              }
-            } else {
-              const toolError = String(toolResultParsed.error || toolResultParsed.message || '').trim();
-              state.response_message = toolError
-                ? `Não consegui gerar um link de confirmação válido agora. Detalhe: ${toolError}`
-                : 'Não consegui gerar um link de confirmação válido agora. Tente novamente informando valor e destinatário com mais precisão.';
-            }
-          }
-
-          state.success = true;
-        }
-
-        await this.repository.saveMessage(
-          state.session_id,
-          'assistant',
-          state.response_message
-        );
-        await this.repository.saveState(state.session_id, state);
-        return state;
       }
 
       try {
