@@ -41,10 +41,71 @@ function formatQuotePath(path: Array<{ code?: string; type?: string }>): string 
   return route.join(' → ');
 }
 
+async function fetchBrlUsdcQuote(): Promise<{
+  source: string;
+  symbol: string;
+  brlPerUsdc: string;
+  usdcPerBrl: string;
+  fetchedAt: string;
+}> {
+  const source = String(process.env.BRL_USDC_QUOTE_SOURCE || 'binance').trim().toLowerCase();
+  const symbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
+  const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
+
+  if (source !== 'binance') {
+    throw new Error(`Fonte de cotação não suportada: ${source}. Use BRL_USDC_QUOTE_SOURCE=binance.`);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
+
+  try {
+    const endpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cotação indisponível na fonte ${source} (${response.status}).`);
+    }
+
+    const payload = await response.json() as { symbol?: string; price?: string };
+    const rawPrice = String(payload?.price || '').trim();
+    const brlPerUsdcNumber = Number(rawPrice);
+    if (!Number.isFinite(brlPerUsdcNumber) || brlPerUsdcNumber <= 0) {
+      throw new Error('Resposta de cotação inválida da fonte externa.');
+    }
+
+    const usdcPerBrlNumber = 1 / brlPerUsdcNumber;
+    return {
+      source,
+      symbol: String(payload?.symbol || symbol).toUpperCase(),
+      brlPerUsdc: brlPerUsdcNumber.toFixed(8),
+      usdcPerBrl: usdcPerBrlNumber.toFixed(8),
+      fetchedAt: new Date().toISOString(),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Tool definitions for OpenAI function calling
  */
 export const toolDefinitions = [
+  {
+    name: "get_brl_usdc_quote",
+    description: "Get the current BRL-USDC market quote in real time from configured external source. Returns both BRL per 1 USDC and USDC per 1 BRL.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
   {
     name: "create_wallet",
     description: "Create a new Stellar wallet or link an existing public key to the user account",
@@ -536,6 +597,8 @@ export async function executeTool(
   try {
     logger.info(`Tool call: ${toolName} ${JSON.stringify(toolInput || {})}`);
     switch (toolName) {
+      case "get_brl_usdc_quote":
+        return await executeGetBrlUsdcQuote();
       case "create_wallet":
         return await executeCreateWallet(toolInput);
       case "get_balance":
@@ -587,6 +650,31 @@ export async function executeTool(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Tool execution error in ${toolName}: ${errorMessage}`);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executeGetBrlUsdcQuote(): Promise<string> {
+  try {
+    const quote = await fetchBrlUsdcQuote();
+
+    return JSON.stringify({
+      success: true,
+      source: quote.source,
+      symbol: quote.symbol,
+      brl_per_usdc: quote.brlPerUsdc,
+      usdc_per_brl: quote.usdcPerBrl,
+      fetched_at: quote.fetchedAt,
+      message:
+        `Cotação atual (${quote.source.toUpperCase()}): ` +
+        `1 USDC = R$ ${quote.brlPerUsdc} | ` +
+        `1 BRL = US$ ${quote.usdcPerBrl}.`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
       error: errorMessage,

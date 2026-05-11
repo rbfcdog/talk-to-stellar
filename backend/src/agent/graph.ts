@@ -438,7 +438,7 @@ ${onboardingUrl}`;
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar digital wallet assistant.
 Analyze the user message and classify it into ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, balance, history, conversion, pix, or general
+login, onboard, wallet, wallet_logout, contacts, payment, balance, history, conversion, price_quote, pix, or general
 
 Respond ONLY with the intent name. Examples:
 - "Check my balance" → balance
@@ -452,6 +452,8 @@ Respond ONLY with the intent name. Examples:
 - "converter USDC para XLM" → conversion
 - "trocar 10 USDC por XLM" → conversion
 - "convert assets" → conversion
+- "qual a cotação do dólar" → price_quote
+- "cotação brl usdc agora" → price_quote
 - "Send 100 XLM" → payment
 - "Create account" → onboard
 - "Create wallet" → wallet
@@ -481,6 +483,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         balance: IntentType.BALANCE,
         history: IntentType.HISTORY,
         conversion: IntentType.CONVERSION,
+        price_quote: IntentType.PRICE_QUOTE,
         pix: IntentType.PIX,
         general: IntentType.GENERAL,
       };
@@ -527,6 +530,11 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     const conversionWords = ['converter', 'conversao', 'converter asset', 'trocar', 'swap', 'convert'];
     if (conversionWords.some((word) => normalized.includes(word))) {
       return IntentType.CONVERSION;
+    }
+
+    const quoteWords = ['cotacao', 'cotação', 'cambio', 'câmbio', 'dolar', 'dólar', 'brl usdc', 'usdc brl', 'exchange rate', 'price quote'];
+    if (quoteWords.some((word) => normalized.includes(word))) {
+      return IntentType.PRICE_QUOTE;
     }
 
     if (this.wantsLogoutWallet(message)) {
@@ -1343,6 +1351,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
         IntentType.WALLET,
         IntentType.ONBOARD,
         IntentType.LOGIN,
+        IntentType.PRICE_QUOTE,
       ]);
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
@@ -1459,6 +1468,7 @@ Sua carteira foi criada na rede de testes do Stellar e já recebeu 10.000 XLM pa
       [IntentType.BALANCE]: ActionType.GET_BALANCE,
       [IntentType.HISTORY]: ActionType.GET_HISTORY,
       [IntentType.CONVERSION]: ActionType.CONVERT_ASSETS,
+      [IntentType.PRICE_QUOTE]: ActionType.GET_PRICE_QUOTE,
       [IntentType.PIX]: ActionType.INITIATE_PIX,
       [IntentType.GENERAL]: ActionType.NONE,
     };
