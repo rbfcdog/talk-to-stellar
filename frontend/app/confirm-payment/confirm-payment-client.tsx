@@ -74,16 +74,26 @@ function trimFixed(value: number, decimals: number) {
 
 function formatFeeAmount(value: number, assetCode: string) {
   const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
-  if (code === "BRL") return `R$ ${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)}`
-  if (code === "USDC") return `US$ ${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)}`
-  if (code === "XLM") return `${trimFixed(value, 7)} XLM`
-  return `${trimFixed(value, value > 0 && value < 0.01 ? 8 : 2)} ${code}`
+  const decimals = value > 0 && value < 0.01 ? 8 : 2
+  const threshold = Math.pow(10, -decimals)
+  const prefix = value > 0 && value < threshold ? "<" : ""
+  if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : value, decimals)}`
+  if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : value, decimals)}`
+  if (code === "XLM") {
+    const xlmDecimals = 7
+    const xlmThreshold = Math.pow(10, -xlmDecimals)
+    const xlmPrefix = value > 0 && value < xlmThreshold ? "<" : ""
+    return `${xlmPrefix}${trimFixed(xlmPrefix ? xlmThreshold : value, xlmDecimals)} XLM`
+  }
+  return `${prefix}${trimFixed(prefix ? threshold : value, decimals)} ${code}`
 }
 
 function formatFeePercent(percent: number) {
   if (!Number.isFinite(percent) || percent < 0) return ""
-  if (percent > 0 && percent < 0.000001) return "<0.000001%"
-  return `${trimFixed(percent, percent > 0 && percent < 0.01 ? 6 : 4)}%`
+  const decimals = percent > 0 && percent < 0.01 ? 6 : 4
+  const threshold = Math.pow(10, -decimals)
+  if (percent > 0 && percent < threshold) return `<${trimFixed(threshold, decimals)}%`
+  return `${trimFixed(percent, decimals)}%`
 }
 
 function buildFeeSummary(input: {
