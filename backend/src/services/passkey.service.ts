@@ -60,6 +60,20 @@ function fromBase64Url(value: string) {
   return new Uint8Array(Buffer.from(value, 'base64url'));
 }
 
+function generateChallengeBytes() {
+  const bytes = crypto.randomBytes(32);
+  return new Uint8Array(bytes);
+}
+
+function expectedChallengeMatches(storedChallenge: string) {
+  const legacyStringChallenge = Buffer.from(storedChallenge, 'utf8').toString('base64url');
+
+  return (responseChallenge: string) => (
+    responseChallenge === storedChallenge ||
+    responseChallenge === legacyStringChallenge
+  );
+}
+
 function isValidStellarPublicKey(value?: string) {
   if (!value) return false;
   try {
@@ -231,8 +245,7 @@ export class PasskeyService {
 
   static async generateRegistration(userId: string) {
     const passkeys = await this.getUserPasskeys(userId);
-    const challenge = crypto.randomBytes(32).toString('base64url');
-    const challengeRow = await this.storeChallenge(userId, 'registration', challenge, { userId });
+    const challenge = generateChallengeBytes();
     const options = await generateRegistrationOptions({
       rpName: getRpName(),
       rpID: getRpID(),
@@ -252,6 +265,7 @@ export class PasskeyService {
         transports: passkey.transports,
       })),
     });
+    const challengeRow = await this.storeChallenge(userId, 'registration', options.challenge, { userId });
 
     return { options, challengeId: challengeRow.id };
   }
@@ -272,16 +286,16 @@ export class PasskeyService {
       expiresAt: Date.now() + 5 * 60_000,
     };
     const challenge = hashBase64Url(JSON.stringify(challengePayload));
-    const challengeRow = await this.storeChallenge(userId, 'authentication', challenge, challengePayload);
     const options = await generateAuthenticationOptions({
       rpID: getRpID(),
-      challenge,
+      challenge: fromBase64Url(challenge),
       allowCredentials: passkeys.map((passkey) => ({
         id: passkey.credential_id,
         transports: passkey.transports,
       })),
       userVerification: 'required',
     });
+    const challengeRow = await this.storeChallenge(userId, 'authentication', options.challenge, challengePayload);
 
     return {
       registrationRequired: false,
@@ -299,7 +313,7 @@ export class PasskeyService {
 
     const verification = await verifyRegistrationResponse({
       response,
-      expectedChallenge: challenge.challenge,
+      expectedChallenge: expectedChallengeMatches(challenge.challenge),
       expectedOrigin: getExpectedOrigin(),
       expectedRPID: getRpID(),
       requireUserVerification: true,
@@ -346,7 +360,7 @@ export class PasskeyService {
 
     const verification = await verifyAuthenticationResponse({
       response,
-      expectedChallenge: challenge.challenge,
+      expectedChallenge: expectedChallengeMatches(challenge.challenge),
       expectedOrigin: getExpectedOrigin(),
       expectedRPID: getRpID(),
       credential: toWebAuthnCredential(passkey),
@@ -454,16 +468,16 @@ export class PasskeyService {
       expiresAt: Date.now() + 5 * 60_000,
     };
     const challenge = hashBase64Url(JSON.stringify(challengePayload));
-    const challengeRow = await this.storeChallenge(transaction.userId, 'transaction', challenge, challengePayload);
     const options = await generateAuthenticationOptions({
       rpID: getRpID(),
-      challenge,
+      challenge: fromBase64Url(challenge),
       allowCredentials: passkeys.map((passkey) => ({
         id: passkey.credential_id,
         transports: passkey.transports,
       })),
       userVerification: 'required',
     });
+    const challengeRow = await this.storeChallenge(transaction.userId, 'transaction', options.challenge, challengePayload);
 
     return {
       registrationRequired: false,
@@ -506,7 +520,7 @@ export class PasskeyService {
 
     const verification = await verifyAuthenticationResponse({
       response: input.response,
-      expectedChallenge: challenge.challenge,
+      expectedChallenge: expectedChallengeMatches(challenge.challenge),
       expectedOrigin: getExpectedOrigin(),
       expectedRPID: getRpID(),
       credential: toWebAuthnCredential(passkey),
