@@ -8,6 +8,7 @@ import { WalletRepository } from '../../repositories/wallet.repository';
 import PasskeyService from '../../services/passkey.service';
 import { ExternalRepository } from '../../repositories/external.repository';
 import { TransferNotificationService } from '../services/transfer-notification.service';
+import { isSessionExpired } from '../../utils/session-expiry';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
@@ -21,6 +22,10 @@ function getJwtSecret() {
 async function hasOnboardingCredentials(sessionId: string, userId: string): Promise<boolean> {
   const session = await agentRepo.getSession(sessionId);
   if (!session) {
+    return false;
+  }
+
+  if (isSessionExpired(session)) {
     return false;
   }
 
@@ -339,6 +344,12 @@ export class ExternalController {
       if (String(session.session_token || '').trim() !== sessionToken) {
         return res.status(401).json({ success: false, message: 'Sessão inválida.' });
       }
+
+      if (isSessionExpired(session)) {
+        return res.status(401).json({ success: false, message: 'Sessão expirada. Entre novamente.' });
+      }
+
+      await agentRepo.saveSession(sessionId, session as any);
 
       await externalRepo.createMapping({
         provider,

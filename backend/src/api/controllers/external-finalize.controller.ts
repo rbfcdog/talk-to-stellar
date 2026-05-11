@@ -15,6 +15,7 @@ import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
+import { isSessionExpired } from '../../utils/session-expiry';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -137,6 +138,8 @@ async function upsertRecentContactFromPayment(input: {
 async function sendTelegramPaymentNotification(input: {
   sessionId: string;
   userId: string;
+  provider?: string | null;
+  providerUserId?: string | null;
   amount: string;
   assetCode: string;
   sourceAmount?: string;
@@ -174,6 +177,12 @@ async function sendTelegramPaymentNotification(input: {
       return;
     }
 
+    let providerUserId = String(
+      String(input.provider || '').toLowerCase() === 'telegram'
+        ? input.providerUserId || ''
+        : ''
+    ).trim();
+
     const { data: mappingBySession } = await supabase
       .from('external_accounts')
       .select('provider, provider_user_id')
@@ -182,7 +191,7 @@ async function sendTelegramPaymentNotification(input: {
       .limit(1)
       .maybeSingle();
 
-    let providerUserId = String(mappingBySession?.provider_user_id || '').trim();
+    providerUserId = providerUserId || String(mappingBySession?.provider_user_id || '').trim();
 
     if (!providerUserId) {
       const { data: mappingByUser } = await supabase
@@ -221,6 +230,8 @@ async function sendTelegramPaymentNotification(input: {
 async function sendTelegramConversionNotification(input: {
   sessionId: string;
   userId: string;
+  provider?: string | null;
+  providerUserId?: string | null;
   sourceAmount: string;
   sourceAssetCode: string;
   destinationAmount: string;
@@ -251,6 +262,12 @@ async function sendTelegramConversionNotification(input: {
       return;
     }
 
+    let providerUserId = String(
+      String(input.provider || '').toLowerCase() === 'telegram'
+        ? input.providerUserId || ''
+        : ''
+    ).trim();
+
     const { data: mappingBySession } = await supabase
       .from('external_accounts')
       .select('provider, provider_user_id')
@@ -259,7 +276,7 @@ async function sendTelegramConversionNotification(input: {
       .limit(1)
       .maybeSingle();
 
-    let providerUserId = String(mappingBySession?.provider_user_id || '').trim();
+    providerUserId = providerUserId || String(mappingBySession?.provider_user_id || '').trim();
 
     if (!providerUserId) {
       const { data: mappingByUser } = await supabase
@@ -555,6 +572,13 @@ export default class ExternalFinalizeController {
         if (!session?.user_id) {
           return res.status(400).json({ success: false, message: 'session not found for conversion confirmation' });
         }
+        if (isSessionExpired(session)) {
+          await agentRepo.clearSession(String(session_id));
+          return res.status(401).json({
+            success: false,
+            message: 'Sua sessão expirou. Entre novamente antes de confirmar a conversão.',
+          });
+        }
 
         const providedPin = String(req.body?.pin || '').trim();
         if (!providedPin) {
@@ -764,6 +788,8 @@ export default class ExternalFinalizeController {
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
+          provider: String((payload as any).provider || ''),
+          providerUserId: String((payload as any).provider_user_id || ''),
           sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
           sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
           destinationAmount: String(publicTransferDetails.destinationAmount || quote.destinationAmount),
@@ -858,6 +884,13 @@ export default class ExternalFinalizeController {
         const session = await agentRepo.getSession(String(session_id));
         if (!session?.user_id) {
           return res.status(400).json({ success: false, message: 'session not found for payment confirmation' });
+        }
+        if (isSessionExpired(session)) {
+          await agentRepo.clearSession(String(session_id));
+          return res.status(401).json({
+            success: false,
+            message: 'Sua sessão expirou. Entre novamente antes de confirmar o pagamento.',
+          });
         }
 
         const normalize = (value: string) =>
@@ -1283,6 +1316,8 @@ export default class ExternalFinalizeController {
         await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
+          provider: String((payload as any).provider || ''),
+          providerUserId: String((payload as any).provider_user_id || ''),
           amount: publicTransferDetails.destinationAmount,
           assetCode: publicTransferDetails.destinationAssetCode,
           sourceAmount: publicTransferDetails.sourceAmount,

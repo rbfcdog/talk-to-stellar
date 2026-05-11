@@ -19,6 +19,7 @@ import { ContactSeedService, repairLegacyStarterContactKey } from "../api/servic
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
 import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
+import { TransferNotificationService } from "../api/services/transfer-notification.service";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -745,6 +746,12 @@ async function executeLogoutSession(input: any): Promise<string> {
       });
     }
 
+    const { data: sessionBeforeLogout } = await supabase
+      .from('agent_sessions')
+      .select('user_id')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+
     // Do not delete agent_sessions row; agent_messages references session_id via FK.
     // Deleting here causes subsequent message persistence to fail in the same request flow.
     const { error } = await supabase
@@ -758,6 +765,11 @@ async function executeLogoutSession(input: any): Promise<string> {
     if (error) {
       throw new Error(error.message || 'Falha ao encerrar sessão');
     }
+
+    void TransferNotificationService.notifySessionLogout({
+      sessionId,
+      userId: String((sessionBeforeLogout as any)?.user_id || ''),
+    });
 
     // Clear runtime state tied to wallet/payment context.
     await supabase
@@ -1382,7 +1394,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
     const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || '0.001');
 
-    const { url } = externalService.createConversionConfirmUrl({
+    const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
       owner_id: String(input.owner_id || input.ownerId || '').trim(),
       source_amount: sourceAmount,

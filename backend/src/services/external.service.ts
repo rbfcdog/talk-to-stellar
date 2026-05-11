@@ -165,6 +165,12 @@ function compactExtra(extra: Record<string, any>) {
   );
 }
 
+type ExternalLinkContext = {
+  provider?: string;
+  provider_user_id?: string;
+  source?: string;
+};
+
 export class ExternalService {
   repo: ExternalRepository;
   supabase: SupabaseClient;
@@ -230,6 +236,7 @@ export class ExternalService {
   async createPaymentConfirmUrl(payload: { amount: string; destination: string; destination_name?: string; destination_contact?: Record<string, any>; session_id?: string; owner_id?: string; asset_code?: string; asset_issuer?: string; nonce?: string }, extra = {}) {
     const assetCode = normalizeAssetCode(payload.asset_code || 'XLM');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
+    const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
 
     const tokenPayload = {
       sub: 'external_payment_confirm',
@@ -242,6 +249,7 @@ export class ExternalService {
       session_id: payload.session_id || null,
       owner_id: payload.owner_id || null,
       nonce: payload.nonce || uuidv4(),
+      ...externalContext,
       ...compactExtra(extra as Record<string, any>),
     };
 
@@ -272,8 +280,9 @@ export class ExternalService {
         .trim()
         .toLowerCase();
 
-    const base = getPaymentConfirmBase();
-    const buildUrl = (pk: string) => `${base}/confirm-payment?token=${encodeURIComponent(token)}&public_key=${encodeURIComponent(pk)}`;
+    const buildUrl = (pk: string) => this.buildFrontendUrl('/confirm-payment', token, externalContext, {
+      public_key: pk,
+    });
 
     // If publicKeyForUrl already set, return synchronously
     if (publicKeyForUrl) {
@@ -390,6 +399,9 @@ export class ExternalService {
     const sourceAssetIssuer = getAssetIssuer(sourceAssetCode, payload.source_asset_issuer);
     const destAssetIssuer = getAssetIssuer(destAssetCode, payload.dest_asset_issuer);
 
+    const compactedExtra = compactExtra(extra as Record<string, any>);
+    const externalContext = this.normalizeExternalLinkContext(compactedExtra);
+
     const tokenPayload = {
       sub: 'external_conversion_confirm',
       session_id: payload.session_id,
@@ -402,14 +414,84 @@ export class ExternalService {
       dest_asset_issuer: destAssetIssuer || null,
       quote: compactQuote(payload.quote),
       nonce: payload.nonce || uuidv4(),
-      ...compactExtra(extra as Record<string, any>),
+      ...externalContext,
+      ...compactedExtra,
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
-    const base = getPaymentConfirmBase();
-    const url = `${base}/confirm-conversion?token=${encodeURIComponent(token)}`;
+    const url = this.buildFrontendUrl('/confirm-conversion', token, externalContext);
 
     return { token, url };
+  }
+
+  async createConversionConfirmUrlWithContext(payload: {
+    session_id: string;
+    owner_id?: string;
+    source_amount?: string;
+    source_asset_code: string;
+    source_asset_issuer?: string;
+    dest_amount: string;
+    dest_asset_code: string;
+    dest_asset_issuer?: string;
+    quote?: any;
+    nonce?: string;
+  }, extra = {}) {
+    const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
+    return this.createConversionConfirmUrl(payload, {
+      ...extra,
+      ...externalContext,
+    });
+  }
+
+  private async resolveExternalLinkContext(sessionId?: string, userId?: string): Promise<ExternalLinkContext> {
+    const session = String(sessionId || '').trim();
+    const user = String(userId || '').trim();
+    const selectContext = async (column: 'session_id' | 'user_id', value: string) => {
+      if (!value) return null;
+      const { data, error } = await this.supabase
+        .from('external_accounts')
+        .select('provider, provider_user_id')
+        .eq(column, value)
+        .order('provider', { ascending: true })
+        .limit(20);
+
+      if (error) {
+        const message = String(error.message || '').toLowerCase();
+        if (message.includes('external_accounts') || message.includes('schema cache') || message.includes('does not exist')) {
+          return null;
+        }
+        throw error;
+      }
+
+      const rows = data || [];
+      return rows.find((row: any) => String(row.provider || '').toLowerCase() === 'telegram') || rows[0] || null;
+    };
+
+    const row = await selectContext('session_id', session) || await selectContext('user_id', user);
+    return this.normalizeExternalLinkContext(row || {});
+  }
+
+  private normalizeExternalLinkContext(input: Record<string, any>): ExternalLinkContext {
+    const provider = String(input.provider || '').trim().toLowerCase();
+    const providerUserId = String(input.provider_user_id || input.providerUserId || '').trim();
+    if (!provider || !providerUserId) return {};
+    return {
+      provider,
+      provider_user_id: providerUserId,
+      source: String(input.source || provider).trim().toLowerCase(),
+    };
+  }
+
+  private buildFrontendUrl(path: string, token: string, context: ExternalLinkContext = {}, extraParams: Record<string, string | undefined> = {}) {
+    const url = new URL(`${getPaymentConfirmBase()}${path}`);
+    url.searchParams.set('token', token);
+    for (const [key, value] of Object.entries(extraParams)) {
+      if (value) url.searchParams.set(key, value);
+    }
+    if (context.provider) url.searchParams.set('provider', context.provider);
+    if (context.provider_user_id) url.searchParams.set('provider_user_id', context.provider_user_id);
+    if (context.source) url.searchParams.set('source', context.source);
+    return url.toString();
   }
 
   // Create mapping row for external account (optional pre-provision)

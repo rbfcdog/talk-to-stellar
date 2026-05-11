@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -15,8 +16,16 @@ function generateSessionId(): string {
 }
 
 export default function LogoutClient() {
+  const searchParams = useSearchParams()
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [message, setMessage] = useState("")
+  const provider = String(searchParams.get("provider") || searchParams.get("source") || "").trim().toLowerCase()
+  const providerUserId = String(searchParams.get("provider_user_id") || "").trim()
+  const providerLabel = provider === "telegram"
+    ? "Telegram"
+    : provider === "whatsapp" || provider === "phone"
+      ? "WhatsApp"
+      : provider
 
   const currentSessionId = useMemo(() => {
     if (typeof window === "undefined") return ""
@@ -36,17 +45,22 @@ export default function LogoutClient() {
         await fetch("/api/logout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: currentSessionId }),
+          body: JSON.stringify({
+            session_id: currentSessionId,
+            provider: provider || undefined,
+            provider_user_id: providerUserId || undefined,
+          }),
         })
       }
       if (typeof window !== "undefined") {
         localStorage.removeItem("talk-to-stellar.sessionId")
         localStorage.removeItem("talk-to-stellar.sessionToken")
+        localStorage.removeItem("talk-to-stellar.sessionCreatedAt")
         sessionStorage.removeItem("chat-session-agent")
         sessionStorage.setItem("chat-session-agent", generateSessionId())
       }
       setStatus("done")
-      setMessage("Você saiu da conta com sucesso.")
+      setMessage(providerLabel ? `Logout concluído. Volte ao ${providerLabel} para continuar.` : "Você saiu da conta com sucesso.")
     } catch {
       setStatus("error")
       setMessage("Não foi possível concluir o logout agora. Tente novamente.")

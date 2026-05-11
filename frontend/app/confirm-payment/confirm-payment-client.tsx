@@ -133,6 +133,13 @@ function buildFeeSummary(input: {
   return `${formatFeeAmount(primaryAmount, primaryAsset)}${equivalents.length ? ` (${equivalents.join(", ")})` : ""}`
 }
 
+function getProviderLabel(provider?: string) {
+  const normalized = String(provider || "").trim().toLowerCase()
+  if (normalized === "telegram") return "Telegram"
+  if (normalized === "whatsapp" || normalized === "phone") return "WhatsApp"
+  return normalized ? normalized : ""
+}
+
 export default function ConfirmPaymentClient({
   initialToken = '',
   initialValidation = null,
@@ -228,6 +235,9 @@ export default function ConfirmPaymentClient({
   }
 
   const payload = validation?.payload || decodeJwtPayload(token)
+  const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
+  const providerLabel = getProviderLabel(externalProvider)
+  const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
   const assetCode = String(payload.asset_code || payload.assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
   const sourceAssetCode = String(payload.source_asset_code || payload.quote?.sourceAsset?.code || "").toUpperCase().replace(/^USD$/, "USDC")
@@ -361,6 +371,7 @@ export default function ConfirmPaymentClient({
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeSummary}</p>
                   )}
+                  {returnMessage && <p>{returnMessage}</p>}
                   <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </div>

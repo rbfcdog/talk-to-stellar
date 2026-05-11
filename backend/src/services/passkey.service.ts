@@ -380,10 +380,18 @@ export class PasskeyService {
       .eq('credential_id', verification.authenticationInfo.credentialID);
     await this.markChallengeUsed(challenge.id);
 
+    const latestSession = await this.getLatestSessionForUser(userId);
+    if (latestSession.sessionId) {
+      const session = await agentRepo.getSession(latestSession.sessionId);
+      if (session) {
+        await agentRepo.saveSession(latestSession.sessionId, session as any);
+      }
+    }
+
     return {
       verified: true,
       sessionToken: AuthService.generateTokenForUser(userId),
-      ...(await this.getLatestSessionForUser(userId)),
+      ...latestSession,
     };
   }
 
