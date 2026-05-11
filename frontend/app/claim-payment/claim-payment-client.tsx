@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { CheckCircle2, LogIn, Wallet } from "lucide-react"
+import { clearClientSession } from "@/lib/session"
 
 type ValidationResult = {
   valid?: boolean
@@ -103,6 +104,16 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const senderName = String(payload.sender_name || "Alguém")
   const loggedIn = Boolean(sessionId && sessionToken)
   const nextPath = `/claim-payment?token=${encodeURIComponent(token)}`
+  const senderSessionId = String(payload.session_id || "").trim()
+  const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
+
+  function leaveSenderSession() {
+    clearClientSession()
+    setSessionId("")
+    setSessionToken("")
+    setStatus("idle")
+    setResult(null)
+  }
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
@@ -129,8 +140,22 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             )}
           </div>
 
-          {!loggedIn && (
+          {(!loggedIn || isSenderSession) && (
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {isSenderSession && (
+                <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+                  Este navegador está com a conta de quem criou o link. Para receber, entre ou crie a carteira do destinatário.
+                </p>
+              )}
+              {isSenderSession && (
+                <button
+                  type="button"
+                  onClick={leaveSenderSession}
+                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Usar outra conta para receber
+                </button>
+              )}
               <Link
                 href={`/login?next=${encodeURIComponent(nextPath)}`}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
@@ -147,7 +172,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             </div>
           )}
 
-          {loggedIn && (
+          {loggedIn && !isSenderSession && (
             <button
               type="button"
               onClick={claim}
