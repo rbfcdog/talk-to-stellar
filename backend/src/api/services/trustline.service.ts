@@ -9,11 +9,23 @@ export class TrustlineService {
     userId: string
   ): Promise<{ success: boolean; assets: string[]; errors: string[] }> {
     const results = { success: true, assets: [] as string[], errors: [] as string[] };
+    const account = await StellarService.loadAccount(publicKey);
+    const existingTrustlines = new Set(
+      (account.balances || [])
+        .filter((balance: any) => balance.asset_type !== 'native')
+        .map((balance: any) => `${String(balance.asset_code || '').toUpperCase()}:${String(balance.asset_issuer || '')}`)
+    );
 
     for (const asset of getDefaultTrustedAssets()) {
       if (!asset.issuer) {
         logger.warn(`Skipping ${asset.code} trustline: issuer not configured in env`);
         results.errors.push(`${asset.code} issuer not configured`);
+        continue;
+      }
+
+      const trustlineKey = `${asset.code}:${asset.issuer}`;
+      if (existingTrustlines.has(trustlineKey)) {
+        logger.info(`Skipping ${asset.code} trustline for ${publicKey}: already exists`);
         continue;
       }
 
@@ -42,6 +54,7 @@ export class TrustlineService {
         if (result.success && result.hash) {
           logger.info(`${asset.code} trustline created successfully: ${result.hash}`);
           results.assets.push(`${asset.code} (hash: ${result.hash})`);
+          existingTrustlines.add(trustlineKey);
         } else {
           const errorMsg = `Failed to create ${asset.code} trustline`;
           logger.error(errorMsg);

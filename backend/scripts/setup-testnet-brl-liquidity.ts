@@ -15,11 +15,21 @@ const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.s
 const friendbotUrl = process.env.STELLAR_FRIENDBOT_URL || 'https://friendbot.stellar.org';
 const server = new Horizon.Server(horizonUrl);
 const USDC_ISSUER = process.env.USDC_ISSUER || 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-const brlIssuanceAmount = Number(process.env.BRL_ISSUANCE_AMOUNT || '100000');
-const brlLiquidityAmount = Number(process.env.BRL_LIQUIDITY_AMOUNT || '20000');
-const usdcLiquidityAmount = Number(process.env.USDC_BRL_LIQUIDITY_AMOUNT || '2000');
-const brlPerXlm = Number(process.env.BRL_PER_XLM_PRICE || '4.2');
-const brlPerUsdc = Number(process.env.BRL_PER_USDC_PRICE || '5.0');
+
+function requirePositiveNumber(name: string): number {
+  const raw = String(process.env[name] || '').trim();
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${name} must be set to a positive number.`);
+  }
+  return value;
+}
+
+const brlIssuanceAmount = requirePositiveNumber('TESTNET_SETUP_BRL_ISSUANCE_AMOUNT');
+const brlLiquidityAmount = requirePositiveNumber('TESTNET_SETUP_BRL_LIQUIDITY_AMOUNT');
+const usdcLiquidityAmount = requirePositiveNumber('TESTNET_SETUP_USDC_BRL_LIQUIDITY_AMOUNT');
+const brlPerXlm = requirePositiveNumber('TESTNET_SETUP_BRL_PER_XLM_PRICE');
+const brlPerUsdc = requirePositiveNumber('TESTNET_SETUP_BRL_PER_USDC_PRICE');
 
 type LoadedKeypair = { keypair: Keypair; generated: boolean };
 type OperationInput = Parameters<typeof TransactionBuilder.prototype.addOperation>[0];
@@ -177,7 +187,7 @@ async function main(): Promise<void> {
     throw new Error('This script is only for Stellar testnet.');
   }
 
-  const brlIssuer = loadOrCreateKeypair('BRL issuer', 'BRL_ISSUER_SECRET', 'BRL_ISSUER');
+  const brlIssuer = loadOrCreateKeypair('BRL issuer', 'BRL_ISSUER_SECRET', 'BRL_ISSUER_TESTNET');
   const brlDistributor = loadOrCreateKeypair('BRL distributor', 'BRL_DISTRIBUTOR_SECRET', 'BRL_DISTRIBUTOR_PUBLIC');
   const marketMaker = loadOrCreateKeypair('BRL market maker', 'BRL_MARKET_MAKER_SECRET', 'BRL_MARKET_MAKER_PUBLIC');
 
@@ -213,7 +223,7 @@ async function main(): Promise<void> {
   ], 'create BRL offers');
 
   console.log('BRL liquidity setup complete. Use these env values:');
-  console.log(`BRL_ISSUER="${brlIssuer.keypair.publicKey()}"`);
+  console.log(`BRL_ISSUER_TESTNET="${brlIssuer.keypair.publicKey()}"`);
   console.log(`BRL_ISSUER_SECRET="${brlIssuer.keypair.secret()}"`);
   console.log(`BRL_DISTRIBUTOR_PUBLIC="${brlDistributor.keypair.publicKey()}"`);
   console.log(`BRL_DISTRIBUTOR_SECRET="${brlDistributor.keypair.secret()}"`);

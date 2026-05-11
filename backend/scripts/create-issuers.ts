@@ -31,7 +31,7 @@ async function createTestIssuers() {
     console.log('Update your .env file with these values:');
     console.log('='.repeat(60));
     console.log(`USDC_ISSUER="${usdcKeypair.publicKey()}"`);
-    console.log(`BRL_ISSUER="${brlKeypair.publicKey()}"`);
+    console.log(`BRL_ISSUER_TESTNET="${brlKeypair.publicKey()}"`);
     console.log('='.repeat(60) + '\n');
 
   } catch (error) {

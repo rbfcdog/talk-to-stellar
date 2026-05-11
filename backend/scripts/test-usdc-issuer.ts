@@ -1,8 +1,12 @@
 import { Horizon, Networks, Asset } from '@stellar/stellar-sdk';
+import dotenv from 'dotenv';
+import { getAssetIssuer } from '../src/config/assets';
+
+dotenv.config();
 
 const server = new Horizon.Server('https://horizon-testnet.stellar.org');
-const USDC_ISSUER = 'GBZ46DBWTLU45IU75G5NR2EY3DEC5ZGJCVYCNGVRBU57WV6DC4OPI7PK';
-const BRL_ISSUER = 'GCKG7UJA4YHCL6MBEVGCWO42CDONOTYU64E53X2SWAHS2CWHXDAKXOL5';
+const USDC_ISSUER = String(getAssetIssuer('USDC') || '').trim();
+const BRL_ISSUER = String(getAssetIssuer('BRL') || '').trim();
 
 async function testIssuer(issuer: string, code: string) {
   console.log(`\nTesting ${code} issuer: ${issuer}`);
@@ -65,6 +69,13 @@ async function main() {
   console.log('Testing USDC and BRL Issuer Configuration');
   console.log('='.repeat(60));
   
+  if (!USDC_ISSUER) {
+    throw new Error('USDC_ISSUER not configured');
+  }
+  if (!BRL_ISSUER) {
+    throw new Error('BRL issuer not configured (BRL_ISSUER_PUBLIC/BRL_ISSUER_TESTNET)');
+  }
+
   await testIssuer(USDC_ISSUER, 'USDC');
   await testIssuer(BRL_ISSUER, 'BRL');
   await testAssetCreation();
