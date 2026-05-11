@@ -144,7 +144,7 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset): stri
         hints.push('USDC_ISSUER não configurado no backend');
     }
     if (destCode === 'BRL' && !getAssetIssuer('BRL')) {
-        hints.push('BRL_ISSUER não configurado no backend');
+        hints.push('BRL issuer não configurado no backend (use BRL_ISSUER_PUBLIC para PUBLIC ou BRL_ISSUER_TESTNET para TESTNET)');
     }
 
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');

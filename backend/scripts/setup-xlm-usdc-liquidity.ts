@@ -19,17 +19,11 @@ const server = new Horizon.Server(horizonUrl);
 const USDC_CODE = 'USDC';
 const issuanceAmount = Number(process.env.USDC_ISSUANCE_AMOUNT || '100000');
 const liquidityAmount = Number(process.env.USDC_LIQUIDITY_AMOUNT || '2000');
-const usdcPerXlmInput = Number(process.env.USDC_PER_XLM || '');
-const xlmPerUsdcInput = Number(process.env.USDC_XLM_PRICE || '');
-const defaultUsdcPerXlm = 0.1715;
-const xlmPerUsdc =
-  Number.isFinite(usdcPerXlmInput) && usdcPerXlmInput > 0
-    ? 1 / usdcPerXlmInput
-    : (
-      Number.isFinite(xlmPerUsdcInput) && xlmPerUsdcInput > 0
-        ? xlmPerUsdcInput
-        : (1 / defaultUsdcPerXlm)
-    );
+const xlmPerUsdcInput = Number(process.env.TESTNET_SETUP_XLM_PER_USDC_PRICE || '');
+if (!Number.isFinite(xlmPerUsdcInput) || xlmPerUsdcInput <= 0) {
+  throw new Error('TESTNET_SETUP_XLM_PER_USDC_PRICE must be set to a positive number.');
+}
+const xlmPerUsdc = xlmPerUsdcInput;
 
 type LoadedKeypair = { keypair: Keypair; generated: boolean };
 type OperationInput = Parameters<typeof TransactionBuilder.prototype.addOperation>[0];

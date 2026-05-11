@@ -34,9 +34,6 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     return network === 'PUBLIC' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
   }
   if (code === 'BRL') {
-    const legacy = String(process.env.BRL_ISSUER || '').trim();
-    if (legacy) return legacy;
-
     if (network === 'PUBLIC') {
       const configuredPublic = String(process.env.BRL_ISSUER_PUBLIC || '').trim();
       return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
@@ -64,7 +61,7 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 }
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
-  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'false').trim().toLowerCase() === 'true';
+  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
   const assetCodes = includeBrl ? ['USDC', 'BRL'] : ['USDC'];
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
