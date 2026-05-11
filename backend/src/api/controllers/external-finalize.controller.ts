@@ -153,7 +153,6 @@ async function sendTelegramPaymentNotification(input: {
   const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Pagamento confirmado.\n` +
-    `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
     `Destino recebeu: ${formatCustomerAssetAmount(input.amount, input.assetCode)}\n` +
     sourceLine +
     feeLine +
@@ -232,7 +231,6 @@ async function sendTelegramConversionNotification(input: {
   const feeLine = feeDisplay ? `Taxa baixa aplicada: ${feeDisplay.display}\n` : '';
   const text =
     `Conversão confirmada.\n` +
-    `Cotação conferida antes da confirmação para evitar surpresa no valor final.\n` +
     `Origem debitada: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n` +
     `Destino recebeu: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}\n` +
     feeLine +
