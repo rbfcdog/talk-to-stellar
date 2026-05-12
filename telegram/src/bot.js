@@ -29,11 +29,31 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
   const bot = new Telegraf(botToken, {
     telegram: {
       agent: botApiAgent,
+      webhookReply: false,
     },
   });
   const sessionStore = createSessionStore({ prefix: sessionPrefix });
 
   bot.use(session());
+
+  async function sendTelegramResponse(ctx, text) {
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      throw new Error('Chat id is missing');
+    }
+
+    logger.info(`[telegram] sending reply chat=${chatId} size=${String(text || '').length}`);
+
+    if (ctx.telegram && typeof ctx.telegram.sendMessage === 'function') {
+      return ctx.telegram.sendMessage(chatId, text);
+    }
+
+    if (typeof ctx.reply === 'function') {
+      return ctx.reply(text);
+    }
+
+    throw new Error('Telegram reply API is unavailable');
+  }
 
   const handleTextMessage = async ctx => {
     const text = ctx.message?.text?.trim();
@@ -51,7 +71,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     try {
       const providerUserId = ctx.from?.id ? String(ctx.from.id) : null;
       if (!providerUserId) {
-        await ctx.reply('Nao consegui identificar sua conta do Telegram. Tente novamente.');
+        await sendTelegramResponse(ctx, 'Nao consegui identificar sua conta do Telegram. Tente novamente.');
         return;
       }
 
@@ -67,14 +87,14 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         }
 
         if (checkResult && checkResult.exists === false) {
-          await ctx.reply(`Olá! Para começar, por favor crie sua conta: ${checkResult.creationUrl}`);
+          await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${checkResult.creationUrl}`);
           return;
         }
         if (checkResult && checkResult.exists && checkResult.sessionId) {
           sessionId = checkResult.sessionId;
           ctx.session.sessionId = sessionId;
         } else {
-          await ctx.reply('Voce ainda nao possui conta cadastrada. Faça seu cadastro para continuar.');
+          await sendTelegramResponse(ctx, 'Voce ainda nao possui conta cadastrada. Faça seu cadastro para continuar.');
           return;
         }
       } else if (backendBaseUrl) {
@@ -87,14 +107,14 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
           if (res.ok) {
             const payload = await res.json();
             if (payload && payload.exists === false) {
-              await ctx.reply(`Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
+              await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
               return;
             }
             if (payload && payload.exists && payload.sessionId) {
               sessionId = payload.sessionId;
               ctx.session.sessionId = sessionId;
             } else if (payload && payload.exists === false) {
-              await ctx.reply(`Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
+              await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
               return;
             }
           } else {
@@ -102,7 +122,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
           }
         } catch (err) {
           logger.warn(`[telegram] external check failed: ${err?.message || err}`);
-          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
+          await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
           return;
         }
       }
@@ -115,7 +135,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         fromId: ctx.from?.id || null,
       });
 
-      await ctx.reply(result.message);
+      await sendTelegramResponse(ctx, result.message);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[telegram] failed to process message', {
@@ -124,11 +144,11 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
       });
 
       if (message.includes('Cannot reach backend')) {
-        await ctx.reply('Nao consegui conectar ao backend agora. Tente novamente em alguns segundos.');
+        await sendTelegramResponse(ctx, 'Nao consegui conectar ao backend agora. Tente novamente em alguns segundos.');
         return;
       }
 
-      await ctx.reply('Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.');
+      await sendTelegramResponse(ctx, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.');
     }
   };
 
@@ -145,7 +165,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     }
     ctx.session = ctx.session || {};
     ctx.session.sessionId = sessionStore.getSessionId(chatId);
-    await ctx.reply('Sessao limpa. Envie uma nova mensagem para recomecar.');
+    await sendTelegramResponse(ctx, 'Sessao limpa. Envie uma nova mensagem para recomecar.');
   });
 
   bot.on('text', handleTextMessage);
