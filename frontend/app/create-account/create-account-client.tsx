@@ -83,6 +83,8 @@ export default function CreateAccountClient({
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const rawNextPath = searchParams.get("next") || "/chat"
   const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
+  const forceNewAccount = searchParams.get("force_new") === "1" || searchParams.get("new_account") === "1"
+  const isClaimPaymentContext = searchParams.get("context") === "claim-payment" || nextPath.startsWith("/claim-payment")
 
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
@@ -200,9 +202,9 @@ export default function CreateAccountClient({
     async function recoverTokenWhenMissing() {
       if (token.trim()) return
       try {
-        const recovered = await recoverOnboardingContextFromBackend()
+        const recovered = await recoverOnboardingContextFromBackend(forceNewAccount)
 
-        if (recovered.mode === "existing") {
+        if (recovered.mode === "existing" && !forceNewAccount) {
           setExistingAccountDetected(true)
           setValidation({
             success: true,
@@ -215,7 +217,13 @@ export default function CreateAccountClient({
         if (recovered.mode === "token") {
           setExistingAccountDetected(false)
           setToken(recovered.token)
-          setValidation({ success: true, valid: true, message: "Link recuperado automaticamente." })
+          setValidation({
+            success: true,
+            valid: true,
+            message: isClaimPaymentContext
+              ? "Link de criação pronto. Depois do cadastro, você volta automaticamente para receber."
+              : "Link recuperado automaticamente.",
+          })
         }
       } catch {
         // keep page usable for manual retry
@@ -223,7 +231,7 @@ export default function CreateAccountClient({
     }
 
     recoverTokenWhenMissing()
-  }, [token])
+  }, [forceNewAccount, isClaimPaymentContext, token])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -459,18 +467,20 @@ export default function CreateAccountClient({
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
-        <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.1fr_0.9fr] md:p-10">
-          <section className="space-y-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur sm:p-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+          <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
               Criar conta
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Finalize sua conta TalkToStellar
+                {isClaimPaymentContext ? "Crie sua conta para receber" : "Finalize sua conta TalkToStellar"}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Preencha seus dados para concluir o cadastro e começar a usar sua carteira com segurança.
+                {isClaimPaymentContext
+                  ? "Cadastre sua conta global e volte automaticamente ao link de pagamento para confirmar o recebimento."
+                  : "Preencha seus dados para concluir o cadastro e começar a usar sua conta global com segurança."}
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
@@ -486,17 +496,19 @@ export default function CreateAccountClient({
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">1. Acesse</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Abra o link recebido para iniciar o processo de criação da conta.
+                  {isClaimPaymentContext
+                    ? "Você chegou por um link de pagamento. A conta criada aqui será usada para receber."
+                    : "Abra o link recebido para iniciar o processo de criação da conta."}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">2. Conclua</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Informe nome, e-mail, telefone e CPF para ativar sua conta.
+                  Informe seus dados, crie um PIN e confirme o recebimento depois do cadastro.
                 </p>
               </div>
             </div>
@@ -509,7 +521,7 @@ export default function CreateAccountClient({
             </div>
           </section>
 
-          <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
                 Verificação do link:

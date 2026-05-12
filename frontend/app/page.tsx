@@ -39,9 +39,9 @@ export default function HomePage() {
         />
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
-        <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.1fr_0.9fr] md:p-10">
-          <section className="space-y-6">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+          <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
               TalkToStellar
             </div>
@@ -61,19 +61,19 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Linguagem natural</p>
                 <p className="mt-2 text-sm text-slate-200">Use mensagens simples para consultar saldo, transferir e organizar contatos.</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Segurança primeiro</p>
                 <p className="mt-2 text-sm text-slate-200">Recupere o PIN e ative sua conta com etapas simples e seguras.</p>
               </div>
             </div>
           </section>
 
-          <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <div className="space-y-4">
               <Link
                 href="/chat"
@@ -98,7 +98,7 @@ export default function HomePage() {
                 <span>@TalkToStellarTelegramBot</span>
                 <Send className="h-5 w-5" />
               </a>
-              <p className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
+              <p className="min-w-0 overflow-hidden rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
                 Escolha como começar: conversar no Telegram ou acessar o chat na web.
               </p>
             </div>
