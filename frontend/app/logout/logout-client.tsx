@@ -47,7 +47,7 @@ export default function LogoutClient() {
   useEffect(() => {
     if (status !== "done" || completionRef.current) return
     completionRef.current = true
-    enqueueWebChatFeedback(`✅ Saída concluída.\n${message || "Sua sessão foi encerrada."}`)
+    enqueueWebChatFeedback(`Saída concluída.\n${message || "Sua sessão foi encerrada."}`)
     closeIntermediatePage()
   }, [status, message])
 

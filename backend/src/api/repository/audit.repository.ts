@@ -79,7 +79,7 @@ export class AuditRepository {
     const metadata = event.metadata ? JSON.stringify(event.metadata) : '';
     
     const eventDescriptions: { [key: string]: string } = {
-      'session_created': `✅ Sessão criada`,
+      'session_created': `Sessão criada`,
       'payment_initiated': `💸 Pagamento iniciado: ${metadata}`,
       'payment_confirmed': `🔒 Pagamento confirmado`,
       'passkey_registered': `🔐 Passkey registrada`,

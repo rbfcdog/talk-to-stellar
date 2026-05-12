@@ -81,6 +81,8 @@ export class AgentGraph {
       .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
       .replace(/\[([^\]\n]+)\]\(\s*\)/g, '$1')
       .replace(/\[([^\]\n]+)\]\(\s*([^)\s]+)\s*\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
+      .replace(/[\u2705\u2713\u26A0\u2B07\uFE0F]/g, '')
+      .replace(/\p{Extended_Pictographic}/gu, '')
       .trim();
   }
 
@@ -1108,45 +1110,45 @@ Analyze the user message and classify it into ONE of these intents:
 login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, or general
 
 Respond ONLY with the intent name. Examples:
-- "Check my balance" → balance
-- "ver saldo" → balance
-- "qual meu saldo atual?" → balance
-- "see current balance" → balance
-- "ver transações" → history
-- "listar transações" → history
-- "show transaction history" → history
-- "see transactions list" → history
-- "manda pro João de novo" → financial_memory
-- "usa a mesma carteira de ontem" → financial_memory
-- "quanto eu já converti esse mês?" → financial_memory
-- "qual foi minha média de cotação?" → financial_memory
-- "quanto recebi esse mês?" → financial_memory
-- "quanto perdi em taxas?" → financial_memory
-- "qual cliente mais me paga?" → financial_memory
-- "quanto economizei em relação a métodos tradicionais?" → financial_memory
-- "seu saldo em reais perdeu 3% esse mes frente ao dolar" → financial_memory
-- "deseja proteger parte do saldo?" → financial_memory
-- "modo ai treasury" → financial_memory
-- "melhor moeda e melhor momento para converter" → financial_memory
-- "converter dolares para reais" → conversion
-- "quero converter 3 usdc pra brl" → conversion
-- "trocar 10 usdc por brl" → conversion
-- "convert assets" → conversion
-- "qual a cotação do dólar" → price_quote
-- "cotação brl usdc agora" → price_quote
-- "Send 100 XLM" → payment
-- "quero mandar 10 usdc pra o Rodrigo receber em brl" → payment
-- "quero criar um link de transacao de 10 usdc" → payment_link
-- "gerar link de pagamento de 15 dólares" → payment_link
-- "cria um link para alguém receber 20 usdc" → payment_link
-- "rodrigobfcdog@gmail.com nos meus contatos" → contacts
-- "Create account" → onboard
-- "Create wallet" → wallet
-- "I need a wallet" → wallet
-- "Entrar na wallet" → wallet
-- "Importar carteira existente" → wallet
-- "Sair da wallet" → wallet_logout
-- "Desconectar carteira" → wallet_logout
+- "Check my balance" -> balance
+- "ver saldo" -> balance
+- "qual meu saldo atual?" -> balance
+- "see current balance" -> balance
+- "ver transações" -> history
+- "listar transações" -> history
+- "show transaction history" -> history
+- "see transactions list" -> history
+- "manda pro João de novo" -> financial_memory
+- "usa a mesma carteira de ontem" -> financial_memory
+- "quanto eu já converti esse mês?" -> financial_memory
+- "qual foi minha média de cotação?" -> financial_memory
+- "quanto recebi esse mês?" -> financial_memory
+- "quanto perdi em taxas?" -> financial_memory
+- "qual cliente mais me paga?" -> financial_memory
+- "quanto economizei em relação a métodos tradicionais?" -> financial_memory
+- "seu saldo em reais perdeu 3% esse mes frente ao dolar" -> financial_memory
+- "deseja proteger parte do saldo?" -> financial_memory
+- "modo ai treasury" -> financial_memory
+- "melhor moeda e melhor momento para converter" -> financial_memory
+- "converter dolares para reais" -> conversion
+- "quero converter 3 usdc pra brl" -> conversion
+- "trocar 10 usdc por brl" -> conversion
+- "convert assets" -> conversion
+- "qual a cotação do dólar" -> price_quote
+- "cotação brl usdc agora" -> price_quote
+- "Send 100 XLM" -> payment
+- "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
+- "quero criar um link de transacao de 10 usdc" -> payment_link
+- "gerar link de pagamento de 15 dólares" -> payment_link
+- "cria um link para alguém receber 20 usdc" -> payment_link
+- "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
+- "Create account" -> onboard
+- "Create wallet" -> wallet
+- "I need a wallet" -> wallet
+- "Entrar na wallet" -> wallet
+- "Importar carteira existente" -> wallet
+- "Sair da wallet" -> wallet_logout
+- "Desconectar carteira" -> wallet_logout
 
 Prioritize 'payment_link' when the user asks to create/generate a payment/transaction link, especially when no recipient public key or saved contact is provided.
 Prioritize 'wallet' for messages about creating/generating wallets, accounts, or getting started.
@@ -1177,7 +1179,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       };
 
       const detectedIntent = intentMap[intentText] || IntentType.GENERAL;
-      logger.debug(`Intent: "${message}" → ${detectedIntent}`);
+      logger.debug(`Intent: "${message}" -> ${detectedIntent}`);
 
       return detectedIntent;
     } catch (error) {

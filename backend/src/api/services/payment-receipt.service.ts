@@ -41,15 +41,7 @@ export class PaymentReceiptService {
   static buildHostedReceiptUrl(txHash?: string | null): string {
     const hash = String(txHash || '').trim();
     if (!hash) return '';
-    const preferred =
-      process.env.BACKEND_URL ||
-      process.env.PUBLIC_BACKEND_URL ||
-      process.env.API_BASE_URL ||
-      process.env.RENDER_EXTERNAL_URL ||
-      '';
-    const fallbackPort = process.env.PORT || '3001';
-    const base = String(preferred || `http://localhost:${fallbackPort}`).trim();
-    const normalizedBase = /^https?:\/\//i.test(base) ? base.replace(/\/$/, '') : `https://${base.replace(/\/$/, '')}`;
+    const normalizedBase = this.getFrontendBaseUrl();
     return `${normalizedBase}/api/external/receipts/${encodeURIComponent(hash)}`;
   }
 

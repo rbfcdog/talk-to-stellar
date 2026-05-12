@@ -94,7 +94,7 @@ function receiptPage(input: { paymentData: HostedReceiptPaymentData; imageBase64
     .card { width: 100%; overflow: hidden; border-radius: 22px; background: #f8fafc; box-shadow: 0 22px 80px rgba(0,0,0,.45); }
     .content { padding: 26px; }
     .brand { color: #111827; font-size: 20px; font-weight: 800; letter-spacing: .01em; }
-    .check { width: 54px; height: 54px; display: grid; place-items: center; margin: 18px auto 10px; border-radius: 999px; background: #dcfce7; color: #15803d; font-size: 30px; font-weight: 800; }
+    .check { width: 54px; height: 54px; display: grid; place-items: center; margin: 18px auto 10px; border-radius: 999px; background: #dcfce7; color: #15803d; font-size: 16px; font-weight: 800; }
     h1 { margin: 0 0 22px; text-align: center; font-size: 24px; color: #111827; }
     .receipt { width: 100%; border-radius: 16px; background: #111827; display: block; }
     dl { margin: 22px 0; display: grid; gap: 12px; }
@@ -110,7 +110,7 @@ function receiptPage(input: { paymentData: HostedReceiptPaymentData; imageBase64
     <section class="card">
       <div class="content">
         <div class="brand">TalkToStellar</div>
-        <div class="check">✓</div>
+        <div class="check">OK</div>
         <h1>Comprovante TalkToStellar</h1>
         <img class="receipt" src="data:image/png;base64,${input.imageBase64}" alt="Comprovante TalkToStellar" />
         <dl>
@@ -121,7 +121,7 @@ function receiptPage(input: { paymentData: HostedReceiptPaymentData; imageBase64
           <div class="row"><dt>Data</dt><dd>${escapeHtml(formatDatePtBr(input.paymentData.completed_at))}</dd></div>
           <div class="row"><dt>ID da operação</dt><dd>${escapeHtml(operationId)}</dd></div>
         </dl>
-        <a class="button" href="${downloadHref}" download>⬇ Baixar comprovante</a>
+        <a class="button" href="${downloadHref}" download>Baixar comprovante</a>
       </div>
     </section>
   </main>
