@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
+import { idempotentFetch } from "@/lib/idempotency"
 
 type FinalizeResponse = {
   success: boolean
@@ -133,7 +134,7 @@ export default function CreateAccountClient({
       browserId = generateBrowserId()
       localStorage.setItem("talk-to-stellar.browserId", browserId)
     }
-    const response = await fetch(`/api/external/check-account`, {
+    const response = await idempotentFetch(`/api/external/check-account`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -280,7 +281,7 @@ export default function CreateAccountClient({
         localStorage.setItem("talk-to-stellar.browserId", browserId)
       }
 
-      const response = await fetch(`/api/external/finalize`, {
+      const response = await idempotentFetch(`/api/external/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -356,7 +357,7 @@ export default function CreateAccountClient({
     setPasskeyError("")
 
     try {
-      const initRes = await fetch(`/api/passkeys/register-init`, {
+      const initRes = await idempotentFetch(`/api/passkeys/register-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -367,7 +368,7 @@ export default function CreateAccountClient({
       const credential = await startRegistration({ optionsJSON: initPayload.options })
 
       setPasskeyStatus('registering')
-      const completeRes = await fetch(`/api/passkeys/register-complete`, {
+      const completeRes = await idempotentFetch(`/api/passkeys/register-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -416,7 +417,7 @@ export default function CreateAccountClient({
       const linkProvider = externalProvider && externalProviderUserId ? externalProvider : "web"
       const linkProviderUserId = externalProvider && externalProviderUserId ? externalProviderUserId : browserId
 
-      const response = await fetch(`/api/external/link-existing`, {
+      const response = await idempotentFetch(`/api/external/link-existing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

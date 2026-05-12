@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
+import { idempotentFetch } from "@/lib/idempotency"
 import { KeyRound, LogIn, ShieldCheck } from "lucide-react"
 
 function generateBrowserId(): string {
@@ -90,7 +91,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       throw new Error("Não foi possível vincular o Telegram a esta sessão.")
     }
 
-    const response = await fetch(`/api/external/link-session`, {
+    const response = await idempotentFetch(`/api/external/link-session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -116,7 +117,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
       }
 
-      const response = await fetch(`/api/external/link-existing`, {
+      const response = await idempotentFetch(`/api/external/link-existing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -165,7 +166,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
       }
 
-      const initRes = await fetch(`/api/passkeys/auth-init`, {
+      const initRes = await idempotentFetch(`/api/passkeys/auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -179,7 +180,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       }
 
       const credential = await startAuthentication({ optionsJSON: initPayload.options })
-      const completeRes = await fetch(`/api/passkeys/auth-complete`, {
+      const completeRes = await idempotentFetch(`/api/passkeys/auth-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

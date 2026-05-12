@@ -21,6 +21,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service';
+import { buildOperationFingerprint } from '../../services/idempotency.service';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -87,6 +88,25 @@ function totalFeeDisplay(input: {
   ].filter(Boolean);
   if (!parts.length) return 'taxa aplicada indisponível';
   return parts.join(' + ');
+}
+
+function getAccountAssetBalance(account: any, asset: { code: string; issuer?: string }): number {
+  const code = normalizeAssetCode(asset.code);
+  const issuer = String(asset.issuer || '').trim();
+  const balance = (account?.balances || []).find((item: any) => {
+    if (code === 'XLM') return String(item?.asset_type || '').toLowerCase() === 'native';
+    return (
+      String(item?.asset_type || '').toLowerCase() !== 'native' &&
+      String(item?.asset_code || '').toUpperCase() === code &&
+      String(item?.asset_issuer || '').trim() === issuer
+    );
+  });
+  const parsed = Number(String(balance?.balance || '0').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatBalanceNumber(value: number): string {
+  return value.toFixed(7).replace(/\.?0+$/, '');
 }
 
 function getJwtSecret() {
@@ -479,6 +499,15 @@ async function claimPaymentToken(
   details?: any
 ): Promise<boolean> {
   try {
+    const operationFingerprint = buildOperationFingerprint({
+      sourceSessionId: sessionId,
+      sourceUserId: userId,
+      destination,
+      amount,
+      assetCode,
+      tokenHash,
+      operationType: String(details?.type || details?.operationType || 'PAYMENT_CONFIRMATION'),
+    });
     const { error } = await supabase
       .from('payment_confirmations')
       .insert({
@@ -490,6 +519,7 @@ async function claimPaymentToken(
         asset_code: assetCode,
         status: 'pending',
         completed_at: null,
+        operation_fingerprint: operationFingerprint,
         details,
       });
 
@@ -552,9 +582,20 @@ async function logPaymentDetails(
   metadata?: any
 ): Promise<void> {
   try {
+    const operationFingerprint = buildOperationFingerprint({
+      sourceSessionId: sessionId,
+      sourceUserId: userId,
+      destination: destinationPublicKey,
+      amount: destinationAmount,
+      assetCode: destinationAssetCode,
+      tokenHash: metadata?.token_hash,
+      operationType,
+      quoteId: metadata?.quote?.quote_issued_at || metadata?.quote?.quote_expires_at,
+      invoiceId: metadata?.invoice_id,
+    });
     const { error } = await supabase
       .from('payment_logs')
-      .insert({
+      .upsert({
         session_id: sessionId,
         user_id: userId,
         source_public_key: sourcePublicKey,
@@ -567,6 +608,7 @@ async function logPaymentDetails(
         destination_asset_issuer: destinationAssetIssuer,
         fee_xlm: feeXlm,
         payment_hash: paymentHash,
+        operation_fingerprint: operationFingerprint,
         operation_type: operationType,
         status,
         error_message: errorMessage,
@@ -578,7 +620,7 @@ async function logPaymentDetails(
         comparison_method: metadata?.savings?.comparison_method ?? metadata?.comparison_method ?? null,
         created_at: new Date().toISOString(),
         completed_at: status === 'success' ? new Date().toISOString() : null,
-      });
+      }, { onConflict: 'operation_fingerprint' });
 
     if (error) {
       logger.warn(`[payment-logging] error logging payment details: ${error?.message || String(error)}`);
@@ -1218,10 +1260,11 @@ export default class ExternalFinalizeController {
           ? { code: requestedSourceAssetCode, issuer: requestedSourceAssetIssuer }
           : { code: 'XLM' };
         let senderHasDestinationAsset = false;
+        let senderAccount: any = null;
 
         if (!isStrictSendPayment && assetCode !== 'XLM') {
           try {
-            const senderAccount = await StellarService.loadAccount(wallet.public_key);
+            senderAccount = await StellarService.loadAccount(wallet.public_key);
             const destAssetBalance = senderAccount.balances.find((b: any) => 
               b.asset_type !== 'native' && 
               b.asset_code === assetCode && 
@@ -1250,37 +1293,116 @@ export default class ExternalFinalizeController {
         const directSourceAmount = directPlatformFee?.enabled
           ? (Number(amount) + Number(directPlatformFee.feeAmount)).toFixed(7).replace(/\.?0+$/, '')
           : String(amount);
-        const quote = isStrictSendPayment
-          ? await StellarService.quoteStrictSendConversion({
-              sourcePublicKey: wallet.public_key,
-              destination: resolvedDestination,
-              sourceAmount: requestedSourceAmount,
-              sourceAsset: actualSourceAsset,
-              destAsset: { code: assetCode, issuer: assetIssuer },
-            })
-          : isDirectPayment
-          ? {
-              sourceAsset: {
-                code: senderHasDestinationAsset ? assetCode : 'XLM',
-                issuer: senderHasDestinationAsset ? assetIssuer : undefined,
-              },
-              destinationAsset: {
-                code: assetCode,
-                issuer: assetIssuer,
-              },
-              sourceAmount: directSourceAmount,
-              destinationAmount: String(amount),
-              platformFee: directPlatformFee,
-              networkFeeXlm: DEFAULT_NETWORK_FEE_XLM,
-              path: [],
+        let quote: any;
+        try {
+          quote = isStrictSendPayment
+            ? await StellarService.quoteStrictSendConversion({
+                sourcePublicKey: wallet.public_key,
+                destination: resolvedDestination,
+                sourceAmount: requestedSourceAmount,
+                sourceAsset: actualSourceAsset,
+                destAsset: { code: assetCode, issuer: assetIssuer },
+              })
+            : isDirectPayment
+            ? {
+                sourceAsset: {
+                  code: senderHasDestinationAsset ? assetCode : 'XLM',
+                  issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+                },
+                destinationAsset: {
+                  code: assetCode,
+                  issuer: assetIssuer,
+                },
+                sourceAmount: directSourceAmount,
+                destinationAmount: String(amount),
+                platformFee: directPlatformFee,
+                networkFeeXlm: DEFAULT_NETWORK_FEE_XLM,
+                path: [],
+              }
+            : await StellarService.quotePathPayment({
+                sourcePublicKey: wallet.public_key,
+                destination: resolvedDestination,
+                destAsset: { code: assetCode, issuer: assetIssuer },
+                destAmount: String(amount),
+                sourceAsset: actualSourceAsset,
+              });
+        } catch (quoteError) {
+          const message = quoteError instanceof Error ? quoteError.message : String(quoteError);
+          logger.warn(`[external-finalize] payment quote failed before token claim: ${message}`);
+          return res.status(400).json({
+            success: false,
+            message: `Não consegui cotar esse pagamento antes da confirmação: ${message}`,
+          });
+        }
+
+        if (!isDirectPayment && !isStrictSendPayment) {
+          try {
+            senderAccount = senderAccount || await StellarService.loadAccount(wallet.public_key);
+            const available = getAccountAssetBalance(senderAccount, actualSourceAsset);
+            const required = Number(String(quote?.sourceMax || quote?.sourceAmount || '0').replace(',', '.'));
+            const xlmAvailable = getAccountAssetBalance(senderAccount, { code: 'XLM' });
+            const minimumReserve = 1.5;
+            const sourceIsXlm = normalizeAssetCode(actualSourceAsset.code) === 'XLM';
+            const wouldBreakReserve = sourceIsXlm && xlmAvailable - required < minimumReserve;
+
+            if (!Number.isFinite(required) || required <= 0 || available < required || wouldBreakReserve) {
+              const sourceCode = normalizeAssetCode(actualSourceAsset.code);
+              const directBalance = assetCode !== 'XLM'
+                ? getAccountAssetBalance(senderAccount, { code: assetCode, issuer: assetIssuer })
+                : xlmAvailable;
+              return res.status(400).json({
+                success: false,
+                insufficientBalance: true,
+                message:
+                  `Saldo insuficiente para garantir ${formatCustomerAssetAmount(String(amount), assetCode)} no destino. ` +
+                  `Disponível: ${formatBalanceNumber(directBalance)} ${assetCode}` +
+                  (sourceCode !== assetCode ? ` e ${formatBalanceNumber(xlmAvailable)} XLM técnico` : '') +
+                  `. Necessário para a rota: até ${formatBalanceNumber(required)} ${sourceCode}` +
+                  (sourceIsXlm ? `, mantendo a reserva mínima da conta (${minimumReserve} XLM).` : '.') +
+                  ` Tente um valor menor, converta/funde saldo antes, ou envie no ativo que você já tem disponível.`,
+              });
             }
-          : await StellarService.quotePathPayment({
-              sourcePublicKey: wallet.public_key,
-              destination: resolvedDestination,
-              destAsset: { code: assetCode, issuer: assetIssuer },
-              destAmount: String(amount),
-              sourceAsset: actualSourceAsset,
-            });
+          } catch (balanceCheckError) {
+            logger.warn(`[external-finalize] pre-build balance check failed: ${balanceCheckError instanceof Error ? balanceCheckError.message : String(balanceCheckError)}`);
+          }
+        }
+
+        let unsignedXdr: string;
+        try {
+          unsignedXdr = isStrictSendPayment
+            ? await StellarService.buildStrictSendConversionXdr({
+                sourcePublicKey: wallet.public_key,
+                destination: resolvedDestination,
+                sourceAmount: requestedSourceAmount,
+                sourceAsset: actualSourceAsset,
+                destAsset: { code: assetCode, issuer: assetIssuer },
+              })
+            : isDirectPayment
+            ? await StellarService.buildPaymentXdr({
+                sourcePublicKey: wallet.public_key,
+                destination: resolvedDestination,
+                amount: String(amount),
+                assetCode: senderHasDestinationAsset ? assetCode : 'XLM',
+                assetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
+                memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
+              })
+            : await StellarService.buildPathPaymentXdr({
+                sourcePublicKey: wallet.public_key,
+                destination: resolvedDestination,
+                destAsset: { code: assetCode, issuer: assetIssuer },
+                destAmount: String(amount),
+                sourceAsset: actualSourceAsset,
+              });
+        } catch (buildError) {
+          const message = buildError instanceof Error ? buildError.message : String(buildError);
+          logger.warn(`[external-finalize] payment XDR build failed before token claim: ${message}`);
+          return res.status(400).json({
+            success: false,
+            message:
+              `Não consegui montar a transação de pagamento: ${message} ` +
+              `O link não foi confirmado. Gere uma nova confirmação depois de ajustar saldo/valor.`,
+          });
+        }
 
         const tokenClaimed = await claimPaymentToken(
           tokenHash,
@@ -1344,31 +1466,6 @@ export default class ExternalFinalizeController {
             quote,
           }
         );
-
-        const unsignedXdr = isStrictSendPayment
-          ? await StellarService.buildStrictSendConversionXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: resolvedDestination,
-              sourceAmount: requestedSourceAmount,
-              sourceAsset: actualSourceAsset,
-              destAsset: { code: assetCode, issuer: assetIssuer },
-            })
-          : isDirectPayment
-          ? await StellarService.buildPaymentXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: resolvedDestination,
-              amount: String(amount),
-              assetCode: senderHasDestinationAsset ? assetCode : 'XLM',
-              assetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
-              memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
-            })
-          : await StellarService.buildPathPaymentXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: resolvedDestination,
-              destAsset: { code: assetCode, issuer: assetIssuer },
-              destAmount: String(amount),
-              sourceAsset: actualSourceAsset,
-            });
 
         // Log payment attempt with full details
         logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}, isStrictSendPayment=${isStrictSendPayment}`);

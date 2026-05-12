@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
+import { idempotentFetch } from "@/lib/idempotency"
 
 type CreatePayLinkResponse = {
   success?: boolean
@@ -56,7 +57,7 @@ export default function PayAnyoneClient() {
     setCopied(false)
 
     try {
-      const response = await fetch("/api/external/pay-links", {
+      const response = await idempotentFetch("/api/external/pay-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

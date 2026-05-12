@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
+import { idempotentFetch } from "@/lib/idempotency"
 
 type ValidationResult = {
   valid?: boolean
@@ -83,7 +84,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     setStatus("claiming")
     setResult(null)
     try {
-      const response = await fetch("/api/external/pay-links/claim", {
+      const response = await idempotentFetch("/api/external/pay-links/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

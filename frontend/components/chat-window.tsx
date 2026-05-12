@@ -7,8 +7,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
 import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
+import { idempotentFetch } from "@/lib/idempotency";
 
 type Message = {
   id: string;
@@ -17,6 +18,41 @@ type Message = {
   content: string;
   createdAt?: Date;
 };
+
+function getFriendlyLinkLabel(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    const path = url.pathname.replace(/\/$/, "");
+    if (path.endsWith("/confirm-payment")) return "Abrir confirmação de pagamento";
+    if (path.endsWith("/confirm-conversion")) return "Abrir confirmação de conversão";
+    if (path.endsWith("/create-account")) return "Criar ou entrar na conta";
+    if (path.endsWith("/change-pin")) return "Redefinir PIN";
+    if (path.endsWith("/pay-anyone")) return "Abrir link de pagamento";
+    if (path.endsWith("/claim-payment")) return "Resgatar pagamento";
+    if (url.hostname.includes("wa.me")) return "Compartilhar no WhatsApp";
+    return "Abrir link";
+  } catch {
+    return "Abrir link";
+  }
+}
+
+function getFriendlyLinkMeta(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.hostname}${url.pathname.replace(/\/$/, "")}`;
+  } catch {
+    return rawUrl.replace(/^https?:\/\//i, "").slice(0, 48);
+  }
+}
+
+function decodeSvgDataUrl(dataUrl: string) {
+  const base64 = dataUrl.replace(/^data:image\/svg\+xml;base64,/, "");
+  try {
+    return atob(base64);
+  } catch {
+    return "";
+  }
+}
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -36,7 +72,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       avatar: "/talktostellar.png",
       isBot: true,
       starter: [
-        { id: "agent-welcome", role: "assistant", content: "Olá! Posso ajudar com saldo, envio e contatos da sua carteira.", createdAt: new Date() },
+        { id: "agent-welcome", role: "assistant", content: "Olá! Vou carregar seu saldo e os principais comandos da sessão. Você também pode digitar \"ajuda\" a qualquer momento.", createdAt: new Date() },
       ],
     },
     "contact-1": {
@@ -270,7 +306,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
-      const response = await fetch('/api/chat', {
+      const response = await idempotentFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -320,7 +356,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
-          await fetch('/api/logout', {
+          await idempotentFetch('/api/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -358,14 +394,23 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     const receiptImageMatch = content.match(/RECEIPT_IMAGE_DATA_URL:(data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+)/);
     if (receiptImageMatch?.[1]) {
       const text = content.replace(/RECEIPT_IMAGE_DATA_URL:data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/, '').trim();
+      const inlineSvg = decodeSvgDataUrl(receiptImageMatch[1]);
       return (
         <div className="space-y-2">
           {text && <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{text}</p>}
-          <img
-            src={receiptImageMatch[1]}
-            alt="Comprovante financeiro"
-            className="max-h-[520px] w-full max-w-[320px] rounded-xl border border-white/10 bg-slate-950 object-contain shadow-lg"
-          />
+          {inlineSvg ? (
+            <div
+              aria-label="Comprovante financeiro"
+              className="max-h-[520px] w-full max-w-[320px] overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-lg [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: inlineSvg }}
+            />
+          ) : (
+            <img
+              src={receiptImageMatch[1]}
+              alt="Comprovante financeiro"
+              className="max-h-[520px] w-full max-w-[320px] rounded-xl border border-white/10 bg-slate-950 object-contain shadow-lg"
+            />
+          )}
         </div>
       );
     }
@@ -373,18 +418,31 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
     return (
-      <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+      <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
         {parts.map((part, idx) => {
           if (/^https?:\/\/[^\s]+$/i.test(part)) {
             return (
-              <a key={idx} href={part} target="_blank" rel="noopener noreferrer" className="underline text-cyan-300 break-all">
-                {part}
+              <a
+                key={idx}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="my-2 flex max-w-[280px] items-center gap-3 rounded-lg border border-[#2a3942] bg-[#182229] px-3 py-2 text-[#e9edef] no-underline shadow-sm transition hover:bg-[#1f2c34]"
+                title={part}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-[#06261d]">
+                  <ExternalLink className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{getFriendlyLinkLabel(part)}</span>
+                  <span className="block truncate text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
+                </span>
               </a>
             );
           }
           return <React.Fragment key={idx}>{part}</React.Fragment>;
         })}
-      </p>
+      </div>
     );
   };
 

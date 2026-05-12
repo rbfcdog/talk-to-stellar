@@ -36,13 +36,6 @@ export class WalletRepository {
    * Save or update wallet information
    */
   async saveWallet(walletInfo: WalletInfo): Promise<void> {
-    // First try to get existing wallet
-    const { data: existing } = await this.supabase
-      .from('wallets')
-      .select('id')
-      .eq('session_id', walletInfo.session_id)
-      .single();
-
     const walletData = {
       session_id: walletInfo.session_id,
       public_key: walletInfo.public_key,
@@ -80,48 +73,23 @@ export class WalletRepository {
     };
 
     let error;
-    if (existing) {
-      // Update existing wallet
-      const result = await this.supabase
+    const result = await this.supabase
+      .from('wallets')
+      .upsert(walletData, { onConflict: 'session_id' });
+    error = result.error;
+
+    if (error && this.isMissingColumnError(error, 'name')) {
+      const retry = await this.supabase
         .from('wallets')
-        .update(walletData)
-        .eq('session_id', walletInfo.session_id);
-      error = result.error;
+        .upsert(walletDataWithoutName, { onConflict: 'session_id' });
+      error = retry.error;
+    }
 
-      if (error && this.isMissingColumnError(error, 'name')) {
-        const retry = await this.supabase
-          .from('wallets')
-          .update(walletDataWithoutName)
-          .eq('session_id', walletInfo.session_id);
-        error = retry.error;
-      }
-
-      if (error && this.isMissingColumnError(error, 'pix_key')) {
-        const retry = await this.supabase
-          .from('wallets')
-          .update(walletDataWithoutNameOrPix)
-          .eq('session_id', walletInfo.session_id);
-        error = retry.error;
-      }
-    } else {
-      const result = await this.supabase
+    if (error && this.isMissingColumnError(error, 'pix_key')) {
+      const retry = await this.supabase
         .from('wallets')
-        .insert(walletData);
-      error = result.error;
-
-      if (error && this.isMissingColumnError(error, 'name')) {
-        const retry = await this.supabase
-          .from('wallets')
-          .insert(walletDataWithoutName);
-        error = retry.error;
-      }
-
-      if (error && this.isMissingColumnError(error, 'pix_key')) {
-        const retry = await this.supabase
-          .from('wallets')
-          .insert(walletDataWithoutNameOrPix);
-        error = retry.error;
-      }
+        .upsert(walletDataWithoutNameOrPix, { onConflict: 'session_id' });
+      error = retry.error;
     }
 
     if (error) {

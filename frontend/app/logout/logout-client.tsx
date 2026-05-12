@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { idempotentFetch } from "@/lib/idempotency"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -44,7 +45,7 @@ export default function LogoutClient() {
     setStatus("loading")
     try {
       if (currentSessionId) {
-        await fetch("/api/logout", {
+        await idempotentFetch("/api/logout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

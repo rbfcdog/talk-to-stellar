@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 const getAgentLogoutUrl = () => {
   if (process.env.BACKEND_URL) {
@@ -26,7 +27,11 @@ export async function POST(req: Request) {
 
     const response = await fetch(AGENT_LOGOUT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": req.headers.get("Idempotency-Key") ||
+          `next_${crypto.createHash("sha256").update(JSON.stringify({ sessionId, provider, providerUserId })).digest("hex")}`,
+      },
       body: JSON.stringify({
         session_id: sessionId,
         provider: provider || undefined,

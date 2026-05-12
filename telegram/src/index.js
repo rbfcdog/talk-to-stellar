@@ -20,7 +20,10 @@ const receiptFontFiles = [
 ];
 
 function renderReceiptPng(svgBuffer) {
-  const renderer = new Resvg(svgBuffer, {
+  const svgText = svgBuffer
+    .toString('utf8')
+    .replace(/font-family="Inter, system-ui, sans-serif"/g, 'font-family="Inter"');
+  const renderer = new Resvg(svgText, {
     fitTo: {
       mode: 'width',
       value: 1080,
@@ -28,7 +31,7 @@ function renderReceiptPng(svgBuffer) {
     font: {
       fontFiles: receiptFontFiles,
       defaultFontFamily: 'Inter',
-      loadSystemFonts: false,
+      loadSystemFonts: true,
     },
   });
   return renderer.render().asPng();

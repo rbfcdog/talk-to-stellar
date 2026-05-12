@@ -6,7 +6,7 @@ import { Router, Request, Response, NextFunction, RequestHandler } from "express
 import { v4 as uuidv4 } from "uuid";
 import { AgentState, IntentType, ActionType, SessionData } from "./types";
 import { AgentGraph } from "./graph";
-import { ALL_TOOLS } from "./tools";
+import { ALL_TOOLS, executeTool } from "./tools";
 import { AgentRepository } from "../repositories/agent.repository";
 import { WalletRepository } from "../repositories/wallet.repository";
 import { logger } from "../utils/logger";
@@ -162,6 +162,45 @@ Always act like the TalkToStellar wallet assistant and keep the focus on the wal
 function isValidUUID(uuid: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(uuid);
+}
+
+function formatStartupBalanceLine(balance: any, index: number): string {
+  const asset = String(balance?.asset || balance?.asset_code || 'UNKNOWN').toUpperCase();
+  const amount = String(balance?.balance || '0.0000000');
+  return `${index + 1}. ${asset}: ${amount}`;
+}
+
+async function buildSessionStartMessage(sessionId: string, publicKey: string): Promise<string> {
+  let balanceBlock = 'Não consegui consultar seu saldo agora.';
+
+  try {
+    const balanceRaw = await executeTool('get_balance', { session_id: sessionId, public_key: publicKey });
+    const balanceResult = JSON.parse(balanceRaw);
+    if (balanceResult?.success && Array.isArray(balanceResult.balances)) {
+      balanceBlock = balanceResult.balances
+        .map((balance: any, index: number) => formatStartupBalanceLine(balance, index))
+        .join('\n');
+    } else if (balanceResult?.error) {
+      balanceBlock = `Não consegui consultar seu saldo agora: ${balanceResult.error}`;
+    }
+  } catch (error) {
+    balanceBlock = `Não consegui consultar seu saldo agora: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  return [
+    'Início da sessão.',
+    '',
+    'Saldo atual:',
+    balanceBlock,
+    '',
+    'Comandos principais:',
+    '1. saldo: ver saldo em R$ e US$',
+    '2. contatos: listar ou salvar contatos',
+    '3. enviar: mandar dinheiro com link de confirmação',
+    '4. converter: trocar saldo entre moedas',
+    '5. histórico: ver operações recentes',
+    '6. ajuda: ver todos os comandos com exemplos',
+  ].join('\n');
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -479,10 +518,17 @@ export function createAgentRoutes(
       }
 
       const messages = await repository.getMessages(session_id, limit);
+      let responseMessages = messages;
+
+      if (messages.length === 0 && sessionData.public_key) {
+        const startupMessage = await buildSessionStartMessage(session_id, sessionData.public_key);
+        await repository.saveMessage(session_id, 'assistant', startupMessage);
+        responseMessages = await repository.getMessages(session_id, limit);
+      }
 
       return res.status(200).json({
         session_id,
-        messages: messages.map((message) => ({
+        messages: responseMessages.map((message) => ({
           id: message.id,
           role: message.role,
           content: message.content,

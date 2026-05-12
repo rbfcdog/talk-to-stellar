@@ -1,8 +1,8 @@
-import { randomUUID } from 'crypto';
 import { supabase } from '../../config/supabase';
 import ExternalService from '../../services/external.service';
 import { FinancialContextService, trackFinancialEvent } from './financial-context.service';
 import { SmartContactsService } from './smart-contacts.service';
+import { buildOperationFingerprint } from '../../services/idempotency.service';
 
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'expired' | 'cancelled';
 
@@ -39,7 +39,7 @@ export class InvoiceService {
       query: normalizedRecipient,
     });
 
-    const linkPayload = externalService.createClaimPaymentUrl({
+    const linkPayload = await externalService.createClaimPaymentUrl({
       amount: normalizedAmount,
       recipient_name: normalizedRecipient,
       sender_name: ctx.userId,
@@ -53,12 +53,21 @@ export class InvoiceService {
       requires_recipient_login: true,
     });
 
-    const paymentLinkId = `inv_link_${randomUUID()}`;
+    const operationFingerprint = buildOperationFingerprint({
+      sourceSessionId: ctx.sessionId,
+      sourceUserId: ctx.userId,
+      destination: normalizedRecipient,
+      amount: normalizedAmount,
+      assetCode: currency,
+      operationType: 'INVOICE',
+      quoteId: `${input.title || 'Cobrança'}:${input.description || ''}:${input.dueDate || ''}`,
+    });
+    const paymentLinkId = `inv_link_${operationFingerprint.slice(0, 24)}`;
     const dueDate = input.dueDate ? new Date(input.dueDate).toISOString() : null;
 
     const { data, error } = await supabase
       .from('invoices')
-      .insert({
+      .upsert({
         user_id: ctx.userId,
         recipient_name: normalizedRecipient,
         recipient_contact_id: contact?.id || null,
@@ -69,12 +78,13 @@ export class InvoiceService {
         due_date: dueDate,
         status: 'sent' satisfies InvoiceStatus,
         payment_link_id: paymentLinkId,
+        operation_fingerprint: operationFingerprint,
         metadata_json: {
           payment_url: linkPayload.url,
           payment_token: linkPayload.token,
           requires_recipient_login: true,
         },
-      })
+      }, { onConflict: 'operation_fingerprint' })
       .select('*')
       .single();
 
@@ -98,7 +108,7 @@ export class InvoiceService {
       payment_link_id: paymentLinkId,
     });
 
-    await supabase.from('financial_events').insert({
+    await supabase.from('financial_events').upsert({
       user_id: ctx.userId,
       event_type: 'invoice_created',
       title: 'Cobrança criada',
@@ -115,7 +125,7 @@ export class InvoiceService {
       semantic_color: 'orange',
       created_at: new Date().toISOString(),
       dedupe_key: `${ctx.userId}:invoice_created:${String(data.id)}`,
-    });
+    }, { onConflict: 'dedupe_key' });
 
     return {
       ...data,

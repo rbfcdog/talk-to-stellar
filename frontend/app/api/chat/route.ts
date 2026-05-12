@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 const getAgentApiUrl = () => {
   // Server-side can use BACKEND_URL directly
@@ -61,13 +62,16 @@ export async function POST(req: Request) {
       source: source || "web",
       metadata: metadata || {},
     };
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      `next_${crypto.createHash("sha256").update(JSON.stringify(dataToSend)).digest("hex")}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
     const agentApiResponse = await fetch(AGENT_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(dataToSend),
       signal: controller.signal,
     });
