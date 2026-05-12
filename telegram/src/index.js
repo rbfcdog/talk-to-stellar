@@ -3,6 +3,7 @@ require('dotenv').config();
 const http = require('http');
 const { Resvg } = require('@resvg/resvg-js');
 const fs = require('fs');
+const path = require('path');
 const puppeteer = require('puppeteer');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
@@ -137,7 +138,7 @@ async function renderReceiptPngWithChromium(svgBuffer) {
   <head>
     <meta charset="utf-8" />
     <style>
-      html, body { margin: 0; padding: 0; background: transparent; }
+      html, body { margin: 0; padding: 0; background: #0b1020; }
       ${fontFaceCss}
       #svg-root, #svg-root svg {
         width: ${width}px;
@@ -147,6 +148,7 @@ async function renderReceiptPngWithChromium(svgBuffer) {
       }
       #svg-root svg text, #svg-root svg tspan {
         font-family: 'TTSInter', Arial, Inter, sans-serif !important;
+        opacity: 1 !important;
       }
     </style>
   </head>
@@ -161,6 +163,24 @@ async function renderReceiptPngWithChromium(svgBuffer) {
         await document.fonts.ready;
       }
     });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const textProbe = await page.evaluate(() => {
+      const textNodes = Array.from(document.querySelectorAll('#svg-root text, #svg-root tspan'));
+      const visibleSample = textNodes.slice(0, 20).map((el) => {
+        const style = window.getComputedStyle(el);
+        return {
+          text: String(el.textContent || '').trim().slice(0, 32),
+          opacity: style.opacity,
+          color: style.color,
+          fill: style.fill,
+          display: style.display,
+          visibility: style.visibility,
+        };
+      });
+      return { count: textNodes.length, sample: visibleSample };
+    });
+    console.log('[telegram-notify] text probe:', JSON.stringify(textProbe));
 
     const clip = await page.$eval('#svg-root', (el) => {
       const rect = el.getBoundingClientRect();
@@ -187,6 +207,26 @@ function normalizeCaption(text) {
   // Telegram caption hard limit for media is 1024 chars.
   if (raw.length <= 1000) return raw;
   return `${raw.slice(0, 997).trimEnd()}...`;
+}
+
+function isPngBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 8) return false;
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  return buffer.subarray(0, 8).equals(pngSignature);
+}
+
+function readPngDimensions(buffer) {
+  if (!isPngBuffer(buffer) || buffer.length < 24) return { width: 0, height: 0 };
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  };
+}
+
+function saveDebugPng(buffer, filename = 'debug-telegram-image.png') {
+  const filepath = path.resolve(process.cwd(), filename);
+  fs.writeFileSync(filepath, buffer);
+  return filepath;
 }
 
 async function main() {
@@ -250,11 +290,39 @@ async function main() {
           console.warn('[telegram-notify] chromium render failed, using resvg fallback:', chromiumError instanceof Error ? chromiumError.message : String(chromiumError));
           pngBuffer = renderReceiptPng(svgBuffer);
         }
-        return await bot.telegram.sendPhoto(
-          chatId,
-          { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
-          { caption }
-        );
+        const debugPath = saveDebugPng(pngBuffer, 'debug-telegram-image.png');
+        const { width, height } = readPngDimensions(pngBuffer);
+        const validPng = isPngBuffer(pngBuffer);
+        console.log(`[telegram-notify] png validation bytes=${pngBuffer.length} width=${width} height=${height} valid=${validPng} file=${debugPath}`);
+
+        if (!validPng) {
+          throw new Error('Rendered buffer is not a PNG');
+        }
+        if (pngBuffer.length < 2048) {
+          throw new Error(`Rendered PNG too small (${pngBuffer.length} bytes)`);
+        }
+        if (!width || !height) {
+          throw new Error('Rendered PNG has invalid dimensions');
+        }
+
+        try {
+          const photoResponse = await bot.telegram.sendPhoto(
+            chatId,
+            { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
+            { caption }
+          );
+          console.log(`[telegram-notify] sendPhoto success chat=${chatId} message_id=${photoResponse?.message_id || 'n/a'} bytes=${pngBuffer.length}`);
+          return photoResponse;
+        } catch (photoError) {
+          console.warn('[telegram-notify] sendPhoto failed, trying sendDocument PNG fallback:', photoError instanceof Error ? photoError.message : String(photoError));
+          const documentResponse = await bot.telegram.sendDocument(
+            chatId,
+            { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
+            { caption }
+          );
+          console.log(`[telegram-notify] sendDocument success chat=${chatId} message_id=${documentResponse?.message_id || 'n/a'} bytes=${pngBuffer.length}`);
+          return documentResponse;
+        }
       } catch (renderOrPhotoError) {
         console.warn('[telegram-notify] sendPhoto failed, trying text-only fallback:', renderOrPhotoError instanceof Error ? renderOrPhotoError.message : String(renderOrPhotoError));
       }
