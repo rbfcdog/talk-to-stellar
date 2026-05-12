@@ -43,6 +43,17 @@ function displaySymbol(assetCode: string): string {
   return `${code} `;
 }
 
+function sanitizeFeeLabel(value?: string): string {
+  const fee = String(value || '').trim();
+  if (!fee) return 'indisponível';
+  if (!/\bXLM\b/i.test(fee)) return fee;
+  const visibleParts = fee
+    .split(/\s*\+\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part && !/\bXLM\b/i.test(part));
+  return visibleParts.join(' + ') || 'taxa de rede convertida';
+}
+
 function escapeXml(value: string): string {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -217,7 +228,7 @@ export class ReceiptImageService {
       description: 'Transferência internacional',
       convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),
       convertedCurrency: displaySymbol(quoteSourceAsset || 'BRL'),
-      feeLabel: String(input.feeDisplay || 'indisponível'),
+      feeLabel: sanitizeFeeLabel(input.feeDisplay),
       quoteLabel: quoteSource && quoteDest && quoteSourceAsset && quoteDestAsset
         ? `1 ${displaySymbol(quoteDestAsset)} = ${formatDisplayAmount(Number(quoteSource) / Math.max(Number(quoteDest), 0.0000001), 2)} ${displaySymbol(quoteSourceAsset)}`
         : 'não aplicável',
