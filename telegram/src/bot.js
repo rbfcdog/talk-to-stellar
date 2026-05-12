@@ -33,6 +33,9 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     },
   });
   const sessionStore = createSessionStore({ prefix: sessionPrefix });
+  const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : () => {};
+  const info = typeof logger.info === 'function' ? logger.info.bind(logger) : () => {};
+  const errorLog = typeof logger.error === 'function' ? logger.error.bind(logger) : () => {};
 
   bot.use(session());
 
@@ -42,14 +45,46 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
       throw new Error('Chat id is missing');
     }
 
-    logger.info(`[telegram] sending reply chat=${chatId} size=${String(text || '').length}`);
+    info(`[telegram] sending reply chat=${chatId} size=${String(text || '').length}`);
+
+    const botApiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    try {
+      const response = await fetch(botApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          disable_web_page_preview: true,
+        }),
+      });
+      const bodyText = await response.text();
+      if (!response.ok) {
+        warn(`[telegram] sendMessage failed status=${response.status} body=${bodyText}`);
+        throw new Error(`Telegram sendMessage failed with status ${response.status}`);
+      }
+
+      try {
+        const payload = JSON.parse(bodyText);
+        info(`[telegram] reply sent chat=${chatId} message_id=${payload?.result?.message_id || 'n/a'}`);
+      } catch {
+        info(`[telegram] reply sent chat=${chatId}`);
+      }
+      return;
+    } catch (error) {
+      warn(`[telegram] direct sendMessage failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (ctx.telegram && typeof ctx.telegram.sendMessage === 'function') {
-      return ctx.telegram.sendMessage(chatId, text);
+      const result = await ctx.telegram.sendMessage(chatId, text);
+      info(`[telegram] reply sent via telegraf chat=${chatId} message_id=${result?.message_id || 'n/a'}`);
+      return result;
     }
 
     if (typeof ctx.reply === 'function') {
-      return ctx.reply(text);
+      const result = await ctx.reply(text);
+      info(`[telegram] reply sent via ctx.reply chat=${chatId}`);
+      return result;
     }
 
     throw new Error('Telegram reply API is unavailable');
@@ -81,7 +116,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         try {
           checkResult = await externalCheck({ provider: 'telegram', provider_user_id: providerUserId });
         } catch (err) {
-          logger.warn(`[telegram] external check failed: ${err?.message || err}`);
+          warn(`[telegram] external check failed: ${err?.message || err}`);
           await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
           return;
         }
@@ -118,10 +153,10 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
               return;
             }
           } else {
-            logger.warn('[telegram] external check returned non-200, continuing with existing session');
+            warn('[telegram] external check returned non-200, continuing with existing session');
           }
         } catch (err) {
-          logger.warn(`[telegram] external check failed: ${err?.message || err}`);
+          warn(`[telegram] external check failed: ${err?.message || err}`);
           await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
           return;
         }
@@ -138,7 +173,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
       await sendTelegramResponse(ctx, result.message);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('[telegram] failed to process message', {
+      errorLog('[telegram] failed to process message', {
         message,
         backendBaseUrl,
       });
@@ -171,7 +206,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
   bot.on('text', handleTextMessage);
 
   bot.catch((error, ctx) => {
-    logger.error('[telegram] unhandled bot error', error, ctx?.updateType || 'unknown');
+    errorLog('[telegram] unhandled bot error', error, ctx?.updateType || 'unknown');
   });
 
   return {
