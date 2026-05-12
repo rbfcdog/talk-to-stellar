@@ -29,8 +29,11 @@ type ConfirmResponse = {
     feeDisplay?: string
     feeUsdc?: string
     feeBrl?: string
+    platformFeeDisplay?: string
+    totalFeeDisplay?: string
     exact?: boolean
   }
+  receiptImageDataUrl?: string
   message?: string
   error?: string
 }
@@ -120,12 +123,16 @@ function formatFeePercent(percent: number) {
 
 function buildFeeSummary(input: {
   feeDisplay?: string
+  platformFeeDisplay?: string
+  totalFeeDisplay?: string
   feeUsdc?: string
   feeBrl?: string
   feeXlm?: string
   sourceAmount?: string
   sourceAssetCode?: string
 }) {
+  if (hasUsableFeeDisplay(input.totalFeeDisplay)) return String(input.totalFeeDisplay || "")
+
   const sourceCode = String(input.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const sourceAmount = parseNumber(input.sourceAmount)
   const feeUsdc = parseNumber(input.feeUsdc)
@@ -151,7 +158,11 @@ function buildFeeSummary(input: {
     primaryAsset = "XLM"
   }
 
-  const fallback = hasUsableFeeDisplay(input.feeDisplay) ? input.feeDisplay : ""
+  const fallbackParts = [
+    hasUsableFeeDisplay(input.platformFeeDisplay) ? String(input.platformFeeDisplay || "") : "",
+    hasUsableFeeDisplay(input.feeDisplay) ? String(input.feeDisplay || "") : "",
+  ].filter(Boolean)
+  const fallback = fallbackParts.join(" + ")
   if (primaryAmount === undefined) return fallback
   if (primaryAmount <= 0) return ""
 
@@ -164,7 +175,8 @@ function buildFeeSummary(input: {
   }
 
   const nonZeroEquivalents = equivalents.filter((item) => !/^(r\$|us\$)\s*0([.,]0+)?$|^0([.,]0+)?%$/i.test(item.trim()))
-  return `${formatFeeAmount(primaryAmount, primaryAsset)}${nonZeroEquivalents.length ? ` (${nonZeroEquivalents.join(", ")})` : ""}`
+  const computed = `${formatFeeAmount(primaryAmount, primaryAsset)}${nonZeroEquivalents.length ? ` (${nonZeroEquivalents.join(", ")})` : ""}`
+  return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
 function getProviderLabel(provider?: string) {
@@ -282,6 +294,7 @@ export default function ConfirmPaymentClient({
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const estimatedFeeSummary = buildFeeSummary({
     feeDisplay: estimatedFeeDisplay,
+    platformFeeDisplay: String(payload.estimated_platform_fee || payload.estimated_spread_fee || ""),
     feeUsdc: String(payload.estimated_fee_usdc || payload.quote?.fee_usdc || ""),
     feeBrl: String(payload.estimated_fee_brl || payload.quote?.fee_brl || ""),
     feeXlm: String(payload.quote?.networkFeeXlm || ""),
@@ -292,13 +305,15 @@ export default function ConfirmPaymentClient({
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
   const resultFeeSummary = buildFeeSummary({
     feeDisplay: resultFeeDisplay,
+    platformFeeDisplay: result?.transferDetails?.platformFeeDisplay,
+    totalFeeDisplay: result?.transferDetails?.totalFeeDisplay,
     feeUsdc: result?.transferDetails?.feeUsdc,
     feeBrl: result?.transferDetails?.feeBrl,
     feeXlm: result?.transferDetails?.feeXlm,
     sourceAmount: result?.transferDetails?.sourceAmount,
     sourceAssetCode: result?.transferDetails?.sourceAssetCode,
   })
-  const showResultFee = hasUsableFeeDisplay(resultFeeSummary)
+  const showResultFee = hasUsableFeeDisplay(resultFeeSummary) || Boolean(result?.transferDetails)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -403,7 +418,16 @@ export default function ConfirmPaymentClient({
                     </p>
                   )}
                   {showResultFee && (
-                    <p>Taxa aplicada: {resultFeeSummary}</p>
+                    <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
+                  )}
+                  {result.receiptImageDataUrl && (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                      <img
+                        src={result.receiptImageDataUrl}
+                        alt="Recibo TalkToStellar"
+                        className="h-auto w-full"
+                      />
+                    </div>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
