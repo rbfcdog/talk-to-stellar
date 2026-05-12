@@ -24,6 +24,9 @@ fi
 
 wait_for_evolution "$BASE_URL"
 
+echo "Requesting QR data from: $CONNECT_URL"
+echo "Browser QR page will be written to: evolution/qr.html"
+
 RESPONSE="$(request_with_retry 5 2 curl -sS -X GET "$CONNECT_URL" -H "apikey: $API_KEY")"
 printf '%s\n' "$RESPONSE" | tee /tmp/talktostellar-evolution-connect.json
 

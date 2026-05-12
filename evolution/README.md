@@ -75,6 +75,8 @@ The Evolution v2 flow is:
 
 Evolution documents `instance/create` with `integration: "WHATSAPP-BAILEYS"` and `qrcode: true`, and `instance/connect/{instance}` returns connection data such as QR/pairing code. See the official docs if the response shape changes.
 
+Do not open `http://localhost:8080/instance/connect` directly in the browser. That path is incomplete and returns `Cannot GET /instance/connect`. The local instance endpoint is `http://localhost:8080/instance/connect/main`, and it requires the API key header, so use the script or Manager UI instead.
+
 ### Option A: Scripts
 
 Create instance:
@@ -83,6 +85,8 @@ Create instance:
 cd evolution
 ./scripts/create-instance.sh
 ```
+
+If the response says `"main" is already in use`, the instance already exists. Continue with the QR command.
 
 Get QR/pairing data:
 
