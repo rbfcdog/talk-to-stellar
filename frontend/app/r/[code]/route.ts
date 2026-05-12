@@ -17,13 +17,25 @@ function getBackendBaseUrl() {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
-  const code = String(params.code || "").trim();
-  const response = await fetch(`${getBackendBaseUrl()}/api/external/short-links/${encodeURIComponent(code)}`, {
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => ({}));
+  const rawCode = String(params.code || "").trim();
+  const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
+  const encodedCode = encodeURIComponent(code);
 
-  if (!response.ok || !payload?.url) {
+  // Prefer same-origin proxy route to keep resolution behavior aligned with the app deployment.
+  let response = await fetch(`${req.nextUrl.origin}/api/external/short-links/${encodedCode}`, {
+    cache: "no-store",
+  }).catch(() => null as any);
+
+  // Fallback: direct backend call if proxy is unavailable.
+  if (!response || !response.ok) {
+    response = await fetch(`${getBackendBaseUrl()}/api/external/short-links/${encodedCode}`, {
+      cache: "no-store",
+    }).catch(() => null as any);
+  }
+
+  const payload = await response?.json().catch(() => ({}));
+
+  if (!response?.ok || !payload?.url) {
     return NextResponse.redirect(new URL("/chat", req.url));
   }
 
