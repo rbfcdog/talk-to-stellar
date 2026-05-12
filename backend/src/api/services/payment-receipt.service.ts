@@ -25,6 +25,10 @@ export type PaymentReceiptInput = {
   feeUsdc?: string | null;
   hash?: string | null;
   quote?: any;
+  savings?: {
+    estimatedSavings?: number | string | null;
+    comparisonMethod?: string | null;
+  } | null;
   settlementMs?: number | null;
   completedAt?: string | null;
   status?: string | null;
@@ -107,6 +111,7 @@ export class PaymentReceiptService {
     const feeLine = await this.feeLine(input);
     const quoteLine = this.quoteLine(input.quote, sourceAmount, sourceAssetCode, destinationAmount, destinationAssetCode);
     const settlementLine = this.settlementLine(input.settlementMs);
+    const savingsLine = this.savingsLine(input.savings);
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = String(input.status || 'Confirmado').trim();
@@ -118,12 +123,19 @@ export class PaymentReceiptService {
       `Status: ${status}`,
       quoteLine,
       feeLine,
+      savingsLine,
       settlementLine,
       timeLine,
       publicOperationId ? `ID da operação: ${publicOperationId}` : 'ID da operação: em processamento',
       '',
       'Recibo registrado no seu histórico.',
     ].filter((line) => line !== '').join('\n');
+  }
+
+  private static savingsLine(savings?: PaymentReceiptInput['savings']): string {
+    const value = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) return '';
+    return `Economia estimada: R$ ${value.toFixed(2)} comparado a uma média de mercado.`;
   }
 
   private static operationLine(type: ReceiptType, sourceLabel: string, destinationLabel: string, counterparty?: string): string {
@@ -160,11 +172,15 @@ export class PaymentReceiptService {
   private static async feeLine(input: PaymentReceiptInput): Promise<string> {
     const exactFeeXlm = String(input.feeXlm || '').trim();
     const display = String(input.feeDisplay || '').trim();
-    if (display) return `Taxa exata: ${display}`;
+    const spread = input.quote?.platformFee?.enabled
+      ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
+      : '';
+    if (display) return `Taxa exata: ${display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
     if (exactFeeXlm) {
       const formatted = await formatNetworkFeeForCustomer(exactFeeXlm);
-      if (formatted.display) return `Taxa exata: ${formatted.display}`;
+      if (formatted.display) return `Taxa exata: ${formatted.display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
     }
+    if (spread) return `Taxa exata: taxa TalkToStellar ${spread}`;
     return 'Taxa exata: indisponivel';
   }
 

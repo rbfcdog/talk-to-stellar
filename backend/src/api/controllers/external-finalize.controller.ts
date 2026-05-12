@@ -11,6 +11,8 @@ import { StellarService } from '../services/stellar.service';
 import { TransferNotificationService } from '../services/transfer-notification.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { ContactSeedService } from '../services/contact-seed.service';
+import { ActivityFeedService } from '../services/activity-feed.service';
+import { EconomyEngineService } from '../services/economy-engine.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { formatNetworkFeeForCustomer } from '../../utils/fee-display';
@@ -18,6 +20,38 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service';
+
+function buildSettlementEconomy(input: {
+  sourceAmount: string;
+  sourceAssetCode: string;
+  feeBrl?: string | null;
+  quote?: any;
+}) {
+  const platformFee = input.quote?.platformFee || {};
+  const savings = EconomyEngineService.calculateForSettledOperation({
+    sourceAmount: input.sourceAmount,
+    sourceAssetCode: input.sourceAssetCode,
+    feeBrl: input.feeBrl,
+    platformFeeAmount: platformFee.feeAmount,
+    platformFeeAssetCode: platformFee.feeAssetCode,
+    quote: input.quote,
+    comparisonMethod: platformFee.comparisonMethod || 'market_average_4_5pct',
+  });
+
+  return {
+    actual_fee_brl: savings.actualFeeBrl,
+    platform_fee_brl: savings.platformFeeBrl,
+    gross_amount_brl: savings.grossAmountBrl,
+    savings: {
+      estimated_traditional_fee: savings.estimatedTraditionalFee,
+      actual_fee: savings.actualFee,
+      estimated_savings: savings.estimatedSavings,
+      savings_percentage: savings.savingsPercentage,
+      comparison_method: savings.comparisonMethod,
+      gross_amount_brl: savings.grossAmountBrl,
+    },
+  };
+}
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -256,6 +290,7 @@ async function sendTelegramPaymentNotification(input: {
   hash?: string;
   quote?: any;
   settlementMs?: number;
+  savings?: any;
 }) {
   const destinationLabel = input.destinationName || input.destination;
   const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
@@ -281,6 +316,7 @@ async function sendTelegramPaymentNotification(input: {
       feeUsdc: feeDisplay?.fee_usdc || null,
       hash: input.hash,
       quote: input.quote,
+      savings: input.savings,
       settlementMs: input.settlementMs,
     });
   } catch (error) {
@@ -302,6 +338,7 @@ async function sendTelegramConversionNotification(input: {
   hash?: string;
   quote?: any;
   settlementMs?: number;
+  savings?: any;
 }) {
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
@@ -321,6 +358,7 @@ async function sendTelegramConversionNotification(input: {
       feeUsdc: feeDisplay?.fee_usdc || null,
       hash: input.hash,
       quote: input.quote,
+      savings: input.savings,
       settlementMs: input.settlementMs,
     });
   } catch (error) {
@@ -498,6 +536,10 @@ async function logPaymentDetails(
         error_message: errorMessage,
         route_path: routePath,
         metadata,
+        actual_fee: metadata?.savings?.actual_fee ?? metadata?.actual_fee_brl ?? null,
+        estimated_savings: metadata?.savings?.estimated_savings ?? null,
+        savings_percentage: metadata?.savings?.savings_percentage ?? null,
+        comparison_method: metadata?.savings?.comparison_method ?? metadata?.comparison_method ?? null,
         created_at: new Date().toISOString(),
         completed_at: status === 'success' ? new Date().toISOString() : null,
       });
@@ -816,6 +858,12 @@ export default class ExternalFinalizeController {
           feeUsdc: feeDisplay.fee_usdc,
           feeBrl: feeDisplay.fee_brl,
         };
+        const economy = buildSettlementEconomy({
+          sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
+          sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
+          feeBrl: feeDisplay.fee_brl || null,
+          quote,
+        });
 
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
@@ -830,6 +878,10 @@ export default class ExternalFinalizeController {
           hash: result.hash,
           quote,
           settlementMs,
+          savings: {
+            estimatedSavings: economy.savings.estimated_savings,
+            comparisonMethod: economy.savings.comparison_method,
+          },
         });
 
         await logPaymentDetails(
@@ -859,6 +911,11 @@ export default class ExternalFinalizeController {
             token_quote: tokenQuote || null,
             quote,
             transferDetails: publicTransferDetails,
+            actual_fee_brl: economy.actual_fee_brl,
+            platform_fee_brl: economy.platform_fee_brl,
+            gross_amount_brl: economy.gross_amount_brl,
+            platform_spread_fee: quote?.platformFee || null,
+            savings: economy.savings,
           }
         );
 
@@ -870,8 +927,14 @@ export default class ExternalFinalizeController {
             type: 'conversion',
             quote,
             transferDetails: publicTransferDetails,
+            savings: economy.savings,
           }
         );
+
+        await ActivityFeedService.syncFromPayments({
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+        });
 
         return res.status(200).json({
           success: true,
@@ -882,6 +945,7 @@ export default class ExternalFinalizeController {
           destAssetCode,
           hash: result.hash,
           transferDetails: publicTransferDetails,
+          savings: economy.savings,
         });
       }
 
@@ -1348,6 +1412,12 @@ export default class ExternalFinalizeController {
           feeUsdc: feeDisplay.fee_usdc,
           feeBrl: feeDisplay.fee_brl,
         };
+        const economy = buildSettlementEconomy({
+          sourceAmount: String(publicTransferDetails.sourceAmount || quote?.sourceAmount || amount),
+          sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote?.sourceAsset?.code || assetCode),
+          feeBrl: feeDisplay.fee_brl || null,
+          quote,
+        });
 
         await sendTelegramPaymentNotification({
           sessionId: String(session_id),
@@ -1364,6 +1434,10 @@ export default class ExternalFinalizeController {
           hash: result.hash,
           quote,
           settlementMs,
+          savings: {
+            estimatedSavings: economy.savings.estimated_savings,
+            comparisonMethod: economy.savings.comparison_method,
+          },
 
         });
 
@@ -1400,6 +1474,11 @@ export default class ExternalFinalizeController {
             public_key_from_body: publicKeyFromBody || null,
             quote,
             transferDetails: publicTransferDetails,
+            actual_fee_brl: economy.actual_fee_brl,
+            platform_fee_brl: economy.platform_fee_brl,
+            gross_amount_brl: economy.gross_amount_brl,
+            platform_spread_fee: quote?.platformFee || null,
+            savings: economy.savings,
           }
         );
 
@@ -1421,6 +1500,7 @@ export default class ExternalFinalizeController {
             public_key_from_body: publicKeyFromBody || null,
             quote,
             transferDetails: publicTransferDetails,
+            savings: economy.savings,
           }
         );
 
@@ -1448,9 +1528,18 @@ export default class ExternalFinalizeController {
             feeUsdc: publicTransferDetails.feeUsdc,
             hash: result.hash,
             quote,
+            savings: {
+              estimatedSavings: economy.savings.estimated_savings,
+              comparisonMethod: economy.savings.comparison_method,
+            },
             settlementMs,
           });
         }
+
+        await ActivityFeedService.syncFromPayments({
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+        });
 
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
         return res.status(200).json({
@@ -1464,6 +1553,7 @@ export default class ExternalFinalizeController {
           assetCode,
           hash: result.hash,
           transferDetails: publicTransferDetails,
+          savings: economy.savings,
         });
       }
 
