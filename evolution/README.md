@@ -94,13 +94,13 @@ cd evolution
 If a QR image/code is returned, the script writes:
 
 ```text
-evolution/qr.html
+qr.html
 ```
 
 Open it:
 
 ```bash
-xdg-open evolution/qr.html
+xdg-open qr.html
 ```
 
 Then scan with:

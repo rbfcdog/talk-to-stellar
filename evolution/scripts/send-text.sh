@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 set -a
 . ./.env
 set +a
+. ./scripts/lib.sh
 
 BASE_URL="${EVOLUTION_PUBLIC_URL:-http://localhost:${SERVER_PORT:-8080}}"
 API_KEY="${EVOLUTION_API_KEY:-${AUTHENTICATION_API_KEY:-}}"
@@ -22,7 +23,9 @@ if [ -z "$NUMBER" ]; then
   exit 1
 fi
 
-curl -sS -X POST "$BASE_URL/message/sendText/$INSTANCE_NAME" \
+wait_for_evolution "$BASE_URL"
+
+request_with_retry 3 2 curl -sS -X POST "$BASE_URL/message/sendText/$INSTANCE_NAME" \
   -H "Content-Type: application/json" \
   -H "apikey: $API_KEY" \
   -d "{
