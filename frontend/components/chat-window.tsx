@@ -355,6 +355,21 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   };
 
   const renderMessageContent = (content: string) => {
+    const receiptImageMatch = content.match(/RECEIPT_IMAGE_DATA_URL:(data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+)/);
+    if (receiptImageMatch?.[1]) {
+      const text = content.replace(/RECEIPT_IMAGE_DATA_URL:data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/, '').trim();
+      return (
+        <div className="space-y-2">
+          {text && <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{text}</p>}
+          <img
+            src={receiptImageMatch[1]}
+            alt="Comprovante financeiro"
+            className="max-h-[520px] w-full max-w-[320px] rounded-xl border border-white/10 bg-slate-950 object-contain shadow-lg"
+          />
+        </div>
+      );
+    }
+
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
     return (

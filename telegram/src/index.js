@@ -52,8 +52,17 @@ async function main() {
 
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
   let healthServer = null;
-  const notify = ({ chatId, text, disableWebPagePreview = true }) =>
-    bot.telegram.sendMessage(chatId, text, { disable_web_page_preview: disableWebPagePreview });
+  const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true }) => {
+    if (imageSvgBase64) {
+      const buffer = Buffer.from(imageSvgBase64, 'base64');
+      return bot.telegram.sendDocument(
+        chatId,
+        { source: buffer, filename: filename || 'recibo-talktostellar.svg' },
+        { caption: text || 'Comprovante TalkToStellar' }
+      );
+    }
+    return bot.telegram.sendMessage(chatId, text, { disable_web_page_preview: disableWebPagePreview });
+  };
 
   if (mode === 'webhook') {
     if (!webhookPublicBase) {
@@ -85,14 +94,17 @@ async function main() {
           const payload = await readJsonBody(req);
           const chatId = String(payload.chat_id || payload.chatId || '').trim();
           const text = String(payload.text || '').trim();
-          if (!chatId || !text) {
-            sendJson(res, 400, { ok: false, error: 'chat_id and text are required' });
+          const imageSvgBase64 = String(payload.image_svg_base64 || payload.imageSvgBase64 || '').trim();
+          if (!chatId || (!text && !imageSvgBase64)) {
+            sendJson(res, 400, { ok: false, error: 'chat_id and text or image_svg_base64 are required' });
             return;
           }
 
           const result = await notify({
             chatId,
             text,
+            imageSvgBase64,
+            filename: String(payload.filename || 'recibo-talktostellar.svg').trim(),
             disableWebPagePreview: payload.disable_web_page_preview !== false,
           });
           sendJson(res, 200, { ok: true, message_id: result?.message_id || null });

@@ -59,14 +59,17 @@ function createHealthServer({ port = 3005, notify, notifySecret } = {}) {
         const payload = await readJsonBody(req);
         const chatId = String(payload.chat_id || payload.chatId || '').trim();
         const text = String(payload.text || '').trim();
-        if (!chatId || !text) {
-          sendJson(res, 400, { ok: false, error: 'chat_id and text are required' });
+        const imageSvgBase64 = String(payload.image_svg_base64 || payload.imageSvgBase64 || '').trim();
+        if (!chatId || (!text && !imageSvgBase64)) {
+          sendJson(res, 400, { ok: false, error: 'chat_id and text or image_svg_base64 are required' });
           return;
         }
 
         const result = await notify({
           chatId,
           text,
+          imageSvgBase64,
+          filename: String(payload.filename || 'recibo-talktostellar.svg').trim(),
           disableWebPagePreview: payload.disable_web_page_preview !== false,
         });
         sendJson(res, 200, { ok: true, message_id: result?.message_id || null });
