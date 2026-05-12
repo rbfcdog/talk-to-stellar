@@ -295,6 +295,19 @@ export class AgentGraph {
     return asksForLink && createVerb;
   }
 
+  private isReceiptImageRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    const wantsReceipt = normalized.includes('recibo') || normalized.includes('comprovante');
+    const wantsImage =
+      normalized.includes('imagem') ||
+      normalized.includes('foto') ||
+      normalized.includes('visual') ||
+      normalized.includes('mostrar') ||
+      normalized.includes('mostre') ||
+      normalized.includes('ver ');
+    return wantsReceipt && wantsImage;
+  }
+
   private extractPaymentLinkIntentFromText(text: string): {
     amount?: string;
     asset_code?: string;
@@ -425,6 +438,41 @@ ${onboardingUrl}`;
         state.response_message =
           `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.${receiveText}`;
       }
+    }
+
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handleReceiptImageRequest(state: AgentState): Promise<AgentState> {
+    const provider = String((state.action_params as any)?.external_provider || (state.action_params as any)?.external_source || 'web').trim();
+    const providerUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
+    const resultRaw = await executeTool('send_receipt_image', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      provider,
+      provider_user_id: providerUserId,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Falha ao gerar a imagem do comprovante.' };
+    }
+
+    state.success = Boolean(result.success);
+    if (result.success && result.image_data_url) {
+      const confirmation = `Imagem do comprovante gerada${result.operation_id ? ` (${result.operation_id})` : ''}.`;
+      state.response_message = provider.toLowerCase() === 'telegram'
+        ? `${confirmation} Enviei o arquivo do recibo aqui no Telegram.`
+        : [
+            confirmation,
+            `RECEIPT_IMAGE_DATA_URL:${result.image_data_url}`,
+          ].join('\n');
+    } else {
+      state.response_message = result.error || 'Ainda não encontrei uma transação concluída para gerar o comprovante em imagem.';
     }
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
@@ -1997,8 +2045,11 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         return await this.handleWalletCreation(state);
       }
 
+      const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       state.detected_intent = this.isPaymentLinkRequest(state.current_input)
         ? IntentType.PAYMENT_LINK
+        : wantsReceiptImage
+          ? IntentType.HISTORY
         : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
@@ -2026,6 +2077,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.CREATE_WALLET && !hasActiveWallet) {
         return await this.handleWalletCreation(state);
+      }
+
+      if (wantsReceiptImage) {
+        return await this.handleReceiptImageRequest(state);
       }
 
       if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {

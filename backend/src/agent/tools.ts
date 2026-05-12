@@ -20,6 +20,7 @@ import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
 import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
+import { PaymentReceiptService, PaymentReceiptInput } from "../api/services/payment-receipt.service";
 import { attachQuoteExpiry, quoteTtlSeconds } from "../api/services/quote-expiry.service";
 import { ActivityFeedService } from "../api/services/activity-feed.service";
 import { FinancialInsightsService } from "../api/services/financial-insights.service";
@@ -162,6 +163,20 @@ export const toolDefinitions = [
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "send_receipt_image",
+    description: "Gera a imagem premium do comprovante da última operação concluída do usuário e entrega no canal atual (web chat ou Telegram). Não retorna link de confirmação.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual." },
+        provider: { type: "string", description: "Canal atual, por exemplo web ou telegram." },
+        provider_user_id: { type: "string", description: "ID do usuário no canal externo, quando houver." },
+      },
+      required: ["session_id"],
     },
   },
   {
@@ -784,6 +799,8 @@ export async function executeTool(
     switch (toolName) {
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
+      case "send_receipt_image":
+        return await executeSendReceiptImage(toolInput);
       case "create_wallet":
         return await executeCreateWallet(toolInput);
       case "get_balance":
@@ -2096,6 +2113,112 @@ async function executeGetSavingsEstimate(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       ...result,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+function paymentLogToReceiptInput(row: any, input: any): PaymentReceiptInput {
+  const metadata = row?.metadata || {};
+  const transferDetails = metadata?.transferDetails || {};
+  const operationType = String(row?.operation_type || '').toUpperCase();
+  const destinationName = String(
+    metadata?.destination_name ||
+    metadata?.destination_contact?.contact_name ||
+    row?.destination_name ||
+    row?.destination_public_key ||
+    'destinatário'
+  ).trim();
+  const type = operationType.includes('CONVERSION') ? 'conversion' : 'payment_sent';
+  const feeDisplay = String(
+    transferDetails?.feeDisplay ||
+    metadata?.fee_display ||
+    ''
+  ).trim();
+  const savings = metadata?.savings
+    ? {
+        estimatedSavings: metadata.savings.estimated_savings,
+        comparisonMethod: metadata.savings.comparison_method,
+      }
+    : null;
+
+  return {
+    type,
+    sessionId: String(input.session_id || input.sessionId || row?.session_id || ''),
+    userId: String(input.user_id || input.userId || row?.user_id || ''),
+    provider: input.provider || input.external_provider || null,
+    providerUserId: input.provider_user_id || input.providerUserId || null,
+    counterpartyLabel: destinationName,
+    sourceAmount: String(transferDetails?.sourceAmount || row?.source_amount || ''),
+    sourceAssetCode: String(transferDetails?.sourceAssetCode || row?.source_asset_code || ''),
+    destinationAmount: String(transferDetails?.destinationAmount || row?.destination_amount || ''),
+    destinationAssetCode: String(transferDetails?.destinationAssetCode || row?.destination_asset_code || ''),
+    feeXlm: String(transferDetails?.feeXlm || row?.fee_xlm || ''),
+    feeDisplay,
+    feeBrl: String(transferDetails?.feeBrl || metadata?.fee_brl || metadata?.actual_fee_brl || ''),
+    feeUsdc: String(transferDetails?.feeUsdc || metadata?.fee_usdc || ''),
+    hash: String(row?.payment_hash || ''),
+    quote: metadata?.quote || null,
+    savings,
+    completedAt: String(row?.completed_at || row?.created_at || ''),
+    status: 'Confirmado',
+  };
+}
+
+async function executeSendReceiptImage(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const userId = await resolveToolUserId(input);
+    let query = supabase
+      .from('payment_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'success')
+      .order('completed_at', { ascending: false })
+      .limit(1);
+
+    if (sessionId) {
+      query = query.eq('session_id', sessionId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(error.message || 'Falha ao buscar o último comprovante.');
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) {
+      return JSON.stringify({
+        success: false,
+        error: 'Ainda não encontrei uma transação concluída para gerar o comprovante em imagem.',
+      });
+    }
+
+    const receiptInput = paymentLogToReceiptInput(row, { ...input, user_id: userId, session_id: sessionId || row.session_id });
+    const svg = await PaymentReceiptService.buildReceiptImageSvg(receiptInput);
+    const imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
+    const operationId = PaymentReceiptService.toPublicOperationId(receiptInput.hash);
+    const caption = operationId
+      ? `Comprovante da operação ${operationId}`
+      : 'Comprovante da última operação';
+
+    await TransferNotificationService.notifyExternalChannelImage({
+      sessionId: receiptInput.sessionId,
+      userId: receiptInput.userId,
+      provider: receiptInput.provider,
+      providerUserId: receiptInput.providerUserId,
+      caption,
+      svg,
+      filename: `${operationId || 'recibo-talktostellar'}.svg`,
+    });
+
+    return JSON.stringify({
+      success: true,
+      operation_id: operationId,
+      image_data_url: imageDataUrl,
+      message: 'Imagem do comprovante gerada e enviada no chat.',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

@@ -43,6 +43,16 @@ export type ExternalChannelMessageNotification = {
   text: string;
 };
 
+export type ExternalChannelImageNotification = {
+  sessionId?: string | null;
+  userId?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
+  caption?: string | null;
+  svg: string;
+  filename?: string | null;
+};
+
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
 
@@ -153,6 +163,31 @@ export class TransferNotificationService {
     await Promise.all([
       this.sendTelegramToMappings(mappings, input.text),
       this.sendWhatsAppToMappings(mappings, session?.phone_number, input.text),
+    ]);
+  }
+
+  static async notifyExternalChannelImage(input: ExternalChannelImageNotification): Promise<void> {
+    const sessionId = String(input.sessionId || '').trim();
+    const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const session = sessionId ? await this.safeGetSession(sessionId) : null;
+    const userId = String(input.userId || session?.user_id || '').trim();
+    const mappings = this.dedupeMappings([
+      ...(directMapping ? [directMapping] : []),
+      ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
+    ]);
+
+    await Promise.all([
+      this.sendTelegramImageToMappings(
+        mappings,
+        input.svg,
+        String(input.caption || '').trim(),
+        String(input.filename || 'recibo-talktostellar.svg').trim()
+      ),
+      this.sendWhatsAppToMappings(
+        mappings,
+        session?.phone_number,
+        `${String(input.caption || 'Comprovante gerado.').trim()}\n\nImagem do recibo disponível no chat web.`
+      ),
     ]);
   }
 
@@ -333,6 +368,96 @@ export class TransferNotificationService {
         logger.warn(`[incoming-transfer] telegram send failed: ${message}`);
       }
     }));
+  }
+
+  private static async sendTelegramImageToMappings(
+    mappings: ExternalMapping[],
+    svg: string,
+    caption: string,
+    filename: string
+  ): Promise<void> {
+    const telegramIds = Array.from(new Set(
+      mappings
+        .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
+        .map((mapping) => String(mapping.provider_user_id || '').trim())
+        .filter(Boolean)
+    ));
+
+    if (telegramIds.length === 0) return;
+
+    const notifyUrl = String(process.env.TELEGRAM_NOTIFY_URL || '').trim();
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    if (!notifyUrl && !botToken) {
+      logger.warn('[telegram-notify] skipped image: set TELEGRAM_NOTIFY_URL or TELEGRAM_BOT_TOKEN in the backend environment');
+      return;
+    }
+
+    const imageSvgBase64 = Buffer.from(svg, 'utf-8').toString('base64');
+
+    await Promise.all(telegramIds.map(async (chatId) => {
+      if (notifyUrl) {
+        const delivered = await this.sendTelegramImageViaNotifyUrl(notifyUrl, chatId, {
+          imageSvgBase64,
+          caption,
+          filename,
+        });
+        if (delivered) return;
+      }
+
+      if (!botToken) return;
+
+      try {
+        const form = new FormData();
+        form.set('chat_id', chatId);
+        if (caption) form.set('caption', caption);
+        form.set('document', new Blob([svg], { type: 'image/svg+xml' }), filename);
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!response.ok) {
+          const payload = await response.text().catch(() => '');
+          logger.warn(`[telegram-notify] sendDocument failed status=${response.status} body=${payload}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[telegram-notify] sendDocument failed: ${message}`);
+      }
+    }));
+  }
+
+  private static async sendTelegramImageViaNotifyUrl(
+    notifyUrl: string,
+    chatId: string,
+    input: { imageSvgBase64: string; caption?: string; filename?: string }
+  ): Promise<boolean> {
+    const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+    try {
+      const response = await fetch(notifyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: input.caption || 'Comprovante TalkToStellar',
+          image_svg_base64: input.imageSvgBase64,
+          filename: input.filename || 'recibo-talktostellar.svg',
+          disable_web_page_preview: true,
+        }),
+      });
+
+      if (response.ok) return true;
+
+      const payload = await response.text().catch(() => '');
+      logger.warn(`[telegram-notify] image notify URL failed status=${response.status} body=${payload}`);
+      return false;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[telegram-notify] image notify URL request failed: ${message}`);
+      return false;
+    }
   }
 
   private static async sendTelegramViaNotifyUrl(notifyUrl: string, chatId: string, text: string): Promise<boolean> {
