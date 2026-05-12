@@ -2,22 +2,57 @@
 
 Local WhatsApp automation stack for TalkToStellar:
 
-- Evolution API on `http://localhost:8080`
+- Evolution API: `http://localhost:8080`
+- Evolution Manager UI: `http://localhost:8080/manager`
 - PostgreSQL on host port `5434`
 - Redis on host port `6380`
 - Persistent WhatsApp session volume mounted at `/evolution/instances`
+
+## Important URL Rule
+
+Use this in your browser:
+
+```text
+http://localhost:8080
+http://localhost:8080/manager
+```
+
+Do not open this in Firefox:
+
+```text
+http://host.docker.internal:3001
+```
+
+`host.docker.internal` is only for the Evolution container calling services running on your host machine. In this project it is used for the webhook target:
+
+```text
+http://host.docker.internal:3001/webhook/evolution
+```
+
+That means:
+
+- Browser -> Evolution: `localhost:8080`
+- Evolution container -> TalkToStellar backend on host: `host.docker.internal:3001`
+- If the backend is not running or the webhook route is not implemented yet, QR setup can still work. Only webhook delivery will fail.
 
 ## Start
 
 ```bash
 cd evolution
 docker compose up -d
+docker compose ps
 ```
 
-Open:
+Health check:
+
+```bash
+curl http://localhost:8080/
+```
+
+Expected response includes:
 
 ```text
-http://localhost:8080
+Welcome to the Evolution API, it is working!
 ```
 
 ## API Key
@@ -28,9 +63,71 @@ Local API key from `.env`:
 change-me-talktostellar-evolution-local
 ```
 
-Change `AUTHENTICATION_API_KEY` before exposing the server.
+Change `AUTHENTICATION_API_KEY` and `EVOLUTION_API_KEY` before exposing this server.
 
-## Create Instance
+## QR Setup
+
+The Evolution v2 flow is:
+
+1. Create an instance with `POST /instance/create`.
+2. Generate/connect QR with `GET /instance/connect/{instance}`.
+3. Scan using WhatsApp Business -> Linked Devices -> Link Device.
+
+Evolution documents `instance/create` with `integration: "WHATSAPP-BAILEYS"` and `qrcode: true`, and `instance/connect/{instance}` returns connection data such as QR/pairing code. See the official docs if the response shape changes.
+
+### Option A: Scripts
+
+Create instance:
+
+```bash
+cd evolution
+./scripts/create-instance.sh
+```
+
+Get QR/pairing data:
+
+```bash
+cd evolution
+./scripts/connect-qr.sh
+```
+
+If a QR image/code is returned, the script writes:
+
+```text
+evolution/qr.html
+```
+
+Open it:
+
+```bash
+xdg-open evolution/qr.html
+```
+
+Then scan with:
+
+```text
+WhatsApp Business -> Linked Devices -> Link Device
+```
+
+### Option B: Manager UI
+
+Open:
+
+```text
+http://localhost:8080/manager
+```
+
+Use API key:
+
+```text
+change-me-talktostellar-evolution-local
+```
+
+Create/connect instance `main` and request QR from the UI.
+
+## Manual API Commands
+
+Create instance:
 
 ```bash
 curl -X POST http://localhost:8080/instance/create \
@@ -40,26 +137,39 @@ curl -X POST http://localhost:8080/instance/create \
     "instanceName": "main",
     "token": "main-local-token",
     "qrcode": true,
-    "integration": "WHATSAPP-BAILEYS"
+    "integration": "WHATSAPP-BAILEYS",
+    "rejectCall": true,
+    "msgCall": "Não consigo atender chamadas por aqui. Envie uma mensagem.",
+    "groupsIgnore": true,
+    "alwaysOnline": true,
+    "readMessages": true,
+    "readStatus": true
   }'
 ```
 
-## Connect And Scan QR
+Connect and get QR:
 
 ```bash
 curl -X GET http://localhost:8080/instance/connect/main \
   -H "apikey: change-me-talktostellar-evolution-local"
 ```
 
-On the phone:
+If you set `OWNER_NUMBER=5511999999999` in `.env`, the script calls:
 
 ```text
-WhatsApp Business -> Linked Devices -> Link Device
+GET /instance/connect/main?number=5511999999999
 ```
 
-Scan the QR returned by Evolution.
-
 ## Send Text
+
+After the QR is connected:
+
+```bash
+cd evolution
+./scripts/send-text.sh 5511999999999 "TalkToStellar conectado."
+```
+
+Manual curl:
 
 ```bash
 curl -X POST http://localhost:8080/message/sendText/main \
@@ -73,13 +183,39 @@ curl -X POST http://localhost:8080/message/sendText/main \
 
 ## Webhook
 
-The local webhook target is:
+Current local webhook target:
 
 ```text
 http://host.docker.internal:3001/webhook/evolution
 ```
 
-Update `WEBHOOK_GLOBAL_URL` in `.env` when the TalkToStellar backend exposes the final Evolution webhook route.
+This is correct for Docker because the Evolution container must call the backend running on your host.
+
+If the TalkToStellar backend also runs inside the same Docker Compose network, change the webhook to the service name instead, for example:
+
+```text
+http://backend:3001/webhook/evolution
+```
+
+If you deploy to Railway/VPS, use the public HTTPS backend URL:
+
+```text
+https://your-backend.com/webhook/evolution
+```
+
+## Logs
+
+```bash
+cd evolution
+docker compose logs -f evolution-api
+```
+
+## Restart
+
+```bash
+cd evolution
+docker compose restart evolution-api
+```
 
 ## Stop
 
@@ -88,9 +224,27 @@ cd evolution
 docker compose down
 ```
 
-To delete local state:
+To delete local state, including WhatsApp session and DB:
 
 ```bash
 cd evolution
 docker compose down -v
+```
+
+## Troubleshooting
+
+If Firefox says it cannot connect to `host.docker.internal:3001`, you opened the webhook URL by mistake. Open `http://localhost:8080/manager` instead.
+
+If QR does not appear:
+
+```bash
+cd evolution
+docker compose logs --tail=200 evolution-api
+./scripts/connect-qr.sh
+```
+
+If sending messages fails, confirm the instance is connected in the Manager UI and that the recipient number uses country code only digits, for example:
+
+```text
+5511999999999
 ```

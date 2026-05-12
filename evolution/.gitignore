@@ -1,6 +1,7 @@
 # Runtime data is stored in Docker named volumes by default.
 data/
 instances/
+qr.html
 *.log
 
 # Keep the committed local dev env, but ignore real deployment overrides.
