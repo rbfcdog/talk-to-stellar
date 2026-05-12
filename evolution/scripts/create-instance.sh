@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 set -a
 . ./.env
 set +a
+. ./scripts/lib.sh
 
 BASE_URL="${EVOLUTION_PUBLIC_URL:-http://localhost:${SERVER_PORT:-8080}}"
 API_KEY="${EVOLUTION_API_KEY:-${AUTHENTICATION_API_KEY:-}}"
@@ -23,7 +24,9 @@ else
   NUMBER_FIELD=""
 fi
 
-curl -sS -X POST "$BASE_URL/instance/create" \
+wait_for_evolution "$BASE_URL"
+
+request_with_retry 5 2 curl -sS -X POST "$BASE_URL/instance/create" \
   -H "Content-Type: application/json" \
   -H "apikey: $API_KEY" \
   -d "{

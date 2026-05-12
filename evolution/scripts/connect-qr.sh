@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 set -a
 . ./.env
 set +a
+. ./scripts/lib.sh
 
 BASE_URL="${EVOLUTION_PUBLIC_URL:-http://localhost:${SERVER_PORT:-8080}}"
 API_KEY="${EVOLUTION_API_KEY:-${AUTHENTICATION_API_KEY:-}}"
@@ -21,7 +22,9 @@ if [ -n "$OWNER_NUMBER" ]; then
   CONNECT_URL="$CONNECT_URL?number=$OWNER_NUMBER"
 fi
 
-RESPONSE="$(curl -sS -X GET "$CONNECT_URL" -H "apikey: $API_KEY")"
+wait_for_evolution "$BASE_URL"
+
+RESPONSE="$(request_with_retry 5 2 curl -sS -X GET "$CONNECT_URL" -H "apikey: $API_KEY")"
 printf '%s\n' "$RESPONSE" | tee /tmp/talktostellar-evolution-connect.json
 
 python3 - "$BASE_URL" "$INSTANCE_NAME" <<'PY'
@@ -79,7 +82,7 @@ if html:
     out.write_text(html)
     print(f"\nQR page written: {out.resolve()}")
     print("Open it with:")
-    print("  xdg-open evolution/qr.html")
+    print("  xdg-open qr.html")
 elif pairing_code:
     print(f"\nPairing code: {pairing_code}")
 else:
