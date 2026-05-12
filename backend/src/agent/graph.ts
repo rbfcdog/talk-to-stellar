@@ -912,7 +912,9 @@ ${onboardingUrl}`;
       const name = String(contact.contact_name || contact.name || `Contato ${index + 1}`).trim();
       const key = String(contact.stellar_public_key || contact.public_key || '').trim();
       const contactTransferKey = String(contact.pix_key || '').trim();
-      return `${index + 1}. ${name} | public_key=${key || 'indisponivel'} | transfer_key=${contactTransferKey || 'indisponivel'}`;
+      const email = String(contact.email || contact.contact_profile?.email || '').trim();
+      const cpf = String(contact.cpf || contact.contact_profile?.cpf || '').trim();
+      return `${index + 1}. ${name} | public_key=${key || 'indisponivel'} | transfer_key=${contactTransferKey || 'indisponivel'} | email=${email || 'indisponivel'} | cpf=${cpf || 'indisponivel'}`;
     });
 
     const pendingPayment = stateData?.pending_payment || (stateData?.action_params as any)?.pending_payment;
@@ -1193,6 +1195,32 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     return `Contato adicionado com sucesso.${lines.length ? `\n${lines.join('\n')}` : ''}`;
   }
 
+  private contactIdentifierLines(contact: any): string[] {
+    const profile = contact?.contact_profile || {};
+    const email = String(contact?.email || profile?.email || '').trim();
+    const cpf = String(contact?.cpf || profile?.cpf || '').trim();
+
+    return [
+      `E-mail: ${email || 'indisponível'}`,
+      `CPF: ${cpf || 'indisponível'}`,
+    ];
+  }
+
+  private formatContactListLine(contact: any, index: number): string {
+    const label = String(contact.display_label || contact.contact_name || contact.name || 'Contato').trim();
+    const publicKey = String(contact.stellar_public_key || contact.public_key || '').trim();
+    const transferKey = String(contact.pix_key || contact.contact_profile?.pix_key || '').trim();
+    const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
+    const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
+    const keyParts = [
+      `Chave pública: ${publicKey || 'indisponível'}`,
+      `Chave de transferência: ${transferKey || 'indisponível'}`,
+      ...this.contactIdentifierLines(contact),
+    ];
+
+    return `${index + 1}. ${label}${last}${freq}\n${keyParts.join('\n')}`;
+  }
+
   private async handleContactsRequest(state: AgentState): Promise<AgentState> {
     const contactIntent = await this.extractContactIntentWithLlm(state.current_input);
     const contactKey = String(contactIntent.contact_key || '').trim();
@@ -1249,10 +1277,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       state.success = true;
       state.response_message = contacts.length
         ? `Seus destinatários:\n${contacts.map((contact: any, index: number) => {
-            const label = String(contact.display_label || contact.contact_name || contact.name || 'Contato').trim();
-            const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
-            const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
-            return `${index + 1}. ${label}${last}${freq}`;
+            return this.formatContactListLine(contact, index);
           }).join('\n')}`
         : 'Você ainda não tem destinatários salvos.';
     }
