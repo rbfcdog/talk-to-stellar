@@ -38,22 +38,58 @@ function verifySessionToken(session: any, providedToken: string) {
   return Boolean(stored && providedToken && stored === String(providedToken).trim());
 }
 
-async function tokenAlreadyClaimed(tokenHash: string) {
+type ClaimTokenReservation =
+  | { ok: true; row: any }
+  | { ok: false; status: number; body: Record<string, any> };
+
+async function readClaimTokenState(tokenHash: string): Promise<ClaimTokenReservation | null> {
   const { data, error } = await supabase
     .from('payment_confirmations')
-    .select('id, status')
+    .select('id, used, used_at, status')
     .eq('token_hash', tokenHash)
-    .limit(1);
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     const message = String(error.message || '').toLowerCase();
     if (message.includes('payment_confirmations') || message.includes('schema cache')) {
-      return false;
+      return null;
     }
     throw error;
   }
 
-  return Array.isArray(data) && data.length > 0;
+  if (!data) {
+    return { ok: false, status: 404, body: { success: false, error: 'Link de pagamento inválido', message: 'Link de pagamento inválido' } };
+  }
+  if (data.used) {
+    return {
+      ok: false,
+      status: 409,
+      body: { success: false, error: 'Este link já foi utilizado', message: 'Este link já foi utilizado', used_at: data.used_at || null },
+    };
+  }
+  return null;
+}
+
+async function reserveClaimTokenForExecution(tokenHash: string): Promise<ClaimTokenReservation> {
+  const state = await readClaimTokenState(tokenHash);
+  if (state) return state;
+
+  const { data, error } = await supabase
+    .from('payment_confirmations')
+    .update({ status: 'processing' })
+    .eq('token_hash', tokenHash)
+    .eq('used', false)
+    .in('status', ['pending', 'failed'])
+    .select('id')
+    .limit(1);
+
+  if (error) throw error;
+  if (!Array.isArray(data) || data.length === 0) {
+    return { ok: false, status: 409, body: { success: false, error: 'Este link já está em processamento', message: 'Este link já está em processamento' } };
+  }
+
+  return { ok: true, row: data[0] };
 }
 
 async function claimToken(input: {
@@ -75,27 +111,29 @@ async function claimToken(input: {
     tokenHash: input.tokenHash,
     operationType: 'CLAIM_PAYMENT_LINK',
   });
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('payment_confirmations')
-    .insert({
-      token_hash: input.tokenHash,
+    .update({
       session_id: input.senderSessionId,
       user_id: input.senderUserId,
       destination: input.destination,
       destination_name: input.destinationName || null,
       amount: input.amount,
       asset_code: input.assetCode,
-      status: 'pending',
+      status: 'processing',
       operation_fingerprint: operationFingerprint,
       details: input.details || null,
-    });
+    })
+    .eq('token_hash', input.tokenHash)
+    .eq('used', false)
+    .eq('status', 'processing')
+    .select('id');
 
   if (error) {
-    if (String(error.code || '') === '23505') return false;
     throw error;
   }
 
-  return true;
+  return Array.isArray(data) && data.length > 0;
 }
 
 async function updateClaimStatus(tokenHash: string, status: 'completed' | 'failed', paymentHash?: string, details?: any) {
@@ -105,9 +143,12 @@ async function updateClaimStatus(tokenHash: string, status: 'completed' | 'faile
       status,
       payment_hash: paymentHash || null,
       completed_at: new Date().toISOString(),
+      used: status === 'completed',
+      used_at: status === 'completed' ? new Date().toISOString() : null,
       details: details || null,
     })
-    .eq('token_hash', tokenHash);
+    .eq('token_hash', tokenHash)
+    .eq('used', false);
 
   if (error) {
     logger.warn(`[pay-link] could not update claim status: ${error.message}`);
@@ -306,8 +347,9 @@ export default class PayLinkController {
       }
 
       const tokenHash = hashToken(token);
-      if (await tokenAlreadyClaimed(tokenHash)) {
-        return res.status(400).json({ success: false, message: 'Este link já foi resgatado.' });
+      const tokenState = await readClaimTokenState(tokenHash);
+      if (tokenState && !tokenState.ok) {
+        return res.status(tokenState.status).json(tokenState.body);
       }
 
       const senderSessionId = String(payload.session_id || '').trim();
@@ -369,6 +411,11 @@ export default class PayLinkController {
         assetIssuer: destinationAssetIssuer,
       });
 
+      const reservation = await reserveClaimTokenForExecution(tokenHash);
+      if (!reservation.ok) {
+        return res.status(reservation.status).json(reservation.body);
+      }
+
       const claimed = await claimToken({
         tokenHash,
         senderSessionId,
@@ -389,7 +436,8 @@ export default class PayLinkController {
         },
       });
       if (!claimed) {
-        return res.status(400).json({ success: false, message: 'Este link já foi resgatado.' });
+        await updateClaimStatus(tokenHash, 'failed', undefined, { error: 'Could not reserve claim token details' });
+        return res.status(409).json({ success: false, error: 'Este link já foi utilizado', message: 'Este link já foi utilizado' });
       }
 
       const senderSecret = await vaultService.getSecret(String(senderWallet.vault_secret_id));
@@ -429,10 +477,15 @@ export default class PayLinkController {
 
       if (!result.success) {
         await updateClaimStatus(tokenHash, 'failed', undefined, { error: result.error || 'Could not submit payment' });
-        return res.status(400).json({ success: false, message: result.error || 'Não foi possível enviar o pagamento.' });
+        return res.status(400).json({
+          success: false,
+          error: result.error || 'Não foi possível enviar o pagamento.',
+          message: result.error || 'Não foi possível enviar o pagamento.',
+        });
       }
 
       const settlementMs = Date.now() - submitStartedAt;
+      const completedAt = new Date().toISOString();
       const transferDetails = result.hash
         ? await StellarService.getSubmittedPaymentDetails(result.hash)
         : null;
@@ -473,16 +526,22 @@ export default class PayLinkController {
       return res.status(200).json({
         success: true,
         claimed: true,
-        amount,
+        tx_hash: result.hash,
+        amount: String(transferDetails?.destinationAmount || amount),
+        asset: String(transferDetails?.destinationAssetCode || destinationAssetCode),
+        destination: recipientWallet.public_key,
+        completed_at: completedAt,
+        receipt_url: PaymentReceiptService.buildHostedReceiptUrl(result.hash),
         assetCode: sourceAssetCode,
         sourceAssetCode,
         destinationAssetCode,
+        hash: result.hash,
         operationId: PaymentReceiptService.toPublicOperationId(result.hash),
         transferDetails,
       });
     } catch (error: any) {
       logger.error(`[pay-link] claim failed: ${error?.message || String(error)}`);
-      return res.status(500).json({ success: false, message: error?.message || String(error) });
+      return res.status(500).json({ success: false, error: error?.message || String(error), message: error?.message || String(error) });
     }
   }
 }

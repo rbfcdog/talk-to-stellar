@@ -15,6 +15,10 @@ type ValidationResult = {
 
 type ConfirmResponse = {
   success: boolean
+  tx_hash?: string
+  asset?: string
+  completed_at?: string
+  receipt_url?: string
   paymentConfirmed?: boolean
   sessionId?: string
   userId?: string
@@ -39,6 +43,19 @@ type ConfirmResponse = {
   receiptImageDataUrl?: string
   message?: string
   error?: string
+}
+
+function shortenValue(value?: string, left = 6, right = 6) {
+  const raw = String(value || "").trim()
+  if (!raw) return "Indisponível"
+  if (raw.length <= left + right + 3) return raw
+  return `${raw.slice(0, left)}...${raw.slice(-right)}`
+}
+
+function formatTimestamp(value?: string) {
+  const timestamp = value ? Date.parse(value) : NaN
+  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("pt-BR")
+  return new Date(timestamp).toLocaleString("pt-BR")
 }
 
 function decodeJwtPayload(token: string): any {
@@ -276,7 +293,7 @@ export default function ConfirmPaymentClient({
 
       const payload = (await response.json()) as ConfirmResponse
       setResult(payload)
-      setStatus(response.ok ? "done" : "error")
+      setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false
@@ -333,6 +350,11 @@ export default function ConfirmPaymentClient({
   })
   const showResultFee = hasUsableFeeDisplay(resultFeeSummary) || Boolean(result?.transferDetails)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
+  const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
+  const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
+  const successDestination = String(result?.destination || result?.destinationName || "")
+  const successHash = String(result?.tx_hash || result?.hash || "")
+  const successReceiptUrl = String(result?.receipt_url || "")
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -444,22 +466,27 @@ export default function ConfirmPaymentClient({
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 space-y-1 text-emerald-300"
+                  className="mt-2 space-y-3 text-emerald-100"
                 >
-                  <p>Pagamento confirmado com sucesso.</p>
-                  {result.transferDetails?.destinationAmount && (
-                    <p>
-                      Destino recebeu: {formatPaymentAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
-                    </p>
-                  )}
-                  {result.transferDetails?.sourceAmount && (
-                    <p>
-                      Origem debitada: {formatPaymentAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
-                      {result.transferDetails.exact === false ? " (valor estimado)" : ""}
-                    </p>
-                  )}
+                  <p className="text-base font-semibold text-emerald-300">Pagamento enviado com sucesso</p>
+                  <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm">
+                    <p><span className="text-slate-300">Valor: </span>{successAmount} {successAsset}</p>
+                    <p><span className="text-slate-300">Destino: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
+                    <p><span className="text-slate-300">Transação: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
+                    <p><span className="text-slate-300">Horário: </span>{formatTimestamp(result.completed_at)}</p>
+                  </div>
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
+                  )}
+                  {successReceiptUrl && (
+                    <a
+                      href={successReceiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                    >
+                      Ver comprovante
+                    </a>
                   )}
                   {result.receiptImageDataUrl && (
                     <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
@@ -473,7 +500,6 @@ export default function ConfirmPaymentClient({
                     </motion.div>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
