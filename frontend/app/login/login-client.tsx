@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
 import { KeyRound, LogIn, ShieldCheck } from "lucide-react"
 
 function generateBrowserId(): string {
@@ -58,6 +59,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const externalProviderUserId = String(externalPayload?.provider_user_id || "").trim()
   const hasExternalContext = Boolean(externalToken && externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
+  const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
   const [email, setEmail] = useState("")
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
@@ -74,11 +76,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   function finishLogin() {
-    if (isTelegramContext) {
+    enqueueWebChatFeedback(`✅ Entrada concluída.\nConta conectada: ${email.trim() || "usuário"}`)
+    if (hasExternalContext) {
       setExternalDone(true)
-      window.setTimeout(() => {
-        window.close()
-      }, 2000)
+      closeIntermediatePage(3000)
       return
     }
 
@@ -217,11 +218,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
         <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
           <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">
-            {isTelegramContext ? "Telegram conectado" : "Conta conectada"}
+            {hasExternalContext ? `${externalProviderLabel} conectado` : "Conta conectada"}
           </p>
           <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            Volte ao Telegram e envie sua próxima mensagem. Esta tela pode ser fechada.
+            Volte ao {externalProviderLabel} e envie sua próxima mensagem. Esta tela fecha automaticamente.
           </p>
         </section>
       </main>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
+import { enqueueWebChatFeedback } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -309,6 +310,19 @@ export default function ConfirmPaymentClient({
       const payload = (await response.json()) as ConfirmResponse
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
+
+      if (response.ok && payload?.success) {
+        const hash = String(payload.tx_hash || payload.hash || "")
+        const receiptUrl = String(payload.receipt_url || "")
+        enqueueWebChatFeedback([
+          "✅ Pagamento enviado com sucesso.",
+          `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
+          `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
+          hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
+          `Horário: ${formatTimestamp(payload.completed_at)}`,
+          receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+        ].filter(Boolean).join("\n"))
+      }
 
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
+import { enqueueWebChatFeedback } from "@/lib/web-feedback"
 import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
 
 type CreatePayLinkResponse = {
@@ -130,6 +131,7 @@ export default function PayAnyoneClient() {
           url: link,
           message: `Compartilhe este link para receber pagamentos. Quem paga acessa, digita o valor e envia para sua conta.`,
         })
+        enqueueWebChatFeedback(`✅ Link para receber criado.\nCompartilhe este link com seu cliente:\n${link}`)
         setStatus("done")
         return
       }
@@ -150,6 +152,13 @@ export default function PayAnyoneClient() {
       const payload = await response.json().catch(() => ({}))
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
+      if (response.ok && payload?.success && payload?.url) {
+        enqueueWebChatFeedback([
+          "✅ Link de pagamento criado.",
+          payload.message ? String(payload.message) : "",
+          String(payload.url),
+        ].filter(Boolean).join("\n"))
+      }
     } catch (error) {
       setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao criar link." })
       setStatus("error")
