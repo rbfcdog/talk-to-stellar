@@ -342,10 +342,13 @@ ${onboardingUrl}`;
       const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
       const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
       const recipientName = String(llmParsed.recipient_query || '').trim();
+      const numericAmount = Number(amount.replace(',', '.'));
+      const hasValidAmount = amount.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0;
 
-      if (llmParsed.needs_clarification && !amount) {
+      if (!hasValidAmount) {
         state.success = false;
-        state.response_message = 'Me diga o valor e a moeda para criar o link. Exemplo: criar link de 10 USDC.';
+        state.response_message =
+          'Não foi informado o valor do link de pagamento. Qual valor você quer colocar no link? Exemplo: "criar link de 10 dólares".';
       } else {
         const url = this.buildPayAnyoneUrl({ amount, assetCode, receiveAssetCode, recipientName });
         state.pending_payment = undefined;
