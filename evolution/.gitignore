@@ -1,0 +1,9 @@
+# Runtime data is stored in Docker named volumes by default.
+data/
+instances/
+*.log
+
+# Keep the committed local dev env, but ignore real deployment overrides.
+.env.local
+.env.production
+.env.*.local
