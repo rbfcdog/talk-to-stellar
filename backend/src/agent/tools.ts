@@ -3417,7 +3417,19 @@ async function executeListContacts(input: any): Promise<string> {
       byDestination.get(key)!.push(row);
     }
 
-    const enrichedContacts = (contacts || []).map((contact: any) => {
+    const contactProfiles = await Promise.all((contacts || []).map(async (contact: any) => {
+      const contactKey = String(contact?.stellar_public_key || '').trim();
+      if (!contactKey) return {};
+      try {
+        return await resolveContactProfileByPublicKey(contactKey);
+      } catch (error) {
+        logger.warn(`[executeListContacts] failed to enrich ${contactKey}: ${error instanceof Error ? error.message : String(error)}`);
+        return {};
+      }
+    }));
+
+    const enrichedContacts = (contacts || []).map((contact: any, index: number) => {
+      const profile: any = contactProfiles[index] || {};
       const contactKey = String(contact?.stellar_public_key || '').trim();
       const relatedRows = byDestination.get(contactKey) || [];
       const successfulRows = relatedRows.filter((row: any) => isSuccessfulPaymentRow(row) && !isConversionOperation(row));
@@ -3448,6 +3460,9 @@ async function executeListContacts(input: any): Promise<string> {
 
       return {
         ...contact,
+        email: contact.email || profile.email || null,
+        cpf: contact.cpf || profile.cpf || null,
+        contact_profile: profile,
         display_label: tags.length ? `${label} (${tags.join(', ')})` : label,
         favorite,
         recurring,
