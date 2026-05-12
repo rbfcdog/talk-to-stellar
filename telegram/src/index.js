@@ -50,6 +50,13 @@ function renderReceiptPng(svgBuffer) {
   return renderer.render().asPng();
 }
 
+function normalizeCaption(text) {
+  const raw = String(text || '').trim() || 'Comprovante TalkToStellar';
+  // Telegram caption hard limit for media is 1024 chars.
+  if (raw.length <= 1000) return raw;
+  return `${raw.slice(0, 997).trimEnd()}...`;
+}
+
 async function main() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const agentUrl = process.env.TELEGRAM_AGENT_URL || 'http://localhost:3001/api/agent/query';
@@ -98,17 +105,36 @@ async function main() {
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
   let healthServer = null;
   const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true }) => {
+    const caption = normalizeCaption(text);
     if (imageSvgBase64) {
       const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
-      const pngBuffer = renderReceiptPng(svgBuffer);
       const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
-      return bot.telegram.sendPhoto(
-        chatId,
-        { source: pngBuffer, filename: pngFilename },
-        { caption: text || 'Comprovante TalkToStellar' }
-      );
+      const svgFilename = String(filename || 'recibo-talktostellar.svg');
+
+      try {
+        const pngBuffer = renderReceiptPng(svgBuffer);
+        return await bot.telegram.sendPhoto(
+          chatId,
+          { source: pngBuffer, filename: pngFilename },
+          { caption }
+        );
+      } catch (renderOrPhotoError) {
+        console.warn('[telegram-notify] sendPhoto failed, trying sendDocument fallback:', renderOrPhotoError instanceof Error ? renderOrPhotoError.message : String(renderOrPhotoError));
+      }
+
+      try {
+        return await bot.telegram.sendDocument(
+          chatId,
+          { source: svgBuffer, filename: svgFilename },
+          { caption }
+        );
+      } catch (documentError) {
+        console.warn('[telegram-notify] sendDocument fallback failed, trying text-only fallback:', documentError instanceof Error ? documentError.message : String(documentError));
+      }
+
+      return bot.telegram.sendMessage(chatId, caption, { disable_web_page_preview: disableWebPagePreview });
     }
-    return bot.telegram.sendMessage(chatId, text, { disable_web_page_preview: disableWebPagePreview });
+    return bot.telegram.sendMessage(chatId, caption, { disable_web_page_preview: disableWebPagePreview });
   };
 
   if (mode === 'webhook') {

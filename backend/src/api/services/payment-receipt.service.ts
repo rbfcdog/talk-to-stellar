@@ -2,7 +2,7 @@ import { supabase } from '../../config/supabase';
 import crypto from 'crypto';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { logger } from '../../utils/logger';
-import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { buildUsedQuoteLabel } from '../../utils/quote-display';
 import { TransferNotificationService } from './transfer-notification.service';
 import { ReceiptImageService } from './receipt-image.service';
@@ -227,15 +227,18 @@ export class PaymentReceiptService {
   private static async feeLine(input: PaymentReceiptInput): Promise<string> {
     const exactFeeXlm = String(input.feeXlm || '').trim();
     const display = String(input.feeDisplay || '').trim();
-    const spread = input.quote?.platformFee?.enabled
-      ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
-      : '';
-    if (display && !/\bXLM\b/i.test(display)) return `Taxa exata: ${display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
+    if (display && !/\bXLM\b/i.test(display)) return `Taxa exata: ${display}`;
     if (exactFeeXlm) {
-      const formatted = await formatNetworkFeeForCustomer(exactFeeXlm);
-      if (formatted.display) return `Taxa exata: ${formatted.display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
+      const networkFee = await formatNetworkFeeForCustomer(exactFeeXlm);
+      const unifiedFee = buildUnifiedFeeDisplay({
+        networkFee,
+        platformFeeAmount: input.quote?.platformFee?.feeAmount || null,
+        platformFeeAssetCode: input.quote?.platformFee?.feeAssetCode || null,
+        sourceAssetCode: input.sourceAssetCode || null,
+        destinationAssetCode: input.destinationAssetCode || null,
+      });
+      if (unifiedFee.display) return `Taxa exata: ${unifiedFee.display}`;
     }
-    if (spread) return `Taxa exata: taxa TalkToStellar ${spread}`;
     return 'Taxa exata: indisponivel';
   }
 

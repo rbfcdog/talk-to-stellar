@@ -388,6 +388,7 @@ export class StellarService {
             const directPlatformFee = PlatformFeeService.calculateSpread({
                 sourceAmount: amount,
                 sourceAssetCode: assetCode || 'XLM',
+                destinationAssetCode: assetCode || 'XLM',
                 mode: 'add_on_top',
             });
             const directFeeAmount = directPlatformFee.enabled ? directPlatformFee.feeAmount : '0';
@@ -727,6 +728,7 @@ export class StellarService {
         const platformFee = PlatformFeeService.calculateSpread({
             sourceAmount: bestPath.source_amount,
             sourceAssetCode: assetCode(sourceAssetObj),
+            destinationAssetCode: assetCode(destAssetObj),
             mode: 'add_on_top',
         });
         const networkFeeXlm = DEFAULT_NETWORK_FEE_XLM;
@@ -769,6 +771,7 @@ export class StellarService {
         const platformFee = PlatformFeeService.calculateSpread({
             sourceAmount,
             sourceAssetCode: assetCode(sourceAssetObj),
+            destinationAssetCode: assetCode(destAssetObj),
             mode: 'deduct_from_source',
         });
         const effectiveSourceAmount = platformFee.enabled ? platformFee.netSourceAmount : String(sourceAmount);

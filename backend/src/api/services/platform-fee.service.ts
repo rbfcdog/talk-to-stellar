@@ -30,6 +30,13 @@ function configuredSpreadBps(): number {
 }
 
 export class PlatformFeeService {
+  static isUsdcBrlTransaction(sourceAssetCode?: string, destinationAssetCode?: string): boolean {
+    const source = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const destination = String(destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    if (!source || !destination) return false;
+    return (source === 'USDC' && destination === 'BRL') || (source === 'BRL' && destination === 'USDC');
+  }
+
   static getTreasuryPublicKey(): string | undefined {
     const key = String(
       process.env.TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY ||
@@ -42,6 +49,7 @@ export class PlatformFeeService {
   static calculateSpread(input: {
     sourceAmount: string | number;
     sourceAssetCode: string;
+    destinationAssetCode?: string;
     mode?: 'deduct_from_source' | 'add_on_top';
   }): PlatformSpreadFee {
     const gross = Math.max(0, toNumber(input.sourceAmount));
@@ -55,8 +63,9 @@ export class PlatformFeeService {
       : gross;
     const feeAmount = formatAssetAmount(fee);
 
+    const appliesByPair = this.isUsdcBrlTransaction(input.sourceAssetCode, input.destinationAssetCode);
     return {
-      enabled: gross > 0 && feeBps > 0 && toNumber(feeAmount) > 0 && Boolean(treasuryPublicKey),
+      enabled: gross > 0 && feeBps > 0 && toNumber(feeAmount) > 0 && Boolean(treasuryPublicKey) && appliesByPair,
       feeBps,
       feeRate,
       feeAmount,
