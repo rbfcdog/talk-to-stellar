@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const http = require('http');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer } = require('./health-server');
 const { createTelegramBot } = require('./bot');
@@ -10,6 +11,13 @@ async function main() {
   const mode = (process.env.TELEGRAM_BOT_MODE || 'polling').toLowerCase();
   const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'talktostellar_bot';
   const sessionPrefix = process.env.TELEGRAM_SESSION_PREFIX || 'telegram';
+  const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH || '/webhook/telegram';
+  const webhookPublicBase = String(
+    process.env.TELEGRAM_WEBHOOK_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    ''
+  ).trim().replace(/\/$/, '');
 
   if (!botToken) {
     throw new Error('TELEGRAM_BOT_TOKEN is required');
@@ -42,35 +50,74 @@ async function main() {
   });
 
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
-  const healthServer = createHealthServer({ port: healthPort });
-  await healthServer.start();
+  let healthServer = null;
 
   if (mode === 'webhook') {
-    throw new Error('Webhook mode is not implemented yet. Use TELEGRAM_BOT_MODE=polling.');
-  }
+    if (!webhookPublicBase) {
+      throw new Error('TELEGRAM_WEBHOOK_URL (or PUBLIC_APP_URL/RENDER_EXTERNAL_URL) is required in webhook mode');
+    }
 
-  // Some environments experience intermittent network timeouts when Telegraf
-  // calls getMe during startup. Try getMe with retries/backoff before launch
-  // to avoid failing the whole process on transient ETIMEDOUT errors.
-  async function tryGetMeWithRetry(bot, maxAttempts = 5) {
-    let attempt = 0
-    while (attempt < maxAttempts) {
-      attempt += 1
-      try {
-        await bot.telegram.getMe()
-        return
-      } catch (err) {
-        console.error(`[telegram] getMe attempt ${attempt} failed:`, err && err.message ? err.message : err)
-        if (attempt >= maxAttempts) throw err
-        const backoff = Math.min(1000 * 2 ** (attempt - 1), 10000)
-        console.log(`[telegram] retrying getMe in ${backoff}ms`)
-        await new Promise((r) => setTimeout(r, backoff))
+    const normalizedPath = webhookPath.startsWith('/') ? webhookPath : `/${webhookPath}`;
+    const webhookUrl = `${webhookPublicBase}${normalizedPath}`;
+    const port = Number(process.env.PORT || process.env.TELEGRAM_WEBHOOK_PORT || healthPort);
+    const webhookCallback = bot.webhookCallback(normalizedPath);
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, service: 'telegram-bot', mode: 'webhook' }));
+        return;
+      }
+      if (req.url === normalizedPath && req.method === 'POST') {
+        webhookCallback(req, res);
+        return;
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+    });
+
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, () => {
+        server.off('error', reject);
+        resolve(server);
+      });
+    });
+    await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
+    healthServer = { server };
+    console.log(`Telegram bot started in webhook mode as @${botUsername}`);
+    console.log(`Webhook: ${webhookUrl}`);
+    console.log(`Health check: http://localhost:${port}/health`);
+  } else {
+    healthServer = createHealthServer({ port: healthPort });
+    await healthServer.start();
+
+    // Some environments experience intermittent network timeouts when Telegraf
+    // calls getMe during startup. Try getMe with retries/backoff before launch
+    // to avoid failing the whole process on transient ETIMEDOUT errors.
+    async function tryGetMeWithRetry(bot, maxAttempts = 5) {
+      let attempt = 0
+      while (attempt < maxAttempts) {
+        attempt += 1
+        try {
+          await bot.telegram.getMe()
+          return
+        } catch (err) {
+          console.error(`[telegram] getMe attempt ${attempt} failed:`, err && err.message ? err.message : err)
+          if (attempt >= maxAttempts) throw err
+          const backoff = Math.min(1000 * 2 ** (attempt - 1), 10000)
+          console.log(`[telegram] retrying getMe in ${backoff}ms`)
+          await new Promise((r) => setTimeout(r, backoff))
+        }
       }
     }
-  }
 
-  await tryGetMeWithRetry(bot)
-  await bot.launch();
+    await tryGetMeWithRetry(bot)
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    await bot.launch();
+    console.log(`Telegram bot started in polling mode as @${botUsername}`);
+    console.log(`Health check: http://localhost:${healthPort}/health`);
+  }
 
   const signalHandler = async () => {
     await bot.stop('SIGTERM');
@@ -81,8 +128,6 @@ async function main() {
   process.once('SIGINT', signalHandler);
   process.once('SIGTERM', signalHandler);
 
-  console.log(`Telegram bot started in polling mode as @${botUsername}`);
-  console.log(`Health check: http://localhost:${healthPort}/health`);
 }
 
 main().catch(error => {
