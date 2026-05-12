@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
-import { enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -57,15 +57,6 @@ function formatTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : NaN
   if (!Number.isFinite(timestamp)) return new Date().toLocaleString("pt-BR")
   return new Date(timestamp).toLocaleString("pt-BR")
-}
-
-function closeCompletionPage() {
-  try {
-    ;(window as any).Telegram?.WebApp?.close?.()
-  } catch {}
-  try {
-    window.close()
-  } catch {}
 }
 
 function decodeJwtPayload(token: string): any {
@@ -284,8 +275,7 @@ export default function ConfirmPaymentClient({
 
   useEffect(() => {
     if (status !== "done") return
-    const timer = window.setTimeout(() => closeCompletionPage(), 5000)
-    return () => window.clearTimeout(timer)
+    closeIntermediatePage()
   }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -529,7 +519,7 @@ export default function ConfirmPaymentClient({
                     </motion.div>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
+                  <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}

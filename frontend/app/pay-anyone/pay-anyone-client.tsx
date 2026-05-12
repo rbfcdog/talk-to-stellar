@@ -6,7 +6,7 @@ import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
-import { enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
 
 type CreatePayLinkResponse = {
@@ -29,15 +29,6 @@ function friendlyName(value: string) {
   if (!raw) return "usuário"
   const base = raw.includes("@") ? raw.split("@")[0] : raw
   return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim() || "usuário"
-}
-
-function closeCompletionPage() {
-  try {
-    ;(window as any).Telegram?.WebApp?.close?.()
-  } catch {}
-  try {
-    window.close()
-  } catch {}
 }
 
 export default function PayAnyoneClient() {
@@ -102,8 +93,7 @@ export default function PayAnyoneClient() {
 
   useEffect(() => {
     if (status !== "done") return
-    const timer = window.setTimeout(() => closeCompletionPage(), 7000)
-    return () => window.clearTimeout(timer)
+    closeIntermediatePage()
   }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -371,7 +361,7 @@ export default function PayAnyoneClient() {
                   </a>
                 </div>
                 <p className="text-slate-300">{result.message}</p>
-                <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
+                <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
               </motion.div>
             )}
             </AnimatePresence>
