@@ -28,6 +28,17 @@ export type SessionWelcomeNotification = {
   providerUserId?: string | null;
 };
 
+export type OnboardingConversionNotification = {
+  sessionId?: string | null;
+  userId?: string | null;
+  name?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
+  sourceAmount?: string | null;
+  destinationAmount?: string | null;
+  keepXlm?: string | number | null;
+};
+
 export type SessionLogoutNotification = {
   sessionId?: string | null;
   userId?: string | null;
@@ -83,6 +94,40 @@ export class TransferNotificationService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[session-welcome] failed to save chat message: ${message}`);
+    }
+
+    await Promise.all([
+      this.sendTelegramToMappings(mappings, text),
+      this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
+    ]);
+  }
+
+  static async notifyOnboardingConversion(input: OnboardingConversionNotification): Promise<void> {
+    const sessionId = String(input.sessionId || '').trim();
+    if (!sessionId) return;
+
+    const session = await this.safeGetSession(sessionId);
+    const userId = String(input.userId || session?.user_id || '').trim();
+    const name = String(input.name || session?.email || '').trim();
+    const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const mappings = this.dedupeMappings([
+      ...(directMapping ? [directMapping] : []),
+      ...(await this.findExternalMappings(sessionId, userId)),
+    ]);
+
+    const sourceAmount = String(input.sourceAmount || '').trim();
+    const destinationAmount = String(input.destinationAmount || '').trim();
+    const keepXlm = String(input.keepXlm || '1.5').trim();
+    const text =
+      `Conversão automática concluída com sucesso.\n` +
+      `Foram convertidos ${sourceAmount || '0'} XLM para aproximadamente ${formatCustomerAssetAmount(destinationAmount || '0', 'USDC')}.\n` +
+      `A conta manteve cerca de ${keepXlm} XLM de reserva.`;
+
+    try {
+      await this.agentRepo.saveMessage(sessionId, 'assistant', text);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[onboarding-conversion] failed to save chat message: ${message}`);
     }
 
     await Promise.all([
