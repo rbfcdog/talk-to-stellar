@@ -44,7 +44,14 @@ function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   if (value > 0 && value < threshold) {
     return `${currency} <${threshold.toFixed(decimals)}`;
   }
-  return `${currency} ${value.toFixed(decimals)}`;
+  const factor = 10 ** decimals;
+  return `${currency} ${(Math.trunc(value * factor) / factor).toFixed(decimals)}`;
+}
+
+function formatXlmFee(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return '';
+  const decimals = value > 0 && value < 0.0000001 ? 7 : 7;
+  return `${value.toFixed(decimals).replace(/\.?0+$/, '') || '0'} XLM`;
 }
 
 export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeDisplay> {
@@ -62,8 +69,8 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
 
   if (!xlmUsdQuote.price) {
     return {
-      display: '',
-      source: 'unavailable',
+      display: formatXlmFee(fee),
+      source: 'xlm_fallback',
     };
   }
 
@@ -72,8 +79,8 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
 
   return {
     display: feeBrl
-      ? `${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')}`
-      : formatSmallCurrency(feeUsdc, 'US$'),
+      ? `${formatXlmFee(fee)} (${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')})`
+      : `${formatXlmFee(fee)} (${formatSmallCurrency(feeUsdc, 'US$')})`,
     fee_usdc: feeUsdc.toFixed(8),
     fee_brl: feeBrl ? feeBrl.toFixed(8) : undefined,
     source: usdBrlQuote.symbol
@@ -87,9 +94,10 @@ export function formatCustomerAssetAmount(amount?: string, assetCode?: string): 
   const value = Number(String(amount || '').replace(',', '.'));
 
   if (!Number.isFinite(value)) return 'valor indisponivel';
-  if (code === 'BRL') return `R$ ${value.toFixed(2)}`;
-  if (code === 'USDC') return `US$ ${value.toFixed(2)}`;
+  const truncated = Math.trunc(value * 100) / 100;
+  if (code === 'BRL') return `R$ ${truncated.toFixed(2)}`;
+  if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;
   if (code === 'XLM') return 'saldo da carteira TalkToStellar';
 
-  return `${value.toFixed(2)} ${code}`;
+  return `${truncated.toFixed(2)} ${code}`;
 }

@@ -933,8 +933,8 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
       fetched_at: quote.fetchedAt,
       message:
         `Cotação atual (${quote.source.toUpperCase()}): ` +
-        `1 USDC = R$ ${quote.brlPerUsdc} | ` +
-        `1 BRL = US$ ${quote.usdcPerBrl}.`,
+        `1 US$ = R$ ${quote.brlPerUsdc} | ` +
+        `1 R$ = US$ ${quote.usdcPerBrl}.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1554,16 +1554,17 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       input.asset_issuer ||
       input.assetIssuer
     );
-    const feeDisplay = await formatNetworkFeeForCustomer(quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
     const platformFee = quote?.platformFee || PlatformFeeService.calculateSpread({
       sourceAmount: normalizedAmount,
       sourceAssetCode: asset.code,
       mode: 'add_on_top',
     });
+    const estimatedNetworkFeeXlm = quote?.networkFeeXlm || input.estimated_fee_xlm || (platformFee?.enabled ? '0.002' : '0.001');
+    const feeDisplay = await formatNetworkFeeForCustomer(estimatedNetworkFeeXlm);
     const platformFeeDisplay = platformFee?.feeAmount
       ? formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode)
       : '';
-    const networkFeeDisplay = feeDisplay.display || 'taxa de rede estimada indisponível';
+    const networkFeeDisplay = feeDisplay.display || '0.001 XLM';
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -1633,11 +1634,11 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
 
     const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
-    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || '0.001');
     const platformFeeDisplay = input.quote?.platformFee?.feeAmount
       ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
       : '';
-    const networkFeeDisplay = feeDisplay.display || 'taxa de rede estimada indisponível';
+    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || (platformFeeDisplay ? '0.002' : '0.001'));
+    const networkFeeDisplay = feeDisplay.display || '0.001 XLM';
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1987,7 +1988,7 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
       } else if (!hasFxRisk && usdRatio > 0.75) {
         suggestions.push('Sugestão: manter maior parte em dólar e converter apenas o necessário para gastos em reais.');
       } else {
-        suggestions.push('Sugestão: manter uma alocação equilibrada entre BRL e USD conforme seu fluxo de gastos.');
+        suggestions.push('Sugestão: manter uma alocação equilibrada entre R$ e US$ conforme seu fluxo de gastos.');
       }
       suggestions.push(`Melhor momento (agora): USD/BRL em ${fxChange.latestRate ? fxChange.latestRate.toFixed(2) : 'indisponível'}.`);
 
