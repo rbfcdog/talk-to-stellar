@@ -5,6 +5,7 @@ This folder contains the first Telegram bot implementation for TalkToStellar.
 ## What is implemented
 
 - A polling bot entrypoint.
+- Webhook mode for production deployments.
 - An HTTP client that forwards user messages to the existing agent API.
 - In-memory per-chat session IDs.
 - A pre-flight account check against `/api/external/check-account` so new users receive an onboarding link.
@@ -30,6 +31,18 @@ If the sender does not yet have an account, the bot replies with a dynamic onboa
 npm start
 ```
 
+### Production recommendation
+
+Use webhook mode to avoid `409 Conflict` from concurrent `getUpdates` polling:
+
+```env
+TELEGRAM_BOT_MODE=webhook
+TELEGRAM_WEBHOOK_URL=https://your-public-domain.com
+TELEGRAM_WEBHOOK_PATH=/webhook/telegram
+```
+
+In local/dev, keep `TELEGRAM_BOT_MODE=polling`.
+
 ## Test
 
 ```bash
@@ -38,6 +51,5 @@ npm test
 
 ## Next step ideas
 
-- Add webhook mode behind an HTTPS endpoint.
 - Persist session IDs if chat continuity needs to survive restarts.
 - Add message parsing for payment-specific shortcuts and commands.
