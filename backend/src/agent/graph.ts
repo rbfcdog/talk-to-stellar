@@ -53,6 +53,19 @@ export class AgentGraph {
     return result;
   }
 
+  private sanitizeAssistantResponse(content: string): string {
+    return String(content || '')
+      .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
+      .replace(/\[([^\]\n]+)\]\(\s*\)/g, '$1')
+      .replace(/\[([^\]\n]+)\]\(\s*([^)\s]+)\s*\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
+      .trim();
+  }
+
+  private async saveAssistantResponse(state: AgentState): Promise<void> {
+    state.response_message = this.sanitizeAssistantResponse(state.response_message);
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+  }
+
   private async getContactNameByPublicKey(publicKey: string, userId?: string): Promise<string | undefined> {
     try {
       if (!userId || !publicKey) {
@@ -355,7 +368,7 @@ export class AgentGraph {
 
     state.success = Boolean(result.success);
     state.response_message = result.message || result.error || 'Não consegui carregar os comandos agora.';
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -492,7 +505,7 @@ ${onboardingUrl}`;
       }
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -523,7 +536,7 @@ ${onboardingUrl}`;
         : result.error || 'Não consegui gerar seu link para receber agora.';
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -558,7 +571,7 @@ ${onboardingUrl}`;
       state.response_message = result.error || 'Ainda não encontrei uma transação concluída para gerar o comprovante em imagem.';
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -654,7 +667,7 @@ ${onboardingUrl}`;
     if (!state.session_data?.public_key) {
       state.success = false;
       state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -679,7 +692,7 @@ ${onboardingUrl}`;
     if (llmParsed.needs_clarification || !recipientQuery || !amount || !assetCode) {
       state.success = false;
       state.response_message = llmParsed.clarification_question || 'Me diga o destinatário, valor e moeda. Exemplo: mandar para Ana Silva 3 USDC.';
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -695,7 +708,7 @@ ${onboardingUrl}`;
     if (!destination) {
       state.success = false;
       state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie a chave pública ou salve esse contato antes de transferir.`;
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -739,7 +752,7 @@ ${onboardingUrl}`;
       if (!quoteResult.success) {
         state.success = false;
         state.response_message = `Não consegui cotar esse pagamento: ${quoteResult.error || 'erro desconhecido'}`;
-        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -788,7 +801,7 @@ ${onboardingUrl}`;
         : (prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`);
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1228,7 +1241,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     if (contactIntent.needs_clarification) {
       state.success = false;
       state.response_message = contactIntent.clarification_question || 'Me diga qual contato você quer salvar ou listar.';
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -1252,7 +1265,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       state.response_message = toolResult.success
         ? this.formatAddedContactMessage(toolResult)
         : `Não consegui adicionar esse contato: ${toolResult.error || 'erro desconhecido'}`;
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -1282,7 +1295,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         : 'Você ainda não tem destinatários salvos.';
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1408,11 +1421,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
 
 Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave pública para receber valores na sua carteira.`;
         state.success = true;
-        await this.repository.saveMessage(
-          state.session_id,
-          "assistant",
-          state.response_message
-        );
+        await this.saveAssistantResponse(state);
         return state;
       }
 
@@ -1460,11 +1469,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
       Use sua chave pública para receber valores na sua carteira.`;
         state.success = true;
 
-        await this.repository.saveMessage(
-          state.session_id,
-          "assistant",
-          state.response_message
-        );
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
 
         return state;
@@ -1479,11 +1484,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
           waiting_for_wallet_input: true,
         };
         state.success = true;
-        await this.repository.saveMessage(
-          state.session_id,
-          "assistant",
-          state.response_message
-        );
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -1535,11 +1536,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         wallet_info: state.wallet_info,
       };
 
-      await this.repository.saveMessage(
-        state.session_id,
-        "assistant",
-        state.response_message
-      );
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
 
       return state;
@@ -1549,11 +1546,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.success = false;
       state.error = errorMessage;
       state.response_message = `Desculpe, houve um erro ao criar sua carteira: ${errorMessage}`;
-      await this.repository.saveMessage(
-        state.session_id,
-        "assistant",
-        state.response_message
-      );
+      await this.saveAssistantResponse(state);
       return state;
     }
   }
@@ -1645,7 +1638,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       ? `Logout concluido. Sua conta foi desconectada. Volte ao ${providerLabel} para continuar.`
       : 'Logout concluido. Você saiu da wallet atual com sucesso. Agora você pode criar ou importar outra carteira quando quiser.';
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1754,7 +1747,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       }
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1791,7 +1784,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       }
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1871,7 +1864,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     state.response_message = state.success
       ? result.message
       : `Não consegui calcular sua economia agora: ${result.error || 'erro desconhecido'}`;
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -1902,7 +1895,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     if (!memory.success) {
       state.success = false;
       state.response_message = `Não consegui consultar sua memória financeira: ${memory.error || 'erro desconhecido'}`;
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -1916,7 +1909,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       if (!destination || !amount || !assetCode) {
         state.success = false;
         state.response_message = memory.message || 'Não encontrei um pagamento anterior com dados suficientes para repetir.';
-        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -1941,7 +1934,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.response_message = state.success
         ? `Encontrei o pagamento anterior: ${this.formatMoneyByAsset(amount, assetCode)} para ${last.counterparty}. Para repetir, confirme aqui:\n\n${prepare.url}`
         : `Encontrei o pagamento anterior, mas não consegui gerar o link de confirmação: ${prepare.error || 'erro desconhecido'}`;
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -1963,7 +1956,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     } else {
       state.response_message = memory.message || 'Memória financeira consultada.';
     }
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -2001,7 +1994,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.success = true;
       state.response_message = 'Conversão pendente cancelada. Nenhum ativo foi convertido.';
       state.pending_conversion = undefined;
-      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
     }
@@ -2033,7 +2026,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       state.response_message = toolResult.message || 'Conversão concluída em poucos segundos. Recibo disponível no seu histórico.';
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -2091,14 +2084,14 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
               } else if (!trustlineResult.success) {
                 state.success = false;
                 state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode}: ${trustlineResult.error || 'erro desconhecido'}`;
-                await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+                await this.saveAssistantResponse(state);
                 await this.repository.saveState(state.session_id, state);
                 return state;
               }
             } catch {
               state.success = false;
               state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode} agora.`;
-              await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+              await this.saveAssistantResponse(state);
               await this.repository.saveState(state.session_id, state);
               return state;
             }
@@ -2166,7 +2159,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         }
       }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -2195,7 +2188,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         `Fonte: ${String(toolResult.source || 'mercado').toUpperCase()} (${toolResult.symbol || 'USDCBRL'}).`;
     }
 
-    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
   }
@@ -2245,7 +2238,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
         state.success = false;
         state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
-        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -2270,7 +2263,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
         state.response_message = this.formatOwnReceivingKeys(publicKey, pixKey);
         state.success = true;
-        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -2302,7 +2295,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       if (state.action_type === ActionType.LOGOUT_WALLET) {
         state.success = true;
         state.response_message = this.getLogoutConfirmationMessage(state);
-        await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
+        await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
@@ -2350,11 +2343,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       }
 
       // Save assistant message
-      await this.repository.saveMessage(
-        state.session_id,
-        "assistant",
-        state.response_message
-      );
+      await this.saveAssistantResponse(state);
 
       // Save state
       await this.repository.saveState(state.session_id, state);
@@ -2391,7 +2380,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       ];
 
       const response = await this.llm.invoke(messages);
-      return response.content as string;
+      return this.sanitizeAssistantResponse(response.content as string);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Fallback response generation failed: ${errorMessage}`);
