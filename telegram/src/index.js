@@ -1,10 +1,38 @@
 require('dotenv').config();
 
 const http = require('http');
-const sharp = require('sharp');
+const { Resvg } = require('@resvg/resvg-js');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
+
+const receiptFontFiles = [
+  require.resolve('@fontsource/inter/files/inter-latin-400-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-500-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-600-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-700-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-800-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-ext-400-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-ext-500-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-ext-600-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-ext-700-normal.woff2'),
+  require.resolve('@fontsource/inter/files/inter-latin-ext-800-normal.woff2'),
+];
+
+function renderReceiptPng(svgBuffer) {
+  const renderer = new Resvg(svgBuffer, {
+    fitTo: {
+      mode: 'width',
+      value: 1080,
+    },
+    font: {
+      fontFiles: receiptFontFiles,
+      defaultFontFamily: 'Inter',
+      loadSystemFonts: false,
+    },
+  });
+  return renderer.render().asPng();
+}
 
 async function main() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -56,10 +84,7 @@ async function main() {
   const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true }) => {
     if (imageSvgBase64) {
       const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
-      const pngBuffer = await sharp(svgBuffer, { density: 216 })
-        .resize({ width: 1080, withoutEnlargement: true })
-        .png({ quality: 92, compressionLevel: 9 })
-        .toBuffer();
+      const pngBuffer = renderReceiptPng(svgBuffer);
       const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
       return bot.telegram.sendPhoto(
         chatId,
