@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Copy, Link2, Send, Wallet } from "lucide-react"
+import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 
 type CreatePayLinkResponse = {
   success?: boolean
@@ -78,7 +78,7 @@ export default function PayAnyoneClient() {
       <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-6 py-10 md:grid-cols-[0.95fr_1.05fr]">
         <section className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-emerald-200">
-            <Wallet className="h-4 w-4" />
+            <ShieldCheck className="h-4 w-4" />
             Pay Anyone
           </div>
           <div className="space-y-4">
@@ -86,18 +86,18 @@ export default function PayAnyoneClient() {
               Envie dinheiro para quem ainda não tem conta
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-              O PIN autoriza a criação do link. Quem recebe entra ou cria a carteira para resgatar o valor.
+              O PIN autoriza a criação do link. Quem recebe precisa entrar ou criar a própria conta global para receber o valor.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            {["Crie", "Compartilhe", "Resgate"].map((label, index) => (
+            {["Crie", "Compartilhe", "Receba"].map((label, index) => (
               <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {index === 0 && "Digite valor, destinatário e PIN."}
                   {index === 1 && "Envie o link pelo canal que preferir."}
-                  {index === 2 && "O destinatário recebe na própria carteira."}
+                  {index === 2 && "O destinatário recebe na própria conta."}
                 </p>
               </div>
             ))}
@@ -164,7 +164,7 @@ export default function PayAnyoneClient() {
 
             {destinationAssetCode !== assetCode && (
               <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
-                O link debita {amount || "0"} {assetCode} da sua carteira e o destinatário recebe em {destinationAssetCode} no resgate.
+                O link debita {amount || "0"} {assetCode} da sua conta e o destinatário recebe em {destinationAssetCode} ao entrar.
               </p>
             )}
 

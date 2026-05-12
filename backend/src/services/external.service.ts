@@ -134,6 +134,12 @@ function compactQuote(quote?: any) {
     sourceAmount: quote.sourceAmount || undefined,
     destinationAmount: quote.destinationAmount || undefined,
     networkFeeXlm: quote.networkFeeXlm || undefined,
+    fee_display: quote.fee_display || undefined,
+    fee_usdc: quote.fee_usdc || undefined,
+    fee_brl: quote.fee_brl || undefined,
+    quote_issued_at: quote.quote_issued_at || quote.issued_at || undefined,
+    quote_expires_at: quote.quote_expires_at || quote.expires_at || undefined,
+    quote_ttl_seconds: quote.quote_ttl_seconds || quote.ttl_seconds || undefined,
     sourceAsset: quote.sourceAsset
       ? {
           code: quote.sourceAsset.code,
@@ -371,6 +377,7 @@ export class ExternalService {
       sender_name: payload.sender_name || null,
       session_id: payload.session_id,
       owner_id: payload.owner_id,
+      requires_recipient_login: true,
       nonce: payload.nonce || uuidv4(),
       ...compactExtra(extra as Record<string, any>),
     };

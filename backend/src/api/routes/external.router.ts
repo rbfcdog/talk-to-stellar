@@ -4,6 +4,7 @@ import ExternalFinalizeController from '../controllers/external-finalize.control
 import ExternalValidateController from '../controllers/external-validate.controller';
 import ExternalRecoveryController from '../controllers/external-recovery.controller';
 import PayLinkController from '../controllers/pay-link.controller';
+import { ReceiptImageController } from '../controllers/receipt-image.controller';
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.post('/pay-links', PayLinkController.create);
 router.post('/pay-links/claim', PayLinkController.claim);
 router.post('/recovery-init', ExternalRecoveryController.recoveryInit);
 router.post('/recovery-complete', ExternalRecoveryController.recoveryComplete);
+router.post('/receipts/render', ReceiptImageController.render);
 
 export default router;

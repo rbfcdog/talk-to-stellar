@@ -1,0 +1,38 @@
+import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
+
+describe('PaymentReceiptService', () => {
+  it('builds a premium receipt with quote, fee and public operation id', async () => {
+    const operationId = PaymentReceiptService.toPublicOperationId('abc123');
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      counterpartyLabel: 'João',
+      sourceAmount: '500',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '89.12',
+      destinationAssetCode: 'USDC',
+      feeDisplay: 'R$ 0.08 / US$ 0.01',
+      feeXlm: '0.0000100',
+      hash: 'abc123',
+      settlementMs: 3200,
+      completedAt: '2026-05-12T12:00:00.000Z',
+      quote: {
+        sourceAmount: '500',
+        sourceAsset: { code: 'BRL' },
+        destinationAmount: '89.12',
+        destinationAsset: { code: 'USDC' },
+      },
+    });
+
+    expect(receipt).toContain('Comprovante TalkToStellar');
+    expect(receipt).toContain('Você enviou US$ 89.12 para João.');
+    expect(receipt).toContain('Status: Confirmado');
+    expect(receipt).toContain('Cotação usada: R$ 500.00 -> US$ 89.12');
+    expect(receipt).toContain('Taxa exata: R$ 0.08 / US$ 0.01');
+    expect(receipt).toContain('Liquidação: 3.2s');
+    expect(receipt).toContain(`ID da operação: ${operationId}`);
+    expect(receipt).not.toContain('Stellar hash');
+    expect(receipt).not.toContain('blockchain');
+  });
+});

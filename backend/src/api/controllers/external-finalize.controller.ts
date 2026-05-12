@@ -9,13 +9,15 @@ import { ContactRepository } from '../../api/repository/contact.repository';
 import { VaultService } from '../../services/vault.service';
 import { StellarService } from '../services/stellar.service';
 import { TransferNotificationService } from '../services/transfer-notification.service';
+import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { ContactSeedService } from '../services/contact-seed.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
-import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
+import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -252,36 +254,38 @@ async function sendTelegramPaymentNotification(input: {
   destinationName?: string;
   destination: string;
   hash?: string;
+  quote?: any;
+  settlementMs?: number;
 }) {
   const destinationLabel = input.destinationName || input.destination;
   const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
     ? 'destinatário'
     : destinationLabel;
-  const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : '';
-  const text =
-    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${readableDestination || 'destinatário'} em 3 segundos.\n` +
-    feeLine +
-    `Recibo disponível no seu histórico.`;
 
   try {
-    await agentRepo.saveMessage(input.sessionId, 'assistant', text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`[payment-notify] failed to save payment confirmation message: ${message}`);
-  }
-
-  try {
-    await TransferNotificationService.notifyExternalChannelMessage({
+    const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_sent',
       sessionId: input.sessionId,
       userId: input.userId,
       provider: input.provider,
       providerUserId: input.providerUserId,
-      text,
+      counterpartyLabel: readableDestination || 'destinatário',
+      sourceAmount: input.sourceAmount || input.amount,
+      sourceAssetCode: input.sourceAssetCode || input.assetCode,
+      destinationAmount: input.amount,
+      destinationAssetCode: input.assetCode,
+      feeXlm: input.feeXlm,
+      feeDisplay: feeDisplay?.display || null,
+      feeBrl: feeDisplay?.fee_brl || null,
+      feeUsdc: feeDisplay?.fee_usdc || null,
+      hash: input.hash,
+      quote: input.quote,
+      settlementMs: input.settlementMs,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`[telegram-notify] failed to send payment confirmation message: ${message}`);
+    logger.warn(`[receipt] failed to send payment receipt: ${message}`);
   }
 }
 
@@ -296,32 +300,32 @@ async function sendTelegramConversionNotification(input: {
   destinationAssetCode: string;
   feeXlm?: string;
   hash?: string;
+  quote?: any;
+  settlementMs?: number;
 }) {
-  const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-  const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : '';
-  const text =
-    `${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)} convertidos para ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)} em 3 segundos.\n` +
-    feeLine +
-    `Recibo disponível no seu histórico.`;
-
   try {
-    await agentRepo.saveMessage(input.sessionId, 'assistant', text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`[conversion-notify] failed to save conversion confirmation message: ${message}`);
-  }
-
-  try {
-    await TransferNotificationService.notifyExternalChannelMessage({
+    const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+    await PaymentReceiptService.sendReceipt({
+      type: 'conversion',
       sessionId: input.sessionId,
       userId: input.userId,
       provider: input.provider,
       providerUserId: input.providerUserId,
-      text,
+      sourceAmount: input.sourceAmount,
+      sourceAssetCode: input.sourceAssetCode,
+      destinationAmount: input.destinationAmount,
+      destinationAssetCode: input.destinationAssetCode,
+      feeXlm: input.feeXlm,
+      feeDisplay: feeDisplay?.display || null,
+      feeBrl: feeDisplay?.fee_brl || null,
+      feeUsdc: feeDisplay?.fee_usdc || null,
+      hash: input.hash,
+      quote: input.quote,
+      settlementMs: input.settlementMs,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`[telegram-notify] failed to send conversion confirmation message: ${message}`);
+    logger.warn(`[receipt] failed to send conversion receipt: ${message}`);
   }
 }
 
@@ -542,6 +546,18 @@ export default class ExternalFinalizeController {
       }
 
       const tokenSub = String((payload as any)?.sub || '');
+      if (
+        ['external_payment_confirm', 'external_conversion_confirm'].includes(tokenSub) &&
+        getQuoteExpiry(payload) &&
+        isQuoteExpired(payload)
+      ) {
+        return res.status(400).json({
+          success: false,
+          expiredQuote: true,
+          message: quoteExpiryMessage(),
+        });
+      }
+
       if (tokenSub === 'external_conversion_confirm') {
         const {
           session_id,
@@ -710,6 +726,7 @@ export default class ExternalFinalizeController {
 
         const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
         const operationType = usesStrictSend ? 'PATH_PAYMENT_STRICT_SEND' : 'PATH_PAYMENT_STRICT_RECEIVE';
+        const submitStartedAt = Date.now();
         const result = await StellarService.signAndSubmitXdr(
           String(session.user_id),
           secretKey,
@@ -772,6 +789,7 @@ export default class ExternalFinalizeController {
           });
         }
 
+        const settlementMs = Date.now() - submitStartedAt;
         const submittedDetails = result.hash
           ? await StellarService.getSubmittedPaymentDetails(result.hash)
           : null;
@@ -810,6 +828,8 @@ export default class ExternalFinalizeController {
           destinationAssetCode: String(publicTransferDetails.destinationAssetCode || quote.destinationAsset.code),
           feeXlm: String(publicTransferDetails.feeXlm || ''),
           hash: result.hash,
+          quote,
+          settlementMs,
         });
 
         await logPaymentDetails(
@@ -1217,6 +1237,7 @@ export default class ExternalFinalizeController {
         // Log payment attempt with full details
         logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}, isStrictSendPayment=${isStrictSendPayment}`);
 
+        const submitStartedAt = Date.now();
         const result = await StellarService.signAndSubmitXdr(
           String(session.user_id),
           secretKey,
@@ -1303,6 +1324,7 @@ export default class ExternalFinalizeController {
           });
         }
 
+        const settlementMs = Date.now() - submitStartedAt;
         const submittedPaymentDetails = result.hash
           ? await StellarService.getSubmittedPaymentDetails(result.hash)
           : null;
@@ -1340,6 +1362,8 @@ export default class ExternalFinalizeController {
           destinationName: destination_contact?.contact_name || destination_name,
           destination: resolvedDestination,
           hash: result.hash,
+          quote,
+          settlementMs,
 
         });
 
@@ -1409,14 +1433,22 @@ export default class ExternalFinalizeController {
         });
 
         if (destinationWallet?.session_id && destinationWallet.session_id !== String(session_id)) {
-          await TransferNotificationService.notifyIncomingTransfer({
-            recipientSessionId: destinationWallet.session_id,
-            senderLabel: String((session as any).email || session.user_id || 'TalkToStellar'),
-            amount: publicTransferDetails.destinationAmount,
-            assetCode: publicTransferDetails.destinationAssetCode,
+          await PaymentReceiptService.sendReceipt({
+            type: 'payment_received',
+            sessionId: destinationWallet.session_id,
+            userId: '',
+            counterpartyLabel: String((session as any).email || session.user_id || 'TalkToStellar'),
             sourceAmount: publicTransferDetails.sourceAmount,
             sourceAssetCode: publicTransferDetails.sourceAssetCode,
+            destinationAmount: publicTransferDetails.destinationAmount,
+            destinationAssetCode: publicTransferDetails.destinationAssetCode,
+            feeXlm: publicTransferDetails.feeXlm,
+            feeDisplay: publicTransferDetails.feeDisplay,
+            feeBrl: publicTransferDetails.feeBrl,
+            feeUsdc: publicTransferDetails.feeUsdc,
             hash: result.hash,
+            quote,
+            settlementMs,
           });
         }
 

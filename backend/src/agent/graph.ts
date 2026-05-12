@@ -845,7 +845,7 @@ ${onboardingUrl}`;
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar digital wallet assistant.
 Analyze the user message and classify it into ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, conversion, price_quote, pix, or general
+login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, or general
 
 Respond ONLY with the intent name. Examples:
 - "Check my balance" → balance
@@ -856,6 +856,18 @@ Respond ONLY with the intent name. Examples:
 - "listar transações" → history
 - "show transaction history" → history
 - "see transactions list" → history
+- "manda pro João de novo" → financial_memory
+- "usa a mesma carteira de ontem" → financial_memory
+- "quanto eu já converti esse mês?" → financial_memory
+- "qual foi minha média de cotação?" → financial_memory
+- "quanto recebi esse mês?" → financial_memory
+- "quanto perdi em taxas?" → financial_memory
+- "qual cliente mais me paga?" → financial_memory
+- "quanto economizei comparado ao wise?" → financial_memory
+- "seu saldo em reais perdeu 3% esse mes frente ao dolar" → financial_memory
+- "deseja proteger parte do saldo?" → financial_memory
+- "modo ai treasury" → financial_memory
+- "melhor moeda e melhor momento para converter" → financial_memory
 - "converter dolares para reais" → conversion
 - "quero converter 3 usdc pra brl" → conversion
 - "trocar 10 usdc por brl" → conversion
@@ -897,6 +909,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         payment_link: IntentType.PAYMENT_LINK,
         balance: IntentType.BALANCE,
         history: IntentType.HISTORY,
+        financial_memory: IntentType.FINANCIAL_MEMORY,
         conversion: IntentType.CONVERSION,
         price_quote: IntentType.PRICE_QUOTE,
         pix: IntentType.PIX,
@@ -1035,8 +1048,13 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       const contacts = Array.isArray(toolResult.contacts) ? toolResult.contacts : [];
       state.success = true;
       state.response_message = contacts.length
-        ? `Seus contatos:\n${contacts.map((contact: any, index: number) => `${index + 1}. ${contact.contact_name || contact.name || 'Contato'}${contact.stellar_public_key ? ` - ${contact.stellar_public_key}` : ''}`).join('\n')}`
-        : 'Você ainda não tem contatos salvos.';
+        ? `Seus destinatários:\n${contacts.map((contact: any, index: number) => {
+            const label = String(contact.display_label || contact.contact_name || contact.name || 'Contato').trim();
+            const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
+            const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
+            return `${index + 1}. ${label}${last}${freq}`;
+          }).join('\n')}`
+        : 'Você ainda não tem destinatários salvos.';
     }
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
@@ -1553,6 +1571,117 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
+  private financialMemoryMode(message: string): 'repeat_payment' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'wise_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    if (/\b(de novo|novamente|again|mesma carteira|mesmo pagamento)\b/.test(normalized)) return 'repeat_payment';
+    if (/\b(favoritos?|recorrente|recorrencia|recorrência|destinatarios|destinatários|clientes)\b/.test(normalized)) return 'recipient_insights';
+    if (normalized.includes('quanto recebi') || normalized.includes('recebi esse mes') || normalized.includes('recebimentos do mes')) return 'monthly_received';
+    if (normalized.includes('taxa') || normalized.includes('taxas')) return 'monthly_fees';
+    if (normalized.includes('mais me paga') || normalized.includes('top cliente') || normalized.includes('top pagador')) return 'top_payer';
+    if (normalized.includes('wise') || normalized.includes('economizei')) return 'wise_savings';
+    if (normalized.includes('perdeu') && normalized.includes('dolar')) return 'risk_alert';
+    if (normalized.includes('proteger parte do saldo') || normalized.includes('proteger saldo')) return 'risk_alert';
+    if (normalized.includes('ai treasury') || normalized.includes('melhor moeda') || normalized.includes('melhor momento') || normalized.includes('manter brl ou usd') || normalized.includes('otimizar convers') || normalized.includes('previsao de gasto') || normalized.includes('previsão de gasto')) return 'treasury_advice';
+    if (normalized.includes('media') && (normalized.includes('cotacao') || normalized.includes('cambio'))) return 'average_quote';
+    if (normalized.includes('mes') || normalized.includes('este mes') || normalized.includes('mês')) return 'monthly_conversion';
+    return 'summary';
+  }
+
+  private extractRepeatCounterparty(message: string): string {
+    const normalized = String(message || '').trim();
+    const match = normalized.match(/\b(?:pro|pra|para|ao|a)\s+(.+?)\s+(?:de novo|novamente|again)\b/i);
+    return match?.[1]?.trim() || '';
+  }
+
+  private async handleFinancialMemoryRequest(state: AgentState): Promise<AgentState> {
+    const mode = this.financialMemoryMode(state.current_input);
+    const contactName = mode === 'repeat_payment' ? this.extractRepeatCounterparty(state.current_input) : '';
+    const memoryRaw = await executeTool('get_financial_memory', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      mode,
+      contact_name: contactName,
+    });
+
+    let memory: any;
+    try {
+      memory = JSON.parse(memoryRaw);
+    } catch {
+      memory = { success: false, error: 'Failed to parse financial memory response' };
+    }
+
+    if (!memory.success) {
+      state.success = false;
+      state.response_message = `Não consegui consultar sua memória financeira: ${memory.error || 'erro desconhecido'}`;
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    if (mode === 'repeat_payment') {
+      const last = memory.last_payment;
+      const destination = String(last?.destinationPublicKey || '').trim();
+      const amount = String(last?.destinationAmount || '').trim();
+      const assetCode = String(last?.destinationAssetCode || '').trim().toUpperCase();
+
+      if (!destination || !amount || !assetCode) {
+        state.success = false;
+        state.response_message = memory.message || 'Não encontrei um pagamento anterior com dados suficientes para repetir.';
+        await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      const prepareRaw = await executeTool('prepare_payment_confirmation', {
+        session_id: state.session_id,
+        owner_id: state.session_data?.user_id,
+        amount,
+        asset_code: assetCode,
+        destination,
+        destination_name: last.counterparty,
+      });
+
+      let prepare: any;
+      try {
+        prepare = JSON.parse(prepareRaw);
+      } catch {
+        prepare = { success: false, error: 'Failed to parse payment confirmation response' };
+      }
+
+      state.success = Boolean(prepare.success && prepare.url);
+      state.response_message = state.success
+        ? `Encontrei o pagamento anterior: ${this.formatMoneyByAsset(amount, assetCode)} para ${last.counterparty}. Para repetir, confirme aqui:\n\n${prepare.url}`
+        : `Encontrei o pagamento anterior, mas não consegui gerar o link de confirmação: ${prepare.error || 'erro desconhecido'}`;
+      await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    state.success = true;
+    if (mode === 'recipient_insights' && Array.isArray(memory.recipients) && memory.recipients.length > 0) {
+      const lines = memory.recipients.slice(0, 8).map((recipient: any, index: number) => {
+        const label = String(recipient.label || 'Destinatário').trim();
+        const tags = [
+          recipient.favorite ? 'favorito' : null,
+          recipient.recurring ? 'recorrente' : null,
+        ].filter(Boolean).join(', ');
+        const last = recipient.lastAmount && recipient.lastAsset
+          ? this.formatMoneyByAsset(String(recipient.lastAmount), String(recipient.lastAsset))
+          : 'sem histórico de valor';
+        return `${index + 1}. ${tags ? `${label} (${tags})` : label} - último envio: ${last}`;
+      });
+      state.response_message = `Destinatários inteligentes:\n${lines.join('\n')}\n\nVocê pode dizer: "manda pro João o mesmo valor da última vez".`;
+    } else {
+      state.response_message = memory.message || 'Memória financeira consultada.';
+    }
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private isConfirmationMessage(text: string): boolean {
     const normalized = text
       .normalize('NFD')
@@ -1853,6 +1982,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         return await this.handlePriceQuoteRequest(state);
       }
 
+      if (state.action_type === ActionType.GET_FINANCIAL_MEMORY) {
+        return await this.handleFinancialMemoryRequest(state);
+      }
+
       if (state.action_type === ActionType.LOGOUT_WALLET) {
         state.success = true;
         state.response_message = this.getLogoutConfirmationMessage(state);
@@ -1967,6 +2100,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       [IntentType.PAYMENT_LINK]: ActionType.CREATE_PAYMENT_LINK,
       [IntentType.BALANCE]: ActionType.GET_BALANCE,
       [IntentType.HISTORY]: ActionType.GET_HISTORY,
+      [IntentType.FINANCIAL_MEMORY]: ActionType.GET_FINANCIAL_MEMORY,
       [IntentType.CONVERSION]: ActionType.CONVERT_ASSETS,
       [IntentType.PRICE_QUOTE]: ActionType.GET_PRICE_QUOTE,
       [IntentType.PIX]: ActionType.INITIATE_PIX,

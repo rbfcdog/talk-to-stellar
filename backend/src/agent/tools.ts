@@ -20,6 +20,14 @@ import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
 import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
+import { attachQuoteExpiry, quoteTtlSeconds } from "../api/services/quote-expiry.service";
+import { ActivityFeedService } from "../api/services/activity-feed.service";
+import { FinancialInsightsService } from "../api/services/financial-insights.service";
+import { SmartContactsService } from "../api/services/smart-contacts.service";
+import { PaymentReplayService } from "../api/services/payment-replay.service";
+import { EconomyEngineService } from "../api/services/economy-engine.service";
+import { InvoiceService } from "../api/services/invoice.service";
+import { GlobalProfileService } from "../api/services/global-profile.service";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -513,6 +521,129 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_financial_memory",
+    description: "Retrieve contextual financial memory and conversational analytics from payment logs: repeat-payment candidates, recipient insights (favorites/recurrence), monthly received totals, fee totals, top payer, average quote rates, and estimated savings vs Wise.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID.",
+        },
+        user_id: {
+          type: "string",
+          description: "Current user ID.",
+        },
+        mode: {
+          type: "string",
+          description: "recent_payments, repeat_payment, monthly_conversion, average_quote, monthly_received, monthly_fees, top_payer, wise_savings, recipient_insights, risk_alert, treasury_advice, or summary.",
+        },
+        contact_name: {
+          type: "string",
+          description: "Optional counterparty/contact name to match for repeat payments.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_activity_feed",
+    description: "Lista o feed inteligente de atividade financeira (pagamentos, conversões, cobranças, economia em taxas, lembretes).",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        limit: { type: "number", description: "Quantidade máxima de itens no feed." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_financial_insights",
+    description: "Gera e retorna insights financeiros automáticos: economia estimada, média de cotação, volume convertido e destaques do mês.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        limit: { type: "number", description: "Quantidade máxima de insights retornados." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "resolve_smart_contact",
+    description: "Resolve um contato financeiro usando contexto conversacional (nome amigável, apelido, função ou tags).",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        query: { type: "string", description: "Texto do usuário para localizar contato." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "find_payment_replay_candidate",
+    description: "Encontra um pagamento anterior e gera confirmação segura para repetir com um toque.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        query_context: { type: "string", description: "Mensagem original para contexto do replay." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_savings_estimate",
+    description: "Mostra economia estimada do mês comparada a métodos tradicionais (média de mercado).",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "create_invoice",
+    description: "Cria cobrança/invoice simples com link de pagamento compartilhável.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        recipient_name: { type: "string", description: "Nome do cliente/destinatário." },
+        title: { type: "string", description: "Título da cobrança." },
+        description: { type: "string", description: "Descrição da cobrança." },
+        amount: { type: "string", description: "Valor da cobrança." },
+        currency: { type: "string", description: "Moeda da cobrança (USD/BRL)." },
+        due_date: { type: "string", description: "Vencimento em ISO date." },
+      },
+      required: ["recipient_name", "amount"],
+    },
+  },
+  {
+    name: "get_or_create_global_profile",
+    description: "Cria ou retorna o link global público do usuário para receber pagamentos.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        username: { type: "string", description: "Sugestão de username." },
+        display_name: { type: "string", description: "Nome público." },
+        bio: { type: "string", description: "Bio curta do perfil." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "add_contact",
     description: "Add a new contact with their Stellar public key or TalkToStellar transfer key",
     parameters: {
@@ -677,6 +808,22 @@ export async function executeTool(
         return await executeSubmitTransaction(toolInput);
       case "get_transaction_history":
         return await executeGetHistory(toolInput);
+      case "get_financial_memory":
+        return await executeGetFinancialMemory(toolInput);
+      case "get_activity_feed":
+        return await executeGetActivityFeed(toolInput);
+      case "get_financial_insights":
+        return await executeGetFinancialInsights(toolInput);
+      case "resolve_smart_contact":
+        return await executeResolveSmartContact(toolInput);
+      case "find_payment_replay_candidate":
+        return await executeFindPaymentReplayCandidate(toolInput);
+      case "get_savings_estimate":
+        return await executeGetSavingsEstimate(toolInput);
+      case "create_invoice":
+        return await executeCreateInvoice(toolInput);
+      case "get_or_create_global_profile":
+        return await executeGetOrCreateGlobalProfile(toolInput);
       case "add_contact":
         return await executeAddContact(toolInput);
       case "list_contacts":
@@ -714,6 +861,25 @@ export async function executeTool(
 async function executeGetBrlUsdcQuote(): Promise<string> {
   try {
     const quote = await fetchBrlUsdcQuote();
+    const observedAt = quote.fetchedAt || new Date().toISOString();
+
+    try {
+      await supabase
+        .from('currency_rate_history')
+        .insert({
+          base_currency: 'USD',
+          quote_currency: 'BRL',
+          rate: Number(quote.brlPerUsdc),
+          source: quote.source,
+          observed_at: observedAt,
+          metadata: {
+            symbol: quote.symbol,
+            usdc_per_brl: quote.usdcPerBrl,
+          },
+        });
+    } catch (persistError) {
+      logger.warn(`[fx-rate] could not persist USD/BRL quote: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+    }
 
     return JSON.stringify({
       success: true,
@@ -1035,24 +1201,27 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           sourceAsset: normalizeAssetInput(input.source_asset_code || input.sourceAssetCode, input.source_asset_issuer || input.sourceAssetIssuer),
         });
     const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
-    const sourceLabel = formatCustomerAssetAmount(quote.sourceAmount, quote.sourceAsset.code);
-    const destinationLabel = formatCustomerAssetAmount(quote.destinationAmount, quote.destinationAsset.code);
+    const expiringQuote = attachQuoteExpiry({
+      ...quote,
+      fee_display: feeDisplay.display,
+      fee_usdc: feeDisplay.fee_usdc,
+      fee_brl: feeDisplay.fee_brl,
+    });
+    const sourceLabel = formatCustomerAssetAmount(expiringQuote.sourceAmount, expiringQuote.sourceAsset.code);
+    const destinationLabel = formatCustomerAssetAmount(expiringQuote.destinationAmount, expiringQuote.destinationAsset.code);
 
     return JSON.stringify({
       success: true,
-      quote: {
-        ...quote,
-        fee_display: feeDisplay.display,
-        fee_usdc: feeDisplay.fee_usdc,
-        fee_brl: feeDisplay.fee_brl,
-      },
+      quote: expiringQuote,
+      quote_expires_at: expiringQuote.quote_expires_at,
+      quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
         (sourceAmount
           ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
           : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Rota usada: ${formatQuotePath(quote.path)}. ` +
         `Taxa estimada: ${feeDisplay.display}. ` +
-        `Fonte: cotação em tempo real.`,
+        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1334,6 +1503,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       input.assetIssuer
     );
     const feeDisplay = await formatNetworkFeeForCustomer(quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
+    const quoteValidityLine = quote?.quote_expires_at
+      ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
+      : '';
 
     const { url } = await externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
@@ -1349,6 +1521,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
       quote: quote || null,
+      quote_issued_at: quote?.quote_issued_at || null,
+      quote_expires_at: quote?.quote_expires_at || null,
+      quote_ttl_seconds: quote?.quote_ttl_seconds || quoteTtlSeconds(),
       source_amount: input.source_amount || input.sourceAmount || quote?.sourceAmount || null,
       source_asset_code: input.source_asset_code || input.sourceAssetCode || quote?.sourceAsset?.code || null,
       source_asset_issuer: input.source_asset_issuer || input.sourceAssetIssuer || quote?.sourceAsset?.issuer || null,
@@ -1364,6 +1539,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: feeDisplay.display,
       message:
         `Antes de confirmar: taxa estimada ${feeDisplay.display}. ` +
+        quoteValidityLine +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
   } catch (error) {
@@ -1407,13 +1583,18 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
+      quote_issued_at: input.quote?.quote_issued_at || null,
+      quote_expires_at: input.quote?.quote_expires_at || null,
+      quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
     });
 
     return JSON.stringify({
       success: true,
       url,
       estimated_fee_display: feeDisplay.display,
-      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}. Para confirmar a conversão, abra:\n\n${url}`,
+      quote_expires_at: input.quote?.quote_expires_at || null,
+      quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
+      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1493,6 +1674,792 @@ async function executeGetHistory(input: any): Promise<string> {
       error: errorMessage,
     });
   }
+}
+
+async function executeGetFinancialMemory(input: any): Promise<string> {
+  try {
+    const userId = await resolveToolUserId(input);
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const mode = String(input.mode || 'summary').trim().toLowerCase();
+    const contactName = String(input.contact_name || input.contactName || '').trim();
+    let ownPublicKey = '';
+    try {
+      ownPublicKey = await resolveToolPublicKey(input);
+    } catch {
+      ownPublicKey = '';
+    }
+
+    let query = supabase
+      .from('payment_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('completed_at', { ascending: false })
+      .limit(100);
+
+    if (sessionId) {
+      query = query.eq('session_id', sessionId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(error.message || 'Falha ao carregar memória financeira');
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    const successful = rows.filter((row: any) => isSuccessfulPaymentRow(row));
+    const normalizedContact = normalizeMemoryText(contactName);
+    const recentPayments = successful
+      .filter((row: any) => !isConversionOperation(row))
+      .map((row: any) => summarizePaymentLog(row));
+    const matchingPayments = normalizedContact
+      ? recentPayments.filter((payment) => normalizeMemoryText(`${payment.counterparty} ${payment.destinationPublicKey}`).includes(normalizedContact))
+      : recentPayments;
+    const lastPayment = matchingPayments[0] || recentPayments[0] || null;
+
+    const { start: monthStart, end: monthEnd } = monthDateRange();
+    const monthlyConversions = successful.filter((row: any) => {
+      const operation = String(row.operation_type || '').toUpperCase();
+      const completedAt = Date.parse(String(row.completed_at || row.created_at || ''));
+      return operation.includes('CONVERSION') && Number.isFinite(completedAt) && completedAt >= monthStart.getTime();
+    });
+    const conversionSummary = summarizeConversions(monthlyConversions);
+    const recipientInsights = summarizeRecipientInsights(successful, ownPublicKey);
+
+    const monthlyRows = successful.filter((row: any) => {
+      const ms = paymentCompletedAtMs(row);
+      return ms >= monthStart.getTime() && ms < monthEnd.getTime();
+    });
+
+    const monthlyReceivedRows = monthlyRows.filter((row: any) => inferDirection(row, ownPublicKey) === 'received');
+    const monthlyReceivedTotal = monthlyReceivedRows.reduce((sum, row) => sum + toNumber(row.destination_amount || row.source_amount), 0);
+    const monthlyReceivedAsset = String(monthlyReceivedRows[0]?.destination_asset_code || monthlyReceivedRows[0]?.source_asset_code || 'USDC').toUpperCase();
+    const monthlyReceivedLabel = formatCustomerAssetAmount(String(monthlyReceivedTotal.toFixed(2)), monthlyReceivedAsset);
+
+    const monthlyFeeXlm = monthlyRows.reduce((sum, row) => sum + toNumber(row.fee_xlm), 0);
+    const monthlyFeeDisplay = (await formatNetworkFeeForCustomer(monthlyFeeXlm.toFixed(7))).display || null;
+
+    const topPayerMap = new Map<string, { label: string; count: number; total: number; asset: string }>();
+    for (const row of monthlyReceivedRows) {
+      const label = inferCounterpartyLabel(row, 'received');
+      const key = normalizeMemoryText(label) || String(row?.source_public_key || '');
+      const current = topPayerMap.get(key) || {
+        label,
+        count: 0,
+        total: 0,
+        asset: String(row?.destination_asset_code || row?.source_asset_code || 'USDC').toUpperCase(),
+      };
+      current.count += 1;
+      current.total += toNumber(row.destination_amount || row.source_amount);
+      topPayerMap.set(key, current);
+    }
+    const topPayer = Array.from(topPayerMap.values()).sort((a, b) => b.total - a.total)[0];
+    const topPayerPayload = topPayer
+      ? {
+          ...topPayer,
+          totalLabel: formatCustomerAssetAmount(String(topPayer.total.toFixed(2)), topPayer.asset || 'USDC'),
+        }
+      : null;
+
+    let userFeeEstimate = 0;
+    let wiseFeeEstimate = 0;
+    for (const row of successful) {
+      if (isConversionOperation(row)) continue;
+      const direction = inferDirection(row, ownPublicKey);
+      if (direction !== 'sent') continue;
+      const amount = toNumber(row.source_amount || row.destination_amount);
+      const sourceAsset = String(row.source_asset_code || row.destination_asset_code || 'USDC').toUpperCase();
+      userFeeEstimate += toNumber(row.fee_usdc || row.fee_brl || row.fee_xlm);
+      wiseFeeEstimate += estimateWiseFee(amount, sourceAsset);
+    }
+    const estimatedSavings = wiseFeeEstimate - userFeeEstimate;
+    const savingsCurrency = String(process.env.WISE_COMPARE_CURRENCY || 'USDC').toUpperCase();
+    const savingsDisplay = formatCustomerAssetAmount(String(estimatedSavings.toFixed(2)), savingsCurrency);
+    const walletFiat = await getWalletFiatBalances(sessionId);
+    const fxChange = await getUsdBrlMonthlyChange();
+    const behavior = classifyTreasuryBehavior(successful, ownPublicKey);
+    const brlInUsd = fxChange.latestRate && walletFiat.brl > 0 ? walletFiat.brl / fxChange.latestRate : 0;
+    const totalUsdEquivalent = walletFiat.usd + brlInUsd;
+    const usdRatio = totalUsdEquivalent > 0 ? walletFiat.usd / totalUsdEquivalent : 0;
+    const riskThresholdPct = Number(process.env.TREASURY_RISK_THRESHOLD_PCT || 2.5);
+    const hasFxRisk = Number.isFinite(fxChange.changePct as any) && (fxChange.changePct as number) >= riskThresholdPct && walletFiat.brl > 0;
+
+    if (sessionId && userId) {
+      await supabase
+        .from('treasury_profiles')
+        .upsert({
+          session_id: sessionId,
+          user_id: userId,
+          target_usd_ratio: Number((behavior.receivesMostlyUsd && behavior.spendsMostlyBrl ? 0.65 : 0.5).toFixed(2)),
+          risk_threshold_pct: riskThresholdPct,
+          metadata: {
+            latest_usd_brl: fxChange.latestRate,
+            month_change_pct: fxChange.changePct,
+            usd_ratio: usdRatio,
+            receives_usd_count: behavior.receivesUsdCount,
+            spends_brl_count: behavior.spendsBrlCount,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'session_id' });
+    }
+
+    if (mode === 'monthly_received') {
+      return JSON.stringify({
+        success: true,
+        mode,
+        count: monthlyReceivedRows.length,
+        received_total: monthlyReceivedTotal,
+        received_asset: monthlyReceivedAsset,
+        received_label: monthlyReceivedLabel,
+        message: `Neste mês você recebeu ${monthlyReceivedLabel} em ${monthlyReceivedRows.length} operação(ões).`,
+      });
+    }
+
+    if (mode === 'monthly_fees') {
+      return JSON.stringify({
+        success: true,
+        mode,
+        total_fee_xlm: monthlyFeeXlm,
+        total_fee_display: monthlyFeeDisplay,
+        message: `Neste mês você pagou ${monthlyFeeXlm.toFixed(7)} XLM em taxas${monthlyFeeDisplay ? ` (${monthlyFeeDisplay})` : ''}.`,
+      });
+    }
+
+    if (mode === 'top_payer') {
+      return JSON.stringify({
+        success: true,
+        mode,
+        top_payer: topPayerPayload,
+        message: topPayerPayload
+          ? `${topPayerPayload.label} é quem mais te paga: ${topPayerPayload.count} recebimento(s), total ${topPayerPayload.totalLabel}.`
+          : 'Ainda não encontrei recebimentos suficientes para identificar quem mais te paga.',
+      });
+    }
+
+    if (mode === 'wise_savings') {
+      return JSON.stringify({
+        success: true,
+        mode,
+        user_fee_estimate: userFeeEstimate,
+        wise_fee_estimate: wiseFeeEstimate,
+        estimated_savings: estimatedSavings,
+        savings_display: savingsDisplay,
+        message: `Estimativa de economia comparado ao Wise: ${savingsDisplay} no período.`,
+      });
+    }
+
+    if (mode === 'recipient_insights') {
+      const recipients = recipientInsights.slice(0, 12);
+      return JSON.stringify({
+        success: true,
+        mode,
+        recipients,
+        message: recipients.length
+          ? `Sugestões contextuais prontas para uso: ${recipients.slice(0, 3).map((item) => item.label).join(', ')}.`
+          : 'Ainda não há histórico suficiente para sugerir favoritos e recorrências.',
+      });
+    }
+
+    if (mode === 'risk_alert') {
+      const message = hasFxRisk
+        ? `Seu saldo em reais perdeu ${Number(fxChange.changePct || 0).toFixed(1)}% frente ao dólar neste mês. Deseja proteger parte do saldo?`
+        : `Risco cambial controlado no momento. Variação do dólar no mês: ${fxChange.changePct ? Number(fxChange.changePct).toFixed(1) : '0.0'}%.`;
+
+      if (sessionId && userId) {
+        await supabase.from('treasury_recommendations').insert({
+          session_id: sessionId,
+          user_id: userId,
+          recommendation_type: 'risk_alert',
+          risk_score: hasFxRisk ? Math.min(100, Math.max(0, Number(fxChange.changePct || 0) * 10)) : 20,
+          suggested_action: hasFxRisk ? 'protect_partial_balance' : 'hold',
+          payload: {
+            change_pct: fxChange.changePct,
+            latest_rate: fxChange.latestRate,
+            brl_balance: walletFiat.brl,
+            usd_balance: walletFiat.usd,
+            usd_ratio: usdRatio,
+          },
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        mode,
+        fx_change_pct: fxChange.changePct,
+        latest_rate: fxChange.latestRate,
+        brl_balance: walletFiat.brl,
+        usd_balance: walletFiat.usd,
+        usd_ratio: usdRatio,
+        message,
+      });
+    }
+
+    if (mode === 'treasury_advice') {
+      const suggestions: string[] = [];
+      if (behavior.receivesMostlyUsd && behavior.spendsMostlyBrl) {
+        suggestions.push('Você costuma receber em dólar e gastar em reais. Posso otimizar conversões automaticamente.');
+      }
+      if (hasFxRisk && usdRatio < 0.55) {
+        suggestions.push('Sugestão: proteger 20% a 35% do saldo em reais em dólar para reduzir volatilidade.');
+      } else if (!hasFxRisk && usdRatio > 0.75) {
+        suggestions.push('Sugestão: manter maior parte em dólar e converter apenas o necessário para gastos em reais.');
+      } else {
+        suggestions.push('Sugestão: manter uma alocação equilibrada entre BRL e USD conforme seu fluxo de gastos.');
+      }
+      suggestions.push(`Melhor momento (agora): USD/BRL em ${fxChange.latestRate ? fxChange.latestRate.toFixed(2) : 'indisponível'}.`);
+
+      if (sessionId && userId) {
+        await supabase.from('treasury_recommendations').insert({
+          session_id: sessionId,
+          user_id: userId,
+          recommendation_type: 'treasury_advice',
+          risk_score: hasFxRisk ? 70 : 35,
+          suggested_action: hasFxRisk ? 'convert_brl_to_usd_partial' : 'hold_or_gradual_convert',
+          payload: {
+            change_pct: fxChange.changePct,
+            latest_rate: fxChange.latestRate,
+            brl_balance: walletFiat.brl,
+            usd_balance: walletFiat.usd,
+            usd_ratio: usdRatio,
+            behavior,
+            suggestions,
+          },
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        mode,
+        behavior,
+        fx_change_pct: fxChange.changePct,
+        latest_rate: fxChange.latestRate,
+        brl_balance: walletFiat.brl,
+        usd_balance: walletFiat.usd,
+        usd_ratio: usdRatio,
+        suggestions,
+        message: suggestions.join(' '),
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      mode,
+      user_id: userId,
+      recent_payments: recentPayments.slice(0, 10),
+      last_payment: lastPayment,
+      monthly_conversion: conversionSummary,
+      recipient_insights: recipientInsights.slice(0, 12),
+      monthly_received: {
+        count: monthlyReceivedRows.length,
+        total: monthlyReceivedTotal,
+        asset: monthlyReceivedAsset,
+        label: monthlyReceivedLabel,
+      },
+      monthly_fees: {
+        total_fee_xlm: monthlyFeeXlm,
+        total_fee_display: monthlyFeeDisplay,
+      },
+      top_payer: topPayerPayload,
+      wise_savings: {
+        user_fee_estimate: userFeeEstimate,
+        wise_fee_estimate: wiseFeeEstimate,
+        estimated_savings: estimatedSavings,
+        savings_display: savingsDisplay,
+      },
+      treasury: {
+        fx_change_pct: fxChange.changePct,
+        latest_usd_brl: fxChange.latestRate,
+        brl_balance: walletFiat.brl,
+        usd_balance: walletFiat.usd,
+        usd_ratio: usdRatio,
+        has_fx_risk: hasFxRisk,
+      },
+      message: buildFinancialMemoryMessage(mode, lastPayment, conversionSummary, recentPayments),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executeGetActivityFeed(input: any): Promise<string> {
+  try {
+    const feed = await ActivityFeedService.listFeed({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      limit: input.limit,
+    });
+
+    return JSON.stringify({
+      success: true,
+      feed,
+      count: feed.length,
+      message: feed.length
+        ? `Feed atualizado com ${feed.length} evento(s) financeiro(s).`
+        : 'Ainda não há atividades financeiras para mostrar.',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeGetFinancialInsights(input: any): Promise<string> {
+  try {
+    const insights = await FinancialInsightsService.listLatestInsights({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      limit: input.limit,
+    });
+
+    return JSON.stringify({
+      success: true,
+      insights,
+      count: insights.length,
+      message: insights[0]?.description || 'Insights financeiros atualizados.',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeResolveSmartContact(input: any): Promise<string> {
+  try {
+    const query = String(input.query || input.contact_name || input.contactName || '').trim();
+    const contact = await SmartContactsService.resolveByContext({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      query,
+    });
+
+    return JSON.stringify({
+      success: true,
+      contact,
+      found: Boolean(contact),
+      message: contact
+        ? `Contato encontrado: ${contact.display_name || contact.contact_name}.`
+        : 'Não encontrei um contato salvo com esse contexto.',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeFindPaymentReplayCandidate(input: any): Promise<string> {
+  try {
+    const replay = await PaymentReplayService.findReplayCandidate({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      queryContext: input.query_context || input.queryContext || input.message || '',
+    });
+
+    return JSON.stringify({
+      success: true,
+      replay,
+      ...replay,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeGetSavingsEstimate(input: any): Promise<string> {
+  try {
+    const result = await EconomyEngineService.calculateMonthly({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+    });
+
+    return JSON.stringify({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeCreateInvoice(input: any): Promise<string> {
+  try {
+    const invoice = await InvoiceService.create({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      recipientName: String(input.recipient_name || input.recipientName || input.recipient || '').trim(),
+      title: input.title,
+      description: input.description,
+      amount: String(input.amount || '').trim(),
+      currency: input.currency,
+      dueDate: input.due_date || input.dueDate,
+    });
+
+    return JSON.stringify({
+      success: true,
+      invoice,
+      message: invoice.summary || 'Cobrança criada com link pronto para envio.',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeGetOrCreateGlobalProfile(input: any): Promise<string> {
+  try {
+    const profile = await GlobalProfileService.getOrCreate({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      usernameHint: input.username,
+      displayName: input.display_name || input.displayName,
+      bio: input.bio,
+    });
+
+    return JSON.stringify({
+      success: true,
+      profile,
+      message: `Seu link global para receber: ${profile.public_link}`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+function normalizeMemoryText(value: string): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s@.+-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function summarizePaymentLog(row: any) {
+  const metadata = row?.metadata || {};
+  const counterparty = String(
+    metadata.destination_name ||
+    metadata.recipient_name ||
+    row.destination_name ||
+    row.destination_public_key ||
+    'destinatário'
+  ).trim();
+
+  return {
+    id: row.id,
+    counterparty,
+    destinationPublicKey: row.destination_public_key,
+    sourceAmount: row.source_amount,
+    sourceAssetCode: row.source_asset_code,
+    destinationAmount: row.destination_amount,
+    destinationAssetCode: row.destination_asset_code,
+    feeXlm: row.fee_xlm,
+    hash: row.payment_hash,
+    operationType: row.operation_type,
+    completedAt: row.completed_at || row.created_at,
+  };
+}
+
+function toNumber(value: any): number {
+  const parsed = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function monthDateRange(): { start: Date; end: Date } {
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return { start, end };
+}
+
+function isSuccessfulPaymentRow(row: any): boolean {
+  return String(row?.status || '').toLowerCase() === 'success';
+}
+
+function isConversionOperation(row: any): boolean {
+  return String(row?.operation_type || '').toUpperCase().includes('CONVERSION');
+}
+
+function paymentCompletedAtMs(row: any): number {
+  const raw = String(row?.completed_at || row?.created_at || '');
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function inferDirection(row: any, ownPublicKey?: string): 'sent' | 'received' | 'unknown' {
+  const ownKey = String(ownPublicKey || '').trim();
+  const src = String(row?.source_public_key || '').trim();
+  const dst = String(row?.destination_public_key || '').trim();
+  if (ownKey) {
+    if (src && src === ownKey) return 'sent';
+    if (dst && dst === ownKey) return 'received';
+  }
+  const op = String(row?.operation_type || '').toUpperCase();
+  if (op.includes('RECEIVE')) return 'received';
+  if (op.includes('PAYMENT') || op.includes('PATH_PAYMENT')) return 'sent';
+  return 'unknown';
+}
+
+function inferCounterpartyLabel(row: any, direction: 'sent' | 'received' | 'unknown'): string {
+  const metadata = row?.metadata || {};
+  const byMetadata = direction === 'received'
+    ? String(metadata.sender_name || metadata.source_name || '').trim()
+    : String(metadata.destination_name || metadata.recipient_name || '').trim();
+  if (byMetadata) return byMetadata;
+  const byRow = String(row?.destination_name || '').trim();
+  if (byRow) return byRow;
+  const fallback = direction === 'received'
+    ? String(row?.source_public_key || '').trim()
+    : String(row?.destination_public_key || '').trim();
+  return fallback || 'contato';
+}
+
+function estimateWiseFee(sendAmount: number, sourceAssetCode: string): number {
+  const flat = Number(process.env.WISE_COMPARE_FLAT_FEE || 2.25);
+  const pct = Number(process.env.WISE_COMPARE_PERCENT_FEE || 0.015);
+  const minFlat = Number.isFinite(flat) ? Math.max(0, flat) : 2.25;
+  const percentage = Number.isFinite(pct) ? Math.max(0, pct) : 0.015;
+  const currency = String(sourceAssetCode || '').toUpperCase();
+  if (!Number.isFinite(sendAmount) || sendAmount <= 0) return 0;
+  if (currency === 'USDC' || currency === 'USD') return sendAmount * percentage + 0.75;
+  if (currency === 'BRL') return sendAmount * percentage + minFlat;
+  return sendAmount * percentage;
+}
+
+function summarizeRecipientInsights(rows: any[], ownPublicKey?: string) {
+  const stats = new Map<string, {
+    key: string;
+    label: string;
+    txCount: number;
+    totalSent: number;
+    lastAt: number;
+    lastAmount: number;
+    lastAsset: string;
+    intervals: number[];
+    previousAt?: number;
+  }>();
+
+  for (const row of rows) {
+    if (!isSuccessfulPaymentRow(row) || isConversionOperation(row)) continue;
+    const direction = inferDirection(row, ownPublicKey);
+    if (direction !== 'sent') continue;
+    const counterpartyKey = String(row?.destination_public_key || '').trim();
+    if (!counterpartyKey) continue;
+    const label = inferCounterpartyLabel(row, direction);
+    const completedAt = paymentCompletedAtMs(row);
+    const amount = toNumber(row?.destination_amount || row?.source_amount);
+    const asset = String(row?.destination_asset_code || row?.source_asset_code || '').toUpperCase() || 'USDC';
+
+    const current = stats.get(counterpartyKey) || {
+      key: counterpartyKey,
+      label,
+      txCount: 0,
+      totalSent: 0,
+      lastAt: 0,
+      lastAmount: 0,
+      lastAsset: asset,
+      intervals: [],
+      previousAt: undefined,
+    };
+
+    current.txCount += 1;
+    current.totalSent += amount > 0 ? amount : 0;
+    if (completedAt > current.lastAt) {
+      current.lastAt = completedAt;
+      current.lastAmount = amount;
+      current.lastAsset = asset;
+      current.label = label || current.label;
+    }
+
+    if (current.previousAt && completedAt > 0) {
+      const gapDays = Math.abs(completedAt - current.previousAt) / (1000 * 60 * 60 * 24);
+      if (Number.isFinite(gapDays) && gapDays > 0) current.intervals.push(gapDays);
+    }
+    current.previousAt = completedAt || current.previousAt;
+    stats.set(counterpartyKey, current);
+  }
+
+  return Array.from(stats.values())
+    .sort((a, b) => b.txCount - a.txCount || b.lastAt - a.lastAt)
+    .map((item, index) => {
+      const avgGap = item.intervals.length
+        ? item.intervals.reduce((sum, val) => sum + val, 0) / item.intervals.length
+        : null;
+      const isRecurring = item.txCount >= 3 && !!avgGap && avgGap <= 45;
+      const isFavorite = index < 3 || item.txCount >= 4;
+      return {
+        counterpartyKey: item.key,
+        label: item.label,
+        txCount: item.txCount,
+        totalSent: item.totalSent,
+        lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : null,
+        lastAmount: item.lastAmount,
+        lastAsset: item.lastAsset,
+        favorite: isFavorite,
+        recurring: isRecurring,
+        averageIntervalDays: avgGap ? Number(avgGap.toFixed(1)) : null,
+        suggestedAmount: item.lastAmount > 0 ? item.lastAmount : null,
+      };
+    });
+}
+
+async function getWalletFiatBalances(sessionId?: string): Promise<{ brl: number; usd: number }> {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return { brl: 0, usd: 0 };
+
+  const { data: walletRow, error } = await supabase
+    .from('wallets')
+    .select('balance')
+    .eq('session_id', sid)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return { brl: 0, usd: 0 };
+
+  const balances = Array.isArray((walletRow as any)?.balance) ? (walletRow as any).balance : [];
+  let brl = 0;
+  let usd = 0;
+  for (const row of balances) {
+    const code = String(row?.asset_code || row?.asset || '').toUpperCase();
+    const value = toNumber(row?.balance || row?.amount);
+    if (code === 'BRL') brl = value;
+    if (code === 'USDC' || code === 'USD') usd = value;
+  }
+  return { brl, usd };
+}
+
+async function getUsdBrlMonthlyChange(): Promise<{
+  latestRate: number | null;
+  monthStartRate: number | null;
+  changePct: number | null;
+  observedAt?: string | null;
+}> {
+  const { start: monthStart } = monthDateRange();
+  const latestResp = await supabase
+    .from('currency_rate_history')
+    .select('rate, observed_at')
+    .eq('base_currency', 'USD')
+    .eq('quote_currency', 'BRL')
+    .order('observed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const monthResp = await supabase
+    .from('currency_rate_history')
+    .select('rate, observed_at')
+    .eq('base_currency', 'USD')
+    .eq('quote_currency', 'BRL')
+    .gte('observed_at', monthStart.toISOString())
+    .order('observed_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const latestRate = toNumber((latestResp.data as any)?.rate);
+  const monthStartRate = toNumber((monthResp.data as any)?.rate);
+  if (!latestRate || !monthStartRate) {
+    return { latestRate: latestRate || null, monthStartRate: monthStartRate || null, changePct: null, observedAt: (latestResp.data as any)?.observed_at || null };
+  }
+  const changePct = ((latestRate - monthStartRate) / monthStartRate) * 100;
+  return {
+    latestRate,
+    monthStartRate,
+    changePct,
+    observedAt: (latestResp.data as any)?.observed_at || null,
+  };
+}
+
+function classifyTreasuryBehavior(rows: any[], ownPublicKey?: string): {
+  receivesMostlyUsd: boolean;
+  spendsMostlyBrl: boolean;
+  receivesUsdCount: number;
+  spendsBrlCount: number;
+} {
+  let receivesUsdCount = 0;
+  let receivesTotal = 0;
+  let spendsBrlCount = 0;
+  let spendsTotal = 0;
+  for (const row of rows) {
+    if (!isSuccessfulPaymentRow(row) || isConversionOperation(row)) continue;
+    const direction = inferDirection(row, ownPublicKey);
+    const srcAsset = String(row?.source_asset_code || '').toUpperCase();
+    const dstAsset = String(row?.destination_asset_code || '').toUpperCase();
+    if (direction === 'received') {
+      receivesTotal += 1;
+      if (srcAsset === 'USDC' || srcAsset === 'USD' || dstAsset === 'USDC' || dstAsset === 'USD') receivesUsdCount += 1;
+    }
+    if (direction === 'sent') {
+      spendsTotal += 1;
+      if (srcAsset === 'BRL' || dstAsset === 'BRL') spendsBrlCount += 1;
+    }
+  }
+  return {
+    receivesMostlyUsd: receivesTotal > 0 ? receivesUsdCount / receivesTotal >= 0.6 : false,
+    spendsMostlyBrl: spendsTotal > 0 ? spendsBrlCount / spendsTotal >= 0.6 : false,
+    receivesUsdCount,
+    spendsBrlCount,
+  };
+}
+
+function summarizeConversions(rows: any[]) {
+  const totals: Record<string, number> = {};
+  const rates: number[] = [];
+  for (const row of rows) {
+    const sourceAmount = Number(String(row.source_amount || '').replace(',', '.'));
+    const destinationAmount = Number(String(row.destination_amount || '').replace(',', '.'));
+    const sourceAsset = String(row.source_asset_code || '').toUpperCase();
+    const destAsset = String(row.destination_asset_code || '').toUpperCase();
+    if (Number.isFinite(sourceAmount) && sourceAsset) {
+      totals[`spent_${sourceAsset}`] = (totals[`spent_${sourceAsset}`] || 0) + sourceAmount;
+    }
+    if (Number.isFinite(destinationAmount) && destAsset) {
+      totals[`received_${destAsset}`] = (totals[`received_${destAsset}`] || 0) + destinationAmount;
+    }
+    if (Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(destinationAmount) && destinationAmount > 0) {
+      rates.push(destinationAmount / sourceAmount);
+    }
+  }
+  const averageRate = rates.length ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
+  return {
+    count: rows.length,
+    totals,
+    averageRate,
+  };
+}
+
+function buildFinancialMemoryMessage(mode: string, lastPayment: any, conversionSummary: any, recentPayments: any[]) {
+  if (mode === 'repeat_payment') {
+    if (!lastPayment) return 'Não encontrei pagamento anterior compatível para repetir.';
+    return `Último pagamento compatível: ${formatCustomerAssetAmount(lastPayment.destinationAmount, lastPayment.destinationAssetCode)} para ${lastPayment.counterparty}.`;
+  }
+
+  if (mode === 'monthly_conversion' || mode === 'average_quote') {
+    if (!conversionSummary.count) return 'Não encontrei conversões confirmadas neste mês.';
+    const totals = Object.entries(conversionSummary.totals)
+      .map(([key, value]) => `${key}: ${Number(value).toFixed(2)}`)
+      .join(', ');
+    const avg = conversionSummary.averageRate ? ` Média de cotação: ${conversionSummary.averageRate.toFixed(6)}.` : '';
+    return `Neste mês: ${conversionSummary.count} conversão(ões). ${totals || 'Sem totais disponíveis.'}.${avg}`;
+  }
+
+  if (!recentPayments.length && !conversionSummary.count) {
+    return 'Ainda não encontrei memória financeira suficiente para responder isso.';
+  }
+
+  return [
+    recentPayments[0]
+      ? `Último pagamento: ${formatCustomerAssetAmount(recentPayments[0].destinationAmount, recentPayments[0].destinationAssetCode)} para ${recentPayments[0].counterparty}.`
+      : '',
+    conversionSummary.count
+      ? `Conversões neste mês: ${conversionSummary.count}.`
+      : '',
+  ].filter(Boolean).join(' ');
 }
 
 /**
@@ -2118,14 +3085,87 @@ async function executeListContacts(input: any): Promise<string> {
 
       throw new Error(error.message || "Failed to fetch contacts");
     }
-    logger.debug(`executeListContacts: returning ${((contacts||[]).length)} contacts for user ${ownerId}`);
-    logger.debug(`executeListContacts: contacts data=${JSON.stringify(contacts?.slice(0,50) || [])}`);
+    const publicKeys = (contacts || [])
+      .map((contact: any) => String(contact?.stellar_public_key || '').trim())
+      .filter(Boolean);
+
+    let paymentRows: any[] = [];
+    if (publicKeys.length > 0) {
+      const { data: logs, error: logsError } = await supabase
+        .from('payment_logs')
+        .select('status, operation_type, destination_public_key, destination_amount, destination_asset_code, completed_at, created_at')
+        .eq('user_id', ownerId)
+        .order('completed_at', { ascending: false })
+        .limit(300);
+      if (!logsError) {
+        paymentRows = Array.isArray(logs) ? logs : [];
+      }
+    }
+
+    const byDestination = new Map<string, any[]>();
+    for (const row of paymentRows) {
+      const key = String(row?.destination_public_key || '').trim();
+      if (!key) continue;
+      if (!byDestination.has(key)) byDestination.set(key, []);
+      byDestination.get(key)!.push(row);
+    }
+
+    const enrichedContacts = (contacts || []).map((contact: any) => {
+      const contactKey = String(contact?.stellar_public_key || '').trim();
+      const relatedRows = byDestination.get(contactKey) || [];
+      const successfulRows = relatedRows.filter((row: any) => isSuccessfulPaymentRow(row) && !isConversionOperation(row));
+      const sortedRows = successfulRows
+        .slice()
+        .sort((a: any, b: any) => paymentCompletedAtMs(b) - paymentCompletedAtMs(a));
+
+      const txCount = successfulRows.length;
+      const totalSent = successfulRows.reduce((sum: number, row: any) => sum + toNumber(row.destination_amount), 0);
+      const lastRow = sortedRows[0];
+      const lastAmount = toNumber(lastRow?.destination_amount);
+      const lastAsset = String(lastRow?.destination_asset_code || 'USDC').toUpperCase();
+      const lastAt = paymentCompletedAtMs(lastRow);
+      const intervals: number[] = [];
+
+      for (let i = 1; i < sortedRows.length; i += 1) {
+        const prev = paymentCompletedAtMs(sortedRows[i - 1]);
+        const cur = paymentCompletedAtMs(sortedRows[i]);
+        const gapDays = Math.abs(prev - cur) / (1000 * 60 * 60 * 24);
+        if (Number.isFinite(gapDays) && gapDays > 0) intervals.push(gapDays);
+      }
+
+      const avgInterval = intervals.length ? intervals.reduce((sum, val) => sum + val, 0) / intervals.length : null;
+      const recurring = txCount >= 3 && !!avgInterval && avgInterval <= 45;
+      const favorite = txCount >= 4;
+      const label = String(contact.contact_name || contact.name || 'Contato').trim();
+      const tags = [favorite ? 'favorito' : null, recurring ? 'recorrente' : null].filter(Boolean);
+
+      return {
+        ...contact,
+        display_label: tags.length ? `${label} (${tags.join(', ')})` : label,
+        favorite,
+        recurring,
+        history: {
+          tx_count: txCount,
+          total_sent: totalSent,
+          total_sent_label: txCount ? formatCustomerAssetAmount(String(totalSent.toFixed(2)), lastAsset) : null,
+          last_amount: txCount ? lastAmount : null,
+          last_asset: txCount ? lastAsset : null,
+          last_amount_label: txCount ? formatCustomerAssetAmount(String(lastAmount.toFixed(2)), lastAsset) : null,
+          last_at: lastAt ? new Date(lastAt).toISOString() : null,
+          avg_interval_days: avgInterval ? Number(avgInterval.toFixed(1)) : null,
+          suggested_repeat_amount: txCount ? lastAmount : null,
+        },
+      };
+    });
+
+    logger.debug(`executeListContacts: returning ${((enrichedContacts||[]).length)} contacts for user ${ownerId}`);
+    logger.debug(`executeListContacts: contacts data=${JSON.stringify(enrichedContacts?.slice(0,50) || [])}`);
 
     return JSON.stringify({
       success: true,
-      contact_count: contacts?.length || 0,
-      contacts: contacts || [],
-      message: `Found ${(contacts || []).length} wallet contacts`,
+      contact_count: enrichedContacts?.length || 0,
+      contacts: enrichedContacts || [],
+      message: `Found ${(enrichedContacts || []).length} contacts`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
