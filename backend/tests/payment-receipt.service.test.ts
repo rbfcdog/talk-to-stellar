@@ -32,7 +32,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).toContain('Comprovante TalkToStellar');
     expect(receipt).toContain('Você enviou US$ 89.12 para João.');
     expect(receipt).toContain('Status: Confirmado');
-    expect(receipt).toContain('Cotação usada: R$ 500.00 -> US$ 89.12');
+    expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.610412');
     expect(receipt).toContain('Taxa exata: R$ 0.08 / US$ 0.01');
     expect(receipt).toContain('Economia estimada: R$ 18.80 em relação a métodos tradicionais.');
     expect(receipt).toContain('Liquidação: 3.2s');

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { logger } from '../../utils/logger';
 import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { buildUsedQuoteLabel } from '../../utils/quote-display';
 import { TransferNotificationService } from './transfer-notification.service';
 import { ReceiptImageService } from './receipt-image.service';
 
@@ -140,7 +141,13 @@ export class PaymentReceiptService {
     const counterparty = String(input.counterpartyLabel || '').trim();
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
     const feeLine = await this.feeLine(input);
-    const quoteLine = this.quoteLine(input.quote, sourceAmount, sourceAssetCode, destinationAmount, destinationAssetCode);
+    const quoteLine = buildUsedQuoteLabel({
+      quote: input.quote,
+      sourceAmount,
+      sourceAssetCode,
+      destinationAmount,
+      destinationAssetCode,
+    });
     const settlementLine = this.settlementLine(input.settlementMs);
     const savingsLine = this.savingsLine(input.savings);
     const timeLine = this.timeLine(input.completedAt);
@@ -181,23 +188,6 @@ export class PaymentReceiptService {
       return `Seu link foi resgatado por ${target}: ${destinationLabel} enviados.`;
     }
     return `Você enviou ${destinationLabel} para ${target}.`;
-  }
-
-  private static quoteLine(
-    quote: any,
-    sourceAmount: string,
-    sourceAssetCode: string,
-    destinationAmount: string,
-    destinationAssetCode: string
-  ): string {
-    const quoteSourceAmount = String(quote?.sourceAmount || sourceAmount || '').trim();
-    const quoteSourceAsset = String(quote?.sourceAsset?.code || sourceAssetCode || '').trim().toUpperCase();
-    const quoteDestAmount = String(quote?.destinationAmount || destinationAmount || '').trim();
-    const quoteDestAsset = String(quote?.destinationAsset?.code || destinationAssetCode || '').trim().toUpperCase();
-    if (!quoteSourceAmount || !quoteDestAmount || quoteSourceAsset === quoteDestAsset) {
-      return 'Cotação usada: não aplicável';
-    }
-    return `Cotação usada: ${formatCustomerAssetAmount(quoteSourceAmount, quoteSourceAsset)} -> ${formatCustomerAssetAmount(quoteDestAmount, quoteDestAsset)}`;
   }
 
   private static async feeLine(input: PaymentReceiptInput): Promise<string> {
