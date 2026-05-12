@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
+import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
   success?: boolean
@@ -321,6 +323,7 @@ export default function ConfirmPaymentClient({
     sourceAssetCode: result?.transferDetails?.sourceAssetCode,
   })
   const showResultFee = hasUsableFeeDisplay(resultFeeSummary) || Boolean(result?.transferDetails)
+  const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -347,6 +350,20 @@ export default function ConfirmPaymentClient({
                   )}
                 </div>
               )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
+              {["Revisar", "Autorizar", "Concluído"].map((step, index) => {
+                const active = currentStep >= index + 1
+                return (
+                  <motion.div
+                    key={step}
+                    layout
+                    className={`rounded-xl px-3 py-2 text-center transition ${active ? "bg-emerald-400/20 text-emerald-200" : "text-slate-400"}`}
+                  >
+                    {step}
+                  </motion.div>
+                )
+              })}
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -403,15 +420,23 @@ export default function ConfirmPaymentClient({
                 disabled={status === "submitting" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? "Confirmando pagamento..." : "Confirmar pagamento"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando pagamento...</span> : "Confirmar pagamento"}
               </button>
             </form>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Resultado</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Aguardando confirmação.</p>}
+              {status === "submitting" && (
+                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Processando na rede...</div>
+              )}
+              <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
-                <div className="mt-2 space-y-1 text-emerald-300">
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 space-y-1 text-emerald-300"
+                >
                   <p>Pagamento confirmado com sucesso.</p>
                   {result.transferDetails?.destinationAmount && (
                     <p>
@@ -428,21 +453,22 @@ export default function ConfirmPaymentClient({
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
                   )}
                   {result.receiptImageDataUrl && (
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-                      <img
+                    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                      <motion.img
                         src={result.receiptImageDataUrl}
                         alt="Recibo TalkToStellar"
                         className="h-auto w-full"
+                        initial={{ y: 12, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
                       />
-                    </div>
+                    </motion.div>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
-                </div>
+                </motion.div>
               )}
-              {status === "error" && (
-                <p className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</p>
-              )}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
+              </AnimatePresence>
             </div>
           </section>
         </div>

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
   valid?: boolean
@@ -221,7 +223,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                {status === "claiming" ? "Recebendo..." : `Receber ${receiveLabel}`}
+                {status === "claiming" ? <span className="inline-flex items-center gap-2"><Spinner />Recebendo...</span> : `Receber ${receiveLabel}`}
               </button>
               <button
                 type="button"
@@ -233,8 +235,10 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             </div>
           )}
 
+          {status === "claiming" && <div className="mt-5 inline-flex items-center gap-2 text-sm text-slate-300"><TypingDots />Validando e creditando pagamento...</div>}
+          <AnimatePresence mode="wait">
           {status === "done" && (
-            <div className="mt-5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
               Pagamento recebido com sucesso.
               {result?.transferDetails?.destinationAmount && (
                 <p className="mt-2">
@@ -244,13 +248,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               {result?.operationId && (
                 <p className="mt-2 break-all font-mono text-xs">ID da operação: {result.operationId}</p>
               )}
-            </div>
+            </motion.div>
           )}
           {status === "error" && (
-            <div className="mt-5 rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
               {result?.message || "Não foi possível receber este pagamento."}
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
         </section>
       </div>
     </main>

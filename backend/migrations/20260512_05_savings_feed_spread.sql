@@ -1,24 +1,16 @@
--- Savings feed and exact fee metadata for payment-focused operations.
--- This migration is additive and safe to run multiple times.
+-- Remove non-payment assistant modules.
+-- Drops Smart Reminders, Financial Automation Rules, and Travel Mode.
+-- The remaining financial assistant scope stays focused on payments,
+-- recipients, payment requests, insights, feed, economy, and global profiles.
 
 BEGIN;
 
-ALTER TABLE IF EXISTS public.payment_logs
-  ADD COLUMN IF NOT EXISTS actual_fee NUMERIC,
-  ADD COLUMN IF NOT EXISTS estimated_savings NUMERIC,
-  ADD COLUMN IF NOT EXISTS savings_percentage NUMERIC,
-  ADD COLUMN IF NOT EXISTS comparison_method TEXT;
+DROP TRIGGER IF EXISTS update_financial_reminders_updated_at ON public.financial_reminders;
+DROP TRIGGER IF EXISTS update_automation_rules_updated_at ON public.automation_rules;
+DROP TRIGGER IF EXISTS update_travel_plans_updated_at ON public.travel_plans;
 
-CREATE INDEX IF NOT EXISTS idx_payment_logs_savings_feed
-  ON public.payment_logs (user_id, completed_at DESC, estimated_savings DESC)
-  WHERE status = 'success';
-
-CREATE INDEX IF NOT EXISTS idx_payment_logs_metadata_platform_spread
-  ON public.payment_logs USING GIN (metadata)
-  WHERE metadata ? 'platform_spread_fee';
-
-CREATE INDEX IF NOT EXISTS idx_financial_events_savings_feed
-  ON public.financial_events (user_id, created_at DESC)
-  WHERE event_type = 'savings_estimated';
+DROP TABLE IF EXISTS public.financial_reminders CASCADE;
+DROP TABLE IF EXISTS public.automation_rules CASCADE;
+DROP TABLE IF EXISTS public.travel_plans CASCADE;
 
 COMMIT;

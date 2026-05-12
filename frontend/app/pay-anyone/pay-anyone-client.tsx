@@ -3,8 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { AnimatePresence, motion } from "framer-motion"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
+import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
 
 type CreatePayLinkResponse = {
   success?: boolean
@@ -32,6 +34,7 @@ export default function PayAnyoneClient() {
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [result, setResult] = useState<CreatePayLinkResponse | null>(null)
   const [copied, setCopied] = useState(false)
+  const [booting, setBooting] = useState(true)
 
   useEffect(() => {
     const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
@@ -48,6 +51,7 @@ export default function PayAnyoneClient() {
       const next = `/pay-anyone${window.location.search || ""}`
       router.replace(`/login?next=${encodeURIComponent(next)}`)
     }
+    setBooting(false)
   }, [router, searchParams])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -121,6 +125,12 @@ export default function PayAnyoneClient() {
         </section>
 
         <section className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 p-5 shadow-2xl md:p-6">
+          {booting && (
+            <div className="mb-5 space-y-3">
+              <Shimmer className="h-12 w-full rounded-xl" />
+              <Shimmer className="h-24 w-full rounded-xl" />
+            </div>
+          )}
           {!loggedIn && (
             <div className="mb-5 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
               Entre na sua conta antes de criar um link de pagamento.
@@ -203,16 +213,18 @@ export default function PayAnyoneClient() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Link2 className="h-4 w-4" />
-              {status === "submitting" ? "Criando link..." : "Criar link de pagamento"}
+              {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Criando link...</span> : "Criar link de pagamento"}
             </button>
           </form>
 
           <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4 text-sm">
             <p className="font-medium text-white">Link</p>
             {status === "idle" && <p className="mt-2 text-slate-400">O link aparece aqui depois da autorização.</p>}
+            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />Gerando link seguro...</div>}
             {status === "error" && <p className="mt-2 text-rose-300">{result?.message || "Não foi possível criar o link."}</p>}
+            <AnimatePresence mode="wait">
             {status === "done" && result?.url && (
-              <div className="mt-3 space-y-3">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
                 <p className="break-all rounded-lg bg-white/5 p-3 font-mono text-xs text-slate-200">{result.url}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
@@ -234,8 +246,9 @@ export default function PayAnyoneClient() {
                   </a>
                 </div>
                 <p className="text-slate-300">{result.message}</p>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
         </section>
       </div>
