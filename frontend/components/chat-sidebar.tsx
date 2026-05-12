@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,8 +15,25 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [agentPreview, setAgentPreview] = useState<{
+    content: string;
+    createdAt?: string;
+  } | null>(null);
 
-  const conversations = [
+  const peopleFallbackColors = [
+    "bg-rose-500",
+    "bg-sky-500",
+    "bg-emerald-500",
+    "bg-amber-500",
+    "bg-violet-500",
+    "bg-cyan-500",
+    "bg-lime-500",
+    "bg-pink-500",
+    "bg-indigo-500",
+    "bg-orange-500",
+  ];
+
+  const baseConversations = [
     {
       id: "agent",
       title: "TalkToStellar",
@@ -97,6 +114,59 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     },
   ];
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLastAgentMessage = async () => {
+      const sessionId = typeof window !== "undefined"
+        ? localStorage.getItem("talk-to-stellar.sessionId")
+        : null;
+      if (!sessionId) return;
+
+      try {
+        const response = await fetch(`/api/chat?session_id=${encodeURIComponent(sessionId)}&limit=1`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = await response.json().catch(() => ({}));
+        const message = Array.isArray(payload?.messages) ? payload.messages[0] : null;
+        if (!message) return;
+
+        const role = String(message.role || "").toLowerCase();
+        const content = String(message.content || "").trim();
+        if (!content || role !== "assistant") return;
+
+        if (!cancelled) {
+          setAgentPreview({
+            content,
+            createdAt: String(message.created_at || ""),
+          });
+        }
+      } catch {
+        // keep current preview if polling fails
+      }
+    };
+
+    loadLastAgentMessage();
+    const interval = window.setInterval(loadLastAgentMessage, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const conversations = useMemo(() => {
+    return baseConversations.map((chat) => {
+      if (chat.id !== "agent" || !agentPreview?.content) return chat;
+      return {
+        ...chat,
+        lastMessage: agentPreview.content,
+        lastMessageTime: agentPreview.createdAt || chat.lastMessageTime,
+      };
+    });
+  }, [agentPreview]);
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -133,14 +203,18 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
           {filteredConversations.map((chat) => (
             <div
               key={chat.id}
-              onClick={() => onSelectChat(chat.id)}
-              className={`flex cursor-pointer items-center gap-3 border-b border-[#313d45]/20 px-3 py-3 hover:bg-[#202c33] ${
+              onClick={() => {
+                if (chat.isBot) onSelectChat(chat.id);
+              }}
+              className={`flex items-center gap-3 border-b border-[#313d45]/20 px-3 py-3 ${
+                chat.isBot ? "cursor-pointer hover:bg-[#202c33]" : "cursor-default opacity-90"
+              } ${
                 selectedChat === chat.id ? "bg-[#2a3942]" : ""
               }`}
             >
               <Avatar className="h-12 w-12 shrink-0">
-                {chat.isBot && <AvatarImage src={chat.avatar} />}
-                <AvatarFallback className={chat.isBot ? "bg-[#00a884] text-white" : "bg-[#6b7280] text-white flex items-center justify-center"}>
+                <AvatarImage src={chat.avatar} />
+                <AvatarFallback className={chat.isBot ? "bg-[#00a884] text-white" : `${peopleFallbackColors[Math.max(0, Number(String(chat.id).replace(/\D/g, "")) - 1) % peopleFallbackColors.length]} text-white flex items-center justify-center`}>
                   {chat.isBot ? (
                     <span className="text-xl">T</span>
                   ) : (
