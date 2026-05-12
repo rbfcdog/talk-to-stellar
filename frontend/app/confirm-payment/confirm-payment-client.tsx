@@ -215,12 +215,6 @@ export default function ConfirmPaymentClient({
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
 
-  const safeClose = () => {
-    try {
-      window.close()
-    } catch {}
-  }
-
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
@@ -260,12 +254,6 @@ export default function ConfirmPaymentClient({
 
     validateToken()
   }, [token])
-
-  useEffect(() => {
-    if (!(status === "done" && result?.success)) return
-    const timer = window.setTimeout(() => safeClose(), 0)
-    return () => window.clearTimeout(timer)
-  }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
