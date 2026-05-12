@@ -4,6 +4,8 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
 import { 
   createExecSqlFunction,
   agentMigrationSQL, 
@@ -157,6 +159,23 @@ export async function runMigrations(supabase: SupabaseClient): Promise<void> {
 
     if (!phase7Success) {
       logger.warn('Disable RLS phase had errors, but continuing...');
+    }
+
+    try {
+      const idempotencySql = fs.readFileSync(
+        path.resolve(__dirname, '../../migrations/20260512_06_global_idempotency_uniqueness.sql'),
+        'utf-8'
+      );
+      const phase8Success = await executeMigrationPhase(
+        supabase,
+        'Global Idempotency & Uniqueness',
+        idempotencySql
+      );
+      if (!phase8Success) {
+        logger.warn('Global Idempotency & Uniqueness phase had errors, but continuing...');
+      }
+    } catch (error) {
+      logger.warn(`Could not load idempotency migration file: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // Verify final state

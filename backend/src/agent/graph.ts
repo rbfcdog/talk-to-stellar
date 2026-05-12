@@ -308,6 +308,36 @@ export class AgentGraph {
     return wantsReceipt && wantsImage;
   }
 
+  private isIntentHelpRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    return (
+      normalized === 'ajuda' ||
+      normalized === 'help' ||
+      normalized.includes('principais comandos') ||
+      normalized.includes('comandos disponiveis') ||
+      normalized.includes('o que voce faz') ||
+      normalized.includes('como usar') ||
+      normalized.includes('mostrar comandos') ||
+      normalized.includes('mostre os comandos')
+    );
+  }
+
+  private async handleIntentHelpRequest(state: AgentState): Promise<AgentState> {
+    const resultRaw = await executeTool('get_intent_help', {});
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Falha ao carregar comandos.' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = result.message || result.error || 'Não consegui carregar os comandos agora.';
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private extractPaymentLinkIntentFromText(text: string): {
     amount?: string;
     asset_code?: string;
@@ -2107,11 +2137,14 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       }
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
+      const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
       state.detected_intent = this.isPaymentLinkRequest(state.current_input)
         ? IntentType.PAYMENT_LINK
         : wantsReceiptImage
           ? IntentType.HISTORY
+        : wantsIntentHelp
+          ? IntentType.GENERAL
         : fixedSavings
           ? IntentType.FINANCIAL_MEMORY
         : await this.detectIntent(state.current_input, state.session_data?.user_id);
@@ -2145,6 +2178,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (wantsReceiptImage) {
         return await this.handleReceiptImageRequest(state);
+      }
+
+      if (wantsIntentHelp) {
+        return await this.handleIntentHelpRequest(state);
       }
 
       if (fixedSavings) {

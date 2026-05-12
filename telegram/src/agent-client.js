@@ -19,7 +19,7 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
     throw new Error('fetch implementation is required (Node.js 18+ provides global fetch)');
   }
 
-  async function sendQuery({ query, sessionId, source = 'telegram', from, fromId, chatId }) {
+  async function sendQuery({ query, sessionId, source = 'telegram', from, fromId, chatId, updateId }) {
     if (!query || !query.trim()) {
       throw new Error('query is required');
     }
@@ -30,7 +30,12 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
     try {
       const response = await fetchImpl(agentUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': updateId
+            ? `telegram_update_${updateId}`
+            : `telegram_${chatId || 'unknown'}_${sessionId}_${Buffer.from(query).toString('base64url').slice(0, 48)}`,
+        },
         body: JSON.stringify({
           query,
           session_id: sessionId,
@@ -40,6 +45,7 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
             from: from || null,
             from_id: fromId || null,
             chat_id: chatId || null,
+            update_id: updateId || null,
           },
         }),
         signal: controller.signal,

@@ -6,9 +6,22 @@ import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { logger } from '../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../config/assets';
+import crypto from 'crypto';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
+}
+
+function tokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function shortCodeFromToken(token: string, purpose: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${purpose}:${token}`)
+    .digest('base64url')
+    .slice(0, 10);
 }
 
 function isLocalhostUrl(url: string): boolean {
@@ -186,6 +199,67 @@ export class ExternalService {
     this.repo = new ExternalRepository(supabase);
   }
 
+  private async shortenFrontendUrl(input: {
+    token: string;
+    url: string;
+    purpose: string;
+    sessionId?: string | null;
+    userId?: string | null;
+    expiresInHours?: number;
+  }): Promise<string> {
+    const disabled = String(process.env.DISABLE_SHORT_LINKS || '').trim().toLowerCase();
+    if (disabled === 'true' || disabled === '1') return input.url;
+
+    const code = shortCodeFromToken(input.token, input.purpose);
+    const hash = tokenHash(input.token);
+    const expiresAt = new Date(Date.now() + (input.expiresInHours || 24) * 60 * 60 * 1000).toISOString();
+
+    try {
+      const { error } = await this.supabase
+        .from('short_links')
+        .upsert({
+          code,
+          url: input.url,
+          purpose: input.purpose,
+          token_hash: hash,
+          session_id: input.sessionId || null,
+          user_id: input.userId || null,
+          expires_at: expiresAt,
+          created_at: new Date().toISOString(),
+        }, { onConflict: 'code' });
+
+      if (error) {
+        logger.warn(`[short-links] could not persist short link: ${error.message}`);
+        return input.url;
+      }
+
+      return `${getPaymentConfirmBase()}/r/${encodeURIComponent(code)}`;
+    } catch (error) {
+      logger.warn(`[short-links] failed to create short link: ${error instanceof Error ? error.message : String(error)}`);
+      return input.url;
+    }
+  }
+
+  async resolveShortLink(code: string): Promise<string | null> {
+    const normalized = String(code || '').trim();
+    if (!normalized) return null;
+
+    const { data, error } = await this.supabase
+      .from('short_links')
+      .select('url, expires_at')
+      .eq('code', normalized)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.url) return null;
+    const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
+    if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+    return String(data.url);
+  }
+
   // Check if provider user exists; return account info or null
   async checkExternalAccount(provider: string, providerUserId: string) {
     let row;
@@ -297,7 +371,16 @@ export class ExternalService {
 
     // If publicKeyForUrl already set, return synchronously
     if (publicKeyForUrl) {
-      return { token, url: buildUrl(publicKeyForUrl) };
+      const longUrl = buildUrl(publicKeyForUrl);
+      const url = await this.shortenFrontendUrl({
+        token,
+        url: longUrl,
+        purpose: 'payment_confirm',
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        expiresInHours: 24,
+      });
+      return { token, url };
     }
 
     const resolveByOwner = async (): Promise<string | null> => {
@@ -340,18 +423,36 @@ export class ExternalService {
 
     const resolvedFromOwner = await resolveByOwner();
     if (resolvedFromOwner) {
-      return { token, url: buildUrl(resolvedFromOwner) };
+      const longUrl = buildUrl(resolvedFromOwner);
+      const url = await this.shortenFrontendUrl({
+        token,
+        url: longUrl,
+        purpose: 'payment_confirm',
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        expiresInHours: 24,
+      });
+      return { token, url };
     }
 
     const resolvedGlobally = await resolveByGlobalLookup();
     if (resolvedGlobally) {
-      return { token, url: buildUrl(resolvedGlobally) };
+      const longUrl = buildUrl(resolvedGlobally);
+      const url = await this.shortenFrontendUrl({
+        token,
+        url: longUrl,
+        purpose: 'payment_confirm',
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        expiresInHours: 24,
+      });
+      return { token, url };
     }
 
     throw new Error('createPaymentConfirmUrl: could not resolve destination public key automatically — include `destination` as a Stellar public key or provide `destination_contact` with `stellar_public_key` or call with owner_id + exact destination_name.');
   }
 
-  createClaimPaymentUrl(payload: {
+  async createClaimPaymentUrl(payload: {
     amount: string;
     recipient_name?: string;
     sender_name?: string;
@@ -389,12 +490,20 @@ export class ExternalService {
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
     const base = getPaymentConfirmBase();
-    const url = `${base}/claim-payment?token=${encodeURIComponent(token)}`;
+    const longUrl = `${base}/claim-payment?token=${encodeURIComponent(token)}`;
+    const url = await this.shortenFrontendUrl({
+      token,
+      url: longUrl,
+      purpose: 'payment_claim',
+      sessionId: payload.session_id,
+      userId: payload.owner_id,
+      expiresInHours: 24 * 7,
+    });
 
     return { token, url };
   }
 
-  createConversionConfirmUrl(payload: {
+  async createConversionConfirmUrl(payload: {
     session_id: string;
     owner_id?: string;
     source_amount?: string;
@@ -431,7 +540,15 @@ export class ExternalService {
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
-    const url = this.buildFrontendUrl('/confirm-conversion', token, externalContext);
+    const longUrl = this.buildFrontendUrl('/confirm-conversion', token, externalContext);
+    const url = await this.shortenFrontendUrl({
+      token,
+      url: longUrl,
+      purpose: 'conversion_confirm',
+      sessionId: payload.session_id,
+      userId: payload.owner_id,
+      expiresInHours: 24,
+    });
 
     return { token, url };
   }
@@ -449,7 +566,7 @@ export class ExternalService {
     nonce?: string;
   }, extra = {}) {
     const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
-    return this.createConversionConfirmUrl(payload, {
+    return await this.createConversionConfirmUrl(payload, {
       ...extra,
       ...externalContext,
     });

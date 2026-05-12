@@ -97,6 +97,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     }
 
     const chatId = ctx.chat?.id;
+    const updateId = ctx.update?.update_id ? String(ctx.update.update_id) : null;
     let sessionId = ctx.session?.sessionId || sessionStore.getSessionId(chatId);
     ctx.session = ctx.session || {};
     ctx.session.sessionId = sessionId;
@@ -141,7 +142,10 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         try {
           const res = await fetch(`${backendBaseUrl.replace(/\/$/, '')}/api/external/check-account`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': updateId ? `telegram_check_${updateId}` : `telegram_check_${providerUserId}_${chatId || ''}`,
+            },
             body: JSON.stringify({
               provider: 'telegram',
               provider_user_id: providerUserId,
@@ -180,6 +184,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         from: ctx.from?.username || null,
         fromId: ctx.from?.id || null,
         chatId: chatId ? String(chatId) : null,
+        updateId,
       });
 
       await sendTelegramResponse(ctx, result.message);

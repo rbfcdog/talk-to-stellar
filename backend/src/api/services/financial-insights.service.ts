@@ -156,7 +156,8 @@ export class FinancialInsightsService {
     ];
 
     for (const insight of insights) {
-      await supabase.from('financial_insights').insert({
+      const dedupeKey = `${ctx.userId}:${insight.type}:${insight.periodStart.slice(0, 10)}:${insight.periodEnd.slice(0, 10)}`;
+      await supabase.from('financial_insights').upsert({
         user_id: ctx.userId,
         type: insight.type,
         title: insight.title,
@@ -166,7 +167,8 @@ export class FinancialInsightsService {
         period_start: insight.periodStart,
         period_end: insight.periodEnd,
         metadata_json: insight.metadata,
-      });
+        dedupe_key: dedupeKey,
+      }, { onConflict: 'dedupe_key' });
     }
 
     await trackFinancialEvent('insight_generated', {

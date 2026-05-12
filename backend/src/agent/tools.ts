@@ -167,6 +167,15 @@ async function fetchBrlUsdcQuote(): Promise<{
  */
 export const toolDefinitions = [
   {
+    name: "get_intent_help",
+    description: "Mostra os principais comandos/intents disponíveis no TalkToStellar com explicações curtas em pt-BR.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: "get_brl_usdc_quote",
     description: "Get the current BRL-USDC market quote in real time from configured external source. Returns both BRL per 1 USDC and USDC per 1 BRL.",
     parameters: {
@@ -821,6 +830,8 @@ export async function executeTool(
   try {
     logger.info(`Tool call: ${toolName} ${JSON.stringify(toolInput || {})}`);
     switch (toolName) {
+      case "get_intent_help":
+        return executeGetIntentHelp();
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
       case "send_receipt_image":
@@ -899,6 +910,76 @@ export async function executeTool(
       error: errorMessage,
     });
   }
+}
+
+function executeGetIntentHelp(): string {
+  const commands = [
+    {
+      command: "saldo",
+      intent: "balance",
+      description: "Mostra o saldo disponível em R$ e US$.",
+      examples: ["ver saldo", "qual meu saldo?"],
+    },
+    {
+      command: "saldo técnico",
+      intent: "technical_balance",
+      description: "Mostra detalhes técnicos de XLM, USDC e BRL quando você precisar depurar a conta.",
+      examples: ["saldo técnico"],
+    },
+    {
+      command: "contatos",
+      intent: "contacts",
+      description: "Lista ou salva destinatários da carteira.",
+      examples: ["listar contatos", "adiciona Ana pelo email ana@example.com"],
+    },
+    {
+      command: "enviar",
+      intent: "payment",
+      description: "Cria um link seguro de confirmação para enviar dinheiro a um contato ou chave pública.",
+      examples: ["mandar 50 dólares para Juliana Lima"],
+    },
+    {
+      command: "converter",
+      intent: "conversion",
+      description: "Cota e cria confirmação para converter saldo entre R$, US$ e saldo técnico.",
+      examples: ["converter 10 usdc para brl"],
+    },
+    {
+      command: "cotação",
+      intent: "price_quote",
+      description: "Consulta a cotação atual de dólar/real usada pela experiência.",
+      examples: ["cotação do dólar agora"],
+    },
+    {
+      command: "histórico",
+      intent: "history",
+      description: "Mostra pagamentos e operações recentes.",
+      examples: ["ver histórico", "últimas transações"],
+    },
+    {
+      command: "link de pagamento",
+      intent: "payment_link",
+      description: "Cria um link para alguém receber ou pagar sem escolher um contato antes.",
+      examples: ["criar link de pagamento de 20 dólares"],
+    },
+    {
+      command: "PIN",
+      intent: "reset_pin",
+      description: "Gera um link para redefinir o PIN quando você esquecer ou quiser trocar.",
+      examples: ["esqueci meu PIN", "redefinir PIN"],
+    },
+  ];
+
+  return JSON.stringify({
+    success: true,
+    commands,
+    message: [
+      "Principais comandos:",
+      ...commands.map((item, index) =>
+        `${index + 1}. ${item.command}: ${item.description} Exemplo: "${item.examples[0]}".`
+      ),
+    ].join("\n"),
+  });
 }
 
 async function executeGetBrlUsdcQuote(): Promise<string> {

@@ -10,6 +10,7 @@ import externalRouter from './api/routes/external.router';
 import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
+import { idempotencyMiddleware } from './services/idempotency.service';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(cors());
 app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(idempotencyMiddleware);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });

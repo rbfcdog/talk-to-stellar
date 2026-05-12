@@ -11,6 +11,7 @@ import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
 import { isSessionExpired } from '../../utils/session-expiry';
+import { buildOperationFingerprint } from '../../services/idempotency.service';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -64,6 +65,15 @@ async function claimToken(input: {
   assetCode: string;
   details?: any;
 }) {
+  const operationFingerprint = buildOperationFingerprint({
+    sourceSessionId: input.senderSessionId,
+    sourceUserId: input.senderUserId,
+    destination: input.destination,
+    amount: input.amount,
+    assetCode: input.assetCode,
+    tokenHash: input.tokenHash,
+    operationType: 'CLAIM_PAYMENT_LINK',
+  });
   const { error } = await supabase
     .from('payment_confirmations')
     .insert({
@@ -75,6 +85,7 @@ async function claimToken(input: {
       amount: input.amount,
       asset_code: input.assetCode,
       status: 'pending',
+      operation_fingerprint: operationFingerprint,
       details: input.details || null,
     });
 
@@ -222,7 +233,7 @@ export default class PayLinkController {
         return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
 
-      const { token, url } = externalService.createClaimPaymentUrl({
+      const { token, url } = await externalService.createClaimPaymentUrl({
         amount,
         recipient_name: recipientName || undefined,
         sender_name: String((session as any).email || (session as any).user_id || 'Alguém'),

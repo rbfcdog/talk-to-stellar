@@ -39,6 +39,31 @@ export type PaymentReceiptInput = {
 export class PaymentReceiptService {
   private static agentRepo = new AgentRepository(supabase);
 
+  private static async saveReceiptMessage(input: {
+    sessionId: string;
+    content: string;
+    dedupeKey: string;
+  }) {
+    const { error } = await supabase
+      .from('agent_messages')
+      .upsert({
+        session_id: input.sessionId,
+        role: 'assistant',
+        content: input.content,
+        dedupe_key: input.dedupeKey,
+        created_at: new Date().toISOString(),
+      }, { onConflict: 'dedupe_key' });
+
+    if (error) {
+      const message = String(error?.message || '').toLowerCase();
+      if (message.includes('dedupe_key') || message.includes('schema cache')) {
+        await this.agentRepo.saveMessage(input.sessionId, 'assistant', input.content);
+        return;
+      }
+      throw error;
+    }
+  }
+
   static toPublicOperationId(settlementReference?: string | null): string {
     const reference = String(settlementReference || '').trim();
     if (!reference) return '';
@@ -58,9 +83,14 @@ export class PaymentReceiptService {
     let svg = '';
     let imageDataUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
+    const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
 
     try {
-      await this.agentRepo.saveMessage(input.sessionId, 'assistant', text);
+      await this.saveReceiptMessage({
+        sessionId: input.sessionId,
+        content: text,
+        dedupeKey: `${receiptDedupeKey}:text`,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to save receipt message: ${message}`);
@@ -69,7 +99,11 @@ export class PaymentReceiptService {
     try {
       svg = await this.buildReceiptImageSvg(input);
       imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
-      await this.agentRepo.saveMessage(input.sessionId, 'assistant', `RECEIPT_IMAGE_DATA_URL:${imageDataUrl}`);
+      await this.saveReceiptMessage({
+        sessionId: input.sessionId,
+        content: `RECEIPT_IMAGE_DATA_URL:${imageDataUrl}`,
+        dedupeKey: `${receiptDedupeKey}:image`,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to save receipt image: ${message}`);

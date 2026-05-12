@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { idempotentFetch } from "@/lib/idempotency"
 
 type ValidationResult = {
   success?: boolean
@@ -257,7 +258,7 @@ export default function ConfirmPaymentClient({
     setResult(null)
 
     try {
-      const response = await fetch(`/api/external/finalize`, {
+      const response = await idempotentFetch(`/api/external/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

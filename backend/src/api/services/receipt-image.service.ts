@@ -65,7 +65,18 @@ function escapeXml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/'/g, '&apos;')
+    .replace(/[^\x00-\x7F]/g, (char) => `&#x${char.codePointAt(0)?.toString(16).toUpperCase() || 'FFFD'};`);
+}
+
+function fitText(value: string, maxLength: number): string {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function receiptText(value: string, maxLength: number): string {
+  return escapeXml(fitText(value, maxLength));
 }
 
 function formatDatePtBr(value?: string | null): string {
@@ -109,19 +120,19 @@ export class ReceiptImageService {
     const statusBadge = String(input.statusBadge || 'Transferência concluída').trim();
     const instantBadge = String(input.instantBadge || 'Liquidado instantaneamente').trim();
     const protectedBadge = String(input.protectedBadge || 'Protegido').trim();
-    const amount = escapeXml(`${input.currency}${input.amount}`);
-    const subtitle = escapeXml(String(input.subtitle || 'Pagamento internacional enviado com sucesso'));
-    const recipient = escapeXml(String(input.recipientName || 'Destinatário'));
-    const description = escapeXml(String(input.description || 'Transferência internacional'));
-    const converted = escapeXml(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`);
-    const fee = escapeXml(String(input.feeLabel || '-'));
-    const quote = escapeXml(String(input.quoteLabel || '-'));
+    const amount = receiptText(`${input.currency}${input.amount}`, 18);
+    const subtitle = receiptText(String(input.subtitle || 'Pagamento internacional enviado com sucesso'), 46);
+    const recipient = receiptText(String(input.recipientName || 'Destinatário'), 34);
+    const description = receiptText(String(input.description || 'Transferência internacional'), 34);
+    const converted = receiptText(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`, 24);
+    const fee = receiptText(String(input.feeLabel || '-'), 30);
+    const quote = receiptText(String(input.quoteLabel || '-'), 34);
     const settlement = Number.isFinite(Number(input.settlementSeconds || 0))
       ? `${Number(input.settlementSeconds || 0).toFixed(1)} segundos`
       : 'confirmada';
-    const dateLabel = escapeXml(formatDatePtBr(input.completedAt));
-    const savingsLabel = escapeXml(String(input.savingsLabel || 'R$ 0,00'));
-    const savingsPercentLabel = escapeXml(String(input.savingsPercentLabel || 'menor que métodos tradicionais'));
+    const dateLabel = receiptText(formatDatePtBr(input.completedAt), 28);
+    const savingsLabel = receiptText(String(input.savingsLabel || 'R$ 0,00'), 18);
+    const savingsPercentLabel = receiptText(String(input.savingsPercentLabel || 'menor que métodos tradicionais'), 28);
     const safeOpId = escapeXml(opId);
 
     const lines = [
@@ -138,8 +149,8 @@ export class ReceiptImageService {
     const rows = lines.map((line, index) => {
       const y = 500 + index * 44;
       return [
-        `<text x="64" y="${y}" fill="#94A1C8" font-size="20" font-family="Inter, system-ui, sans-serif">${line[0]}</text>`,
-        `<text x="658" y="${y}" text-anchor="end" fill="#F4F7FF" font-size="22" font-weight="600" font-family="Inter, system-ui, sans-serif">${line[1]}</text>`,
+        `<text x="64" y="${y}" fill="#94A1C8" font-size="20" font-family="Inter">${line[0]}</text>`,
+        `<text x="658" y="${y}" text-anchor="end" fill="#F4F7FF" font-size="22" font-weight="600" font-family="Inter">${line[1]}</text>`,
         index < lines.length - 1
           ? `<line x1="64" y1="${y + 20}" x2="658" y2="${y + 20}" stroke="#1B2545" stroke-width="1"/>`
           : '',
@@ -154,8 +165,8 @@ export class ReceiptImageService {
       <stop offset="100%" stop-color="#0B1020"/>
     </linearGradient>
     <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.09)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.03)"/>
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.09"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.03"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000000" flood-opacity="0.35"/>
@@ -167,37 +178,37 @@ export class ReceiptImageService {
   <rect x="36" y="40" width="648" height="1200" rx="40" fill="#0F1731" opacity="0.5"/>
   <rect x="44" y="48" width="632" height="1184" rx="36" fill="url(#card)" stroke="#22315C" stroke-width="1.5" filter="url(#shadow)"/>
 
-  <text x="78" y="106" fill="#F4F7FF" font-size="28" font-weight="700" font-family="Inter, system-ui, sans-serif">TalkTo</text>
+  <text x="78" y="106" fill="#F4F7FF" font-size="28" font-weight="700" font-family="Inter">TalkTo</text>
   <rect x="438" y="72" width="206" height="42" rx="21" fill="#143A2D" stroke="#2FA070" stroke-width="1"/>
-  <text x="541" y="99" text-anchor="middle" fill="#7EE2B8" font-size="17" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(statusBadge)}</text>
+  <text x="541" y="99" text-anchor="middle" fill="#7EE2B8" font-size="17" font-weight="600" font-family="Inter">${escapeXml(statusBadge)}</text>
 
   <circle cx="360" cy="196" r="42" fill="#163D2D" stroke="#2CCB84" stroke-width="2"/>
   <path d="M341 196 L356 210 L382 184" fill="none" stroke="#A7FFD6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <text x="360" y="294" text-anchor="middle" fill="#F8FBFF" font-size="72" font-weight="800" font-family="Inter, system-ui, sans-serif">${amount}</text>
-  <text x="360" y="336" text-anchor="middle" fill="#9FB0DB" font-size="24" font-family="Inter, system-ui, sans-serif">${subtitle}</text>
+  <text x="360" y="294" text-anchor="middle" fill="#F8FBFF" font-size="72" font-weight="800" font-family="Inter">${amount}</text>
+  <text x="360" y="336" text-anchor="middle" fill="#9FB0DB" font-size="24" font-family="Inter">${subtitle}</text>
 
   <rect x="64" y="356" width="594" height="96" rx="18" fill="#101B34" stroke="#2B406F" stroke-width="1"/>
-  <text x="92" y="397" fill="#8DA0CB" font-size="18" font-family="Inter, system-ui, sans-serif">Economia estimada</text>
-  <text x="92" y="431" fill="#95FFD1" font-size="36" font-weight="800" font-family="Inter, system-ui, sans-serif">${savingsLabel}</text>
-  <text x="628" y="421" text-anchor="end" fill="#B8C8EE" font-size="17" font-weight="600" font-family="Inter, system-ui, sans-serif">${savingsPercentLabel}</text>
-  <text x="64" y="478" fill="#7C8BB3" font-size="14" font-family="Inter, system-ui, sans-serif">comparado a métodos tradicionais</text>
+  <text x="92" y="397" fill="#8DA0CB" font-size="18" font-family="Inter">Economia estimada</text>
+  <text x="92" y="431" fill="#95FFD1" font-size="36" font-weight="800" font-family="Inter">${savingsLabel}</text>
+  <text x="628" y="421" text-anchor="end" fill="#B8C8EE" font-size="17" font-weight="600" font-family="Inter">${savingsPercentLabel}</text>
+  <text x="64" y="478" fill="#7C8BB3" font-size="14" font-family="Inter">comparado a métodos tradicionais</text>
 
   ${rows}
 
   <rect x="64" y="930" width="274" height="40" rx="20" fill="#152642" stroke="#254273" stroke-width="1"/>
-  <text x="201" y="956" text-anchor="middle" fill="#B8C8EE" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(instantBadge)}</text>
+  <text x="201" y="956" text-anchor="middle" fill="#B8C8EE" font-size="16" font-weight="600" font-family="Inter">${escapeXml(instantBadge)}</text>
 
   <rect x="356" y="930" width="132" height="40" rx="20" fill="#183A2C" stroke="#2A8F66" stroke-width="1"/>
-  <text x="422" y="956" text-anchor="middle" fill="#8EF0C6" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(protectedBadge)}</text>
+  <text x="422" y="956" text-anchor="middle" fill="#8EF0C6" font-size="16" font-weight="600" font-family="Inter">${escapeXml(protectedBadge)}</text>
 
   <rect x="542" y="912" width="116" height="116" rx="16" fill="#0D1328" stroke="#26365F"/>
   <g transform="translate(560 930)">
     ${qrPattern(opId)}
   </g>
 
-  <text x="64" y="1060" fill="#7082B0" font-size="14" font-family="Inter, system-ui, sans-serif">Estimativa baseada em taxas internacionais médias.</text>
-  <text x="64" y="1086" fill="#5F719D" font-size="13" font-family="Inter, system-ui, sans-serif">Recibo registrado no seu histórico.</text>
+  <text x="64" y="1060" fill="#7082B0" font-size="14" font-family="Inter">Estimativa baseada em taxas internacionais médias.</text>
+  <text x="64" y="1086" fill="#5F719D" font-size="13" font-family="Inter">Recibo registrado no seu histórico.</text>
 </svg>`;
   }
 

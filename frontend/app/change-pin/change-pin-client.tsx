@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { idempotentFetch } from '@/lib/idempotency';
 
 interface ChangePinPageState {
   stage: 'verify' | 'change' | 'success' | 'error';
@@ -49,7 +50,7 @@ export default function ChangePinClient() {
   const verifyToken = async (token: string, userId: string) => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/security/reset-pin-verify`, {
+      const response = await idempotentFetch(`${apiUrl}/api/security/reset-pin-verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, user_id: userId }),
@@ -120,7 +121,7 @@ export default function ChangePinClient() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/security/reset-pin-finalize`, {
+      const response = await idempotentFetch(`${apiUrl}/api/security/reset-pin-finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -275,4 +276,3 @@ export default function ChangePinClient() {
     </main>
   );
 }
-
