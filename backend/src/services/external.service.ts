@@ -240,6 +240,47 @@ export class ExternalService {
     }
   }
 
+  private async registerPaymentConfirmation(input: {
+    token: string;
+    sessionId?: string | null;
+    userId?: string | null;
+    destination: string;
+    destinationName?: string | null;
+    destinationContact?: any;
+    amount: string;
+    assetCode: string;
+    details?: any;
+  }): Promise<void> {
+    const token_hash = tokenHash(input.token);
+    const operationFingerprint = crypto
+      .createHash('sha256')
+      .update(`payment-confirmation:${token_hash}`)
+      .digest('hex');
+    const { error } = await this.supabase
+      .from('payment_confirmations')
+      .insert({
+        token_hash,
+        session_id: input.sessionId || null,
+        user_id: input.userId || null,
+        destination: input.destination,
+        destination_name: input.destinationName || null,
+        destination_contact: input.destinationContact || null,
+        amount: input.amount,
+        asset_code: input.assetCode,
+        status: 'pending',
+        used: false,
+        used_at: null,
+        operation_fingerprint: operationFingerprint,
+        details: input.details || null,
+        created_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      if (String(error.code || '') === '23505') return;
+      throw new Error(`Não foi possível registrar o link de pagamento: ${error.message}`);
+    }
+  }
+
   async resolveShortLink(code: string): Promise<string | null> {
     const normalized = String(code || '').trim();
     if (!normalized) return null;
@@ -371,6 +412,17 @@ export class ExternalService {
 
     // If publicKeyForUrl already set, return synchronously
     if (publicKeyForUrl) {
+      await this.registerPaymentConfirmation({
+        token,
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        destination: publicKeyForUrl,
+        destinationName: payload.destination_name || null,
+        destinationContact: compactContact(payload.destination_contact),
+        amount: payload.amount,
+        assetCode,
+        details: { purpose: 'payment_confirm' },
+      });
       const longUrl = buildUrl(publicKeyForUrl);
       const url = await this.shortenFrontendUrl({
         token,
@@ -423,6 +475,17 @@ export class ExternalService {
 
     const resolvedFromOwner = await resolveByOwner();
     if (resolvedFromOwner) {
+      await this.registerPaymentConfirmation({
+        token,
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        destination: resolvedFromOwner,
+        destinationName: payload.destination_name || null,
+        destinationContact: compactContact(payload.destination_contact),
+        amount: payload.amount,
+        assetCode,
+        details: { purpose: 'payment_confirm' },
+      });
       const longUrl = buildUrl(resolvedFromOwner);
       const url = await this.shortenFrontendUrl({
         token,
@@ -437,6 +500,17 @@ export class ExternalService {
 
     const resolvedGlobally = await resolveByGlobalLookup();
     if (resolvedGlobally) {
+      await this.registerPaymentConfirmation({
+        token,
+        sessionId: payload.session_id,
+        userId: payload.owner_id,
+        destination: resolvedGlobally,
+        destinationName: payload.destination_name || null,
+        destinationContact: compactContact(payload.destination_contact),
+        amount: payload.amount,
+        assetCode,
+        details: { purpose: 'payment_confirm' },
+      });
       const longUrl = buildUrl(resolvedGlobally);
       const url = await this.shortenFrontendUrl({
         token,
@@ -489,6 +563,20 @@ export class ExternalService {
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
+    await this.registerPaymentConfirmation({
+      token,
+      sessionId: payload.session_id,
+      userId: payload.owner_id,
+      destination: 'CLAIM_LINK_PENDING',
+      destinationName: payload.recipient_name || null,
+      amount: payload.amount,
+      assetCode,
+      details: {
+        purpose: 'payment_claim',
+        destination_asset_code: destinationAssetCode,
+        destination_asset_issuer: destinationAssetIssuer || null,
+      },
+    });
     const base = getPaymentConfirmBase();
     const longUrl = `${base}/claim-payment?token=${encodeURIComponent(token)}`;
     const url = await this.shortenFrontendUrl({

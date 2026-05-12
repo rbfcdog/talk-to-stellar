@@ -458,17 +458,69 @@ async function hashPaymentToken(token: string): Promise<string> {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-async function checkPaymentTokenUsed(tokenHash: string): Promise<boolean> {
+type PaymentTokenReservation =
+  | { ok: true; row: any }
+  | { ok: false; status: number; body: Record<string, any> };
+
+async function reservePaymentTokenForExecution(tokenHash: string): Promise<PaymentTokenReservation> {
   try {
-    const { data } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from('payment_confirmations')
-      .select('id')
+      .select('id, used, used_at, status')
       .eq('token_hash', tokenHash)
-      .limit(1);
-    return Array.isArray(data) && data.length > 0;
+      .limit(1)
+      .maybeSingle();
+
+    if (selectError) throw selectError;
+    if (!existing) {
+      return { ok: false, status: 404, body: { success: false, error: 'Link de pagamento inválido' } };
+    }
+    if (existing.used) {
+      return {
+        ok: false,
+        status: 409,
+        body: { success: false, error: 'Este link já foi utilizado', used_at: existing.used_at || null },
+      };
+    }
+    if (String(existing.status || '').toLowerCase() === 'processing') {
+      return {
+        ok: false,
+        status: 409,
+        body: { success: false, error: 'Este link já está em processamento' },
+      };
+    }
+
+    const { data: reserved, error: reserveError } = await supabase
+      .from('payment_confirmations')
+      .update({ status: 'processing' })
+      .eq('token_hash', tokenHash)
+      .eq('used', false)
+      .in('status', ['pending', 'failed'])
+      .select('id, used, used_at, status')
+      .limit(1)
+      .maybeSingle();
+
+    if (reserveError) throw reserveError;
+    if (!reserved) {
+      const { data: latest } = await supabase
+        .from('payment_confirmations')
+        .select('used, used_at, status')
+        .eq('token_hash', tokenHash)
+        .limit(1)
+        .maybeSingle();
+      return {
+        ok: false,
+        status: 409,
+        body: latest?.used
+          ? { success: false, error: 'Este link já foi utilizado', used_at: latest.used_at || null }
+          : { success: false, error: 'Este link já está em processamento' },
+      };
+    }
+
+    return { ok: true, row: reserved };
   } catch (err: any) {
-    logger.warn(`[payment-idempotency] error checking token usage: ${err?.message || String(err)}`);
-    return false; // fail open if DB check fails
+    logger.warn(`[payment-idempotency] error reserving token: ${err?.message || String(err)}`);
+    throw err;
   }
 }
 
@@ -491,7 +543,32 @@ async function claimPaymentToken(
       tokenHash,
       operationType: String(details?.type || details?.operationType || 'PAYMENT_CONFIRMATION'),
     });
-    const { error } = await supabase
+    const { data, error } = await supabase
+      .from('payment_confirmations')
+      .update({
+        session_id: sessionId,
+        user_id: userId,
+        destination,
+        amount,
+        asset_code: assetCode,
+        status: 'processing',
+        completed_at: null,
+        operation_fingerprint: operationFingerprint,
+        details,
+      })
+      .eq('token_hash', tokenHash)
+      .eq('used', false)
+      .eq('status', 'processing')
+      .select('id')
+      .limit(1);
+
+    if (error) {
+      logger.warn(`[payment-idempotency] error claiming token: ${error?.message || String(error)}`);
+      return false;
+    }
+    if (Array.isArray(data) && data.length > 0) return true;
+
+    const { error: insertError } = await supabase
       .from('payment_confirmations')
       .insert({
         token_hash: tokenHash,
@@ -500,17 +577,17 @@ async function claimPaymentToken(
         destination,
         amount,
         asset_code: assetCode,
-        status: 'pending',
+        status: 'processing',
         completed_at: null,
+        used: false,
+        used_at: null,
         operation_fingerprint: operationFingerprint,
         details,
       });
 
-    if (error) {
-      if (String(error.code || '') === '23505') {
-        return false;
-      }
-      logger.warn(`[payment-idempotency] error claiming token: ${error?.message || String(error)}`);
+    if (insertError) {
+      if (String(insertError.code || '') === '23505') return false;
+      logger.warn(`[payment-idempotency] error inserting token claim: ${insertError?.message || String(insertError)}`);
       return false;
     }
     return true;
@@ -525,23 +602,34 @@ async function updatePaymentTokenStatus(
   paymentHash: string | undefined,
   status: 'completed' | 'failed',
   details?: any
-): Promise<void> {
+): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const nextDetails = {
+      ...(details || {}),
+      used: status === 'completed',
+    };
+    const { data, error } = await supabase
       .from('payment_confirmations')
       .update({
         payment_hash: paymentHash,
         status,
         completed_at: new Date().toISOString(),
-        details,
+        used: status === 'completed' ? true : false,
+        used_at: status === 'completed' ? new Date().toISOString() : null,
+        details: nextDetails,
       })
-      .eq('token_hash', tokenHash);
+      .eq('token_hash', tokenHash)
+      .eq('used', false)
+      .select('id');
 
     if (error) {
       logger.warn(`[payment-idempotency] error updating token status: ${error?.message || String(error)}`);
+      return false;
     }
+    return Array.isArray(data) && data.length > 0;
   } catch (err: any) {
     logger.warn(`[payment-idempotency] error in updatePaymentTokenStatus: ${err?.message || String(err)}`);
+    return false;
   }
 }
 
@@ -628,27 +716,18 @@ export default class ExternalFinalizeController {
       const browserId = String(req.body?.browser_id || '').trim();
       // Accept public_key coming from POST body or URL query (confirm link may include it)
       const publicKeyFromBody = String(req.body?.public_key || req.query?.public_key || '').trim() || undefined;
-      if (!token) return res.status(400).json({ success: false, message: 'token is required' });
+      if (!token) return res.status(400).json({ success: false, error: 'Token é obrigatório', message: 'Token é obrigatório' });
 
       let payload: any;
       try {
         payload = jwt.verify(token, getJwtSecret());
       } catch (err: any) {
-        return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+        return res.status(400).json({ success: false, error: 'Link inválido ou expirado', message: 'Link inválido ou expirado' });
       }
 
-      // Check token idempotency - prevent reuse of payment links
       const tokenHash = await hashPaymentToken(token);
-      const tokenWasUsed = await checkPaymentTokenUsed(tokenHash);
-      if (tokenWasUsed) {
-        logger.warn(`[external-finalize] payment confirmation token reused: ${tokenHash.substring(0, 16)}...`);
-        return res.status(400).json({
-          success: false,
-          message: 'Este link de confirmação já foi utilizado. Solicite uma nova confirmação.'
-        });
-      }
-
       const tokenSub = String((payload as any)?.sub || '');
+
       if (
         ['external_payment_confirm', 'external_conversion_confirm'].includes(tokenSub) &&
         getQuoteExpiry(payload) &&
@@ -1390,6 +1469,12 @@ export default class ExternalFinalizeController {
           });
         }
 
+        const reservation = await reservePaymentTokenForExecution(tokenHash);
+        if (!reservation.ok) {
+          logger.warn(`[external-finalize] payment confirmation token unavailable: ${tokenHash.substring(0, 16)}...`);
+          return res.status(reservation.status).json(reservation.body);
+        }
+
         const tokenClaimed = await claimPaymentToken(
           tokenHash,
           String(session_id),
@@ -1413,9 +1498,13 @@ export default class ExternalFinalizeController {
         );
 
         if (!tokenClaimed) {
+          await updatePaymentTokenStatus(tokenHash, undefined, 'failed', {
+            error: 'Could not reserve payment token details',
+          });
           return res.status(400).json({
             success: false,
-            message: 'Este link de confirmação já foi utilizado. Por favor, solicite um novo pagamento.',
+            error: 'Este link já foi utilizado',
+            message: 'Este link já foi utilizado',
           });
         }
 
@@ -1539,11 +1628,13 @@ export default class ExternalFinalizeController {
 
           return res.status(400).json({
             success: false,
-            message: result.error || 'Could not submit payment',
+            error: result.error || 'Não foi possível enviar o pagamento.',
+            message: result.error || 'Não foi possível enviar o pagamento.',
           });
         }
 
         const settlementMs = Date.now() - submitStartedAt;
+        const completedAt = new Date().toISOString();
         const submittedPaymentDetails = result.hash
           ? await StellarService.getSubmittedPaymentDetails(result.hash)
           : null;
@@ -1671,7 +1762,7 @@ export default class ExternalFinalizeController {
           }
         );
 
-        await updatePaymentTokenStatus(
+        const tokenMarkedUsed = await updatePaymentTokenStatus(
           tokenHash,
           result.hash,
           'completed',
@@ -1692,6 +1783,9 @@ export default class ExternalFinalizeController {
             savings: economy.savings,
           }
         );
+        if (!tokenMarkedUsed) {
+          logger.warn(`[external-finalize] payment completed but token was already marked used: ${tokenHash.substring(0, 16)}...`);
+        }
 
         await upsertRecentContactFromPayment({
           ownerId: String(session.user_id),
@@ -1732,14 +1826,19 @@ export default class ExternalFinalizeController {
         });
 
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
+        const receiptUrl = PaymentReceiptService.buildHostedReceiptUrl(result.hash);
         return res.status(200).json({
           success: true,
           paymentConfirmed: true,
+          tx_hash: result.hash,
+          amount: publicTransferDetails.destinationAmount || String(amount),
+          asset: publicTransferDetails.destinationAssetCode || assetCode,
+          completed_at: completedAt,
+          receipt_url: receiptUrl,
           sessionId: String(session_id),
           userId: String(session.user_id),
           destination: resolvedDestination,
           destinationName: destination_contact?.contact_name || destination_name || 'Destinatário',
-          amount: String(amount),
           assetCode,
           hash: result.hash,
           transferDetails: publicTransferDetails,

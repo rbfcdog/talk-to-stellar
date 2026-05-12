@@ -1,5 +1,6 @@
 import { PaymentReceiptService } from './payment-receipt.service';
 import { buildUsedQuoteLabel } from '../../utils/quote-display';
+import { Resvg } from '@resvg/resvg-js';
 
 export type ReceiptImageInput = {
   amount: string;
@@ -20,6 +21,17 @@ export type ReceiptImageInput = {
   protectedBadge?: string;
   savingsLabel?: string;
   savingsPercentLabel?: string;
+};
+
+export type HostedReceiptPaymentData = {
+  tx_hash: string;
+  amount: string;
+  asset: string;
+  destination: string;
+  sender: string;
+  completed_at: string;
+  fee?: string;
+  estimated_savings?: string;
 };
 
 function toNumber(value: unknown): number {
@@ -114,6 +126,46 @@ function qrPattern(seed: string): string {
 }
 
 export class ReceiptImageService {
+  static hostedReceiptInput(paymentData: HostedReceiptPaymentData): ReceiptImageInput {
+    const estimatedSavings = Number(String(paymentData.estimated_savings || '').replace(',', '.'));
+    return {
+      amount: formatDisplayAmount(paymentData.amount, 2),
+      currency: displaySymbol(paymentData.asset),
+      subtitle: 'Pagamento enviado com sucesso',
+      recipientName: paymentData.destination || 'Destinatário',
+      description: `De ${fitText(paymentData.sender || 'TalkToStellar', 24)}`,
+      convertedAmount: formatDisplayAmount(paymentData.amount, 2),
+      convertedCurrency: displaySymbol(paymentData.asset),
+      feeLabel: sanitizeFeeLabel(paymentData.fee),
+      quoteLabel: 'sem conversão',
+      settlementSeconds: null,
+      completedAt: paymentData.completed_at,
+      operationId: PaymentReceiptService.toPublicOperationId(paymentData.tx_hash) || paymentData.tx_hash,
+      savingsLabel: Number.isFinite(estimatedSavings) && estimatedSavings > 0
+        ? `R$ ${formatDisplayAmount(estimatedSavings, 2)}`
+        : 'R$ 0,00',
+      savingsPercentLabel: 'estimativa',
+    };
+  }
+
+  static generateReceiptImage(paymentData: HostedReceiptPaymentData): Buffer {
+    const svg = this.toSvg(this.hostedReceiptInput(paymentData));
+    return new Resvg(svg, {
+      fitTo: {
+        mode: 'width',
+        value: 1080,
+      },
+      font: {
+        defaultFontFamily: 'Inter',
+        loadSystemFonts: true,
+      },
+    }).render().asPng();
+  }
+
+  static generateReceiptImageBase64(paymentData: HostedReceiptPaymentData): string {
+    return this.generateReceiptImage(paymentData).toString('base64');
+  }
+
   static toSvg(input: ReceiptImageInput): string {
     const opId = String(input.operationId || '').trim() || 'TTS-PENDING';
     const statusBadge = String(input.statusBadge || 'Transferência concluída').trim();

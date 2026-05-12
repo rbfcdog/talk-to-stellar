@@ -39,6 +39,7 @@ const orderedMigrations = [
   '20260512_04_remove_non_payment_assistant_modules.sql',
   '20260512_05_savings_feed_spread.sql',
   '20260512_06_global_idempotency_uniqueness.sql',
+  '20260513_00_payment_confirmation_single_use.sql',
 ];
 
 function resolveExecutionList(): string[] {

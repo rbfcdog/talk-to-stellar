@@ -35,6 +35,19 @@ function formatAmount(amount?: string, assetCode?: string) {
   return `${n.toFixed(2)} ${code}`
 }
 
+function shortenValue(value?: string, left = 6, right = 6) {
+  const raw = String(value || "").trim()
+  if (!raw) return "Indisponível"
+  if (raw.length <= left + right + 3) return raw
+  return `${raw.slice(0, left)}...${raw.slice(-right)}`
+}
+
+function formatTimestamp(value?: string) {
+  const timestamp = value ? Date.parse(value) : NaN
+  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("pt-BR")
+  return new Date(timestamp).toLocaleString("pt-BR")
+}
+
 export default function ClaimPaymentClient({ initialToken }: { initialToken?: string }) {
   const [token, setToken] = useState(initialToken || "")
   const [sessionId, setSessionId] = useState("")
@@ -136,6 +149,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const createAccountPath = `/create-account?next=${encodeURIComponent(nextPath)}&force_new=1&context=claim-payment`
   const senderSessionId = String(payload.session_id || "").trim()
   const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
+  const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
+  const successAsset = String(result?.asset || result?.transferDetails?.destinationAssetCode || destinationAssetCode || "")
+  const successDestination = String(result?.destination || "")
+  const successHash = String(result?.tx_hash || result?.hash || "")
+  const successReceiptUrl = String(result?.receipt_url || "")
 
   function leaveSenderSession() {
     clearClientSession()
@@ -246,21 +264,29 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           {status === "claiming" && <div className="mt-5 inline-flex items-center gap-2 text-sm text-slate-300"><TypingDots />Validando e creditando pagamento...</div>}
           <AnimatePresence mode="wait">
           {status === "done" && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-              Pagamento recebido com sucesso.
-              {result?.transferDetails?.destinationAmount && (
-                <p className="mt-2">
-                  Recebido: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
-                </p>
-              )}
-              {result?.operationId && (
-                <p className="mt-2 break-all font-mono text-xs">ID da operação: {result.operationId}</p>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+              <p className="text-base font-semibold text-emerald-300">Pagamento enviado com sucesso</p>
+              <div className="space-y-2 rounded-lg border border-emerald-400/20 bg-slate-950/50 p-4">
+                <p><span className="text-slate-300">Valor: </span>{successAmount} {successAsset}</p>
+                <p><span className="text-slate-300">Destino: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
+                <p><span className="text-slate-300">Transação: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
+                <p><span className="text-slate-300">Horário: </span>{formatTimestamp(result?.completed_at)}</p>
+              </div>
+              {successReceiptUrl && (
+                <a
+                  href={successReceiptUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                >
+                  Ver comprovante
+                </a>
               )}
             </motion.div>
           )}
           {status === "error" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
-              {result?.message || "Não foi possível receber este pagamento."}
+              {result?.error || result?.message || "Não foi possível receber este pagamento."}
             </motion.div>
           )}
           </AnimatePresence>
