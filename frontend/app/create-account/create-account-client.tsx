@@ -128,7 +128,7 @@ export default function CreateAccountClient({
     setTelegramDone(true)
     window.setTimeout(() => {
       window.close()
-    }, 700)
+    }, 2000)
   }
 
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {

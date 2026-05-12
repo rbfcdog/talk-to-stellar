@@ -175,13 +175,16 @@ export class PaymentReceiptService {
     const counterparty = String(input.counterpartyLabel || '').trim();
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
     const feeLine = await this.feeLine(input);
-    const quoteLine = buildUsedQuoteLabel({
-      quote: input.quote,
-      sourceAmount,
-      sourceAssetCode,
-      destinationAmount,
-      destinationAssetCode,
-    });
+    const hasConversion = sourceAssetCode !== destinationAssetCode;
+    const quoteLine = hasConversion
+      ? buildUsedQuoteLabel({
+          quote: input.quote,
+          sourceAmount,
+          sourceAssetCode,
+          destinationAmount,
+          destinationAssetCode,
+        })
+      : '';
     const settlementLine = this.settlementLine(input.settlementMs);
     const savingsLine = this.savingsLine(input.savings);
     const timeLine = this.timeLine(input.completedAt);
@@ -189,8 +192,6 @@ export class PaymentReceiptService {
     const status = String(input.status || 'Confirmado').trim();
 
     return [
-      'Comprovante TalkToStellar',
-      '',
       operationLine,
       `Status: ${status}`,
       quoteLine,

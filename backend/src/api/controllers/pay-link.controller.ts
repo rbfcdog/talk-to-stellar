@@ -8,6 +8,7 @@ import { VaultService } from '../../services/vault.service';
 import ExternalService from '../../services/external.service';
 import { StellarService } from '../services/stellar.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
+import { TransferNotificationService } from '../services/transfer-notification.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
 import { isSessionExpired } from '../../utils/session-expiry';
@@ -248,14 +249,31 @@ export default class PayLinkController {
       const transferLabel = destinationAssetCode === assetCode
         ? `${amount} ${assetCode}`
         : `${amount} ${assetCode}, com recebimento em ${destinationAssetCode}`;
+      const outboundMessage = recipientName
+        ? `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para ${recipientName}.\n\n${url}`
+        : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Entre ou crie sua conta global para receber.\n\n${url}`;
+
+      // Deliver the created link to the user's active channels (Telegram/WhatsApp) and web chat timeline.
+      try {
+        await agentRepo.saveMessage(sessionId, 'assistant', `Link de pagamento criado:\n${url}`);
+      } catch (error) {
+        logger.warn(`[pay-link] failed to save link message in web chat: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      try {
+        await TransferNotificationService.notifyExternalChannelMessage({
+          sessionId,
+          userId: String(session.user_id),
+          text: outboundMessage,
+        });
+      } catch (error) {
+        logger.warn(`[pay-link] failed to deliver link to external channels: ${error instanceof Error ? error.message : String(error)}`);
+      }
 
       return res.status(201).json({
         success: true,
         token,
         url,
-        message: recipientName
-          ? `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para ${recipientName}.`
-          : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Entre ou crie sua conta global para receber.`,
+        message: outboundMessage,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });

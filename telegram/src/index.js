@@ -3,6 +3,7 @@ require('dotenv').config();
 const http = require('http');
 const { Resvg } = require('@resvg/resvg-js');
 const fs = require('fs');
+const puppeteer = require('puppeteer');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
@@ -48,6 +49,137 @@ function renderReceiptPng(svgBuffer) {
     },
   });
   return renderer.render().asPng();
+}
+
+let browserPromise = null;
+
+async function getBrowser() {
+  if (!browserPromise) {
+    browserPromise = puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=medium'],
+    });
+  }
+  return browserPromise;
+}
+
+function toBase64(filePath) {
+  return fs.readFileSync(filePath).toString('base64');
+}
+
+function parseSvgSize(svgText) {
+  const viewBoxMatch = svgText.match(/viewBox=["']\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*["']/i);
+  const widthMatch = svgText.match(/width=["']\s*([\d.]+)(px)?\s*["']/i);
+  const heightMatch = svgText.match(/height=["']\s*([\d.]+)(px)?\s*["']/i);
+  const width = Number(widthMatch?.[1] || viewBoxMatch?.[3] || 720);
+  const height = Number(heightMatch?.[1] || viewBoxMatch?.[4] || 1280);
+  return {
+    width: Number.isFinite(width) && width > 0 ? Math.round(width) : 720,
+    height: Number.isFinite(height) && height > 0 ? Math.round(height) : 1280,
+  };
+}
+
+function sanitizeSvgForHtml(svgText) {
+  return String(svgText || '')
+    .replace(/<\?xml[^>]*\?>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .trim();
+}
+
+function buildFontFaceCss() {
+  const candidates = [
+    '@fontsource/inter/files/inter-latin-400-normal.woff2',
+    '@fontsource/inter/files/inter-latin-500-normal.woff2',
+    '@fontsource/inter/files/inter-latin-600-normal.woff2',
+    '@fontsource/inter/files/inter-latin-700-normal.woff2',
+    '@fontsource/inter/files/inter-latin-ext-400-normal.woff2',
+    '@fontsource/inter/files/inter-latin-ext-500-normal.woff2',
+    '@fontsource/inter/files/inter-latin-ext-600-normal.woff2',
+    '@fontsource/inter/files/inter-latin-ext-700-normal.woff2',
+  ];
+
+  const rules = [];
+  for (const relPath of candidates) {
+    try {
+      const filePath = require.resolve(relPath);
+      const weightMatch = relPath.match(/-(400|500|600|700)-/);
+      const weight = weightMatch ? weightMatch[1] : '400';
+      rules.push(`
+        @font-face {
+          font-family: 'TTSInter';
+          src: url(data:font/woff2;base64,${toBase64(filePath)}) format('woff2');
+          font-weight: ${weight};
+          font-style: normal;
+          font-display: block;
+        }
+      `);
+    } catch {}
+  }
+  return rules.join('\n');
+}
+
+async function renderReceiptPngWithChromium(svgBuffer) {
+  const rawSvg = sanitizeSvgForHtml(svgBuffer.toString('utf8'));
+  const { width, height } = parseSvgSize(rawSvg);
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  try {
+    await page.setViewport({
+      width: Math.max(320, width),
+      height: Math.max(320, height),
+      deviceScaleFactor: 2,
+    });
+
+    const fontFaceCss = buildFontFaceCss();
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; }
+      ${fontFaceCss}
+      #svg-root, #svg-root svg {
+        width: ${width}px;
+        height: ${height}px;
+        display: block;
+        overflow: visible;
+      }
+      #svg-root svg text, #svg-root svg tspan {
+        font-family: 'TTSInter', Arial, Inter, sans-serif !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="svg-root">${rawSvg}</div>
+  </body>
+</html>`;
+
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.evaluate(async () => {
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+      }
+    });
+
+    const clip = await page.$eval('#svg-root', (el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        x: Math.max(0, rect.x),
+        y: Math.max(0, rect.y),
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      };
+    });
+
+    return await page.screenshot({
+      type: 'png',
+      clip,
+      omitBackground: false,
+    });
+  } finally {
+    await page.close();
+  }
 }
 
 function normalizeCaption(text) {
@@ -109,27 +241,22 @@ async function main() {
     if (imageSvgBase64) {
       const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
       const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
-      const svgFilename = String(filename || 'recibo-talktostellar.svg');
 
       try {
-        const pngBuffer = renderReceiptPng(svgBuffer);
+        let pngBuffer;
+        try {
+          pngBuffer = await renderReceiptPngWithChromium(svgBuffer);
+        } catch (chromiumError) {
+          console.warn('[telegram-notify] chromium render failed, using resvg fallback:', chromiumError instanceof Error ? chromiumError.message : String(chromiumError));
+          pngBuffer = renderReceiptPng(svgBuffer);
+        }
         return await bot.telegram.sendPhoto(
           chatId,
-          { source: pngBuffer, filename: pngFilename },
+          { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
           { caption }
         );
       } catch (renderOrPhotoError) {
-        console.warn('[telegram-notify] sendPhoto failed, trying sendDocument fallback:', renderOrPhotoError instanceof Error ? renderOrPhotoError.message : String(renderOrPhotoError));
-      }
-
-      try {
-        return await bot.telegram.sendDocument(
-          chatId,
-          { source: svgBuffer, filename: svgFilename },
-          { caption }
-        );
-      } catch (documentError) {
-        console.warn('[telegram-notify] sendDocument fallback failed, trying text-only fallback:', documentError instanceof Error ? documentError.message : String(documentError));
+        console.warn('[telegram-notify] sendPhoto failed, trying text-only fallback:', renderOrPhotoError instanceof Error ? renderOrPhotoError.message : String(renderOrPhotoError));
       }
 
       return bot.telegram.sendMessage(chatId, caption, { disable_web_page_preview: disableWebPagePreview });
@@ -250,4 +377,13 @@ async function main() {
 main().catch(error => {
   console.error('[telegram] failed to start bot:', error);
   process.exit(1);
+});
+
+process.on('SIGINT', async () => {
+  try {
+    if (browserPromise) {
+      const browser = await browserPromise;
+      await browser.close();
+    }
+  } catch {}
 });

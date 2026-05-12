@@ -214,6 +214,12 @@ export default function ConfirmPaymentClient({
   const [pin, setPin] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
 
+  const safeClose = () => {
+    try {
+      window.close()
+    } catch {}
+  }
+
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
@@ -253,6 +259,13 @@ export default function ConfirmPaymentClient({
 
     validateToken()
   }, [token])
+
+  useEffect(() => {
+    if (!(status === "done" && result?.success)) return
+    // Payment screen should remain visible a bit longer.
+    const timer = window.setTimeout(() => safeClose(), 5000)
+    return () => window.clearTimeout(timer)
+  }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
