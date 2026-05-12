@@ -422,6 +422,7 @@ export default function CreateAccountClient({
         body: JSON.stringify({
           provider: linkProvider,
           provider_user_id: linkProviderUserId,
+          token: externalProvider && externalProviderUserId ? token : undefined,
           email: existingEmail,
           pin: existingPin,
         }),

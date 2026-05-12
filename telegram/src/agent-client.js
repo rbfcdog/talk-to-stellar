@@ -19,7 +19,7 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
     throw new Error('fetch implementation is required (Node.js 18+ provides global fetch)');
   }
 
-  async function sendQuery({ query, sessionId, source = 'telegram', from, fromId }) {
+  async function sendQuery({ query, sessionId, source = 'telegram', from, fromId, chatId }) {
     if (!query || !query.trim()) {
       throw new Error('query is required');
     }
@@ -39,6 +39,7 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
             channel: 'telegram',
             from: from || null,
             from_id: fromId || null,
+            chat_id: chatId || null,
           },
         }),
         signal: controller.signal,
