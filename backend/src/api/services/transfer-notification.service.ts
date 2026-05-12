@@ -294,9 +294,6 @@ export class TransferNotificationService {
   }
 
   private static async sendTelegramToMappings(mappings: ExternalMapping[], text: string): Promise<void> {
-    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-    if (!botToken) return;
-
     const telegramIds = Array.from(new Set(
       mappings
         .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
@@ -304,7 +301,23 @@ export class TransferNotificationService {
         .filter(Boolean)
     ));
 
+    if (telegramIds.length === 0) return;
+
+    const notifyUrl = String(process.env.TELEGRAM_NOTIFY_URL || '').trim();
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    if (!notifyUrl && !botToken) {
+      logger.warn('[telegram-notify] skipped: set TELEGRAM_NOTIFY_URL or TELEGRAM_BOT_TOKEN in the backend environment');
+      return;
+    }
+
     await Promise.all(telegramIds.map(async (chatId) => {
+      if (notifyUrl) {
+        const delivered = await this.sendTelegramViaNotifyUrl(notifyUrl, chatId, text);
+        if (delivered) return;
+      }
+
+      if (!botToken) return;
+
       try {
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
@@ -320,6 +333,34 @@ export class TransferNotificationService {
         logger.warn(`[incoming-transfer] telegram send failed: ${message}`);
       }
     }));
+  }
+
+  private static async sendTelegramViaNotifyUrl(notifyUrl: string, chatId: string, text: string): Promise<boolean> {
+    const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+    try {
+      const response = await fetch(notifyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          disable_web_page_preview: true,
+        }),
+      });
+
+      if (response.ok) return true;
+
+      const payload = await response.text().catch(() => '');
+      logger.warn(`[telegram-notify] notify URL failed status=${response.status} body=${payload}`);
+      return false;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[telegram-notify] notify URL request failed: ${message}`);
+      return false;
+    }
   }
 
   private static async sendWhatsAppToMappings(

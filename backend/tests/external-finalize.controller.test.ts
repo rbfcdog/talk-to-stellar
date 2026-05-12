@@ -223,6 +223,7 @@ describe('ExternalFinalizeController', () => {
     finalizeGetSessionMock.mockResolvedValue({
       user_id: 'user@example.com',
       session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
     });
     finalizeGetAccountBalanceMock.mockResolvedValue([
       { asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0' },
@@ -305,6 +306,7 @@ describe('ExternalFinalizeController', () => {
     finalizeGetSessionMock.mockResolvedValue({
       user_id: 'user@example.com',
       session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
     });
     finalizeGetAccountBalanceMock.mockResolvedValue([
       { asset_code: 'USDC', asset_issuer: testnetUsdcIssuer, balance: '0' },

@@ -9,6 +9,7 @@ import { runMigrations } from './utils/migrate';
 import externalRouter from './api/routes/external.router';
 import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
+import financialRouter from './api/routes/financial.router';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use('/api/passkeys', passkeyRouter);
 
 // Register security routes (PIN reset, etc)
 app.use('/api/security', securityRouter);
+app.use('/api/financial', financialRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

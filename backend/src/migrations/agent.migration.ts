@@ -292,6 +292,23 @@ ALTER TABLE IF EXISTS operations ADD COLUMN IF NOT EXISTS amount_usdc NUMERIC;
 ALTER TABLE IF EXISTS operations ADD COLUMN IF NOT EXISTS amount_brl NUMERIC;
 ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS phone_number TEXT;
 ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS pix_key TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS nickname TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS role_label TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS preferred_currency TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS preferred_amount NUMERIC;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS last_amount NUMERIC;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS last_direction TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS last_operation_id UUID;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS total_sent NUMERIC DEFAULT 0;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS total_received NUMERIC DEFAULT 0;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS transaction_count INTEGER DEFAULT 0;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS metadata_json JSONB DEFAULT '{}';
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
+ALTER TABLE IF EXISTS contacts ADD COLUMN IF NOT EXISTS recurring BOOLEAN DEFAULT false;
 CREATE TABLE IF NOT EXISTS recovery_otps (
   id BIGSERIAL PRIMARY KEY,
   phone_number TEXT UNIQUE NOT NULL,
@@ -362,6 +379,25 @@ ADD COLUMN IF NOT EXISTS last_balance_alert_at TIMESTAMP;
 ALTER TABLE agent_sessions
 ADD COLUMN IF NOT EXISTS opt_out_weekly_summary BOOLEAN DEFAULT false;
 
+-- Expand contacts into smart financial contacts
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS nickname TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS role_label TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS preferred_currency TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS preferred_amount NUMERIC;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_amount NUMERIC;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_direction TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_operation_id UUID;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS total_sent NUMERIC DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS total_received NUMERIC DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS transaction_count INTEGER DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS metadata_json JSONB DEFAULT '{}';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS recurring BOOLEAN DEFAULT false;
+
 -- Create conversion_rules table
 CREATE TABLE IF NOT EXISTS conversion_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -379,6 +415,126 @@ CREATE TABLE IF NOT EXISTS conversion_rules (
 );
 CREATE INDEX IF NOT EXISTS idx_conversion_rules_wallet_id ON conversion_rules(wallet_id);
 CREATE INDEX IF NOT EXISTS idx_conversion_rules_enabled ON conversion_rules(enabled);
+
+-- FX rate history for treasury/risk analytics
+CREATE TABLE IF NOT EXISTS currency_rate_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    base_currency TEXT NOT NULL,
+    quote_currency TEXT NOT NULL,
+    rate NUMERIC NOT NULL,
+    source TEXT,
+    observed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata JSONB DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_currency_rate_history_pair_time
+ON currency_rate_history(base_currency, quote_currency, observed_at DESC);
+
+-- AI Treasury profile per session/user
+CREATE TABLE IF NOT EXISTS treasury_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL,
+    user_id TEXT NOT NULL,
+    auto_protect_enabled BOOLEAN NOT NULL DEFAULT false,
+    target_usd_ratio NUMERIC NOT NULL DEFAULT 0.50,
+    risk_threshold_pct NUMERIC NOT NULL DEFAULT 2.50,
+    spending_projection_brl NUMERIC,
+    spending_projection_usd NUMERIC,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id),
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(session_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_treasury_profiles_user_id ON treasury_profiles(user_id);
+
+CREATE TABLE IF NOT EXISTS treasury_recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL,
+    user_id TEXT NOT NULL,
+    recommendation_type TEXT NOT NULL,
+    risk_score NUMERIC,
+    suggested_action TEXT,
+    payload JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(session_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_treasury_recommendations_session_time
+ON treasury_recommendations(session_id, created_at DESC);
+
+-- AI Financial Insights
+CREATE TABLE IF NOT EXISTS financial_insights (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    amount NUMERIC,
+    currency TEXT,
+    period_start TIMESTAMP,
+    period_end TIMESTAMP,
+    metadata_json JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_financial_insights_user_time ON financial_insights(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_financial_insights_type ON financial_insights(type);
+
+-- Smart Activity Feed
+CREATE TABLE IF NOT EXISTS financial_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    amount NUMERIC,
+    currency TEXT,
+    status TEXT,
+    icon TEXT,
+    semantic_color TEXT,
+    related_operation_id UUID,
+    related_contact_id BIGINT,
+    metadata_json JSONB DEFAULT '{}',
+    dedupe_key TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_financial_events_user_time ON financial_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_financial_events_type ON financial_events(event_type);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_events_dedupe_key_unique ON financial_events(dedupe_key) WHERE dedupe_key IS NOT NULL;
+
+-- Invoice AI light
+CREATE TABLE IF NOT EXISTS invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    recipient_name TEXT NOT NULL,
+    recipient_contact_id BIGINT,
+    title TEXT NOT NULL,
+    description TEXT,
+    amount NUMERIC NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    due_date TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'paid', 'expired', 'cancelled')),
+    payment_link_id TEXT,
+    metadata_json JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_user_time ON invoices(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+
+-- Global account identity
+CREATE TABLE IF NOT EXISTS global_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    default_currency TEXT DEFAULT 'USD',
+    accepted_currencies TEXT[] DEFAULT '{USD,BRL}',
+    is_public BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_global_profiles_username ON global_profiles(username);
 
 -- Create audit_events table
 CREATE TABLE IF NOT EXISTS audit_events (
@@ -486,4 +642,8 @@ ALTER TABLE IF EXISTS conversion_rules DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS audit_events DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scheduled_payments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS whitelisted_assets DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS financial_insights DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS financial_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS invoices DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS global_profiles DISABLE ROW LEVEL SECURITY;
 `;

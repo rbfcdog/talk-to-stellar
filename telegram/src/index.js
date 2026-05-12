@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const http = require('http');
 const { createAgentClient } = require('./agent-client');
-const { createHealthServer } = require('./health-server');
+const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
 
 async function main() {
@@ -12,6 +12,7 @@ async function main() {
   const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'talktostellar_bot';
   const sessionPrefix = process.env.TELEGRAM_SESSION_PREFIX || 'telegram';
   const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH || '/webhook/telegram';
+  const notifySecret = process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '';
   const webhookPublicBase = String(
     process.env.TELEGRAM_WEBHOOK_URL ||
     process.env.PUBLIC_APP_URL ||
@@ -51,6 +52,8 @@ async function main() {
 
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
   let healthServer = null;
+  const notify = ({ chatId, text, disableWebPagePreview = true }) =>
+    bot.telegram.sendMessage(chatId, text, { disable_web_page_preview: disableWebPagePreview });
 
   if (mode === 'webhook') {
     if (!webhookPublicBase) {
@@ -62,18 +65,47 @@ async function main() {
     const port = Number(process.env.PORT || process.env.TELEGRAM_WEBHOOK_PORT || healthPort);
     const webhookCallback = bot.webhookCallback(normalizedPath);
 
-    const server = http.createServer((req, res) => {
+    const sendJson = (res, status, payload) => {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(payload));
+    };
+
+    const server = http.createServer(async (req, res) => {
       if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, service: 'telegram-bot', mode: 'webhook' }));
+        sendJson(res, 200, { ok: true, service: 'telegram-bot', mode: 'webhook' });
+        return;
+      }
+      if (req.url === '/notify' && req.method === 'POST') {
+        if (!isAuthorized(req, notifySecret)) {
+          sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+          return;
+        }
+
+        try {
+          const payload = await readJsonBody(req);
+          const chatId = String(payload.chat_id || payload.chatId || '').trim();
+          const text = String(payload.text || '').trim();
+          if (!chatId || !text) {
+            sendJson(res, 400, { ok: false, error: 'chat_id and text are required' });
+            return;
+          }
+
+          const result = await notify({
+            chatId,
+            text,
+            disableWebPagePreview: payload.disable_web_page_preview !== false,
+          });
+          sendJson(res, 200, { ok: true, message_id: result?.message_id || null });
+        } catch (error) {
+          sendJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
       if (req.url === normalizedPath && req.method === 'POST') {
         webhookCallback(req, res);
         return;
       }
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+      sendJson(res, 404, { ok: false, error: 'Not found' });
     });
 
     await new Promise((resolve, reject) => {
@@ -89,7 +121,7 @@ async function main() {
     console.log(`Webhook: ${webhookUrl}`);
     console.log(`Health check: http://localhost:${port}/health`);
   } else {
-    healthServer = createHealthServer({ port: healthPort });
+    healthServer = createHealthServer({ port: healthPort, notify, notifySecret });
     await healthServer.start();
 
     // Some environments experience intermittent network timeouts when Telegraf

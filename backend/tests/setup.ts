@@ -16,6 +16,7 @@ jest.mock('../src/config/supabase', () => ({
       insert: jest.fn().mockReturnThis(),
       update: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: { id: 'test-user-id' }, error: null }),
       maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),

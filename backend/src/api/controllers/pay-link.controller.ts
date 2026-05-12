@@ -7,9 +7,10 @@ import { WalletRepository } from '../../repositories/wallet.repository';
 import { VaultService } from '../../services/vault.service';
 import ExternalService from '../../services/external.service';
 import { StellarService } from '../services/stellar.service';
-import { TransferNotificationService } from '../services/transfer-notification.service';
+import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
+import { isSessionExpired } from '../../utils/session-expiry';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -121,7 +122,7 @@ async function ensureRecipientTrustline(input: {
   if (hasTrustline) return;
 
   if (!input.wallet?.vault_secret_id) {
-    throw new Error(`Sua carteira ainda não pode receber ${input.assetCode}. Ative a conta antes de resgatar.`);
+    throw new Error(`Sua conta ainda não pode receber ${input.assetCode}. Ative a conta antes de receber.`);
   }
 
   const secret = await vaultService.getSecret(String(input.wallet.vault_secret_id));
@@ -140,6 +141,40 @@ async function ensureRecipientTrustline(input: {
 
   if (!result.success) {
     throw new Error(`Não consegui ativar recebimento em ${input.assetCode}: ${result.error || 'erro desconhecido'}`);
+  }
+}
+
+async function notifySenderClaimCompleted(input: {
+  senderSessionId: string;
+  senderUserId: string;
+  recipientLabel?: string;
+  sourceAmount: string;
+  sourceAssetCode: string;
+  destinationAmount: string;
+  destinationAssetCode: string;
+  feeXlm?: string | null;
+  hash?: string | null;
+  settlementMs?: number | null;
+  quote?: any;
+}) {
+  try {
+    await PaymentReceiptService.sendReceipt({
+      type: 'claim_redeemed',
+      sessionId: input.senderSessionId,
+      userId: input.senderUserId,
+      counterpartyLabel: String(input.recipientLabel || '').trim() || 'destinatário',
+      sourceAmount: input.sourceAmount,
+      sourceAssetCode: input.sourceAssetCode,
+      destinationAmount: input.destinationAmount,
+      destinationAssetCode: input.destinationAssetCode,
+      feeXlm: input.feeXlm || undefined,
+      hash: input.hash || undefined,
+      settlementMs: input.settlementMs || undefined,
+      quote: input.quote,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[pay-link] failed to send sender claim notification: ${message}`);
   }
 }
 
@@ -184,7 +219,7 @@ export default class PayLinkController {
 
       const wallet = await walletRepo.getWalletBySession(sessionId);
       if (!wallet?.public_key || !wallet?.vault_secret_id) {
-        return res.status(400).json({ success: false, message: 'Carteira do remetente não encontrada.' });
+        return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
 
       const { token, url } = externalService.createClaimPaymentUrl({
@@ -209,7 +244,7 @@ export default class PayLinkController {
         url,
         message: recipientName
           ? `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para ${recipientName}.`
-          : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Ative sua carteira para receber.`,
+          : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Entre ou crie sua conta global para receber.`,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
@@ -220,10 +255,14 @@ export default class PayLinkController {
     const token = String(req.body?.token || '').trim();
     const recipientSessionId = String(req.body?.session_id || '').trim();
     const recipientSessionToken = String(req.body?.session_token || '').trim();
+    const recipientPin = String(req.body?.pin || '').trim();
 
     try {
       if (!token || !recipientSessionId || !recipientSessionToken) {
-        return res.status(400).json({ success: false, message: 'token, session_id e session_token são obrigatórios.' });
+        return res.status(401).json({ success: false, loginRequired: true, message: 'Para receber, entre ou crie sua conta global.' });
+      }
+      if (!/^\d{4,8}$/.test(recipientPin)) {
+        return res.status(400).json({ success: false, message: 'Digite o PIN da sua conta para receber este pagamento.' });
       }
 
       let payload: any;
@@ -268,7 +307,15 @@ export default class PayLinkController {
         return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
       if (!recipientSession?.user_id || !verifySessionToken(recipientSession, recipientSessionToken)) {
-        return res.status(401).json({ success: false, message: 'Entre na sua conta para receber.' });
+        return res.status(401).json({ success: false, loginRequired: true, message: 'Entre na sua conta global para receber.' });
+      }
+      if (isSessionExpired(recipientSession)) {
+        return res.status(401).json({ success: false, loginRequired: true, message: 'Sua sessão expirou. Entre novamente para receber.' });
+      }
+
+      const recipientPinHash = String((recipientSession as any).session_password_hash || (recipientSession as any).password_hash || '').trim();
+      if (!recipientPinHash || recipientPinHash !== hashPin(recipientPin)) {
+        return res.status(401).json({ success: false, message: 'PIN inválido para esta conta.' });
       }
 
       const [senderWallet, recipientWallet] = await Promise.all([
@@ -276,13 +323,13 @@ export default class PayLinkController {
         walletRepo.getWalletBySession(recipientSessionId),
       ]);
       if (!senderWallet?.public_key || !senderWallet?.vault_secret_id) {
-        return res.status(400).json({ success: false, message: 'Carteira do remetente não encontrada.' });
+        return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
       if (!recipientWallet?.public_key) {
-        return res.status(400).json({ success: false, message: 'Carteira do destinatário não encontrada.' });
+        return res.status(400).json({ success: false, message: 'Conta do destinatário não encontrada.' });
       }
       if (senderWallet.public_key === recipientWallet.public_key) {
-        return res.status(400).json({ success: false, message: 'Você não pode resgatar um link enviado pela mesma carteira.' });
+        return res.status(400).json({ success: false, message: 'Você não pode receber um link criado pela mesma conta.' });
       }
 
       await ensureRecipientTrustline({
@@ -336,6 +383,7 @@ export default class PayLinkController {
             memoText: 'TalkToStellar claim link',
           });
 
+      const submitStartedAt = Date.now();
       const result = await StellarService.signAndSubmitXdr(String(senderSession.user_id), senderSecret, xdr, {
         user_id: String(senderSession.user_id),
         type: isCrossAsset ? 'PATH_PAYMENT_STRICT_SEND' : 'PAYMENT',
@@ -355,6 +403,7 @@ export default class PayLinkController {
         return res.status(400).json({ success: false, message: result.error || 'Não foi possível enviar o pagamento.' });
       }
 
+      const settlementMs = Date.now() - submitStartedAt;
       const transferDetails = result.hash
         ? await StellarService.getSubmittedPaymentDetails(result.hash)
         : null;
@@ -365,15 +414,31 @@ export default class PayLinkController {
         transferDetails,
       });
 
-      await TransferNotificationService.notifyIncomingTransfer({
-        recipientSessionId,
-        recipientUserId: String(recipientSession.user_id),
-        senderLabel: String(payload.sender_name || (senderSession as any).email || senderSession.user_id || 'TalkToStellar'),
-        amount: String(transferDetails?.destinationAmount || amount),
-        assetCode: String(transferDetails?.destinationAssetCode || destinationAssetCode),
+      await PaymentReceiptService.sendReceipt({
+        type: 'payment_received',
+        sessionId: recipientSessionId,
+        userId: String(recipientSession.user_id),
+        counterpartyLabel: String(payload.sender_name || (senderSession as any).email || senderSession.user_id || 'TalkToStellar'),
         sourceAmount: String(transferDetails?.sourceAmount || amount),
         sourceAssetCode: String(transferDetails?.sourceAssetCode || sourceAssetCode),
+        destinationAmount: String(transferDetails?.destinationAmount || amount),
+        destinationAssetCode: String(transferDetails?.destinationAssetCode || destinationAssetCode),
+        feeXlm: String(transferDetails?.feeXlm || ''),
         hash: result.hash,
+        settlementMs,
+      });
+
+      await notifySenderClaimCompleted({
+        senderSessionId,
+        senderUserId: String(senderSession.user_id),
+        recipientLabel: String((recipientSession as any).email || payload.recipient_name || recipientSession.user_id || '').trim(),
+        sourceAmount: String(transferDetails?.sourceAmount || amount),
+        sourceAssetCode: String(transferDetails?.sourceAssetCode || sourceAssetCode),
+        destinationAmount: String(transferDetails?.destinationAmount || amount),
+        destinationAssetCode: String(transferDetails?.destinationAssetCode || destinationAssetCode),
+        feeXlm: String(transferDetails?.feeXlm || ''),
+        hash: result.hash,
+        settlementMs,
       });
 
       return res.status(200).json({
@@ -383,8 +448,7 @@ export default class PayLinkController {
         assetCode: sourceAssetCode,
         sourceAssetCode,
         destinationAssetCode,
-        hash: result.hash,
-        destination: recipientWallet.public_key,
+        operationId: PaymentReceiptService.toPublicOperationId(result.hash),
         transferDetails,
       });
     } catch (error: any) {

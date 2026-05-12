@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, LogIn, Wallet } from "lucide-react"
-import { clearClientSession } from "@/lib/session"
+import { CheckCircle2, LogIn, ShieldCheck } from "lucide-react"
+import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 
 type ValidationResult = {
   valid?: boolean
@@ -39,12 +39,22 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const [validation, setValidation] = useState<ValidationResult>({})
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">("idle")
   const [result, setResult] = useState<any>(null)
+  const [pin, setPin] = useState("")
+  const [loginNotice, setLoginNotice] = useState("")
 
   useEffect(() => {
     const current = new URLSearchParams(window.location.search).get("token") || initialToken || ""
     setToken(current)
-    setSessionId(localStorage.getItem("talk-to-stellar.sessionId") || "")
-    setSessionToken(localStorage.getItem("talk-to-stellar.sessionToken") || "")
+    if (isClientSessionExpired()) {
+      clearClientSession()
+      setLoginNotice("Sua sessão expirou. Entre novamente para receber este pagamento.")
+      setSessionId("")
+      setSessionToken("")
+    } else {
+      setLoginNotice("")
+      setSessionId(localStorage.getItem("talk-to-stellar.sessionId") || "")
+      setSessionToken(localStorage.getItem("talk-to-stellar.sessionToken") || "")
+    }
     if (current) {
       window.history.replaceState(null, "", window.location.pathname)
     }
@@ -80,13 +90,21 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           token,
           session_id: sessionId,
           session_token: sessionToken,
+          pin,
         }),
       })
       const payload = await response.json().catch(() => ({}))
+      if (response.status === 401 && payload?.loginRequired) {
+        clearClientSession()
+        setSessionId("")
+        setSessionToken("")
+        setPin("")
+        setLoginNotice(payload?.message || "Entre novamente para receber este pagamento.")
+      }
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
     } catch (error) {
-      setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao resgatar pagamento." })
+      setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao receber pagamento." })
       setStatus("error")
     }
   }
@@ -111,6 +129,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     clearClientSession()
     setSessionId("")
     setSessionToken("")
+    setPin("")
     setStatus("idle")
     setResult(null)
   }
@@ -120,7 +139,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       <div className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
         <section className="w-full rounded-lg border border-white/10 bg-slate-950/85 p-6 shadow-2xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
-            <Wallet className="h-4 w-4" />
+            <ShieldCheck className="h-4 w-4" />
             Receber pagamento
           </div>
 
@@ -128,7 +147,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             {senderName} criou um link de {sourceAmountLabel} para {recipientName}
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
-            Entre ou crie sua carteira TalkToStellar para resgatar. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a carteira autenticada nesta página."}
+            Entre ou crie sua conta global para receber. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a conta autenticada nesta página."}
+            {loggedIn && !isSenderSession ? " Confirme com seu PIN para garantir que este pagamento entre na sua conta." : ""}
           </p>
 
           <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
@@ -136,15 +156,20 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             {validation.valid === false ? (
               <p className="mt-1 text-rose-300">{validation.message || "Link inválido."}</p>
             ) : (
-              <p className="mt-1 text-emerald-300">Link pronto para resgate.</p>
+              <p className="mt-1 text-emerald-300">Link pronto. A pessoa que recebe precisa entrar na própria conta.</p>
             )}
           </div>
 
           {(!loggedIn || isSenderSession) && (
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {loginNotice && (
+                <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+                  {loginNotice}
+                </p>
+              )}
               {isSenderSession && (
                 <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
-                  Este navegador está com a conta de quem criou o link. Para receber, entre ou crie a carteira do destinatário.
+                  Este navegador está com a conta de quem criou o link. Para receber, entre ou crie a conta do destinatário.
                 </p>
               )}
               {isSenderSession && (
@@ -167,21 +192,42 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 href={`/create-account?next=${encodeURIComponent(nextPath)}`}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                Criar carteira
+                Criar conta global
               </Link>
             </div>
           )}
 
           {loggedIn && !isSenderSession && (
-            <button
-              type="button"
-              onClick={claim}
-              disabled={status === "claiming" || validation.valid === false || !token}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {status === "claiming" ? "Resgatando..." : `Receber ${receiveLabel}`}
-            </button>
+            <div className="mt-5 space-y-3">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">PIN da conta que vai receber</span>
+                <input
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Confirme seu PIN"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={claim}
+                disabled={status === "claiming" || validation.valid === false || !token || !/^\d{4,8}$/.test(pin)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {status === "claiming" ? "Recebendo..." : `Receber ${receiveLabel}`}
+              </button>
+              <button
+                type="button"
+                onClick={leaveSenderSession}
+                className="inline-flex w-full items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Usar outra conta para receber
+              </button>
+            </div>
           )}
 
           {status === "done" && (
@@ -192,12 +238,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   Recebido: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
                 </p>
               )}
-              {result?.hash && <p className="mt-2 break-all font-mono text-xs">Hash: {result.hash}</p>}
+              {result?.operationId && (
+                <p className="mt-2 break-all font-mono text-xs">ID da operação: {result.operationId}</p>
+              )}
             </div>
           )}
           {status === "error" && (
             <div className="mt-5 rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
-              {result?.message || "Não foi possível resgatar este pagamento."}
+              {result?.message || "Não foi possível receber este pagamento."}
             </div>
           )}
         </section>
