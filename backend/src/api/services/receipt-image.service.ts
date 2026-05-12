@@ -21,6 +21,28 @@ export type ReceiptImageInput = {
   savingsPercentLabel?: string;
 };
 
+function toNumber(value: unknown): number {
+  const parsed = Number(String(value || '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function truncate(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.trunc(value * factor) / factor;
+}
+
+function formatDisplayAmount(value: unknown, decimals = 2): string {
+  const number = truncate(toNumber(value), decimals);
+  return number.toFixed(decimals);
+}
+
+function displaySymbol(assetCode: string): string {
+  const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  if (code === 'USDC') return 'US$';
+  if (code === 'BRL') return 'R$';
+  return `${code} `;
+}
+
 function escapeXml(value: string): string {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -82,7 +104,6 @@ export class ReceiptImageService {
       ? `${Number(input.settlementSeconds || 0).toFixed(1)} segundos`
       : 'confirmada';
     const dateLabel = escapeXml(formatDatePtBr(input.completedAt));
-    const balanceLabel = escapeXml(String(input.balanceLabel || '-'));
     const savingsLabel = escapeXml(String(input.savingsLabel || 'R$ 0,00'));
     const savingsPercentLabel = escapeXml(String(input.savingsPercentLabel || 'menor que métodos tradicionais'));
     const safeOpId = escapeXml(opId);
@@ -96,7 +117,6 @@ export class ReceiptImageService {
       ['Liquidação', settlement],
       ['Data', dateLabel],
       ['ID', safeOpId],
-      ['Saldo restante', balanceLabel],
     ];
 
     const rows = lines.map((line, index) => {
@@ -191,15 +211,15 @@ export class ReceiptImageService {
     const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
     return {
-      amount: String(input.destinationAmount || ''),
-      currency: quoteDestAsset === 'USDC' || quoteDestAsset === 'USD' ? 'US$' : `${quoteDestAsset} `,
+      amount: formatDisplayAmount(input.destinationAmount, 2),
+      currency: displaySymbol(quoteDestAsset),
       recipientName: String(input.counterpartyLabel || 'Destinatário'),
       description: 'Transferência internacional',
-      convertedAmount: quoteSource || input.sourceAmount || '',
-      convertedCurrency: quoteSourceAsset === 'BRL' ? 'R$' : `${quoteSourceAsset} `,
+      convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),
+      convertedCurrency: displaySymbol(quoteSourceAsset || 'BRL'),
       feeLabel: String(input.feeDisplay || 'indisponível'),
       quoteLabel: quoteSource && quoteDest && quoteSourceAsset && quoteDestAsset
-        ? `1 ${quoteDestAsset} = ${(Number(quoteSource) / Math.max(Number(quoteDest), 0.0000001)).toFixed(2)} ${quoteSourceAsset}`
+        ? `1 ${displaySymbol(quoteDestAsset)} = ${formatDisplayAmount(Number(quoteSource) / Math.max(Number(quoteDest), 0.0000001), 2)} ${displaySymbol(quoteSourceAsset)}`
         : 'não aplicável',
       settlementSeconds: Number.isFinite(Number(input.settlementMs || 0))
         ? Number(input.settlementMs || 0) / 1000
@@ -208,7 +228,7 @@ export class ReceiptImageService {
       operationId: opId || null,
       balanceLabel: '-',
       savingsLabel: Number.isFinite(estimatedSavings) && estimatedSavings > 0
-        ? `R$ ${estimatedSavings.toFixed(2)}`
+        ? `R$ ${formatDisplayAmount(estimatedSavings, 2)}`
         : 'R$ 0,00',
       savingsPercentLabel: Number.isFinite(savingsPercentage) && savingsPercentage > 0
         ? `${savingsPercentage.toFixed(0)}% menor`

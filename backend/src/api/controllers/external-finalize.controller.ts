@@ -1271,7 +1271,7 @@ export default class ExternalFinalizeController {
               sourceAmount: directSourceAmount,
               destinationAmount: String(amount),
               platformFee: directPlatformFee,
-              networkFeeXlm: '0.001',
+              networkFeeXlm: directPlatformFee?.enabled ? '0.002' : '0.001',
               path: [],
             }
           : await StellarService.quotePathPayment({

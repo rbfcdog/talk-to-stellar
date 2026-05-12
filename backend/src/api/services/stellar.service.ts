@@ -721,12 +721,12 @@ export class StellarService {
             }
         }
 
-        const networkFeeXlm = '0.001';
         const platformFee = PlatformFeeService.calculateSpread({
             sourceAmount: bestPath.source_amount,
             sourceAssetCode: assetCode(sourceAssetObj),
             mode: 'add_on_top',
         });
+        const networkFeeXlm = platformFee.enabled ? '0.002' : '0.001';
 
         // Add 2% slippage to sourceMax to handle price fluctuations during path payment
         const slippagePercent = 1.02;
@@ -796,7 +796,7 @@ export class StellarService {
             }
         }
 
-        const networkFeeXlm = '0.001';
+        const networkFeeXlm = platformFee.enabled ? '0.002' : '0.001';
 
         // Apply 2% slippage to destinationMin to handle price fluctuations during path payment
         const slippagePercent = 0.98;

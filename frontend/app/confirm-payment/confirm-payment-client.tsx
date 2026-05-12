@@ -55,10 +55,11 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const n = Number(String(amount || "").replace(",", "."))
   if (!Number.isFinite(n)) return "Valor indisponível"
-  if (code === "BRL") return `R$ ${n.toFixed(2)}`
-  if (code === "USDC") return `US$ ${n.toFixed(2)}`
+  const truncated = Math.trunc(n * 100) / 100
+  if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
+  if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
   if (code === "XLM") return "saldo da carteira TalkToStellar"
-  return `${n.toFixed(2)} ${code}`
+  return `${truncated.toFixed(2)} ${code}`
 }
 
 function formatRecipientLabel(payload: any) {
@@ -97,20 +98,25 @@ function trimFixed(value: number, decimals: number) {
   return value.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
 }
 
+function truncateNumber(value: number, decimals: number) {
+  const factor = 10 ** decimals
+  return Math.trunc(value * factor) / factor
+}
+
 function formatFeeAmount(value: number, assetCode: string) {
   const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   const decimals = value > 0 && value < 0.01 ? 8 : 2
   const threshold = Math.pow(10, -decimals)
   const prefix = value > 0 && value < threshold ? "<" : ""
-  if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : value, decimals)}`
-  if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : value, decimals)}`
+  if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
+  if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "XLM") {
     const xlmDecimals = 7
     const xlmThreshold = Math.pow(10, -xlmDecimals)
     const xlmPrefix = value > 0 && value < xlmThreshold ? "<" : ""
-    return `${xlmPrefix}${trimFixed(xlmPrefix ? xlmThreshold : value, xlmDecimals)} XLM`
+    return `${xlmPrefix}${trimFixed(xlmPrefix ? xlmThreshold : truncateNumber(value, xlmDecimals), xlmDecimals)} XLM`
   }
-  return `${prefix}${trimFixed(prefix ? threshold : value, decimals)} ${code}`
+  return `${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)} ${code}`
 }
 
 function formatFeePercent(percent: number) {

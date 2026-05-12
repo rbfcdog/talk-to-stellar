@@ -30,5 +30,28 @@ describe('ReceiptImageService', () => {
     expect(svg).toContain('Economia estimada');
     expect(svg).toContain('R$ 84.00');
     expect(svg).toContain('83% menor');
+    expect(svg).not.toContain('Saldo restante');
+  });
+
+  it('formats receipt payment values with user-facing symbols and truncated decimals', () => {
+    const svg = ReceiptImageService.toSvg(ReceiptImageService.fromPaymentReceipt({
+      destinationAmount: '10.999',
+      destinationAssetCode: 'USDC',
+      sourceAmount: '61.239',
+      sourceAssetCode: 'BRL',
+      counterpartyLabel: 'Ana',
+      feeDisplay: 'US$ 0.03 + 0.002 XLM',
+      quote: {
+        sourceAmount: '61.239',
+        sourceAsset: { code: 'BRL' },
+        destinationAmount: '10.999',
+        destinationAsset: { code: 'USDC' },
+      },
+    }));
+
+    expect(svg).toContain('US$10.99');
+    expect(svg).toContain('R$61.23');
+    expect(svg).not.toContain('USDC');
+    expect(svg).not.toContain('BRL');
   });
 });

@@ -11,6 +11,13 @@ type CreatePayLinkResponse = {
   message?: string
 }
 
+function displayAsset(assetCode: string) {
+  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (code === "USDC") return "US$"
+  if (code === "BRL") return "R$"
+  return code
+}
+
 export default function PayAnyoneClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -151,9 +158,9 @@ export default function PayAnyoneClient() {
                   onChange={(event) => setAssetCode(event.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
-                  <option value="USDC">USDC</option>
+                  <option value="USDC">US$</option>
                   <option value="XLM">XLM</option>
-                  <option value="BRL">BRL</option>
+                  <option value="BRL">R$</option>
                 </select>
               </label>
               <label className="block space-y-2">
@@ -163,8 +170,8 @@ export default function PayAnyoneClient() {
                   onChange={(event) => setDestinationAssetCode(event.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
-                  <option value="USDC">USDC</option>
-                  <option value="BRL">BRL</option>
+                  <option value="USDC">US$</option>
+                  <option value="BRL">R$</option>
                   <option value="XLM">XLM</option>
                 </select>
               </label>
@@ -172,7 +179,7 @@ export default function PayAnyoneClient() {
 
             {destinationAssetCode !== assetCode && (
               <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
-                O link debita {amount || "0"} {assetCode} da sua conta e o destinatário recebe em {destinationAssetCode} ao entrar.
+                O link debita {amount || "0"} {displayAsset(assetCode)} da sua conta e o destinatário recebe em {displayAsset(destinationAssetCode)} ao entrar.
               </p>
             )}
 
