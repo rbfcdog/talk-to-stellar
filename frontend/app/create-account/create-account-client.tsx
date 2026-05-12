@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type FinalizeResponse = {
   success: boolean
@@ -108,6 +110,7 @@ export default function CreateAccountClient({
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
   const [telegramDone, setTelegramDone] = useState(false)
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
+  const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
   const loginHref = useMemo(() => {
     const params = new URLSearchParams()
@@ -497,6 +500,13 @@ export default function CreateAccountClient({
                 </div>
               )}
             </div>
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
+              {["Identidade", "Segurança", "Conta pronta"].map((step, index) => (
+                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-cyan-400/20 text-cyan-100" : "text-slate-400"}`}>
+                  {step}
+                </motion.div>
+              ))}
+            </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -620,17 +630,19 @@ export default function CreateAccountClient({
                 disabled={status === "submitting" || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? "Finalizando conta..." : "Finalizar conta"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Finalizando conta...</span> : "Finalizar conta"}
               </button>
             </form>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Status</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Aguardando validação do link.</p>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Criando conta e preparando wallet...</div>}
+              <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
-                <div className="mt-2 space-y-1 text-emerald-300">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
                   <p>Conta criada com sucesso.</p>
-                </div>
+                </motion.div>
               )}
               {result?.success && (
                 <div className="mt-3 space-y-2">
@@ -650,12 +662,11 @@ export default function CreateAccountClient({
                   {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
                 </div>
               )}
-              {status === "error" && (
-                <p className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</p>
-              )}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
               {passkeyStatus === 'done' && result?.passkeySessionToken && (
                 <p className="mt-2 break-all text-emerald-300">Biometria ativada com sucesso.</p>
               )}
+              </AnimatePresence>
             </div>
 
             <a

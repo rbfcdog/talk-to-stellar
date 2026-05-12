@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
+import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
   success?: boolean
@@ -168,6 +170,7 @@ export default function ConfirmConversionClient({
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
   const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
+  const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -194,6 +197,13 @@ export default function ConfirmConversionClient({
                   )}
                 </div>
               )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
+              {["Revisar", "Autorizar", "Concluído"].map((step, index) => (
+                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-emerald-400/20 text-emerald-200" : "text-slate-400"}`}>
+                  {step}
+                </motion.div>
+              ))}
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -242,15 +252,17 @@ export default function ConfirmConversionClient({
                 disabled={status === "submitting" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? "Confirmando conversão..." : "Confirmar conversão"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando conversão...</span> : "Confirmar conversão"}
               </button>
             </form>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Resultado</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Aguardando confirmação.</p>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Executando conversão...</div>}
+              <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
-                <div className="mt-2 space-y-1 text-emerald-300">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
                   <p>Conversão confirmada com sucesso.</p>
                   {result.transferDetails?.sourceAmount && (
                     <p>
@@ -266,11 +278,10 @@ export default function ConfirmConversionClient({
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                </div>
+                </motion.div>
               )}
-              {status === "error" && (
-                <p className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</p>
-              )}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
+              </AnimatePresence>
             </div>
           </section>
         </div>

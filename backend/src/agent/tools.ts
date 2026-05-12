@@ -921,12 +921,6 @@ function executeGetIntentHelp(): string {
       examples: ["ver saldo", "qual meu saldo?"],
     },
     {
-      command: "saldo técnico",
-      intent: "technical_balance",
-      description: "Mostra detalhes técnicos de XLM, USDC e BRL quando você precisar depurar a conta.",
-      examples: ["saldo técnico"],
-    },
-    {
       command: "contatos",
       intent: "contacts",
       description: "Lista ou salva destinatários da carteira.",
@@ -941,8 +935,8 @@ function executeGetIntentHelp(): string {
     {
       command: "converter",
       intent: "conversion",
-      description: "Cota e cria confirmação para converter saldo entre R$, US$ e saldo técnico.",
-      examples: ["converter 10 usdc para brl"],
+      description: "Cota e cria confirmação para converter saldo entre R$ e US$.",
+      examples: ["converter 10 us$ para r$"],
     },
     {
       command: "cotação",
@@ -1686,7 +1680,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: feeDisplay.display,
       estimated_platform_fee: platformFeeDisplay,
       message:
-        `Antes de confirmar: taxa estimada ${platformFeeDisplay ? `${platformFeeDisplay} TalkToStellar + ` : ''}${networkFeeDisplay}. ` +
+        `Antes de confirmar: ` +
+        `${platformFeeDisplay ? `Taxa TalkToStellar estimada: ${platformFeeDisplay}. ` : ''}` +
+        `Taxa de conversão/rede estimada: ${networkFeeDisplay}. ` +
         quoteValidityLine +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
@@ -1750,7 +1746,12 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       estimated_spread_fee: platformFeeDisplay || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
-      message: `Antes de confirmar: taxa estimada ${platformFeeDisplay ? `${platformFeeDisplay} TalkToStellar + ` : ''}${networkFeeDisplay}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
+      message:
+        `Antes de confirmar: ` +
+        `${platformFeeDisplay ? `Taxa TalkToStellar estimada: ${platformFeeDisplay}. ` : ''}` +
+        `Taxa de conversão/rede estimada: ${networkFeeDisplay}. ` +
+        `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
+        `Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

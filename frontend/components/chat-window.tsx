@@ -3,13 +3,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef, FormEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
 import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
+import { Shimmer, TypingDots } from "@/components/ui/feedback";
 
 type Message = {
   id: string;
@@ -464,7 +465,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           </Avatar>
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
-            <p className="text-xs text-[#8696a0]">{isLoading ? "digitando..." : "online"}</p>
+            <p className="text-xs text-[#8696a0]">
+              {isLoading ? <TypingDots className="text-[#8ea4b1]" /> : "online"}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-4 text-[#aebac1] sm:gap-5">
@@ -481,14 +484,44 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         style={{ backgroundImage: `url('/bg-chat-tile-light.png')`, backgroundRepeat: "repeat" }}
       >
         <div className="space-y-2 p-3 sm:p-4">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`min-w-0 max-w-[84%] overflow-hidden rounded-lg px-3 py-2 text-[14.2px] shadow-md sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
-                {renderMessageContent(m.content)}
-                <div className="text-right text-[11px] text-[#ffffff99] mt-1">{formatTime(m.createdAt)}</div>
-              </div>
+          {messages.length === 0 && (
+            <div className="space-y-3 py-2">
+              <Shimmer className="h-16 w-[72%] rounded-2xl" />
+              <Shimmer className="ml-auto h-14 w-[58%] rounded-2xl" />
             </div>
-          ))}
+          )}
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <motion.div
+                key={m.id}
+                layout
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div className={`min-w-0 max-w-[84%] overflow-hidden rounded-2xl px-3 py-2 text-[14.2px] shadow-md transition-transform duration-150 hover:-translate-y-0.5 sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
+                  {renderMessageContent(m.content)}
+                  <div className="mt-1 text-right text-[11px] text-[#ffffff99]">{formatTime(m.createdAt)}</div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <AnimatePresence>
+            {isLoading && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex justify-start"
+              >
+                <div className="rounded-2xl bg-[#202c33] px-4 py-3 text-[#9cb4c1] shadow-md">
+                  <TypingDots />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -502,7 +535,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Digite uma mensagem"
-            className="h-11 flex-1 rounded-lg border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0]"
+            className="h-11 flex-1 rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
             disabled={isLoading}
           />
           {input.trim() ? (
