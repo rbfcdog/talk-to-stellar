@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
 import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
+import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/ui/feedback";
 
 type Message = {
@@ -144,6 +145,71 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
   useEffect(() => {
     setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
+  }, [chatId]);
+
+  const appendWebFeedback = (items: WebChatFeedback[]) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+    setMessages((prev) => {
+      const contentKeys = new Set(prev.map((message) => `assistant:${message.content}`));
+      const next = items
+        .map((item) => ({
+          id: `web-feedback-${item.id}`,
+          role: "assistant" as const,
+          content: item.content,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+        }))
+        .filter((message) => {
+          if (!message.content.trim()) return false;
+          if (contentKeys.has(`assistant:${message.content}`)) return false;
+          contentKeys.add(`assistant:${message.content}`);
+          return true;
+        });
+
+      return next.length ? [...prev, ...next] : prev;
+    });
+  };
+
+  const consumeQueuedWebFeedback = () => {
+    appendWebFeedback(consumeWebChatFeedback());
+  };
+
+  useEffect(() => {
+    if (chatId !== "agent" || typeof window === "undefined") return;
+    consumeQueuedWebFeedback();
+
+    const onFeedback = (event: Event) => {
+      const detail = (event as CustomEvent<WebChatFeedback>).detail;
+      if (detail?.content) appendWebFeedback([detail]);
+      consumeQueuedWebFeedback();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === "talk-to-stellar.webChatFeedbackQueue") {
+        consumeQueuedWebFeedback();
+      }
+    };
+    const onFocus = () => consumeQueuedWebFeedback();
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(WEB_CHAT_FEEDBACK_CHANNEL);
+      channel.onmessage = (event) => {
+        if (event.data?.content) appendWebFeedback([event.data]);
+        consumeQueuedWebFeedback();
+      };
+    } catch {}
+
+    window.addEventListener(WEB_CHAT_FEEDBACK_EVENT, onFeedback);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener(WEB_CHAT_FEEDBACK_EVENT, onFeedback);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      try {
+        channel?.close();
+      } catch {}
+    };
   }, [chatId]);
   
   // --- Refs para controlar os elementos da tela ---

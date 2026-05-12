@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { enqueueWebChatFeedback } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -138,6 +139,17 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       }
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
+      if (response.ok && payload?.success) {
+        const hash = String(payload.tx_hash || payload.hash || "")
+        const receiptUrl = String(payload.receipt_url || "")
+        enqueueWebChatFeedback([
+          "✅ Pagamento recebido com sucesso.",
+          `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
+          hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
+          `Horário: ${formatTimestamp(payload.completed_at)}`,
+          receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+        ].filter(Boolean).join("\n"))
+      }
       if (!response.ok || !payload?.success) {
         claimLockRef.current = false
       }

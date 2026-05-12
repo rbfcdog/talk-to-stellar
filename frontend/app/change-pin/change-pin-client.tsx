@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { idempotentFetch } from '@/lib/idempotency';
+import { closeIntermediatePage, enqueueWebChatFeedback } from '@/lib/web-feedback';
 
 interface ChangePinPageState {
   stage: 'verify' | 'change' | 'success' | 'error';
@@ -149,9 +150,11 @@ export default function ChangePinClient() {
         message: 'PIN alterado com sucesso!',
       }));
 
+      enqueueWebChatFeedback('✅ PIN alterado com sucesso.\nSeu novo PIN já está ativo.')
+      closeIntermediatePage(3000)
       setTimeout(() => {
-        window.location.href = '/';
-      }, 3000);
+        if (!window.closed) window.location.href = '/chat';
+      }, 3500);
     } catch (error) {
       setState((prev) => ({
         ...prev,
@@ -254,7 +257,7 @@ export default function ChangePinClient() {
               <div className="space-y-3 py-8 text-center">
                 <h2 className="text-2xl font-semibold text-emerald-300">PIN Alterado com Sucesso!</h2>
                 <p className="text-slate-200">{state.message}</p>
-                <p className="text-xs text-slate-400">Você será redirecionado em alguns segundos...</p>
+                <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
               </div>
             )}
 

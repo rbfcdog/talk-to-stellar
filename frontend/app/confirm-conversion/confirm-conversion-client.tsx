@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
+import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -96,12 +97,6 @@ export default function ConfirmConversionClient({
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
 
-  const safeClose = () => {
-    try {
-      window.close()
-    } catch {}
-  }
-
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
@@ -137,8 +132,7 @@ export default function ConfirmConversionClient({
 
   useEffect(() => {
     if (!(status === "done" && result?.success)) return
-    const timer = window.setTimeout(() => safeClose(), 0)
-    return () => window.clearTimeout(timer)
+    closeIntermediatePage(5000)
   }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -162,6 +156,18 @@ export default function ConfirmConversionClient({
       const payload = (await response.json()) as ConfirmResponse
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
+      if (response.ok && payload?.success) {
+        enqueueWebChatFeedback([
+          "✅ Conversão concluída.",
+          payload.transferDetails?.sourceAmount
+            ? `Origem debitada: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode)}`
+            : "",
+          payload.transferDetails?.destinationAmount
+            ? `Destino recebeu: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
+            : "",
+          payload.transferDetails?.feeDisplay ? `Taxa: ${payload.transferDetails.feeDisplay}` : "",
+        ].filter(Boolean).join("\n"))
+      }
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false
       }
@@ -298,6 +304,7 @@ export default function ConfirmConversionClient({
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
+                  <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}

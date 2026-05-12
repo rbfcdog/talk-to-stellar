@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { idempotentFetch } from "@/lib/idempotency"
+import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -20,6 +21,7 @@ export default function LogoutClient() {
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [message, setMessage] = useState("")
+  const completionRef = useRef(false)
   const provider = String(searchParams.get("provider") || searchParams.get("source") || "").trim().toLowerCase()
   const providerUserId = String(searchParams.get("provider_user_id") || "").trim()
   const sessionIdFromUrl = String(searchParams.get("session_id") || "").trim()
@@ -37,9 +39,22 @@ export default function LogoutClient() {
 
   useEffect(() => {
     if (!currentSessionId) {
-      setMessage("Nenhuma sessão ativa encontrada. Você já está deslogado.")
+      const doneMessage = "Nenhuma sessão ativa encontrada. Você já está deslogado."
+      setStatus("done")
+      setMessage(doneMessage)
     }
   }, [currentSessionId])
+
+  useEffect(() => {
+    if (status !== "done" || completionRef.current) return
+    completionRef.current = true
+    enqueueWebChatFeedback(`✅ Saída concluída.\n${message || "Sua sessão foi encerrada."}`)
+    closeIntermediatePage(3000)
+    const timer = window.setTimeout(() => {
+      if (!window.closed) window.location.href = "/chat"
+    }, 3500)
+    return () => window.clearTimeout(timer)
+  }, [status, message])
 
   async function handleConfirmLogout() {
     setStatus("loading")
