@@ -17,6 +17,29 @@ import { WalletRepository } from '../repositories/wallet.repository';
 
 const walletRepo = new WalletRepository(supabase as any);
 
+function ensureHttpProtocol(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function normalizeFrontendBase(value: string): string {
+  const normalized = ensureHttpProtocol(value);
+  return normalized ? normalized.replace(/\/$/, '') : '';
+}
+
+function isLocalhostUrl(value: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(String(value || '').trim());
+}
+
+function resolveFrontendBase(candidates: Array<string | undefined>, fallback = 'http://localhost:3000'): string {
+  const normalized = candidates
+    .map((value) => normalizeFrontendBase(String(value || '')))
+    .filter(Boolean);
+  const hosted = normalized.find((value) => !isLocalhostUrl(value));
+  return hosted || normalized[0] || fallback;
+}
 
 export class AgentGraph {
   private llm: ChatOpenAI;
@@ -407,12 +430,12 @@ export class AgentGraph {
   }
 
   private getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): string {
-    const base =
-      process.env.CREATE_ACCOUNT_BASE ||
-      process.env.FRONTEND_URL ||
-      process.env.PUBLIC_APP_URL ||
-      "http://localhost:3000";
-    const normalizedBase = String(base).trim().replace(/\/$/, "");
+    const normalizedBase = resolveFrontendBase([
+      process.env.FRONTEND_URL,
+      process.env.PUBLIC_APP_URL,
+      process.env.CREATE_ACCOUNT_BASE,
+      process.env.PAYMENT_CONFIRM_BASE,
+    ]);
     let onboardingUrl = `${normalizedBase}/create-account`;
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
@@ -426,12 +449,11 @@ export class AgentGraph {
     }
 
     if (preferLogin) {
+      const loginUrl = `${normalizedBase}/login`;
       return `Sua sessão não está ativa no momento.
 
 Abra este link para entrar na sua conta:
-${onboardingUrl}
-
-Na página, use a opção "Já tenho conta".`;
+${loginUrl}`;
     }
 
     return `Você precisa entrar na sua conta para continuar.
@@ -441,13 +463,12 @@ ${onboardingUrl}`;
   }
 
   private getFrontendBaseUrl(): string {
-    const base =
-      process.env.PAYMENT_CONFIRM_BASE ||
-      process.env.CREATE_ACCOUNT_BASE ||
-      process.env.FRONTEND_URL ||
-      process.env.PUBLIC_APP_URL ||
-      "http://localhost:3000";
-    return String(base).trim().replace(/\/$/, "");
+    return resolveFrontendBase([
+      process.env.PAYMENT_CONFIRM_BASE,
+      process.env.CREATE_ACCOUNT_BASE,
+      process.env.FRONTEND_URL,
+      process.env.PUBLIC_APP_URL,
+    ]);
   }
 
   private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; receiveAssetCode?: string; recipientName?: string }): string {
@@ -1594,12 +1615,12 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   }
 
   private getLogoutConfirmationMessage(state?: AgentState): string {
-    const base =
-      process.env.FRONTEND_URL ||
-      process.env.PUBLIC_APP_URL ||
-      process.env.CREATE_ACCOUNT_BASE ||
-      "http://localhost:3000";
-    const normalizedBase = String(base).trim().replace(/\/$/, "");
+    const normalizedBase = resolveFrontendBase([
+      process.env.FRONTEND_URL,
+      process.env.PUBLIC_APP_URL,
+      process.env.CREATE_ACCOUNT_BASE,
+      process.env.PAYMENT_CONFIRM_BASE,
+    ]);
     const logoutUrl = new URL(`${normalizedBase}/logout`);
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
