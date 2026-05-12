@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, FormEvent } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -234,6 +235,18 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     return () => window.clearInterval(interval);
   }, [chatId, sessionId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const latestReceipt = [...messages].reverse().find((message) =>
+      String(message.content || "").includes("RECEIPT_IMAGE_DATA_URL:")
+    );
+    if (!latestReceipt) return;
+    const match = String(latestReceipt.content || "").match(/RECEIPT_IMAGE_DATA_URL:(data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+)/);
+    if (match?.[1]) {
+      window.localStorage.setItem("talk-to-stellar.lastReceiptImage", match[1]);
+    }
+  }, [messages]);
+
   const resetClientSession = () => {
     if (typeof window === "undefined") return;
     clearClientSession();
@@ -400,17 +413,35 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         <div className="space-y-2">
           {text && <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{text}</p>}
           {inlineSvg ? (
-            <div
-              aria-label="Comprovante financeiro"
-              className="max-h-[520px] w-full max-w-[320px] overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-lg [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
-              dangerouslySetInnerHTML={{ __html: inlineSvg }}
-            />
+            <div className="space-y-3">
+              <div
+                aria-label="Comprovante financeiro"
+                className="max-h-[520px] w-full max-w-[320px] overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-lg [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: inlineSvg }}
+              />
+              <Link
+                href="/receipt"
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Abrir página para baixar
+              </Link>
+            </div>
           ) : (
-            <img
-              src={receiptImageMatch[1]}
-              alt="Comprovante financeiro"
-              className="max-h-[520px] w-full max-w-[320px] rounded-xl border border-white/10 bg-slate-950 object-contain shadow-lg"
-            />
+            <div className="space-y-3">
+              <img
+                src={receiptImageMatch[1]}
+                alt="Comprovante financeiro"
+                className="max-h-[520px] w-full max-w-[320px] rounded-xl border border-white/10 bg-slate-950 object-contain shadow-lg"
+              />
+              <Link
+                href="/receipt"
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Abrir página para baixar
+              </Link>
+            </div>
           )}
         </div>
       );

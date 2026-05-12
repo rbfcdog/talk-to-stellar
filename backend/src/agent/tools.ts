@@ -2392,21 +2392,11 @@ async function executeSendReceiptImage(input: any): Promise<string> {
       ? `Comprovante da operação ${operationId}`
       : 'Comprovante da última operação';
 
-    await TransferNotificationService.notifyExternalChannelImage({
-      sessionId: receiptInput.sessionId,
-      userId: receiptInput.userId,
-      provider: receiptInput.provider,
-      providerUserId: receiptInput.providerUserId,
-      caption,
-      svg,
-      filename: `${operationId || 'recibo-talktostellar'}.svg`,
-    });
-
     return JSON.stringify({
       success: true,
       operation_id: operationId,
       image_data_url: imageDataUrl,
-      message: 'Imagem do comprovante gerada e enviada no chat.',
+      message: 'Imagem do comprovante gerada para visualização no chat web.',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
