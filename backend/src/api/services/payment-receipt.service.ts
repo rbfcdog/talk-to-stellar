@@ -38,6 +38,47 @@ export type PaymentReceiptInput = {
 
 export class PaymentReceiptService {
   private static agentRepo = new AgentRepository(supabase);
+  private static getFrontendBaseUrl() {
+    const preferred =
+      process.env.PAYMENT_CONFIRM_BASE ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.CREATE_ACCOUNT_BASE ||
+      '';
+    const trimmed = String(preferred || '').trim();
+    if (!trimmed) return 'http://localhost:3000';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/$/, '');
+    return `https://${trimmed}`.replace(/\/$/, '');
+  }
+
+  private static makeShortCode(seed: string) {
+    return crypto.createHash('sha256').update(seed).digest('base64url').slice(0, 10);
+  }
+
+  private static async createReceiptViewerUrl(input: {
+    sessionId: string;
+    userId: string;
+    operationId: string;
+    imageDataUrl: string;
+  }): Promise<string> {
+    const code = this.makeShortCode(`receipt:${input.sessionId}:${input.operationId}:${Date.now()}`);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const tokenHash = crypto.createHash('sha256').update(`receipt:${code}:${input.operationId}`).digest('hex');
+    const { error } = await supabase
+      .from('short_links')
+      .upsert({
+        code,
+        url: input.imageDataUrl,
+        purpose: 'receipt_image',
+        token_hash: tokenHash,
+        session_id: input.sessionId,
+        user_id: input.userId,
+        expires_at: expiresAt,
+        created_at: new Date().toISOString(),
+      }, { onConflict: 'code' });
+    if (error) throw error;
+    return `${this.getFrontendBaseUrl()}/receipt/${encodeURIComponent(code)}`;
+  }
 
   private static async saveReceiptMessage(input: {
     sessionId: string;
@@ -81,6 +122,7 @@ export class PaymentReceiptService {
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
     const text = await this.buildReceiptText(input);
     let imageDataUrl = '';
+    let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
 
@@ -98,6 +140,12 @@ export class PaymentReceiptService {
     try {
       const svg = await this.buildReceiptImageSvg(input);
       imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
+      viewerUrl = await this.createReceiptViewerUrl({
+        sessionId: input.sessionId,
+        userId: input.userId,
+        operationId: operationId || input.hash || crypto.randomUUID(),
+        imageDataUrl,
+      });
       await this.saveReceiptMessage({
         sessionId: input.sessionId,
         content: `RECEIPT_IMAGE_DATA_URL:${imageDataUrl}`,
@@ -114,7 +162,9 @@ export class PaymentReceiptService {
         userId: input.userId,
         provider: input.provider,
         providerUserId: input.providerUserId,
-        text,
+        text: viewerUrl ? `${text}\nRecibo online: ${viewerUrl}` : text,
+        buttonText: viewerUrl ? 'Abrir recibo e baixar' : null,
+        buttonUrl: viewerUrl || null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -52,6 +52,8 @@ export type ExternalChannelMessageNotification = {
   provider?: string | null;
   providerUserId?: string | null;
   text: string;
+  buttonText?: string | null;
+  buttonUrl?: string | null;
 };
 
 export type ExternalChannelImageNotification = {
@@ -206,7 +208,10 @@ export class TransferNotificationService {
       ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
     await Promise.all([
-      this.sendTelegramToMappings(mappings, input.text),
+      this.sendTelegramToMappings(mappings, input.text, {
+        buttonText: input.buttonText,
+        buttonUrl: input.buttonUrl,
+      }),
       this.sendWhatsAppToMappings(mappings, session?.phone_number, input.text),
     ]);
   }
@@ -373,7 +378,11 @@ export class TransferNotificationService {
     });
   }
 
-  private static async sendTelegramToMappings(mappings: ExternalMapping[], text: string): Promise<void> {
+  private static async sendTelegramToMappings(
+    mappings: ExternalMapping[],
+    text: string,
+    options?: { buttonText?: string | null; buttonUrl?: string | null }
+  ): Promise<void> {
     const telegramIds = Array.from(new Set(
       mappings
         .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
@@ -392,17 +401,29 @@ export class TransferNotificationService {
 
     await Promise.all(telegramIds.map(async (chatId) => {
       if (notifyUrl) {
-        const delivered = await this.sendTelegramViaNotifyUrl(notifyUrl, chatId, text);
+        const delivered = await this.sendTelegramViaNotifyUrl(notifyUrl, chatId, text, options);
         if (delivered) return;
       }
 
       if (!botToken) return;
 
       try {
+        const buttonText = String(options?.buttonText || '').trim();
+        const buttonUrl = String(options?.buttonUrl || '').trim();
+        const replyMarkup =
+          buttonText && buttonUrl
+            ? {
+                inline_keyboard: [[{ text: buttonText, url: buttonUrl }]],
+              }
+            : undefined;
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text }),
+          body: JSON.stringify({
+            chat_id: chatId,
+            text,
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+          }),
         });
         if (!response.ok) {
           const payload = await response.text().catch(() => '');
@@ -518,8 +539,15 @@ export class TransferNotificationService {
     }
   }
 
-  private static async sendTelegramViaNotifyUrl(notifyUrl: string, chatId: string, text: string): Promise<boolean> {
+  private static async sendTelegramViaNotifyUrl(
+    notifyUrl: string,
+    chatId: string,
+    text: string,
+    options?: { buttonText?: string | null; buttonUrl?: string | null }
+  ): Promise<boolean> {
     const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+    const buttonText = String(options?.buttonText || '').trim();
+    const buttonUrl = String(options?.buttonUrl || '').trim();
     try {
       const response = await fetch(notifyUrl, {
         method: 'POST',
@@ -531,6 +559,7 @@ export class TransferNotificationService {
           chat_id: chatId,
           text,
           disable_web_page_preview: true,
+          ...(buttonText && buttonUrl ? { button_text: buttonText, button_url: buttonUrl } : {}),
         }),
       });
 

@@ -280,8 +280,12 @@ async function main() {
 
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
   let healthServer = null;
-  const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true }) => {
+  const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true, buttonText = '', buttonUrl = '' }) => {
     const caption = normalizeCaption(text);
+    const hasButton = String(buttonText || '').trim() && String(buttonUrl || '').trim();
+    const replyMarkup = hasButton
+      ? { inline_keyboard: [[{ text: String(buttonText).trim(), url: String(buttonUrl).trim() }]] }
+      : undefined;
     if (imageSvgBase64) {
       const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
       const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
@@ -314,7 +318,7 @@ async function main() {
           const photoResponse = await bot.telegram.sendPhoto(
             chatId,
             { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
-            { caption }
+            { caption, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }
           );
           console.log(`[telegram-notify] sendPhoto success chat=${chatId} message_id=${photoResponse?.message_id || 'n/a'} bytes=${pngBuffer.length}`);
           return photoResponse;
@@ -323,7 +327,7 @@ async function main() {
           const documentResponse = await bot.telegram.sendDocument(
             chatId,
             { source: pngBuffer, filename: pngFilename, contentType: 'image/png' },
-            { caption }
+            { caption, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }
           );
           console.log(`[telegram-notify] sendDocument success chat=${chatId} message_id=${documentResponse?.message_id || 'n/a'} bytes=${pngBuffer.length}`);
           return documentResponse;
@@ -332,9 +336,15 @@ async function main() {
         console.warn('[telegram-notify] sendPhoto failed, trying text-only fallback:', renderOrPhotoError instanceof Error ? renderOrPhotoError.message : String(renderOrPhotoError));
       }
 
-      return bot.telegram.sendMessage(chatId, caption, { disable_web_page_preview: disableWebPagePreview });
+      return bot.telegram.sendMessage(chatId, caption, {
+        disable_web_page_preview: disableWebPagePreview,
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      });
     }
-    return bot.telegram.sendMessage(chatId, caption, { disable_web_page_preview: disableWebPagePreview });
+    return bot.telegram.sendMessage(chatId, caption, {
+      disable_web_page_preview: disableWebPagePreview,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
   };
 
   if (mode === 'webhook') {
@@ -379,6 +389,8 @@ async function main() {
             imageSvgBase64,
             filename: String(payload.filename || 'recibo-talktostellar.svg').trim(),
             disableWebPagePreview: payload.disable_web_page_preview !== false,
+            buttonText: String(payload.button_text || payload.buttonText || '').trim(),
+            buttonUrl: String(payload.button_url || payload.buttonUrl || '').trim(),
           });
           sendJson(res, 200, { ok: true, message_id: result?.message_id || null });
         } catch (error) {
