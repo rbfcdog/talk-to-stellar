@@ -95,6 +95,12 @@ export default function ConfirmConversionClient({
   const [pin, setPin] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
 
+  const safeClose = () => {
+    try {
+      window.close()
+    } catch {}
+  }
+
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
@@ -127,6 +133,12 @@ export default function ConfirmConversionClient({
     }
     validateToken()
   }, [token])
+
+  useEffect(() => {
+    if (!(status === "done" && result?.success)) return
+    const timer = window.setTimeout(() => safeClose(), 2000)
+    return () => window.clearTimeout(timer)
+  }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

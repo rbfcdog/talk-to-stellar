@@ -36,6 +36,12 @@ export default function PayAnyoneClient() {
   const [copied, setCopied] = useState(false)
   const [booting, setBooting] = useState(true)
 
+  const safeClose = () => {
+    try {
+      window.close()
+    } catch {}
+  }
+
   useEffect(() => {
     const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
     const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
@@ -53,6 +59,12 @@ export default function PayAnyoneClient() {
     }
     setBooting(false)
   }, [router, searchParams])
+
+  useEffect(() => {
+    if (!(status === "done" && result?.url)) return
+    const timer = window.setTimeout(() => safeClose(), 2000)
+    return () => window.clearTimeout(timer)
+  }, [status, result?.url])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

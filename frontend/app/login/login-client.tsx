@@ -78,7 +78,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       setExternalDone(true)
       window.setTimeout(() => {
         window.close()
-      }, 700)
+      }, 2000)
       return
     }
 
