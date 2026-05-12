@@ -16,7 +16,7 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
-import { formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
@@ -69,6 +69,24 @@ function buildSettlementEconomy(input: {
       gross_amount_brl: savings.grossAmountBrl,
     },
   };
+}
+
+function platformFeeDisplay(quote?: any): string {
+  const platformFee = quote?.platformFee;
+  if (!platformFee?.feeAmount || !platformFee?.feeAssetCode) return '';
+  return formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode);
+}
+
+function totalFeeDisplay(input: {
+  networkFeeDisplay?: string | null;
+  platformFeeDisplay?: string | null;
+}): string {
+  const parts = [
+    String(input.platformFeeDisplay || '').trim(),
+    String(input.networkFeeDisplay || '').trim(),
+  ].filter(Boolean);
+  if (!parts.length) return 'taxa aplicada indisponível';
+  return parts.join(' + ');
 }
 
 function getJwtSecret() {
@@ -870,11 +888,22 @@ export default class ExternalFinalizeController {
               exact: false,
             };
         const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || ''));
+        const appliedPlatformFeeDisplay = platformFeeDisplay(quote);
+        const appliedFeeDisplay = totalFeeDisplay({
+          networkFeeDisplay: feeDisplay.display,
+          platformFeeDisplay: appliedPlatformFeeDisplay,
+        });
+        const sourceAmountWithPlatformFee = quote?.sourceAmount
+          ? String(quote.sourceAmount)
+          : String(transferDetails.sourceAmount || '');
         const publicTransferDetails = {
           ...transferDetails,
-          feeDisplay: feeDisplay.display,
+          sourceAmount: sourceAmountWithPlatformFee || transferDetails.sourceAmount,
+          feeDisplay: appliedFeeDisplay,
           feeUsdc: feeDisplay.fee_usdc,
           feeBrl: feeDisplay.fee_brl,
+          platformFeeDisplay: appliedPlatformFeeDisplay || null,
+          totalFeeDisplay: appliedFeeDisplay,
         };
         const economy = buildSettlementEconomy({
           sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
@@ -1485,6 +1514,30 @@ export default class ExternalFinalizeController {
 
         });
 
+        const receiptSvg = await PaymentReceiptService.buildReceiptImageSvg({
+          type: 'payment_sent',
+          sessionId: String(session_id),
+          userId: String(session.user_id),
+          counterpartyLabel: destination_contact?.contact_name || destination_name || 'destinatário',
+          sourceAmount: publicTransferDetails.sourceAmount,
+          sourceAssetCode: publicTransferDetails.sourceAssetCode,
+          destinationAmount: publicTransferDetails.destinationAmount,
+          destinationAssetCode: publicTransferDetails.destinationAssetCode,
+          feeXlm: publicTransferDetails.feeXlm,
+          feeDisplay: publicTransferDetails.feeDisplay,
+          feeBrl: publicTransferDetails.feeBrl,
+          feeUsdc: publicTransferDetails.feeUsdc,
+          hash: result.hash,
+          quote,
+          savings: {
+            estimatedSavings: economy.savings.estimated_savings,
+            savingsPercentage: economy.savings.savings_percentage,
+            comparisonMethod: economy.savings.comparison_method,
+          },
+          settlementMs,
+        });
+        const receiptImageDataUrl = `data:image/svg+xml;base64,${Buffer.from(receiptSvg, 'utf-8').toString('base64')}`;
+
         // Log successful payment
         await logPaymentDetails(
           String(session_id),
@@ -1599,6 +1652,7 @@ export default class ExternalFinalizeController {
           hash: result.hash,
           transferDetails: publicTransferDetails,
           savings: economy.savings,
+          receiptImageDataUrl,
         });
       }
 
