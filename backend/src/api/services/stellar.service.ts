@@ -382,7 +382,15 @@ export class StellarService {
         try {
             const { sourcePublicKey, destination, amount, assetCode, assetIssuer, memoText } = input;
 
-            const nativeAmount = (!assetCode || assetCode === 'XLM') ? parseFloat(amount) : 0;
+            const directPlatformFee = PlatformFeeService.calculateSpread({
+                sourceAmount: amount,
+                sourceAssetCode: assetCode || 'XLM',
+                mode: 'add_on_top',
+            });
+            const directFeeAmount = directPlatformFee.enabled ? directPlatformFee.feeAmount : '0';
+            const totalDebitAmount = addAssetAmounts(amount, directFeeAmount);
+
+            const nativeAmount = (!assetCode || assetCode === 'XLM') ? parseFloat(totalDebitAmount) : 0;
             await this.ensureTestnetAccountFunded(destination);
             await this.ensureTestnetAccountFunded(sourcePublicKey, nativeAmount + 2);
 
@@ -395,16 +403,17 @@ export class StellarService {
                 return b.asset_type !== 'native' && (b as any).asset_code === assetToSend.getCode() && (b as any).asset_issuer === assetToSend.getIssuer();
             });
 
-            if (!balanceLine || parseFloat(balanceLine.balance) < parseFloat(amount)) {
-                throw new Error(`Saldo insuficiente. Você não tem ${amount} ${assetCode || 'XLM'} para enviar.`);
+            if (!balanceLine || parseFloat(balanceLine.balance) < parseFloat(totalDebitAmount)) {
+                throw new Error(`Saldo insuficiente. Necessário: ${totalDebitAmount} ${assetCode || 'XLM'} incluindo taxa TalkToStellar.`);
             }
 
             const nativeBalanceLine = sourceAccount.balances.find(b => b.asset_type === 'native');
             const xlmBalance = nativeBalanceLine ? parseFloat(nativeBalanceLine.balance) : 0;
             
             const minimumReserve = 1.5; 
-            const feeInXlm = 10000 / 10000000;
-            let amountInXlm = assetToSend.isNative() ? parseFloat(amount) : 0;
+            const operationCount = directPlatformFee.enabled ? 2 : 1;
+            const feeInXlm = (10000 * operationCount) / 10000000;
+            let amountInXlm = assetToSend.isNative() ? parseFloat(totalDebitAmount) : 0;
 
             if (xlmBalance - amountInXlm - feeInXlm < minimumReserve) {
                 throw new Error('Saldo de XLM insuficiente para cobrir a taxa da transação e a reserva mínima da conta.');
@@ -429,6 +438,16 @@ export class StellarService {
                     amount: amount
                 })
             );
+
+            if (directPlatformFee.enabled && directPlatformFee.treasuryPublicKey) {
+                transactionBuilder = transactionBuilder.addOperation(
+                    Operation.payment({
+                        destination: directPlatformFee.treasuryPublicKey,
+                        asset,
+                        amount: directPlatformFee.feeAmount,
+                    })
+                );
+            }
 
             if (memoText) {
                 const safeMemo = sanitizeMemoText(memoText);

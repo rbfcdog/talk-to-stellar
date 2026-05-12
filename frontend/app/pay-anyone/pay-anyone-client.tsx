@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type FormEvent } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 
@@ -12,6 +12,7 @@ type CreatePayLinkResponse = {
 }
 
 export default function PayAnyoneClient() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [sessionId, setSessionId] = useState("")
   const [sessionToken, setSessionToken] = useState("")
@@ -25,14 +26,21 @@ export default function PayAnyoneClient() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    setSessionId(localStorage.getItem("talk-to-stellar.sessionId") || "")
-    setSessionToken(localStorage.getItem("talk-to-stellar.sessionToken") || "")
+    const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
+    const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+    setSessionId(storedSessionId)
+    setSessionToken(storedSessionToken)
     setRecipientName(searchParams.get("recipient") || "")
     setAmount(searchParams.get("amount") || "15")
     const sourceAsset = (searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC")
     setAssetCode(sourceAsset)
     setDestinationAssetCode((searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset).toUpperCase().replace(/^USD$/, "USDC"))
-  }, [searchParams])
+
+    if (!storedSessionId || !storedSessionToken) {
+      const next = `/pay-anyone${window.location.search || ""}`
+      router.replace(`/login?next=${encodeURIComponent(next)}`)
+    }
+  }, [router, searchParams])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
