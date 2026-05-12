@@ -610,6 +610,30 @@ ${onboardingUrl}`;
     return false;
   }
 
+  private isDirectLoginRequest(text: string): boolean {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return (
+      /\b(login|logar|entrar|acessar)\b/.test(normalized) &&
+      /\b(conta|wallet|talktostellar|talk to stellar|app)\b/.test(normalized)
+    ) || /\bfazer login\b/.test(normalized);
+  }
+
+  private isDirectOnboardingRequest(text: string): boolean {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return (
+      /\b(criar|abrir|cadastrar|cadastro|nova)\b/.test(normalized) &&
+      /\b(conta|wallet|carteira)\b/.test(normalized)
+    );
+  }
+
   private formatMoneyByAsset(amount: string, assetCode: string): string {
     const n = Number(String(amount || '0').replace(',', '.'));
     if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
@@ -2231,15 +2255,19 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
-      state.detected_intent = this.isPaymentLinkRequest(state.current_input)
-        ? IntentType.PAYMENT_LINK
-        : wantsReceiptImage
-          ? IntentType.HISTORY
-        : wantsIntentHelp
-          ? IntentType.GENERAL
-        : fixedSavings
-          ? IntentType.FINANCIAL_MEMORY
-        : await this.detectIntent(state.current_input, state.session_data?.user_id);
+      state.detected_intent = this.isDirectLoginRequest(state.current_input)
+        ? IntentType.LOGIN
+        : this.isDirectOnboardingRequest(state.current_input)
+          ? IntentType.ONBOARD
+          : this.isPaymentLinkRequest(state.current_input)
+            ? IntentType.PAYMENT_LINK
+            : wantsReceiptImage
+              ? IntentType.HISTORY
+              : wantsIntentHelp
+                ? IntentType.GENERAL
+                : fixedSavings
+                  ? IntentType.FINANCIAL_MEMORY
+                  : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -2259,6 +2287,22 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
         state.success = false;
         state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      if (!hasActiveWallet && state.action_type === ActionType.LOGIN_USER) {
+        state.success = false;
+        state.response_message = this.getOnboardingOrLoginMessage(state, true);
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      if (!hasActiveWallet && state.action_type === ActionType.CREATE_ACCOUNT) {
+        state.success = false;
+        state.response_message = this.getOnboardingOrLoginMessage(state, false);
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;

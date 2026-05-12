@@ -90,4 +90,28 @@ describe('Agent payment link flow', () => {
     expect(message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
     expect(message).not.toContain('talktostellar.com/login');
   });
+
+  it('returns deterministic configured login URL without LLM fallback', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const baseState = createState();
+    const state: AgentState = {
+      ...baseState,
+      current_input: 'quero acessar minha conta',
+      session_data: {
+        ...baseState.session_data!,
+        public_key: '',
+      },
+    };
+
+    const result = await graph.processInput(state);
+
+    expect(result.response_message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
+    expect(result.response_message).not.toContain('talktostellar.com/login');
+    expect(repository.saveMessage).toHaveBeenCalledWith(
+      state.session_id,
+      'assistant',
+      result.response_message
+    );
+  });
 });
