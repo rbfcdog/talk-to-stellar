@@ -26,7 +26,7 @@ fi
 
 wait_for_evolution "$BASE_URL"
 
-request_with_retry 5 2 curl -sS -X POST "$BASE_URL/instance/create" \
+RESPONSE="$(request_with_retry 5 2 curl -sS -X POST "$BASE_URL/instance/create" \
   -H "Content-Type: application/json" \
   -H "apikey: $API_KEY" \
   -d "{
@@ -40,7 +40,15 @@ request_with_retry 5 2 curl -sS -X POST "$BASE_URL/instance/create" \
     \"alwaysOnline\": true,
     \"readMessages\": true,
     \"readStatus\": true$NUMBER_FIELD
-  }" | tee /tmp/talktostellar-evolution-create-instance.json
+  }")"
+
+printf '%s\n' "$RESPONSE" | tee /tmp/talktostellar-evolution-create-instance.json
+
+if printf '%s' "$RESPONSE" | grep -qi "already in use"; then
+  echo
+  echo "Instance already exists: $INSTANCE_NAME"
+  echo "This is OK for local setup. Continue with the connect command below."
+fi
 
 echo
 echo "Instance requested: $INSTANCE_NAME"
