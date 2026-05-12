@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_treasury_recommendations_user_time
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.updated_at = CURRENT_TIMESTAMP;
+  NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
