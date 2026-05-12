@@ -58,6 +58,15 @@ function formatTimestamp(value?: string) {
   return new Date(timestamp).toLocaleString("pt-BR")
 }
 
+function closeCompletionPage() {
+  try {
+    ;(window as any).Telegram?.WebApp?.close?.()
+  } catch {}
+  try {
+    window.close()
+  } catch {}
+}
+
 function decodeJwtPayload(token: string): any {
   try {
     const payload = token.split(".")[1]
@@ -271,6 +280,12 @@ export default function ConfirmPaymentClient({
 
     validateToken()
   }, [token])
+
+  useEffect(() => {
+    if (status !== "done") return
+    const timer = window.setTimeout(() => closeCompletionPage(), 5000)
+    return () => window.clearTimeout(timer)
+  }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -500,6 +515,7 @@ export default function ConfirmPaymentClient({
                     </motion.div>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
+                  <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}

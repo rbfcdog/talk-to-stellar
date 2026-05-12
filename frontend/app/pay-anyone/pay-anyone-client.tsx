@@ -30,6 +30,15 @@ function friendlyName(value: string) {
   return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim() || "usuário"
 }
 
+function closeCompletionPage() {
+  try {
+    ;(window as any).Telegram?.WebApp?.close?.()
+  } catch {}
+  try {
+    window.close()
+  } catch {}
+}
+
 export default function PayAnyoneClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -89,6 +98,12 @@ export default function PayAnyoneClient() {
       active = false
     }
   }, [sessionId])
+
+  useEffect(() => {
+    if (status !== "done") return
+    const timer = window.setTimeout(() => closeCompletionPage(), 7000)
+    return () => window.clearTimeout(timer)
+  }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -347,6 +362,7 @@ export default function PayAnyoneClient() {
                   </a>
                 </div>
                 <p className="text-slate-300">{result.message}</p>
+                <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
               </motion.div>
             )}
             </AnimatePresence>

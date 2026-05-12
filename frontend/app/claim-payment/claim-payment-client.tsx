@@ -48,6 +48,15 @@ function formatTimestamp(value?: string) {
   return new Date(timestamp).toLocaleString("pt-BR")
 }
 
+function closeCompletionPage() {
+  try {
+    ;(window as any).Telegram?.WebApp?.close?.()
+  } catch {}
+  try {
+    window.close()
+  } catch {}
+}
+
 export default function ClaimPaymentClient({ initialToken }: { initialToken?: string }) {
   const [token, setToken] = useState(initialToken || "")
   const [sessionId, setSessionId] = useState("")
@@ -95,6 +104,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     }
     validate()
   }, [token])
+
+  useEffect(() => {
+    if (status !== "done") return
+    const timer = window.setTimeout(() => closeCompletionPage(), 5000)
+    return () => window.clearTimeout(timer)
+  }, [status])
 
   async function claim() {
     if (!token || validation.valid === false || !/^\d{4,8}$/.test(pin)) return
@@ -282,6 +297,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   Ver comprovante
                 </a>
               )}
+              <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
             </motion.div>
           )}
           {status === "error" && (
