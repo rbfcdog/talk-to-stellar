@@ -307,7 +307,7 @@ export class UserService {
       }
 
       if (secretKey) {
-        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId);
+        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
         await this.autoConvertInitialFundingToUsdc({
           userId,
           publicKey,

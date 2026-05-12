@@ -223,11 +223,12 @@ async function configureWalletAssetsAndContacts(input: {
   userId: string;
   publicKey: string;
   vaultSecretId?: string | null;
+  sessionId?: string | null;
 }) {
   if (input.vaultSecretId) {
     try {
       const secretKey = await vaultService.getSecret(String(input.vaultSecretId));
-      await ContactSeedService.createDefaultTrustlines(input.publicKey, secretKey, input.userId);
+      await ContactSeedService.createDefaultTrustlines(input.publicKey, secretKey, input.userId, input.sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[external-finalize] default trustline setup failed for ${input.userId}: ${message}`);
@@ -1993,8 +1994,6 @@ export default class ExternalFinalizeController {
         publicKey,
         vaultSecretId,
       });
-
-      await ContactSeedService.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
 
       try {
         const freshAccount = await StellarService.loadAccount(publicKey);

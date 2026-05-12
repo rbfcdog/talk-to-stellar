@@ -7,6 +7,7 @@ import { ExternalRepository } from '../../repositories/external.repository';
 import VaultService from '../../services/vault.service';
 import { StellarService } from './stellar.service';
 import { TrustlineService } from './trustline.service';
+import { TransferNotificationService } from './transfer-notification.service';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -70,16 +71,16 @@ export class ContactSeedService {
     return `${pixPrefix}.${stableHash(ownerId, 8)}@talktostellar`;
   }
 
-  static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string) {
+  static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
     const result = await TrustlineService.createDefaultTrustlines(publicKey, secretKey, userId);
     if (!result.success) {
       logger.warn(`[contact-seed] default trustlines partially failed for ${publicKey}: ${result.errors.join(' | ')}`);
     }
-    await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId);
+    await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
     return result;
   }
 
-  static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string) {
+  static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
     const enabledFlag = String(process.env.ONBOARDING_AUTO_CONVERT_TO_USDC || 'true').trim().toLowerCase();
     const enabled = enabledFlag !== 'false' && enabledFlag !== '0' && enabledFlag !== 'no';
     if (!enabled || getStellarNetworkName() !== 'TESTNET') return;
@@ -123,14 +124,23 @@ export class ContactSeedService {
         amount: Number(quote.destinationAmount),
         context: `Friendbot funding sweep: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`,
         source_public_key: publicKey,
-        source_session_id: sessionId,
-        destination_session_id: sessionId,
+        source_session_id: sessionId || undefined,
+        destination_session_id: sessionId || undefined,
       });
 
       if (!result.success) {
         logger.warn(`[contact-seed] funding XLM->USDC sweep failed for ${publicKey}: ${result.error || 'unknown error'}`);
       } else {
         logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
+        if (sessionId) {
+          await TransferNotificationService.notifyOnboardingConversion({
+            sessionId: String(sessionId),
+            userId: String(userId),
+            sourceAmount,
+            destinationAmount: quote.destinationAmount,
+            keepXlm: reserve,
+          });
+        }
       }
     } catch (error) {
       logger.warn(`[contact-seed] funding XLM->USDC sweep skipped for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
