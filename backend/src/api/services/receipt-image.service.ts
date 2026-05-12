@@ -65,8 +65,7 @@ function escapeXml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-    .replace(/[^\x00-\x7F]/g, (char) => `&#x${char.codePointAt(0)?.toString(16).toUpperCase() || 'FFFD'};`);
+    .replace(/'/g, '&apos;');
 }
 
 function fitText(value: string, maxLength: number): string {

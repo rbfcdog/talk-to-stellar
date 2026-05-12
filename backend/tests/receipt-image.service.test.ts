@@ -22,8 +22,8 @@ describe('ReceiptImageService', () => {
     });
 
     expect(svg).toContain('<svg');
-    expect(svg).toContain('Jo&#xE3;o Silva');
-    expect(svg).toContain('Pagamento de servi&#xE7;o freelance');
+    expect(svg).toContain('João Silva');
+    expect(svg).toContain('Pagamento de serviço freelance');
     expect(svg).toContain('US$245.90');
     expect(svg).toContain('TTS-84X92A1');
     expect(svg).toContain('Liquidado instantaneamente');

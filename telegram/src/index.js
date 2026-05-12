@@ -2,22 +2,35 @@ require('dotenv').config();
 
 const http = require('http');
 const { Resvg } = require('@resvg/resvg-js');
+const fs = require('fs');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
 
-const receiptFontFiles = [
-  require.resolve('@fontsource/inter/files/inter-latin-400-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-500-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-600-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-700-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-800-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-ext-400-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-ext-500-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-ext-600-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-ext-700-normal.woff2'),
-  require.resolve('@fontsource/inter/files/inter-latin-ext-800-normal.woff2'),
+const preferredSystemFonts = [
+  '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
 ];
+
+const receiptFontFiles = preferredSystemFonts.filter((fontPath) => fs.existsSync(fontPath));
+
+if (receiptFontFiles.length === 0) {
+  console.warn('[receipt] no system TTF fonts found, falling back to bundled Inter WOFF2.');
+  receiptFontFiles.push(
+    require.resolve('@fontsource/inter/files/inter-latin-400-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-500-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-600-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-700-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-800-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-ext-400-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-ext-500-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-ext-600-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-ext-700-normal.woff2'),
+    require.resolve('@fontsource/inter/files/inter-latin-ext-800-normal.woff2'),
+  );
+}
 
 function renderReceiptPng(svgBuffer) {
   const svgText = svgBuffer
@@ -30,7 +43,7 @@ function renderReceiptPng(svgBuffer) {
     },
     font: {
       fontFiles: receiptFontFiles,
-      defaultFontFamily: 'Inter',
+      defaultFontFamily: 'Noto Sans',
       loadSystemFonts: true,
     },
   });
