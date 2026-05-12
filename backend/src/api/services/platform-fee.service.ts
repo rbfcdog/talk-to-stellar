@@ -10,7 +10,7 @@ export type PlatformSpreadFee = {
   comparisonMethod: string;
 };
 
-const DEFAULT_SPREAD_BPS = 35;
+const DEFAULT_SPREAD_BPS = 30;
 
 function toNumber(value: unknown): number {
   const parsed = Number(String(value || '').replace(',', '.'));
@@ -64,7 +64,7 @@ export class PlatformFeeService {
       grossSourceAmount: formatAssetAmount(mode === 'add_on_top' ? gross + fee : gross),
       netSourceAmount: formatAssetAmount(net),
       treasuryPublicKey,
-      comparisonMethod: 'market_average_4_5pct',
+      comparisonMethod: 'traditional_providers_average_4_5pct',
     };
   }
 

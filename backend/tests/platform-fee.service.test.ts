@@ -29,6 +29,20 @@ describe('PlatformFeeService', () => {
     expect(fee.feeAssetCode).toBe('BRL');
   });
 
+  it('uses 0.30% spread by default', () => {
+    delete process.env.TALKTOSTELLAR_SPREAD_BPS;
+
+    const fee = PlatformFeeService.calculateSpread({
+      sourceAmount: '1000',
+      sourceAssetCode: 'BRL',
+      mode: 'deduct_from_source',
+    });
+
+    expect(fee.feeBps).toBe(30);
+    expect(fee.feeAmount).toBe('3');
+    expect(fee.netSourceAmount).toBe('997');
+  });
+
   it('adds spread on top for strict-receive path payments', () => {
     const fee = PlatformFeeService.calculateSpread({
       sourceAmount: '100',

@@ -28,6 +28,22 @@ function buildSettlementEconomy(input: {
   quote?: any;
 }) {
   const platformFee = input.quote?.platformFee || {};
+  const grossAmountBrl = EconomyEngineService.estimateAmountInBrl({
+    amount: input.sourceAmount,
+    assetCode: input.sourceAssetCode,
+    quote: input.quote,
+  });
+  const platformFeeBrl = EconomyEngineService.estimateAmountInBrl({
+    amount: platformFee.feeAmount,
+    assetCode: platformFee.feeAssetCode,
+    quote: input.quote,
+  });
+  const effectiveFeeBrl = EconomyEngineService.effectiveCostFromQuote({
+    grossAmountBrl,
+    networkFeeBrl: input.feeBrl,
+    platformFeeBrl,
+    quote: input.quote,
+  });
   const savings = EconomyEngineService.calculateForSettledOperation({
     sourceAmount: input.sourceAmount,
     sourceAssetCode: input.sourceAssetCode,
@@ -35,7 +51,8 @@ function buildSettlementEconomy(input: {
     platformFeeAmount: platformFee.feeAmount,
     platformFeeAssetCode: platformFee.feeAssetCode,
     quote: input.quote,
-    comparisonMethod: platformFee.comparisonMethod || 'market_average_4_5pct',
+    effectiveFeeBrl,
+    comparisonMethod: platformFee.comparisonMethod || EconomyEngineService.comparisonMethod(),
   });
 
   return {
@@ -880,6 +897,7 @@ export default class ExternalFinalizeController {
           settlementMs,
           savings: {
             estimatedSavings: economy.savings.estimated_savings,
+            savingsPercentage: economy.savings.savings_percentage,
             comparisonMethod: economy.savings.comparison_method,
           },
         });
@@ -1436,6 +1454,7 @@ export default class ExternalFinalizeController {
           settlementMs,
           savings: {
             estimatedSavings: economy.savings.estimated_savings,
+            savingsPercentage: economy.savings.savings_percentage,
             comparisonMethod: economy.savings.comparison_method,
           },
 
@@ -1530,6 +1549,7 @@ export default class ExternalFinalizeController {
             quote,
             savings: {
               estimatedSavings: economy.savings.estimated_savings,
+              savingsPercentage: economy.savings.savings_percentage,
               comparisonMethod: economy.savings.comparison_method,
             },
             settlementMs,

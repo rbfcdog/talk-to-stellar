@@ -17,6 +17,8 @@ export type ReceiptImageInput = {
   statusBadge?: string;
   instantBadge?: string;
   protectedBadge?: string;
+  savingsLabel?: string;
+  savingsPercentLabel?: string;
 };
 
 function escapeXml(value: string): string {
@@ -81,6 +83,8 @@ export class ReceiptImageService {
       : 'confirmada';
     const dateLabel = escapeXml(formatDatePtBr(input.completedAt));
     const balanceLabel = escapeXml(String(input.balanceLabel || '-'));
+    const savingsLabel = escapeXml(String(input.savingsLabel || 'R$ 0,00'));
+    const savingsPercentLabel = escapeXml(String(input.savingsPercentLabel || 'menor que métodos tradicionais'));
     const safeOpId = escapeXml(opId);
 
     const lines = [
@@ -96,7 +100,7 @@ export class ReceiptImageService {
     ];
 
     const rows = lines.map((line, index) => {
-      const y = 396 + index * 46;
+      const y = 500 + index * 44;
       return [
         `<text x="64" y="${y}" fill="#94A1C8" font-size="20" font-family="Inter, system-ui, sans-serif">${line[0]}</text>`,
         `<text x="658" y="${y}" text-anchor="end" fill="#F4F7FF" font-size="22" font-weight="600" font-family="Inter, system-ui, sans-serif">${line[1]}</text>`,
@@ -137,25 +141,27 @@ export class ReceiptImageService {
   <text x="360" y="294" text-anchor="middle" fill="#F8FBFF" font-size="72" font-weight="800" font-family="Inter, system-ui, sans-serif">${amount}</text>
   <text x="360" y="336" text-anchor="middle" fill="#9FB0DB" font-size="24" font-family="Inter, system-ui, sans-serif">${subtitle}</text>
 
-  <rect x="64" y="356" width="594" height="3" rx="2" fill="#203262"/>
-  <rect x="64" y="357" width="272" height="1" fill="#45D09A"/>
-  <text x="64" y="349" fill="#7C8BB3" font-size="14" font-family="Inter, system-ui, sans-serif">BRL → USD</text>
+  <rect x="64" y="356" width="594" height="96" rx="18" fill="#101B34" stroke="#2B406F" stroke-width="1"/>
+  <text x="92" y="397" fill="#8DA0CB" font-size="18" font-family="Inter, system-ui, sans-serif">Economia estimada</text>
+  <text x="92" y="431" fill="#95FFD1" font-size="36" font-weight="800" font-family="Inter, system-ui, sans-serif">${savingsLabel}</text>
+  <text x="628" y="421" text-anchor="end" fill="#B8C8EE" font-size="17" font-weight="600" font-family="Inter, system-ui, sans-serif">${savingsPercentLabel}</text>
+  <text x="64" y="478" fill="#7C8BB3" font-size="14" font-family="Inter, system-ui, sans-serif">comparado a métodos tradicionais</text>
 
   ${rows}
 
-  <rect x="64" y="860" width="274" height="40" rx="20" fill="#152642" stroke="#254273" stroke-width="1"/>
-  <text x="201" y="886" text-anchor="middle" fill="#B8C8EE" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(instantBadge)}</text>
+  <rect x="64" y="930" width="274" height="40" rx="20" fill="#152642" stroke="#254273" stroke-width="1"/>
+  <text x="201" y="956" text-anchor="middle" fill="#B8C8EE" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(instantBadge)}</text>
 
-  <rect x="356" y="860" width="132" height="40" rx="20" fill="#183A2C" stroke="#2A8F66" stroke-width="1"/>
-  <text x="422" y="886" text-anchor="middle" fill="#8EF0C6" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(protectedBadge)}</text>
+  <rect x="356" y="930" width="132" height="40" rx="20" fill="#183A2C" stroke="#2A8F66" stroke-width="1"/>
+  <text x="422" y="956" text-anchor="middle" fill="#8EF0C6" font-size="16" font-weight="600" font-family="Inter, system-ui, sans-serif">${escapeXml(protectedBadge)}</text>
 
-  <rect x="542" y="842" width="116" height="116" rx="16" fill="#0D1328" stroke="#26365F"/>
-  <g transform="translate(560 860)">
+  <rect x="542" y="912" width="116" height="116" rx="16" fill="#0D1328" stroke="#26365F"/>
+  <g transform="translate(560 930)">
     ${qrPattern(opId)}
   </g>
 
-  <text x="64" y="970" fill="#7082B0" font-size="14" font-family="Inter, system-ui, sans-serif">Comprovante inteligente TalkTo</text>
-  <text x="64" y="996" fill="#5F719D" font-size="13" font-family="Inter, system-ui, sans-serif">Pronto para Telegram, WhatsApp e Web</text>
+  <text x="64" y="1060" fill="#7082B0" font-size="14" font-family="Inter, system-ui, sans-serif">Estimativa baseada em taxas internacionais médias.</text>
+  <text x="64" y="1086" fill="#5F719D" font-size="13" font-family="Inter, system-ui, sans-serif">Recibo registrado no seu histórico.</text>
 </svg>`;
   }
 
@@ -170,6 +176,7 @@ export class ReceiptImageService {
     sourceAmount?: string;
     sourceAssetCode?: string;
     feeDisplay?: string;
+    savings?: { estimatedSavings?: number | string | null; savingsPercentage?: number | string | null } | null;
     settlementMs?: number | null;
     completedAt?: string | null;
     hash?: string | null;
@@ -180,6 +187,8 @@ export class ReceiptImageService {
     const quoteSourceAsset = String(input.quote?.sourceAsset?.code || input.sourceAssetCode || '').trim().toUpperCase();
     const quoteDest = String(input.quote?.destinationAmount || input.destinationAmount || '').trim();
     const quoteDestAsset = String(input.quote?.destinationAsset?.code || input.destinationAssetCode || '').trim().toUpperCase();
+    const estimatedSavings = Number(String(input.savings?.estimatedSavings || '').replace(',', '.'));
+    const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
     return {
       amount: String(input.destinationAmount || ''),
@@ -198,7 +207,12 @@ export class ReceiptImageService {
       completedAt: input.completedAt || null,
       operationId: opId || null,
       balanceLabel: '-',
+      savingsLabel: Number.isFinite(estimatedSavings) && estimatedSavings > 0
+        ? `R$ ${estimatedSavings.toFixed(2)}`
+        : 'R$ 0,00',
+      savingsPercentLabel: Number.isFinite(savingsPercentage) && savingsPercentage > 0
+        ? `${savingsPercentage.toFixed(0)}% menor`
+        : 'estimativa',
     };
   }
 }
-

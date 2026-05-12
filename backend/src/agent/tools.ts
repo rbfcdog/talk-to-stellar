@@ -51,6 +51,15 @@ function formatQuotePath(path: Array<{ code?: string; type?: string }>): string 
   return `rota otimizada em ${path.length + 1} etapas`;
 }
 
+function formatBrl(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 async function fetchBrlUsdcQuote(): Promise<{
   source: string;
   symbol: string;
@@ -537,7 +546,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_financial_memory",
-    description: "Retrieve contextual financial memory and conversational analytics from payment logs: repeat-payment candidates, recipient insights (favorites/recurrence), monthly received totals, fee totals, top payer, average quote rates, and estimated savings vs Wise.",
+    description: "Retrieve contextual financial memory and conversational analytics from payment logs: repeat-payment candidates, recipient insights, monthly received totals, fee totals, top payer, average quote rates, and estimated savings vs traditional providers.",
     parameters: {
       type: "object",
       properties: {
@@ -551,7 +560,7 @@ export const toolDefinitions = [
         },
         mode: {
           type: "string",
-          description: "recent_payments, repeat_payment, monthly_conversion, average_quote, monthly_received, monthly_fees, top_payer, wise_savings, recipient_insights, risk_alert, treasury_advice, or summary.",
+          description: "recent_payments, repeat_payment, monthly_conversion, average_quote, monthly_received, monthly_fees, top_payer, traditional_savings, recipient_insights, risk_alert, treasury_advice, or summary.",
         },
         contact_name: {
           type: "string",
@@ -621,6 +630,20 @@ export const toolDefinitions = [
       properties: {
         session_id: { type: "string", description: "Sessão atual do usuário." },
         user_id: { type: "string", description: "Usuário atual (opcional)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_savings_identity",
+    description: "Responde determinísticamente quanto o usuário economizou hoje, no mês, no lifetime, quanto teria pago por métodos tradicionais, e a operação de maior economia.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        period: { type: "string", description: "today, month ou lifetime." },
+        view: { type: "string", description: "summary, traditional_cost ou biggest_operation." },
       },
       required: [],
     },
@@ -837,6 +860,8 @@ export async function executeTool(
         return await executeFindPaymentReplayCandidate(toolInput);
       case "get_savings_estimate":
         return await executeGetSavingsEstimate(toolInput);
+      case "get_savings_identity":
+        return await executeGetSavingsIdentity(toolInput);
       case "create_invoice":
         return await executeCreateInvoice(toolInput);
       case "get_or_create_global_profile":
@@ -1795,20 +1820,30 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
         }
       : null;
 
-    let userFeeEstimate = 0;
-    let wiseFeeEstimate = 0;
+    let actualFeeEstimate = 0;
+    let traditionalFeeEstimate = 0;
+    let estimatedSavings = 0;
     for (const row of successful) {
-      if (isConversionOperation(row)) continue;
       const direction = inferDirection(row, ownPublicKey);
       if (direction !== 'sent') continue;
-      const amount = toNumber(row.source_amount || row.destination_amount);
-      const sourceAsset = String(row.source_asset_code || row.destination_asset_code || 'USDC').toUpperCase();
-      userFeeEstimate += toNumber(row.fee_usdc || row.fee_brl || row.fee_xlm);
-      wiseFeeEstimate += estimateWiseFee(amount, sourceAsset);
+      const metadata = row?.metadata || {};
+      const savedSavings = metadata?.savings || {};
+      const grossBrl = toNumber(savedSavings.gross_amount_brl || metadata.gross_amount_brl);
+      const rowActualFee = toNumber(savedSavings.actual_fee || metadata.actual_fee_brl || metadata.fee_brl || row.fee_brl || row.fee_usdc || row.fee_xlm);
+      const rowTraditionalFee = toNumber(savedSavings.estimated_traditional_fee) ||
+        (grossBrl > 0 ? grossBrl * EconomyEngineService.traditionalFeePct() : 0);
+      const rowSavings = toNumber(savedSavings.estimated_savings) ||
+        Math.max(0, rowTraditionalFee - rowActualFee);
+      actualFeeEstimate += rowActualFee;
+      traditionalFeeEstimate += rowTraditionalFee;
+      estimatedSavings += rowSavings;
     }
-    const estimatedSavings = wiseFeeEstimate - userFeeEstimate;
-    const savingsCurrency = String(process.env.WISE_COMPARE_CURRENCY || 'USDC').toUpperCase();
-    const savingsDisplay = formatCustomerAssetAmount(String(estimatedSavings.toFixed(2)), savingsCurrency);
+    const savingsDisplay = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(estimatedSavings);
     const walletFiat = await getWalletFiatBalances(sessionId);
     const fxChange = await getUsdBrlMonthlyChange();
     const behavior = classifyTreasuryBehavior(successful, ownPublicKey);
@@ -1870,15 +1905,15 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
       });
     }
 
-    if (mode === 'wise_savings') {
+    if (mode === 'traditional_savings') {
       return JSON.stringify({
         success: true,
         mode,
-        user_fee_estimate: userFeeEstimate,
-        wise_fee_estimate: wiseFeeEstimate,
+        actual_fee_estimate: actualFeeEstimate,
+        traditional_fee_estimate: traditionalFeeEstimate,
         estimated_savings: estimatedSavings,
         savings_display: savingsDisplay,
-        message: `Estimativa de economia comparado ao Wise: ${savingsDisplay} no período.`,
+        message: `Economia estimada em relação a métodos tradicionais: ${savingsDisplay} no período.`,
       });
     }
 
@@ -1994,9 +2029,9 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
         total_fee_display: monthlyFeeDisplay,
       },
       top_payer: topPayerPayload,
-      wise_savings: {
-        user_fee_estimate: userFeeEstimate,
-        wise_fee_estimate: wiseFeeEstimate,
+      traditional_savings: {
+        actual_fee_estimate: actualFeeEstimate,
+        traditional_fee_estimate: traditionalFeeEstimate,
         estimated_savings: estimatedSavings,
         savings_display: savingsDisplay,
       },
@@ -2120,6 +2155,44 @@ async function executeGetSavingsEstimate(input: any): Promise<string> {
   }
 }
 
+async function executeGetSavingsIdentity(input: any): Promise<string> {
+  try {
+    const view = String(input.view || 'summary').trim();
+    const rawPeriod = String(input.period || 'month').trim();
+    const period = ['today', 'month', 'lifetime'].includes(rawPeriod) ? rawPeriod as any : 'month';
+    const identity = await EconomyEngineService.calculateIdentity({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      period,
+    });
+
+    let message = identity.message;
+    if (view === 'traditional_cost') {
+      message =
+        `Em métodos tradicionais, essas operações teriam custado aproximadamente ` +
+        `${formatBrl(identity.estimatedTraditionalFee)}. No TalkToStellar, o custo efetivo estimado foi ` +
+        `${formatBrl(identity.actualFee)}. Economia estimada: ${formatBrl(identity.estimatedSavings)}.`;
+    }
+
+    if (view === 'biggest_operation') {
+      const biggest = identity.biggestSavingsOperation;
+      message = biggest
+        ? `Sua operação com maior economia gerou aproximadamente ${formatBrl(biggest.estimatedSavings)} de economia em relação a métodos tradicionais.`
+        : 'Ainda não encontrei uma operação concluída com economia estimada.';
+    }
+
+    return JSON.stringify({
+      success: true,
+      ...identity,
+      view,
+      message,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
 function paymentLogToReceiptInput(row: any, input: any): PaymentReceiptInput {
   const metadata = row?.metadata || {};
   const transferDetails = metadata?.transferDetails || {};
@@ -2140,6 +2213,7 @@ function paymentLogToReceiptInput(row: any, input: any): PaymentReceiptInput {
   const savings = metadata?.savings
     ? {
         estimatedSavings: metadata.savings.estimated_savings,
+        savingsPercentage: metadata.savings.savings_percentage,
         comparisonMethod: metadata.savings.comparison_method,
       }
     : null;
@@ -2360,18 +2434,6 @@ function inferCounterpartyLabel(row: any, direction: 'sent' | 'received' | 'unkn
     ? String(row?.source_public_key || '').trim()
     : String(row?.destination_public_key || '').trim();
   return fallback || 'contato';
-}
-
-function estimateWiseFee(sendAmount: number, sourceAssetCode: string): number {
-  const flat = Number(process.env.WISE_COMPARE_FLAT_FEE || 2.25);
-  const pct = Number(process.env.WISE_COMPARE_PERCENT_FEE || 0.015);
-  const minFlat = Number.isFinite(flat) ? Math.max(0, flat) : 2.25;
-  const percentage = Number.isFinite(pct) ? Math.max(0, pct) : 0.015;
-  const currency = String(sourceAssetCode || '').toUpperCase();
-  if (!Number.isFinite(sendAmount) || sendAmount <= 0) return 0;
-  if (currency === 'USDC' || currency === 'USD') return sendAmount * percentage + 0.75;
-  if (currency === 'BRL') return sendAmount * percentage + minFlat;
-  return sendAmount * percentage;
 }
 
 function summarizeRecipientInsights(rows: any[], ownPublicKey?: string) {

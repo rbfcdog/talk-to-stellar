@@ -16,6 +16,8 @@ describe('ReceiptImageService', () => {
       completedAt: '2026-05-11T17:32:00.000Z',
       operationId: 'TTS-84X92A1',
       balanceLabel: 'US$1,240.22',
+      savingsLabel: 'R$ 84.00',
+      savingsPercentLabel: '83% menor',
     });
 
     expect(svg).toContain('<svg');
@@ -25,6 +27,8 @@ describe('ReceiptImageService', () => {
     expect(svg).toContain('TTS-84X92A1');
     expect(svg).toContain('Liquidado instantaneamente');
     expect(svg).toContain('Protegido');
+    expect(svg).toContain('Economia estimada');
+    expect(svg).toContain('R$ 84.00');
+    expect(svg).toContain('83% menor');
   });
 });
-
