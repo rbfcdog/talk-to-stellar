@@ -295,6 +295,28 @@ export class AgentGraph {
     return asksForLink && createVerb;
   }
 
+  private isReceiveLinkRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    const asksForLink =
+      /\blink\b/.test(normalized) ||
+      normalized.includes('link para receber') ||
+      normalized.includes('link de recebimento');
+    const receiveRef =
+      normalized.includes('receber') ||
+      normalized.includes('recebimento') ||
+      normalized.includes('me pagar') ||
+      normalized.includes('cobrar') ||
+      normalized.includes('cliente pagar');
+    const selfRef =
+      normalized.includes('meu') ||
+      normalized.includes('minha') ||
+      normalized.includes('pra mim') ||
+      normalized.includes('para mim') ||
+      normalized.includes('qual');
+
+    return asksForLink && receiveRef && selfRef;
+  }
+
   private isReceiptImageRequest(text: string): boolean {
     const normalized = this.normalizeTextForIntent(text);
     const wantsReceipt = normalized.includes('recibo') || normalized.includes('comprovante');
@@ -468,6 +490,37 @@ ${onboardingUrl}`;
         state.response_message =
           `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.${receiveText}`;
       }
+    }
+
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handleReceiveLinkRequest(state: AgentState): Promise<AgentState> {
+    if (!state.session_data?.public_key) {
+      state.success = false;
+      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+    } else {
+      const displayName = String(state.session_data?.email || state.session_data?.user_id || '').trim();
+      const resultRaw = await executeTool('get_or_create_global_profile', {
+        session_id: state.session_id,
+        user_id: state.session_data?.user_id,
+        display_name: displayName,
+      });
+
+      let result: any;
+      try {
+        result = JSON.parse(resultRaw);
+      } catch {
+        result = { success: false, error: 'Não consegui gerar seu link para receber agora.' };
+      }
+
+      state.success = Boolean(result.success);
+      const link = String(result?.profile?.public_link || '').trim();
+      state.response_message = result.success && link
+        ? `Aqui está seu link para receber:\n\n${link}\n\nCompartilhe com seu cliente. Ele acessa, digita o valor e continua o pagamento para sua conta.`
+        : result.error || 'Não consegui gerar seu link para receber agora.';
     }
 
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
@@ -2195,6 +2248,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
         await this.repository.saveState(state.session_id, state);
         return state;
+      }
+
+      if (hasActiveWallet && this.isReceiveLinkRequest(state.current_input)) {
+        return await this.handleReceiveLinkRequest(state);
       }
 
       if (state.action_type === ActionType.BUILD_PAYMENT) {

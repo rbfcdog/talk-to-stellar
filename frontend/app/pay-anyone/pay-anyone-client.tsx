@@ -14,6 +14,8 @@ type CreatePayLinkResponse = {
   message?: string
 }
 
+type LinkMode = "send" | "receive"
+
 function displayAsset(assetCode: string) {
   const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "USDC") return "US$"
@@ -21,11 +23,20 @@ function displayAsset(assetCode: string) {
   return code
 }
 
+function friendlyName(value: string) {
+  const raw = String(value || "").trim()
+  if (!raw) return "usuário"
+  const base = raw.includes("@") ? raw.split("@")[0] : raw
+  return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim() || "usuário"
+}
+
 export default function PayAnyoneClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [sessionId, setSessionId] = useState("")
   const [sessionToken, setSessionToken] = useState("")
+  const [mode, setMode] = useState<LinkMode>("send")
+  const [userName, setUserName] = useState("usuário")
   const [recipientName, setRecipientName] = useState("")
   const [amount, setAmount] = useState("15")
   const [assetCode, setAssetCode] = useState("USDC")
@@ -36,17 +47,14 @@ export default function PayAnyoneClient() {
   const [copied, setCopied] = useState(false)
   const [booting, setBooting] = useState(true)
 
-  const safeClose = () => {
-    try {
-      window.close()
-    } catch {}
-  }
-
   useEffect(() => {
     const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
     const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+    const storedUserName = localStorage.getItem("talk-to-stellar.userName") || ""
     setSessionId(storedSessionId)
     setSessionToken(storedSessionToken)
+    setUserName(friendlyName(storedUserName || storedSessionId))
+    setMode(searchParams.get("mode") === "receive" ? "receive" : "send")
     setRecipientName(searchParams.get("recipient") || "")
     setAmount(searchParams.get("amount") || "15")
     const sourceAsset = (searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC")
@@ -61,10 +69,26 @@ export default function PayAnyoneClient() {
   }, [router, searchParams])
 
   useEffect(() => {
-    if (!(status === "done" && result?.url)) return
-    const timer = window.setTimeout(() => safeClose(), 2000)
-    return () => window.clearTimeout(timer)
-  }, [status, result?.url])
+    if (!sessionId) return
+    let active = true
+    async function loadProfileName() {
+      try {
+        const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        const profile = payload?.profile || {}
+        const nextName = friendlyName(String(profile.display_name || profile.username || ""))
+        if (!active || !nextName) return
+        setUserName(nextName)
+        localStorage.setItem("talk-to-stellar.userName", nextName)
+      } catch {
+        // Keep the locally cached name.
+      }
+    }
+    loadProfileName()
+    return () => {
+      active = false
+    }
+  }, [sessionId])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -73,6 +97,28 @@ export default function PayAnyoneClient() {
     setCopied(false)
 
     try {
+      if (mode === "receive") {
+        const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
+          method: "GET",
+        })
+        const payload = await response.json().catch(() => ({}))
+        const profile = payload?.profile || {}
+        if (!response.ok || !payload?.success || !profile?.public_link) {
+          throw new Error(payload?.message || "Não foi possível criar seu link para receber.")
+        }
+        const link = String(profile.public_link)
+        const displayName = friendlyName(String(profile.display_name || profile.username || userName))
+        setUserName(displayName)
+        localStorage.setItem("talk-to-stellar.userName", displayName)
+        setResult({
+          success: true,
+          url: link,
+          message: `Compartilhe este link para receber pagamentos. Quem paga acessa, digita o valor e envia para sua conta.`,
+        })
+        setStatus("done")
+        return
+      }
+
       const response = await idempotentFetch("/api/external/pay-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,6 +150,7 @@ export default function PayAnyoneClient() {
   const loggedIn = Boolean(sessionId && sessionToken)
   const shareText = result?.message && result?.url ? `${result.message}\n${result.url}` : result?.url || ""
   const whatsappUrl = shareText ? `https://wa.me/?text=${encodeURIComponent(shareText)}` : "#"
+  const isReceiveMode = mode === "receive"
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
@@ -114,22 +161,25 @@ export default function PayAnyoneClient() {
             Pay Anyone
           </div>
           <div className="space-y-4">
+            <p className="text-lg font-semibold text-emerald-200">Bem vindo, {userName}</p>
             <h1 className="max-w-xl text-4xl font-semibold text-white md:text-6xl">
-              Envie dinheiro para quem ainda não tem conta
+              {isReceiveMode ? "Receba dinheiro pelo seu link global" : "Envie dinheiro para quem ainda não tem conta"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-              O PIN autoriza a criação do link. Quem recebe precisa entrar ou criar a própria conta global para receber o valor.
+              {isReceiveMode
+                ? "Compartilhe seu link com clientes. Eles acessam, digitam o valor e pagam direto para sua conta."
+                : "O PIN autoriza a criação do link. Quem recebe precisa entrar ou criar a própria conta global para receber o valor."}
             </p>
           </div>
 
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-            {["Crie", "Compartilhe", "Receba"].map((label, index) => (
+            {(isReceiveMode ? ["Crie", "Compartilhe", "Receba"] : ["Crie", "Compartilhe", "Receba"]).map((label, index) => (
               <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  {index === 0 && "Digite valor, destinatário e PIN."}
+                  {index === 0 && (isReceiveMode ? "Gere seu link público de recebimento." : "Digite valor, destinatário e PIN.")}
                   {index === 1 && "Envie o link pelo canal que preferir."}
-                  {index === 2 && "O destinatário recebe na própria conta."}
+                  {index === 2 && (isReceiveMode ? "O pagamento cai na sua conta." : "O destinatário recebe na própria conta.")}
                 </p>
               </div>
             ))}
@@ -152,18 +202,47 @@ export default function PayAnyoneClient() {
             </div>
           )}
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Nome do destinatário</span>
-              <input
-                value={recipientName}
-                onChange={(event) => setRecipientName(event.target.value)}
-                placeholder="João"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
-              />
-            </label>
+          <div className="mb-5 grid rounded-lg border border-white/10 bg-white/5 p-1 text-sm sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("send")
+                setStatus("idle")
+                setResult(null)
+                setCopied(false)
+              }}
+              className={`rounded-md px-4 py-2 font-semibold transition ${!isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
+            >
+              Enviar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("receive")
+                setStatus("idle")
+                setResult(null)
+                setCopied(false)
+              }}
+              className={`rounded-md px-4 py-2 font-semibold transition ${isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
+            >
+              Receber
+            </button>
+          </div>
 
-            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            {!isReceiveMode && (
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">Nome do destinatário</span>
+                <input
+                  value={recipientName}
+                  onChange={(event) => setRecipientName(event.target.value)}
+                  placeholder="João"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                />
+              </label>
+            )}
+
+            {!isReceiveMode && <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">Valor</span>
                 <input
@@ -198,34 +277,44 @@ export default function PayAnyoneClient() {
                   <option value="XLM">XLM</option>
                 </select>
               </label>
-            </div>
+            </div>}
 
-            {destinationAssetCode !== assetCode && (
+            {isReceiveMode && (
+              <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+                Seu link de recebimento é fixo. O cliente escolhe o valor na página pública e o pagamento é identificado como entrada para você.
+              </div>
+            )}
+
+            {!isReceiveMode && destinationAssetCode !== assetCode && (
               <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
                 O link debita {amount || "0"} {displayAsset(assetCode)} da sua conta e o destinatário recebe em {displayAsset(destinationAssetCode)} ao entrar.
               </p>
             )}
 
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Seu PIN</span>
-              <input
-                value={pin}
-                onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-                type="password"
-                inputMode="numeric"
-                maxLength={8}
-                placeholder="Autorize a criação do link"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
-              />
-            </label>
+            {!isReceiveMode && (
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-200">Seu PIN</span>
+                <input
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  placeholder="Autorize a criação do link"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                />
+              </label>
+            )}
 
             <button
               type="submit"
-              disabled={!loggedIn || status === "submitting" || !amount.trim() || !pin.trim()}
+              disabled={!loggedIn || status === "submitting" || (!isReceiveMode && (!amount.trim() || !pin.trim()))}
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Link2 className="h-4 w-4" />
-              {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Criando link...</span> : "Criar link de pagamento"}
+              {status === "submitting"
+                ? <span className="inline-flex items-center gap-2"><Spinner />Criando link...</span>
+                : isReceiveMode ? "Criar link para receber" : "Criar link de pagamento"}
             </button>
           </form>
 

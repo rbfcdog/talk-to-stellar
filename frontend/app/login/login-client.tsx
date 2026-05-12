@@ -138,6 +138,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         payload?.sessionId ? String(payload.sessionId) : undefined,
         payload?.sessionToken ? String(payload.sessionToken) : undefined
       )
+      localStorage.setItem("talk-to-stellar.userName", email.trim())
       finishLogin()
     } catch (err) {
       setStatus("error")
@@ -198,6 +199,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
         completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
       )
+      localStorage.setItem("talk-to-stellar.userName", email.trim())
       getBrowserId()
       await linkExternalSession(
         completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
