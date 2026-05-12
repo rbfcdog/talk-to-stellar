@@ -2,6 +2,19 @@ import { AgentGraph } from '../src/agent/graph';
 import { ActionType, AgentState, IntentType } from '../src/agent/types';
 
 describe('Agent payment link flow', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      PAYMENT_CONFIRM_BASE: 'https://talk-to-stellar-owxg.vercel.app',
+    };
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
   const createRepository = () => ({
     saveMessage: jest.fn().mockResolvedValue(undefined),
     saveState: jest.fn().mockResolvedValue(undefined),
@@ -31,18 +44,6 @@ describe('Agent payment link flow', () => {
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
     const state = createState();
 
-    (graph as any).extractPaymentIntentWithLlm = jest.fn().mockResolvedValue({
-      recipient_query: '',
-      amount: '',
-      asset_code: 'USDC',
-      receive_asset_code: '',
-      category: '',
-      memo: '',
-      is_payment_link: true,
-      needs_clarification: false,
-      clarification_question: '',
-    });
-
     const result = await (graph as any).handlePayAnyoneLinkRequest(state);
 
     expect(result.success).toBe(false);
@@ -55,5 +56,28 @@ describe('Agent payment link flow', () => {
       result.response_message
     );
     expect(repository.saveState).toHaveBeenCalledWith(state.session_id, result);
+  });
+
+  it('generates a payment link immediately when amount is present', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const state = {
+      ...createState(),
+      current_input: 'quero criar um link de pagto de 10 dolares',
+    };
+
+    (graph as any).extractPaymentIntentWithLlm = jest.fn().mockRejectedValue(new Error('LLM should not be called'));
+
+    const result = await (graph as any).handlePayAnyoneLinkRequest(state);
+
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('US$ 10.00');
+    expect(result.response_message).toContain('https://talk-to-stellar-owxg.vercel.app/pay-anyone?amount=10&asset=USDC');
+    expect((graph as any).extractPaymentIntentWithLlm).not.toHaveBeenCalled();
+    expect(repository.saveMessage).toHaveBeenCalledWith(
+      state.session_id,
+      'assistant',
+      result.response_message
+    );
   });
 });

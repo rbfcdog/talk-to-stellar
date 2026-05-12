@@ -268,6 +268,66 @@ export class AgentGraph {
     };
   }
 
+  private normalizeTextForIntent(text: string): string {
+    return String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  private isPaymentLinkRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    const asksForLink =
+      /\blink\b/.test(normalized) ||
+      normalized.includes('payment link') ||
+      normalized.includes('link de pagamento') ||
+      normalized.includes('link de pagto') ||
+      normalized.includes('link de transacao') ||
+      normalized.includes('link de transferencia');
+    const createVerb =
+      normalized.includes('criar') ||
+      normalized.includes('gerar') ||
+      normalized.includes('fazer') ||
+      normalized.includes('montar') ||
+      normalized.includes('create') ||
+      normalized.includes('generate');
+
+    return asksForLink && createVerb;
+  }
+
+  private extractPaymentLinkIntentFromText(text: string): {
+    amount?: string;
+    asset_code?: string;
+    receive_asset_code?: string;
+    recipient_query?: string;
+  } {
+    const original = String(text || '');
+    const normalized = this.normalizeTextForIntent(original);
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1]?.replace(',', '.');
+
+    let assetCode = 'USDC';
+    if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
+    if (/\b(xlm|lumen|lumens)\b/.test(normalized)) assetCode = 'XLM';
+    if (/\b(usd|usdc|dolar|dolares|dollar|dollars)\b/.test(normalized)) assetCode = 'USDC';
+
+    let receiveAssetCode = '';
+    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)/);
+    if (receiveMatch?.[1]) {
+      const receive = receiveMatch[1];
+      if (receive === 'brl' || receive === 'real' || receive === 'reais') receiveAssetCode = 'BRL';
+      else if (receive === 'xlm' || receive.startsWith('lumen')) receiveAssetCode = 'XLM';
+      else receiveAssetCode = 'USDC';
+    }
+
+    return {
+      amount,
+      asset_code: assetCode,
+      receive_asset_code: receiveAssetCode,
+      recipient_query: '',
+    };
+  }
+
   private getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): string {
     const base =
       process.env.CREATE_ACCOUNT_BASE ||
@@ -333,7 +393,13 @@ ${onboardingUrl}`;
       state.success = false;
       state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
-      const llmParsed = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+      const deterministicParsed = this.extractPaymentLinkIntentFromText(state.current_input);
+      const llmParsed = deterministicParsed.amount
+        ? deterministicParsed
+        : {
+            ...deterministicParsed,
+            is_payment_link: true,
+          };
       const amountInfo = this.normalizePaymentAmountAndAsset(
         String(llmParsed.amount || ''),
         llmParsed.asset_code
@@ -1931,7 +1997,9 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         return await this.handleWalletCreation(state);
       }
 
-      state.detected_intent = await this.detectIntent(state.current_input, state.session_data?.user_id);
+      state.detected_intent = this.isPaymentLinkRequest(state.current_input)
+        ? IntentType.PAYMENT_LINK
+        : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
