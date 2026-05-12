@@ -224,7 +224,11 @@ function readPngDimensions(buffer) {
 }
 
 function saveDebugPng(buffer, filename = 'debug-telegram-image.png') {
-  const filepath = path.resolve(process.cwd(), filename);
+  const baseDir = process.env.TELEGRAM_DEBUG_IMAGE_DIR
+    ? path.resolve(process.env.TELEGRAM_DEBUG_IMAGE_DIR)
+    : '/tmp/talktostellar-debug';
+  fs.mkdirSync(baseDir, { recursive: true });
+  const filepath = path.resolve(baseDir, filename);
   fs.writeFileSync(filepath, buffer);
   return filepath;
 }
@@ -281,6 +285,7 @@ async function main() {
     if (imageSvgBase64) {
       const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
       const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
+      const debugName = `debug-telegram-image-${String(chatId || 'unknown')}-${Date.now()}.png`;
 
       try {
         let pngBuffer;
@@ -290,7 +295,7 @@ async function main() {
           console.warn('[telegram-notify] chromium render failed, using resvg fallback:', chromiumError instanceof Error ? chromiumError.message : String(chromiumError));
           pngBuffer = renderReceiptPng(svgBuffer);
         }
-        const debugPath = saveDebugPng(pngBuffer, 'debug-telegram-image.png');
+        const debugPath = saveDebugPng(pngBuffer, debugName);
         const { width, height } = readPngDimensions(pngBuffer);
         const validPng = isPngBuffer(pngBuffer);
         console.log(`[telegram-notify] png validation bytes=${pngBuffer.length} width=${width} height=${height} valid=${validPng} file=${debugPath}`);
