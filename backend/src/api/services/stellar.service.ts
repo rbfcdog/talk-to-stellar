@@ -4,6 +4,9 @@ import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
 import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS } from '../../config/assets';
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
+import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
+
+const STELLAR_BASE_FEE_STROOPS = '100';
 
 interface BuildPaymentInput {
   sourcePublicKey: string;
@@ -412,7 +415,7 @@ export class StellarService {
             
             const minimumReserve = 1.5; 
             const operationCount = directPlatformFee.enabled ? 2 : 1;
-            const feeInXlm = (10000 * operationCount) / 10000000;
+            const feeInXlm = (Number(STELLAR_BASE_FEE_STROOPS) * operationCount) / 10000000;
             let amountInXlm = assetToSend.isNative() ? parseFloat(totalDebitAmount) : 0;
 
             if (xlmBalance - amountInXlm - feeInXlm < minimumReserve) {
@@ -427,7 +430,7 @@ export class StellarService {
             }
 
             let transactionBuilder = new TransactionBuilder(sourceAccount, {
-                fee: '10000',
+                fee: STELLAR_BASE_FEE_STROOPS,
                 networkPassphrase: stellarConfig.network
             });
 
@@ -477,7 +480,7 @@ export class StellarService {
             const asset = new Asset(assetCode, assetIssuer);
 
             const transactionBuilder = new TransactionBuilder(sourceAccount, {
-                fee: '10000',
+                fee: STELLAR_BASE_FEE_STROOPS,
                 networkPassphrase: stellarConfig.network,
             }).addOperation(
                 Operation.changeTrust({
@@ -637,7 +640,7 @@ export class StellarService {
             const xlmBalance = nativeBalanceLine ? parseFloat(nativeBalanceLine.balance) : 0;
             
             const minimumReserve = 1.5; 
-            const feeInXlm = 10000 / 10000000;
+            const feeInXlm = Number(STELLAR_BASE_FEE_STROOPS) / 10000000;
             // If sending XLM, use sourceMax (with slippage); otherwise 0
             let amountInXlm = sourceAssetObj.isNative() ? parseFloat(totalSourceMax) : 0;
 
@@ -654,7 +657,7 @@ export class StellarService {
             });
 
             const transactionBuilder = new TransactionBuilder(sourceAccount, {
-                fee: '10000',
+                fee: STELLAR_BASE_FEE_STROOPS,
                 networkPassphrase: stellarConfig.network
             });
 
@@ -726,7 +729,7 @@ export class StellarService {
             sourceAssetCode: assetCode(sourceAssetObj),
             mode: 'add_on_top',
         });
-        const networkFeeXlm = platformFee.enabled ? '0.002' : '0.001';
+        const networkFeeXlm = DEFAULT_NETWORK_FEE_XLM;
 
         // Add 2% slippage to sourceMax to handle price fluctuations during path payment
         const slippagePercent = 1.02;
@@ -796,7 +799,7 @@ export class StellarService {
             }
         }
 
-        const networkFeeXlm = platformFee.enabled ? '0.002' : '0.001';
+        const networkFeeXlm = DEFAULT_NETWORK_FEE_XLM;
 
         // Apply 2% slippage to destinationMin to handle price fluctuations during path payment
         const slippagePercent = 0.98;
@@ -854,7 +857,7 @@ export class StellarService {
             });
 
             const transactionBuilder = new TransactionBuilder(sourceAccount, {
-                fee: '10000',
+                fee: STELLAR_BASE_FEE_STROOPS,
                 networkPassphrase: stellarConfig.network
             })
                 .addOperation(

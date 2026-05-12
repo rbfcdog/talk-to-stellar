@@ -18,7 +18,7 @@ import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../c
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
-import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
+import { DEFAULT_NETWORK_FEE_XLM, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
 import { PaymentReceiptService, PaymentReceiptInput } from "../api/services/payment-receipt.service";
 import { attachQuoteExpiry, quoteTtlSeconds } from "../api/services/quote-expiry.service";
@@ -1559,12 +1559,12 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       sourceAssetCode: asset.code,
       mode: 'add_on_top',
     });
-    const estimatedNetworkFeeXlm = quote?.networkFeeXlm || input.estimated_fee_xlm || (platformFee?.enabled ? '0.002' : '0.001');
+    const estimatedNetworkFeeXlm = quote?.networkFeeXlm || input.estimated_fee_xlm || DEFAULT_NETWORK_FEE_XLM;
     const feeDisplay = await formatNetworkFeeForCustomer(estimatedNetworkFeeXlm);
     const platformFeeDisplay = platformFee?.feeAmount
       ? formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode)
       : '';
-    const networkFeeDisplay = feeDisplay.display || '0.001 XLM';
+    const networkFeeDisplay = feeDisplay.display || 'US$ indisponivel';
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -1637,8 +1637,8 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     const platformFeeDisplay = input.quote?.platformFee?.feeAmount
       ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
       : '';
-    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || (platformFeeDisplay ? '0.002' : '0.001'));
-    const networkFeeDisplay = feeDisplay.display || '0.001 XLM';
+    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
+    const networkFeeDisplay = feeDisplay.display || 'US$ indisponivel';
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1905,7 +1905,9 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
         mode,
         total_fee_xlm: monthlyFeeXlm,
         total_fee_display: monthlyFeeDisplay,
-        message: `Neste mês você pagou ${monthlyFeeXlm.toFixed(7)} XLM em taxas${monthlyFeeDisplay ? ` (${monthlyFeeDisplay})` : ''}.`,
+        message: monthlyFeeDisplay
+          ? `Neste mês você pagou ${monthlyFeeDisplay} em taxas de rede.`
+          : 'Neste mês as taxas de rede estão indisponíveis.',
       });
     }
 

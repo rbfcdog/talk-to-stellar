@@ -5,6 +5,8 @@ type FeeDisplay = {
   source: string;
 };
 
+export const DEFAULT_NETWORK_FEE_XLM = '0.0000100';
+
 async function fetchBinancePrice(symbol: string): Promise<number | undefined> {
   const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
   const controller = new AbortController();
@@ -48,14 +50,13 @@ function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   return `${currency} ${(Math.trunc(value * factor) / factor).toFixed(decimals)}`;
 }
 
-function formatXlmFee(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return '';
-  const decimals = value > 0 && value < 0.0000001 ? 7 : 7;
-  return `${value.toFixed(decimals).replace(/\.?0+$/, '') || '0'} XLM`;
+function fallbackPositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(String(value || '').replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeDisplay> {
-  const fee = Number(String(feeXlm || '').replace(',', '.'));
+  const fee = Number(String(feeXlm || DEFAULT_NETWORK_FEE_XLM).replace(',', '.'));
   if (!Number.isFinite(fee) || fee < 0) {
     return {
       display: '',
@@ -67,25 +68,20 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
   const brlSymbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
   const usdBrlQuote = await fetchFirstBinancePrice([brlSymbol, 'USDCBRL', 'USDTBRL']);
 
-  if (!xlmUsdQuote.price) {
-    return {
-      display: formatXlmFee(fee),
-      source: 'xlm_fallback',
-    };
-  }
-
-  const feeUsdc = fee * xlmUsdQuote.price;
-  const feeBrl = usdBrlQuote.price ? feeUsdc * usdBrlQuote.price : undefined;
+  const xlmUsd = xlmUsdQuote.price || fallbackPositiveNumber(process.env.XLM_USDC_FALLBACK_RATE, 0.1);
+  const usdBrl = usdBrlQuote.price || fallbackPositiveNumber(process.env.USD_BRL_FALLBACK_RATE, 5);
+  const feeUsdc = fee * xlmUsd;
+  const feeBrl = feeUsdc * usdBrl;
+  const sourceParts = [
+    xlmUsdQuote.symbol ? `binance:${xlmUsdQuote.symbol}` : 'fallback:XLMUSDC',
+    usdBrlQuote.symbol ? `binance:${usdBrlQuote.symbol}` : 'fallback:USDBRL',
+  ];
 
   return {
-    display: feeBrl
-      ? `${formatXlmFee(fee)} (${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')})`
-      : `${formatXlmFee(fee)} (${formatSmallCurrency(feeUsdc, 'US$')})`,
+    display: `${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')}`,
     fee_usdc: feeUsdc.toFixed(8),
-    fee_brl: feeBrl ? feeBrl.toFixed(8) : undefined,
-    source: usdBrlQuote.symbol
-      ? `binance:${xlmUsdQuote.symbol}/${usdBrlQuote.symbol}`
-      : `binance:${xlmUsdQuote.symbol}`,
+    fee_brl: feeBrl.toFixed(8),
+    source: sourceParts.join('/'),
   };
 }
 

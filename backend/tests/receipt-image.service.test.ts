@@ -40,7 +40,7 @@ describe('ReceiptImageService', () => {
       sourceAmount: '61.239',
       sourceAssetCode: 'BRL',
       counterpartyLabel: 'Ana',
-      feeDisplay: 'US$ 0.03 + 0.002 XLM',
+      feeDisplay: 'US$ 0.03 + 0.00002 XLM',
       quote: {
         sourceAmount: '61.239',
         sourceAsset: { code: 'BRL' },
@@ -53,5 +53,6 @@ describe('ReceiptImageService', () => {
     expect(svg).toContain('R$61.23');
     expect(svg).not.toContain('USDC');
     expect(svg).not.toContain('BRL');
+    expect(svg).not.toContain('XLM');
   });
 });

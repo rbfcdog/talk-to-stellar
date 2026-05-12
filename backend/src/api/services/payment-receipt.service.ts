@@ -206,7 +206,7 @@ export class PaymentReceiptService {
     const spread = input.quote?.platformFee?.enabled
       ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
       : '';
-    if (display) return `Taxa exata: ${display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
+    if (display && !/\bXLM\b/i.test(display)) return `Taxa exata: ${display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;
     if (exactFeeXlm) {
       const formatted = await formatNetworkFeeForCustomer(exactFeeXlm);
       if (formatted.display) return `Taxa exata: ${formatted.display}${spread ? ` + taxa TalkToStellar ${spread}` : ''}`;

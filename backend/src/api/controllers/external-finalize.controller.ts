@@ -16,7 +16,7 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
-import { formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { DEFAULT_NETWORK_FEE_XLM, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
@@ -773,7 +773,7 @@ export default class ExternalFinalizeController {
           String(quote.destinationAmount),
           String(quote.destinationAsset.code),
           quote.destinationAsset.code === 'XLM' ? undefined : quote.destinationAsset.issuer,
-          String(quote.networkFeeXlm || '0.001'),
+          String(quote.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM),
           undefined,
           usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
           'pending',
@@ -847,7 +847,7 @@ export default class ExternalFinalizeController {
             String(quote.destinationAmount),
             String(quote.destinationAsset.code),
             quote.destinationAsset.code === 'XLM' ? undefined : quote.destinationAsset.issuer,
-            String(quote.networkFeeXlm || '0.001'),
+            String(quote.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM),
             undefined,
             usesStrictSend ? 'CONVERSION_STRICT_SEND' : 'CONVERSION_STRICT_RECEIVE',
             'failed',
@@ -1271,7 +1271,7 @@ export default class ExternalFinalizeController {
               sourceAmount: directSourceAmount,
               destinationAmount: String(amount),
               platformFee: directPlatformFee,
-              networkFeeXlm: directPlatformFee?.enabled ? '0.002' : '0.001',
+              networkFeeXlm: DEFAULT_NETWORK_FEE_XLM,
               path: [],
             }
           : await StellarService.quotePathPayment({
@@ -1322,7 +1322,7 @@ export default class ExternalFinalizeController {
           amount,
           assetCode,
           assetIssuer,
-          quote?.networkFeeXlm || '0.001',
+          quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM,
           undefined,
           isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
           'pending',
@@ -1428,7 +1428,7 @@ export default class ExternalFinalizeController {
             amount,
             assetCode,
             assetIssuer,
-            quote?.networkFeeXlm || '0.001',
+            quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM,
             undefined,
             isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
             'failed',
