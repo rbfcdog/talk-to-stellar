@@ -42,9 +42,9 @@ function getFriendlyLinkLabel(rawUrl: string) {
 function getFriendlyLinkMeta(rawUrl: string) {
   try {
     const url = new URL(rawUrl);
-    return `${url.hostname}${url.pathname.replace(/\/$/, "")}`;
+    return url.toString();
   } catch {
-    return rawUrl.replace(/^https?:\/\//i, "").slice(0, 48);
+    return rawUrl;
   }
 }
 
@@ -525,15 +525,15 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                 href={part}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="my-2 flex max-w-[280px] items-center gap-3 rounded-lg border border-[#2a3942] bg-[#182229] px-3 py-2 text-[#e9edef] no-underline shadow-sm transition hover:bg-[#1f2c34]"
+                className="my-2 flex max-w-full items-center gap-3 rounded-lg border border-[#2a3942] bg-[#182229] px-3 py-2 text-[#e9edef] no-underline shadow-sm transition hover:bg-[#1f2c34]"
                 title={part}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-[#06261d]">
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{getFriendlyLinkLabel(part)}</span>
-                  <span className="block truncate text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
+                  <span className="block text-sm font-medium">{getFriendlyLinkLabel(part)}</span>
+                  <span className="block break-all text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
                 </span>
               </a>
             );

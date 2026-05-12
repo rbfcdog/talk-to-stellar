@@ -88,6 +88,8 @@
     source_asset_issuer VARCHAR(56),
     payment_hash VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    used BOOLEAN NOT NULL DEFAULT false,
+    used_at TIMESTAMPTZ,
     details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ
@@ -100,6 +102,8 @@
     ADD COLUMN IF NOT EXISTS source_asset_issuer VARCHAR(56),
     ADD COLUMN IF NOT EXISTS payment_hash VARCHAR(255),
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    ADD COLUMN IF NOT EXISTS used BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS details JSONB,
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
@@ -108,6 +112,8 @@
   CREATE INDEX IF NOT EXISTS idx_payment_confirmations_session_id ON public.payment_confirmations (session_id);
   CREATE INDEX IF NOT EXISTS idx_payment_confirmations_user_id ON public.payment_confirmations (user_id);
   CREATE INDEX IF NOT EXISTS idx_payment_confirmations_status ON public.payment_confirmations (status);
+  CREATE INDEX IF NOT EXISTS idx_payment_confirmations_used ON public.payment_confirmations (used);
+  CREATE INDEX IF NOT EXISTS idx_payment_confirmations_used_at ON public.payment_confirmations (used_at);
   CREATE INDEX IF NOT EXISTS idx_payment_confirmations_completed_at ON public.payment_confirmations (completed_at DESC);
 
   -- Smart Contacts.

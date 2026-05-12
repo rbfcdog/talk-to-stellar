@@ -80,4 +80,14 @@ describe('Agent payment link flow', () => {
       result.response_message
     );
   });
+
+  it('uses the configured full frontend URL for login prompts', () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+
+    const message = (graph as any).getOnboardingOrLoginMessage(undefined, true);
+
+    expect(message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
+    expect(message).not.toContain('talktostellar.com/login');
+  });
 });
