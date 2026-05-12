@@ -26,11 +26,11 @@ async function main() {
 
   const agentClient = createAgentClient({ agentUrl });
   const backendBaseUrl = new URL(agentUrl).origin;
-  const externalCheck = async ({ provider, provider_user_id }) => {
+  const externalCheck = async ({ provider, provider_user_id, chat_id, username }) => {
     const response = await fetch(`${backendBaseUrl.replace(/\/$/, '')}/api/external/check-account`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, provider_user_id }),
+      body: JSON.stringify({ provider, provider_user_id, chat_id, telegram_chat_id: chat_id, username }),
     });
 
     if (!response.ok) {

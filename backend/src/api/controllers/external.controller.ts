@@ -19,6 +19,27 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function externalDataFromPayload(payload: any): Record<string, unknown> {
+  const provider = String(payload?.provider || '').trim().toLowerCase();
+  const chatId = String(
+    payload?.telegram_chat_id ||
+    payload?.chat_id ||
+    payload?.telegramChatId ||
+    ''
+  ).trim();
+  const username = String(payload?.username || payload?.telegram_username || '').trim();
+  const data: Record<string, unknown> = {};
+  if (provider === 'telegram' && chatId) {
+    data.telegram_chat_id = chatId;
+    data.chat_id = chatId;
+  }
+  if (provider === 'telegram' && username) {
+    data.telegram_username = username;
+    data.username = username;
+  }
+  return data;
+}
+
 async function hasOnboardingCredentials(sessionId: string, userId: string): Promise<boolean> {
   const session = await agentRepo.getSession(sessionId);
   if (!session) {
@@ -46,6 +67,7 @@ export class ExternalController {
   static async checkAccount(req: Request, res: Response) {
     try {
       const { provider } = req.body;
+      const externalData = externalDataFromPayload(req.body);
       const forceNewAccount = Boolean(req.body?.force_new_account || req.body?.forceNewAccount);
       const normalizeExternalId = (prov: string, value: string) => {
         if (String(prov || '').toLowerCase() === 'whatsapp' || String(prov || '').toLowerCase() === 'phone') {
@@ -78,6 +100,19 @@ export class ExternalController {
       }
 
       if (existing && !forceNewAccount) {
+        if (Object.keys(externalData).length > 0) {
+          await externalRepo.createMapping({
+            provider,
+            provider_user_id,
+            session_id: existing.session_id || null,
+            user_id: existing.user_id || null,
+            data: {
+              ...((existing as any).data || {}),
+              ...externalData,
+            },
+          });
+        }
+
         const hasLinkedSession = Boolean(existing.session_id);
         const hasLinkedUser = Boolean(existing.user_id);
         let linkedWallet = null;
@@ -110,7 +145,7 @@ export class ExternalController {
         }
       }
 
-      const { token, url } = externalService.createOnboardUrl(provider, provider_user_id);
+      const { token, url } = externalService.createOnboardUrl(provider, provider_user_id, externalData);
 
       return res.status(200).json({
         success: true,
@@ -135,9 +170,9 @@ export class ExternalController {
       const externalToken = String(req.body?.token || '').trim();
       const email = String(req.body?.email || '').trim().toLowerCase();
       const pin = String(req.body?.pin || '').trim();
+      let externalPayload: any = null;
 
       if (externalToken) {
-        let externalPayload: any;
         try {
           externalPayload = jwt.verify(externalToken, getJwtSecret());
         } catch {
@@ -151,6 +186,11 @@ export class ExternalController {
         provider = String(externalPayload?.provider || '').trim().toLowerCase();
         providerUserId = String(externalPayload?.provider_user_id || '').trim();
       }
+      const externalData = externalDataFromPayload({
+        ...req.body,
+        ...(externalPayload || {}),
+        provider,
+      });
 
       const reqTag = `[link-existing provider=${provider || 'n/a'} user=${email || 'n/a'} provider_user_id=${providerUserId ? providerUserId.slice(0, 8) + '***' : 'n/a'}]`;
 
@@ -279,6 +319,7 @@ export class ExternalController {
         provider_user_id: providerUserId,
         session_id: String(matched.session_id),
         user_id: String(matched.user_id || email),
+        data: externalData,
       });
 
       const shouldAwaitWelcome = provider === 'telegram';
@@ -338,6 +379,7 @@ export class ExternalController {
 
       const provider = String(payload?.provider || '').trim().toLowerCase();
       const providerUserId = String(payload?.provider_user_id || '').trim();
+      const externalData = externalDataFromPayload(payload);
       if (!provider || !providerUserId) {
         return res.status(400).json({ success: false, message: 'Token externo sem provider.' });
       }
@@ -362,6 +404,7 @@ export class ExternalController {
         provider_user_id: providerUserId,
         session_id: sessionId,
         user_id: String(session.user_id),
+        data: externalData,
       });
 
       await supabase

@@ -114,7 +114,12 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
       if (typeof externalCheck === 'function') {
         let checkResult;
         try {
-          checkResult = await externalCheck({ provider: 'telegram', provider_user_id: providerUserId });
+          checkResult = await externalCheck({
+            provider: 'telegram',
+            provider_user_id: providerUserId,
+            chat_id: chatId ? String(chatId) : null,
+            username: ctx.from?.username || null,
+          });
         } catch (err) {
           warn(`[telegram] external check failed: ${err?.message || err}`);
           await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
@@ -137,7 +142,13 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
           const res = await fetch(`${backendBaseUrl.replace(/\/$/, '')}/api/external/check-account`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: 'telegram', provider_user_id: providerUserId }),
+            body: JSON.stringify({
+              provider: 'telegram',
+              provider_user_id: providerUserId,
+              chat_id: chatId ? String(chatId) : null,
+              telegram_chat_id: chatId ? String(chatId) : null,
+              username: ctx.from?.username || null,
+            }),
           });
           if (res.ok) {
             const payload = await res.json();
@@ -168,6 +179,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         source: 'telegram',
         from: ctx.from?.username || null,
         fromId: ctx.from?.id || null,
+        chatId: chatId ? String(chatId) : null,
       });
 
       await sendTelegramResponse(ctx, result.message);

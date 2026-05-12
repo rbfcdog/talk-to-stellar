@@ -332,7 +332,7 @@ export class TransferNotificationService {
     const telegramIds = Array.from(new Set(
       mappings
         .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
-        .map((mapping) => String(mapping.provider_user_id || '').trim())
+        .map((mapping) => this.telegramChatId(mapping))
         .filter(Boolean)
     ));
 
@@ -379,7 +379,7 @@ export class TransferNotificationService {
     const telegramIds = Array.from(new Set(
       mappings
         .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
-        .map((mapping) => String(mapping.provider_user_id || '').trim())
+        .map((mapping) => this.telegramChatId(mapping))
         .filter(Boolean)
     ));
 
@@ -424,6 +424,17 @@ export class TransferNotificationService {
         logger.warn(`[telegram-notify] sendDocument failed: ${message}`);
       }
     }));
+  }
+
+  private static telegramChatId(mapping: ExternalMapping): string {
+    const data = (mapping.data || {}) as Record<string, unknown>;
+    return String(
+      data.telegram_chat_id ||
+      data.chat_id ||
+      data.telegramChatId ||
+      mapping.provider_user_id ||
+      ''
+    ).trim();
   }
 
   private static async sendTelegramImageViaNotifyUrl(

@@ -233,6 +233,11 @@ export class ExternalService {
     urlObj.searchParams.set('provider', provider);
     urlObj.searchParams.set('provider_user_id', providerUserId);
     urlObj.searchParams.set('source', provider);
+    const telegramChatId = String((extra as any)?.telegram_chat_id || (extra as any)?.chat_id || '').trim();
+    if (telegramChatId) {
+      urlObj.searchParams.set('telegram_chat_id', telegramChatId);
+      urlObj.searchParams.set('chat_id', telegramChatId);
+    }
     const url = urlObj.toString();
 
     return { token, url };
