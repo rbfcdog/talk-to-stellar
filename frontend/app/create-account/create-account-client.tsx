@@ -335,6 +335,7 @@ export default function CreateAccountClient({
       }
       if (response.ok && payload.success) {
         saveClientSession(payload.sessionId, payload.sessionToken)
+        localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "Usuário")
       }
       if (response.ok && payload.sessionId) {
         try {
@@ -471,6 +472,7 @@ export default function CreateAccountClient({
       if (payload?.sessionToken) {
         localStorage.setItem("talk-to-stellar.sessionToken", String(payload.sessionToken))
       }
+      localStorage.setItem("talk-to-stellar.userName", existingEmail.trim())
 
       setExistingStatus("done")
       if (isTelegramContext) {
