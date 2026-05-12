@@ -265,7 +265,6 @@ export default function ConfirmConversionClient({
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                 </div>
               )}
               {status === "error" && (

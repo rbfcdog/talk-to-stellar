@@ -82,7 +82,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
           checkResult = await externalCheck({ provider: 'telegram', provider_user_id: providerUserId });
         } catch (err) {
           logger.warn(`[telegram] external check failed: ${err?.message || err}`);
-          await ctx.reply('Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
+          await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
           return;
         }
 
@@ -155,7 +155,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
   bot.start(async ctx => {
     ctx.session = ctx.session || {};
     ctx.session.sessionId = sessionStore.getSessionId(ctx.chat?.id);
-    await ctx.reply(formatWelcomeMessage());
+    await sendTelegramResponse(ctx, formatWelcomeMessage());
   });
 
   bot.command('reset', async ctx => {

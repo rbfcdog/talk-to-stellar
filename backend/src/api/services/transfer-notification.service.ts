@@ -113,7 +113,10 @@ export class TransferNotificationService {
 
     const session = await this.safeGetSession(recipientSessionId);
     const recipientUserId = String(input.recipientUserId || session?.user_id || '').trim();
-    const senderLabel = String(input.senderLabel || 'Alguem').trim();
+    const rawSenderLabel = String(input.senderLabel || 'Alguem').trim();
+    const senderLabel = /^G[A-Z2-7]{55}$/i.test(rawSenderLabel)
+      ? (await this.resolveHumanLabel({ publicKey: rawSenderLabel, sessionId: recipientSessionId, userId: recipientUserId })) || 'Alguem'
+      : rawSenderLabel;
     const receivedLabel = formatCustomerAssetAmount(input.amount, input.assetCode);
     const sourceLine = input.sourceAmount && input.sourceAssetCode && input.sourceAssetCode !== input.assetCode
       ? `Valor de origem: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
@@ -189,6 +192,83 @@ export class TransferNotificationService {
       logger.warn(`[incoming-transfer] failed to query external mappings: ${error?.message || String(error)}`);
       return [];
     }
+  }
+
+  static async resolveHumanLabel(input: {
+    publicKey?: string | null;
+    sessionId?: string | null;
+    userId?: string | null;
+  }): Promise<string | undefined> {
+    const publicKey = String(input.publicKey || '').trim();
+    const sessionId = String(input.sessionId || '').trim();
+    const userId = String(input.userId || '').trim();
+
+    const pickLabel = (name?: string | null, email?: string | null, phone?: string | null) => {
+      const normalizedName = String(name || '').trim();
+      const normalizedEmail = String(email || '').trim();
+      const normalizedPhone = String(phone || '').trim();
+      return normalizedName || normalizedEmail || normalizedPhone || undefined;
+    };
+
+    if (sessionId) {
+      try {
+        const session = await this.safeGetSession(sessionId);
+        const label = pickLabel(session?.name, session?.email, session?.phone_number);
+        if (label) return label;
+      } catch {
+        // ignore
+      }
+    }
+
+    if (userId) {
+      try {
+        const { data: sessionByUser } = await supabase
+          .from('agent_sessions')
+          .select('email, phone_number')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle();
+        const sessionLabel = pickLabel(sessionByUser?.email, sessionByUser?.phone_number);
+        if (sessionLabel) return sessionLabel;
+      } catch {
+        // ignore
+      }
+    }
+
+    if (publicKey) {
+      try {
+        const { data: walletByKey } = await supabase
+          .from('wallets')
+          .select('name, pix_key, session_id')
+          .eq('public_key', publicKey)
+          .limit(1)
+          .maybeSingle();
+        const walletLabel = pickLabel(walletByKey?.name, walletByKey?.pix_key);
+        if (walletLabel) return walletLabel;
+
+        const { data: contactByKey } = await supabase
+          .from('contacts')
+          .select('contact_name, pix_key, phone_number')
+          .eq('stellar_public_key', publicKey)
+          .limit(1)
+          .maybeSingle();
+        const contactLabel = pickLabel(contactByKey?.contact_name, contactByKey?.pix_key, contactByKey?.phone_number);
+        if (contactLabel) return contactLabel;
+
+        const { data: sessionByKey } = await supabase
+          .from('agent_sessions')
+          .select('email, phone_number')
+          .eq('public_key', publicKey)
+          .limit(1)
+          .maybeSingle();
+        const sessionLabel = pickLabel(sessionByKey?.email, sessionByKey?.phone_number);
+        if (sessionLabel) return sessionLabel;
+      } catch {
+        // ignore
+      }
+    }
+
+    return undefined;
   }
 
   private static buildDirectMapping(provider?: string | null, providerUserId?: string | null): ExternalMapping | null {

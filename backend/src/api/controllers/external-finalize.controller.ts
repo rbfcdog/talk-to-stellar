@@ -181,7 +181,8 @@ async function upsertRecentContactFromPayment(input: {
   if (!ownerId || !destinationPublicKey || !isValidStellarPublicKey(destinationPublicKey)) return;
   if (sourcePublicKey && destinationPublicKey === sourcePublicKey) return;
 
-  const explicitName = String(input.destinationContact?.contact_name || input.destinationName || '').trim();
+  const explicitNameRaw = String(input.destinationContact?.contact_name || input.destinationName || '').trim();
+  const explicitName = isValidStellarPublicKey(explicitNameRaw) ? '' : explicitNameRaw;
   const contactName = explicitName || `Contato ${destinationPublicKey.slice(0, 6)}`;
   const pixKey = String(input.destinationContact?.pix_key || '').trim().toLowerCase() || null;
 
@@ -253,10 +254,13 @@ async function sendTelegramPaymentNotification(input: {
   hash?: string;
 }) {
   const destinationLabel = input.destinationName || input.destination;
+  const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
+    ? 'destinatário'
+    : destinationLabel;
   const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
   const feeLine = feeDisplay?.display ? `Taxa total: ${feeDisplay.display}\n` : '';
   const text =
-    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${destinationLabel} em 3 segundos.\n` +
+    `${formatCustomerAssetAmount(input.amount, input.assetCode)} enviados para ${readableDestination || 'destinatário'} em 3 segundos.\n` +
     feeLine +
     `Recibo disponível no seu histórico.`;
 
@@ -1423,7 +1427,7 @@ export default class ExternalFinalizeController {
           sessionId: String(session_id),
           userId: String(session.user_id),
           destination: resolvedDestination,
-          destinationName: destination_contact?.contact_name || destination_name || destination,
+          destinationName: destination_contact?.contact_name || destination_name || 'Destinatário',
           amount: String(amount),
           assetCode,
           hash: result.hash,
