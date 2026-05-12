@@ -65,7 +65,7 @@ export class UserService {
       const nativeBalance = accountInfoBefore.balances.find((b: any) => b.asset_type === 'native');
       const xlmBalance = Number(nativeBalance?.balance || '0');
 
-      const keepXlm = parsePositiveNumber(process.env.ONBOARDING_KEEP_XLM, 1.6);
+      const keepXlm = parsePositiveNumber(process.env.ONBOARDING_KEEP_XLM, 1.5);
       const sendAmount = xlmBalance - keepXlm;
       if (!Number.isFinite(sendAmount) || sendAmount <= 0.01) {
         return;
