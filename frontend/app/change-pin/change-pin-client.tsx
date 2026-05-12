@@ -150,7 +150,7 @@ export default function ChangePinClient() {
         message: 'PIN alterado com sucesso!',
       }));
 
-      enqueueWebChatFeedback('✅ PIN alterado com sucesso.\nSeu novo PIN já está ativo.')
+      enqueueWebChatFeedback('PIN alterado com sucesso.\nSeu novo PIN já está ativo.')
       closeIntermediatePage()
     } catch (error) {
       setState((prev) => ({

@@ -121,7 +121,7 @@ export default function PayAnyoneClient() {
           url: link,
           message: `Compartilhe este link para receber pagamentos. Quem paga acessa, digita o valor e envia para sua conta.`,
         })
-        enqueueWebChatFeedback(`✅ Link para receber criado.\nCompartilhe este link com seu cliente:\n${link}`)
+        enqueueWebChatFeedback(`Link para receber criado.\nCompartilhe este link com seu cliente:\n${link}`)
         setStatus("done")
         return
       }
@@ -144,7 +144,7 @@ export default function PayAnyoneClient() {
       setStatus(response.ok && payload?.success ? "done" : "error")
       if (response.ok && payload?.success && payload?.url) {
         enqueueWebChatFeedback([
-          "✅ Link de pagamento criado.",
+          "Link de pagamento criado.",
           payload.message ? String(payload.message) : "",
           String(payload.url),
         ].filter(Boolean).join("\n"))

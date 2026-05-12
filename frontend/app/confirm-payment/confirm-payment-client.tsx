@@ -305,7 +305,7 @@ export default function ConfirmPaymentClient({
         const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
         enqueueWebChatFeedback([
-          "✅ Pagamento enviado com sucesso.",
+          "Pagamento enviado com sucesso.",
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",

@@ -344,9 +344,9 @@ export default function CreateAccountClient({
 
       if (response.ok && payload.success) {
         if (isTelegramContext) {
-          finishTelegramFlow(`✅ Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
+          finishTelegramFlow(`Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
         } else {
-          finishAndClose(`✅ Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
+          finishAndClose(`Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
         }
         return
       }
@@ -409,9 +409,9 @@ export default function CreateAccountClient({
         message: 'Biometria ativada com sucesso',
       })
       if (isTelegramContext) {
-        finishTelegramFlow(`✅ Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
+        finishTelegramFlow(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
       } else {
-        finishAndClose(`✅ Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
+        finishAndClose(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
       }
     } catch (err: any) {
       submitLockRef.current = false
@@ -466,9 +466,9 @@ export default function CreateAccountClient({
 
       setExistingStatus("done")
       if (isTelegramContext) {
-        finishTelegramFlow(`✅ Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
+        finishTelegramFlow(`Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
       } else {
-        finishAndClose(`✅ Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
+        finishAndClose(`Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
       }
     } catch (error) {
       submitLockRef.current = false

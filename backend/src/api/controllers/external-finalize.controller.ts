@@ -1319,7 +1319,7 @@ export default class ExternalFinalizeController {
         });
 
         // Determine actual source asset: if sender has the destination asset, use it directly
-        // This avoids unnecessary XLM→USDC conversions when user already has USDC
+        // This avoids unnecessary XLM to USDC conversions when user already has USDC
         let actualSourceAsset: any = isStrictSendPayment
           ? { code: requestedSourceAssetCode, issuer: requestedSourceAssetIssuer }
           : { code: 'XLM' };

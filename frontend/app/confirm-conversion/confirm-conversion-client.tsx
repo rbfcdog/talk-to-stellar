@@ -158,7 +158,7 @@ export default function ConfirmConversionClient({
       setStatus(response.ok ? "done" : "error")
       if (response.ok && payload?.success) {
         enqueueWebChatFeedback([
-          "✅ Conversão concluída.",
+          "Conversão concluída.",
           payload.transferDetails?.sourceAmount
             ? `Origem debitada: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode)}`
             : "",

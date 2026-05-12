@@ -17,9 +17,16 @@ function generateFeedbackId() {
   return `feedback-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+function sanitizeFeedbackText(content: string) {
+  return String(content || "")
+    .replace(/[\u2705\u2713\u26A0\u2B07\uFE0F]/g, "")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .trim()
+}
+
 export function enqueueWebChatFeedback(content: string) {
   if (typeof window === "undefined") return
-  const text = String(content || "").trim()
+  const text = sanitizeFeedbackText(String(content || ""))
   if (!text) return
 
   const feedback: WebChatFeedback = {

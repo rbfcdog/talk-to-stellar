@@ -48,7 +48,7 @@ export class AutoConversionService {
           });
 
           logger.info(
-            `Matched conversion rule: ${receivedAmount} ${receivedAsset} → ${rule.to_asset_code} (Rule: ${rule.id})`
+            `Matched conversion rule: ${receivedAmount} ${receivedAsset} to ${rule.to_asset_code} (Rule: ${rule.id})`
           );
         }
       }
@@ -99,7 +99,7 @@ export class AutoConversionService {
     const rulesList = rules
       .map(
         r =>
-          `✓ ${r.amount} ${r.fromAsset} → ${r.toAsset} (Regra: ${r.ruleId.substring(0, 8)}...)`
+          `${r.amount} ${r.fromAsset} para ${r.toAsset} (Regra: ${r.ruleId.substring(0, 8)}...)`
       )
       .join('\n');
 

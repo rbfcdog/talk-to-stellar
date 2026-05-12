@@ -1,6 +1,27 @@
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 
 describe('PaymentReceiptService', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      PAYMENT_CONFIRM_BASE: 'https://talk-to-stellar-owxg.vercel.app',
+      BACKEND_URL: 'http://localhost:8080',
+    };
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('builds hosted receipt URLs from the configured frontend base', () => {
+    const url = PaymentReceiptService.buildHostedReceiptUrl('abc123');
+
+    expect(url).toBe('https://talk-to-stellar-owxg.vercel.app/api/external/receipts/abc123');
+    expect(url).not.toContain('localhost:8080');
+  });
+
   it('builds a premium receipt with quote, fee and public operation id', async () => {
     const operationId = PaymentReceiptService.toPublicOperationId('abc123');
     const receipt = await PaymentReceiptService.buildReceiptText({

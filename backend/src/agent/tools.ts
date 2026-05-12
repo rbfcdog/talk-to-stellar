@@ -3823,15 +3823,15 @@ async function executeRestartOnboarding(input: any): Promise<string> {
 
     // Build response message
     const messages = [
-      `✓ PIN definido com sucesso`,
-      `✓ Sua conta está segura com o PIN ${pin.replace(/./g, '*')}`,
+      `PIN definido com sucesso`,
+      `Sua conta está segura com o PIN ${pin.replace(/./g, '*')}`,
     ];
 
     if (requestPasskey && passkeyUrl) {
-      messages.push(`✓ Próximo passo: Configure sua Passkey (biometria/face) para maior segurança`);
+      messages.push(`Próximo passo: Configure sua Passkey (biometria/face) para maior segurança`);
       messages.push(`Abra este link: ${passkeyUrl}`);
     } else if (requestPasskey && !passkeyUrl) {
-      messages.push(`⚠ A Passkey não pôde ser configurada neste dispositivo. Tente novamente depois.`);
+      messages.push(`A Passkey não pôde ser configurada neste dispositivo. Tente novamente depois.`);
     } else {
       messages.push(`Você pode configurar uma Passkey depois se quiser.`);
     }

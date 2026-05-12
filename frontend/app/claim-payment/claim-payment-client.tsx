@@ -133,7 +133,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
         enqueueWebChatFeedback([
-          "✅ Pagamento recebido com sucesso.",
+          "Pagamento recebido com sucesso.",
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
           `Horário: ${formatTimestamp(payload.completed_at)}`,
