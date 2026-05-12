@@ -13,6 +13,7 @@ import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { ContactSeedService } from '../services/contact-seed.service';
 import { ActivityFeedService } from '../services/activity-feed.service';
 import { EconomyEngineService } from '../services/economy-engine.service';
+import { PlatformFeeService } from '../services/platform-fee.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { formatNetworkFeeForCustomer } from '../../utils/fee-display';
@@ -1210,6 +1211,16 @@ export default class ExternalFinalizeController {
 
         // Build quote and XDR using actual source asset
         const isDirectPayment = assetCode === 'XLM' || senderHasDestinationAsset;
+        const directPlatformFee = isDirectPayment
+          ? PlatformFeeService.calculateSpread({
+              sourceAmount: String(amount),
+              sourceAssetCode: senderHasDestinationAsset ? assetCode : 'XLM',
+              mode: 'add_on_top',
+            })
+          : null;
+        const directSourceAmount = directPlatformFee?.enabled
+          ? (Number(amount) + Number(directPlatformFee.feeAmount)).toFixed(7).replace(/\.?0+$/, '')
+          : String(amount);
         const quote = isStrictSendPayment
           ? await StellarService.quoteStrictSendConversion({
               sourcePublicKey: wallet.public_key,
@@ -1219,7 +1230,21 @@ export default class ExternalFinalizeController {
               destAsset: { code: assetCode, issuer: assetIssuer },
             })
           : isDirectPayment
-          ? null
+          ? {
+              sourceAsset: {
+                code: senderHasDestinationAsset ? assetCode : 'XLM',
+                issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+              },
+              destinationAsset: {
+                code: assetCode,
+                issuer: assetIssuer,
+              },
+              sourceAmount: directSourceAmount,
+              destinationAmount: String(amount),
+              platformFee: directPlatformFee,
+              networkFeeXlm: '0.001',
+              path: [],
+            }
           : await StellarService.quotePathPayment({
               sourcePublicKey: wallet.public_key,
               destination: resolvedDestination,

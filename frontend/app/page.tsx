@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Link2, MessageCircle, Send } from "lucide-react"
+import { MessageCircle, Send } from "lucide-react"
 
 export default function HomePage() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
@@ -81,13 +81,6 @@ export default function HomePage() {
               >
                 <span>Abrir chat web</span>
                 <MessageCircle className="h-5 w-5" />
-              </Link>
-              <Link
-                href="/pay-anyone"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-              >
-                <span>Criar link de pagamento</span>
-                <Link2 className="h-5 w-5" />
               </Link>
               <a
                 href="https://t.me/TalkToStellarTelegramBot"

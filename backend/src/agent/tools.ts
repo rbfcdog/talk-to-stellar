@@ -27,6 +27,7 @@ import { FinancialInsightsService } from "../api/services/financial-insights.ser
 import { SmartContactsService } from "../api/services/smart-contacts.service";
 import { PaymentReplayService } from "../api/services/payment-replay.service";
 import { EconomyEngineService } from "../api/services/economy-engine.service";
+import { PlatformFeeService } from "../api/services/platform-fee.service";
 import { InvoiceService } from "../api/services/invoice.service";
 import { GlobalProfileService } from "../api/services/global-profile.service";
 
@@ -1554,9 +1555,15 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       input.assetIssuer
     );
     const feeDisplay = await formatNetworkFeeForCustomer(quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
-    const spreadFeeDisplay = quote?.platformFee?.enabled
-      ? formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)
+    const platformFee = quote?.platformFee || PlatformFeeService.calculateSpread({
+      sourceAmount: normalizedAmount,
+      sourceAssetCode: asset.code,
+      mode: 'add_on_top',
+    });
+    const platformFeeDisplay = platformFee?.feeAmount
+      ? formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode)
       : '';
+    const networkFeeDisplay = feeDisplay.display || 'taxa de rede estimada indisponível';
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -1574,7 +1581,10 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
-      estimated_spread_fee: spreadFeeDisplay || null,
+      estimated_platform_fee: platformFeeDisplay || null,
+      estimated_platform_fee_amount: platformFee?.feeAmount || null,
+      estimated_platform_fee_asset_code: platformFee?.feeAssetCode || null,
+      estimated_spread_fee: platformFeeDisplay || null,
       quote: quote || null,
       quote_issued_at: quote?.quote_issued_at || null,
       quote_expires_at: quote?.quote_expires_at || null,
@@ -1592,8 +1602,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       url,
       asset: asset.code,
       estimated_fee_display: feeDisplay.display,
+      estimated_platform_fee: platformFeeDisplay,
       message:
-        `Antes de confirmar: taxa estimada ${feeDisplay.display}${spreadFeeDisplay ? ` + spread ${spreadFeeDisplay}` : ''}. ` +
+        `Antes de confirmar: taxa estimada ${platformFeeDisplay ? `${platformFeeDisplay} TalkToStellar + ` : ''}${networkFeeDisplay}. ` +
         quoteValidityLine +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
@@ -1623,9 +1634,10 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
     const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || '0.001');
-    const spreadFeeDisplay = input.quote?.platformFee?.enabled
+    const platformFeeDisplay = input.quote?.platformFee?.feeAmount
       ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
       : '';
+    const networkFeeDisplay = feeDisplay.display || 'taxa de rede estimada indisponível';
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1641,7 +1653,8 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
-      estimated_spread_fee: spreadFeeDisplay || null,
+      estimated_platform_fee: platformFeeDisplay || null,
+      estimated_spread_fee: platformFeeDisplay || null,
       quote_issued_at: input.quote?.quote_issued_at || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
@@ -1651,10 +1664,11 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       success: true,
       url,
       estimated_fee_display: feeDisplay.display,
-      estimated_spread_fee: spreadFeeDisplay || null,
+      estimated_platform_fee: platformFeeDisplay || null,
+      estimated_spread_fee: platformFeeDisplay || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
-      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}${spreadFeeDisplay ? ` + spread ${spreadFeeDisplay}` : ''}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
+      message: `Antes de confirmar: taxa estimada ${platformFeeDisplay ? `${platformFeeDisplay} TalkToStellar + ` : ''}${networkFeeDisplay}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
