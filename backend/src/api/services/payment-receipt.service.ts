@@ -80,7 +80,6 @@ export class PaymentReceiptService {
 
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
     const text = await this.buildReceiptText(input);
-    let svg = '';
     let imageDataUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
@@ -97,7 +96,7 @@ export class PaymentReceiptService {
     }
 
     try {
-      svg = await this.buildReceiptImageSvg(input);
+      const svg = await this.buildReceiptImageSvg(input);
       imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
       await this.saveReceiptMessage({
         sessionId: input.sessionId,
@@ -120,23 +119,6 @@ export class PaymentReceiptService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
-    }
-
-    if (svg) {
-      try {
-        await TransferNotificationService.notifyExternalChannelImage({
-          sessionId: input.sessionId,
-          userId: input.userId,
-          provider: input.provider,
-          providerUserId: input.providerUserId,
-          caption: operationId ? `Comprovante da operação ${operationId}` : 'Comprovante TalkToStellar',
-          svg,
-          filename: `${operationId || 'recibo-talktostellar'}.svg`,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`[receipt] failed to deliver receipt image: ${message}`);
-      }
     }
 
     return text;
