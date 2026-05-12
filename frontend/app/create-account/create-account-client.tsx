@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
@@ -109,8 +109,10 @@ export default function CreateAccountClient({
   const [validation, setValidation] = useState<any>(initialValidation)
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
   const [telegramDone, setTelegramDone] = useState(false)
+  const submitLockRef = useRef(false)
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
+  const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
   const loginHref = useMemo(() => {
     const params = new URLSearchParams()
@@ -126,9 +128,25 @@ export default function CreateAccountClient({
 
   function finishTelegramFlow() {
     setTelegramDone(true)
-    window.setTimeout(() => {
+    try {
       window.close()
-    }, 2000)
+    } catch {}
+    window.setTimeout(() => {
+      if (!window.closed) {
+        window.location.href = nextPath
+      }
+    }, 150)
+  }
+
+  function closeOrRedirect(target: string) {
+    try {
+      window.close()
+    } catch {}
+    window.setTimeout(() => {
+      if (!window.closed) {
+        window.location.href = target
+      }
+    }, 150)
   }
 
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
@@ -240,6 +258,7 @@ export default function CreateAccountClient({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPinError("")
+    if (submitLockRef.current) return
 
     if (!/^\d{4,8}$/.test(pin)) {
       setPinError("PIN deve conter de 4 a 8 dígitos numéricos.")
@@ -250,6 +269,7 @@ export default function CreateAccountClient({
       return
     }
 
+    submitLockRef.current = true
     setStatus("submitting")
     setResult(null)
 
@@ -302,6 +322,10 @@ export default function CreateAccountClient({
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
 
+      if (!response.ok || !payload?.success) {
+        submitLockRef.current = false
+      }
+
       if (response.ok && payload.sessionToken) {
         try {
           localStorage.setItem('talk-to-stellar.sessionToken', payload.sessionToken)
@@ -331,11 +355,12 @@ export default function CreateAccountClient({
         if (isTelegramContext) {
           finishTelegramFlow()
         } else {
-          window.location.href = nextPath
+          closeOrRedirect(nextPath)
         }
         return
       }
     } catch (error) {
+      submitLockRef.current = false
       const message = error instanceof Error ? error.message : "Falha ao finalizar conta"
       setResult({ success: false, error: message })
       setStatus("error")
@@ -395,9 +420,10 @@ export default function CreateAccountClient({
       if (isTelegramContext) {
         finishTelegramFlow()
       } else {
-        window.location.href = nextPath
+        closeOrRedirect(nextPath)
       }
     } catch (err: any) {
+      submitLockRef.current = false
       setPasskeyStatus('error')
       setPasskeyError(getPasskeyErrorMessage(err))
     }
@@ -405,6 +431,8 @@ export default function CreateAccountClient({
 
   async function handleLinkExisting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitLockRef.current) return
+    submitLockRef.current = true
     setExistingStatus("submitting")
     setExistingError("")
 
@@ -448,9 +476,10 @@ export default function CreateAccountClient({
       if (isTelegramContext) {
         finishTelegramFlow()
       } else {
-        window.location.href = nextPath
+        closeOrRedirect(nextPath)
       }
     } catch (error) {
+      submitLockRef.current = false
       setExistingStatus("error")
       setExistingError(error instanceof Error ? error.message : "Falha ao entrar com e-mail e PIN.")
     }
@@ -627,7 +656,7 @@ export default function CreateAccountClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || !pin.trim() || !pinConfirm.trim()}
+                disabled={submitLocked || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Finalizando conta...</span> : "Finalizar conta"}
@@ -649,7 +678,7 @@ export default function CreateAccountClient({
                   <button
                     type="button"
                     onClick={() => registerAndSignInWithPasskey()}
-                    disabled={passkeyStatus === 'registering'}
+                    disabled={submitLocked || passkeyStatus === 'registering'}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === 'registering'

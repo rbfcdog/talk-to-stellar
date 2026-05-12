@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
@@ -213,6 +213,7 @@ export default function ConfirmPaymentClient({
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
+  const submitLockRef = useRef(false)
 
   const safeClose = () => {
     try {
@@ -262,13 +263,15 @@ export default function ConfirmPaymentClient({
 
   useEffect(() => {
     if (!(status === "done" && result?.success)) return
-    // Payment screen should remain visible a bit longer.
-    const timer = window.setTimeout(() => safeClose(), 5000)
+    const timer = window.setTimeout(() => safeClose(), 0)
     return () => window.clearTimeout(timer)
   }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!token.trim() || !pin.trim() || validation?.valid === false) return
+    if (submitLockRef.current) return
+    submitLockRef.current = true
     setStatus("submitting")
     setResult(null)
 
@@ -287,6 +290,10 @@ export default function ConfirmPaymentClient({
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
 
+      if (!response.ok || !payload?.success) {
+        submitLockRef.current = false
+      }
+
       // On success, ensure token is removed from URL (double-safety)
       if (response.ok) {
         try {
@@ -296,6 +303,7 @@ export default function ConfirmPaymentClient({
         }
       }
     } catch (error) {
+      submitLockRef.current = false
       const message = error instanceof Error ? error.message : "Falha ao confirmar pagamento"
       setResult({ success: false, error: message })
       setStatus("error")
@@ -430,7 +438,7 @@ export default function ConfirmPaymentClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || !token.trim() || !pin.trim() || validation?.valid === false}
+                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando pagamento...</span> : "Confirmar pagamento"}
