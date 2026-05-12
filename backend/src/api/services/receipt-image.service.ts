@@ -1,4 +1,5 @@
 import { PaymentReceiptService } from './payment-receipt.service';
+import { buildUsedQuoteLabel } from '../../utils/quote-display';
 
 export type ReceiptImageInput = {
   amount: string;
@@ -52,6 +53,10 @@ function sanitizeFeeLabel(value?: string): string {
     .map((part) => part.trim())
     .filter((part) => part && !/\bXLM\b/i.test(part));
   return visibleParts.join(' + ') || 'taxa de rede convertida';
+}
+
+function sanitizeQuoteLabel(value: string): string {
+  return String(value || 'Cotação usada: não aplicável').replace(/^Cotação usada:\s*/i, '').trim();
 }
 
 function escapeXml(value: string): string {
@@ -229,9 +234,13 @@ export class ReceiptImageService {
       convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),
       convertedCurrency: displaySymbol(quoteSourceAsset || 'BRL'),
       feeLabel: sanitizeFeeLabel(input.feeDisplay),
-      quoteLabel: quoteSource && quoteDest && quoteSourceAsset && quoteDestAsset
-        ? `1 ${displaySymbol(quoteDestAsset)} = ${formatDisplayAmount(Number(quoteSource) / Math.max(Number(quoteDest), 0.0000001), 2)} ${displaySymbol(quoteSourceAsset)}`
-        : 'não aplicável',
+      quoteLabel: sanitizeQuoteLabel(buildUsedQuoteLabel({
+        quote: input.quote,
+        sourceAmount: input.sourceAmount,
+        sourceAssetCode: input.sourceAssetCode,
+        destinationAmount: input.destinationAmount,
+        destinationAssetCode: input.destinationAssetCode,
+      })),
       settlementSeconds: Number.isFinite(Number(input.settlementMs || 0))
         ? Number(input.settlementMs || 0) / 1000
         : null,

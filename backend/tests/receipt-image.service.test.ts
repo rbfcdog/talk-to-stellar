@@ -1,4 +1,5 @@
 import { ReceiptImageService } from '../src/api/services/receipt-image.service';
+import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 
 describe('ReceiptImageService', () => {
   it('renders dynamic svg with transaction fields', () => {
@@ -33,8 +34,11 @@ describe('ReceiptImageService', () => {
     expect(svg).not.toContain('Saldo restante');
   });
 
-  it('formats receipt payment values with user-facing symbols and truncated decimals', () => {
-    const svg = ReceiptImageService.toSvg(ReceiptImageService.fromPaymentReceipt({
+  it('formats receipt payment values with user-facing symbols and the same executed quote', async () => {
+    const receiptInput = {
+      type: 'payment_sent' as const,
+      sessionId: 'session-1',
+      userId: 'user-1',
       destinationAmount: '10.999',
       destinationAssetCode: 'USDC',
       sourceAmount: '61.239',
@@ -47,10 +51,14 @@ describe('ReceiptImageService', () => {
         destinationAmount: '10.999',
         destinationAsset: { code: 'USDC' },
       },
-    }));
+    };
+    const svg = ReceiptImageService.toSvg(ReceiptImageService.fromPaymentReceipt(receiptInput));
+    const receiptText = await PaymentReceiptService.buildReceiptText(receiptInput);
 
     expect(svg).toContain('US$10.99');
     expect(svg).toContain('R$61.23');
+    expect(svg).toContain('1 US$ = R$ 5.567687');
+    expect(receiptText).toContain('Cotação usada: 1 US$ = R$ 5.567687');
     expect(svg).not.toContain('USDC');
     expect(svg).not.toContain('BRL');
     expect(svg).not.toContain('XLM');
