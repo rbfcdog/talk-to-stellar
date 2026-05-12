@@ -91,8 +91,8 @@ export class ContactSeedService {
       const account = await StellarService.loadAccount(publicKey);
       const nativeBalance = account.balances.find((balance: any) => balance.asset_type === 'native');
       const xlmBalance = Number(nativeBalance?.balance || '0');
-      const keepXlm = Number(String(process.env.ONBOARDING_KEEP_XLM || '1.6').trim());
-      const reserve = Number.isFinite(keepXlm) && keepXlm > 0 ? keepXlm : 1.6;
+      const keepXlm = Number(String(process.env.ONBOARDING_KEEP_XLM || '1.5').trim());
+      const reserve = Number.isFinite(keepXlm) && keepXlm > 0 ? keepXlm : 1.5;
       const sourceAmountNumber = Math.floor((xlmBalance - reserve) * 1e7) / 1e7;
 
       if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= 0.01) {
