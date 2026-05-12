@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const http = require('http');
+const sharp = require('sharp');
 const { createAgentClient } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
@@ -54,10 +55,15 @@ async function main() {
   let healthServer = null;
   const notify = async ({ chatId, text, imageSvgBase64, filename, disableWebPagePreview = true }) => {
     if (imageSvgBase64) {
-      const buffer = Buffer.from(imageSvgBase64, 'base64');
-      return bot.telegram.sendDocument(
+      const svgBuffer = Buffer.from(imageSvgBase64, 'base64');
+      const pngBuffer = await sharp(svgBuffer, { density: 216 })
+        .resize({ width: 1080, withoutEnlargement: true })
+        .png({ quality: 92, compressionLevel: 9 })
+        .toBuffer();
+      const pngFilename = String(filename || 'recibo-talktostellar.png').replace(/\.svg$/i, '.png');
+      return bot.telegram.sendPhoto(
         chatId,
-        { source: buffer, filename: filename || 'recibo-talktostellar.svg' },
+        { source: pngBuffer, filename: pngFilename },
         { caption: text || 'Comprovante TalkToStellar' }
       );
     }
