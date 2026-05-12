@@ -97,3 +97,46 @@ export function formatCustomerAssetAmount(amount?: string, assetCode?: string): 
 
   return `${truncated.toFixed(2)} ${code}`;
 }
+
+export function buildUnifiedFeeDisplay(input: {
+  networkFee: FeeDisplay;
+  platformFeeAmount?: string | null;
+  platformFeeAssetCode?: string | null;
+  sourceAssetCode?: string | null;
+  destinationAssetCode?: string | null;
+}): FeeDisplay & { platform_applied: boolean } {
+  const source = String(input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const destination = String(input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const isUsdcBrlPair = (source === 'USDC' && destination === 'BRL') || (source === 'BRL' && destination === 'USDC');
+
+  const networkUsdc = Number(String(input.networkFee?.fee_usdc || '').replace(',', '.'));
+  const networkBrl = Number(String(input.networkFee?.fee_brl || '').replace(',', '.'));
+  let totalUsdc = Number.isFinite(networkUsdc) ? networkUsdc : 0;
+  let totalBrl = Number.isFinite(networkBrl) ? networkBrl : 0;
+
+  const platformAmount = Number(String(input.platformFeeAmount || '').replace(',', '.'));
+  const platformAsset = String(input.platformFeeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAsset === 'BRL');
+
+  const impliedRate = totalUsdc > 0 && totalBrl > 0 ? totalBrl / totalUsdc : undefined;
+  const fallbackRate = fallbackPositiveNumber(process.env.USD_BRL_FALLBACK_RATE, 5);
+  const usdBrlRate = impliedRate && Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : fallbackRate;
+
+  if (platformApplied) {
+    if (platformAsset === 'USDC') {
+      totalUsdc += platformAmount;
+      totalBrl += platformAmount * usdBrlRate;
+    } else if (platformAsset === 'BRL') {
+      totalBrl += platformAmount;
+      totalUsdc += platformAmount / usdBrlRate;
+    }
+  }
+
+  return {
+    display: `${formatSmallCurrency(totalBrl, 'R$')} / ${formatSmallCurrency(totalUsdc, 'US$')}`,
+    fee_usdc: totalUsdc.toFixed(8),
+    fee_brl: totalBrl.toFixed(8),
+    source: input.networkFee?.source || 'unavailable',
+    platform_applied: platformApplied,
+  };
+}

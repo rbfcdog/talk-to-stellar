@@ -16,7 +16,7 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
-import { DEFAULT_NETWORK_FEE_XLM, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
@@ -70,24 +70,6 @@ function buildSettlementEconomy(input: {
       gross_amount_brl: savings.grossAmountBrl,
     },
   };
-}
-
-function platformFeeDisplay(quote?: any): string {
-  const platformFee = quote?.platformFee;
-  if (!platformFee?.feeAmount || !platformFee?.feeAssetCode) return '';
-  return formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode);
-}
-
-function totalFeeDisplay(input: {
-  networkFeeDisplay?: string | null;
-  platformFeeDisplay?: string | null;
-}): string {
-  const parts = [
-    String(input.platformFeeDisplay || '').trim(),
-    String(input.networkFeeDisplay || '').trim(),
-  ].filter(Boolean);
-  if (!parts.length) return 'taxa aplicada indisponível';
-  return parts.join(' + ');
 }
 
 function getAccountAssetBalance(account: any, asset: { code: string; issuer?: string }): number {
@@ -930,10 +912,12 @@ export default class ExternalFinalizeController {
               exact: false,
             };
         const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || ''));
-        const appliedPlatformFeeDisplay = platformFeeDisplay(quote);
-        const appliedFeeDisplay = totalFeeDisplay({
-          networkFeeDisplay: feeDisplay.display,
-          platformFeeDisplay: appliedPlatformFeeDisplay,
+        const unifiedFee = buildUnifiedFeeDisplay({
+          networkFee: feeDisplay,
+          platformFeeAmount: quote?.platformFee?.feeAmount,
+          platformFeeAssetCode: quote?.platformFee?.feeAssetCode,
+          sourceAssetCode: String(transferDetails.sourceAssetCode || quote?.sourceAsset?.code || ''),
+          destinationAssetCode: String(transferDetails.destinationAssetCode || quote?.destinationAsset?.code || ''),
         });
         const sourceAmountWithPlatformFee = quote?.sourceAmount
           ? String(quote.sourceAmount)
@@ -941,11 +925,11 @@ export default class ExternalFinalizeController {
         const publicTransferDetails = {
           ...transferDetails,
           sourceAmount: sourceAmountWithPlatformFee || transferDetails.sourceAmount,
-          feeDisplay: appliedFeeDisplay,
-          feeUsdc: feeDisplay.fee_usdc,
-          feeBrl: feeDisplay.fee_brl,
-          platformFeeDisplay: appliedPlatformFeeDisplay || null,
-          totalFeeDisplay: appliedFeeDisplay,
+          feeDisplay: unifiedFee.display,
+          feeUsdc: unifiedFee.fee_usdc,
+          feeBrl: unifiedFee.fee_brl,
+          platformFeeDisplay: null,
+          totalFeeDisplay: unifiedFee.display,
         };
         const economy = buildSettlementEconomy({
           sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
@@ -1287,6 +1271,7 @@ export default class ExternalFinalizeController {
           ? PlatformFeeService.calculateSpread({
               sourceAmount: String(amount),
               sourceAssetCode: senderHasDestinationAsset ? assetCode : 'XLM',
+              destinationAssetCode: assetCode,
               mode: 'add_on_top',
             })
           : null;
@@ -1575,11 +1560,20 @@ export default class ExternalFinalizeController {
               exact: false,
             };
         const feeDisplay = await formatNetworkFeeForCustomer(String(transferDetails.feeXlm || ''));
+        const unifiedFee = buildUnifiedFeeDisplay({
+          networkFee: feeDisplay,
+          platformFeeAmount: quote?.platformFee?.feeAmount,
+          platformFeeAssetCode: quote?.platformFee?.feeAssetCode,
+          sourceAssetCode: String(transferDetails.sourceAssetCode || quote?.sourceAsset?.code || ''),
+          destinationAssetCode: String(transferDetails.destinationAssetCode || quote?.destinationAsset?.code || ''),
+        });
         const publicTransferDetails = {
           ...transferDetails,
-          feeDisplay: feeDisplay.display,
-          feeUsdc: feeDisplay.fee_usdc,
-          feeBrl: feeDisplay.fee_brl,
+          feeDisplay: unifiedFee.display,
+          feeUsdc: unifiedFee.fee_usdc,
+          feeBrl: unifiedFee.fee_brl,
+          platformFeeDisplay: null,
+          totalFeeDisplay: unifiedFee.display,
         };
         const economy = buildSettlementEconomy({
           sourceAmount: String(publicTransferDetails.sourceAmount || quote?.sourceAmount || amount),

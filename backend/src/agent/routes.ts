@@ -197,9 +197,12 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
     '1. saldo: ver saldo em R$ e US$',
     '2. contatos: listar ou salvar contatos',
     '3. enviar: mandar dinheiro com link de confirmação',
-    '4. converter: trocar saldo entre moedas',
-    '5. histórico: ver operações recentes',
-    '6. ajuda: ver todos os comandos com exemplos',
+    '4. converter: trocar saldo entre R$ e US$',
+    '5. cotação: ver cotação atual do dólar',
+    '6. histórico: ver operações recentes',
+    '7. link de pagamento: criar link para pagar/receber',
+    '8. PIN: redefinir PIN com link seguro',
+    '9. ajuda: ver todos os comandos com exemplos',
   ].join('\n');
 }
 

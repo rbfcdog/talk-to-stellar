@@ -443,6 +443,8 @@ export class TransferNotificationService {
     input: { imageSvgBase64: string; caption?: string; filename?: string }
   ): Promise<boolean> {
     const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+    const caption = String(input.caption || 'Comprovante TalkToStellar').trim();
+    const safeCaption = caption.length > 1000 ? `${caption.slice(0, 997).trimEnd()}...` : caption;
     try {
       const response = await fetch(notifyUrl, {
         method: 'POST',
@@ -452,7 +454,7 @@ export class TransferNotificationService {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text: input.caption || 'Comprovante TalkToStellar',
+          text: safeCaption,
           image_svg_base64: input.imageSvgBase64,
           filename: input.filename || 'recibo-talktostellar.svg',
           disable_web_page_preview: true,

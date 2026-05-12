@@ -18,7 +18,7 @@ import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../c
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
-import { DEFAULT_NETWORK_FEE_XLM, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
+import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../utils/fee-display";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
 import { PaymentReceiptService, PaymentReceiptInput } from "../api/services/payment-receipt.service";
 import { attachQuoteExpiry, quoteTtlSeconds } from "../api/services/quote-expiry.service";
@@ -1319,14 +1319,18 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           sourceAsset: normalizeAssetInput(input.source_asset_code || input.sourceAssetCode, input.source_asset_issuer || input.sourceAssetIssuer),
         });
     const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
-    const spreadFeeLine = quote.platformFee?.enabled
-      ? ` Spread TalkToStellar: ${formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)}.`
-      : '';
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee: feeDisplay,
+      platformFeeAmount: quote.platformFee?.feeAmount || null,
+      platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
+      sourceAssetCode: quote.sourceAsset?.code,
+      destinationAssetCode: quote.destinationAsset?.code,
+    });
     const expiringQuote = attachQuoteExpiry({
       ...quote,
-      fee_display: feeDisplay.display,
-      fee_usdc: feeDisplay.fee_usdc,
-      fee_brl: feeDisplay.fee_brl,
+      fee_display: unifiedFee.display,
+      fee_usdc: unifiedFee.fee_usdc,
+      fee_brl: unifiedFee.fee_brl,
     });
     const sourceLabel = formatCustomerAssetAmount(expiringQuote.sourceAmount, expiringQuote.sourceAsset.code);
     const destinationLabel = formatCustomerAssetAmount(expiringQuote.destinationAmount, expiringQuote.destinationAsset.code);
@@ -1341,8 +1345,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
           : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Rota usada: ${formatQuotePath(quote.path)}. ` +
-        `Taxa estimada: ${feeDisplay.display}. ` +
-        spreadFeeLine +
+        `Taxa estimada total: ${unifiedFee.display}. ` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -1432,12 +1435,16 @@ async function executeConvertAssets(input: any): Promise<string> {
     const destinationAmount = submittedDetails?.destinationAmount || quote.destinationAmount;
     const destinationAssetCode = submittedDetails?.destinationAssetCode || quote.destinationAsset.code;
     const feeDisplay = await formatNetworkFeeForCustomer(submittedDetails?.feeXlm || quote.networkFeeXlm);
-    const spreadFeeLine = quote.platformFee?.enabled
-      ? ` Spread TalkToStellar: ${formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)}.`
-      : '';
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee: feeDisplay,
+      platformFeeAmount: quote.platformFee?.feeAmount || null,
+      platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
+      sourceAssetCode: sourceAssetCode,
+      destinationAssetCode: destinationAssetCode,
+    });
     const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm
-      ? ` Taxa total: ${feeDisplay.display}.${spreadFeeLine}`
-      : ` Taxa total: R$ 0,00.${spreadFeeLine}`;
+      ? ` Taxa total: ${unifiedFee.display}.`
+      : ` Taxa total: R$ 0,00 / US$ 0,00.`;
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
 
@@ -1446,15 +1453,17 @@ async function executeConvertAssets(input: any): Promise<string> {
       hash: result.hash,
       quote: {
         ...quote,
-        fee_display: feeDisplay.display,
-        fee_usdc: feeDisplay.fee_usdc,
-        fee_brl: feeDisplay.fee_brl,
+        fee_display: unifiedFee.display,
+        fee_usdc: unifiedFee.fee_usdc,
+        fee_brl: unifiedFee.fee_brl,
       },
       transferDetails: submittedDetails ? {
         ...submittedDetails,
-        feeDisplay: feeDisplay.display,
-        feeUsdc: feeDisplay.fee_usdc,
-        feeBrl: feeDisplay.fee_brl,
+        feeDisplay: unifiedFee.display,
+        feeUsdc: unifiedFee.fee_usdc,
+        feeBrl: unifiedFee.fee_brl,
+        platformFeeDisplay: null,
+        totalFeeDisplay: unifiedFee.display,
       } : submittedDetails,
       operation_type: operationType,
       message:
@@ -1629,17 +1638,24 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       input.asset_issuer ||
       input.assetIssuer
     );
+    const sourceAssetCodeForFee = String(quote?.sourceAsset?.code || input.source_asset_code || input.sourceAssetCode || asset.code).trim().toUpperCase();
+    const destinationAssetCodeForFee = String(quote?.destinationAsset?.code || asset.code).trim().toUpperCase();
     const platformFee = quote?.platformFee || PlatformFeeService.calculateSpread({
       sourceAmount: normalizedAmount,
-      sourceAssetCode: asset.code,
+      sourceAssetCode: sourceAssetCodeForFee,
+      destinationAssetCode: destinationAssetCodeForFee,
       mode: 'add_on_top',
     });
     const estimatedNetworkFeeXlm = quote?.networkFeeXlm || input.estimated_fee_xlm || DEFAULT_NETWORK_FEE_XLM;
-    const feeDisplay = await formatNetworkFeeForCustomer(estimatedNetworkFeeXlm);
-    const platformFeeDisplay = platformFee?.feeAmount
-      ? formatCustomerAssetAmount(platformFee.feeAmount, platformFee.feeAssetCode)
-      : '';
-    const networkFeeDisplay = feeDisplay.display || 'US$ indisponivel';
+    const networkFee = await formatNetworkFeeForCustomer(estimatedNetworkFeeXlm);
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee,
+      platformFeeAmount: platformFee?.feeAmount || null,
+      platformFeeAssetCode: platformFee?.feeAssetCode || null,
+      sourceAssetCode: sourceAssetCodeForFee,
+      destinationAssetCode: destinationAssetCodeForFee,
+    });
+    const totalFeeDisplay = unifiedFee.display || 'US$ indisponivel';
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -1654,13 +1670,13 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       session_id: String(input.session_id),
       owner_id: String(input.owner_id),
     }, {
-      estimated_fee_display: feeDisplay.display,
-      estimated_fee_usdc: feeDisplay.fee_usdc || null,
-      estimated_fee_brl: feeDisplay.fee_brl || null,
-      estimated_platform_fee: platformFeeDisplay || null,
-      estimated_platform_fee_amount: platformFee?.feeAmount || null,
-      estimated_platform_fee_asset_code: platformFee?.feeAssetCode || null,
-      estimated_spread_fee: platformFeeDisplay || null,
+      estimated_fee_display: unifiedFee.display,
+      estimated_fee_usdc: unifiedFee.fee_usdc || null,
+      estimated_fee_brl: unifiedFee.fee_brl || null,
+      estimated_platform_fee: null,
+      estimated_platform_fee_amount: null,
+      estimated_platform_fee_asset_code: null,
+      estimated_spread_fee: null,
       quote: quote || null,
       quote_issued_at: quote?.quote_issued_at || null,
       quote_expires_at: quote?.quote_expires_at || null,
@@ -1677,12 +1693,10 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       success: true,
       url,
       asset: asset.code,
-      estimated_fee_display: feeDisplay.display,
-      estimated_platform_fee: platformFeeDisplay,
+      estimated_fee_display: unifiedFee.display,
+      estimated_platform_fee: null,
       message:
-        `Antes de confirmar: ` +
-        `${platformFeeDisplay ? `Taxa TalkToStellar estimada: ${platformFeeDisplay}. ` : ''}` +
-        `Taxa de conversão/rede estimada: ${networkFeeDisplay}. ` +
+        `Antes de confirmar: taxa estimada total ${totalFeeDisplay}. ` +
         quoteValidityLine +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
@@ -1711,11 +1725,14 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
 
     const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
-    const platformFeeDisplay = input.quote?.platformFee?.feeAmount
-      ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
-      : '';
-    const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
-    const networkFeeDisplay = feeDisplay.display || 'US$ indisponivel';
+    const networkFee = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee,
+      platformFeeAmount: input.quote?.platformFee?.feeAmount || null,
+      platformFeeAssetCode: input.quote?.platformFee?.feeAssetCode || null,
+      sourceAssetCode: sourceAsset.code,
+      destinationAssetCode: destAsset.code,
+    });
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1728,11 +1745,11 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       dest_asset_issuer: destAsset.issuer,
       quote: input.quote || null,
     }, {
-      estimated_fee_display: feeDisplay.display,
-      estimated_fee_usdc: feeDisplay.fee_usdc || null,
-      estimated_fee_brl: feeDisplay.fee_brl || null,
-      estimated_platform_fee: platformFeeDisplay || null,
-      estimated_spread_fee: platformFeeDisplay || null,
+      estimated_fee_display: unifiedFee.display,
+      estimated_fee_usdc: unifiedFee.fee_usdc || null,
+      estimated_fee_brl: unifiedFee.fee_brl || null,
+      estimated_platform_fee: null,
+      estimated_spread_fee: null,
       quote_issued_at: input.quote?.quote_issued_at || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
@@ -1741,15 +1758,13 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     return JSON.stringify({
       success: true,
       url,
-      estimated_fee_display: feeDisplay.display,
-      estimated_platform_fee: platformFeeDisplay || null,
-      estimated_spread_fee: platformFeeDisplay || null,
+      estimated_fee_display: unifiedFee.display,
+      estimated_platform_fee: null,
+      estimated_spread_fee: null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
       message:
-        `Antes de confirmar: ` +
-        `${platformFeeDisplay ? `Taxa TalkToStellar estimada: ${platformFeeDisplay}. ` : ''}` +
-        `Taxa de conversão/rede estimada: ${networkFeeDisplay}. ` +
+        `Antes de confirmar: taxa estimada total ${unifiedFee.display || 'indisponível'}. ` +
         `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
         `Para confirmar a conversão, abra:\n\n${url}`,
     });
