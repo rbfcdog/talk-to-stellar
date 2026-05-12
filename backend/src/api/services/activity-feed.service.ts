@@ -119,7 +119,7 @@ export class ActivityFeedService {
                 actualFee: toNumber(savedSavings.actual_fee),
                 estimatedSavings: toNumber(savedSavings.estimated_savings),
                 savingsPercentage: toNumber(savedSavings.savings_percentage),
-                comparisonMethod: String(savedSavings.comparison_method || 'market_average_4_5pct'),
+                comparisonMethod: String(savedSavings.comparison_method || EconomyEngineService.comparisonMethod()),
               }
             : EconomyEngineService.calculateForOperation({
                 grossAmount: sourceAmountBrl,

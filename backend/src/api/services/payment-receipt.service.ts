@@ -27,6 +27,7 @@ export type PaymentReceiptInput = {
   quote?: any;
   savings?: {
     estimatedSavings?: number | string | null;
+    savingsPercentage?: number | string | null;
     comparisonMethod?: string | null;
   } | null;
   settlementMs?: number | null;
@@ -95,6 +96,7 @@ export class PaymentReceiptService {
         completedAt: input.completedAt || null,
         hash: input.hash || null,
         quote: input.quote,
+        savings: input.savings,
       })
     );
   }
@@ -135,7 +137,7 @@ export class PaymentReceiptService {
   private static savingsLine(savings?: PaymentReceiptInput['savings']): string {
     const value = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) return '';
-    return `Economia estimada: R$ ${value.toFixed(2)} comparado a uma média de mercado.`;
+    return `Economia estimada: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
   }
 
   private static operationLine(type: ReceiptType, sourceLabel: string, destinationLabel: string, counterparty?: string): string {

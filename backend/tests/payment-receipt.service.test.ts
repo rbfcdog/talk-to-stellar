@@ -23,6 +23,10 @@ describe('PaymentReceiptService', () => {
         destinationAmount: '89.12',
         destinationAsset: { code: 'USDC' },
       },
+      savings: {
+        estimatedSavings: 18.8,
+        savingsPercentage: 83,
+      },
     });
 
     expect(receipt).toContain('Comprovante TalkToStellar');
@@ -30,6 +34,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).toContain('Status: Confirmado');
     expect(receipt).toContain('Cotação usada: R$ 500.00 -> US$ 89.12');
     expect(receipt).toContain('Taxa exata: R$ 0.08 / US$ 0.01');
+    expect(receipt).toContain('Economia estimada: R$ 18.80 em relação a métodos tradicionais.');
     expect(receipt).toContain('Liquidação: 3.2s');
     expect(receipt).toContain(`ID da operação: ${operationId}`);
     expect(receipt).not.toContain('Stellar hash');

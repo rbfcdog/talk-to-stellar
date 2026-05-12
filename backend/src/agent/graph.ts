@@ -980,7 +980,7 @@ Respond ONLY with the intent name. Examples:
 - "quanto recebi esse mês?" → financial_memory
 - "quanto perdi em taxas?" → financial_memory
 - "qual cliente mais me paga?" → financial_memory
-- "quanto economizei comparado ao wise?" → financial_memory
+- "quanto economizei em relação a métodos tradicionais?" → financial_memory
 - "seu saldo em reais perdeu 3% esse mes frente ao dolar" → financial_memory
 - "deseja proteger parte do saldo?" → financial_memory
 - "modo ai treasury" → financial_memory
@@ -1688,7 +1688,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
-  private financialMemoryMode(message: string): 'repeat_payment' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'wise_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
+  private financialMemoryMode(message: string): 'repeat_payment' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -1698,13 +1698,74 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     if (normalized.includes('quanto recebi') || normalized.includes('recebi esse mes') || normalized.includes('recebimentos do mes')) return 'monthly_received';
     if (normalized.includes('taxa') || normalized.includes('taxas')) return 'monthly_fees';
     if (normalized.includes('mais me paga') || normalized.includes('top cliente') || normalized.includes('top pagador')) return 'top_payer';
-    if (normalized.includes('wise') || normalized.includes('economizei')) return 'wise_savings';
+    if (normalized.includes('economizei') || normalized.includes('economia') || normalized.includes('metodos tradicionais') || normalized.includes('banco')) return 'traditional_savings';
     if (normalized.includes('perdeu') && normalized.includes('dolar')) return 'risk_alert';
     if (normalized.includes('proteger parte do saldo') || normalized.includes('proteger saldo')) return 'risk_alert';
     if (normalized.includes('ai treasury') || normalized.includes('melhor moeda') || normalized.includes('melhor momento') || normalized.includes('manter brl ou usd') || normalized.includes('otimizar convers') || normalized.includes('previsao de gasto') || normalized.includes('previsão de gasto')) return 'treasury_advice';
     if (normalized.includes('media') && (normalized.includes('cotacao') || normalized.includes('cambio'))) return 'average_quote';
     if (normalized.includes('mes') || normalized.includes('este mes') || normalized.includes('mês')) return 'monthly_conversion';
     return 'summary';
+  }
+
+  private fixedSavingsIntent(message: string): null | {
+    period: 'today' | 'month' | 'lifetime';
+    view: 'summary' | 'traditional_cost' | 'biggest_operation';
+  } {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const isSavingsAsk =
+      normalized.includes('economizei') ||
+      normalized.includes('economia') ||
+      normalized.includes('teria pago') ||
+      normalized.includes('metodos tradicionais') ||
+      normalized.includes('banco');
+
+    if (!isSavingsAsk) return null;
+
+    if (normalized.includes('maior economia') || normalized.includes('operacao teve maior') || normalized.includes('operacao com maior')) {
+      return { period: 'lifetime', view: 'biggest_operation' };
+    }
+
+    const view = normalized.includes('teria pago') || normalized.includes('quanto pagaria') || normalized.includes('no banco')
+      ? 'traditional_cost'
+      : 'summary';
+    const period = normalized.includes('hoje')
+      ? 'today'
+      : normalized.includes('ja economizei') || normalized.includes('lifetime') || normalized.includes('total')
+        ? 'lifetime'
+        : 'month';
+
+    return { period, view };
+  }
+
+  private async handleFixedSavingsIntent(state: AgentState, fixed: {
+    period: 'today' | 'month' | 'lifetime';
+    view: 'summary' | 'traditional_cost' | 'biggest_operation';
+  }): Promise<AgentState> {
+    const resultRaw = await executeTool('get_savings_identity', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      period: fixed.period,
+      view: fixed.view,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Failed to parse savings response' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = state.success
+      ? result.message
+      : `Não consegui calcular sua economia agora: ${result.error || 'erro desconhecido'}`;
+    await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
+    await this.repository.saveState(state.session_id, state);
+    return state;
   }
 
   private extractRepeatCounterparty(message: string): string {
@@ -2046,10 +2107,13 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       }
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
+      const fixedSavings = this.fixedSavingsIntent(state.current_input);
       state.detected_intent = this.isPaymentLinkRequest(state.current_input)
         ? IntentType.PAYMENT_LINK
         : wantsReceiptImage
           ? IntentType.HISTORY
+        : fixedSavings
+          ? IntentType.FINANCIAL_MEMORY
         : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
@@ -2081,6 +2145,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (wantsReceiptImage) {
         return await this.handleReceiptImageRequest(state);
+      }
+
+      if (fixedSavings) {
+        return await this.handleFixedSavingsIntent(state, fixedSavings);
       }
 
       if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
