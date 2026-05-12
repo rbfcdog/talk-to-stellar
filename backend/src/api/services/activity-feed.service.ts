@@ -107,14 +107,24 @@ export class ActivityFeedService {
       }
 
       if (status === 'success' && (eventType === 'payment_sent' || eventType === 'conversion_completed')) {
-        const feeBrl = toNumber(metadata?.fee_brl);
+        const feeBrl = toNumber(metadata?.actual_fee_brl || metadata?.fee_brl);
+        const savedSavings = (metadata?.savings || {}) as Record<string, unknown>;
         const quoteMetadata = (metadata?.quote || {}) as Record<string, unknown>;
-        const sourceAmountBrl = sourceCurrency === 'BRL' ? sourceAmount : toNumber(quoteMetadata.sourceAmount);
+        const sourceAmountBrl = toNumber(savedSavings.gross_amount_brl) ||
+          (sourceCurrency === 'BRL' ? sourceAmount : toNumber(quoteMetadata.sourceAmount));
         if (sourceAmountBrl > 0) {
-          const savings = EconomyEngineService.calculateForOperation({
-            grossAmount: sourceAmountBrl,
-            actualFee: feeBrl,
-          });
+          const savings = toNumber(savedSavings.estimated_savings) > 0
+            ? {
+                estimatedTraditionalFee: toNumber(savedSavings.estimated_traditional_fee),
+                actualFee: toNumber(savedSavings.actual_fee),
+                estimatedSavings: toNumber(savedSavings.estimated_savings),
+                savingsPercentage: toNumber(savedSavings.savings_percentage),
+                comparisonMethod: String(savedSavings.comparison_method || 'market_average_4_5pct'),
+              }
+            : EconomyEngineService.calculateForOperation({
+                grossAmount: sourceAmountBrl,
+                actualFee: feeBrl,
+              });
 
           if (savings.estimatedSavings > 0) {
             const savingsEvent = {
@@ -131,6 +141,8 @@ export class ActivityFeedService {
                 savings_percentage: savings.savingsPercentage,
                 comparison_method: savings.comparisonMethod,
                 payment_hash: hash,
+                source_amount_brl: sourceAmountBrl,
+                platform_spread_fee: metadata?.platform_spread_fee || null,
               },
               icon: 'piggy-bank',
               semantic_color: 'teal',

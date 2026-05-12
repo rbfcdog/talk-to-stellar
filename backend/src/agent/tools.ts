@@ -1201,6 +1201,9 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           sourceAsset: normalizeAssetInput(input.source_asset_code || input.sourceAssetCode, input.source_asset_issuer || input.sourceAssetIssuer),
         });
     const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
+    const spreadFeeLine = quote.platformFee?.enabled
+      ? ` Spread TalkToStellar: ${formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)}.`
+      : '';
     const expiringQuote = attachQuoteExpiry({
       ...quote,
       fee_display: feeDisplay.display,
@@ -1221,6 +1224,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Rota usada: ${formatQuotePath(quote.path)}. ` +
         `Taxa estimada: ${feeDisplay.display}. ` +
+        spreadFeeLine +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -1310,7 +1314,12 @@ async function executeConvertAssets(input: any): Promise<string> {
     const destinationAmount = submittedDetails?.destinationAmount || quote.destinationAmount;
     const destinationAssetCode = submittedDetails?.destinationAssetCode || quote.destinationAsset.code;
     const feeDisplay = await formatNetworkFeeForCustomer(submittedDetails?.feeXlm || quote.networkFeeXlm);
-    const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm ? ` Taxa total: ${feeDisplay.display}.` : ' Taxa total: R$ 0,00.';
+    const spreadFeeLine = quote.platformFee?.enabled
+      ? ` Spread TalkToStellar: ${formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)}.`
+      : '';
+    const feeLine = submittedDetails?.feeXlm || quote.networkFeeXlm
+      ? ` Taxa total: ${feeDisplay.display}.${spreadFeeLine}`
+      : ` Taxa total: R$ 0,00.${spreadFeeLine}`;
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
 
@@ -1503,6 +1512,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       input.assetIssuer
     );
     const feeDisplay = await formatNetworkFeeForCustomer(quote?.networkFeeXlm || input.estimated_fee_xlm || '0.001');
+    const spreadFeeDisplay = quote?.platformFee?.enabled
+      ? formatCustomerAssetAmount(quote.platformFee.feeAmount, quote.platformFee.feeAssetCode)
+      : '';
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -1520,6 +1532,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
+      estimated_spread_fee: spreadFeeDisplay || null,
       quote: quote || null,
       quote_issued_at: quote?.quote_issued_at || null,
       quote_expires_at: quote?.quote_expires_at || null,
@@ -1538,7 +1551,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       asset: asset.code,
       estimated_fee_display: feeDisplay.display,
       message:
-        `Antes de confirmar: taxa estimada ${feeDisplay.display}. ` +
+        `Antes de confirmar: taxa estimada ${feeDisplay.display}${spreadFeeDisplay ? ` + spread ${spreadFeeDisplay}` : ''}. ` +
         quoteValidityLine +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
@@ -1568,6 +1581,9 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim() || undefined;
     const destAmount = String(input.dest_amount || input.destAmount || input.amount || '').trim();
     const feeDisplay = await formatNetworkFeeForCustomer(input.quote?.networkFeeXlm || '0.001');
+    const spreadFeeDisplay = input.quote?.platformFee?.enabled
+      ? formatCustomerAssetAmount(input.quote.platformFee.feeAmount, input.quote.platformFee.feeAssetCode)
+      : '';
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -1583,6 +1599,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       estimated_fee_display: feeDisplay.display,
       estimated_fee_usdc: feeDisplay.fee_usdc || null,
       estimated_fee_brl: feeDisplay.fee_brl || null,
+      estimated_spread_fee: spreadFeeDisplay || null,
       quote_issued_at: input.quote?.quote_issued_at || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
@@ -1592,9 +1609,10 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       success: true,
       url,
       estimated_fee_display: feeDisplay.display,
+      estimated_spread_fee: spreadFeeDisplay || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
-      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
+      message: `Antes de confirmar: taxa estimada ${feeDisplay.display}${spreadFeeDisplay ? ` + spread ${spreadFeeDisplay}` : ''}. Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

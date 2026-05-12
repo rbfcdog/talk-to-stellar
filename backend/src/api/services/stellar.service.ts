@@ -3,6 +3,7 @@ import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
 import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS } from '../../config/assets';
+import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 
 interface BuildPaymentInput {
   sourcePublicKey: string;
@@ -48,6 +49,9 @@ interface PathPaymentQuote {
   destinationAmount: string;
   sourceAmount: string;
   sourceMax: string;
+  pathSourceAmount?: string;
+  pathSourceMax?: string;
+  platformFee?: PlatformSpreadFee;
   networkFeeXlm: string;
   path: Array<{
     code: string;
@@ -66,8 +70,10 @@ interface StrictSendConversionQuote {
     issuer?: string;
   };
   sourceAmount: string;
+  effectiveSourceAmount?: string;
   destinationAmount: string;
   destinationMin: string;
+  platformFee?: PlatformSpreadFee;
   networkFeeXlm: string;
   path: Array<{
     code: string;
@@ -102,6 +108,14 @@ function sanitizeMemoText(value: string): string | undefined {
 function isValidStellarPublicKey(key: string): boolean {
     // Stellar public keys: Start with 'G', 56 characters, base32 (A-Z, 2-7)
     return /^G[A-Z2-7]{55}$/.test(key);
+}
+
+function addAssetAmounts(...values: Array<string | number | undefined>): string {
+    const total = values.reduce<number>((sum, value) => {
+        const parsed = Number(String(value || '0').replace(',', '.'));
+        return sum + (Number.isFinite(parsed) ? parsed : 0);
+    }, 0);
+    return total.toFixed(7).replace(/\.?0+$/, '');
 }
 
 function createAsset(input: AssetInput): Asset {
@@ -589,9 +603,15 @@ export class StellarService {
                 return b.asset_type !== 'native' && (b as any).asset_code === sourceAssetObj.getCode() && (b as any).asset_issuer === sourceAssetObj.getIssuer();
             });
 
-            // Use sourceMax (which includes slippage) for balance check to ensure we can cover worst-case scenario
-            if (!sourceBalanceLine || parseFloat(sourceBalanceLine.balance) < parseFloat(quote.sourceMax)) {
-                throw new Error(`Saldo de ${sourceAsset.code} insuficiente para a conversão. Máximo necessário (com slippage): ${quote.sourceMax}, disponível: ${sourceBalanceLine?.balance || '0'}.`);
+            const pathSourceMax = String(quote.pathSourceMax || quote.sourceMax);
+            const feeAmount = quote.platformFee?.enabled && quote.platformFee.treasuryPublicKey
+                ? String(quote.platformFee.feeAmount)
+                : '0';
+            const totalSourceMax = addAssetAmounts(pathSourceMax, feeAmount);
+
+            // Use source max plus platform fee for balance check to cover worst-case settlement.
+            if (!sourceBalanceLine || parseFloat(sourceBalanceLine.balance) < parseFloat(totalSourceMax)) {
+                throw new Error(`Saldo de ${sourceAsset.code} insuficiente para a conversão. Máximo necessário: ${totalSourceMax}, disponível: ${sourceBalanceLine?.balance || '0'}.`);
             }
 
             const nativeBalanceLine = sourceAccount.balances.find(b => b.asset_type === 'native');
@@ -600,7 +620,7 @@ export class StellarService {
             const minimumReserve = 1.5; 
             const feeInXlm = 10000 / 10000000;
             // If sending XLM, use sourceMax (with slippage); otherwise 0
-            let amountInXlm = sourceAssetObj.isNative() ? parseFloat(quote.sourceMax) : 0;
+            let amountInXlm = sourceAssetObj.isNative() ? parseFloat(totalSourceMax) : 0;
 
             if (xlmBalance - amountInXlm - feeInXlm < minimumReserve) {
                 throw new Error('Saldo de XLM insuficiente para cobrir a taxa da transação e a reserva mínima da conta.');
@@ -622,13 +642,23 @@ export class StellarService {
             transactionBuilder.addOperation(
                 Operation.pathPaymentStrictReceive({
                     sendAsset: sourceAssetObj,
-                    sendMax: quote.sourceMax,
+                    sendMax: pathSourceMax,
                     destination: destination,
                     destAsset: destAssetObj,
                     destAmount: destAmount,
                     path: pathAssets
                 })
             );
+
+            if (quote.platformFee?.enabled && quote.platformFee.treasuryPublicKey) {
+                transactionBuilder.addOperation(
+                    Operation.payment({
+                        destination: quote.platformFee.treasuryPublicKey,
+                        asset: sourceAssetObj,
+                        amount: quote.platformFee.feeAmount,
+                    })
+                );
+            }
 
             const transaction = transactionBuilder.setTimeout(300).build();
 
@@ -673,10 +703,16 @@ export class StellarService {
         }
 
         const networkFeeXlm = '0.001';
+        const platformFee = PlatformFeeService.calculateSpread({
+            sourceAmount: bestPath.source_amount,
+            sourceAssetCode: assetCode(sourceAssetObj),
+            mode: 'add_on_top',
+        });
 
         // Add 2% slippage to sourceMax to handle price fluctuations during path payment
         const slippagePercent = 1.02;
         const sourceMaxWithSlippage = (parseFloat(bestPath.source_amount) * slippagePercent).toFixed(7);
+        const totalSourceAmount = addAssetAmounts(bestPath.source_amount, platformFee.enabled ? platformFee.feeAmount : '0');
 
         return {
             sourceAsset: {
@@ -688,8 +724,11 @@ export class StellarService {
                 issuer: assetIssuer(destAssetObj),
             },
             destinationAmount: String(destAmount),
-            sourceAmount: String(bestPath.source_amount),
-            sourceMax: sourceMaxWithSlippage,
+            sourceAmount: totalSourceAmount,
+            sourceMax: addAssetAmounts(sourceMaxWithSlippage, platformFee.enabled ? platformFee.feeAmount : '0'),
+            pathSourceAmount: String(bestPath.source_amount),
+            pathSourceMax: sourceMaxWithSlippage,
+            platformFee,
             networkFeeXlm,
             path: (bestPath.path || []).map((pathAsset: any) => ({
                 code: pathAsset.asset_type === 'native' ? 'XLM' : pathAsset.asset_code,
@@ -705,9 +744,16 @@ export class StellarService {
         const destAssetObj = createAsset(destAsset);
         const sourceAssetObj = createAsset(sourceAsset);
 
+        const platformFee = PlatformFeeService.calculateSpread({
+            sourceAmount,
+            sourceAssetCode: assetCode(sourceAssetObj),
+            mode: 'deduct_from_source',
+        });
+        const effectiveSourceAmount = platformFee.enabled ? platformFee.netSourceAmount : String(sourceAmount);
+
         const pathsResponse = await server.strictSendPaths(
             sourceAssetObj,
-            sourceAmount,
+            effectiveSourceAmount,
             [destAssetObj]
         ).call();
 
@@ -747,8 +793,10 @@ export class StellarService {
                 issuer: assetIssuer(destAssetObj),
             },
             sourceAmount: String(sourceAmount),
+            effectiveSourceAmount,
             destinationAmount: String(bestPath.destination_amount),
             destinationMin: destinationMinWithSlippage,
+            platformFee,
             networkFeeXlm,
             path: (bestPath.path || []).map((pathAsset: any) => ({
                 code: pathAsset.asset_type === 'native' ? 'XLM' : pathAsset.asset_code,
@@ -771,8 +819,12 @@ export class StellarService {
                 return b.asset_type !== 'native' && (b as any).asset_code === sourceAssetObj.getCode() && (b as any).asset_issuer === sourceAssetObj.getIssuer();
             });
 
-            if (!sourceBalanceLine || parseFloat(sourceBalanceLine.balance) < parseFloat(sourceAmount)) {
-                throw new Error(`Saldo de ${assetCode(sourceAssetObj)} insuficiente para a conversão. Necessário: ${sourceAmount}, disponível: ${sourceBalanceLine?.balance || '0'}.`);
+            const totalSourceAmount = quote.platformFee?.enabled && quote.platformFee.treasuryPublicKey
+                ? String(sourceAmount)
+                : String(quote.effectiveSourceAmount || sourceAmount);
+
+            if (!sourceBalanceLine || parseFloat(sourceBalanceLine.balance) < parseFloat(totalSourceAmount)) {
+                throw new Error(`Saldo de ${assetCode(sourceAssetObj)} insuficiente para a conversão. Necessário: ${totalSourceAmount}, disponível: ${sourceBalanceLine?.balance || '0'}.`);
             }
 
             const pathAssets = quote.path.map((pathAsset: any) => {
@@ -782,22 +834,32 @@ export class StellarService {
                 return new Asset(pathAsset.code || pathAsset.asset_code, pathAsset.issuer || pathAsset.asset_issuer);
             });
 
-            const transaction = new TransactionBuilder(sourceAccount, {
+            const transactionBuilder = new TransactionBuilder(sourceAccount, {
                 fee: '10000',
                 networkPassphrase: stellarConfig.network
             })
                 .addOperation(
                     Operation.pathPaymentStrictSend({
                         sendAsset: sourceAssetObj,
-                        sendAmount: sourceAmount,
+                        sendAmount: String(quote.effectiveSourceAmount || sourceAmount),
                         destination,
                         destAsset: destAssetObj,
                         destMin: quote.destinationMin,
                         path: pathAssets,
                     })
-                )
-                .setTimeout(300)
-                .build();
+                );
+
+            if (quote.platformFee?.enabled && quote.platformFee.treasuryPublicKey) {
+                transactionBuilder.addOperation(
+                    Operation.payment({
+                        destination: quote.platformFee.treasuryPublicKey,
+                        asset: sourceAssetObj,
+                        amount: quote.platformFee.feeAmount,
+                    })
+                );
+            }
+
+            const transaction = transactionBuilder.setTimeout(300).build();
 
             return transaction.toXDR();
         } catch (error) {

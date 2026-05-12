@@ -12,6 +12,77 @@ export type SavingsResult = {
 const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.045);
 
 export class EconomyEngineService {
+  static estimateAmountInBrl(input: {
+    amount: unknown;
+    assetCode: unknown;
+    quote?: any;
+    fallbackUsdBrl?: number;
+  }): number {
+    const amount = toNumber(input.amount);
+    const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    if (amount <= 0) return 0;
+    if (assetCode === 'BRL') return amount;
+
+    const quote = input.quote || {};
+    const sourceAmount = toNumber(quote.sourceAmount);
+    const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const destinationAmount = toNumber(quote.destinationAmount);
+    const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+
+    if (assetCode === sourceAsset && destinationAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) {
+      return amount * (destinationAmount / sourceAmount);
+    }
+    if (assetCode === destinationAsset && sourceAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) {
+      return amount * (sourceAmount / destinationAmount);
+    }
+
+    const fallback = Number(input.fallbackUsdBrl || process.env.DEFAULT_USD_BRL_RATE || 5.6);
+    if ((assetCode === 'USDC' || assetCode === 'USD') && Number.isFinite(fallback) && fallback > 0) {
+      return amount * fallback;
+    }
+
+    return 0;
+  }
+
+  static calculateForSettledOperation(input: {
+    sourceAmount: unknown;
+    sourceAssetCode: unknown;
+    feeBrl?: unknown;
+    platformFeeAmount?: unknown;
+    platformFeeAssetCode?: unknown;
+    quote?: any;
+    comparisonMethod?: string;
+  }): SavingsResult & {
+    grossAmountBrl: number;
+    platformFeeBrl: number;
+    actualFeeBrl: number;
+  } {
+    const grossAmountBrl = this.estimateAmountInBrl({
+      amount: input.sourceAmount,
+      assetCode: input.sourceAssetCode,
+      quote: input.quote,
+    });
+    const networkFeeBrl = toNumber(input.feeBrl);
+    const platformFeeBrl = this.estimateAmountInBrl({
+      amount: input.platformFeeAmount,
+      assetCode: input.platformFeeAssetCode,
+      quote: input.quote,
+    });
+    const actualFeeBrl = networkFeeBrl + platformFeeBrl;
+    const savings = this.calculateForOperation({
+      grossAmount: grossAmountBrl,
+      actualFee: actualFeeBrl,
+      comparisonMethod: input.comparisonMethod,
+    });
+
+    return {
+      ...savings,
+      grossAmountBrl,
+      platformFeeBrl,
+      actualFeeBrl,
+    };
+  }
+
   static calculateForOperation(input: {
     grossAmount: number;
     actualFee: number;
@@ -63,14 +134,15 @@ export class EconomyEngineService {
       const sourceAmount = toNumber((row as Record<string, unknown>).source_amount);
       const sourceAsset = String((row as Record<string, unknown>).source_asset_code || '').toUpperCase();
 
-      if (sourceAsset === 'BRL') {
+      const savedGrossBrl = toNumber((metadata?.savings as any)?.gross_amount_brl || metadata?.gross_amount_brl);
+      if (savedGrossBrl > 0) {
+        grossBrl += savedGrossBrl;
+      } else if (sourceAsset === 'BRL') {
         grossBrl += sourceAmount;
       }
 
-      const feeBrlFromMetadata = toNumber(metadata?.fee_brl);
-      if (feeBrlFromMetadata > 0) {
-        actualFeeBrl += feeBrlFromMetadata;
-      }
+      const feeBrlFromMetadata = toNumber(metadata?.actual_fee_brl || metadata?.fee_brl);
+      actualFeeBrl += feeBrlFromMetadata;
     }
 
     const savings = this.calculateForOperation({ grossAmount: grossBrl, actualFee: actualFeeBrl });
