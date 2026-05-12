@@ -46,12 +46,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const [loginNotice, setLoginNotice] = useState("")
   const claimLockRef = useRef(false)
 
-  const safeClose = () => {
-    try {
-      window.close()
-    } catch {}
-  }
-
   useEffect(() => {
     const current = new URLSearchParams(window.location.search).get("token") || initialToken || ""
     setToken(current)
@@ -88,12 +82,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     }
     validate()
   }, [token])
-
-  useEffect(() => {
-    if (status !== "done") return
-    const timer = window.setTimeout(() => safeClose(), 0)
-    return () => window.clearTimeout(timer)
-  }, [status])
 
   async function claim() {
     if (!token || validation.valid === false || !/^\d{4,8}$/.test(pin)) return
