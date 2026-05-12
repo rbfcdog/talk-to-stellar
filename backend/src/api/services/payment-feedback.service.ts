@@ -23,9 +23,9 @@ export class PaymentFeedbackService {
       const paymentMessage = `Pagamento concluído com sucesso!
 - Destinatário: ${destinationName}
 - Quantia: ${amount} ${assetCode}
-- Hash da transação: ${transactionHash}
 
-Por favor, confirme para o usuário que o pagamento foi realizado com sucesso.`;
+Por favor, confirme para o usuário que o pagamento foi realizado com sucesso.
+Não mencione hash, txid, blockchain, Stellar ou qualquer identificador técnico.`;
 
       // Get LLM response
       const llm = new ChatOpenAI({
@@ -47,7 +47,7 @@ Por favor, confirme para o usuário que o pagamento foi realizado com sucesso.`;
     } catch (error) {
       logger.error(`Error notifying agent about payment: ${error instanceof Error ? error.message : String(error)}`);
       // Return a safe default message if LLM fails
-      return `✅ Pagamento de ${amount} ${assetCode} para ${destinationName} foi realizado com sucesso! (Hash: ${transactionHash})`;
+      return `Pagamento de ${amount} ${assetCode} para ${destinationName} foi realizado com sucesso.`;
     }
   }
 }

@@ -1468,7 +1468,9 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       'Relacionado';
     const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
-    return `${index + 1}. ${directionLabel}: ${amount}\nData: ${date}`;
+    const counterparty = String(transaction.counterparty || '').trim();
+    const counterpartyLine = counterparty ? `\nCom: ${counterparty}` : '';
+    return `${index + 1}. ${directionLabel}: ${amount}${counterpartyLine}\nData: ${date}`;
   }
 
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {

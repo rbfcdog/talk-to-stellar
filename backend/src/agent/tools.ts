@@ -1434,7 +1434,7 @@ async function executeSubmitTransaction(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       transaction_hash: txHash,
-      message: `Operação enviada com sucesso. Código da operação: ${txHash}`,
+      message: 'Operação enviada com sucesso.',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1457,27 +1457,28 @@ async function executeGetHistory(input: any): Promise<string> {
       input.limit || 10
     );
 
-    const formattedOps = operations.map((op: any) => {
+    const formattedOps = await Promise.all(operations.map(async (op: any) => {
       const asset = getAssetCode(op);
       const amount = op.amount || op.starting_balance || op.source_amount || op.amount_in || op.amount_out;
       const from = op.from || op.source_account || op.funder || op.account;
       const to = op.to || op.account || op.into;
       const direction = to === publicKey ? 'received' : from === publicKey ? 'sent' : 'related';
+      const counterpartyKey = direction === 'received' ? from : to;
+      const counterpartyLabel = await TransferNotificationService.resolveHumanLabel({
+        publicKey: String(counterpartyKey || '').trim() || undefined,
+      });
 
       return {
         id: op.id,
         type: op.type,
         date: op.created_at,
-        hash: op.transaction_hash,
-        source: op.source_account,
-        from,
-        to,
+        counterparty: counterpartyLabel || 'contato não identificado',
         direction,
         asset,
         amount: amount ? String(amount) : undefined,
         asset_issuer: op.asset_issuer,
       };
-    });
+    }));
     return JSON.stringify({
       success: true,
       public_key: publicKey,

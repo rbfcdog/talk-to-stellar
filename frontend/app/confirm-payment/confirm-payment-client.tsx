@@ -58,6 +58,21 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   return `${n.toFixed(2)} ${code}`
 }
 
+function formatRecipientLabel(payload: any) {
+  const candidate = String(
+    payload?.destination_name ||
+    payload?.destination_contact?.contact_name ||
+    payload?.destination_contact?.name ||
+    payload?.destination_contact?.email ||
+    payload?.destination_contact?.phone_number ||
+    payload?.destination_contact?.phone ||
+    ''
+  ).trim()
+
+  if (candidate) return candidate
+  return 'Destinatário'
+}
+
 function hasUsableFeeDisplay(value?: string) {
   const normalized = String(value || "").trim().toLowerCase()
   if (!normalized || normalized.includes("indispon")) return false
@@ -263,7 +278,7 @@ export default function ConfirmPaymentClient({
   const sourceAmount = String(payload.source_amount || payload.quote?.sourceAmount || "")
   const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
-  const destinationLabel = payload.destination_name || payload.destination || "Destinatário indisponível"
+  const destinationLabel = formatRecipientLabel(payload)
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const estimatedFeeSummary = buildFeeSummary({
     feeDisplay: estimatedFeeDisplay,
@@ -391,7 +406,6 @@ export default function ConfirmPaymentClient({
                     <p>Taxa aplicada: {resultFeeSummary}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="break-all font-mono text-xs">Código da operação: {result.hash}</p>
                   <p className="break-all font-mono text-xs">Destino: {result.destinationName || result.destination}</p>
                 </div>
               )}
