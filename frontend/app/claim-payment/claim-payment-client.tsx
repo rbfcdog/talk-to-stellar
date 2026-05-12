@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
@@ -44,6 +44,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const [result, setResult] = useState<any>(null)
   const [pin, setPin] = useState("")
   const [loginNotice, setLoginNotice] = useState("")
+  const claimLockRef = useRef(false)
 
   const safeClose = () => {
     try {
@@ -90,11 +91,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
   useEffect(() => {
     if (status !== "done") return
-    const timer = window.setTimeout(() => safeClose(), 2000)
+    const timer = window.setTimeout(() => safeClose(), 0)
     return () => window.clearTimeout(timer)
   }, [status])
 
   async function claim() {
+    if (!token || validation.valid === false || !/^\d{4,8}$/.test(pin)) return
+    if (claimLockRef.current) return
+    claimLockRef.current = true
     setStatus("claiming")
     setResult(null)
     try {
@@ -118,7 +122,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       }
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
+      if (!response.ok || !payload?.success) {
+        claimLockRef.current = false
+      }
     } catch (error) {
+      claimLockRef.current = false
       setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao receber pagamento." })
       setStatus("error")
     }
@@ -231,7 +239,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               <button
                 type="button"
                 onClick={claim}
-                disabled={status === "claiming" || validation.valid === false || !token || !/^\d{4,8}$/.test(pin)}
+                disabled={status === "claiming" || status === "done" || validation.valid === false || !token || !/^\d{4,8}$/.test(pin)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 className="h-4 w-4" />
