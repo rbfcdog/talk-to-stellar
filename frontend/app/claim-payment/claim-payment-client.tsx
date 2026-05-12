@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
-import { enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -47,15 +47,6 @@ function formatTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : NaN
   if (!Number.isFinite(timestamp)) return new Date().toLocaleString("pt-BR")
   return new Date(timestamp).toLocaleString("pt-BR")
-}
-
-function closeCompletionPage() {
-  try {
-    ;(window as any).Telegram?.WebApp?.close?.()
-  } catch {}
-  try {
-    window.close()
-  } catch {}
 }
 
 export default function ClaimPaymentClient({ initialToken }: { initialToken?: string }) {
@@ -108,8 +99,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
   useEffect(() => {
     if (status !== "done") return
-    const timer = window.setTimeout(() => closeCompletionPage(), 5000)
-    return () => window.clearTimeout(timer)
+    closeIntermediatePage()
   }, [status])
 
   async function claim() {
@@ -309,7 +299,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   Ver comprovante
                 </a>
               )}
-              <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
+              <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
             </motion.div>
           )}
           {status === "error" && (

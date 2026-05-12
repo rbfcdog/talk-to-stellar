@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -49,11 +48,7 @@ export default function LogoutClient() {
     if (status !== "done" || completionRef.current) return
     completionRef.current = true
     enqueueWebChatFeedback(`✅ Saída concluída.\n${message || "Sua sessão foi encerrada."}`)
-    closeIntermediatePage(3000)
-    const timer = window.setTimeout(() => {
-      if (!window.closed) window.location.href = "/chat"
-    }, 3500)
-    return () => window.clearTimeout(timer)
+    closeIntermediatePage()
   }, [status, message])
 
   async function handleConfirmLogout() {
@@ -91,6 +86,9 @@ export default function LogoutClient() {
         <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
           <h1 className="text-3xl font-semibold text-white">Sair da conta</h1>
           <p className="mt-3 text-slate-300">{status === "loading" ? "Encerrando sua sessão..." : message || "Confirme para encerrar sua sessão atual."}</p>
+          {status === "done" && (
+            <p className="mt-2 text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+          )}
           <div className="mt-6 flex min-w-0 flex-wrap gap-3">
             {status !== "done" && (
               <button
@@ -102,12 +100,6 @@ export default function LogoutClient() {
                 {status === "loading" ? "Saindo..." : "Confirmar logout"}
               </button>
             )}
-            <Link
-              href="/chat"
-              className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Voltar para o chat
-            </Link>
           </div>
         </div>
       </div>

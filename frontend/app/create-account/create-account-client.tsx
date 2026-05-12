@@ -6,7 +6,7 @@ import { startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type FinalizeResponse = {
@@ -130,17 +130,13 @@ export default function CreateAccountClient({
   function finishTelegramFlow(feedback?: string) {
     if (feedback) enqueueWebChatFeedback(feedback)
     setTelegramDone(true)
-    closeIntermediatePage(3000)
+    closeIntermediatePage()
   }
 
-  function closeOrRedirect(target: string, feedback?: string) {
+  function finishAndClose(feedback?: string) {
     if (feedback) enqueueWebChatFeedback(feedback)
-    closeIntermediatePage(3000)
-    window.setTimeout(() => {
-      if (!window.closed) {
-        window.location.href = target
-      }
-    }, 3500)
+    setTelegramDone(true)
+    closeIntermediatePage()
   }
 
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
@@ -350,7 +346,7 @@ export default function CreateAccountClient({
         if (isTelegramContext) {
           finishTelegramFlow(`✅ Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
         } else {
-          closeOrRedirect(nextPath, `✅ Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
+          finishAndClose(`✅ Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
         }
         return
       }
@@ -415,7 +411,7 @@ export default function CreateAccountClient({
       if (isTelegramContext) {
         finishTelegramFlow(`✅ Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
       } else {
-        closeOrRedirect(nextPath, `✅ Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
+        finishAndClose(`✅ Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
       }
     } catch (err: any) {
       submitLockRef.current = false
@@ -472,7 +468,7 @@ export default function CreateAccountClient({
       if (isTelegramContext) {
         finishTelegramFlow(`✅ Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
       } else {
-        closeOrRedirect(nextPath, `✅ Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
+        finishAndClose(`✅ Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
       }
     } catch (error) {
       submitLockRef.current = false
@@ -485,10 +481,13 @@ export default function CreateAccountClient({
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
         <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
-          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">Telegram conectado</p>
+          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">{isTelegramContext ? "Telegram conectado" : "Conta conectada"}</p>
           <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            Volte ao Telegram e envie sua próxima mensagem. Esta tela fecha automaticamente.
+            {isTelegramContext ? "Volte ao Telegram e envie sua próxima mensagem." : "Processo concluído."}
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            {INTERMEDIATE_PAGE_CLOSE_COPY}
           </p>
         </section>
       </main>

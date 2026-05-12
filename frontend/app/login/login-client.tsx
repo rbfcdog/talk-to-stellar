@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { KeyRound, LogIn, ShieldCheck } from "lucide-react"
 
 function generateBrowserId(): string {
@@ -51,8 +51,6 @@ function decodeJwtPayload(token: string): any {
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const searchParams = useSearchParams()
-  const rawNextPath = searchParams.get("next") || "/chat"
-  const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
   const externalToken = searchParams.get("token") || ""
   const externalPayload = useMemo(() => decodeJwtPayload(externalToken), [externalToken])
   const externalProvider = String(externalPayload?.provider || "").trim().toLowerCase()
@@ -64,7 +62,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
-  const [externalDone, setExternalDone] = useState(false)
+  const [loginDone, setLoginDone] = useState(false)
 
   function getBrowserId() {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
@@ -77,13 +75,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function finishLogin() {
     enqueueWebChatFeedback(`✅ Entrada concluída.\nConta conectada: ${email.trim() || "usuário"}`)
-    if (hasExternalContext) {
-      setExternalDone(true)
-      closeIntermediatePage(3000)
-      return
-    }
-
-    window.location.href = nextPath
+    setLoginDone(true)
+    closeIntermediatePage()
   }
 
   async function linkExternalSession(sessionId?: string, sessionToken?: string) {
@@ -213,7 +206,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }
 
-  if (externalDone) {
+  if (loginDone) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
         <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
@@ -222,7 +215,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           </p>
           <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            Volte ao {externalProviderLabel} e envie sua próxima mensagem. Esta tela fecha automaticamente.
+            {hasExternalContext ? `Volte ao ${externalProviderLabel} e envie sua próxima mensagem.` : "Entrada concluída."}
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            {INTERMEDIATE_PAGE_CLOSE_COPY}
           </p>
         </section>
       </main>

@@ -8,6 +8,8 @@ export type WebChatFeedback = {
 
 export const WEB_CHAT_FEEDBACK_EVENT = "talk-to-stellar:web-chat-feedback"
 export const WEB_CHAT_FEEDBACK_CHANNEL = "talk-to-stellar-web-chat-feedback"
+export const INTERMEDIATE_PAGE_CLOSE_DELAY_MS = 2000
+export const INTERMEDIATE_PAGE_CLOSE_COPY = "Esta tela fecha em 2 segundos."
 const WEB_CHAT_FEEDBACK_KEY = "talk-to-stellar.webChatFeedbackQueue"
 
 function generateFeedbackId() {
@@ -57,7 +59,7 @@ export function consumeWebChatFeedback(): WebChatFeedback[] {
   }
 }
 
-export function closeIntermediatePage(delayMs = 5000) {
+export function closeIntermediatePage(delayMs = INTERMEDIATE_PAGE_CLOSE_DELAY_MS) {
   if (typeof window === "undefined") return
   window.setTimeout(() => {
     try {
@@ -66,5 +68,11 @@ export function closeIntermediatePage(delayMs = 5000) {
     try {
       window.close()
     } catch {}
+
+    window.setTimeout(() => {
+      try {
+        if (!window.closed) window.location.replace("about:blank")
+      } catch {}
+    }, 250)
   }, delayMs)
 }

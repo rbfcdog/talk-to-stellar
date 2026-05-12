@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback } from "@/lib/web-feedback"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
@@ -132,7 +132,7 @@ export default function ConfirmConversionClient({
 
   useEffect(() => {
     if (!(status === "done" && result?.success)) return
-    closeIntermediatePage(5000)
+    closeIntermediatePage()
   }, [status, result?.success])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -304,7 +304,7 @@ export default function ConfirmConversionClient({
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="text-xs text-slate-400">Esta janela fecha automaticamente em alguns segundos.</p>
+                  <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
