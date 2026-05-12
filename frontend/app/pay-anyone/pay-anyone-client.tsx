@@ -75,8 +75,8 @@ export default function PayAnyoneClient() {
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
-      <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-6 py-10 md:grid-cols-[0.95fr_1.05fr]">
-        <section className="space-y-6">
+      <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 md:grid-cols-[0.95fr_1.05fr]">
+        <section className="min-w-0 space-y-6 overflow-hidden">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-emerald-200">
             <ShieldCheck className="h-4 w-4" />
             Pay Anyone
@@ -90,9 +90,9 @@ export default function PayAnyoneClient() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3">
             {["Crie", "Compartilhe", "Receba"].map((label, index) => (
-              <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {index === 0 && "Digite valor, destinatário e PIN."}
@@ -104,7 +104,7 @@ export default function PayAnyoneClient() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-white/10 bg-slate-950/80 p-5 shadow-2xl md:p-6">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 p-5 shadow-2xl md:p-6">
           {!loggedIn && (
             <div className="mb-5 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
               Entre na sua conta antes de criar um link de pagamento.
@@ -125,7 +125,7 @@ export default function PayAnyoneClient() {
               />
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_130px_130px]">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">Valor</span>
                 <input

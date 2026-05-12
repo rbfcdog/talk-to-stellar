@@ -170,9 +170,9 @@ export default function ConfirmConversionClient({
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
-        <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.1fr_0.9fr] md:p-10">
-          <section className="space-y-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+          <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-emerald-200">
               Confirmação de conversão
             </div>
@@ -195,14 +195,14 @@ export default function ConfirmConversionClient({
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Origem</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {formatAmount(sourceAmount, sourceAssetCode)}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {formatAmount(destAmount, destAssetCode)}
@@ -211,9 +211,9 @@ export default function ConfirmConversionClient({
             </div>
           </section>
 
-          <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">Resumo</p>
                 <p className="mt-2 text-slate-300">Debitar: {formatAmount(sourceAmount, sourceAssetCode)}</p>
                 <p className="text-slate-300">Receber: {formatAmount(destAmount, destAssetCode)}</p>

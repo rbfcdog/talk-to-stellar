@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, LogIn, ShieldCheck } from "lucide-react"
+import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 
 type ValidationResult = {
@@ -122,6 +122,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const senderName = String(payload.sender_name || "Alguém")
   const loggedIn = Boolean(sessionId && sessionToken)
   const nextPath = `/claim-payment?token=${encodeURIComponent(token)}`
+  const createAccountPath = `/create-account?next=${encodeURIComponent(nextPath)}&force_new=1&context=claim-payment`
   const senderSessionId = String(payload.session_id || "").trim()
   const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
 
@@ -136,8 +137,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
-        <section className="w-full rounded-lg border border-white/10 bg-slate-950/85 p-6 shadow-2xl">
+      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10 sm:px-6">
+        <section className="min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-950/85 p-5 shadow-2xl sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
             <ShieldCheck className="h-4 w-4" />
             Receber pagamento
@@ -147,7 +148,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             {senderName} criou um link de {sourceAmountLabel} para {recipientName}
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
-            Entre ou crie sua conta global para receber. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a conta autenticada nesta página."}
+            Entre em uma conta existente ou crie uma nova conta global para receber. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a conta autenticada nesta página."}
             {loggedIn && !isSenderSession ? " Confirme com seu PIN para garantir que este pagamento entre na sua conta." : ""}
           </p>
 
@@ -161,7 +162,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           </div>
 
           {(!loggedIn || isSenderSession) && (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
               {loginNotice && (
                 <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
                   {loginNotice}
@@ -189,10 +190,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 Entrar para receber
               </Link>
               <Link
-                href={`/create-account?next=${encodeURIComponent(nextPath)}`}
+                href={createAccountPath}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                Criar conta global
+                <UserPlus className="h-4 w-4" />
+                Criar conta para receber
               </Link>
             </div>
           )}

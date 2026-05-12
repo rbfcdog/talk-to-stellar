@@ -227,9 +227,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
-        <div className="grid w-full gap-8 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[1.05fr_0.95fr] md:p-10">
-          <section className="space-y-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur sm:p-6 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:p-10">
+          <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-cyan-200">
               <ShieldCheck className="h-4 w-4" />
               TalkToStellar
@@ -248,19 +248,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">PIN</p>
                 <p className="mt-2 text-sm text-slate-200">Acesso rápido para a conta já criada.</p>
               </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Passkey</p>
                 <p className="mt-2 text-sm text-slate-200">Biometria ou desbloqueio do aparelho quando disponível.</p>
               </div>
             </div>
           </section>
 
-          <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handlePinLogin}>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">E-mail</span>
