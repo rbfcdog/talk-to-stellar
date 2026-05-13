@@ -51,6 +51,15 @@ type ConfirmResponse = {
     destinationAssetCode?: string
     message?: string
   } | null
+  monthly_savings?: {
+    period?: string
+    estimated_savings_brl?: string
+    estimated_traditional_fee_brl?: string
+    actual_fee_brl?: string
+    savings_percentage?: string
+    comparison_method?: string
+    message?: string
+  } | null
   receiptImageDataUrl?: string
   message?: string
   error?: string
@@ -533,6 +542,7 @@ export default function ConfirmPaymentClient({
           sourceAssetCode: String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || payloadForFeedback?.asset_code || ""),
         })
         const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
+        const monthlySavingsForFeedback = formatBrl(String(payload?.monthly_savings?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
           "Pagamento enviado com sucesso.",
           conversionMessage,
@@ -541,6 +551,7 @@ export default function ConfirmPaymentClient({
           feedbackIsCrossAsset && routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
           hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Taxa estimada: ${estimatedFeeForFeedback}` : "",
           feedbackIsCrossAsset && savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
+          monthlySavingsForFeedback ? `Economia acumulada no mês: ${monthlySavingsForFeedback}` : "",
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
           `Horário: ${formatTimestamp(payload.completed_at)}`,
           receiptUrl ? `Comprovante: ${receiptUrl}` : "",
@@ -698,6 +709,7 @@ export default function ConfirmPaymentClient({
   const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
+  const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""))
   const isExpiredLink = Boolean(validation?.valid === false && (validation as any)?.expired)
 
   return (
@@ -887,6 +899,9 @@ export default function ConfirmPaymentClient({
                   )}
                   {successAutoConversionMessage && (
                     <p>{successAutoConversionMessage}</p>
+                  )}
+                  {successMonthlySavings && (
+                    <p>Você já economizou {successMonthlySavings} neste mês usando o TalkToStellar.</p>
                   )}
                   {successReceiptUrl && (
                     <a
