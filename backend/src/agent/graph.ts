@@ -1977,7 +1977,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
-  private financialMemoryMode(message: string): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
+  private financialMemoryMode(message: string, allowLooseNicknameReply = false): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -1988,7 +1988,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       (normalized.includes('definir') || normalized.includes('salvar') || normalized.includes('colocar') || normalized.includes(':'))) return 'nickname_set';
     if ((normalized.includes('qual foi o valor') || normalized.includes('quanto foi')) &&
       (normalized.includes('pagamento') || normalized.includes('transacao') || normalized.includes('transação'))) return 'nickname_lookup';
-    if (this.looksLikeNicknameReply(message)) return 'nickname_set';
+    if (allowLooseNicknameReply && this.looksLikeNicknameReply(message)) return 'nickname_set';
     if (/\b(de novo|novamente|again|mesma carteira|mesmo pagamento)\b/.test(normalized)) return 'repeat_payment';
     if (/\b(favoritos?|recorrente|recorrencia|recorrência|destinatarios|destinatários|clientes)\b/.test(normalized)) return 'recipient_insights';
     if (normalized.includes('quanto recebi') || normalized.includes('recebi esse mes') || normalized.includes('recebimentos do mes')) return 'monthly_received';
@@ -2013,15 +2013,20 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       .toLowerCase();
     if (
       normalized.startsWith('enviar ') ||
+      normalized.startsWith('mandar ') ||
+      normalized.startsWith('pagar ') ||
+      normalized.startsWith('transferir ') ||
       normalized.startsWith('converter ') ||
       normalized.startsWith('saldo') ||
       normalized.startsWith('criar ') ||
       normalized.startsWith('gerar ') ||
       normalized.startsWith('quero ')
     ) return false;
+    if (/\b(mandar|enviar|pagar|transferir|converter|criar|gerar|receber)\b/.test(normalized)) return false;
+    if (/\b\d+(?:[.,]\d+)?\b/.test(normalized)) return false;
+    if (/\b(usdc?|usd|dolar|dolares|brl|real|reais|eurc?|euro|euros|xlm)\b/.test(normalized)) return false;
     if (normalized.includes('link')) return false;
-    if (/\b(apelido|nome da transacao|nome da transação|transacao|transação|pagamento)\b/.test(normalized)) return true;
-    return false;
+    return normalized.length >= 3 && normalized.length <= 60;
   }
 
   private extractTransactionNickname(message: string): string {
@@ -2036,8 +2041,23 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return text.slice(0, 80);
   }
 
-  private hasDeterministicFinancialMemoryIntent(message: string): boolean {
-    const mode = this.financialMemoryMode(message);
+  private hasPendingNicknamePrompt(state: AgentState): boolean {
+    const messages = Array.isArray(state.messages) ? state.messages : [];
+    const lastAssistant = [...messages].reverse().find((msg) => String(msg?.role || '').toLowerCase() === 'assistant');
+    const content = String(lastAssistant?.content || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    if (!content) return false;
+    return (
+      content.includes('quer dar um nome para esta transacao') ||
+      content.includes('apelido da transacao') ||
+      content.includes('nome para esta transacao')
+    );
+  }
+
+  private hasDeterministicFinancialMemoryIntent(message: string, allowLooseNicknameReply = false): boolean {
+    const mode = this.financialMemoryMode(message, allowLooseNicknameReply);
     return mode === 'nickname_set' || mode === 'nickname_lookup';
   }
 
@@ -2122,7 +2142,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   }
 
   private async handleFinancialMemoryRequest(state: AgentState): Promise<AgentState> {
-    const mode = this.financialMemoryMode(state.current_input);
+    const mode = this.financialMemoryMode(state.current_input, this.hasPendingNicknamePrompt(state));
     const contactName = mode === 'repeat_payment' ? this.extractRepeatCounterparty(state.current_input) : '';
     const nickname = mode === 'nickname_set' || mode === 'nickname_lookup'
       ? this.extractTransactionNickname(state.current_input)
@@ -2460,7 +2480,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
-      const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(state.current_input);
+      const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
+        state.current_input,
+        this.hasPendingNicknamePrompt(state)
+      );
       state.detected_intent = this.isDirectLoginRequest(state.current_input)
         ? IntentType.LOGIN
         : this.isDirectOnboardingRequest(state.current_input)
