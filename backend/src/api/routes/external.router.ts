@@ -18,6 +18,7 @@ router.get('/validate-token', ExternalValidateController.validate);
 router.get('/short-links/:code', ShortLinkController.resolve);
 router.post('/pay-links', PayLinkController.create);
 router.post('/pay-links/claim', PayLinkController.claim);
+router.post('/short-links', ShortLinkController.create);
 router.post('/recovery-init', ExternalRecoveryController.recoveryInit);
 router.post('/recovery-complete', ExternalRecoveryController.recoveryComplete);
 router.get('/receipts/viewer/:code', ReceiptImageController.viewer);

@@ -277,6 +277,7 @@ export default function ConfirmPaymentClient({
   const [showPasskeyOptions, setShowPasskeyOptions] = useState(false)
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "starting" | "authenticating" | "submitting" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
+  const [qrTargetUrl, setQrTargetUrl] = useState("")
   const [mobileSyncStatus, setMobileSyncStatus] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
@@ -380,6 +381,44 @@ export default function ConfirmPaymentClient({
     if (status !== "done") return
     closeIntermediatePage()
   }, [status])
+
+  useEffect(() => {
+    let cancelled = false
+    async function prepareQrTarget() {
+      if (!mobileRedirectUrl) {
+        setQrTargetUrl("")
+        return
+      }
+      const tokenPayload = validation?.payload || decodeJwtPayload(token)
+      try {
+        const response = await fetch("/api/external/short-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: mobileRedirectUrl,
+            purpose: "confirm_payment_passkey_qr",
+            session_id: String(tokenPayload?.session_id || tokenPayload?.sessionId || "").trim() || undefined,
+            user_id: String(tokenPayload?.owner_id || tokenPayload?.ownerId || tokenPayload?.user_id || tokenPayload?.userId || "").trim() || undefined,
+            expires_in_hours: 6,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+        if (response.ok && payload?.url) {
+          setQrTargetUrl(String(payload.url))
+          return
+        }
+        setQrTargetUrl(mobileRedirectUrl)
+      } catch {
+        if (!cancelled) setQrTargetUrl(mobileRedirectUrl)
+      }
+    }
+
+    void prepareQrTarget()
+    return () => {
+      cancelled = true
+    }
+  }, [mobileRedirectUrl, token, validation?.payload])
 
   useEffect(() => {
     if (requestedAuthMethod !== "passkey") return
@@ -571,9 +610,9 @@ export default function ConfirmPaymentClient({
     return url.toString()
   }, [token, publicKey, publicKeyFromUrl])
   const qrImageUrl = useMemo(() => {
-    if (!mobileRedirectUrl) return ""
-    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileRedirectUrl)}`
-  }, [mobileRedirectUrl])
+    if (!qrTargetUrl) return ""
+    return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
+  }, [qrTargetUrl])
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -716,9 +755,12 @@ export default function ConfirmPaymentClient({
                   <img
                     src={qrImageUrl}
                     alt="QR Code para confirmar pagamento no celular"
-                    className="h-52 w-52 rounded-xl border border-white/10 bg-white p-2"
+                    className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
                   />
                 </div>
+                {qrTargetUrl && (
+                  <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>
+                )}
               </div>
             )}
 
