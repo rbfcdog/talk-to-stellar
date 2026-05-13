@@ -11,6 +11,7 @@ import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
 import { idempotencyMiddleware } from './services/idempotency.service';
+import { DailySummaryService } from './api/services/daily-summary.service';
 
 const app = express();
 
@@ -52,6 +53,9 @@ app.use('/api/passkeys', passkeyRouter);
 // Register security routes (PIN reset, etc)
 app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
+
+// Start background summary scheduler (idempotent per process).
+DailySummaryService.startScheduler();
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

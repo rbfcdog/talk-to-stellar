@@ -21,6 +21,7 @@ import { ContactSeedService } from '../services/contact-seed.service';
 import { ActivityFeedService } from '../services/activity-feed.service';
 import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
+import { GlobalProfileService } from '../services/global-profile.service';
 import { logger } from '../../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
@@ -314,6 +315,16 @@ async function configureWalletAssetsAndContacts(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[external-finalize] starter contact setup failed for ${input.userId}: ${message}`);
+  }
+
+  try {
+    await GlobalProfileService.ensureForUser({
+      userId: input.userId,
+      displayName: input.userId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[external-finalize] global profile setup failed for ${input.userId}: ${message}`);
   }
 }
 

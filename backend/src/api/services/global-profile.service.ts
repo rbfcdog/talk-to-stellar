@@ -16,7 +16,65 @@ function profileBaseUrl(): string {
   return base.replace(/\/$/, '');
 }
 
+async function resolveDestinationByUserId(userId: string): Promise<{
+  destination_public_key: string | null;
+  destination_identifier: string | null;
+}> {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) {
+    return { destination_public_key: null, destination_identifier: null };
+  }
+
+  const { data: latestSession } = await supabase
+    .from('agent_sessions')
+    .select('session_id, email, phone_number, pix_key')
+    .eq('user_id', normalizedUserId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const sessionId = String((latestSession as any)?.session_id || '').trim();
+  if (!sessionId) {
+    return { destination_public_key: null, destination_identifier: null };
+  }
+
+  const { data: wallet } = await supabase
+    .from('wallets')
+    .select('public_key')
+    .eq('session_id', sessionId)
+    .limit(1)
+    .maybeSingle();
+
+  const email = String((latestSession as any)?.email || '').trim().toLowerCase();
+  const phone = String((latestSession as any)?.phone_number || '').replace(/\D+/g, '');
+  const pix = String((latestSession as any)?.pix_key || '').trim().toLowerCase();
+  const destinationIdentifier =
+    (email && !email.endsWith('@talktostellar') ? email : '') ||
+    phone ||
+    (pix && !pix.endsWith('@talktostellar') ? pix : '') ||
+    null;
+
+  return {
+    destination_public_key: String((wallet as any)?.public_key || '').trim() || null,
+    destination_identifier: destinationIdentifier,
+  };
+}
+
 export class GlobalProfileService {
+  static async ensureForUser(input: {
+    userId: string;
+    displayName?: string;
+    usernameHint?: string;
+    bio?: string;
+  }): Promise<Record<string, unknown>> {
+    return await this.getOrCreate({
+      userId: input.userId,
+      displayName: input.displayName,
+      usernameHint: input.usernameHint,
+      bio: input.bio,
+    });
+  }
+
   static async getOrCreate(input: {
     sessionId?: string;
     userId?: string;
@@ -116,11 +174,14 @@ export class GlobalProfileService {
     });
 
     const link = `${profileBaseUrl()}/u/${normalized}`;
+    const destination = await resolveDestinationByUserId(String((data as any)?.user_id || ''));
     return {
       ...data,
       public_link: link,
       qr_value: link,
       qr_url: `https://quickchart.io/qr?text=${encodeURIComponent(link)}&size=280`,
+      destination_public_key: destination.destination_public_key,
+      destination_identifier: destination.destination_identifier,
     };
   }
 }
