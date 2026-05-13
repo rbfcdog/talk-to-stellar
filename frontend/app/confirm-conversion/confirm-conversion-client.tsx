@@ -189,6 +189,9 @@ export default function ConfirmConversionClient({
       setStatus(response.ok ? "done" : "error")
       if (response.ok && payload?.success) {
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
+        const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
+        const feedbackDestinationCode = normalizeAssetCode(String(payloadForFeedback?.dest_asset_code || payloadForFeedback?.destination_asset_code || payloadForFeedback?.quote?.destinationAsset?.code || ""))
+        const feedbackIsCrossAsset = Boolean(feedbackSourceCode && feedbackDestinationCode && feedbackSourceCode !== feedbackDestinationCode)
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
         const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
@@ -199,9 +202,9 @@ export default function ConfirmConversionClient({
           payload.transferDetails?.destinationAmount
             ? `Destino recebeu: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
             : "",
-          routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
           payload.transferDetails?.feeDisplay ? `Taxa: ${payload.transferDetails.feeDisplay}` : "",
-          savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -226,6 +229,7 @@ export default function ConfirmConversionClient({
   const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "XLM")
   const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "XLM")
+  const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
@@ -296,10 +300,10 @@ export default function ConfirmConversionClient({
                 {showEstimatedFee && (
                   <p className="text-slate-300">Taxa total estimada: {estimatedFeeDisplay}</p>
                 )}
-                {routeChain && (
+                {isCrossAssetConversion && routeChain && (
                   <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
                 )}
-                {formatBrl(estimatedSavingsBrl) && (
+                {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300">
                     Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
@@ -351,7 +355,7 @@ export default function ConfirmConversionClient({
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
                   )}
-                  {formatBrl(estimatedSavingsBrl) && (
+                  {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
                     <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}

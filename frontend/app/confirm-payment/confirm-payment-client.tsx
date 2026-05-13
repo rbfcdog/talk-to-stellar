@@ -501,6 +501,9 @@ export default function ConfirmPaymentClient({
         const conversionMessage = getAutoConversionMessage(payload)
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
+        const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
+        const feedbackDestinationCode = normalizeAssetCode(String(payloadForFeedback?.destination_asset_code || payloadForFeedback?.quote?.destinationAsset?.code || payloadForFeedback?.asset_code || ""))
+        const feedbackIsCrossAsset = Boolean(feedbackSourceCode && feedbackDestinationCode && feedbackSourceCode !== feedbackDestinationCode)
         const estimatedFeeForFeedback = buildFeeSummary({
           feeDisplay: String(payloadForFeedback?.estimated_fee_display || payloadForFeedback?.quote?.fee_display || ""),
           feeUsdc: String(payloadForFeedback?.estimated_fee_usdc || payloadForFeedback?.quote?.fee_usdc || ""),
@@ -514,9 +517,9 @@ export default function ConfirmPaymentClient({
           conversionMessage,
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
-          routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
           hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Taxa estimada: ${estimatedFeeForFeedback}` : "",
-          savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
           `Horário: ${formatTimestamp(payload.completed_at)}`,
           receiptUrl ? `Comprovante: ${receiptUrl}` : "",
@@ -622,6 +625,7 @@ export default function ConfirmPaymentClient({
   const sourceAmount = String(payload.source_amount || payload.quote?.sourceAmount || "")
   const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
+  const shouldShowCrossAssetInsights = isCrossCurrency
   const destinationLabel = formatRecipientLabel(payload)
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const estimatedSavingsBrl = String(payload?.savings_estimate?.estimated_savings_brl || "")
@@ -736,10 +740,10 @@ export default function ConfirmPaymentClient({
                 {showEstimatedFee && (
                   <p className="text-slate-300">Taxa total estimada: {estimatedFeeSummary}</p>
                 )}
-                {routeChain && (
+                {shouldShowCrossAssetInsights && routeChain && (
                   <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
                 )}
-                {formatBrl(estimatedSavingsBrl) && (
+                {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300">
                     Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
@@ -840,7 +844,7 @@ export default function ConfirmPaymentClient({
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
                   )}
-                  {formatBrl(estimatedSavingsBrl) && (
+                  {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
                     <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {successAutoConversionMessage && (

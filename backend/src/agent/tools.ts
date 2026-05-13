@@ -150,6 +150,12 @@ function buildSavingsEstimate(input: {
   };
 }
 
+function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unknown): boolean {
+  const source = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const destination = String(destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  return Boolean(source && destination && source !== destination);
+}
+
 function formatNoPathFallbackMessage(errorMessage: string): string {
   const raw = String(errorMessage || '').trim();
   const normalized = raw.toLowerCase();
@@ -1561,12 +1567,15 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
     const sourceNumeric = toAmountNumber(expiringQuote.sourceAmount);
     const destinationNumeric = toAmountNumber(expiringQuote.destinationAmount);
     const effectiveRate = sourceNumeric > 0 && destinationNumeric > 0 ? destinationNumeric / sourceNumeric : 0;
-    const savingsEstimate = buildSavingsEstimate({
-      sourceAmount: expiringQuote.sourceAmount,
-      sourceAssetCode: expiringQuote.sourceAsset?.code,
-      quote: expiringQuote,
-      estimatedFeeBrl: feeBreakdown.estimated_fee_brl,
-    });
+    const crossAsset = isCrossAssetPair(expiringQuote.sourceAsset?.code, expiringQuote.destinationAsset?.code);
+    const savingsEstimate = crossAsset
+      ? buildSavingsEstimate({
+          sourceAmount: expiringQuote.sourceAmount,
+          sourceAssetCode: expiringQuote.sourceAsset?.code,
+          quote: expiringQuote,
+          estimatedFeeBrl: feeBreakdown.estimated_fee_brl,
+        })
+      : null;
 
     return JSON.stringify({
       success: true,
@@ -1600,7 +1609,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
         `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` +
+        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -1679,12 +1688,15 @@ async function executeGetBestRoute(input: any): Promise<string> {
     const totalFeeBrl = toAmountNumber(feeBreakdown.estimated_fee_brl);
     const totalFeeUsdc = toAmountNumber(feeBreakdown.estimated_fee_usdc);
     const feePctOverSource = sourceNumeric > 0 && totalFeeUsdc > 0 ? (totalFeeUsdc / sourceNumeric) * 100 : 0;
-    const savingsEstimate = buildSavingsEstimate({
-      sourceAmount: quote.sourceAmount,
-      sourceAssetCode: quote.sourceAsset?.code,
-      quote,
-      estimatedFeeBrl: feeBreakdown.estimated_fee_brl,
-    });
+    const crossAsset = isCrossAssetPair(quote.sourceAsset?.code, quote.destinationAsset?.code);
+    const savingsEstimate = crossAsset
+      ? buildSavingsEstimate({
+          sourceAmount: quote.sourceAmount,
+          sourceAssetCode: quote.sourceAsset?.code,
+          quote,
+          estimatedFeeBrl: feeBreakdown.estimated_fee_brl,
+        })
+      : null;
 
     return JSON.stringify({
       success: true,
@@ -1730,7 +1742,7 @@ async function executeGetBestRoute(input: any): Promise<string> {
         `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
         `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` +
+        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -2049,12 +2061,15 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
           path: quote?.path || [],
         })
       : '';
-    const savingsEstimate = buildSavingsEstimate({
-      sourceAmount: input.source_amount || input.sourceAmount || quote?.sourceAmount || normalizedAmount,
-      sourceAssetCode: sourceAssetCodeForFee,
-      quote,
-      estimatedFeeBrl: unifiedFee.fee_brl || null,
-    });
+    const crossAsset = isCrossAssetPair(sourceAssetCodeForFee, destinationAssetCodeForFee);
+    const savingsEstimate = crossAsset
+      ? buildSavingsEstimate({
+          sourceAmount: input.source_amount || input.sourceAmount || quote?.sourceAmount || normalizedAmount,
+          sourceAssetCode: sourceAssetCodeForFee,
+          quote,
+          estimatedFeeBrl: unifiedFee.fee_brl || null,
+        })
+      : null;
     const quoteValidityLine = quote?.quote_expires_at
       ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
@@ -2076,7 +2091,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_platform_fee_amount: null,
       estimated_platform_fee_asset_code: null,
       estimated_spread_fee: null,
-      route_chain: routeChain || null,
+      route_chain: crossAsset ? (routeChain || null) : null,
       optimization_criteria: String(input.optimization_criteria || '').trim() || null,
       savings_estimate: savingsEstimate,
       quote: quote || null,
@@ -2097,14 +2112,14 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       success: true,
       url,
       asset: asset.code,
-      route_chain: routeChain || null,
+      route_chain: crossAsset ? (routeChain || null) : null,
       savings_estimate: savingsEstimate,
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
       message:
         `Antes de confirmar: taxa estimada total ${totalFeeDisplay}. ` +
-        `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` +
-        `${routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
+        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
+        `${crossAsset && routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
         quoteValidityLine +
         `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
@@ -2147,12 +2162,15 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       destinationAssetCode: input.quote?.destinationAsset?.code || destAsset.code,
       path: input.quote?.path || [],
     });
-    const savingsEstimate = buildSavingsEstimate({
-      sourceAmount: sourceAmount || input.quote?.sourceAmount || destAmount,
-      sourceAssetCode: sourceAsset.code,
-      quote: input.quote || null,
-      estimatedFeeBrl: unifiedFee.fee_brl || null,
-    });
+    const crossAsset = isCrossAssetPair(sourceAsset.code, destAsset.code);
+    const savingsEstimate = crossAsset
+      ? buildSavingsEstimate({
+          sourceAmount: sourceAmount || input.quote?.sourceAmount || destAmount,
+          sourceAssetCode: sourceAsset.code,
+          quote: input.quote || null,
+          estimatedFeeBrl: unifiedFee.fee_brl || null,
+        })
+      : null;
 
     const { url } = await externalService.createConversionConfirmUrlWithContext({
       session_id: String(input.session_id || input.sessionId || '').trim(),
@@ -2170,7 +2188,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       estimated_fee_brl: unifiedFee.fee_brl || null,
       estimated_platform_fee: null,
       estimated_spread_fee: null,
-      route_chain: routeChain || null,
+      route_chain: crossAsset ? (routeChain || null) : null,
       optimization_criteria: String(input.optimization_criteria || '').trim() || null,
       savings_estimate: savingsEstimate,
       quote_issued_at: input.quote?.quote_issued_at || null,
@@ -2181,7 +2199,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     return JSON.stringify({
       success: true,
       url,
-      route_chain: routeChain || null,
+      route_chain: crossAsset ? (routeChain || null) : null,
       savings_estimate: savingsEstimate,
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
@@ -2190,8 +2208,8 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
       message:
         `Antes de confirmar: taxa estimada total ${unifiedFee.display || 'indisponível'}. ` +
-        `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` +
-        `${routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
+        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
+        `${crossAsset && routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
         `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
         `Para confirmar a conversão, abra:\n\n${url}`,
     });

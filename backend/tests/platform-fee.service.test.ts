@@ -19,6 +19,7 @@ describe('PlatformFeeService', () => {
     const fee = PlatformFeeService.calculateSpread({
       sourceAmount: '500',
       sourceAssetCode: 'BRL',
+      destinationAssetCode: 'USDC',
       mode: 'deduct_from_source',
     });
 
@@ -35,6 +36,7 @@ describe('PlatformFeeService', () => {
     const fee = PlatformFeeService.calculateSpread({
       sourceAmount: '1000',
       sourceAssetCode: 'BRL',
+      destinationAssetCode: 'USDC',
       mode: 'deduct_from_source',
     });
 
@@ -47,6 +49,7 @@ describe('PlatformFeeService', () => {
     const fee = PlatformFeeService.calculateSpread({
       sourceAmount: '100',
       sourceAssetCode: 'USDC',
+      destinationAssetCode: 'BRL',
       mode: 'add_on_top',
     });
 
@@ -54,5 +57,21 @@ describe('PlatformFeeService', () => {
     expect(fee.feeAmount).toBe('0.35');
     expect(fee.grossSourceAmount).toBe('100.35');
     expect(fee.netSourceAmount).toBe('100');
+  });
+
+  it('applies minimum non-zero fee for BRL/USDC pair', () => {
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '0';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_USDC = '0.02';
+
+    const fee = PlatformFeeService.calculateSpread({
+      sourceAmount: '1',
+      sourceAssetCode: 'USDC',
+      destinationAssetCode: 'BRL',
+      mode: 'add_on_top',
+    });
+
+    expect(fee.enabled).toBe(true);
+    expect(fee.feeAmount).toBe('0.02');
+    expect(fee.grossSourceAmount).toBe('1.02');
   });
 });
