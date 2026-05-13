@@ -438,16 +438,33 @@ export class ExternalService {
     userId?: string;
     expiresInHours?: number;
   }): Promise<string> {
-    const url = new URL(`${getPaymentConfirmBase()}/logout`);
     const sessionId = String(input.sessionId || '').trim();
     const provider = String(input.provider || '').trim().toLowerCase();
     const providerUserId = String(input.providerUserId || '').trim();
     const source = String(input.source || provider || '').trim().toLowerCase();
     const userId = String(input.userId || '').trim();
-    if (sessionId) url.searchParams.set('session_id', sessionId);
-    if (provider) url.searchParams.set('provider', provider);
-    if (providerUserId) url.searchParams.set('provider_user_id', providerUserId);
-    if (source) url.searchParams.set('source', source);
+
+    const payload = {
+      sub: 'external_logout_confirm',
+      session_id: sessionId || null,
+      provider: provider || null,
+      provider_user_id: providerUserId || null,
+      source: source || null,
+      nonce: uuidv4(),
+    };
+    const expiresInHours = Math.max(1, Number(input.expiresInHours || 24));
+    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: `${expiresInHours}h` });
+    await this.registerLogoutConfirmation({
+      token,
+      sessionId: sessionId || null,
+      userId: userId || null,
+      provider: provider || null,
+      providerUserId: providerUserId || null,
+      expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000),
+    });
+
+    const url = new URL(`${getPaymentConfirmBase()}/logout`);
+    url.searchParams.set('token', token);
 
     const expiresAt = new Date(Date.now() + Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000);
     return await this.shortenArbitraryUrl({
@@ -457,6 +474,37 @@ export class ExternalService {
       userId: userId || null,
       expiresAt,
     });
+  }
+
+  private async registerLogoutConfirmation(input: {
+    token: string;
+    sessionId?: string | null;
+    userId?: string | null;
+    provider?: string | null;
+    providerUserId?: string | null;
+    expiresAt?: string | Date | null;
+  }): Promise<void> {
+    const token_hash = tokenHash(input.token);
+    const { error } = await this.supabase
+      .from('logout_confirmations')
+      .insert({
+        token_hash,
+        session_id: input.sessionId || null,
+        user_id: input.userId || null,
+        provider: input.provider || null,
+        provider_user_id: input.providerUserId || null,
+        status: 'pending',
+        used: false,
+        used_at: null,
+        expires_at: normalizeExpiresAt(input.expiresAt)?.toISOString() || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      if (String(error.code || '') === '23505') return;
+      throw new Error(`Não foi possível registrar o link de logout: ${error.message}`);
+    }
   }
 
   async shortenPublicUrl(input: {
