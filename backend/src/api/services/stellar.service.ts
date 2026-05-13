@@ -156,6 +156,7 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extra
     const destCode = assetCode(destAssetObj);
     const sourceIssuer = assetIssuer(sourceAssetObj);
     const destIssuer = assetIssuer(destAssetObj);
+    const network = getStellarNetworkName();
     const hints: string[] = [];
 
     if (destCode === 'USDC' && !getAssetIssuer('USDC')) {
@@ -163,6 +164,9 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extra
     }
     if (destCode === 'BRL' && !getAssetIssuer('BRL')) {
         hints.push('BRL issuer não configurado no backend (use BRL_ISSUER_PUBLIC para PUBLIC ou BRL_ISSUER_TESTNET para TESTNET)');
+    }
+    if ((sourceCode === 'EURC' || destCode === 'EURC') && network === 'TESTNET') {
+        hints.push('EURC na TESTNET está sem liquidez suficiente agora. Rode o setup de liquidez EURC e valide novamente.');
     }
 
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');

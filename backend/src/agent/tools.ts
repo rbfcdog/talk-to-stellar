@@ -52,6 +52,26 @@ function formatQuotePath(path: Array<{ code?: string; type?: string }>): string 
   return `rota otimizada em ${path.length + 1} etapas`;
 }
 
+function formatNoPathFallbackMessage(errorMessage: string): string {
+  const raw = String(errorMessage || '').trim();
+  const normalized = raw.toLowerCase();
+  const mentionsNoPath =
+    normalized.includes('não foi encontrado caminho') ||
+    normalized.includes('nenhum caminho encontrado') ||
+    normalized.includes('sem rota de liquidez');
+  const mentionsEurc = normalized.includes('eurc') || normalized.includes('euro');
+
+  if (mentionsNoPath && mentionsEurc) {
+    return [
+      'EURC está temporariamente sem rota de liquidez para esta conversão na rede atual.',
+      'Tente novamente em instantes ou converta usando BRL/USDC agora.',
+      raw,
+    ].join(' ');
+  }
+
+  return raw;
+}
+
 function formatBrl(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -1061,7 +1081,7 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
         `1 R$ = US$ ${quote.usdcPerBrl}.`,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = formatNoPathFallbackMessage(error instanceof Error ? error.message : String(error));
     return JSON.stringify({
       success: false,
       error: errorMessage,
