@@ -13,6 +13,14 @@ interface ChatSidebarProps {
   onSelectChat: (chatId: string | null) => void;
 }
 
+const STELLAR_PUBLIC_KEY_REGEX = /\bG[A-Z2-7]{55}\b/gi;
+
+function sanitizeVisiblePreview(content: string): string {
+  return String(content || "")
+    .replace(STELLAR_PUBLIC_KEY_REGEX, "[chave oculta]")
+    .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]");
+}
+
 export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [agentPreview, setAgentPreview] = useState<{
@@ -134,7 +142,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         if (!message) return;
 
         const role = String(message.role || "").toLowerCase();
-        const content = String(message.content || "").trim();
+        const content = sanitizeVisiblePreview(String(message.content || "").trim());
         if (!content || role !== "assistant") return;
 
         if (!cancelled) {

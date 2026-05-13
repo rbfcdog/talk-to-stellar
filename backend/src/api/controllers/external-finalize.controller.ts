@@ -2384,7 +2384,12 @@ export default class ExternalFinalizeController {
       // create session and session token
       const sessionId = uuidv4();
       const sessionToken = uuidv4();
-      const pixKey = ContactSeedService.derivePixKey(userId, email, name);
+      const pixKey = ContactSeedService.derivePixKey(userId, {
+        email: email || undefined,
+        phoneNumber: normalizedPhoneNumber || undefined,
+        cpf: normalizedCpf || undefined,
+        name: name || undefined,
+      });
 
       const now = new Date().toISOString();
       await agentRepo.saveSession(sessionId, {
