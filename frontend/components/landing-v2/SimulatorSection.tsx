@@ -1,16 +1,102 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowRightLeft } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { ArrowRightLeft } from "lucide-react";
+
+type PreviewPayload = {
+  success: boolean;
+  input?: { brl_amount?: number };
+  quote?: { brl_per_usdc?: number; usdc_per_brl?: number; source?: string };
+  output?: { gross_receive_usdc?: number; receive_usdc?: number };
+  fees?: {
+    talktostellar_spread_brl?: number;
+    talktostellar_spread_usdc?: number;
+    network_fee_brl?: number;
+    network_fee_usdc?: number;
+    total_fee_brl?: number;
+    total_fee_usdc?: number;
+    total_fee_pct?: number;
+    spread_bps_config?: number;
+    network_fee_display?: string;
+  };
+  comparison?: {
+    traditional_fee_pct?: number;
+    traditional_fee_brl?: number;
+    savings_brl?: number;
+  };
+  message?: string;
+};
+
+function formatBrl(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatUsdc(value: number, decimals = 2) {
+  const n = Number.isFinite(value) ? value : 0;
+  return `US$ ${n.toFixed(decimals)}`;
+}
 
 export default function SimulatorSection() {
   const [brlAmount, setBrlAmount] = useState<string>("1000");
-  const exchangeRate = 0.18; // Approx
+  const [payload, setPayload] = useState<PreviewPayload | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleBrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBrlAmount(e.target.value);
-  };
+  useEffect(() => {
+    const parsed = Number(brlAmount.replace(",", "."));
+    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/financial/conversion-preview?brl_amount=${encodeURIComponent(String(amount || 0))}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await response.json()) as PreviewPayload;
+        if (!controller.signal.aborted) {
+          setPayload(data?.success ? data : null);
+        }
+      } catch {
+        if (!controller.signal.aborted) setPayload(null);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 220);
 
-  const usdcAmount = (parseFloat(brlAmount || "0") * exchangeRate).toFixed(2);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [brlAmount]);
+
+  const numbers = useMemo(() => {
+    const rate = Number(payload?.quote?.usdc_per_brl || 0);
+    const receiveUsdc = Number(payload?.output?.receive_usdc || 0);
+    const grossReceiveUsdc = Number(payload?.output?.gross_receive_usdc || 0);
+    const spreadBrl = Number(payload?.fees?.talktostellar_spread_brl || 0);
+    const networkBrl = Number(payload?.fees?.network_fee_brl || 0);
+    const totalFeeBrl = Number(payload?.fees?.total_fee_brl || 0);
+    const totalFeePct = Number(payload?.fees?.total_fee_pct || 0);
+    const traditionalFeePct = Number(payload?.comparison?.traditional_fee_pct || 0);
+    const traditionalFeeBrl = Number(payload?.comparison?.traditional_fee_brl || 0);
+    const savingsBrl = Number(payload?.comparison?.savings_brl || 0);
+    return {
+      rate,
+      receiveUsdc,
+      grossReceiveUsdc,
+      spreadBrl,
+      networkBrl,
+      totalFeeBrl,
+      totalFeePct,
+      traditionalFeePct,
+      traditionalFeeBrl,
+      savingsBrl,
+    };
+  }, [payload]);
 
   return (
     <section id="simulator" className="py-20 w-full flex flex-col items-center relative scroll-mt-24">
@@ -19,11 +105,11 @@ export default function SimulatorSection() {
           Simule sua <span className="text-[#00D2FF]">economia</span>
         </h2>
         <p className="text-lg text-[#9BA4B5] max-w-2xl mx-auto">
-          Descubra o quanto você deixa de pagar em taxas abusivas usando nossa rota de conversão inteligente.
+          Compare a taxa tradicional com a taxa real da rota BRL → USDC na Stellar.
         </p>
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -31,23 +117,29 @@ export default function SimulatorSection() {
       >
         <div className="absolute top-0 right-0 w-32 h-32 bg-[#00D2FF]/10 blur-[50px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#4CA1EF]/10 blur-[50px] pointer-events-none" />
-        
+
         <div className="text-center mb-8 relative z-10">
-          <p className="text-[#9BA4B5] text-sm font-medium">Taxa de câmbio estimada</p>
-          <p className="text-[#00D2FF] font-semibold mt-1">1 BRL = {(exchangeRate).toFixed(4)} USDC</p>
+          <p className="text-[#9BA4B5] text-sm font-medium">Taxa de câmbio ao vivo</p>
+          <p className="text-[#00D2FF] font-semibold mt-1">
+            {numbers.rate > 0 ? `1 BRL = ${numbers.rate.toFixed(6)} USDC` : "Carregando cotação..."}
+          </p>
+          <p className="text-[11px] text-[#9BA4B5] mt-1">
+            Fonte: {payload?.quote?.source === "binance" ? "Binance" : "Fallback configurado no backend"}
+          </p>
         </div>
 
         <div className="space-y-6 relative z-10">
-          {/* Send Amount Wrapper */}
           <div className="bg-white/5 border border-white/[0.03] rounded-2xl p-4 transition-colors focus-within:border-[#00D2FF]/50 hover:border-white/[0.03]">
             <label className="block text-xs font-medium text-[#9BA4B5] mb-2 uppercase tracking-wider">Você envia</label>
             <div className="flex items-center justify-between">
-              <input 
+              <input
                 type="number"
                 value={brlAmount}
-                onChange={handleBrlChange}
+                onChange={(e) => setBrlAmount(e.target.value)}
                 className="bg-transparent border-none outline-none text-3xl font-bold text-white w-full"
                 placeholder="0.00"
+                min="0"
+                step="0.01"
               />
               <div className="flex items-center gap-2 bg-[#0C1421]/80 rounded-full px-3 py-1.5 shrink-0 ml-2 border border-white/[0.03]">
                 <img src="https://flagcdn.com/w20/br.png" alt="BRL" className="w-5 h-5 rounded-full object-cover" />
@@ -56,23 +148,20 @@ export default function SimulatorSection() {
             </div>
           </div>
 
-          {/* Swap Button Area */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
             <div className="bg-[#16324f] border border-white/[0.03] p-2 rounded-full hidden sm:block shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
               <ArrowRightLeft className="w-5 h-5 text-[#00D2FF] rotate-90" />
             </div>
           </div>
 
-          {/* Receive Amount Wrapper */}
           <div className="bg-white/5 border border-white/[0.03] rounded-2xl p-4">
             <label className="block text-xs font-medium text-[#9BA4B5] mb-2 uppercase tracking-wider">Você recebe (estimativa)</label>
             <div className="flex items-center justify-between">
-              <input 
+              <input
                 type="text"
-                value={usdcAmount}
+                value={numbers.receiveUsdc > 0 ? numbers.receiveUsdc.toFixed(4) : "0.0000"}
                 readOnly
                 className="bg-transparent border-none outline-none text-3xl font-bold text-[#00D2FF] w-full"
-                placeholder="0.00"
               />
               <div className="flex items-center gap-2 bg-[#0C1421]/80 rounded-full px-3 py-1.5 shrink-0 ml-2 border border-white/[0.03]">
                 <div className="w-5 h-5 rounded-full bg-[#4CA1EF] flex items-center justify-center">
@@ -81,70 +170,70 @@ export default function SimulatorSection() {
                 <span className="font-bold text-slate-200">USDC</span>
               </div>
             </div>
+            <p className="mt-2 text-xs text-[#9BA4B5]">
+              Antes das taxas: {formatUsdc(numbers.grossReceiveUsdc, 4)}
+            </p>
           </div>
+        </div>
 
+        <div className="mt-6 rounded-2xl border border-white/[0.03] bg-white/5 p-4 text-sm text-[#cbd5e1]">
+          <p>Taxa TalkToStellar (spread): {formatBrl(numbers.spreadBrl)}</p>
+          <p>Taxa de rede estimada: {formatBrl(numbers.networkBrl)}</p>
+          <p className="font-semibold text-white mt-1">
+            Taxa total: {formatBrl(numbers.totalFeeBrl)} ({numbers.totalFeePct.toFixed(4)}%)
+          </p>
+          <p className="text-xs text-[#9BA4B5] mt-2">
+            Configuração backend: spread {payload?.fees?.spread_bps_config ?? 0} bps.
+          </p>
         </div>
 
         <div className="space-y-6 relative z-10 w-full mt-8">
-          <button 
-            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-            className="w-full bg-[#00D2FF] text-slate-950 font-bold text-lg py-4 rounded-xl hover:bg-cyan-300 transition-colors shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+          <a
+            href="/chat"
+            className="inline-flex w-full items-center justify-center bg-[#00D2FF] text-slate-950 font-bold text-lg py-4 rounded-xl hover:bg-cyan-300 transition-colors shadow-[0_0_20px_rgba(34,211,238,0.2)]"
           >
-            Enviar dinheiro agora
-          </button>
+            TESTE AGORA NO NAVEGADOR
+          </a>
+          {loading && <p className="text-center text-xs text-[#9BA4B5]">Atualizando taxa e simulação...</p>}
         </div>
       </motion.div>
 
-      {/* Comparison Grid below */}
       <div className="w-full max-w-5xl mx-auto px-4 mt-16">
-        <h4 className="text-xl md:text-2xl font-semibold text-white text-center mb-8">Por que a nossa rota é imbatível?</h4>
+        <h4 className="text-xl md:text-2xl font-semibold text-white text-center mb-8">Controle de custo em cada conversão</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-          
-          {/* Left: Bancos Tradicionais */}
-          <div className="bg-[#162032] border border-white/[0.03] rounded-2xl p-6 flex flex-col items-center text-center shadow-[0_4px_24px_rgba(0,0,0,0.2)] relative opacity-70 hover:opacity-100 transition-opacity">
-            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-              <span className="text-red-500 font-bold text-lg">✗</span>
-            </div>
-            <h5 className="text-white font-medium mb-1">Bancos Tradicionais</h5>
-            <p className="text-[#9BA4B5] text-sm mb-4">Taxas altas e demoradas</p>
+          <div className="bg-[#162032] border border-white/[0.03] rounded-2xl p-6 flex flex-col items-center text-center shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+            <h5 className="text-white font-medium mb-1">Custo tradicional</h5>
+            <p className="text-[#9BA4B5] text-sm mb-4">Referência média de mercado</p>
             <div className="mt-auto pt-4 border-t border-white/[0.03] w-full">
-              <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">Você perde até</p>
-              <p className="font-bold text-red-400 text-xl">R$ {(parseFloat(brlAmount || "0") * 0.06).toFixed(2)}</p>
-              <p className="text-xs text-red-500/60 mt-1">~6% (Spread + IOF)</p>
+              <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">Taxa estimada</p>
+              <p className="font-bold text-red-400 text-xl">{formatBrl(numbers.traditionalFeeBrl)}</p>
+              <p className="text-xs text-red-500/70 mt-1">~{numbers.traditionalFeePct.toFixed(2)}%</p>
             </div>
           </div>
 
-          {/* Center: TalkToStellar */}
           <div className="bg-[#0C1421] border border-[#00D2FF]/30 rounded-2xl p-8 flex flex-col items-center text-center shadow-[0_4px_32px_rgba(34,211,238,0.15)] relative transform md:-translate-y-4 z-10">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-transparent via-[#00D2FF] to-transparent" />
-            <div className="w-16 h-16 rounded-full bg-[#00D2FF]/10 flex items-center justify-center mb-4 border border-[#00D2FF]/20">
-              <span className="text-[#00D2FF] font-bold text-2xl">✓</span>
-            </div>
             <h5 className="text-white font-bold text-lg mb-1">TalkToStellar</h5>
-            <p className="text-[#00D2FF] text-sm font-medium mb-4">A melhor rota blockchain</p>
+            <p className="text-[#00D2FF] text-sm font-medium mb-4">Taxas visíveis antes de confirmar</p>
             <div className="mt-auto pt-4 border-t border-white/[0.03] w-full">
-              <p className="text-[11px] text-[#00D2FF]/70 uppercase tracking-wider mb-1">Taxas mínimas a partir de</p>
-              <p className="font-black text-[#00D2FF] text-3xl">0.05%</p>
-              <p className="text-xs text-[#9BA4B5] mt-2">Maior economia garantida</p>
+              <p className="text-[11px] text-[#00D2FF]/70 uppercase tracking-wider mb-1">Taxa total da conversão</p>
+              <p className="font-black text-[#00D2FF] text-3xl">{formatBrl(numbers.totalFeeBrl)}</p>
+              <p className="text-xs text-[#9BA4B5] mt-2">{numbers.totalFeePct.toFixed(4)}% sobre o valor enviado</p>
             </div>
           </div>
 
-          {/* Right: Contas Globais */}
-          <div className="bg-[#162032] border border-white/[0.03] rounded-2xl p-6 flex flex-col items-center text-center shadow-[0_4px_24px_rgba(0,0,0,0.2)] relative opacity-70 hover:opacity-100 transition-opacity">
-            <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center mb-4">
-              <span className="text-orange-500 font-bold text-lg">✗</span>
-            </div>
-            <h5 className="text-white font-medium mb-1">Contas Globais</h5>
-            <p className="text-[#9BA4B5] text-sm mb-4">Apps de conversão em dólar</p>
+          <div className="bg-[#162032] border border-white/[0.03] rounded-2xl p-6 flex flex-col items-center text-center shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+            <h5 className="text-white font-medium mb-1">Economia estimada</h5>
+            <p className="text-[#9BA4B5] text-sm mb-4">vs taxa tradicional</p>
             <div className="mt-auto pt-4 border-t border-white/[0.03] w-full">
-              <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">Você perde até</p>
-              <p className="font-bold text-orange-400 text-xl">R$ {(parseFloat(brlAmount || "0") * 0.04).toFixed(2)}</p>
-              <p className="text-xs text-orange-500/60 mt-1">~4% de spread médio</p>
+              <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">Você preserva</p>
+              <p className="font-bold text-emerald-400 text-xl">{formatBrl(numbers.savingsBrl)}</p>
+              <p className="text-xs text-emerald-500/70 mt-1">Com rota BRL → USDC na Stellar</p>
             </div>
           </div>
-
         </div>
       </div>
     </section>
   );
 }
+
