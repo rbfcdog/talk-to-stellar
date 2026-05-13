@@ -184,10 +184,14 @@ export default function SimulatorSection() {
           <p className="font-semibold text-white mt-1">
             Taxa total: {formatBrl(numbers.totalFeeBrl)} ({numbers.totalFeePct.toFixed(4)}%)
           </p>
-          <p className="text-xs text-[#9BA4B5] mt-2">
-            Configuração backend: spread {payload?.fees?.spread_bps_config ?? 0} bps
-            {payload?.fees?.spread_collection_active ? "" : " (estimado para simulação)"}.
-          </p>
+          <div className="mt-3 pt-3 border-t border-white/[0.03] space-y-1">
+            <p className="text-xs text-[#9BA4B5]">
+              Método tradicional (estimativa): {formatBrl(numbers.traditionalFeeBrl)} ({numbers.traditionalFeePct.toFixed(2)}%)
+            </p>
+            <p className="text-sm font-semibold text-emerald-400">
+              Economia em relação ao método tradicional: {formatBrl(numbers.savingsBrl)}
+            </p>
+          </div>
         </div>
 
         <div className="space-y-6 relative z-10 w-full mt-8">
