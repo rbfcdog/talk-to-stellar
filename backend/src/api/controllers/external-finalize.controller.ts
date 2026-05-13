@@ -182,6 +182,12 @@ type IdentityCollision = {
   userId?: string;
 };
 
+type ExternalIdentityLock = {
+  sessionId?: string;
+  userId?: string;
+  canonicalLogin?: string;
+};
+
 function normalizePhoneForCompare(value?: string): string {
   return String(value || '').replace(/\D+/g, '');
 }
@@ -193,6 +199,76 @@ function normalizeEmailForCompare(value?: string): string {
 function looksLikeEmail(value?: string): boolean {
   const normalized = normalizeEmailForCompare(value);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function resolveCanonicalSessionLogin(session: any): string {
+  const sessionEmail = normalizeEmailForCompare(session?.email);
+  if (sessionEmail) return sessionEmail;
+  const sessionUserId = normalizeEmailForCompare(session?.user_id);
+  return looksLikeEmail(sessionUserId) ? sessionUserId : '';
+}
+
+async function resolveExternalIdentityLock(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
+  const normalizedProvider = normalizeExternalProvider(provider);
+  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
+  if (!normalizedProvider || !normalizedProviderUserId) return null;
+
+  const mapped = await externalRepo.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
+  const mappedSessionId = String(mapped?.session_id || '').trim();
+  const mappedUserId = normalizeEmailForCompare(String(mapped?.user_id || ''));
+
+  if (mappedSessionId || mappedUserId) {
+    let canonicalLogin = looksLikeEmail(mappedUserId) ? mappedUserId : '';
+    if (mappedSessionId) {
+      const linkedSession = await agentRepo.getSession(mappedSessionId);
+      if (linkedSession) {
+        canonicalLogin = resolveCanonicalSessionLogin(linkedSession) || canonicalLogin;
+      }
+    }
+    return {
+      sessionId: mappedSessionId || undefined,
+      userId: mappedUserId || undefined,
+      canonicalLogin: canonicalLogin || undefined,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('onboarding_finalizations')
+    .select('session_id, user_id, used, status, result')
+    .eq('provider', normalizedProvider)
+    .eq('provider_user_id', normalizedProviderUserId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || '').toLowerCase();
+    if (message.includes('onboarding_finalizations') || message.includes('schema cache') || message.includes('does not exist')) {
+      return null;
+    }
+    throw error;
+  }
+
+  const status = String((data as any)?.status || '').trim().toLowerCase();
+  const used = Boolean((data as any)?.used);
+  if (!used && status !== 'completed') return null;
+
+  const fallbackSessionId = String((data as any)?.session_id || (data as any)?.result?.sessionId || '').trim();
+  const fallbackUserId = normalizeEmailForCompare(String((data as any)?.user_id || (data as any)?.result?.userId || ''));
+  let canonicalLogin = looksLikeEmail(fallbackUserId) ? fallbackUserId : '';
+  if (fallbackSessionId) {
+    const linkedSession = await agentRepo.getSession(fallbackSessionId);
+    if (linkedSession) {
+      canonicalLogin = resolveCanonicalSessionLogin(linkedSession) || canonicalLogin;
+    }
+  }
+
+  if (!fallbackSessionId && !fallbackUserId && !canonicalLogin) return null;
+  return {
+    sessionId: fallbackSessionId || undefined,
+    userId: fallbackUserId || undefined,
+    canonicalLogin: canonicalLogin || undefined,
+  };
 }
 
 function isUniqueViolation(error: any): boolean {
@@ -2226,13 +2302,22 @@ export default class ExternalFinalizeController {
       // create deterministic user id for external users, or use email if provided
       const userId = email ? String(email) : `external:${provider}:${provider_user_id}`;
       const normalizedEmail = normalizeEmailForCompare(email);
+      const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+      const identityLock = await resolveExternalIdentityLock(provider, provider_user_id);
+
+      if (identityLock?.canonicalLogin && normalizedEmail !== identityLock.canonicalLogin) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+        });
+      }
 
       const existingAccount = await externalRepo.findByProviderAndId(provider, provider_user_id);
       if (existingAccount?.session_id && existingAccount?.user_id) {
         const existingSession = await agentRepo.getSession(String(existingAccount.session_id));
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
         if (!existingSession || !existingWallet) {
-          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
           return res.status(409).json({
             success: false,
             notAssociated: true,
@@ -2243,7 +2328,6 @@ export default class ExternalFinalizeController {
         const existingUserId = normalizeEmailForCompare((existingSession as any)?.user_id);
         const canonicalExternalLogin = existingEmail || (looksLikeEmail(existingUserId) ? existingUserId : '');
         if (canonicalExternalLogin && normalizedEmail !== canonicalExternalLogin) {
-          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
           return res.status(409).json({
             success: false,
             notAssociated: true,
@@ -2346,6 +2430,53 @@ export default class ExternalFinalizeController {
             userId: existingAccount.user_id,
             publicKey: existingWallet.public_key,
             walletName: existingWallet.name || `Wallet for ${existingAccount.user_id}`,
+          });
+        }
+      }
+
+      if (!existingAccount?.session_id && identityLock?.sessionId) {
+        const lockedSession = await agentRepo.getSession(identityLock.sessionId);
+        const lockedWallet = lockedSession ? await walletRepo.getWalletBySession(identityLock.sessionId) : null;
+        if (lockedSession && lockedWallet) {
+          const lockedLogin = resolveCanonicalSessionLogin(lockedSession);
+          if (lockedLogin && normalizedEmail !== lockedLogin) {
+            return res.status(409).json({
+              success: false,
+              notAssociated: true,
+              message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+            });
+          }
+
+          const sessionPinHash = String((lockedSession as any)?.session_password_hash || (lockedSession as any)?.password_hash || '').trim();
+          if (sessionPinHash && pinHash !== sessionPinHash) {
+            return res.status(401).json({
+              success: false,
+              message: 'PIN inválido para a conta já vinculada a este canal.',
+            });
+          }
+
+          await createExternalMappingsWithAliases({
+            provider,
+            provider_user_id,
+            session_id: String(identityLock.sessionId),
+            user_id: String((lockedSession as any)?.user_id || identityLock.userId || ''),
+            data: {
+              name: name || null,
+              email: email || null,
+              phone_number: normalizedPhoneNumber || null,
+              cpf: normalizedCpf || null,
+            },
+          });
+
+          return res.status(200).json({
+            success: true,
+            alreadyCompleted: true,
+            message: 'Conta já criada. Reutilizando a conta existente.',
+            sessionId: String(identityLock.sessionId),
+            sessionToken: String((lockedSession as any)?.session_token || ''),
+            userId: String((lockedSession as any)?.user_id || identityLock.userId || ''),
+            publicKey: String((lockedWallet as any)?.public_key || ''),
+            walletName: String((lockedWallet as any)?.name || `Wallet for ${String((lockedSession as any)?.user_id || identityLock.userId || '')}`),
           });
         }
       }

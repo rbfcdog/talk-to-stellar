@@ -265,6 +265,7 @@ export default function ConfirmPaymentClient({
 }) {
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
+  const requestedAuthMethod = useMemo(() => String(searchParams.get("auth") || "").trim().toLowerCase(), [searchParams])
   const publicKeyFromUrl = useMemo(() => searchParams.get("public_key") || searchParams.get("destination_public_key") || '', [searchParams])
   const router = useRouter()
 
@@ -279,6 +280,7 @@ export default function ConfirmPaymentClient({
   const [mobileSyncStatus, setMobileSyncStatus] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
+  const passkeyAutoTriggerRef = useRef(false)
 
   useEffect(() => {
     if (tokenFromUrl) {
@@ -378,6 +380,17 @@ export default function ConfirmPaymentClient({
     if (status !== "done") return
     closeIntermediatePage()
   }, [status])
+
+  useEffect(() => {
+    if (requestedAuthMethod !== "passkey") return
+    if (passkeyAutoTriggerRef.current) return
+    if (!token.trim()) return
+    if (validation?.valid !== true) return
+    if (status === "done" || submitLockRef.current) return
+    passkeyAutoTriggerRef.current = true
+    setShowPasskeyOptions(true)
+    void handlePasskeyConfirm()
+  }, [requestedAuthMethod, token, validation?.valid, status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
