@@ -54,21 +54,21 @@ export default function HomePage() {
                 className="drop-shadow-lg"
               />
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Sua carteira Stellar com assistente de IA
+                Conta global com orientação passo a passo
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Envie dinheiro, gerencie contatos e use a blockchain com linguagem natural no Telegram ou no chat web.
+                Você sempre sabe o próximo passo: consultar saldo, enviar, receber e criar links de pagamento no Telegram ou no chat web.
               </p>
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Linguagem natural</p>
-                <p className="mt-2 text-sm text-slate-200">Use mensagens simples para consultar saldo, transferir e organizar contatos.</p>
+                <p className="mt-2 text-sm text-slate-200">Digite em português simples e o agente te guia no caminho mais curto até concluir.</p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Segurança primeiro</p>
-                <p className="mt-2 text-sm text-slate-200">Recupere o PIN e ative sua conta com etapas simples e seguras.</p>
+                <p className="mt-2 text-sm text-slate-200">Confirmações com PIN e links de uso único para evitar ações duplicadas.</p>
               </div>
             </div>
           </section>
@@ -99,7 +99,7 @@ export default function HomePage() {
                 <Send className="h-5 w-5" />
               </a>
               <p className="min-w-0 overflow-hidden rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-                Escolha como começar: conversar no Telegram ou acessar o chat na web.
+                Começo recomendado: abra o chat, digite "saldo", depois "contatos" e em seguida "enviar 10 dólares para [nome]".
               </p>
             </div>
           </section>

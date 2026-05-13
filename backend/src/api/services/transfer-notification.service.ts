@@ -89,7 +89,12 @@ export class TransferNotificationService {
         : 'Bem-vindo ao TalkToStellar.';
     const text =
       `${greeting}\n` +
-      `Login concluido. Sua conta esta conectada. Agora voce pode consultar saldo, enviar pagamentos e receber transferencias por aqui.`;
+      `Login concluido. Sua conta esta conectada.\n` +
+      `Para começar sem erro, siga este caminho rápido:\n` +
+      `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
+      `2) Digite "contatos" para ver para quem já pode enviar.\n` +
+      `3) Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.\n` +
+      `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente").`;
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);

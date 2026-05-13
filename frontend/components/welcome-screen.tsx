@@ -20,7 +20,7 @@ export function WelcomeScreen() {
       </h1>
 
       <p className="mb-8 max-w-md text-[14px] leading-[1.5] text-[#8696a0]">
-        Selecione WhatsDap na barra lateral para consultar saldo, enviar valores e gerenciar seus contatos da carteira.
+        Selecione WhatsDap na barra lateral. Se estiver começando agora, siga este caminho: 1) saldo, 2) contatos, 3) enviar com confirmação.
       </p>
 
       <div className="mb-8 flex items-center gap-1 text-[14px] text-[#8696a0]">
