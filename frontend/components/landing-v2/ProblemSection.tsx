@@ -15,7 +15,7 @@ export default function ProblemSection() {
           viewport={{ once: true }}
           className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-white leading-tight tracking-tight"
         >
-          O segredo que as instituições financeiras ocultam.
+          Conversão internacional com rota inteligente e taxa transparente.
         </motion.h2>
         
         <motion.p 
@@ -25,7 +25,7 @@ export default function ProblemSection() {
           transition={{ delay: 0.1 }}
           className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light max-w-2xl mx-auto"
         >
-          Corretoras lucram com a sua pressa e os bancos com a sua paciência. Nós usamos a infraestrutura da Stellar para eliminar ineficiências e dolarizar seu capital instantaneamente, com zero spread.
+          No modelo tradicional, custo e prazo mudam sem clareza. No TalkToStellar, você vê rota, taxa e valor final antes de confirmar, com liquidação rápida usando infraestrutura Stellar.
         </motion.p>
       </div>
 
@@ -39,9 +39,9 @@ export default function ProblemSection() {
           className="w-full bg-[#162032]/40 backdrop-blur-md border border-white/[0.03] rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-[#162032]/60 hover:border-white/[0.03] transition-all duration-500"
         >
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Esqueça novos downloads.</h3>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Tudo no canal que você já usa.</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              Bancos e corretoras te forçam a baixar aplicativos pesados, decorar senhas e passar por onboarding complexos. Com o TalkToStellar, sua carteira de investimentos funciona diretamente no WhatsApp. Sem atritos, integrado onde você já está.
+              O app foi desenhado para reduzir fricção operacional: você inicia no Telegram, WhatsApp ou navegador, recebe orientação passo a passo e conclui envio/conversão sem trocar de ambiente.
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -213,4 +213,3 @@ export default function ProblemSection() {
     </section>
   );
 }
-

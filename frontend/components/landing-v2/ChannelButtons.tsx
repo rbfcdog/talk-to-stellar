@@ -9,6 +9,7 @@ type ChannelButtonsProps = {
 export default function ChannelButtons({ compact = false, className = "" }: ChannelButtonsProps) {
   const baseSize = compact ? "px-3 py-2 text-xs" : "px-6 py-4 text-base";
   const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
+  const webLabel = compact ? "Teste no Navegador" : "TESTE AGORA NO NAVEGADOR";
 
   return (
     <div className={`flex flex-col sm:flex-row min-w-0 gap-3 ${className}`.trim()}>
@@ -33,12 +34,11 @@ export default function ChannelButtons({ compact = false, className = "" }: Chan
 
       <a
         href="/chat"
-        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#00D2FF] ${baseSize} font-semibold text-slate-950 transition hover:bg-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.3)]`}
+        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#00D2FF] ${baseSize} font-bold uppercase text-slate-950 transition hover:bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.45)]`}
       >
         <Monitor className={iconSize} />
-        <span>Visualização Web</span>
+        <span>{webLabel}</span>
       </a>
     </div>
   );
 }
-

@@ -67,8 +67,8 @@ export default function Hero() {
                 <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">Use mensagens simples para simular, transferir e organizar transações.</p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.03] bg-[#0C1421]/40 p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">Sem novos apps</p>
-                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">Não perca espaço no celular. Tudo funciona no chat que você já usa.</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">Conversão com menor taxa</p>
+                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">A plataforma compara rotas em tempo real para reduzir custo efetivo em BRL e USDC, com transparência de taxa antes da confirmação.</p>
               </div>
             </div>
           </section>
