@@ -59,6 +59,12 @@ function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
+type ExternalIdentityLock = {
+  sessionId?: string;
+  userId?: string;
+  canonicalLogin?: string;
+};
+
 async function readOnboardingLinkState(hash: string) {
   const { data, error } = await supabase
     .from('onboarding_finalizations')
@@ -73,6 +79,77 @@ async function readOnboardingLinkState(hash: string) {
     throw error;
   }
   return data;
+}
+
+function resolveCanonicalSessionLogin(session: any): string {
+  const sessionEmail = normalizeEmailForCompare(session?.email);
+  if (sessionEmail) return sessionEmail;
+  const sessionUserId = normalizeEmailForCompare(session?.user_id);
+  return looksLikeEmail(sessionUserId) ? sessionUserId : '';
+}
+
+async function resolveExternalIdentityLock(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
+  const normalizedProvider = normalizeExternalProvider(provider);
+  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
+  if (!normalizedProvider || !normalizedProviderUserId) return null;
+
+  const mapped = await externalRepo.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
+  const mappedSessionId = String(mapped?.session_id || '').trim();
+  const mappedUserId = normalizeEmailForCompare(String(mapped?.user_id || ''));
+
+  if (mappedSessionId || mappedUserId) {
+    let canonicalLogin = looksLikeEmail(mappedUserId) ? mappedUserId : '';
+    if (mappedSessionId) {
+      const linkedSession = await agentRepo.getSession(mappedSessionId);
+      if (linkedSession) {
+        canonicalLogin = resolveCanonicalSessionLogin(linkedSession) || canonicalLogin;
+      }
+    }
+    return {
+      sessionId: mappedSessionId || undefined,
+      userId: mappedUserId || undefined,
+      canonicalLogin: canonicalLogin || undefined,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('onboarding_finalizations')
+    .select('session_id, user_id, used, status, result')
+    .eq('provider', normalizedProvider)
+    .eq('provider_user_id', normalizedProviderUserId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || '').toLowerCase();
+    if (message.includes('onboarding_finalizations') || message.includes('schema cache') || message.includes('does not exist')) {
+      return null;
+    }
+    throw error;
+  }
+
+  const status = String((data as any)?.status || '').trim().toLowerCase();
+  const used = Boolean((data as any)?.used);
+  if (!used && status !== 'completed') return null;
+
+  const fallbackSessionId = String((data as any)?.session_id || (data as any)?.result?.sessionId || '').trim();
+  const fallbackUserId = normalizeEmailForCompare(String((data as any)?.user_id || (data as any)?.result?.userId || ''));
+
+  let canonicalLogin = looksLikeEmail(fallbackUserId) ? fallbackUserId : '';
+  if (fallbackSessionId) {
+    const linkedSession = await agentRepo.getSession(fallbackSessionId);
+    if (linkedSession) {
+      canonicalLogin = resolveCanonicalSessionLogin(linkedSession) || canonicalLogin;
+    }
+  }
+
+  if (!fallbackSessionId && !fallbackUserId && !canonicalLogin) return null;
+  return {
+    sessionId: fallbackSessionId || undefined,
+    userId: fallbackUserId || undefined,
+    canonicalLogin: canonicalLogin || undefined,
+  };
 }
 
 async function assertOnboardingLinkReusable(rawToken: string): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
@@ -271,6 +348,15 @@ export class ExternalController {
       const pinHash = crypto
         .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
+      const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+      const identityLock = await resolveExternalIdentityLock(provider, providerUserId);
+      if (identityLock?.canonicalLogin && email !== identityLock.canonicalLogin) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+        });
+      }
 
       let matched: any = null;
       const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
@@ -280,7 +366,6 @@ export class ExternalController {
       if (mappedSessionId && mappedUserId) {
         const linkedSession = await agentRepo.getSession(mappedSessionId);
         if (!linkedSession) {
-          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
           return res.status(409).json({
             success: false,
             notAssociated: true,
@@ -300,7 +385,6 @@ export class ExternalController {
           const pinMatchesMappedAccount = (linkedHash1 && linkedHash1 === pinHash) || (linkedHash2 && linkedHash2 === pinHash);
 
           if (!emailMatchesMappedAccount || !pinMatchesMappedAccount) {
-            const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
             return res.status(409).json({
               success: false,
               notAssociated: true,
@@ -317,6 +401,39 @@ export class ExternalController {
             session_password_hash: String((linkedSession as any)?.session_password_hash || ''),
             updated_at: String((linkedSession as any)?.updated_at || ''),
             created_at: String((linkedSession as any)?.created_at || ''),
+          };
+        }
+      }
+
+      if (!matched && identityLock?.sessionId) {
+        const lockedSession = await agentRepo.getSession(identityLock.sessionId);
+        if (lockedSession) {
+          const lockedLogin = resolveCanonicalSessionLogin(lockedSession);
+          const lockedHash1 = String((lockedSession as any)?.session_password_hash || '').trim();
+          const lockedHash2 = String((lockedSession as any)?.password_hash || '').trim();
+          const lockedPinMatches = (lockedHash1 && lockedHash1 === pinHash) || (lockedHash2 && lockedHash2 === pinHash);
+          if (lockedLogin && email !== lockedLogin) {
+            return res.status(409).json({
+              success: false,
+              notAssociated: true,
+              message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+            });
+          }
+          if (!lockedPinMatches) {
+            return res.status(401).json({
+              success: false,
+              message: 'PIN inválido para a conta já vinculada a este canal.',
+            });
+          }
+          matched = {
+            session_id: String((lockedSession as any)?.session_id || identityLock.sessionId),
+            user_id: String((lockedSession as any)?.user_id || identityLock.userId || ''),
+            email: String((lockedSession as any)?.email || ''),
+            session_token: String((lockedSession as any)?.session_token || ''),
+            password_hash: String((lockedSession as any)?.password_hash || ''),
+            session_password_hash: String((lockedSession as any)?.session_password_hash || ''),
+            updated_at: String((lockedSession as any)?.updated_at || ''),
+            created_at: String((lockedSession as any)?.created_at || ''),
           };
         }
       }
@@ -426,11 +543,24 @@ export class ExternalController {
 
       const targetSessionId = String(matched.session_id);
       const targetUserId = String(matched.user_id || email);
+      if (identityLock?.sessionId && identityLock.sessionId !== targetSessionId) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `A conta informada não está associada a este ${providerLabel}.`,
+        });
+      }
+      if (identityLock?.userId && normalizeEmailForCompare(identityLock.userId) !== normalizeEmailForCompare(targetUserId)) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `A conta informada não está associada a este ${providerLabel}.`,
+        });
+      }
       const confirmedMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
       const ownerSessionId = String(confirmedMapping?.session_id || '').trim();
       const ownerUserId = String(confirmedMapping?.user_id || '').trim();
       if ((ownerSessionId && ownerSessionId !== targetSessionId) || (ownerUserId && ownerUserId !== targetUserId)) {
-        const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
         return res.status(409).json({
           success: false,
           message: `Este ${providerLabel} já está vinculado a outra conta.`,
@@ -526,12 +656,36 @@ export class ExternalController {
       }
 
       await agentRepo.saveSession(sessionId, session as any);
+      const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+      const identityLock = await resolveExternalIdentityLock(provider, providerUserId);
+      const sessionLogin = resolveCanonicalSessionLogin(session);
+      const sessionUserId = normalizeEmailForCompare(String(session.user_id || ''));
+      if (identityLock?.canonicalLogin && sessionLogin && identityLock.canonicalLogin !== sessionLogin) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+        });
+      }
+      if (identityLock?.sessionId && identityLock.sessionId !== sessionId) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `Este ${providerLabel} já está vinculado a outra conta.`,
+        });
+      }
+      if (identityLock?.userId && normalizeEmailForCompare(identityLock.userId) !== sessionUserId) {
+        return res.status(409).json({
+          success: false,
+          notAssociated: true,
+          message: `Este ${providerLabel} já está vinculado a outra conta.`,
+        });
+      }
 
       const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
       const ownerSessionId = String(existingMapping?.session_id || '').trim();
       const ownerUserId = String(existingMapping?.user_id || '').trim();
       if ((ownerSessionId && ownerSessionId !== sessionId) || (ownerUserId && ownerUserId !== String(session.user_id || ''))) {
-        const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
         return res.status(409).json({
           success: false,
           message: `Este ${providerLabel} já está vinculado a outra conta.`,
