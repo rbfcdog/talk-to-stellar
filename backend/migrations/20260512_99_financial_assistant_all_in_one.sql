@@ -289,7 +289,7 @@
     avatar_url TEXT,
     bio TEXT,
     default_currency TEXT DEFAULT 'USD',
-    accepted_currencies TEXT[] DEFAULT '{USD,BRL}',
+  accepted_currencies TEXT[] DEFAULT '{USD,BRL,EUR}',
     is_public BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()

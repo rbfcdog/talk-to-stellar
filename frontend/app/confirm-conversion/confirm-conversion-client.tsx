@@ -49,13 +49,18 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
+function normalizeAssetCode(value?: string) {
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+}
+
 function formatAmount(amount?: string, assetCode?: string) {
   if (!String(amount || "").trim()) return "Valor indisponível"
-  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = normalizeAssetCode(assetCode || "")
   const n = Number(String(amount || "").replace(",", "."))
   if (!Number.isFinite(n)) return "Valor indisponível"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
+  if (code === "EURC") return `€ ${n.toFixed(2)}`
   if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }
@@ -188,8 +193,8 @@ export default function ConfirmConversionClient({
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
-  const sourceAssetCode = String(payload.source_asset_code || payload.sourceAssetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
-  const destAssetCode = String(payload.dest_asset_code || payload.destAssetCode || "XLM").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "XLM")
+  const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "XLM")
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")

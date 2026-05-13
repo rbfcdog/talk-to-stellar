@@ -50,9 +50,10 @@ function formatDisplayAmount(value: unknown, decimals = 2): string {
 }
 
 function displaySymbol(assetCode: string): string {
-  const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
   if (code === 'USDC') return 'US$';
   if (code === 'BRL') return 'R$';
+  if (code === 'EURC') return '€';
   return `${code} `;
 }
 

@@ -29,20 +29,25 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
+function normalizeAssetCode(value?: string) {
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+}
+
 function formatAmount(amount?: string, assetCode?: string) {
   const n = Number(String(amount || "").replace(",", "."))
-  const code = String(assetCode || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+  const code = normalizeAssetCode(assetCode || "USDC")
   if (!Number.isFinite(n)) return `${amount || ""} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
+  if (code === "EURC") return `€ ${n.toFixed(2)}`
   return `${n.toFixed(2)} ${code}`
 }
 
 function getAutoConversionMessage(result?: any) {
   if (result?.autoConversion?.message) return String(result.autoConversion.message)
   const details = result?.transferDetails
-  const sourceAsset = String(details?.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
-  const destinationAsset = String(details?.destinationAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
+  const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
   return `Conversão automática concluída: ${formatAmount(details?.sourceAmount, sourceAsset)} viraram ${formatAmount(details?.destinationAmount, destinationAsset)} antes do envio.`
 }
@@ -168,8 +173,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     () => formatAmount(payload.amount, payload.asset_code),
     [payload.amount, payload.asset_code]
   )
-  const destinationAssetCode = String(payload.destination_asset_code || payload.asset_code || "USDC").toUpperCase().replace(/^USD$/, "USDC")
-  const sourceAssetCode = String(payload.asset_code || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+  const destinationAssetCode = normalizeAssetCode(payload.destination_asset_code || payload.asset_code || "USDC")
+  const sourceAssetCode = normalizeAssetCode(payload.asset_code || "USDC")
   const isCrossAsset = destinationAssetCode !== sourceAssetCode
   const receiveLabel = isCrossAsset ? destinationAssetCode : sourceAmountLabel
   const recipientName = String(payload.recipient_name || "você")

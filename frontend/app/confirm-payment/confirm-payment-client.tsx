@@ -81,14 +81,19 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
+function normalizeAssetCode(value?: string) {
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+}
+
 function formatPaymentAmount(amount?: string, assetCode?: string) {
   if (!String(amount || "").trim()) return "Valor indisponível"
-  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = normalizeAssetCode(assetCode)
   const n = Number(String(amount || "").replace(",", "."))
   if (!Number.isFinite(n)) return "Valor indisponível"
   const truncated = Math.trunc(n * 100) / 100
   if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
+  if (code === "EURC") return `€ ${truncated.toFixed(2)}`
   if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${truncated.toFixed(2)} ${code}`
 }
@@ -96,8 +101,8 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
 function getAutoConversionMessage(result?: ConfirmResponse | null) {
   if (result?.autoConversion?.message) return result.autoConversion.message
   const details = result?.transferDetails
-  const sourceAsset = String(details?.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
-  const destinationAsset = String(details?.destinationAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
+  const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
   return `Conversão automática concluída: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} viraram ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`
 }
@@ -144,12 +149,13 @@ function truncateNumber(value: number, decimals: number) {
 }
 
 function formatFeeAmount(value: number, assetCode: string) {
-  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = normalizeAssetCode(assetCode)
   const decimals = value > 0 && value < 0.01 ? 8 : 2
   const threshold = Math.pow(10, -decimals)
   const prefix = value > 0 && value < threshold ? "<" : ""
   if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
+  if (code === "EURC") return `€ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "XLM") {
     const xlmDecimals = 7
     const xlmThreshold = Math.pow(10, -xlmDecimals)
@@ -179,7 +185,7 @@ function buildFeeSummary(input: {
 }) {
   if (hasUsableFeeDisplay(input.totalFeeDisplay)) return String(input.totalFeeDisplay || "")
 
-  const sourceCode = String(input.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceCode = normalizeAssetCode(input.sourceAssetCode)
   const sourceAmount = parseNumber(input.sourceAmount)
   const feeUsdc = parseNumber(input.feeUsdc)
   const feeBrl = parseNumber(input.feeBrl)
@@ -503,9 +509,9 @@ export default function ConfirmPaymentClient({
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
-  const assetCode = String(payload.asset_code || payload.assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const assetCode = normalizeAssetCode(payload.asset_code || payload.assetCode || "")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
-  const sourceAssetCode = String(payload.source_asset_code || payload.quote?.sourceAsset?.code || "").toUpperCase().replace(/^USD$/, "USDC")
+  const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.quote?.sourceAsset?.code || "")
   const sourceAmount = String(payload.source_amount || payload.quote?.sourceAmount || "")
   const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
