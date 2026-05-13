@@ -6,7 +6,13 @@ import ExternalService from '../../services/external.service';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
 import PasskeyService from '../../services/passkey.service';
-import { ExternalRepository } from '../../repositories/external.repository';
+import {
+  ExternalRepository,
+  externalProviderAliases,
+  isPhoneProvider,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from '../../repositories/external.repository';
 import { TransferNotificationService } from '../services/transfer-notification.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 
@@ -14,6 +20,27 @@ const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
+
+async function createExternalMappingWithAliases(payload: {
+  provider: string;
+  provider_user_id: string;
+  session_id: string | null;
+  user_id: string | null;
+  data?: Record<string, unknown>;
+}) {
+  const normalizedProvider = normalizeExternalProvider(payload.provider);
+  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
+  const providers = externalProviderAliases(normalizedProvider);
+  for (const provider of providers) {
+    await externalRepo.createMapping({
+      provider,
+      provider_user_id: normalizedProviderUserId,
+      session_id: payload.session_id,
+      user_id: payload.user_id,
+      data: payload.data || {},
+    });
+  }
+}
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -69,24 +96,16 @@ export class ExternalController {
       const { provider } = req.body;
       const externalData = externalDataFromPayload(req.body);
       const forceNewAccount = Boolean(req.body?.force_new_account || req.body?.forceNewAccount);
-      const normalizeExternalId = (prov: string, value: string) => {
-        if (String(prov || '').toLowerCase() === 'whatsapp' || String(prov || '').toLowerCase() === 'phone') {
-          return String(value || '').replace(/\D+/g, '');
-        }
-        return String(value || '').trim();
-      };
-      const provider_user_id = normalizeExternalId(String(provider || ''), String(req.body?.provider_user_id || ''));
+      const normalizedProvider = normalizeExternalProvider(String(provider || ''));
+      const provider_user_id = normalizeExternalProviderUserId(normalizedProvider, String(req.body?.provider_user_id || ''));
 
-      if (!provider || !provider_user_id) {
+      if (!normalizedProvider || !provider_user_id) {
         return res.status(400).json({ success: false, message: 'provider and provider_user_id required' });
       }
 
       let existing = null;
       try {
-        existing = await externalService.checkExternalAccount(provider, provider_user_id);
-        if (!existing && String(provider).toLowerCase() === 'whatsapp') {
-          existing = await externalService.checkExternalAccount('phone', provider_user_id);
-        }
+        existing = await externalService.checkExternalAccount(normalizedProvider, provider_user_id);
       } catch (error: any) {
         const message = String(error?.message || '').toLowerCase();
         const isMissingExternalTable =
@@ -101,8 +120,8 @@ export class ExternalController {
 
       if (existing && !forceNewAccount) {
         if (Object.keys(externalData).length > 0) {
-          await externalRepo.createMapping({
-            provider,
+          await createExternalMappingWithAliases({
+            provider: normalizedProvider,
             provider_user_id,
             session_id: existing.session_id || null,
             user_id: existing.user_id || null,
@@ -145,7 +164,7 @@ export class ExternalController {
         }
       }
 
-      const { token, url } = externalService.createOnboardUrl(provider, provider_user_id, externalData);
+      const { token, url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, externalData);
 
       return res.status(200).json({
         success: true,
@@ -186,6 +205,8 @@ export class ExternalController {
         provider = String(externalPayload?.provider || '').trim().toLowerCase();
         providerUserId = String(externalPayload?.provider_user_id || '').trim();
       }
+      provider = normalizeExternalProvider(provider);
+      providerUserId = normalizeExternalProviderUserId(provider, providerUserId);
       const externalData = externalDataFromPayload({
         ...req.body,
         ...(externalPayload || {}),
@@ -314,11 +335,24 @@ export class ExternalController {
         })
         .eq('session_id', String(matched.session_id));
 
-      await externalRepo.createMapping({
+      const targetSessionId = String(matched.session_id);
+      const targetUserId = String(matched.user_id || email);
+      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const ownerSessionId = String(existingMapping?.session_id || '').trim();
+      const ownerUserId = String(existingMapping?.user_id || '').trim();
+      if ((ownerSessionId && ownerSessionId !== targetSessionId) || (ownerUserId && ownerUserId !== targetUserId)) {
+        const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+        return res.status(409).json({
+          success: false,
+          message: `Este ${providerLabel} já está vinculado a outra conta.`,
+        });
+      }
+
+      await createExternalMappingWithAliases({
         provider,
         provider_user_id: providerUserId,
-        session_id: String(matched.session_id),
-        user_id: String(matched.user_id || email),
+        session_id: targetSessionId,
+        user_id: targetUserId,
         data: externalData,
       });
 
@@ -378,7 +412,7 @@ export class ExternalController {
       }
 
       const provider = String(payload?.provider || '').trim().toLowerCase();
-      const providerUserId = String(payload?.provider_user_id || '').trim();
+      const providerUserId = normalizeExternalProviderUserId(provider, String(payload?.provider_user_id || '').trim());
       const externalData = externalDataFromPayload(payload);
       if (!provider || !providerUserId) {
         return res.status(400).json({ success: false, message: 'Token externo sem provider.' });
@@ -399,7 +433,18 @@ export class ExternalController {
 
       await agentRepo.saveSession(sessionId, session as any);
 
-      await externalRepo.createMapping({
+      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const ownerSessionId = String(existingMapping?.session_id || '').trim();
+      const ownerUserId = String(existingMapping?.user_id || '').trim();
+      if ((ownerSessionId && ownerSessionId !== sessionId) || (ownerUserId && ownerUserId !== String(session.user_id || ''))) {
+        const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+        return res.status(409).json({
+          success: false,
+          message: `Este ${providerLabel} já está vinculado a outra conta.`,
+        });
+      }
+
+      await createExternalMappingWithAliases({
         provider,
         provider_user_id: providerUserId,
         session_id: sessionId,

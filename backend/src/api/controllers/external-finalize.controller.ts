@@ -4,7 +4,13 @@ import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
-import { ExternalRepository } from '../../repositories/external.repository';
+import {
+  ExternalRepository,
+  externalProviderAliases,
+  isPhoneProvider,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from '../../repositories/external.repository';
 import { ContactRepository } from '../../api/repository/contact.repository';
 import { VaultService } from '../../services/vault.service';
 import { StellarService } from '../services/stellar.service';
@@ -144,6 +150,28 @@ const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
 const vaultService = new VaultService(supabase);
+
+async function createExternalMappingsWithAliases(payload: {
+  provider: string;
+  provider_user_id: string;
+  session_id: string;
+  user_id: string;
+  data?: Record<string, unknown> | null;
+}) {
+  const normalizedProvider = normalizeExternalProvider(payload.provider);
+  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
+  const providers = externalProviderAliases(normalizedProvider);
+
+  for (const provider of providers) {
+    await externalRepo.createMapping({
+      provider,
+      provider_user_id: normalizedProviderUserId,
+      session_id: payload.session_id,
+      user_id: payload.user_id,
+      data: payload.data || undefined,
+    });
+  }
+}
 
 type IdentityCollision = {
   field: 'email' | 'phone_number' | 'cpf';
@@ -903,7 +931,7 @@ export default class ExternalFinalizeController {
       const { token, name, email, pin } = req.body;
       const rawPhoneNumber = String(req.body?.phone_number || req.body?.phoneNumber || '').trim();
       const rawCpf = String(req.body?.cpf || '').trim();
-      const normalizedPhoneNumber = rawPhoneNumber ? rawPhoneNumber.replace(/\D+/g, '') : '';
+      let normalizedPhoneNumber = rawPhoneNumber ? rawPhoneNumber.replace(/\D+/g, '') : '';
       const normalizedCpf = rawCpf ? rawCpf.replace(/\D+/g, '') : '';
       const browserId = String(req.body?.browser_id || '').trim();
       // Accept public_key coming from POST body or URL query (confirm link may include it)
@@ -2110,9 +2138,15 @@ export default class ExternalFinalizeController {
         });
       }
 
-      const { provider, provider_user_id } = payload as any;
+      const rawProvider = String((payload as any)?.provider || '');
+      const rawProviderUserId = String((payload as any)?.provider_user_id || '');
+      const provider = normalizeExternalProvider(rawProvider);
+      const provider_user_id = normalizeExternalProviderUserId(provider, rawProviderUserId);
       if (!provider || !provider_user_id) {
         return res.status(400).json({ success: false, message: 'token missing provider data' });
+      }
+      if (isPhoneProvider(provider) && !normalizedPhoneNumber) {
+        normalizedPhoneNumber = provider_user_id;
       }
 
       const providedPin = String(pin || '').trim();
@@ -2172,7 +2206,7 @@ export default class ExternalFinalizeController {
             vaultSecretId: existingWallet.vault_secret_id,
           });
 
-          await externalRepo.createMapping({
+          await createExternalMappingsWithAliases({
             provider,
             provider_user_id,
             session_id: String(existingAccount.session_id),
@@ -2305,7 +2339,7 @@ export default class ExternalFinalizeController {
             vaultSecretId: existingWallet.vault_secret_id,
           });
 
-          await externalRepo.createMapping({
+          await createExternalMappingsWithAliases({
             provider,
             provider_user_id,
             session_id: existingWallet.session_id,
@@ -2397,7 +2431,7 @@ export default class ExternalFinalizeController {
       }
 
       // link external_accounts mapping
-      await externalRepo.createMapping({
+      await createExternalMappingsWithAliases({
         provider,
         provider_user_id,
         session_id: sessionId,
