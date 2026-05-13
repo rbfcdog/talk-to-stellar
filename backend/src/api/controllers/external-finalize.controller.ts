@@ -873,6 +873,7 @@ async function logPaymentDetails(
         operation_type: operationType,
         status,
         error_message: errorMessage,
+        memo: metadata?.transaction_nickname || metadata?.memo || null,
         route_path: routePath,
         metadata,
         actual_fee: metadata?.savings?.actual_fee ?? metadata?.actual_fee_brl ?? null,
@@ -913,6 +914,15 @@ export default class ExternalFinalizeController {
       try {
         payload = jwt.verify(token, getJwtSecret());
       } catch (err: any) {
+        if (String(err?.name || '') === 'TokenExpiredError') {
+          return res.status(410).json({
+            success: false,
+            expired: true,
+            expired_at: err?.expiredAt ? new Date(err.expiredAt).toISOString() : null,
+            error: 'Este link expirou. Solicite um novo link.',
+            message: 'Este link expirou. Solicite um novo link.',
+          });
+        }
         return res.status(400).json({ success: false, error: 'Link inválido ou expirado', message: 'Link inválido ou expirado' });
       }
 

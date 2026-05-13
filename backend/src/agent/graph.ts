@@ -473,17 +473,57 @@ ${onboardingUrl}`;
     ]);
   }
 
-  private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; receiveAssetCode?: string; recipientName?: string }): string {
+  private parsePaymentLinkExpiryFromText(text: string): Date | null {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const explicitIsoMatch = normalized.match(/\bexpira\s+em\s+(\d{4}-\d{2}-\d{2})[ t](\d{1,2})(?::(\d{2}))?\b/);
+    if (explicitIsoMatch) {
+      const yearMonthDay = explicitIsoMatch[1];
+      const hour = Number(explicitIsoMatch[2]);
+      const minute = Number(explicitIsoMatch[3] || '0');
+      if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+        const date = new Date(`${yearMonthDay}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`);
+        if (Number.isFinite(date.getTime()) && date.getTime() > Date.now()) return date;
+      }
+    }
+
+    const relativeMatch = normalized.match(/\bexpira\s+(hoje|amanha|amanhã)\s*(?:as|a|às)?\s*(\d{1,2})(?::(\d{2}))?\s*h?\b/);
+    if (!relativeMatch) return null;
+    const dayRef = relativeMatch[1];
+    const hour = Number(relativeMatch[2]);
+    const minute = Number(relativeMatch[3] || '0');
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+
+    const base = new Date();
+    const candidate = new Date(base);
+    if (dayRef === 'amanha' || dayRef === 'amanhã') {
+      candidate.setDate(candidate.getDate() + 1);
+    }
+    candidate.setHours(hour, minute, 0, 0);
+    if (candidate.getTime() <= Date.now()) return null;
+    return candidate;
+  }
+
+  private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; receiveAssetCode?: string; recipientName?: string; expiresAt?: Date | null }): string {
     const params = new URLSearchParams();
     const amount = String(input.amount || '').trim();
     const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     const receiveAssetCode = String(input.receiveAssetCode || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
     const recipientName = String(input.recipientName || '').trim();
+    const expiresAt = input.expiresAt instanceof Date && Number.isFinite(input.expiresAt.getTime())
+      ? input.expiresAt
+      : null;
 
     if (amount) params.set('amount', amount);
     if (assetCode) params.set('asset', assetCode);
     if (receiveAssetCode && receiveAssetCode !== assetCode) params.set('receive_asset', receiveAssetCode);
     if (recipientName) params.set('recipient', recipientName);
+    if (expiresAt) params.set('expires_at', expiresAt.toISOString());
 
     const qs = params.toString();
     return `${this.getFrontendBaseUrl()}/pay-anyone${qs ? `?${qs}` : ''}`;
@@ -509,6 +549,7 @@ ${onboardingUrl}`;
       const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
       const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
       const recipientName = String(llmParsed.recipient_query || '').trim();
+      const expiresAt = this.parsePaymentLinkExpiryFromText(state.current_input);
       const numericAmount = Number(amount.replace(',', '.'));
       const hasValidAmount = amount.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0;
 
@@ -517,14 +558,17 @@ ${onboardingUrl}`;
         state.response_message =
           'Não foi informado o valor do link de pagamento. Qual valor você quer colocar no link? Exemplo: "criar link de 10 dólares".';
       } else {
-        const url = this.buildPayAnyoneUrl({ amount, assetCode, receiveAssetCode, recipientName });
+        const url = this.buildPayAnyoneUrl({ amount, assetCode, receiveAssetCode, recipientName, expiresAt });
         state.pending_payment = undefined;
         state.success = true;
         const receiveText = receiveAssetCode && receiveAssetCode !== assetCode
           ? ` A pessoa recebe em ${receiveAssetCode}.`
           : '';
+        const expiryText = expiresAt
+          ? ` O link ficará válido até ${expiresAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`
+          : '';
         state.response_message =
-          `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.${receiveText}`;
+          `Claro. Para criar o link de pagamento de ${this.formatMoneyByAsset(amount, assetCode)}, abra:\n\n${url}\n\nNa página, confirme com seu PIN e copie o link para enviar.${receiveText}${expiryText}`;
       }
     }
 
@@ -1818,11 +1862,18 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
-  private financialMemoryMode(message: string): 'repeat_payment' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
+  private financialMemoryMode(message: string): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
+    if ((normalized.includes('apelido') || normalized.includes('nome da transacao') || normalized.includes('nome da transação')) &&
+      (normalized.includes('qual') || normalized.includes('quanto') || normalized.includes('?'))) return 'nickname_lookup';
+    if ((normalized.includes('apelido') || normalized.includes('nome da transacao') || normalized.includes('nome da transação')) &&
+      (normalized.includes('definir') || normalized.includes('salvar') || normalized.includes('colocar') || normalized.includes(':'))) return 'nickname_set';
+    if ((normalized.includes('qual foi o valor') || normalized.includes('quanto foi')) &&
+      (normalized.includes('pagamento') || normalized.includes('transacao') || normalized.includes('transação'))) return 'nickname_lookup';
+    if (this.looksLikeNicknameReply(message)) return 'nickname_set';
     if (/\b(de novo|novamente|again|mesma carteira|mesmo pagamento)\b/.test(normalized)) return 'repeat_payment';
     if (/\b(favoritos?|recorrente|recorrencia|recorrência|destinatarios|destinatários|clientes)\b/.test(normalized)) return 'recipient_insights';
     if (normalized.includes('quanto recebi') || normalized.includes('recebi esse mes') || normalized.includes('recebimentos do mes')) return 'monthly_received';
@@ -1835,6 +1886,44 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     if (normalized.includes('media') && (normalized.includes('cotacao') || normalized.includes('cambio'))) return 'average_quote';
     if (normalized.includes('mes') || normalized.includes('este mes') || normalized.includes('mês')) return 'monthly_conversion';
     return 'summary';
+  }
+
+  private looksLikeNicknameReply(message: string): boolean {
+    const text = String(message || '').trim();
+    if (!text || text.length > 80) return false;
+    if (/[?]/.test(text)) return false;
+    const normalized = text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    if (
+      normalized.startsWith('enviar ') ||
+      normalized.startsWith('converter ') ||
+      normalized.startsWith('saldo') ||
+      normalized.startsWith('criar ') ||
+      normalized.startsWith('gerar ') ||
+      normalized.startsWith('quero ')
+    ) return false;
+    if (normalized.includes('link')) return false;
+    if (/\b(apelido|nome da transacao|nome da transação|transacao|transação|pagamento)\b/.test(normalized)) return true;
+    return false;
+  }
+
+  private extractTransactionNickname(message: string): string {
+    const text = String(message || '').trim();
+    if (!text) return '';
+    const explicit = text.match(/(?:apelido|nome)\s*(?:da|do)?\s*(?:transacao|transação|pagamento)?\s*[:\-]\s*(.+)$/i);
+    if (explicit?.[1]) return explicit[1].trim().slice(0, 80);
+
+    const valueQuestion = text.match(/(?:valor|pagamento|transacao|transação)\s+(.+?)(?:\?|$)/i);
+    if (valueQuestion?.[1]) return valueQuestion[1].trim().slice(0, 80);
+
+    return text.slice(0, 80);
+  }
+
+  private hasDeterministicFinancialMemoryIntent(message: string): boolean {
+    const mode = this.financialMemoryMode(message);
+    return mode === 'nickname_set' || mode === 'nickname_lookup';
   }
 
   private fixedSavingsIntent(message: string): null | {
@@ -1920,11 +2009,15 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleFinancialMemoryRequest(state: AgentState): Promise<AgentState> {
     const mode = this.financialMemoryMode(state.current_input);
     const contactName = mode === 'repeat_payment' ? this.extractRepeatCounterparty(state.current_input) : '';
+    const nickname = mode === 'nickname_set' || mode === 'nickname_lookup'
+      ? this.extractTransactionNickname(state.current_input)
+      : '';
     const memoryRaw = await executeTool('get_financial_memory', {
       session_id: state.session_id,
       user_id: state.session_data?.user_id,
       mode,
       contact_name: contactName,
+      nickname,
     });
 
     let memory: any;
@@ -2252,6 +2345,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
+      const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(state.current_input);
       state.detected_intent = this.isDirectLoginRequest(state.current_input)
         ? IntentType.LOGIN
         : this.isDirectOnboardingRequest(state.current_input)
@@ -2264,6 +2358,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
                 ? IntentType.GENERAL
                 : fixedSavings
                   ? IntentType.FINANCIAL_MEMORY
+                  : deterministicFinancialMemory
+                    ? IntentType.FINANCIAL_MEMORY
                   : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 

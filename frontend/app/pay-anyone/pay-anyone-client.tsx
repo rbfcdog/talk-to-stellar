@@ -43,6 +43,7 @@ export default function PayAnyoneClient() {
   const [assetCode, setAssetCode] = useState("USDC")
   const [destinationAssetCode, setDestinationAssetCode] = useState("USDC")
   const [pin, setPin] = useState("")
+  const [expiresAtLocal, setExpiresAtLocal] = useState("")
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [result, setResult] = useState<CreatePayLinkResponse | null>(null)
   const [copied, setCopied] = useState(false)
@@ -62,6 +63,14 @@ export default function PayAnyoneClient() {
     const sourceAsset = (searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC")
     setAssetCode(sourceAsset)
     setDestinationAssetCode((searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset).toUpperCase().replace(/^USD$/, "USDC"))
+    const expiresAtFromQuery = String(searchParams.get("expires_at") || "").trim()
+    if (expiresAtFromQuery) {
+      const parsed = new Date(expiresAtFromQuery)
+      if (Number.isFinite(parsed.getTime())) {
+        const localValue = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+        setExpiresAtLocal(localValue)
+      }
+    }
 
     if (!storedSessionId || !storedSessionToken) {
       const next = `/pay-anyone${window.location.search || ""}`
@@ -139,6 +148,7 @@ export default function PayAnyoneClient() {
           amount,
           asset_code: assetCode,
           destination_asset_code: destinationAssetCode,
+          expires_at: expiresAtLocal ? new Date(expiresAtLocal).toISOString() : undefined,
           pin,
         }),
       })
@@ -301,6 +311,15 @@ export default function PayAnyoneClient() {
                   <option value="BRL">R$</option>
                   <option value="XLM">XLM</option>
                 </select>
+              </label>
+              <label className="block space-y-2 sm:col-span-3">
+                <span className="text-sm font-medium text-slate-200">Expira em (opcional)</span>
+                <input
+                  value={expiresAtLocal}
+                  onChange={(event) => setExpiresAtLocal(event.target.value)}
+                  type="datetime-local"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                />
               </label>
             </div>}
 

@@ -12,6 +12,8 @@ type ValidationResult = {
   valid?: boolean
   payload?: any
   message?: string
+  expired?: boolean
+  expired_at?: string
 }
 
 type ConfirmResponse = {
@@ -393,6 +395,7 @@ export default function ConfirmPaymentClient({
   const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
+  const isExpiredLink = Boolean(validation?.valid === false && (validation as any)?.expired)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -415,7 +418,9 @@ export default function ConfirmPaymentClient({
                   {validation.valid ? (
                     <span className="text-emerald-300">Link válido</span>
                   ) : (
-                    <span className="text-rose-300">{validation.message || 'Link inválido ou ausente'}</span>
+                    <span className="text-rose-300">
+                      {isExpiredLink ? `Link expirado. ${validation.message || 'Solicite um novo link.'}` : (validation.message || 'Link inválido ou ausente')}
+                    </span>
                   )}
                 </div>
               )}
