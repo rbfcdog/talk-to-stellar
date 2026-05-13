@@ -791,12 +791,13 @@ export default function ConfirmPaymentClient({
                   <p className="text-slate-300">Taxa total estimada: {estimatedFeeSummary}</p>
                 )}
                 {shouldShowCrossAssetInsights && routeChain && (
-                  <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
+                  <p className="text-slate-300">Melhor caminho encontrado: {routeChain}</p>
                 )}
                 {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
-                  <p className="text-emerald-300">
-                    Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
+                  <p className="text-emerald-300 font-medium">
+                    Rota mais barata encontrada: você economiza {formatBrl(estimatedSavingsBrl)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
+                    {" "}vs métodos tradicionais.
                   </p>
                 )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
@@ -895,7 +896,7 @@ export default function ConfirmPaymentClient({
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
                   )}
                   {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
-                    <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
+                    <p>Economia estimada nesta operação com a melhor rota: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {successAutoConversionMessage && (
                     <p>{successAutoConversionMessage}</p>

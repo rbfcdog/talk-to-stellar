@@ -1609,7 +1609,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
         `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
+        `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -1742,7 +1742,7 @@ async function executeGetBestRoute(input: any): Promise<string> {
         `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
         `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
+        `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -2118,7 +2118,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_platform_fee: null,
       message:
         `Antes de confirmar: taxa estimada total ${totalFeeDisplay}. ` +
-        `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
+        `${savingsEstimate ? `Encontrei uma rota mais barata: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
         `${crossAsset && routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
         quoteValidityLine +
         `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
