@@ -64,6 +64,8 @@ function formatExternalIdentifier(provider: string, value: string): string {
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const searchParams = useSearchParams()
+  const requestedAuthMethod = String(searchParams.get("auth") || "").trim().toLowerCase()
+  const emailFromQuery = String(searchParams.get("email") || "").trim()
   const rawNextPath = String(searchParams.get("next") || "").trim()
   const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
     ? rawNextPath
@@ -83,9 +85,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
+  const [qrTargetUrl, setQrTargetUrl] = useState("")
   const [loginDone, setLoginDone] = useState(false)
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
   const actionLockRef = useRef(false)
+  const passkeyAutoTriggerRef = useRef(false)
 
   function redirectToUsed(customMessage?: string) {
     const params = new URLSearchParams()
@@ -139,6 +143,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   useEffect(() => {
+    if (emailFromQuery) {
+      setEmail(emailFromQuery)
+    }
+  }, [emailFromQuery])
+
+  useEffect(() => {
     if (!hasExternalContext) return
     if (!isExternalLoginAlreadyCompleted()) return
     setExternalLinkUsed(true)
@@ -152,6 +162,58 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     if (hasExternalContext) return
     redirectToUsed("Este link de login é inválido.")
   }, [externalToken, hasExternalContext])
+
+  const mobileRedirectUrl = useMemo(() => {
+    if (typeof window === "undefined") return ""
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) return ""
+    const url = new URL(`${window.location.origin}/login`)
+    url.searchParams.set("auth", "passkey")
+    url.searchParams.set("email", normalizedEmail)
+    if (nextPath) url.searchParams.set("next", nextPath)
+    if (externalToken) url.searchParams.set("token", externalToken)
+    return url.toString()
+  }, [email, nextPath, externalToken])
+
+  const qrImageUrl = useMemo(() => {
+    if (!qrTargetUrl) return ""
+    return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
+  }, [qrTargetUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    async function prepareQrTarget() {
+      if (!mobileRedirectUrl) {
+        setQrTargetUrl("")
+        return
+      }
+      try {
+        const response = await fetch("/api/external/short-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: mobileRedirectUrl,
+            purpose: "login_passkey_qr",
+            expires_in_hours: 6,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+        if (response.ok && payload?.url) {
+          setQrTargetUrl(String(payload.url))
+          return
+        }
+        setQrTargetUrl(mobileRedirectUrl)
+      } catch {
+        if (!cancelled) setQrTargetUrl(mobileRedirectUrl)
+      }
+    }
+
+    void prepareQrTarget()
+    return () => {
+      cancelled = true
+    }
+  }, [mobileRedirectUrl])
 
   useEffect(() => {
     if (!hasExternalContext) return
@@ -336,6 +398,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }
 
+  useEffect(() => {
+    if (requestedAuthMethod !== "passkey") return
+    if (passkeyAutoTriggerRef.current) return
+    if (!email.trim()) {
+      setStatus("error")
+      setError("Informe seu e-mail para entrar com Passkey.")
+      return
+    }
+    if (externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey") return
+    passkeyAutoTriggerRef.current = true
+    void handlePasskeyLogin()
+  }, [requestedAuthMethod, email, externalLinkUsed, status])
+
   if (loginDone) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
@@ -451,6 +526,20 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               <KeyRound className="h-4 w-4" />
               {status === "passkey" ? "Abrindo biometria..." : "1) Entrar com Passkey"}
             </button>
+            {qrImageUrl && !externalLinkUsed && (
+              <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+                <p className="font-medium text-white">Entrar com Passkey no celular</p>
+                <p className="mt-1 text-slate-300">Escaneie para abrir este login no celular e confirmar com Touch ID.</p>
+                <div className="mt-3 flex justify-center">
+                  <img
+                    src={qrImageUrl}
+                    alt="QR Code para login com Passkey no celular"
+                    className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
+                  />
+                </div>
+                {qrTargetUrl && <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>}
+              </div>
+            )}
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
               Depois de entrar, use: "saldo" para conferir conta, "contatos" para revisar destinatários e "enviar 10 dólares para [nome]" para iniciar pagamento.

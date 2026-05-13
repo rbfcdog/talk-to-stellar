@@ -79,6 +79,11 @@ function getPasskeyErrorMessage(error: any): string {
   return message || "Falha ao ativar biometria."
 }
 
+function looksLikeEmail(value?: string): boolean {
+  const normalized = String(value || "").trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
 export default function CreateAccountClient({
   initialToken = '',
   initialValidation = null,
@@ -105,6 +110,7 @@ export default function CreateAccountClient({
   const [status, setStatus] = useState("ready")
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
+  const [passkeyQrTargetUrl, setPasskeyQrTargetUrl] = useState("")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
   const [existingEmail, setExistingEmail] = useState("")
   const [existingPin, setExistingPin] = useState("")
@@ -118,6 +124,24 @@ export default function CreateAccountClient({
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
+  const passkeyLoginEmail = useMemo(() => {
+    const candidates = [email, result?.userId]
+    for (const candidate of candidates) {
+      if (looksLikeEmail(candidate)) return String(candidate || "").trim().toLowerCase()
+    }
+    return ""
+  }, [email, result?.userId])
+  const passkeyLoginRedirectUrl = useMemo(() => {
+    if (typeof window === "undefined" || !passkeyLoginEmail) return ""
+    const url = new URL(`${window.location.origin}/login`)
+    url.searchParams.set("auth", "passkey")
+    url.searchParams.set("email", passkeyLoginEmail)
+    return url.toString()
+  }, [passkeyLoginEmail])
+  const passkeyQrImageUrl = useMemo(() => {
+    if (!passkeyQrTargetUrl) return ""
+    return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
+  }, [passkeyQrTargetUrl])
   const loginHref = useMemo(() => {
     const params = new URLSearchParams()
     if (token) {
@@ -129,6 +153,42 @@ export default function CreateAccountClient({
     const query = params.toString()
     return query ? `/login?${query}` : "/login"
   }, [rawNextPath, token])
+
+  useEffect(() => {
+    let cancelled = false
+    async function preparePasskeyQr() {
+      if (!passkeyLoginRedirectUrl) {
+        setPasskeyQrTargetUrl("")
+        return
+      }
+
+      try {
+        const response = await fetch("/api/external/short-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: passkeyLoginRedirectUrl,
+            purpose: "create_account_passkey_qr",
+            expires_in_hours: 6,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+        if (response.ok && payload?.url) {
+          setPasskeyQrTargetUrl(String(payload.url))
+          return
+        }
+        setPasskeyQrTargetUrl(passkeyLoginRedirectUrl)
+      } catch {
+        if (!cancelled) setPasskeyQrTargetUrl(passkeyLoginRedirectUrl)
+      }
+    }
+
+    void preparePasskeyQr()
+    return () => {
+      cancelled = true
+    }
+  }, [passkeyLoginRedirectUrl])
 
   function redirectToUsed(customMessage?: string) {
     const params = new URLSearchParams()
@@ -833,6 +893,19 @@ export default function CreateAccountClient({
                   <p className="text-xs text-slate-400">
                     Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.
                   </p>
+                  {passkeyQrImageUrl && (
+                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-slate-300">
+                      <p className="font-medium text-white">Usar Passkey no celular</p>
+                      <p className="mt-1">Escaneie para abrir o login com Passkey no celular e autorizar com Touch ID.</p>
+                      <div className="mt-2 flex justify-center">
+                        <img
+                          src={passkeyQrImageUrl}
+                          alt="QR Code para login com Passkey no celular"
+                          className="h-56 w-56 rounded-xl border border-white/10 bg-white p-2"
+                        />
+                      </div>
+                    </div>
+                  )}
                   {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
                 </div>
               )}
