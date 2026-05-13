@@ -37,6 +37,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - Prefer R$ and US$ displays. Use BRL/USDC only when needed as internal asset labels, and never use XLM in normal payment/conversion copy.
 - Never refer to the experience as a generic Stellar blockchain assistant.
 - When greeting the user, say something aligned with TalkToStellar, such as helping with wallet, balance, contacts, or transfers.
+- No primeiro contato da sessão, oriente o usuário com um mini-menu de próximos passos para ele não se perder.
 
 ## PRODUCT CONTEXT
 - TalkToStellar is a digital wallet for people who want to move money, manage saved contacts, and review wallet activity.
@@ -197,19 +198,23 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
   return [
     'Início da sessão.',
     '',
-    'Saldo atual:',
+    'Resumo rápido da sua conta:',
     balanceBlock,
     '',
-    'Comandos principais:',
-    '1. saldo: ver saldo em R$ e US$',
-    '2. contatos: listar ou salvar contatos',
-    '3. enviar: mandar dinheiro com link de confirmação',
-    '4. converter: trocar saldo entre R$ e US$',
-    '5. cotação: ver cotação atual do dólar',
-    '6. histórico: ver operações recentes',
-    '7. link de pagamento: criar link para pagar/receber',
+    'Como começar agora:',
+    '1. Digite "saldo" para conferir seu dinheiro disponível.',
+    '2. Digite "contatos" para ver para quem você já pode enviar.',
+    '3. Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.',
+    '',
+    'Atalhos principais:',
+    '4. converter: trocar saldo entre R$ e US$ com cotação atual',
+    '5. cotação: ver o preço do dólar no momento',
+    '6. histórico: revisar operações recentes',
+    '7. link de pagamento: criar link para cobrar/receber',
     '8. PIN: redefinir PIN com link seguro',
-    '9. ajuda: ver todos os comandos com exemplos',
+    '9. ajuda: abrir guia completo com exemplos',
+    '',
+    'Se quiser, me diga seu objetivo em uma frase, por exemplo: "quero cobrar um cliente", "quero enviar 50 reais" ou "quero organizar meus contatos".',
   ].join('\n');
 }
 
@@ -583,6 +588,20 @@ export function createAgentRoutes(
 
       const sessionData = await repository.getSession(session_id);
       await repository.clearSession(session_id);
+      const { error: unlinkError } = await supabase
+        .from('external_accounts')
+        .update({
+          session_id: null,
+          user_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('session_id', session_id);
+      if (unlinkError) {
+        const message = String(unlinkError.message || '').toLowerCase();
+        if (!message.includes('external_accounts') && !message.includes('schema cache') && !message.includes('does not exist')) {
+          throw new Error(unlinkError.message || 'Falha ao desvincular sessão externa.');
+        }
+      }
       void TransferNotificationService.notifySessionLogout({
         sessionId: session_id,
         userId: String(sessionData?.user_id || ''),

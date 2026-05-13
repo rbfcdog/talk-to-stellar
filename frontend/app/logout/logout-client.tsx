@@ -55,7 +55,7 @@ export default function LogoutClient() {
     setStatus("loading")
     try {
       if (currentSessionId) {
-        await idempotentFetch("/api/logout", {
+        const response = await idempotentFetch("/api/logout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -64,6 +64,10 @@ export default function LogoutClient() {
             provider_user_id: providerUserId || undefined,
           }),
         })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.error || payload?.message || "Falha ao encerrar sessão no servidor.")
+        }
       }
       if (typeof window !== "undefined") {
         localStorage.removeItem("talk-to-stellar.sessionId")
