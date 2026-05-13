@@ -100,7 +100,7 @@ export class AgentGraph {
       const contacts = await this.fetchContacts(userId);
 
       const contact = contacts.find((c: any) => 
-        c.stellar_public_key === publicKey || c.public_key === publicKey
+        c.stellar_public_key === publicKey || c.public_key === publicKey || c.destination_public_key === publicKey
       );
 
       return contact?.contact_name || contact?.name;
@@ -160,7 +160,7 @@ export class AgentGraph {
       const isPublicKey = /^G[A-Z2-7]{55}$/i.test(normalizedQuery);
       if (isPublicKey) {
         return contacts.find((c: any) =>
-          String(c.stellar_public_key || c.public_key || '').trim() === query.trim()
+          String(c.stellar_public_key || c.public_key || c.destination_public_key || '').trim() === query.trim()
         );
       }
 
@@ -883,6 +883,7 @@ ${onboardingUrl}`;
 
     const contact = await this.getContactByPublicKeyOrName(recipientQuery, state.session_data.user_id);
     const destination = String(
+      contact?.destination_public_key ||
       contact?.stellar_public_key ||
       contact?.public_key ||
       (/^G[A-Z2-7]{55}$/i.test(recipientQuery) ? recipientQuery : '')

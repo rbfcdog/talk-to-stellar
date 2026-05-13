@@ -3686,6 +3686,7 @@ async function executeListContacts(input: any): Promise<string> {
 
       return {
         ...contact,
+        destination_public_key: contact.stellar_public_key || profile.public_key || null,
         stellar_public_key: undefined,
         public_key: undefined,
         email: contact.email || profile.email || null,
