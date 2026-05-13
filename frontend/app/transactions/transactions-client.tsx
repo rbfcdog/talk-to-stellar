@@ -26,7 +26,7 @@ type TransactionItem = {
 }
 
 function normalizeAssetCode(value?: string) {
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
 function formatAmount(amount?: string | null, assetCode?: string | null) {
@@ -35,7 +35,6 @@ function formatAmount(amount?: string | null, assetCode?: string | null) {
   if (!Number.isFinite(n)) return `${amount || "0"} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
-  if (code === "EURC") return `€ ${n.toFixed(2)}`
   return `${n.toFixed(2)} ${code}`
 }
 

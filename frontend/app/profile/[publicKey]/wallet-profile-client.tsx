@@ -13,7 +13,7 @@ type BalanceItem = {
 
 function normalizeAssetCode(value?: string, type?: string) {
   if (String(type || "").toLowerCase() === "native") return "XLM"
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
 function formatAssetBalance(item: BalanceItem) {
@@ -22,7 +22,6 @@ function formatAssetBalance(item: BalanceItem) {
   if (!Number.isFinite(raw)) return `${item.balance || "0"} ${code}`
   if (code === "USDC") return `US$ ${raw.toFixed(2)}`
   if (code === "BRL") return `R$ ${raw.toFixed(2)}`
-  if (code === "EURC") return `€ ${raw.toFixed(2)}`
   return `${raw.toFixed(7)} ${code}`
 }
 

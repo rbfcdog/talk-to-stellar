@@ -130,16 +130,6 @@ function formatNoPathFallbackMessage(errorMessage: string): string {
     normalized.includes('não foi encontrado caminho') ||
     normalized.includes('nenhum caminho encontrado') ||
     normalized.includes('sem rota de liquidez');
-  const mentionsEurc = normalized.includes('eurc') || normalized.includes('euro');
-
-  if (mentionsNoPath && mentionsEurc) {
-    return [
-      'EURC está temporariamente sem rota de liquidez para esta conversão na rede atual.',
-      'Tente novamente em instantes ou converta usando BRL/USDC agora.',
-      raw,
-    ].join(' ');
-  }
-
   return raw;
 }
 
@@ -431,7 +421,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL, EURC",
+          description: "Destination asset code, e.g. XLM, USDC, BRL",
         },
         dest_asset_issuer: {
           type: "string",
@@ -439,7 +429,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL, EURC",
+          description: "Source asset code, e.g. XLM, USDC, BRL",
         },
         source_asset_issuer: {
           type: "string",
@@ -473,7 +463,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Moeda de origem (BRL, USDC, EURC, XLM).",
+          description: "Moeda de origem (BRL, USDC, XLM).",
         },
         source_asset_issuer: {
           type: "string",
@@ -481,7 +471,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Moeda de destino (BRL, USDC, EURC, XLM).",
+          description: "Moeda de destino (BRL, USDC, XLM).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -493,7 +483,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, BRL, and EURC.",
+    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
     parameters: {
       type: "object",
       properties: {
@@ -515,7 +505,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL, EURC",
+          description: "Destination asset code, e.g. XLM, USDC, BRL",
         },
         dest_asset_issuer: {
           type: "string",
@@ -523,7 +513,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL, EURC",
+          description: "Source asset code, e.g. XLM, USDC, BRL",
         },
         source_asset_issuer: {
           type: "string",
@@ -535,7 +525,7 @@ export const toolDefinitions = [
   },
   {
     name: "ensure_trustline",
-    description: "Create a trustline for USDC, BRL, EURC, or another issued Stellar asset in the current session wallet.",
+    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the current session wallet.",
     parameters: {
       type: "object",
       properties: {
@@ -553,7 +543,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code, e.g. USDC, BRL, or EURC",
+          description: "Asset code, e.g. USDC or BRL",
         },
         asset_issuer: {
           type: "string",
@@ -625,7 +615,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code (XLM, USDC, BRL, EURC).",
+          description: "Source asset code (XLM, USDC, BRL).",
         },
         source_asset_issuer: {
           type: "string",
@@ -637,7 +627,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code (XLM, USDC, BRL, EURC).",
+          description: "Destination asset code (XLM, USDC, BRL).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -820,7 +810,7 @@ export const toolDefinitions = [
         title: { type: "string", description: "Título da cobrança." },
         description: { type: "string", description: "Descrição da cobrança." },
         amount: { type: "string", description: "Valor da cobrança." },
-        currency: { type: "string", description: "Moeda da cobrança (USD/BRL/EUR)." },
+        currency: { type: "string", description: "Moeda da cobrança (USD/BRL)." },
         due_date: { type: "string", description: "Vencimento em ISO date." },
       },
       required: ["recipient_name", "amount"],
@@ -1102,7 +1092,7 @@ function executeGetIntentHelp(): string {
       command: "melhor rota",
       intent: "best_route",
       description: "Mostra automaticamente a melhor rota para enviar ou converter com menor custo efetivo.",
-      examples: ["qual a melhor rota pra enviar 300 reais em euro?"],
+      examples: ["qual a melhor rota pra enviar 300 reais em dólar?"],
     },
     {
       command: "histórico",
@@ -1158,7 +1148,7 @@ function executeGetIntentHelp(): string {
       "Exemplos prontos:",
       "- \"enviar 10 dólares para Ana\"",
       "- \"converter 200 reais para dólar\"",
-      "- \"converter 50 euros para dólares\"",
+      "- \"converter 50 reais para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
       "",
@@ -1362,7 +1352,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${publicKey}`);
     const account = await stellarService.getAccount(publicKey);
 
-    const visibleAssets = ['BRL', 'USDC', 'EURC'];
+    const visibleAssets = ['BRL', 'USDC'];
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -1376,7 +1366,7 @@ async function executeGetBalance(input: any): Promise<string> {
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balance.asset === asset) || {
       asset,
       balance: '0.0000000',
-      asset_type: asset === 'BRL' || asset === 'USDC' || asset === 'EURC' ? 'credit_alphanum4' : 'native',
+      asset_type: asset === 'BRL' || asset === 'USDC' ? 'credit_alphanum4' : 'native',
       asset_issuer: undefined,
     });
     return JSON.stringify({
@@ -1445,7 +1435,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       balanceByAsset.set(String(item.asset || '').toUpperCase(), item);
     }
 
-    const technicalAssets = ['XLM', 'USDC', 'BRL', 'EURC'].map((assetCode) => {
+    const technicalAssets = ['XLM', 'USDC', 'BRL'].map((assetCode) => {
       const existing = balanceByAsset.get(assetCode);
       if (existing) return existing;
       return {
@@ -1462,7 +1452,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
-      message: "Technical balances retrieved for XLM, USDC, BRL, EURC",
+      message: "Technical balances retrieved for XLM, USDC, BRL",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

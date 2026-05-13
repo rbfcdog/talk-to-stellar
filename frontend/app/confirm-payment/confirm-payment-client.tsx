@@ -82,7 +82,7 @@ function decodeJwtPayload(token: string): any {
 }
 
 function normalizeAssetCode(value?: string) {
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
 function formatPaymentAmount(amount?: string, assetCode?: string) {
@@ -93,7 +93,6 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   const truncated = Math.trunc(n * 100) / 100
   if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
-  if (code === "EURC") return `€ ${truncated.toFixed(2)}`
   if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${truncated.toFixed(2)} ${code}`
 }
@@ -155,7 +154,6 @@ function formatFeeAmount(value: number, assetCode: string) {
   const prefix = value > 0 && value < threshold ? "<" : ""
   if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
-  if (code === "EURC") return `€ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "XLM") {
     const xlmDecimals = 7
     const xlmThreshold = Math.pow(10, -xlmDecimals)

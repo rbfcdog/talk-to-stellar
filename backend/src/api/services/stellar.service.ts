@@ -165,10 +165,6 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extra
     if (destCode === 'BRL' && !getAssetIssuer('BRL')) {
         hints.push('BRL issuer não configurado no backend (use BRL_ISSUER_PUBLIC para PUBLIC ou BRL_ISSUER_TESTNET para TESTNET)');
     }
-    if ((sourceCode === 'EURC' || destCode === 'EURC') && network === 'TESTNET') {
-        hints.push('EURC na TESTNET está sem liquidez suficiente agora. Rode o setup de liquidez EURC e valide novamente.');
-    }
-
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');
     hints.push('Confirme trustline do ativo de destino na wallet');
     if (!(sourceCode === 'BRL' || destCode === 'BRL')) {
@@ -721,7 +717,7 @@ export class StellarService {
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL/EURC).`);
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL).`);
         }
 
         let bestPath = trustedPaths[0];
@@ -798,7 +794,7 @@ export class StellarService {
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL/EURC).`);
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL).`);
         }
 
         let bestPath = trustedPaths[0];

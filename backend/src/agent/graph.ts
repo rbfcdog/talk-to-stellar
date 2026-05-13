@@ -359,9 +359,7 @@ export class AgentGraph {
     const hinted = String(hintedAsset || '').trim().toUpperCase();
     const normalizedAsset = hinted === 'USD'
       ? 'USDC'
-      : hinted === 'EUR'
-        ? 'EURC'
-        : (hinted || undefined);
+      : (hinted || undefined);
     const normalizedAmount = amountText.replace(',', '.');
     const cleanedAmount = Number.isFinite(Number(normalizedAmount)) ? normalizedAmount : amountText;
 
@@ -478,15 +476,12 @@ export class AgentGraph {
     if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
     if (/\b(xlm|lumen|lumens)\b/.test(normalized)) assetCode = 'XLM';
     if (/\b(usd|usdc|dolar|dolares|dollar|dollars)\b/.test(normalized)) assetCode = 'USDC';
-    if (/\b(eur|eurc|euro|euros)\b/.test(normalized)) assetCode = 'EURC';
-
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?|eur|eurc|euro|euros)/);
+    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       if (receive === 'brl' || receive === 'real' || receive === 'reais') receiveAssetCode = 'BRL';
       else if (receive === 'xlm' || receive.startsWith('lumen')) receiveAssetCode = 'XLM';
-      else if (receive === 'eur' || receive === 'eurc' || receive === 'euro' || receive === 'euros') receiveAssetCode = 'EURC';
       else receiveAssetCode = 'USDC';
     }
 
@@ -603,8 +598,8 @@ ${onboardingUrl}`;
   private buildPayAnyoneUrl(input: { amount?: string; assetCode?: string; receiveAssetCode?: string; recipientName?: string; expiresAt?: Date | null }): string {
     const params = new URLSearchParams();
     const amount = String(input.amount || '').trim();
-    const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
-    const receiveAssetCode = String(input.receiveAssetCode || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+    const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const receiveAssetCode = String(input.receiveAssetCode || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
     const recipientName = String(input.recipientName || '').trim();
     const expiresAt = input.expiresAt instanceof Date && Number.isFinite(input.expiresAt.getTime())
       ? input.expiresAt
@@ -637,8 +632,8 @@ ${onboardingUrl}`;
         llmParsed.asset_code
       );
       const amount = String(amountInfo.amount || '').trim();
-      const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
-      const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+      const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
       const recipientName = String(llmParsed.recipient_query || '').trim();
       const expiresAt = this.parsePaymentLinkExpiryFromText(state.current_input);
       const numericAmount = Number(amount.replace(',', '.'));
@@ -777,7 +772,6 @@ ${onboardingUrl}`;
     const upper = String(assetCode || '').toUpperCase();
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
-    if (upper === 'EURC' || upper === 'EUR') return `€ ${n.toFixed(2)}`;
     if (upper === 'XLM') return 'saldo da carteira TalkToStellar';
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
   }
@@ -803,8 +797,8 @@ ${onboardingUrl}`;
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem chave pública.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo que o usuário quer gastar/enviar (USDC, BRL, EURC ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser EUR/Euro, normalize para EURC.',
-        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/EURC/XLM". Isso também vale para links de pagamento.',
+        '- asset_code deve ser o ativo que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
+        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM". Isso também vale para links de pagamento.',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
         '- needs_clarification deve ser true somente se o destinatário ou o valor estiverem ambíguos.',
@@ -862,12 +856,11 @@ ${onboardingUrl}`;
       llmParsed.asset_code
     );
     const amount = String(amountInfo.amount || '').trim();
-    const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+    const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode)
       .trim()
       .toUpperCase()
-      .replace(/^USD$/, 'USDC')
-      .replace(/^EUR$/, 'EURC');
+      .replace(/^USD$/, 'USDC');
 
     if (llmParsed.is_payment_link) {
       return await this.handlePayAnyoneLinkRequest(state);
@@ -1003,9 +996,9 @@ ${onboardingUrl}`;
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
-        '- sourceAssetCode deve ser o ativo de origem (XLM, USDC, BRL, EURC ou outro ativo explícito).',
+        '- sourceAssetCode deve ser o ativo de origem (XLM, USDC, BRL ou outro ativo explícito).',
         '- destAssetCode deve ser o ativo de destino.',
-        '- Se o usuário usar USD, normalize para USDC. Se usar EUR/Euro, normalize para EURC.',
+        '- Se o usuário usar USD, normalize para USDC.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
         '',
@@ -1029,12 +1022,10 @@ ${onboardingUrl}`;
         sourceAmount: parsed.sourceAmount || parsed.amount,
         sourceAssetCode: String(parsed.sourceAssetCode || parsed.source_asset_code || parsed.asset_code || parsed.asset || '')
           .toUpperCase()
-          .replace(/^USD$/, 'USDC')
-          .replace(/^EUR$/, 'EURC') || undefined,
+          .replace(/^USD$/, 'USDC') || undefined,
         destAssetCode: String(parsed.destAssetCode || parsed.dest_asset_code || parsed.to_asset_code || parsed.destination_asset || '')
           .toUpperCase()
-          .replace(/^USD$/, 'USDC')
-          .replace(/^EUR$/, 'EURC') || undefined,
+          .replace(/^USD$/, 'USDC') || undefined,
         needs_clarification: Boolean(parsed.needs_clarification),
         clarification_question: parsed.clarification_question || '',
       };
@@ -2027,7 +2018,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     ) return false;
     if (/\b(mandar|enviar|pagar|transferir|converter|criar|gerar|receber)\b/.test(normalized)) return false;
     if (/\b\d+(?:[.,]\d+)?\b/.test(normalized)) return false;
-    if (/\b(usdc?|usd|dolar|dolares|brl|real|reais|eurc?|euro|euros|xlm)\b/.test(normalized)) return false;
+    if (/\b(usdc?|usd|dolar|dolares|brl|real|reais|xlm)\b/.test(normalized)) return false;
     if (normalized.includes('link')) return false;
     return normalized.length >= 3 && normalized.length <= 60;
   }
@@ -2328,8 +2319,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
-      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
-      const finalDestAssetCode = String(llmParsed.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const finalDestAssetCode = String(llmParsed.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
 
       if (!finalSourceAmount || !finalSourceAssetCode || !finalDestAssetCode) {
         state.success = false;

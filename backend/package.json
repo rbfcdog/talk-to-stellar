@@ -19,8 +19,6 @@
     "seed:users": "ts-node scripts/seed-users.ts --count",
     "stellar:first-tx": "ts-node scripts/first-testnet-transaction.ts",
     "stellar:setup-brl-liquidity": "ts-node scripts/setup-testnet-brl-liquidity.ts",
-    "stellar:setup-eurc-liquidity": "ts-node scripts/setup-testnet-eurc-liquidity.ts",
-    "stellar:validate-eurc-liquidity": "ts-node scripts/validate-testnet-eurc-liquidity.ts",
     "stellar:rebalance-brl-market": "ts-node scripts/rebalance-testnet-brl-market.ts",
     "stellar:rebalance-brl-market:watch": "ts-node scripts/rebalance-testnet-brl-market.ts --watch",
     "stellar:setup-xlm-usdc-liquidity": "ts-node scripts/setup-xlm-usdc-liquidity.ts",

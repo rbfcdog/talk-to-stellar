@@ -1,17 +1,12 @@
 import { StellarService } from './stellar.service';
 import { logger } from '../../utils/logger';
-import { getAssetIssuer, getDefaultTrustedAssets } from '../../config/assets';
+import { getDefaultTrustedAssets } from '../../config/assets';
 
 export class TrustlineService {
   private static issuerReachabilityCache = new Map<string, boolean>();
 
   private static getDefaultTrustlineAssets(): Array<{ code: string; issuer: string }> {
-    const assets = getDefaultTrustedAssets();
-    const eurcIssuer = String(getAssetIssuer('EURC') || '').trim();
-    if (eurcIssuer && !assets.some((asset) => asset.code === 'EURC' && asset.issuer === eurcIssuer)) {
-      assets.push({ code: 'EURC', issuer: eurcIssuer });
-    }
-    return assets;
+    return getDefaultTrustedAssets();
   }
 
   private static async isIssuerReachable(issuer: string): Promise<boolean> {

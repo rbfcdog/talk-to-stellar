@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.global_profiles (
   avatar_url TEXT,
   bio TEXT,
   default_currency TEXT DEFAULT 'USD',
-  accepted_currencies TEXT[] DEFAULT '{USD,BRL,EUR}',
+  accepted_currencies TEXT[] DEFAULT '{USD,BRL}',
   is_public BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
