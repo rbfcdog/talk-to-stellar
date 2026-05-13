@@ -517,10 +517,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">PIN</p>
                 <p className="mt-2 text-sm text-slate-200">Caminho mais rápido para entrar e continuar.</p>
               </div>
+              {/* Passkey UI temporarily hidden on desktop while mobile handoff is disabled.
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Passkey</p>
                 <p className="mt-2 text-sm text-slate-200">Biometria para entrar com menos atrito quando disponível.</p>
               </div>
+              */}
             </div>
           </section>
 
@@ -570,6 +572,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               </button>
             </form>
 
+            {/* Passkey UI temporarily hidden on desktop while mobile handoff is disabled.
             <button
               type="button"
               onClick={handlePasskeyLogin}
@@ -593,6 +596,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 {qrTargetUrl && <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>}
               </div>
             )}
+            */}
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
               Depois de entrar, use: "saldo" para conferir conta, "contatos" para revisar destinatários e "enviar 10 dólares para [nome]" para iniciar pagamento.
