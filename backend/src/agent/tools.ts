@@ -44,12 +44,35 @@ function normalizeAssetInput(code: any, issuer: any) {
   return resolveConfiguredAsset(code || 'XLM', issuer);
 }
 
-function formatQuotePath(path: Array<{ code?: string; type?: string }>): string {
-  if (!Array.isArray(path) || path.length === 0) {
+function formatRouteChain(input: {
+  sourceAssetCode?: string;
+  destinationAssetCode?: string;
+  path?: Array<{ code?: string; asset_code?: string; type?: string; asset_type?: string }>;
+}): string {
+  const sourceCode = String(input.sourceAssetCode || '').trim().toUpperCase();
+  const destinationCode = String(input.destinationAssetCode || '').trim().toUpperCase();
+  const hops = Array.isArray(input.path)
+    ? input.path
+        .map((item) => String(item?.code || item?.asset_code || '').trim().toUpperCase())
+        .filter(Boolean)
+    : [];
+
+  const route = [sourceCode, ...hops, destinationCode].filter(Boolean);
+  const compact = route.filter((asset, index) => index === 0 || asset !== route[index - 1]);
+  return compact.join(' -> ');
+}
+
+function formatQuotePath(path: Array<{ code?: string; type?: string }>, sourceAssetCode?: string, destinationAssetCode?: string): string {
+  if (!Array.isArray(path) || path.length === 0 || !sourceAssetCode || !destinationAssetCode) {
     return 'rota direta';
   }
 
-  return `rota otimizada em ${path.length + 1} etapas`;
+  const route = formatRouteChain({
+    sourceAssetCode,
+    destinationAssetCode,
+    path,
+  });
+  return route || `rota otimizada em ${path.length + 1} etapas`;
 }
 
 function formatNoPathFallbackMessage(errorMessage: string): string {
@@ -376,6 +399,48 @@ export const toolDefinitions = [
         },
       },
       required: ["source_public_key", "destination", "dest_amount", "dest_asset_code", "source_asset_code"],
+    },
+  },
+  {
+    name: "get_best_route",
+    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real na Stellar. Retorna a rota escolhida, taxa estimada, critério de otimização e validade da cotação.",
+    parameters: {
+      type: "object",
+      properties: {
+        source_public_key: {
+          type: "string",
+          description: "Chave pública da carteira de origem.",
+        },
+        destination: {
+          type: "string",
+          description: "Chave pública de destino. Para conversão interna, use a mesma chave da origem.",
+        },
+        source_amount: {
+          type: "string",
+          description: "Quanto gastar da moeda de origem (strict-send).",
+        },
+        dest_amount: {
+          type: "string",
+          description: "Quanto o destino deve receber (strict-receive).",
+        },
+        source_asset_code: {
+          type: "string",
+          description: "Moeda de origem (BRL, USDC, EURC, XLM).",
+        },
+        source_asset_issuer: {
+          type: "string",
+          description: "Issuer da moeda de origem quando não for XLM.",
+        },
+        dest_asset_code: {
+          type: "string",
+          description: "Moeda de destino (BRL, USDC, EURC, XLM).",
+        },
+        dest_asset_issuer: {
+          type: "string",
+          description: "Issuer da moeda de destino quando não for XLM.",
+        },
+      },
+      required: ["source_public_key", "destination", "source_asset_code", "dest_asset_code"],
     },
   },
   {
@@ -885,6 +950,8 @@ export async function executeTool(
         return await executeBuildPayment(toolInput);
       case "quote_asset_transfer":
         return await executeQuoteAssetTransfer(toolInput);
+      case "get_best_route":
+        return await executeGetBestRoute(toolInput);
       case "convert_assets":
         return await executeConvertAssets(toolInput);
       case "ensure_trustline":
@@ -984,6 +1051,12 @@ function executeGetIntentHelp(): string {
       examples: ["cotação do dólar agora"],
     },
     {
+      command: "melhor rota",
+      intent: "best_route",
+      description: "Mostra automaticamente a melhor rota para enviar ou converter com menor custo efetivo.",
+      examples: ["qual a melhor rota pra enviar 300 reais em euro?"],
+    },
+    {
       command: "histórico",
       intent: "history",
       description: "Mostra pagamentos e operações recentes.",
@@ -1024,9 +1097,10 @@ function executeGetIntentHelp(): string {
       "2) contatos: listar ou salvar destinatários.",
       "3) enviar: fazer pagamento com confirmação segura.",
       "4) converter: trocar R$, US$ e € com cotação atual.",
-      "5) histórico: revisar operações recentes.",
-      "6) link de pagamento: gerar link para cobrar/receber.",
-      "7) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
+      "5) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
+      "6) histórico: revisar operações recentes.",
+      "7) link de pagamento: gerar link para cobrar/receber.",
+      "8) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
       "",
       "Comandos disponíveis:",
       ...commands.map((item, index) =>
@@ -1430,7 +1504,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         (sourceAmount
           ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
           : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
-        `Rota usada: ${formatQuotePath(quote.path)}. ` +
+        `Rota usada: ${formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
         `Taxa estimada total: ${unifiedFee.display}. ` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
@@ -1439,6 +1513,108 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
     return JSON.stringify({
       success: false,
       error: errorMessage,
+    });
+  }
+}
+
+async function executeGetBestRoute(input: any): Promise<string> {
+  try {
+    const sourceAmount = String(input.source_amount || input.sourceAmount || '').trim();
+    const destinationAmount = String(input.dest_amount || input.destAmount || '').trim();
+    if (!sourceAmount && !destinationAmount) {
+      return JSON.stringify({
+        success: false,
+        error: "Informe source_amount (quanto gastar) ou dest_amount (quanto receber) para calcular a melhor rota.",
+      });
+    }
+
+    const sourceAsset = normalizeAssetInput(
+      input.source_asset_code || input.sourceAssetCode,
+      input.source_asset_issuer || input.sourceAssetIssuer
+    );
+    const destinationAsset = normalizeAssetInput(
+      input.dest_asset_code || input.destAssetCode,
+      input.dest_asset_issuer || input.destAssetIssuer
+    );
+
+    const quoteInputBase = {
+      sourcePublicKey: String(input.source_public_key || input.sourcePublicKey || '').trim(),
+      destination: String(input.destination || '').trim(),
+      sourceAsset,
+      destAsset: destinationAsset,
+    };
+
+    const usesStrictSend = Boolean(sourceAmount);
+    const quote = usesStrictSend
+      ? await ApiStellarService.quoteStrictSendConversion({
+          ...quoteInputBase,
+          sourceAmount,
+        })
+      : await ApiStellarService.quotePathPayment({
+          ...quoteInputBase,
+          destAmount: destinationAmount,
+        });
+
+    const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee: feeDisplay,
+      platformFeeAmount: quote.platformFee?.feeAmount || null,
+      platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
+      sourceAssetCode: quote.sourceAsset?.code,
+      destinationAssetCode: quote.destinationAsset?.code,
+    });
+    const expiringQuote = attachQuoteExpiry({
+      ...quote,
+      fee_display: unifiedFee.display,
+      fee_usdc: unifiedFee.fee_usdc,
+      fee_brl: unifiedFee.fee_brl,
+    });
+
+    const routeChain = formatRouteChain({
+      sourceAssetCode: quote.sourceAsset?.code,
+      destinationAssetCode: quote.destinationAsset?.code,
+      path: quote.path,
+    });
+    const criteria = usesStrictSend
+      ? "maximizar recebimento no destino para o valor de envio informado"
+      : "minimizar gasto na origem para o valor de recebimento informado";
+
+    return JSON.stringify({
+      success: true,
+      mode: usesStrictSend ? "strict_send" : "strict_receive",
+      optimization_criteria: criteria,
+      route: {
+        path_hops: quote.path || [],
+        chain: routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code),
+        hops_count: Array.isArray(quote.path) ? quote.path.length : 0,
+      },
+      source: {
+        amount: quote.sourceAmount,
+        asset_code: quote.sourceAsset?.code,
+        asset_issuer: quote.sourceAsset?.issuer || null,
+      },
+      destination: {
+        amount: quote.destinationAmount,
+        asset_code: quote.destinationAsset?.code,
+        asset_issuer: quote.destinationAsset?.issuer || null,
+      },
+      estimated_fee_display: unifiedFee.display,
+      estimated_fee_usdc: unifiedFee.fee_usdc || null,
+      estimated_fee_brl: unifiedFee.fee_brl || null,
+      quote: expiringQuote,
+      quote_expires_at: expiringQuote.quote_expires_at,
+      quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
+      message:
+        `Melhor rota agora: ${routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
+        `Critério: ${criteria}. ` +
+        `Taxa estimada total: ${unifiedFee.display}. ` +
+        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: formatNoPathFallbackMessage(errorMessage),
     });
   }
 }
