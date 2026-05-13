@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
+import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
@@ -231,6 +232,24 @@ function getProviderLabel(provider?: string) {
   return normalized ? normalized : ""
 }
 
+function getPasskeyErrorMessage(error: any): string {
+  const name = String(error?.name || "")
+  const message = String(error?.message || error || "")
+  const normalized = message.toLowerCase()
+
+  if (name === "NotAllowedError") {
+    return "A biometria foi cancelada ou expirou. Tente novamente."
+  }
+  if (name === "SecurityError" || normalized.includes("rp id")) {
+    return "A Passkey precisa abrir no domínio correto e com HTTPS."
+  }
+  if (normalized.includes("registrationrequired")) {
+    return "Nenhuma Passkey registrada para esta conta."
+  }
+
+  return message || "Não foi possível confirmar com biometria."
+}
+
 export default function ConfirmPaymentClient({
   initialToken = '',
   initialValidation = null,
@@ -248,6 +267,9 @@ export default function ConfirmPaymentClient({
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
+  const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "starting" | "authenticating" | "submitting" | "error">("idle")
+  const [passkeyError, setPasskeyError] = useState("")
+  const [mobileSyncStatus, setMobileSyncStatus] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
 
@@ -274,6 +296,15 @@ export default function ConfirmPaymentClient({
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         if (!response.ok || !payload?.valid) {
+          if (payload?.used) {
+            setResult({
+              success: true,
+              message: "Pagamento já confirmado neste link.",
+            })
+            setStatus("done")
+            submitLockRef.current = true
+            return
+          }
           setValidation({
             success: false,
             valid: false,
@@ -290,6 +321,51 @@ export default function ConfirmPaymentClient({
 
     validateToken()
   }, [token])
+
+  useEffect(() => {
+    if (!token || status === "done") return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`, {
+          cache: "no-store",
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+
+        if (response.status === 409 && payload?.processing) {
+          setMobileSyncStatus("Confirmação em andamento no celular...")
+          return
+        }
+
+        if (response.status === 409 && payload?.used) {
+          submitLockRef.current = true
+          setResult((prev) => prev || {
+            success: true,
+            message: "Pagamento confirmado pelo celular.",
+          })
+          setStatus("done")
+          setMobileSyncStatus("")
+          enqueueWebChatFeedback("Pagamento confirmado pelo celular.")
+          return
+        }
+
+        if (response.ok) {
+          setMobileSyncStatus("")
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    const timer = window.setInterval(poll, 2500)
+    void poll()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [token, status])
 
   useEffect(() => {
     if (status !== "done") return
@@ -354,6 +430,75 @@ export default function ConfirmPaymentClient({
     }
   }
 
+  async function handlePasskeyConfirm() {
+    if (!token.trim() || validation?.valid === false || submitLockRef.current || status === "done") return
+    if (!window.PublicKeyCredential) {
+      setPasskeyStatus("error")
+      setPasskeyError("Este navegador não suporta Passkey/WebAuthn.")
+      return
+    }
+
+    setPasskeyError("")
+    setPasskeyStatus("starting")
+    setStatus("submitting")
+    setResult(null)
+    submitLockRef.current = true
+
+    try {
+      const initResponse = await idempotentFetch("/api/passkeys/auth-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          public_key: publicKey || publicKeyFromUrl || undefined,
+        }),
+      })
+      const initPayload = await initResponse.json().catch(() => ({}))
+      if (!initResponse.ok || !initPayload?.success) {
+        throw new Error(initPayload?.message || "Não foi possível iniciar biometria.")
+      }
+      if (initPayload?.registrationRequired) {
+        throw new Error("registrationRequired")
+      }
+
+      setPasskeyStatus("authenticating")
+      const credential = await startAuthentication({ optionsJSON: initPayload.options })
+
+      setPasskeyStatus("submitting")
+      const response = await idempotentFetch(`/api/external/finalize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          public_key: publicKey || publicKeyFromUrl || undefined,
+          passkey_challenge_id: initPayload.challengeId,
+          passkey_credential: credential,
+        }),
+      })
+
+      const payload = (await response.json()) as ConfirmResponse
+      setResult(payload)
+      setStatus(response.ok && payload?.success ? "done" : "error")
+
+      if (response.ok && payload?.success) {
+        setPasskeyStatus("idle")
+      } else {
+        submitLockRef.current = false
+        setPasskeyStatus("error")
+        setPasskeyError(payload?.message || payload?.error || "Falha ao confirmar com biometria.")
+      }
+    } catch (error: any) {
+      submitLockRef.current = false
+      setStatus("error")
+      setPasskeyStatus("error")
+      setPasskeyError(getPasskeyErrorMessage(error))
+      setResult({
+        success: false,
+        error: getPasskeyErrorMessage(error),
+      })
+    }
+  }
+
   const payload = validation?.payload || decodeJwtPayload(token)
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
@@ -396,6 +541,19 @@ export default function ConfirmPaymentClient({
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const isExpiredLink = Boolean(validation?.valid === false && (validation as any)?.expired)
+  const mobileRedirectUrl = useMemo(() => {
+    if (!token || typeof window === "undefined") return ""
+    const url = new URL(`${window.location.origin}/confirm-payment`)
+    url.searchParams.set("token", token)
+    const destinationKey = String(publicKey || publicKeyFromUrl || "").trim()
+    if (destinationKey) url.searchParams.set("public_key", destinationKey)
+    url.searchParams.set("auth", "passkey")
+    return url.toString()
+  }, [token, publicKey, publicKeyFromUrl])
+  const qrImageUrl = useMemo(() => {
+    if (!mobileRedirectUrl) return ""
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileRedirectUrl)}`
+  }, [mobileRedirectUrl])
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -454,6 +612,11 @@ export default function ConfirmPaymentClient({
                 </p>
               </div>
             </div>
+            {mobileSyncStatus && (
+              <p className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
+                {mobileSyncStatus}
+              </p>
+            )}
           </section>
 
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
@@ -496,7 +659,36 @@ export default function ConfirmPaymentClient({
               >
                 {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando pagamento...</span> : "Confirmar pagamento"}
               </button>
+              <button
+                type="button"
+                onClick={handlePasskeyConfirm}
+                disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
+                  ? "Autenticando com biometria..."
+                  : "Confirmar com biometria (Passkey)"}
+              </button>
+              {passkeyError && (
+                <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                  {passkeyError}
+                </p>
+              )}
             </form>
+
+            {qrImageUrl && status !== "done" && (
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+                <p className="font-medium text-white">Confirmar pelo celular com biometria</p>
+                <p className="mt-1 text-slate-300">Escaneie o QR com seu celular para abrir esta confirmação e autorizar com Face ID/Touch ID.</p>
+                <div className="mt-3 flex justify-center">
+                  <img
+                    src={qrImageUrl}
+                    alt="QR Code para confirmar pagamento no celular"
+                    className="h-52 w-52 rounded-xl border border-white/10 bg-white p-2"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Resultado</p>
