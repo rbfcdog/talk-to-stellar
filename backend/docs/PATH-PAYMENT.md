@@ -26,10 +26,10 @@ O projeto já possui a base técnica de conversão on-chain via XLM e path payme
 ## Casos de Uso
 
 ### Cenário Típico
-- **Você tem:** 200 EUR
+- **Você tem:** R$ 500
 - **Quer enviar:** Exatamente 100 USDC para alguém
-- **O sistema faz:** Encontra o melhor caminho EUR → XLM → USDC
-- **Resultado:** Destinatário recebe exatos 100 USDC, você paga o mínimo necessário em EUR
+- **O sistema faz:** Encontra o melhor caminho BRL → XLM → USDC
+- **Resultado:** Destinatário recebe exatos 100 USDC, você paga o mínimo necessário em BRL
 
 ### Vantagens
 - ✅ **Precisão:** Destinatário recebe valor exato
@@ -60,7 +60,7 @@ Content-Type: application/json
   },
   "destAmount": "100.00",
   "sourceAsset": {
-    "code": "EUR",
+    "code": "BRL",
     "issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
   }
 }
@@ -97,7 +97,7 @@ Content-Type: application/json
   },
   "destAmount": "100.00",
   "sourceAsset": {
-    "code": "EUR",
+    "code": "BRL",
     "issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
   },
   "secretKey": "SAMPLEKEY123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"

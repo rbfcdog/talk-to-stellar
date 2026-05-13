@@ -7,7 +7,7 @@ dotenv.config();
 
 async function main(): Promise<void> {
   console.log('='.repeat(84));
-  console.log('Backfill trustlines for ALL existing wallets (USDC, BRL, EURC)');
+  console.log('Backfill trustlines for ALL existing wallets (USDC, BRL)');
   console.log('='.repeat(84));
 
   const vaultService = new VaultService(supabase);
@@ -92,4 +92,3 @@ main().catch((error) => {
   console.error(`Script failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });
-

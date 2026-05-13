@@ -2,9 +2,7 @@ import {
   getAssetIssuer,
   normalizeAssetCode,
   PUBLIC_BRL_ISSUER_NTOKENS,
-  PUBLIC_EURC_ISSUER,
   PUBLIC_USDC_ISSUER,
-  TESTNET_EURC_ISSUER,
   TESTNET_USDC_ISSUER,
 } from '../src/config/assets';
 
@@ -48,12 +46,7 @@ describe('asset config', () => {
     expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
   });
 
-  it('uses Circle EURC fallback issuer by network when env is not set', () => {
-    delete process.env.EURC_ISSUER;
-    delete process.env.EUR_ISSUER;
-    process.env.STELLAR_NETWORK = 'TESTNET';
-    expect(getAssetIssuer('EURC')).toBe(TESTNET_EURC_ISSUER);
-    process.env.STELLAR_NETWORK = 'PUBLIC';
-    expect(getAssetIssuer('EURC')).toBe(PUBLIC_EURC_ISSUER);
+  it('keeps unknown asset aliases unchanged', () => {
+    expect(normalizeAssetCode('foo')).toBe('FOO');
   });
 });

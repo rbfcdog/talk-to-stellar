@@ -1,4 +1,4 @@
-export type AssetCode = 'XLM' | 'USDC' | 'BRL' | 'EURC' | string;
+export type AssetCode = 'XLM' | 'USDC' | 'BRL' | string;
 
 export interface AssetConfig {
   code: AssetCode;
@@ -8,8 +8,6 @@ export interface AssetConfig {
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
-export const PUBLIC_EURC_ISSUER = 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2';
-export const TESTNET_EURC_ISSUER = 'GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO';
 
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
@@ -21,7 +19,6 @@ export function normalizeAssetCode(value: unknown): string {
   const code = String(value || 'XLM').trim().toUpperCase();
   if (!code || code === 'NATIVE') return 'XLM';
   if (code === 'USD') return 'USDC';
-  if (code === 'EUR') return 'EURC';
   return code;
 }
 
@@ -44,13 +41,6 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
     return configuredTestnet || undefined;
   }
-  if (code === 'EURC') {
-    const configured =
-      String(process.env.EURC_ISSUER || '').trim() ||
-      String(process.env.EUR_ISSUER || '').trim();
-    if (configured) return configured;
-    return network === 'PUBLIC' ? PUBLIC_EURC_ISSUER : TESTNET_EURC_ISSUER;
-  }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
 
@@ -71,8 +61,7 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
   const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const includeEurc = String(process.env.ENABLE_EURC_ASSET || 'true').trim().toLowerCase() === 'true';
-  const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeEurc ? ['EURC'] : [])];
+  const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : [])];
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
@@ -80,6 +69,5 @@ export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string 
 
 export function getTrustedPathAssetCodes(): string[] {
   const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const includeEurc = String(process.env.ENABLE_EURC_ASSET || 'true').trim().toLowerCase() === 'true';
-  return ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeEurc ? ['EURC'] : [])];
+  return ['USDC', ...(includeBrl ? ['BRL'] : [])];
 }

@@ -86,14 +86,13 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
 }
 
 export function formatCustomerAssetAmount(amount?: string, assetCode?: string): string {
-  const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+  const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const value = Number(String(amount || '').replace(',', '.'));
 
   if (!Number.isFinite(value)) return 'valor indisponivel';
   const truncated = Math.trunc(value * 100) / 100;
   if (code === 'BRL') return `R$ ${truncated.toFixed(2)}`;
   if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;
-  if (code === 'EURC') return `€ ${truncated.toFixed(2)}`;
   if (code === 'XLM') return 'saldo da carteira TalkToStellar';
 
   return `${truncated.toFixed(2)} ${code}`;
@@ -106,8 +105,8 @@ export function buildUnifiedFeeDisplay(input: {
   sourceAssetCode?: string | null;
   destinationAssetCode?: string | null;
 }): FeeDisplay & { platform_applied: boolean } {
-  const source = String(input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
-  const destination = String(input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+  const source = String(input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const destination = String(input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const isUsdcBrlPair = (source === 'USDC' && destination === 'BRL') || (source === 'BRL' && destination === 'USDC');
 
   const networkUsdc = Number(String(input.networkFee?.fee_usdc || '').replace(',', '.'));
@@ -116,7 +115,7 @@ export function buildUnifiedFeeDisplay(input: {
   let totalBrl = Number.isFinite(networkBrl) ? networkBrl : 0;
 
   const platformAmount = Number(String(input.platformFeeAmount || '').replace(',', '.'));
-  const platformAsset = String(input.platformFeeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+  const platformAsset = String(input.platformFeeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAsset === 'BRL');
 
   const impliedRate = totalUsdc > 0 && totalBrl > 0 ? totalBrl / totalUsdc : undefined;

@@ -115,7 +115,7 @@ function getSpendableAssetBalance(account: any, asset: { code: string; issuer?: 
 }
 
 function getTrustedSpendableAssets(account: any, destinationAsset: { code: string; issuer?: string }): Array<{ code: string; issuer?: string }> {
-  const trustedOrder = ['USDC', 'EURC', 'BRL', 'XLM'];
+  const trustedOrder = ['USDC', 'BRL', 'XLM'];
   const byKey = new Map<string, { code: string; issuer?: string; balance: number }>();
 
   for (const balance of account?.balances || []) {

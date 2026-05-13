@@ -15,14 +15,13 @@ function trimFixed(value: number, decimals: number): string {
 }
 
 function normalizeAssetCode(value: unknown): string {
-  return String(value || '').trim().toUpperCase().replace(/^USD$/, 'USDC').replace(/^EUR$/, 'EURC');
+  return String(value || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
 }
 
 function displaySymbol(assetCode: string): string {
   const code = normalizeAssetCode(assetCode);
   if (code === 'USDC') return 'US$';
   if (code === 'BRL') return 'R$';
-  if (code === 'EURC') return '€';
   return code;
 }
 

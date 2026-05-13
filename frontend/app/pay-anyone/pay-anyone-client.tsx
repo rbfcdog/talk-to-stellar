@@ -18,14 +18,13 @@ type CreatePayLinkResponse = {
 type LinkMode = "send" | "receive"
 
 function normalizeAssetCode(value: string) {
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
 function displayAsset(assetCode: string) {
   const code = normalizeAssetCode(assetCode)
   if (code === "USDC") return "US$"
   if (code === "BRL") return "R$"
-  if (code === "EURC") return "€"
   return code
 }
 
@@ -301,7 +300,6 @@ export default function PayAnyoneClient() {
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
                   <option value="USDC">US$</option>
-                  <option value="EURC">€</option>
                   <option value="XLM">XLM</option>
                   <option value="BRL">R$</option>
                 </select>
@@ -314,7 +312,6 @@ export default function PayAnyoneClient() {
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
                   <option value="USDC">US$</option>
-                  <option value="EURC">€</option>
                   <option value="BRL">R$</option>
                   <option value="XLM">XLM</option>
                 </select>
