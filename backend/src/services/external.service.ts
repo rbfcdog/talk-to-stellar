@@ -31,6 +31,14 @@ function shortCodeFromToken(token: string, purpose: string): string {
     .slice(0, 10);
 }
 
+function shortCodeFromSeed(seed: string, purpose: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${purpose}:${seed}`)
+    .digest('base64url')
+    .slice(0, 12);
+}
+
 function isLocalhostUrl(url: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(String(url || '').trim());
 }
@@ -249,6 +257,48 @@ export class ExternalService {
     }
   }
 
+  private async shortenArbitraryUrl(input: {
+    url: string;
+    purpose: string;
+    sessionId?: string | null;
+    userId?: string | null;
+    expiresAt?: string | Date | null;
+  }): Promise<string> {
+    const disabled = String(process.env.DISABLE_SHORT_LINKS || '').trim().toLowerCase();
+    if (disabled === 'true' || disabled === '1') return input.url;
+
+    const normalizedUrl = String(input.url || '').trim();
+    if (!normalizedUrl) return input.url;
+
+    const expiresAt = (normalizeExpiresAt(input.expiresAt) || new Date(Date.now() + 24 * 60 * 60 * 1000)).toISOString();
+    const code = shortCodeFromSeed(`${input.purpose}:${normalizedUrl}`, input.purpose);
+
+    try {
+      const { error } = await this.supabase
+        .from('short_links')
+        .upsert({
+          code,
+          url: normalizedUrl,
+          purpose: input.purpose,
+          token_hash: null,
+          session_id: input.sessionId || null,
+          user_id: input.userId || null,
+          expires_at: expiresAt,
+          created_at: new Date().toISOString(),
+        }, { onConflict: 'code' });
+
+      if (error) {
+        logger.warn(`[short-links] could not persist arbitrary short link: ${error.message}`);
+        return normalizedUrl;
+      }
+
+      return `${getPaymentConfirmBase()}/r/${encodeURIComponent(code)}`;
+    } catch (error) {
+      logger.warn(`[short-links] failed to create arbitrary short link: ${error instanceof Error ? error.message : String(error)}`);
+      return normalizedUrl;
+    }
+  }
+
   private async registerPaymentConfirmation(input: {
     token: string;
     sessionId?: string | null;
@@ -367,6 +417,63 @@ export class ExternalService {
     const url = urlObj.toString();
 
     return { token, url };
+  }
+
+  async createOnboardUrlWithShortLink(provider: string, providerUserId: string, extra = {}) {
+    const { token, url: longUrl } = this.createOnboardUrl(provider, providerUserId, extra);
+    const shortUrl = await this.shortenFrontendUrl({
+      token,
+      url: longUrl,
+      purpose: 'external_onboard',
+      expiresInHours: 24,
+    });
+    return { token, url: shortUrl, longUrl };
+  }
+
+  async createLogoutUrl(input: {
+    sessionId?: string;
+    provider?: string;
+    providerUserId?: string;
+    source?: string;
+    userId?: string;
+    expiresInHours?: number;
+  }): Promise<string> {
+    const url = new URL(`${getPaymentConfirmBase()}/logout`);
+    const sessionId = String(input.sessionId || '').trim();
+    const provider = String(input.provider || '').trim().toLowerCase();
+    const providerUserId = String(input.providerUserId || '').trim();
+    const source = String(input.source || provider || '').trim().toLowerCase();
+    const userId = String(input.userId || '').trim();
+    if (sessionId) url.searchParams.set('session_id', sessionId);
+    if (provider) url.searchParams.set('provider', provider);
+    if (providerUserId) url.searchParams.set('provider_user_id', providerUserId);
+    if (source) url.searchParams.set('source', source);
+
+    const expiresAt = new Date(Date.now() + Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000);
+    return await this.shortenArbitraryUrl({
+      url: url.toString(),
+      purpose: 'logout_confirm',
+      sessionId: sessionId || null,
+      userId: userId || null,
+      expiresAt,
+    });
+  }
+
+  async shortenPublicUrl(input: {
+    url: string;
+    purpose: string;
+    sessionId?: string;
+    userId?: string;
+    expiresInHours?: number;
+  }): Promise<string> {
+    const expiresAt = new Date(Date.now() + Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000);
+    return await this.shortenArbitraryUrl({
+      url: input.url,
+      purpose: input.purpose,
+      sessionId: input.sessionId || null,
+      userId: input.userId || null,
+      expiresAt,
+    });
   }
 
   // Create a one-time JWT + URL to confirm a payment from an external channel

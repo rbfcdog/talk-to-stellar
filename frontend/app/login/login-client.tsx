@@ -6,7 +6,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { KeyRound, LogIn, ShieldCheck } from "lucide-react"
+import { KeyRound, LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -49,6 +49,19 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
+function formatExternalIdentifier(provider: string, value: string): string {
+  const normalizedProvider = String(provider || "").trim().toLowerCase()
+  const raw = String(value || "").trim()
+  if (!raw) return "indisponível"
+  if (normalizedProvider === "whatsapp" || normalizedProvider === "phone") {
+    const digits = raw.replace(/\D+/g, "")
+    if (!digits) return raw
+    if (digits.length <= 4) return digits
+    return `+${digits.slice(0, Math.max(2, digits.length - 4))}****${digits.slice(-2)}`
+  }
+  return raw
+}
+
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const searchParams = useSearchParams()
   const rawNextPath = String(searchParams.get("next") || "").trim()
@@ -62,6 +75,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const hasExternalContext = Boolean(externalToken && externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
+  const externalIdentifierLabel = useMemo(
+    () => formatExternalIdentifier(externalProvider, externalProviderUserId),
+    [externalProvider, externalProviderUserId]
+  )
   const [email, setEmail] = useState("")
   const [pin, setPin] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
@@ -307,6 +324,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 Use seu PIN ou Passkey para voltar ao chat, confirmar pagamentos e receber links com segurança.
               </p>
+              {hasExternalContext && (
+                <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
+                  <p className="font-medium">Canal detectado: {externalProviderLabel}</p>
+                  <p className="mt-1 text-cyan-100/90">Identificador: {externalIdentifierLabel}</p>
+                </div>
+              )}
               {expired && (
                 <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
                   Sua sessão expirou. Entre novamente para continuar.
@@ -327,6 +350,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           </section>
 
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+            {hasExternalContext && (
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                {isTelegramContext ? <Send className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
+                Entrando via {externalProviderLabel}
+              </div>
+            )}
             <form className="space-y-4" onSubmit={handlePinLogin}>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">E-mail</span>

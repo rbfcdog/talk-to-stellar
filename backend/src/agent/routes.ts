@@ -287,7 +287,7 @@ export function createAgentRoutes(
           const existing = await externalService.checkExternalAccount("telegram", providerUserId);
 
           if (!existing) {
-            const { url } = externalService.createOnboardUrl("telegram", providerUserId);
+            const { url } = await externalService.createOnboardUrlWithShortLink("telegram", providerUserId);
             return res.status(200).json({
               session_id: session_id || null,
               success: true,
@@ -306,7 +306,7 @@ export function createAgentRoutes(
               if (externalSession) {
                 await repository.clearSession(String(existing.session_id));
               }
-              const { url } = externalService.createOnboardUrl("telegram", providerUserId);
+              const { url } = await externalService.createOnboardUrlWithShortLink("telegram", providerUserId);
               return res.status(200).json({
                 session_id: session_id || null,
                 success: true,
@@ -333,7 +333,7 @@ export function createAgentRoutes(
             if (requestedSessionData) {
               req.body.session_id = requestedSessionId;
             } else {
-            const { url } = externalService.createOnboardUrl("web", providerUserId);
+            const { url } = await externalService.createOnboardUrlWithShortLink("web", providerUserId);
             return res.status(200).json({
               session_id: session_id || null,
               success: true,
@@ -380,8 +380,8 @@ export function createAgentRoutes(
         const providerUserId = String(runtimeExternalContext.external_provider_user_id || '').trim();
         const fallbackProviderUserId = String(metadata?.browser_id || metadata?.provider_user_id || sessionId).trim();
         const { url } = provider && providerUserId
-          ? externalService.createOnboardUrl(provider, providerUserId)
-          : externalService.createOnboardUrl("web", fallbackProviderUserId);
+          ? await externalService.createOnboardUrlWithShortLink(provider, providerUserId)
+          : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId);
 
         return res.status(200).json({
           session_id: sessionId,

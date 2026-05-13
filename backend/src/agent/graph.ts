@@ -431,7 +431,7 @@ export class AgentGraph {
     };
   }
 
-  private getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): string {
+  private async getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): Promise<string> {
     const normalizedBase = resolveFrontendBase([
       process.env.FRONTEND_URL,
       process.env.PUBLIC_APP_URL,
@@ -444,14 +444,38 @@ export class AgentGraph {
 
     if (externalProvider && externalProviderUserId) {
       try {
-        onboardingUrl = this.externalService.createOnboardUrl(externalProvider, externalProviderUserId).url;
+        const onboard = await this.externalService.createOnboardUrlWithShortLink(externalProvider, externalProviderUserId);
+        onboardingUrl = onboard.url;
       } catch (error) {
         logger.warn(`[onboarding-url] failed to create external onboarding URL: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
+      try {
+        onboardingUrl = await this.externalService.shortenPublicUrl({
+          url: onboardingUrl,
+          purpose: 'onboarding_generic',
+          sessionId: String(state?.session_id || '').trim() || undefined,
+          userId: String(state?.session_data?.user_id || '').trim() || undefined,
+          expiresInHours: 24,
+        });
+      } catch (error) {
+        logger.warn(`[onboarding-url] failed to shorten generic onboarding URL: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
     if (preferLogin) {
-      const loginUrl = `${normalizedBase}/login`;
+      let loginUrl = `${normalizedBase}/login`;
+      try {
+        loginUrl = await this.externalService.shortenPublicUrl({
+          url: loginUrl,
+          purpose: 'login_entry',
+          sessionId: String(state?.session_id || '').trim() || undefined,
+          userId: String(state?.session_data?.user_id || '').trim() || undefined,
+          expiresInHours: 24,
+        });
+      } catch (error) {
+        logger.warn(`[login-url] failed to shorten login URL: ${error instanceof Error ? error.message : String(error)}`);
+      }
       return `Sua sessão não está ativa no momento.
 
 Abra este link para entrar na sua conta:
@@ -532,7 +556,7 @@ ${onboardingUrl}`;
   private async handlePayAnyoneLinkRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const deterministicParsed = this.extractPaymentLinkIntentFromText(state.current_input);
       const llmParsed = deterministicParsed.amount
@@ -580,7 +604,7 @@ ${onboardingUrl}`;
   private async handleReceiveLinkRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const displayName = String(state.session_data?.email || state.session_data?.user_id || '').trim();
       const resultRaw = await executeTool('get_or_create_global_profile', {
@@ -757,7 +781,7 @@ ${onboardingUrl}`;
   private async handlePaymentRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
       await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
@@ -1550,7 +1574,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
 
       // If no email/phone provided, ask for it
       if (!email && !phoneNumber) {
-        state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+        state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
         state.waiting_for_wallet_input = true;
         state.action_params = {
           ...state.action_params,
@@ -1666,22 +1690,37 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     );
   }
 
-  private getLogoutConfirmationMessage(state?: AgentState): string {
-    const normalizedBase = resolveFrontendBase([
-      process.env.FRONTEND_URL,
-      process.env.PUBLIC_APP_URL,
-      process.env.CREATE_ACCOUNT_BASE,
-      process.env.PAYMENT_CONFIRM_BASE,
-    ]);
-    const logoutUrl = new URL(`${normalizedBase}/logout`);
+  private async getLogoutConfirmationMessage(state?: AgentState): Promise<string> {
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
     const sessionId = String(state?.session_id || '').trim();
-    if (sessionId) logoutUrl.searchParams.set('session_id', sessionId);
-    if (externalProvider) logoutUrl.searchParams.set('provider', externalProvider);
-    if (externalProviderUserId) logoutUrl.searchParams.set('provider_user_id', externalProviderUserId);
-    if (externalProvider) logoutUrl.searchParams.set('source', externalProvider);
-    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl.toString()}`;
+    let logoutUrl = '';
+    try {
+      logoutUrl = await this.externalService.createLogoutUrl({
+        sessionId,
+        provider: externalProvider || undefined,
+        providerUserId: externalProviderUserId || undefined,
+        source: externalProvider || undefined,
+        userId: String(state?.session_data?.user_id || '').trim() || undefined,
+        expiresInHours: 24,
+      });
+    } catch (error) {
+      logger.warn(`[logout-url] failed to create short logout URL: ${error instanceof Error ? error.message : String(error)}`);
+      const normalizedBase = resolveFrontendBase([
+        process.env.FRONTEND_URL,
+        process.env.PUBLIC_APP_URL,
+        process.env.CREATE_ACCOUNT_BASE,
+        process.env.PAYMENT_CONFIRM_BASE,
+      ]);
+      const fallback = new URL(`${normalizedBase}/logout`);
+      if (sessionId) fallback.searchParams.set('session_id', sessionId);
+      if (externalProvider) fallback.searchParams.set('provider', externalProvider);
+      if (externalProviderUserId) fallback.searchParams.set('provider_user_id', externalProviderUserId);
+      if (externalProvider) fallback.searchParams.set('source', externalProvider);
+      logoutUrl = fallback.toString();
+    }
+
+    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl}`;
   }
 
   private async handleWalletLogout(state: AgentState): Promise<AgentState> {
@@ -1785,7 +1824,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
       const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_saldo_tecnico' : 'get_balance', {
@@ -1828,7 +1867,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleHistoryCheck(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const toolResultRaw = await executeTool('get_transaction_history', {
         public_key: state.session_data.public_key,
@@ -2184,7 +2223,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
-      state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
@@ -2379,7 +2418,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
         state.success = false;
-        state.response_message = this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+        state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
@@ -2387,7 +2426,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (!hasActiveWallet && state.action_type === ActionType.LOGIN_USER) {
         state.success = false;
-        state.response_message = this.getOnboardingOrLoginMessage(state, true);
+        state.response_message = await this.getOnboardingOrLoginMessage(state, true);
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
@@ -2395,7 +2434,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (!hasActiveWallet && state.action_type === ActionType.CREATE_ACCOUNT) {
         state.success = false;
-        state.response_message = this.getOnboardingOrLoginMessage(state, false);
+        state.response_message = await this.getOnboardingOrLoginMessage(state, false);
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
@@ -2452,7 +2491,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.LOGOUT_WALLET) {
         state.success = true;
-        state.response_message = this.getLogoutConfirmationMessage(state);
+        state.response_message = await this.getLogoutConfirmationMessage(state);
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
