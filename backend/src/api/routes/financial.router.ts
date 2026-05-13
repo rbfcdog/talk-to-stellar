@@ -15,5 +15,7 @@ router.get('/invoices/:session_id', FinancialController.listInvoices);
 router.post('/global-profile', FinancialController.getOrCreateGlobalProfile);
 router.get('/global-profile/:session_id', FinancialController.getOrCreateGlobalProfile);
 router.get('/u/:username', FinancialController.getPublicGlobalProfile);
+router.get('/transactions/:session_id', FinancialController.getTransactions);
+router.get('/wallet-profile/:public_key', FinancialController.getWalletProfile);
 
 export default router;

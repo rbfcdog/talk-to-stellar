@@ -35,6 +35,7 @@ export type PaymentReceiptInput = {
   settlementMs?: number | null;
   completedAt?: string | null;
   status?: string | null;
+  contextMessage?: string | null;
 };
 
 export class PaymentReceiptService {
@@ -185,6 +186,7 @@ export class PaymentReceiptService {
           sourceAmount: input.sourceAmount || null,
           sourceAssetCode: input.sourceAssetCode || null,
           feeDisplay: input.feeDisplay || null,
+          contextMessage: input.contextMessage || null,
           completedAt: input.completedAt || null,
         },
       });
@@ -235,6 +237,7 @@ export class PaymentReceiptService {
         hash: input.hash || null,
         quote: input.quote,
         savings: input.savings,
+        contextMessage: input.contextMessage || null,
       })
     );
   }
@@ -266,10 +269,12 @@ export class PaymentReceiptService {
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = String(input.status || 'Confirmado').trim();
     const nicknamePrompt = this.transactionNicknamePrompt(input.type);
+    const contextLine = this.contextLine(input.contextMessage);
 
     return [
       operationLine,
       `Status: ${status}`,
+      contextLine,
       quoteLine,
       feeLine,
       savingsLine,
@@ -281,6 +286,14 @@ export class PaymentReceiptService {
       'Recibo registrado no seu histórico.',
       nicknamePrompt,
     ].filter((line) => line !== '').join('\n');
+  }
+
+  private static contextLine(contextMessage?: string | null): string {
+    const raw = String(contextMessage || '').trim();
+    if (!raw) return '';
+    const sanitized = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!sanitized) return '';
+    return `Mensagem: ${sanitized}`;
   }
 
   private static savingsLine(savings?: PaymentReceiptInput['savings']): string {

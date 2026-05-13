@@ -281,6 +281,7 @@ export class ReceiptImageService {
     completedAt?: string | null;
     hash?: string | null;
     quote?: any;
+    contextMessage?: string | null;
   }): ReceiptImageInput {
     const opId = PaymentReceiptService.toPublicOperationId(input.hash);
     const quoteSource = String(input.quote?.sourceAmount || input.sourceAmount || '').trim();
@@ -290,11 +291,14 @@ export class ReceiptImageService {
     const estimatedSavings = Number(String(input.savings?.estimatedSavings || '').replace(',', '.'));
     const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
+    const contextMessage = String(input.contextMessage || '').replace(/\s+/g, ' ').trim();
+    const description = contextMessage ? fitText(contextMessage, 34) : 'Transferência internacional';
+
     return {
       amount: formatDisplayAmount(input.destinationAmount, 2),
       currency: displaySymbol(quoteDestAsset),
       recipientName: String(input.counterpartyLabel || 'Destinatário'),
-      description: 'Transferência internacional',
+      description,
       convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),
       convertedCurrency: displaySymbol(quoteSourceAsset || 'BRL'),
       feeLabel: sanitizeFeeLabel(input.feeDisplay),

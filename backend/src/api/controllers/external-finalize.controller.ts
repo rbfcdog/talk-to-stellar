@@ -404,6 +404,7 @@ async function sendTelegramPaymentNotification(input: {
   quote?: any;
   settlementMs?: number;
   savings?: any;
+  contextMessage?: string | null;
 }): Promise<string> {
   const destinationLabel = input.destinationName || input.destination;
   const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
@@ -431,6 +432,7 @@ async function sendTelegramPaymentNotification(input: {
       quote: input.quote,
       savings: input.savings,
       settlementMs: input.settlementMs,
+      contextMessage: input.contextMessage || null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1345,6 +1347,8 @@ export default class ExternalFinalizeController {
 
       if (tokenSub === 'external_payment_confirm') {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
+        const contextMessageRaw = String((payload as any)?.transaction_context_message || (payload as any)?.memo || '').trim();
+        const contextMessage = contextMessageRaw ? contextMessageRaw.slice(0, 120) : '';
         const assetCode = normalizeAssetCode((payload as any)?.asset_code || 'XLM');
         const assetIssuer = resolveAssetIssuer(assetCode, (payload as any)?.asset_issuer);
         const requestedSourceAmount = String((payload as any)?.source_amount || '').trim();
@@ -1736,6 +1740,7 @@ export default class ExternalFinalizeController {
                 sourceAmount: requestedSourceAmount,
                 sourceAsset: actualSourceAsset,
                 destAsset: { code: assetCode, issuer: assetIssuer },
+                memoText: contextMessage || `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
               })
             : isDirectPayment
             ? await StellarService.buildPaymentXdr({
@@ -1744,7 +1749,7 @@ export default class ExternalFinalizeController {
                 amount: String(amount),
                 assetCode: senderHasDestinationAsset ? assetCode : 'XLM',
                 assetIssuer: senderHasDestinationAsset ? assetIssuer : undefined,
-                memoText: `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
+                memoText: contextMessage || `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`,
               })
             : await StellarService.buildPathPaymentXdr({
                 sourcePublicKey: wallet.public_key,
@@ -1833,6 +1838,7 @@ export default class ExternalFinalizeController {
             destination_asset_issuer: selectedDestinationAssetIssuer,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
+            memo: contextMessage || null,
             quote,
           }
         );
@@ -1879,6 +1885,7 @@ export default class ExternalFinalizeController {
               destination_asset_issuer: selectedDestinationAssetIssuer,
               browser_id: browserId || null,
               public_key_from_body: publicKeyFromBody || null,
+              memo: contextMessage || null,
               quote,
               error: result.error || 'Could not submit payment',
             }
@@ -1914,6 +1921,7 @@ export default class ExternalFinalizeController {
               destination_asset_issuer: selectedDestinationAssetIssuer,
               browser_id: browserId || null,
               public_key_from_body: publicKeyFromBody || null,
+              memo: contextMessage || null,
               quote,
               error: result.error || 'Could not submit payment',
             }
@@ -2008,6 +2016,7 @@ export default class ExternalFinalizeController {
             savingsPercentage: economy.savings.savings_percentage,
             comparisonMethod: economy.savings.comparison_method,
           },
+          contextMessage: contextMessage || null,
 
         });
 
@@ -2066,6 +2075,7 @@ export default class ExternalFinalizeController {
             destination_asset_issuer: destinationIssuerForLog,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
+            memo: contextMessage || null,
             quote,
             transferDetails: publicTransferDetails,
             actual_fee_brl: economy.actual_fee_brl,
@@ -2093,6 +2103,7 @@ export default class ExternalFinalizeController {
             destination_asset_issuer: destinationIssuerForLog,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
+            memo: contextMessage || null,
             quote,
             transferDetails: publicTransferDetails,
             savings: economy.savings,
@@ -2127,6 +2138,7 @@ export default class ExternalFinalizeController {
             feeUsdc: publicTransferDetails.feeUsdc,
             hash: result.hash,
             quote,
+            contextMessage: contextMessage || null,
             savings: {
               estimatedSavings: economy.savings.estimated_savings,
               savingsPercentage: economy.savings.savings_percentage,
@@ -2159,6 +2171,7 @@ export default class ExternalFinalizeController {
           transferDetails: publicTransferDetails,
           savings: economy.savings,
           autoConversion,
+          context_message: contextMessage || null,
           message: autoConversion
             ? `Pagamento enviado. ${autoConversion.message}`
             : 'Pagamento enviado com sucesso.',

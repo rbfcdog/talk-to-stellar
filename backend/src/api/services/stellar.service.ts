@@ -38,6 +38,7 @@ interface StrictSendConversionInput {
   sourceAsset: AssetInput;
   sourceAmount: string;
   destAsset: AssetInput;
+  memoText?: string;
 }
 
 interface PathPaymentQuote {
@@ -834,7 +835,7 @@ export class StellarService {
 
     static async buildStrictSendConversionXdr(input: StrictSendConversionInput): Promise<string> {
         try {
-            const { sourcePublicKey, destination, sourceAmount, destAsset, sourceAsset } = input;
+            const { sourcePublicKey, destination, sourceAmount, destAsset, sourceAsset, memoText } = input;
             const quote = await this.quoteStrictSendConversion(input);
             const sourceAssetObj = createAsset(sourceAsset);
             const destAssetObj = createAsset(destAsset);
@@ -883,6 +884,13 @@ export class StellarService {
                         amount: quote.platformFee.feeAmount,
                     })
                 );
+            }
+
+            if (memoText) {
+                const safeMemo = sanitizeMemoText(memoText);
+                if (safeMemo) {
+                    transactionBuilder.addMemo(Memo.text(safeMemo));
+                }
             }
 
             const transaction = transactionBuilder.setTimeout(300).build();

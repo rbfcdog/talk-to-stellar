@@ -1652,6 +1652,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
     let normalizedDestination = destinationCandidate ? String(destinationCandidate).trim() : '';
     normalizedDestination = repairLegacyStarterContactKey(normalizedDestination);
     const quote = input.quote && typeof input.quote === 'object' ? input.quote : null;
+    const contextMessage = String(input.memo || input.context_message || '').replace(/\s+/g, ' ').trim().slice(0, 120);
     const destinationAmount = input.destination_amount || input.destinationAmount || quote?.destinationAmount;
     const normalizedAmount = destinationAmount
       ? String(destinationAmount).trim()
@@ -1752,6 +1753,8 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       destination_amount: input.destination_amount || input.destinationAmount || quote?.destinationAmount || normalizedAmount,
       destination_asset_code: input.destination_asset_code || input.destinationAssetCode || quote?.destinationAsset?.code || asset.code,
       destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || quote?.destinationAsset?.issuer || asset.issuer || null,
+      transaction_context_message: contextMessage || null,
+      memo: contextMessage || null,
     });
 
     return JSON.stringify({
@@ -1763,6 +1766,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       message:
         `Antes de confirmar: taxa estimada total ${totalFeeDisplay}. ` +
         quoteValidityLine +
+        `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
     });
   } catch (error) {
