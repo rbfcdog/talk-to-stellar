@@ -659,6 +659,19 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_savings_comparison",
+    description: "Compara o custo efetivo do usuário no TalkToStellar com o custo estimado em bancos/provedores tradicionais. Resposta financeira e informativa, sem aconselhamento.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual (opcional)." },
+        period: { type: "string", description: "today, month ou lifetime." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "create_invoice",
     description: "Cria cobrança/invoice simples com link de pagamento compartilhável.",
     parameters: {
@@ -874,6 +887,8 @@ export async function executeTool(
         return await executeGetSavingsEstimate(toolInput);
       case "get_savings_identity":
         return await executeGetSavingsIdentity(toolInput);
+      case "get_savings_comparison":
+        return await executeGetSavingsComparison(toolInput);
       case "create_invoice":
         return await executeCreateInvoice(toolInput);
       case "get_or_create_global_profile":
@@ -949,6 +964,12 @@ function executeGetIntentHelp(): string {
       intent: "history",
       description: "Mostra pagamentos e operações recentes.",
       examples: ["ver histórico", "últimas transações"],
+    },
+    {
+      command: "comparativo de economia",
+      intent: "savings_comparison",
+      description: "Compara o que você pagou aqui vs estimativa de bancos/métodos tradicionais.",
+      examples: ["quanto economizei vs bancos?", "savings comparison month"],
     },
     {
       command: "link de pagamento",
@@ -2324,6 +2345,41 @@ async function executeGetSavingsIdentity(input: any): Promise<string> {
       success: true,
       ...identity,
       view,
+      message,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ success: false, error: errorMessage });
+  }
+}
+
+async function executeGetSavingsComparison(input: any): Promise<string> {
+  try {
+    const rawPeriod = String(input.period || 'month').trim();
+    const period = ['today', 'month', 'lifetime'].includes(rawPeriod) ? rawPeriod as any : 'month';
+    const identity = await EconomyEngineService.calculateIdentity({
+      sessionId: input.session_id || input.sessionId,
+      userId: input.user_id || input.userId,
+      period,
+    });
+
+    const message =
+      `Comparativo financeiro (${period}): em bancos/métodos tradicionais, o custo estimado seria ` +
+      `${formatBrl(identity.estimatedTraditionalFee)}. No TalkToStellar, o custo efetivo estimado foi ` +
+      `${formatBrl(identity.actualFee)}. Economia estimada: ${formatBrl(identity.estimatedSavings)}. ` +
+      `Percentual de economia sobre o custo tradicional: ${identity.savingsPercentage.toFixed(1)}%. ` +
+      `Estimativa informativa baseada em médias de mercado.`;
+
+    return JSON.stringify({
+      success: true,
+      period,
+      comparison_method: identity.comparisonMethod,
+      operation_count: identity.operationCount,
+      estimated_traditional_fee: identity.estimatedTraditionalFee,
+      actual_fee: identity.actualFee,
+      estimated_savings: identity.estimatedSavings,
+      savings_percentage: identity.savingsPercentage,
+      effective_savings_rate: identity.effectiveSavingsRate,
       message,
     });
   } catch (error) {
