@@ -13,6 +13,8 @@ type ValidationResult = {
   valid?: boolean
   payload?: any
   message?: string
+  expired?: boolean
+  expired_at?: string
 }
 
 function decodeJwtPayload(token: string): any {
@@ -183,6 +185,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
+  const isExpiredLink = Boolean(validation.valid === false && (validation as any)?.expired)
 
   function leaveSenderSession() {
     clearClientSession()
@@ -213,13 +216,17 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
             <p className="text-slate-400">Status do link</p>
             {validation.valid === false ? (
-              <p className="mt-1 text-rose-300">{validation.message || "Link inválido."}</p>
+              <p className="mt-1 text-rose-300">
+                {isExpiredLink
+                  ? `Link expirado. ${validation.message || "Solicite um novo link."}`
+                  : (validation.message || "Link inválido.")}
+              </p>
             ) : (
               <p className="mt-1 text-emerald-300">Link pronto. A pessoa que recebe precisa entrar na própria conta.</p>
             )}
           </div>
 
-          {(!loggedIn || isSenderSession) && (
+          {(!loggedIn || isSenderSession) && !isExpiredLink && (
             <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
               {loginNotice && (
                 <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
@@ -257,7 +264,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             </div>
           )}
 
-          {loggedIn && !isSenderSession && (
+          {loggedIn && !isSenderSession && !isExpiredLink && (
             <div className="mt-5 space-y-3">
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">PIN da conta que vai receber</span>

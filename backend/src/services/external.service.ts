@@ -16,6 +16,13 @@ function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function normalizeExpiresAt(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return null;
+  return date;
+}
+
 function shortCodeFromToken(token: string, purpose: string): string {
   return crypto
     .createHash('sha256')
@@ -206,13 +213,15 @@ export class ExternalService {
     sessionId?: string | null;
     userId?: string | null;
     expiresInHours?: number;
+    expiresAt?: string | Date | null;
   }): Promise<string> {
     const disabled = String(process.env.DISABLE_SHORT_LINKS || '').trim().toLowerCase();
     if (disabled === 'true' || disabled === '1') return input.url;
 
     const code = shortCodeFromToken(input.token, input.purpose);
     const hash = tokenHash(input.token);
-    const expiresAt = new Date(Date.now() + (input.expiresInHours || 24) * 60 * 60 * 1000).toISOString();
+    const explicitExpiresAt = normalizeExpiresAt(input.expiresAt);
+    const expiresAt = (explicitExpiresAt || new Date(Date.now() + (input.expiresInHours || 24) * 60 * 60 * 1000)).toISOString();
 
     try {
       const { error } = await this.supabase
@@ -250,6 +259,7 @@ export class ExternalService {
     amount: string;
     assetCode: string;
     details?: any;
+    expiresAt?: string | Date | null;
   }): Promise<void> {
     const token_hash = tokenHash(input.token);
     const operationFingerprint = crypto
@@ -271,6 +281,7 @@ export class ExternalService {
         used: false,
         used_at: null,
         operation_fingerprint: operationFingerprint,
+        expires_at: normalizeExpiresAt(input.expiresAt)?.toISOString() || null,
         details: input.details || null,
         created_at: new Date().toISOString(),
       });
@@ -537,11 +548,21 @@ export class ExternalService {
     destination_asset_code?: string;
     destination_asset_issuer?: string;
     nonce?: string;
+    expires_at?: string;
   }, extra = {}) {
     const assetCode = normalizeAssetCode(payload.asset_code || 'USDC');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
     const destinationAssetCode = normalizeAssetCode(payload.destination_asset_code || assetCode);
     const destinationAssetIssuer = getAssetIssuer(destinationAssetCode, payload.destination_asset_issuer);
+
+    const requestedExpiry = normalizeExpiresAt(payload.expires_at);
+    const minExpiryMs = Date.now() + 60 * 1000;
+    if (requestedExpiry && requestedExpiry.getTime() < minExpiryMs) {
+      throw new Error('A expiração do link deve ser de pelo menos 1 minuto no futuro.');
+    }
+    const defaultExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = requestedExpiry || defaultExpiry;
+    const ttlSeconds = Math.max(60, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
 
     const tokenPayload = {
       sub: 'external_payment_claim',
@@ -558,11 +579,12 @@ export class ExternalService {
       session_id: payload.session_id,
       owner_id: payload.owner_id,
       requires_recipient_login: true,
+      expires_at: expiresAt.toISOString(),
       nonce: payload.nonce || uuidv4(),
       ...compactExtra(extra as Record<string, any>),
     };
 
-    const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
+    const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: ttlSeconds });
     await this.registerPaymentConfirmation({
       token,
       sessionId: payload.session_id,
@@ -571,10 +593,12 @@ export class ExternalService {
       destinationName: payload.recipient_name || null,
       amount: payload.amount,
       assetCode,
+      expiresAt,
       details: {
         purpose: 'payment_claim',
         destination_asset_code: destinationAssetCode,
         destination_asset_issuer: destinationAssetIssuer || null,
+        expires_at: expiresAt.toISOString(),
       },
     });
     const base = getPaymentConfirmBase();
@@ -585,10 +609,10 @@ export class ExternalService {
       purpose: 'payment_claim',
       sessionId: payload.session_id,
       userId: payload.owner_id,
-      expiresInHours: 24 * 7,
+      expiresAt,
     });
 
-    return { token, url };
+    return { token, url, expires_at: expiresAt.toISOString() };
   }
 
   async createConversionConfirmUrl(payload: {

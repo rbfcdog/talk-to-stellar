@@ -243,6 +243,8 @@ export default class PayLinkController {
       const assetIssuer = getAssetIssuer(assetCode, req.body?.asset_issuer);
       const destinationAssetCode = normalizeAssetCode(req.body?.destination_asset_code || req.body?.receive_asset_code || assetCode);
       const destinationAssetIssuer = getAssetIssuer(destinationAssetCode, req.body?.destination_asset_issuer || req.body?.receive_asset_issuer);
+      const expiresAtRaw = String(req.body?.expires_at || '').trim();
+      const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
 
       if (!sessionId || !sessionToken || !pin || !amount) {
         return res.status(400).json({ success: false, message: 'session_id, session_token, pin e amount são obrigatórios.' });
@@ -258,6 +260,12 @@ export default class PayLinkController {
       }
       if (destinationAssetCode !== 'XLM' && !destinationAssetIssuer) {
         return res.status(400).json({ success: false, message: `${destinationAssetCode}_ISSUER não está configurado no backend.` });
+      }
+      if (expiresAtRaw && (!expiresAt || !Number.isFinite(expiresAt.getTime()))) {
+        return res.status(400).json({ success: false, message: 'Expiração inválida. Use data/hora válida.' });
+      }
+      if (expiresAt && expiresAt.getTime() <= Date.now() + 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'A expiração deve ser pelo menos 1 minuto no futuro.' });
       }
 
       const session = await agentRepo.getSession(sessionId);
@@ -275,7 +283,7 @@ export default class PayLinkController {
         return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
 
-      const { token, url } = await externalService.createClaimPaymentUrl({
+      const { token, url, expires_at } = await externalService.createClaimPaymentUrl({
         amount,
         recipient_name: recipientName || undefined,
         sender_name: String((session as any).email || (session as any).user_id || 'Alguém'),
@@ -285,6 +293,7 @@ export default class PayLinkController {
         asset_issuer: assetIssuer,
         destination_asset_code: destinationAssetCode,
         destination_asset_issuer: destinationAssetIssuer,
+        expires_at: expiresAt ? expiresAt.toISOString() : undefined,
       });
 
       const transferLabel = destinationAssetCode === assetCode
@@ -293,10 +302,13 @@ export default class PayLinkController {
       const outboundMessage = recipientName
         ? `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para ${recipientName}.\n\n${url}`
         : `${String((session as any).email || 'Alguém')} criou um link de ${transferLabel} para você. Entre ou crie sua conta global para receber.\n\n${url}`;
+      const expiryLine = expires_at
+        ? `\n\nExpira em: ${new Date(expires_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
+        : '';
 
       // Deliver the created link to the user's active channels (Telegram/WhatsApp) and web chat timeline.
       try {
-        await agentRepo.saveMessage(sessionId, 'assistant', `Link de pagamento criado:\n${url}`);
+        await agentRepo.saveMessage(sessionId, 'assistant', `Link de pagamento criado:\n${url}${expiryLine}`);
       } catch (error) {
         logger.warn(`[pay-link] failed to save link message in web chat: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -304,7 +316,7 @@ export default class PayLinkController {
         await TransferNotificationService.notifyExternalChannelMessage({
           sessionId,
           userId: String(session.user_id),
-          text: outboundMessage,
+          text: `${outboundMessage}${expiryLine}`,
         });
       } catch (error) {
         logger.warn(`[pay-link] failed to deliver link to external channels: ${error instanceof Error ? error.message : String(error)}`);
@@ -314,7 +326,8 @@ export default class PayLinkController {
         success: true,
         token,
         url,
-        message: outboundMessage,
+        expires_at: expires_at || null,
+        message: `${outboundMessage}${expiryLine}`,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
@@ -339,7 +352,15 @@ export default class PayLinkController {
       let payload: any;
       try {
         payload = jwt.verify(token, getJwtSecret());
-      } catch {
+      } catch (error: any) {
+        if (String(error?.name || '') === 'TokenExpiredError') {
+          return res.status(410).json({
+            success: false,
+            expired: true,
+            expired_at: error?.expiredAt ? new Date(error.expiredAt).toISOString() : null,
+            message: 'Este link expirou. Solicite um novo link.',
+          });
+        }
         return res.status(400).json({ success: false, message: 'Link inválido ou expirado.' });
       }
 

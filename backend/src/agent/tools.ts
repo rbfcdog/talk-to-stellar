@@ -570,11 +570,15 @@ export const toolDefinitions = [
         },
         mode: {
           type: "string",
-          description: "recent_payments, repeat_payment, monthly_conversion, average_quote, monthly_received, monthly_fees, top_payer, traditional_savings, recipient_insights, risk_alert, treasury_advice, or summary.",
+          description: "recent_payments, repeat_payment, nickname_set, nickname_lookup, monthly_conversion, average_quote, monthly_received, monthly_fees, top_payer, traditional_savings, recipient_insights, risk_alert, treasury_advice, or summary.",
         },
         contact_name: {
           type: "string",
           description: "Optional counterparty/contact name to match for repeat payments.",
+        },
+        nickname: {
+          type: "string",
+          description: "Apelido da transação para salvar ou consultar.",
         },
       },
       required: [],
@@ -970,6 +974,12 @@ function executeGetIntentHelp(): string {
       intent: "savings_comparison",
       description: "Compara o que você pagou aqui vs estimativa de bancos/métodos tradicionais.",
       examples: ["quanto economizei vs bancos?", "savings comparison month"],
+    },
+    {
+      command: "apelido de transação",
+      intent: "transaction_nickname",
+      description: "Salva e consulta pagamentos por apelido para achar rápido depois.",
+      examples: ["apelido da transação: pagamento logo setembro", "qual foi o valor de pagamento logo setembro?"],
     },
     {
       command: "link de pagamento",
@@ -1934,6 +1944,115 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
 
     const rows = Array.isArray(data) ? data : [];
     const successful = rows.filter((row: any) => isSuccessfulPaymentRow(row));
+    const nicknameInput = String(input.nickname || input.memo || '').trim().slice(0, 80);
+
+    if (mode === 'nickname_set') {
+      const nickname = nicknameInput;
+      if (!nickname) {
+        return JSON.stringify({
+          success: false,
+          mode,
+          message: 'Me diga qual apelido você quer usar para a transação.',
+        });
+      }
+
+      const target = successful[0];
+      if (!target?.id) {
+        return JSON.stringify({
+          success: false,
+          mode,
+          message: 'Ainda não encontrei uma transação concluída para salvar esse apelido.',
+        });
+      }
+
+      const { error: updateError } = await supabase
+        .from('payment_logs')
+        .update({
+          memo: nickname,
+        })
+        .eq('id', target.id)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        throw new Error(updateError.message || 'Falha ao salvar apelido da transação.');
+      }
+
+      const amountLabel = formatCustomerAssetAmount(
+        String(target.destination_amount || target.source_amount || '0'),
+        String(target.destination_asset_code || target.source_asset_code || 'USDC')
+      );
+
+      return JSON.stringify({
+        success: true,
+        mode,
+        nickname,
+        payment_hash: target.payment_hash || null,
+        operation_id: target.id,
+        message: `Apelido salvo: "${nickname}" para a transação de ${amountLabel}. Para consultar depois, pergunte: "qual foi o valor de ${nickname}?"`,
+      });
+    }
+
+    if (mode === 'nickname_lookup') {
+      const nickname = nicknameInput || String(input.contact_name || '').trim().slice(0, 80);
+      if (!nickname) {
+        return JSON.stringify({
+          success: false,
+          mode,
+          message: 'Me diga o apelido da transação que você quer consultar.',
+        });
+      }
+
+      const normalizedNickname = normalizeMemoryText(nickname);
+      const { data: directRows, error: directError } = await supabase
+        .from('payment_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'success')
+        .ilike('memo', `%${nickname}%`)
+        .order('completed_at', { ascending: false })
+        .limit(5);
+
+      if (directError) {
+        throw new Error(directError.message || 'Falha ao consultar apelido da transação.');
+      }
+
+      const direct = Array.isArray(directRows) ? directRows : [];
+      const byExact = direct.find((row: any) => normalizeMemoryText(String(row?.memo || '')) === normalizedNickname);
+      const byContains = byExact
+        ? null
+        : direct.find((row: any) => normalizeMemoryText(String(row?.memo || '')).includes(normalizedNickname));
+      const target = byExact || byContains;
+
+      if (!target) {
+        return JSON.stringify({
+          success: false,
+          mode,
+          nickname,
+          message: `Não encontrei transação com o apelido "${nickname}".`,
+        });
+      }
+
+      const valueLabel = formatCustomerAssetAmount(
+        String(target.destination_amount || target.source_amount || '0'),
+        String(target.destination_asset_code || target.source_asset_code || 'USDC')
+      );
+      const completedAt = target.completed_at || target.created_at;
+      const whenLabel = completedAt
+        ? new Date(String(completedAt)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+        : 'horário indisponível';
+
+      return JSON.stringify({
+        success: true,
+        mode,
+        nickname: String(target.memo || nickname),
+        payment_hash: target.payment_hash || null,
+        operation_type: target.operation_type || null,
+        value: valueLabel,
+        completed_at: completedAt || null,
+        message: `A transação "${String(target.memo || nickname)}" foi de ${valueLabel} (${whenLabel}).`,
+      });
+    }
+
     const normalizedContact = normalizeMemoryText(contactName);
     const recentPayments = successful
       .filter((row: any) => !isConversionOperation(row))

@@ -13,19 +13,29 @@ function tokenHash(token: string) {
 }
 
 async function readPaymentLinkState(hash: string) {
-  const { data, error } = await supabase
+  const primary = await supabase
     .from('payment_confirmations')
-    .select('used, used_at, status')
+    .select('used, used_at, status, expires_at')
     .eq('token_hash', hash)
     .limit(1)
     .maybeSingle()
 
-  if (error) {
-    const message = String(error.message || '').toLowerCase()
+  if (primary.error) {
+    const message = String(primary.error.message || '').toLowerCase()
+    if (message.includes('expires_at')) {
+      const fallback = await supabase
+        .from('payment_confirmations')
+        .select('used, used_at, status')
+        .eq('token_hash', hash)
+        .limit(1)
+        .maybeSingle()
+
+      if (!fallback.error) return fallback.data
+    }
     if (message.includes('payment_confirmations') || message.includes('schema cache')) return null
-    throw error
+    throw primary.error
   }
-  return data
+  return primary.data
 }
 
 async function readOnboardingState(hash: string) {
@@ -55,7 +65,18 @@ export default class ExternalValidateController {
       try {
         payload = jwt.verify(token, getJwtSecret())
       } catch (err: any) {
-        return res.status(400).json({ success: false, valid: false, message: 'Invalid or expired token' })
+        if (String(err?.name || '') === 'TokenExpiredError') {
+          const decoded = jwt.decode(token) || {}
+          return res.status(400).json({
+            success: false,
+            valid: false,
+            expired: true,
+            expired_at: err?.expiredAt ? new Date(err.expiredAt).toISOString() : null,
+            message: 'Este link expirou. Solicite um novo link.',
+            payload: decoded,
+          })
+        }
+        return res.status(400).json({ success: false, valid: false, message: 'Link inválido ou expirado.' })
       }
 
       const sub = String(payload?.sub || '')
@@ -76,6 +97,18 @@ export default class ExternalValidateController {
 
       if (['external_payment_confirm', 'external_conversion_confirm', 'external_payment_claim'].includes(sub)) {
         const state = await readPaymentLinkState(hash)
+        const expiresAtRaw = (state as any)?.expires_at
+        const expiresAtMs = expiresAtRaw ? Date.parse(String(expiresAtRaw)) : NaN
+        if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+          return res.status(410).json({
+            success: false,
+            valid: false,
+            expired: true,
+            expired_at: expiresAtRaw || null,
+            message: 'Este link expirou. Solicite um novo link.',
+            payload,
+          })
+        }
         if (state?.used || String(state?.status || '').toLowerCase() === 'completed') {
           return res.status(409).json({
             success: false,

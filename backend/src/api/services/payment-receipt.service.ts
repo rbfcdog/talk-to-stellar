@@ -265,6 +265,7 @@ export class PaymentReceiptService {
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = String(input.status || 'Confirmado').trim();
+    const nicknamePrompt = this.transactionNicknamePrompt(input.type);
 
     return [
       operationLine,
@@ -278,6 +279,7 @@ export class PaymentReceiptService {
       publicOperationId ? `ID da operação: ${publicOperationId}` : 'ID da operação: em processamento',
       '',
       'Recibo registrado no seu histórico.',
+      nicknamePrompt,
     ].filter((line) => line !== '').join('\n');
   }
 
@@ -329,6 +331,11 @@ export class PaymentReceiptService {
       return `Você converteu ${sourceLabel} para ${destinationLabel} e enviou para ${target}.`;
     }
     return `Você enviou ${destinationLabel} para ${target}.`;
+  }
+
+  private static transactionNicknamePrompt(type: ReceiptType): string {
+    if (type !== 'payment_sent' && type !== 'claim_redeemed') return '';
+    return 'Quer dar um nome para esta transação para encontrar depois? Exemplo: "apelido da transação: pagamento logo setembro".';
   }
 
   private static async feeLine(input: PaymentReceiptInput): Promise<string> {
