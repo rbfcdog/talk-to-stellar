@@ -293,6 +293,16 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     });
   }, []);
 
+  const resetChatAfterLogout = useCallback(() => {
+    if (typeof window === "undefined") return;
+    clearClientSession();
+    const newSessionId = generateSessionId();
+    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setSessionId(newSessionId);
+    setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
+    window.location.reload();
+  }, [chatId, selectedMeta.starter]);
+
   const fetchServerMessages = useCallback(async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
     if (isClientSessionExpired()) {
@@ -395,6 +405,21 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       } catch {}
     };
   }, [chatId, fetchServerMessages]);
+
+  useEffect(() => {
+    if (chatId !== "agent" || typeof window === "undefined") return;
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "talk-to-stellar.logoutRefreshAt" && event.newValue) {
+        resetChatAfterLogout();
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [chatId, resetChatAfterLogout]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
