@@ -120,6 +120,42 @@ export class AgentGraph {
       const normalizedQuery = query.trim().toLowerCase();
       const normalizedLookup = this.normalizeLookup(query);
       const normalizePhone = (value: string) => String(value || '').replace(/\D+/g, '');
+      const hasAtSymbol = normalizedQuery.includes('@');
+      const normalizeIdentifier = (value: string) => String(value || '').trim().toLowerCase();
+      const contactIdentifiers = (contact: any): string[] => {
+        const raw = [
+          contact?.pix_key,
+          contact?.email,
+          contact?.phone_number,
+          contact?.cpf,
+          contact?.contact_profile?.pix_key,
+          contact?.contact_profile?.email,
+          contact?.contact_profile?.phone_number,
+          contact?.contact_profile?.cpf,
+          contact?.identifier,
+          contact?.contact_profile?.identifier,
+        ];
+
+        const normalized = raw
+          .map((value: any) => normalizeIdentifier(value))
+          .filter(Boolean);
+
+        return Array.from(new Set(normalized));
+      };
+      const contactNames = (contact: any): string[] => {
+        const raw = [
+          contact?.contact_name,
+          contact?.name,
+          contact?.display_label,
+          contact?.contact_profile?.name,
+        ];
+
+        const normalized = raw
+          .map((value: any) => String(value || '').trim())
+          .filter(Boolean);
+
+        return Array.from(new Set(normalized));
+      };
 
       const isPublicKey = /^G[A-Z2-7]{55}$/i.test(normalizedQuery);
       if (isPublicKey) {
@@ -130,10 +166,54 @@ export class AgentGraph {
 
       const queryPhone = normalizePhone(query);
       if (queryPhone.length >= 8) {
-        const byPhone = contacts.find((c: any) => normalizePhone(String(c.phone_number || '')) === queryPhone);
+        const byPhone = contacts.find((c: any) => {
+          const phones = [
+            String(c?.phone_number || ''),
+            String(c?.contact_profile?.phone_number || ''),
+          ];
+          return phones.some((phone: string) => normalizePhone(phone) === queryPhone);
+        });
         if (byPhone) {
           return byPhone;
         }
+      }
+
+      const byIdentifier = contacts.find((c: any) => {
+        const identifiers = contactIdentifiers(c);
+        return identifiers.some((identifier) => {
+          if (hasAtSymbol) {
+            return identifier === normalizedQuery;
+          }
+          return this.normalizeLookup(identifier) === normalizedLookup;
+        });
+      });
+      if (byIdentifier) {
+        return byIdentifier;
+      }
+
+      // Support positional aliases like "contato 1" / "contact 1"
+      const aliasMatch = normalizedQuery.match(/^(?:contato|contact)\s*(\d{1,3})$/);
+      if (aliasMatch) {
+        const idx = Number(aliasMatch[1]);
+        if (Number.isFinite(idx) && idx >= 1 && idx <= contacts.length) {
+          return contacts[idx - 1];
+        }
+      }
+
+      const byName = contacts.find((c: any) => {
+        const names = contactNames(c);
+        return names.some((name) => {
+          const normalizedName = this.normalizeLookup(name);
+          return (
+            name.toLowerCase() === normalizedQuery ||
+            normalizedName === normalizedLookup ||
+            normalizedName.includes(normalizedLookup) ||
+            normalizedLookup.includes(normalizedName)
+          );
+        });
+      });
+      if (byName) {
+        return byName;
       }
 
       const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedQuery);
@@ -153,26 +233,7 @@ export class AgentGraph {
       if (globalPix) {
         return globalPix;
       }
-
-      // Support positional aliases like "contato 1" / "contact 1"
-      const aliasMatch = normalizedQuery.match(/^(?:contato|contact)\s*(\d{1,3})$/);
-      if (aliasMatch) {
-        const idx = Number(aliasMatch[1]);
-        if (Number.isFinite(idx) && idx >= 1 && idx <= contacts.length) {
-          return contacts[idx - 1];
-        }
-      }
-
-      return contacts.find((c: any) => {
-        const contactName = String(c.contact_name || c.name || '').trim();
-        const normalizedContactName = this.normalizeLookup(contactName);
-        return (
-          contactName.toLowerCase() === normalizedQuery ||
-          normalizedContactName === normalizedLookup ||
-          normalizedContactName.includes(normalizedLookup) ||
-          normalizedLookup.includes(normalizedContactName)
-        );
-      });
+      return undefined;
     } catch (error) {
       logger.debug(`[getContactByPublicKeyOrName] Error: ${error}`);
       return undefined;
