@@ -776,6 +776,34 @@ ${onboardingUrl}`;
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
   }
 
+  private toAmountNumber(value: unknown): number {
+    const parsed = Number(String(value || '').replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private formatBestRouteTransparency(quoteResult: any): string {
+    if (!quoteResult || typeof quoteResult !== 'object') return '';
+
+    const routeChain = String(quoteResult?.route?.chain || '').trim();
+    const criteria = String(quoteResult?.optimization_criteria || '').trim();
+    const totalFeeDisplay = String(quoteResult?.fee_breakdown?.total_fee_display || quoteResult?.quote?.fee_display || '').trim();
+    const savingsBrl = this.toAmountNumber(quoteResult?.savings_estimate?.estimated_savings_brl);
+    const savingsPct = this.toAmountNumber(quoteResult?.savings_estimate?.savings_percentage_over_traditional_fee);
+    const ttlSeconds = this.toAmountNumber(quoteResult?.quote_ttl_seconds);
+
+    const lines: string[] = [];
+    if (routeChain) lines.push(`Melhor caminho agora: ${routeChain}.`);
+    if (criteria) lines.push(`Critério: ${criteria}.`);
+    if (totalFeeDisplay) lines.push(`Taxa total estimada: ${totalFeeDisplay}.`);
+    if (savingsBrl > 0) {
+      const pctLabel = savingsPct > 0 ? ` (${savingsPct.toFixed(1).replace('.', ',')}%)` : '';
+      lines.push(`Economia estimada vs métodos tradicionais: R$ ${savingsBrl.toFixed(2).replace('.', ',')}${pctLabel}.`);
+    }
+    if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
+
+    return lines.join(' ');
+  }
+
   private async extractPaymentIntentWithLlm(userMessage: string, userId?: string): Promise<{
     recipient_query?: string;
     amount?: string;
@@ -892,6 +920,7 @@ ${onboardingUrl}`;
     }
 
     let quote: any = null;
+    let bestRouteResult: any = null;
     let confirmationAmount = amount;
     let confirmationAssetCode = assetCode;
     let sourceAmountForConfirmation: string | undefined;
@@ -917,7 +946,7 @@ ${onboardingUrl}`;
         }
       }
 
-      const quoteRaw = await executeTool('quote_asset_transfer', {
+      const quoteRaw = await executeTool('get_best_route', {
         source_public_key: state.session_data.public_key,
         destination,
         source_amount: amount,
@@ -926,16 +955,17 @@ ${onboardingUrl}`;
         dest_asset_code: receiveAssetCode,
         dest_asset_issuer: destIssuer,
       });
-      const quoteResult = JSON.parse(quoteRaw);
-      if (!quoteResult.success) {
+      const parsedBestRoute = JSON.parse(quoteRaw);
+      if (!parsedBestRoute.success) {
         state.success = false;
-        state.response_message = `Não consegui cotar esse pagamento: ${quoteResult.error || 'erro desconhecido'}`;
+        state.response_message = `Não consegui cotar esse pagamento: ${parsedBestRoute.error || 'erro desconhecido'}`;
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
       }
 
-      quote = quoteResult.quote;
+      bestRouteResult = parsedBestRoute;
+      quote = parsedBestRoute.quote;
       confirmationAmount = String(quote.destinationAmount || '').trim();
       confirmationAssetCode = receiveAssetCode;
       sourceAmountForConfirmation = amount;
@@ -958,6 +988,7 @@ ${onboardingUrl}`;
       destination_amount: quote?.destinationAmount,
       destination_asset_code: quote?.destinationAsset?.code,
       destination_asset_issuer: quote?.destinationAsset?.issuer,
+      optimization_criteria: bestRouteResult?.optimization_criteria,
       memo: llmParsed.memo,
     });
 
@@ -974,9 +1005,16 @@ ${onboardingUrl}`;
     } else {
       state.pending_payment = undefined;
       state.success = true;
-      state.response_message = receiveAssetCode !== assetCode
-        ? `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}. Para confirmar, abra o link:\n\n${prepare.url}`
-        : (prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`);
+      if (receiveAssetCode !== assetCode) {
+        const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
+        state.response_message = [
+          `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+          transparencyLine,
+          `Para confirmar, abra o link:\n\n${prepare.url}`,
+        ].filter(Boolean).join('\n');
+      } else {
+        state.response_message = prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`;
+      }
     }
 
     await this.saveAssistantResponse(state);
@@ -2367,7 +2405,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
             state.success = false;
             state.response_message = `Não encontrei recebimento em ${finalDestAssetCode} ativo na sua carteira. Ative esse recebimento antes de converter.`;
           } else {
-          const toolResultRaw = await executeTool('quote_asset_transfer', {
+          const toolResultRaw = await executeTool('get_best_route', {
             source_public_key: state.session_data.public_key,
             destination: state.session_data.public_key,
             source_amount: finalSourceAmount,
@@ -2399,6 +2437,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
               dest_asset_code: finalDestAssetCode,
               dest_asset_issuer: destIssuer,
               quote: toolResult.quote,
+              optimization_criteria: toolResult.optimization_criteria,
             });
 
             let conversionPrepare: any;
@@ -2416,8 +2455,12 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
               state.success = true;
               const sourceLabel = this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
               const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
-              state.response_message =
-                `${toolResult.message}\n\nPara confirmar a conversão de ${sourceLabel} para aproximadamente ${destLabel}, abra o link:\n\n${conversionPrepare.url}`;
+              const transparencyLine = this.formatBestRouteTransparency(toolResult);
+              state.response_message = [
+                `Conversão cotada: ${sourceLabel} para aproximadamente ${destLabel}.`,
+                transparencyLine || toolResult.message,
+                `Para confirmar a conversão, abra o link:\n\n${conversionPrepare.url}`,
+              ].filter(Boolean).join('\n');
             }
           }
           }
