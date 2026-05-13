@@ -25,7 +25,7 @@ export default function ProblemSection() {
           transition={{ delay: 0.1 }}
           className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light max-w-2xl mx-auto"
         >
-          No modelo tradicional, custo e prazo mudam sem clareza. No TalkToStellar, você vê rota, taxa e valor final antes de confirmar, com liquidação rápida usando infraestrutura Stellar.
+          No fluxo tradicional, você descobre custo real e prazo só no fim. Aqui, o valor final é previsível antes da confirmação, com transparência de taxa e execução orientada em cada etapa.
         </motion.p>
       </div>
 
@@ -39,9 +39,9 @@ export default function ProblemSection() {
           className="w-full bg-[#162032]/40 backdrop-blur-md border border-white/[0.03] rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-[#162032]/60 hover:border-white/[0.03] transition-all duration-500"
         >
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Tudo no canal que você já usa.</h3>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Decisão financeira com contexto.</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              O app foi desenhado para reduzir fricção operacional: você inicia no Telegram, WhatsApp ou navegador, recebe orientação passo a passo e conclui envio/conversão sem trocar de ambiente.
+              Em vez de telas confusas e termos técnicos, você recebe orientação objetiva para cada operação: quanto vai pagar, quanto chega no destino e qual o próximo passo para concluir com segurança.
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
