@@ -6,6 +6,7 @@ import { PaymentReplayService } from '../services/payment-replay.service';
 import { EconomyEngineService } from '../services/economy-engine.service';
 import { InvoiceService } from '../services/invoice.service';
 import { GlobalProfileService } from '../services/global-profile.service';
+import { TransactionHistoryService } from '../services/transaction-history.service';
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
   return {
@@ -128,4 +129,30 @@ export class FinancialController {
     }
   }
 
+  static async getTransactions(req: Request, res: Response) {
+    try {
+      const payload = await TransactionHistoryService.listTransactions({
+        ...sessionAndUser(req),
+        month: Number(req.query.month || req.body?.month || 0),
+        year: Number(req.query.year || req.body?.year || 0),
+        limit: Number(req.query.limit || req.body?.limit || 60),
+      });
+      return res.status(200).json({ success: true, ...payload });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
+  static async getWalletProfile(req: Request, res: Response) {
+    try {
+      const publicKey = String(req.params.public_key || req.query.public_key || req.body?.public_key || '').trim();
+      const payload = await TransactionHistoryService.getWalletProfile({
+        ...sessionAndUser(req),
+        publicKey,
+      });
+      return res.status(200).json({ success: true, ...payload });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
 }
