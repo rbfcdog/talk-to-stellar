@@ -281,6 +281,16 @@ function getPasskeyErrorMessage(error: any): string {
   return message || "Não foi possível confirmar com biometria."
 }
 
+function isPasskeyChallengeExpiredMessage(message?: string) {
+  const normalized = String(message || "").toLowerCase()
+  return (
+    normalized.includes("passkey challenge expired") ||
+    normalized.includes("challenge expired") ||
+    normalized.includes("desafio expirada") ||
+    normalized.includes("desafio expirado")
+  )
+}
+
 export default function ConfirmPaymentClient({
   initialToken = '',
   initialValidation = null,
@@ -546,7 +556,7 @@ export default function ConfirmPaymentClient({
     }
   }
 
-  async function handlePasskeyConfirm() {
+  async function handlePasskeyConfirm(attempt = 0) {
     if (!token.trim() || validation?.valid === false || submitLockRef.current || status === "done") return
     if (!window.PublicKeyCredential) {
       setPasskeyStatus("error")
@@ -561,7 +571,7 @@ export default function ConfirmPaymentClient({
     submitLockRef.current = true
 
     try {
-      const initResponse = await idempotentFetch("/api/passkeys/auth-init", {
+      const initResponse = await fetch("/api/passkeys/auth-init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -597,20 +607,37 @@ export default function ConfirmPaymentClient({
       setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (response.ok && payload?.success) {
+        setMobileSyncStatus("")
         setPasskeyStatus("idle")
       } else {
+        const serverMessage = String(payload?.message || payload?.error || "")
+        if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
+          submitLockRef.current = false
+          setMobileSyncStatus("Biometria expirada durante a troca de dispositivo. Gerando novo desafio...")
+          setPasskeyStatus("starting")
+          await handlePasskeyConfirm(attempt + 1)
+          return
+        }
         submitLockRef.current = false
         setPasskeyStatus("error")
-        setPasskeyError(payload?.message || payload?.error || "Falha ao confirmar com biometria.")
+        setPasskeyError(serverMessage || "Falha ao confirmar com biometria.")
       }
     } catch (error: any) {
+      const message = getPasskeyErrorMessage(error)
+      if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
+        submitLockRef.current = false
+        setMobileSyncStatus("Biometria expirada durante a troca de dispositivo. Gerando novo desafio...")
+        setPasskeyStatus("starting")
+        await handlePasskeyConfirm(attempt + 1)
+        return
+      }
       submitLockRef.current = false
       setStatus("error")
       setPasskeyStatus("error")
-      setPasskeyError(getPasskeyErrorMessage(error))
+      setPasskeyError(message)
       setResult({
         success: false,
-        error: getPasskeyErrorMessage(error),
+        error: message,
       })
     }
   }
