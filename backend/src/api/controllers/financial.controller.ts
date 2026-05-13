@@ -12,9 +12,48 @@ import { supabase } from '../../config/supabase';
 import ExternalService from '../../services/external.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { isSessionExpired } from '../../utils/session-expiry';
+import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { PlatformFeeService } from '../services/platform-fee.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
+
+function toPositiveNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function fetchBrlPerUsdcRate(): Promise<{ brlPerUsdc: number; source: string; symbol: string }> {
+  const symbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
+  const timeoutMs = toPositiveNumber(process.env.BRL_USDC_QUOTE_TIMEOUT_MS, 8000);
+  const fallback = toPositiveNumber(process.env.DEFAULT_USD_BRL_RATE, 5.6);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return { brlPerUsdc: fallback, source: 'fallback', symbol };
+    }
+
+    const payload = await response.json() as { price?: string; symbol?: string };
+    const brlPerUsdc = toPositiveNumber(payload?.price, fallback);
+    return {
+      brlPerUsdc,
+      source: 'binance',
+      symbol: String(payload?.symbol || symbol).toUpperCase(),
+    };
+  } catch {
+    return { brlPerUsdc: fallback, source: 'fallback', symbol };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
   return {
@@ -24,6 +63,79 @@ function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
 }
 
 export class FinancialController {
+  static async getConversionPreview(req: Request, res: Response) {
+    try {
+      const rawAmount = String(req.query?.brl_amount || req.body?.brl_amount || req.query?.amount || req.body?.amount || '1000')
+        .replace(',', '.')
+        .trim();
+      const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
+      const rate = await fetchBrlPerUsdcRate();
+      const usdcPerBrl = rate.brlPerUsdc > 0 ? 1 / rate.brlPerUsdc : 0;
+      const grossUsdc = brlAmount * usdcPerBrl;
+
+      const spread = PlatformFeeService.calculateSpread({
+        sourceAmount: brlAmount.toFixed(7),
+        sourceAssetCode: 'BRL',
+        destinationAssetCode: 'USDC',
+        mode: 'deduct_from_source',
+      });
+
+      const spreadBrl = spread.enabled ? toPositiveNumber(spread.feeAmount, 0) : 0;
+      const netBrl = Math.max(0, brlAmount - spreadBrl);
+      const spreadUsdc = spreadBrl * usdcPerBrl;
+      const receiveUsdc = netBrl * usdcPerBrl;
+
+      const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
+      const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
+      const networkFeeUsdc = toPositiveNumber(networkFee.fee_usdc, 0);
+
+      const totalFeeBrl = spreadBrl + networkFeeBrl;
+      const totalFeeUsdc = spreadUsdc + networkFeeUsdc;
+      const totalFeePct = brlAmount > 0 ? (totalFeeBrl / brlAmount) * 100 : 0;
+
+      const traditionalFeePct = Math.max(0, EconomyEngineService.traditionalFeePct() * 100);
+      const traditionalFeeBrl = brlAmount * (traditionalFeePct / 100);
+      const savingsBrl = Math.max(0, traditionalFeeBrl - totalFeeBrl);
+
+      return res.status(200).json({
+        success: true,
+        input: {
+          brl_amount: Number(brlAmount.toFixed(2)),
+        },
+        quote: {
+          brl_per_usdc: Number(rate.brlPerUsdc.toFixed(6)),
+          usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
+          source: rate.source,
+          symbol: rate.symbol,
+        },
+        output: {
+          gross_receive_usdc: Number(grossUsdc.toFixed(4)),
+          receive_usdc: Number(receiveUsdc.toFixed(4)),
+        },
+        fees: {
+          talktostellar_spread_brl: Number(spreadBrl.toFixed(6)),
+          talktostellar_spread_usdc: Number(spreadUsdc.toFixed(6)),
+          network_fee_brl: Number(networkFeeBrl.toFixed(6)),
+          network_fee_usdc: Number(networkFeeUsdc.toFixed(6)),
+          total_fee_brl: Number(totalFeeBrl.toFixed(6)),
+          total_fee_usdc: Number(totalFeeUsdc.toFixed(6)),
+          total_fee_pct: Number(totalFeePct.toFixed(4)),
+          spread_bps_config: spread.feeBps,
+          spread_min_brl_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_BRL, 0.05),
+          spread_min_usdc_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_USDC, 0.01),
+          network_fee_display: networkFee.display,
+        },
+        comparison: {
+          traditional_fee_pct: Number(traditionalFeePct.toFixed(4)),
+          traditional_fee_brl: Number(traditionalFeeBrl.toFixed(6)),
+          savings_brl: Number(savingsBrl.toFixed(6)),
+        },
+      });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
   static async getActivityFeed(req: Request, res: Response) {
     try {
       const data = await ActivityFeedService.listFeed({

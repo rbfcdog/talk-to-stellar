@@ -94,7 +94,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Custo real, sem entrelinhas.</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              Escondidas no "spread" e "taxas operacionais", instituições tradicionais mordem até 5% do seu dinheiro. Nós eliminamos isso exibindo a cotação comercial crua e garantindo custo zero de spread graças aos provedores de liquidez na Stellar.
+              Em instituições tradicionais, parte do custo fica escondida em spread e taxa operacional. No TalkToStellar, você recebe uma das menores estruturas de spread para BRL/USDC, com taxa exibida antes da confirmação.
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">

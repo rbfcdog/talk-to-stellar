@@ -20,7 +20,7 @@ export default function Pathfinding() {
           A Rota Mais Barata. <br className="block md:hidden" /><span className="text-gradient">Sempre.</span>
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-          Esqueça as taxas ocultas. Nossa IA varre o mercado global em milissegundos e executa a conversão perfeita antes mesmo de você piscar.
+          Esqueça taxas ocultas. A rede Stellar executa o roteamento de liquidez com liquidação rápida, e o TalkToStellar mostra taxa e valor final antes da confirmação.
         </p>
       </motion.div>
 
