@@ -1970,8 +1970,17 @@ async function executeGetFinancialMemory(input: any): Promise<string> {
     const rows = Array.isArray(data) ? data : [];
     const successful = rows.filter((row: any) => isSuccessfulPaymentRow(row));
     const nicknameInput = String(input.nickname || input.memo || '').trim().slice(0, 80);
+    const allowNicknameSet = Boolean(input.allow_nickname_set || input.allowNicknameSet);
 
     if (mode === 'nickname_set') {
+      if (!allowNicknameSet) {
+        return JSON.stringify({
+          success: false,
+          mode,
+          message: 'Para nomear uma transação, responda imediatamente após a confirmação do pagamento.',
+        });
+      }
+
       const nickname = nicknameInput;
       if (!nickname) {
         return JSON.stringify({
