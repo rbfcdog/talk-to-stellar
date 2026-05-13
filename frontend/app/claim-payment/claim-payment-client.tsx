@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCircle2, LogIn, ShieldCheck, UserPlus } from "lucide-react"
+import { LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { TypingDots } from "@/components/ui/feedback"
 
 type ValidationResult = {
   valid?: boolean
@@ -68,11 +68,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const [token, setToken] = useState(initialToken || "")
   const [sessionId, setSessionId] = useState("")
   const [sessionToken, setSessionToken] = useState("")
+  const [sessionReady, setSessionReady] = useState<"unknown" | "checking" | "ready" | "missing_wallet" | "invalid">("unknown")
   const [validation, setValidation] = useState<ValidationResult>({})
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">("idle")
   const [result, setResult] = useState<any>(null)
-  const [pin, setPin] = useState("")
   const [loginNotice, setLoginNotice] = useState("")
+  const [autoClaimAttempted, setAutoClaimAttempted] = useState(false)
   const claimLockRef = useRef(false)
 
   useEffect(() => {
@@ -83,10 +84,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       setLoginNotice("Sua sessão expirou. Entre novamente para receber este pagamento.")
       setSessionId("")
       setSessionToken("")
+      setSessionReady("invalid")
     } else {
       setLoginNotice("")
-      setSessionId(localStorage.getItem("talk-to-stellar.sessionId") || "")
-      setSessionToken(localStorage.getItem("talk-to-stellar.sessionToken") || "")
+      const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
+      const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+      setSessionId(storedSessionId)
+      setSessionToken(storedSessionToken)
+      setSessionReady(storedSessionId && storedSessionToken ? "checking" : "unknown")
     }
     if (current) {
       window.history.replaceState(null, "", window.location.pathname)
@@ -117,8 +122,51 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     closeIntermediatePage()
   }, [status])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function validateCurrentSessionForClaim() {
+      if (!sessionId || !sessionToken) {
+        setSessionReady("unknown")
+        return
+      }
+
+      setSessionReady("checking")
+      try {
+        const response = await fetch(`/api/agent/session/${encodeURIComponent(sessionId)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+
+        const sessionPublicKey = String(payload?.public_key || "").trim()
+        if (!response.ok || !sessionPublicKey) {
+          clearClientSession()
+          setSessionId("")
+          setSessionToken("")
+          setSessionReady(response.ok ? "missing_wallet" : "invalid")
+          setLoginNotice("Sua sessão atual não tem conta global ativa. Entre ou crie sua conta para receber este pagamento.")
+          return
+        }
+
+        setLoginNotice("")
+        setSessionReady("ready")
+      } catch {
+        if (cancelled) return
+        clearClientSession()
+        setSessionId("")
+        setSessionToken("")
+        setSessionReady("invalid")
+        setLoginNotice("Não consegui validar sua sessão atual. Entre novamente para receber este pagamento.")
+      }
+    }
+
+    void validateCurrentSessionForClaim()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, sessionToken])
+
   async function claim() {
-    if (!token || validation.valid === false || !/^\d{4,8}$/.test(pin)) return
+    if (!token || validation.valid === false || !sessionId || !sessionToken) return
     if (claimLockRef.current) return
     claimLockRef.current = true
     setStatus("claiming")
@@ -131,7 +179,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           token,
           session_id: sessionId,
           session_token: sessionToken,
-          pin,
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -139,7 +186,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         clearClientSession()
         setSessionId("")
         setSessionToken("")
-        setPin("")
         setLoginNotice(payload?.message || "Entre novamente para receber este pagamento.")
       }
       setResult(payload)
@@ -178,7 +224,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const receiveLabel = isCrossAsset ? destinationAssetCode : sourceAmountLabel
   const recipientName = String(payload.recipient_name || "você")
   const senderName = String(payload.sender_name || "Alguém")
-  const loggedIn = Boolean(sessionId && sessionToken)
+  const hasSessionCredentials = Boolean(sessionId && sessionToken)
+  const loggedIn = Boolean(hasSessionCredentials && sessionReady === "ready")
   const nextPath = `/claim-payment?token=${encodeURIComponent(token)}`
   const createAccountPath = `/create-account?next=${encodeURIComponent(nextPath)}&force_new=1&context=claim-payment`
   const senderSessionId = String(payload.session_id || "").trim()
@@ -191,13 +238,21 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const isExpiredLink = Boolean(validation.valid === false && (validation as any)?.expired)
 
+  useEffect(() => {
+    if (autoClaimAttempted) return
+    if (!token || validation.valid === false || isExpiredLink) return
+    if (!loggedIn || isSenderSession) return
+    setAutoClaimAttempted(true)
+    void claim()
+  }, [autoClaimAttempted, token, validation.valid, isExpiredLink, loggedIn, isSenderSession])
+
   function leaveSenderSession() {
     clearClientSession()
     setSessionId("")
     setSessionToken("")
-    setPin("")
     setStatus("idle")
     setResult(null)
+    setAutoClaimAttempted(false)
   }
 
   return (
@@ -216,7 +271,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             Você vai receber {isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} com crédito final em ${destinationAssetCode}.` : sourceAmountLabel}. Para receber, entre ou crie sua conta global.
             Esse processo leva cerca de 2 minutos.
             {isCrossAsset ? ` Você recebe em ${destinationAssetCode}.` : " O dinheiro é enviado para a conta autenticada nesta página."}
-            {loggedIn && !isSenderSession ? " Confirme com seu PIN para garantir que este pagamento entre na sua conta." : ""}
+            {loggedIn && !isSenderSession ? " Assim que o login estiver válido, o crédito será processado automaticamente." : ""}
           </p>
 
           <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
@@ -234,6 +289,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
           {(!loggedIn || isSenderSession) && !isExpiredLink && (
             <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
+              {hasSessionCredentials && sessionReady === "checking" && (
+                <p className="sm:col-span-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-slate-200">
+                  Validando sua conta para recebimento...
+                </p>
+              )}
               {loginNotice && (
                 <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
                   {loginNotice}
@@ -265,34 +325,16 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <UserPlus className="h-4 w-4" />
-                1) Criar conta para receber
+                2) Criar conta para receber
               </Link>
             </div>
           )}
 
           {loggedIn && !isSenderSession && !isExpiredLink && (
             <div className="mt-5 space-y-3">
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">PIN da conta que vai receber</span>
-                <input
-                  value={pin}
-                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  placeholder="Confirme seu PIN"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={claim}
-                disabled={status === "claiming" || status === "done" || validation.valid === false || !token || !/^\d{4,8}$/.test(pin)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                {status === "claiming" ? <span className="inline-flex items-center gap-2"><Spinner />Recebendo...</span> : `2) Confirmar e receber ${receiveLabel}`}
-              </button>
+              <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+                Conta validada. Processando recebimento automático de {receiveLabel}.
+              </div>
               <button
                 type="button"
                 onClick={leaveSenderSession}

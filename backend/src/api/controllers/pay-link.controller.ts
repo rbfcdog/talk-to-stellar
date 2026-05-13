@@ -38,6 +38,17 @@ function verifySessionToken(session: any, providedToken: string) {
   return Boolean(stored && providedToken && stored === String(providedToken).trim());
 }
 
+function isMissingStellarAccountError(message: string): boolean {
+  const normalized = String(message || '').trim().toLowerCase();
+  return (
+    normalized.includes('não encontrada na rede stellar') ||
+    normalized.includes('nao encontrada na rede stellar') ||
+    normalized.includes('falha ao consultar o saldo na rede stellar') ||
+    normalized.includes('account not found') ||
+    normalized.includes('resource missing')
+  );
+}
+
 type ClaimTokenReservation =
   | { ok: true; row: any }
   | { ok: false; status: number; body: Record<string, any> };
@@ -338,15 +349,11 @@ export default class PayLinkController {
     const token = String(req.body?.token || '').trim();
     const recipientSessionId = String(req.body?.session_id || '').trim();
     const recipientSessionToken = String(req.body?.session_token || '').trim();
-    const recipientPin = String(req.body?.pin || '').trim();
     let reservedTokenHash: string | null = null;
 
     try {
       if (!token || !recipientSessionId || !recipientSessionToken) {
         return res.status(401).json({ success: false, loginRequired: true, message: 'Para receber, entre ou crie sua conta global.' });
-      }
-      if (!/^\d{4,8}$/.test(recipientPin)) {
-        return res.status(400).json({ success: false, message: 'Digite o PIN da sua conta para receber este pagamento.' });
       }
 
       let payload: any;
@@ -406,11 +413,6 @@ export default class PayLinkController {
         return res.status(401).json({ success: false, loginRequired: true, message: 'Sua sessão expirou. Entre novamente para receber.' });
       }
 
-      const recipientPinHash = String((recipientSession as any).session_password_hash || (recipientSession as any).password_hash || '').trim();
-      if (!recipientPinHash || recipientPinHash !== hashPin(recipientPin)) {
-        return res.status(401).json({ success: false, message: 'PIN inválido para esta conta.' });
-      }
-
       const [senderWallet, recipientWallet] = await Promise.all([
         walletRepo.getWalletBySession(senderSessionId),
         walletRepo.getWalletBySession(recipientSessionId),
@@ -419,19 +421,37 @@ export default class PayLinkController {
         return res.status(400).json({ success: false, message: 'Conta do remetente não encontrada.' });
       }
       if (!recipientWallet?.public_key) {
-        return res.status(400).json({ success: false, message: 'Conta do destinatário não encontrada.' });
+        return res.status(401).json({
+          success: false,
+          loginRequired: true,
+          createAccountRequired: true,
+          message: 'Sua conta ainda não foi finalizada. Entre ou crie sua conta global para receber este pagamento.',
+        });
       }
       if (senderWallet.public_key === recipientWallet.public_key) {
         return res.status(400).json({ success: false, message: 'Você não pode receber um link criado pela mesma conta.' });
       }
 
-      await ensureRecipientTrustline({
-        publicKey: recipientWallet.public_key,
-        wallet: recipientWallet,
-        userId: String(recipientSession.user_id),
-        assetCode: destinationAssetCode,
-        assetIssuer: destinationAssetIssuer,
-      });
+      try {
+        await ensureRecipientTrustline({
+          publicKey: recipientWallet.public_key,
+          wallet: recipientWallet,
+          userId: String(recipientSession.user_id),
+          assetCode: destinationAssetCode,
+          assetIssuer: destinationAssetIssuer,
+        });
+      } catch (error: any) {
+        const trustlineError = error instanceof Error ? error.message : String(error);
+        if (isMissingStellarAccountError(trustlineError)) {
+          return res.status(401).json({
+            success: false,
+            loginRequired: true,
+            createAccountRequired: true,
+            message: 'Sua conta ainda não está ativa para receber. Entre ou crie sua conta global e tente novamente.',
+          });
+        }
+        throw error;
+      }
 
       const reservation = await reserveClaimTokenForExecution(tokenHash);
       if (!reservation.ok) {
