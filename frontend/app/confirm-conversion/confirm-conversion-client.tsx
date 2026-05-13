@@ -76,6 +76,33 @@ function hasUsableFeeDisplay(value?: string) {
   return !looksLikeZeroOnly
 }
 
+function formatBrl(value?: string) {
+  const amount = Number(String(value || "").replace(",", "."))
+  if (!Number.isFinite(amount) || amount <= 0) return ""
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+function formatRouteChainFromPayload(payload: any) {
+  const explicit = String(payload?.route_chain || payload?.route?.chain || "").trim()
+  if (explicit) return explicit
+  const quote = payload?.quote
+  const source = String(quote?.sourceAsset?.code || payload?.source_asset_code || "").trim().toUpperCase()
+  const destination = String(quote?.destinationAsset?.code || payload?.dest_asset_code || payload?.destination_asset_code || "").trim().toUpperCase()
+  const hops = Array.isArray(quote?.path)
+    ? quote.path
+      .map((item: any) => String(item?.code || item?.asset_code || "").trim().toUpperCase())
+      .filter(Boolean)
+    : []
+  const chain = [source, ...hops, destination].filter(Boolean)
+  const compact = chain.filter((asset, index) => index === 0 || asset !== chain[index - 1])
+  return compact.join(" -> ")
+}
+
 function getProviderLabel(provider?: string) {
   const normalized = String(provider || "").trim().toLowerCase()
   if (normalized === "telegram") return "Telegram"
@@ -161,6 +188,9 @@ export default function ConfirmConversionClient({
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
       if (response.ok && payload?.success) {
+        const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
+        const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
+        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
           "Conversão concluída.",
           payload.transferDetails?.sourceAmount
@@ -169,7 +199,9 @@ export default function ConfirmConversionClient({
           payload.transferDetails?.destinationAmount
             ? `Destino recebeu: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
             : "",
+          routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
           payload.transferDetails?.feeDisplay ? `Taxa: ${payload.transferDetails.feeDisplay}` : "",
+          savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -198,6 +230,9 @@ export default function ConfirmConversionClient({
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
+  const routeChain = formatRouteChainFromPayload(payload)
+  const estimatedSavingsBrl = String(payload?.savings_estimate?.estimated_savings_brl || "")
+  const estimatedSavingsPct = Number(String(payload?.savings_estimate?.savings_percentage_over_traditional_fee || "").replace(",", "."))
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
   const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
@@ -261,6 +296,15 @@ export default function ConfirmConversionClient({
                 {showEstimatedFee && (
                   <p className="text-slate-300">Taxa total estimada: {estimatedFeeDisplay}</p>
                 )}
+                {routeChain && (
+                  <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
+                )}
+                {formatBrl(estimatedSavingsBrl) && (
+                  <p className="text-emerald-300">
+                    Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
+                    {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -306,6 +350,9 @@ export default function ConfirmConversionClient({
                   )}
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeDisplay}</p>
+                  )}
+                  {formatBrl(estimatedSavingsBrl) && (
+                    <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>

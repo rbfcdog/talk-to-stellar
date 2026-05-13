@@ -171,6 +171,33 @@ function formatFeePercent(percent: number) {
   return `${trimFixed(percent, decimals)}%`
 }
 
+function formatBrl(value?: string) {
+  const amount = Number(String(value || "").replace(",", "."))
+  if (!Number.isFinite(amount) || amount <= 0) return ""
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+function formatRouteChainFromPayload(payload: any) {
+  const explicit = String(payload?.route_chain || payload?.route?.chain || "").trim()
+  if (explicit) return explicit
+  const quote = payload?.quote
+  const source = String(quote?.sourceAsset?.code || payload?.source_asset_code || "").trim().toUpperCase()
+  const destination = String(quote?.destinationAsset?.code || payload?.destination_asset_code || payload?.asset_code || "").trim().toUpperCase()
+  const hops = Array.isArray(quote?.path)
+    ? quote.path
+      .map((item: any) => String(item?.code || item?.asset_code || "").trim().toUpperCase())
+      .filter(Boolean)
+    : []
+  const chain = [source, ...hops, destination].filter(Boolean)
+  const compact = chain.filter((asset, index) => index === 0 || asset !== chain[index - 1])
+  return compact.join(" -> ")
+}
+
 function buildFeeSummary(input: {
   feeDisplay?: string
   platformFeeDisplay?: string
@@ -472,11 +499,24 @@ export default function ConfirmPaymentClient({
         const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
         const conversionMessage = getAutoConversionMessage(payload)
+        const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
+        const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
+        const estimatedFeeForFeedback = buildFeeSummary({
+          feeDisplay: String(payloadForFeedback?.estimated_fee_display || payloadForFeedback?.quote?.fee_display || ""),
+          feeUsdc: String(payloadForFeedback?.estimated_fee_usdc || payloadForFeedback?.quote?.fee_usdc || ""),
+          feeBrl: String(payloadForFeedback?.estimated_fee_brl || payloadForFeedback?.quote?.fee_brl || ""),
+          sourceAmount: String(payloadForFeedback?.source_amount || payloadForFeedback?.quote?.sourceAmount || payloadForFeedback?.amount || ""),
+          sourceAssetCode: String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || payloadForFeedback?.asset_code || ""),
+        })
+        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
           "Pagamento enviado com sucesso.",
           conversionMessage,
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
+          routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
+          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Taxa estimada: ${estimatedFeeForFeedback}` : "",
+          savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
           `Horário: ${formatTimestamp(payload.completed_at)}`,
           receiptUrl ? `Comprovante: ${receiptUrl}` : "",
@@ -584,6 +624,9 @@ export default function ConfirmPaymentClient({
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
   const destinationLabel = formatRecipientLabel(payload)
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
+  const estimatedSavingsBrl = String(payload?.savings_estimate?.estimated_savings_brl || "")
+  const estimatedSavingsPct = Number(String(payload?.savings_estimate?.savings_percentage_over_traditional_fee || "").replace(",", "."))
+  const routeChain = formatRouteChainFromPayload(payload)
   const estimatedFeeSummary = buildFeeSummary({
     feeDisplay: estimatedFeeDisplay,
     platformFeeDisplay: String(payload.estimated_platform_fee || payload.estimated_spread_fee || ""),
@@ -693,6 +736,15 @@ export default function ConfirmPaymentClient({
                 {showEstimatedFee && (
                   <p className="text-slate-300">Taxa total estimada: {estimatedFeeSummary}</p>
                 )}
+                {routeChain && (
+                  <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
+                )}
+                {formatBrl(estimatedSavingsBrl) && (
+                  <p className="text-emerald-300">
+                    Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
+                    {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
+                  </p>
+                )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
                   <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
                 )}
@@ -787,6 +839,9 @@ export default function ConfirmPaymentClient({
                   </div>
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
+                  )}
+                  {formatBrl(estimatedSavingsBrl) && (
+                    <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {successAutoConversionMessage && (
                     <p>{successAutoConversionMessage}</p>
