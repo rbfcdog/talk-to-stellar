@@ -11,6 +11,7 @@ import {
   normalizeExternalProvider,
   normalizeExternalProviderUserId,
 } from '../../repositories/external.repository';
+import PasskeyService from '../../services/passkey.service';
 import { ContactRepository } from '../../api/repository/contact.repository';
 import { VaultService } from '../../services/vault.service';
 import { StellarService } from '../services/stellar.service';
@@ -1519,24 +1520,51 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const providedPin = String(req.body?.pin || '').trim();
-        if (!providedPin) {
-          return res.status(400).json({
-            success: false,
-            message: 'PIN é obrigatório para confirmar o pagamento.',
-          });
-        }
+        const passkeyChallengeId = String(req.body?.passkey_challenge_id || '').trim();
+        const passkeyCredential = req.body?.passkey_credential;
+        const hasPasskeyPayload = Boolean(passkeyChallengeId || passkeyCredential);
 
-        const pinHash = crypto
-          .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-          .toString('hex');
+        if (hasPasskeyPayload) {
+          if (!passkeyChallengeId || !passkeyCredential || typeof passkeyCredential !== 'object') {
+            return res.status(400).json({
+              success: false,
+              message: 'Dados de biometria incompletos. Tente novamente.',
+            });
+          }
 
-        const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
-        if (!sessionPinHash || pinHash !== sessionPinHash) {
-          return res.status(401).json({
-            success: false,
-            message: 'PIN inválido. Tente novamente.',
-          });
+          try {
+            await PasskeyService.verifyTransactionAuthorization({
+              token: String(token),
+              publicKey: resolvedDestination,
+              challengeId: passkeyChallengeId,
+              response: passkeyCredential,
+            });
+          } catch (passkeyError: any) {
+            return res.status(401).json({
+              success: false,
+              message: passkeyError?.message || 'Falha na validação da biometria.',
+            });
+          }
+        } else {
+          const providedPin = String(req.body?.pin || '').trim();
+          if (!providedPin) {
+            return res.status(400).json({
+              success: false,
+              message: 'PIN é obrigatório para confirmar o pagamento.',
+            });
+          }
+
+          const pinHash = crypto
+            .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+            .toString('hex');
+
+          const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
+          if (!sessionPinHash || pinHash !== sessionPinHash) {
+            return res.status(401).json({
+              success: false,
+              message: 'PIN inválido. Tente novamente.',
+            });
+          }
         }
 
         const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
