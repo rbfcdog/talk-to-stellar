@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
 export default function LinkUsedClient() {
@@ -15,23 +14,8 @@ export default function LinkUsedClient() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-200">Link inválido</p>
           <h1 className="mt-3 text-3xl font-semibold text-white">Link já usado</h1>
           <p className="mt-4 text-sm text-slate-200">{message}</p>
-          <div className="mt-6 flex gap-2">
-            <Link
-              href="/login"
-              className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
-            >
-              Ir para login
-            </Link>
-            <Link
-              href="/chat"
-              className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
-            >
-              Ir para chat
-            </Link>
-          </div>
         </section>
       </div>
     </main>
   )
 }
-
