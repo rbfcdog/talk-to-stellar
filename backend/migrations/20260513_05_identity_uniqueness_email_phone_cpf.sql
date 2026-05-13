@@ -4,16 +4,14 @@
 DO $$
 BEGIN
   IF to_regclass('public.agent_sessions') IS NOT NULL THEN
-    -- Remove legacy placeholder e-mails that were duplicated across sessions.
-    UPDATE public.agent_sessions
-      SET email = NULL
-      WHERE lower(btrim(coalesce(email, ''))) IN ('unknown@example.com')
-         OR lower(btrim(coalesce(email, ''))) LIKE '%@local.test';
-
-    -- Keep only the newest non-placeholder e-mail per normalized value.
+    -- Keep only the newest e-mail per normalized value.
+    -- IMPORTANT: email is NOT NULL in agent_sessions, so never write NULL here.
+    -- For duplicates (or known placeholders), rewrite secondary rows to deterministic unique placeholders.
     WITH ranked_email AS (
       SELECT
         ctid AS row_id,
+        session_id,
+        lower(btrim(coalesce(email, ''))) AS normalized_email,
         row_number() OVER (
           PARTITION BY lower(btrim(email))
           ORDER BY coalesce(updated_at, created_at, now()) DESC, session_id DESC
@@ -22,10 +20,18 @@ BEGIN
       WHERE email IS NOT NULL AND btrim(email) <> ''
     )
     UPDATE public.agent_sessions s
-      SET email = NULL
+      SET email = concat(
+        'dedup+',
+        substr(replace(s.session_id::text, '-', ''), 1, 24),
+        '@local.test'
+      )
       FROM ranked_email r
       WHERE s.ctid = r.row_id
-        AND r.rn > 1;
+        AND (
+          r.rn > 1
+          OR r.normalized_email = 'unknown@example.com'
+          OR r.normalized_email LIKE '%@local.test'
+        );
 
     -- Keep only the newest phone number per normalized digits.
     WITH ranked_phone AS (
