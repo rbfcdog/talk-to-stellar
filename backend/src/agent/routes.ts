@@ -685,13 +685,29 @@ export function createAgentRoutes(
         return res.status(404).json({ error: "Session not found" });
       }
 
+      let resolvedPublicKey = String((sessionData as any).public_key || '').trim();
+      if (!resolvedPublicKey) {
+        try {
+          const wallet = await walletRepo.getWalletBySession(session_id);
+          const walletPublicKey = String((wallet as any)?.public_key || '').trim();
+          if (walletPublicKey) {
+            resolvedPublicKey = walletPublicKey;
+            (sessionData as any).public_key = walletPublicKey;
+            await repository.saveSession(session_id, sessionData as any);
+          }
+        } catch {
+          // ignore hydration failures on read-only session checks
+        }
+      }
+
       const messages = await repository.getMessages(session_id);
 
       return res.status(200).json({
         session_id,
         user_id: sessionData.user_id,
         email: sessionData.email,
-        public_key: sessionData.public_key,
+        public_key: resolvedPublicKey || null,
+        has_wallet: Boolean(resolvedPublicKey),
         created_at: sessionData.created_at,
         last_activity: sessionData.last_activity,
         message_count: messages.length,

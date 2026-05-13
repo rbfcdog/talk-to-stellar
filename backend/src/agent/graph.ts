@@ -640,9 +640,16 @@ ${onboardingUrl}`;
       const hasValidAmount = amount.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0;
 
       if (!hasValidAmount) {
-        state.success = false;
-        state.response_message =
-          'Não foi informado o valor do link de pagamento. Qual valor você quer colocar no link? Exemplo: "criar link de 10 dólares".';
+        const recovered = await this.tryRecoverConfirmationLinkFromRecentPaymentContext(state);
+        if (recovered) {
+          state.success = true;
+          state.pending_payment = undefined;
+          state.response_message = recovered;
+        } else {
+          state.success = false;
+          state.response_message =
+            'Não foi informado o valor do link de pagamento. Qual valor você quer colocar no link? Exemplo: "criar link de 10 dólares".';
+        }
       } else {
         const url = this.buildPayAnyoneUrl({ amount, assetCode, receiveAssetCode, recipientName, expiresAt });
         state.pending_payment = undefined;
@@ -661,6 +668,190 @@ ${onboardingUrl}`;
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
+  }
+
+  private isFollowUpGenerateLinkRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    if (!normalized.includes('link')) return false;
+
+    return (
+      normalized.includes('gere o link') ||
+      normalized.includes('gera o link') ||
+      normalized.includes('gerar o link') ||
+      normalized.includes('quero o link') ||
+      normalized.includes('manda o link') ||
+      normalized.includes('pode gerar o link') ||
+      normalized.includes('cria o link') ||
+      normalized.includes('criar o link')
+    );
+  }
+
+  private async tryRecoverConfirmationLinkFromRecentPaymentContext(state: AgentState): Promise<string | null> {
+    if (!this.isFollowUpGenerateLinkRequest(state.current_input)) {
+      return null;
+    }
+
+    const recentUserMessages = (state.messages || [])
+      .filter((message: any) => message?.role === 'user')
+      .slice(-5)
+      .reverse();
+
+    for (const message of recentUserMessages) {
+      const messageText = String(message?.content || '').trim();
+      if (!messageText) continue;
+
+      const parsed = await this.extractPaymentIntentWithLlm(messageText, state.session_data?.user_id);
+      if (parsed.is_payment_link) continue;
+
+      const prepared = await this.preparePaymentConfirmationFromIntent(state, {
+        recipient_query: parsed.recipient_query,
+        amount: parsed.amount,
+        asset_code: parsed.asset_code,
+        receive_asset_code: parsed.receive_asset_code,
+        memo: parsed.memo,
+      });
+
+      if (prepared.success && prepared.message) {
+        return prepared.message;
+      }
+    }
+
+    return null;
+  }
+
+  private async preparePaymentConfirmationFromIntent(
+    state: AgentState,
+    intent: {
+      recipient_query?: string;
+      amount?: string;
+      asset_code?: string;
+      receive_asset_code?: string;
+      memo?: string;
+    }
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    const recipientQuery = String(intent.recipient_query || '').trim();
+    const amountInfo = this.normalizePaymentAmountAndAsset(
+      String(intent.amount || ''),
+      intent.asset_code
+    );
+    const amount = String(amountInfo.amount || '').trim();
+    const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const receiveAssetCode = String(intent.receive_asset_code || assetCode)
+      .trim()
+      .toUpperCase()
+      .replace(/^USD$/, 'USDC');
+
+    if (!recipientQuery || !amount || !assetCode) {
+      return { success: false, error: 'context_incomplete' };
+    }
+
+    const contact = await this.getContactByPublicKeyOrName(recipientQuery, state.session_data?.user_id);
+    const destination = String(
+      contact?.destination_public_key ||
+      contact?.stellar_public_key ||
+      contact?.public_key ||
+      (/^G[A-Z2-7]{55}$/i.test(recipientQuery) ? recipientQuery : '')
+    ).trim();
+    const destinationName = String(contact?.contact_name || contact?.name || recipientQuery).trim();
+
+    if (!destination) {
+      return { success: false, error: 'destination_not_found' };
+    }
+
+    let quote: any = null;
+    let bestRouteResult: any = null;
+    let confirmationAmount = amount;
+    let confirmationAssetCode = assetCode;
+    let sourceAmountForConfirmation: string | undefined;
+    let sourceAssetCodeForConfirmation: string | undefined;
+    let sourceAssetIssuerForConfirmation: string | undefined;
+
+    if (receiveAssetCode && receiveAssetCode !== assetCode) {
+      const sourceIssuer = getAssetIssuer(assetCode) || await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), assetCode);
+      let destIssuer = getAssetIssuer(receiveAssetCode) || await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
+      if (receiveAssetCode !== 'XLM' && !destIssuer) {
+        const trustlineResultRaw = await executeTool('ensure_trustline', {
+          session_id: contact?.session_id,
+          public_key: destination,
+          asset_code: receiveAssetCode,
+        });
+        try {
+          const trustlineResult = JSON.parse(trustlineResultRaw);
+          if (trustlineResult.success && trustlineResult.asset_issuer) {
+            destIssuer = trustlineResult.asset_issuer;
+          }
+        } catch {
+          // ignore, quote will fail with a clearer error if issuer is missing
+        }
+      }
+
+      const quoteRaw = await executeTool('get_best_route', {
+        source_public_key: state.session_data?.public_key,
+        destination,
+        source_amount: amount,
+        source_asset_code: assetCode,
+        source_asset_issuer: sourceIssuer,
+        dest_asset_code: receiveAssetCode,
+        dest_asset_issuer: destIssuer,
+      });
+      const parsedBestRoute = JSON.parse(quoteRaw);
+      if (!parsedBestRoute.success) {
+        return { success: false, error: parsedBestRoute.error || 'route_quote_failed' };
+      }
+
+      bestRouteResult = parsedBestRoute;
+      quote = parsedBestRoute.quote;
+      confirmationAmount = String(quote.destinationAmount || '').trim();
+      confirmationAssetCode = receiveAssetCode;
+      sourceAmountForConfirmation = amount;
+      sourceAssetCodeForConfirmation = assetCode;
+      sourceAssetIssuerForConfirmation = sourceIssuer;
+    }
+
+    const prepareRaw = await executeTool('prepare_payment_confirmation', {
+      session_id: state.session_id,
+      owner_id: state.session_data?.user_id,
+      amount: confirmationAmount,
+      asset_code: confirmationAssetCode,
+      destination,
+      destination_name: destinationName,
+      destination_contact: contact || undefined,
+      quote,
+      source_amount: sourceAmountForConfirmation,
+      source_asset_code: sourceAssetCodeForConfirmation,
+      source_asset_issuer: sourceAssetIssuerForConfirmation,
+      destination_amount: quote?.destinationAmount,
+      destination_asset_code: quote?.destinationAsset?.code,
+      destination_asset_issuer: quote?.destinationAsset?.issuer,
+      optimization_criteria: bestRouteResult?.optimization_criteria,
+      memo: intent.memo,
+    });
+
+    let prepare: any;
+    try {
+      prepare = JSON.parse(prepareRaw);
+    } catch {
+      prepare = { success: false, error: 'Failed to parse payment confirmation response' };
+    }
+
+    if (!prepare.success || !prepare.url) {
+      return { success: false, error: prepare.error || 'prepare_payment_confirmation_failed' };
+    }
+
+    if (receiveAssetCode !== assetCode) {
+      const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
+      const message = [
+        `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+        transparencyLine,
+        `Para confirmar, abra o link:\n\n${prepare.url}`,
+      ].filter(Boolean).join('\n');
+      return { success: true, message };
+    }
+
+    return {
+      success: true,
+      message: prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`,
+    };
   }
 
   private async handleReceiveLinkRequest(state: AgentState): Promise<AgentState> {
@@ -888,10 +1079,6 @@ ${onboardingUrl}`;
     );
     const amount = String(amountInfo.amount || '').trim();
     const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-    const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode)
-      .trim()
-      .toUpperCase()
-      .replace(/^USD$/, 'USDC');
 
     if (llmParsed.is_payment_link) {
       return await this.handlePayAnyoneLinkRequest(state);
@@ -904,120 +1091,25 @@ ${onboardingUrl}`;
       await this.repository.saveState(state.session_id, state);
       return state;
     }
-
-    const contact = await this.getContactByPublicKeyOrName(recipientQuery, state.session_data.user_id);
-    const destination = String(
-      contact?.destination_public_key ||
-      contact?.stellar_public_key ||
-      contact?.public_key ||
-      (/^G[A-Z2-7]{55}$/i.test(recipientQuery) ? recipientQuery : '')
-    ).trim();
-    const destinationName = String(contact?.contact_name || contact?.name || recipientQuery).trim();
-
-    if (!destination) {
-      state.success = false;
-      state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie e-mail, CPF ou telefone do destinatário para salvar esse contato antes de transferir.`;
-      await this.saveAssistantResponse(state);
-      await this.repository.saveState(state.session_id, state);
-      return state;
-    }
-
-    let quote: any = null;
-    let bestRouteResult: any = null;
-    let confirmationAmount = amount;
-    let confirmationAssetCode = assetCode;
-    let sourceAmountForConfirmation: string | undefined;
-    let sourceAssetCodeForConfirmation: string | undefined;
-    let sourceAssetIssuerForConfirmation: string | undefined;
-
-    if (receiveAssetCode && receiveAssetCode !== assetCode) {
-      const sourceIssuer = getAssetIssuer(assetCode) || await this.resolveWalletAssetIssuer(state.session_data.public_key, assetCode);
-      let destIssuer = getAssetIssuer(receiveAssetCode) || await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
-      if (receiveAssetCode !== 'XLM' && !destIssuer) {
-        const trustlineResultRaw = await executeTool('ensure_trustline', {
-          session_id: contact?.session_id,
-          public_key: destination,
-          asset_code: receiveAssetCode,
-        });
-        try {
-          const trustlineResult = JSON.parse(trustlineResultRaw);
-          if (trustlineResult.success && trustlineResult.asset_issuer) {
-            destIssuer = trustlineResult.asset_issuer;
-          }
-        } catch {
-          // ignore, quote will fail with a clearer error if issuer is missing
-        }
-      }
-
-      const quoteRaw = await executeTool('get_best_route', {
-        source_public_key: state.session_data.public_key,
-        destination,
-        source_amount: amount,
-        source_asset_code: assetCode,
-        source_asset_issuer: sourceIssuer,
-        dest_asset_code: receiveAssetCode,
-        dest_asset_issuer: destIssuer,
-      });
-      const parsedBestRoute = JSON.parse(quoteRaw);
-      if (!parsedBestRoute.success) {
-        state.success = false;
-        state.response_message = `Não consegui cotar esse pagamento: ${parsedBestRoute.error || 'erro desconhecido'}`;
-        await this.saveAssistantResponse(state);
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      bestRouteResult = parsedBestRoute;
-      quote = parsedBestRoute.quote;
-      confirmationAmount = String(quote.destinationAmount || '').trim();
-      confirmationAssetCode = receiveAssetCode;
-      sourceAmountForConfirmation = amount;
-      sourceAssetCodeForConfirmation = assetCode;
-      sourceAssetIssuerForConfirmation = sourceIssuer;
-    }
-
-    const prepareRaw = await executeTool('prepare_payment_confirmation', {
-      session_id: state.session_id,
-      owner_id: state.session_data.user_id,
-      amount: confirmationAmount,
-      asset_code: confirmationAssetCode,
-      destination,
-      destination_name: destinationName,
-      destination_contact: contact || undefined,
-      quote,
-      source_amount: sourceAmountForConfirmation,
-      source_asset_code: sourceAssetCodeForConfirmation,
-      source_asset_issuer: sourceAssetIssuerForConfirmation,
-      destination_amount: quote?.destinationAmount,
-      destination_asset_code: quote?.destinationAsset?.code,
-      destination_asset_issuer: quote?.destinationAsset?.issuer,
-      optimization_criteria: bestRouteResult?.optimization_criteria,
+    const prepared = await this.preparePaymentConfirmationFromIntent(state, {
+      recipient_query: recipientQuery,
+      amount,
+      asset_code: assetCode,
+      receive_asset_code: llmParsed.receive_asset_code || assetCode,
       memo: llmParsed.memo,
     });
 
-    let prepare: any;
-    try {
-      prepare = JSON.parse(prepareRaw);
-    } catch {
-      prepare = { success: false, error: 'Failed to parse payment confirmation response' };
-    }
-
-    if (!prepare.success || !prepare.url) {
+    if (!prepared.success) {
       state.success = false;
-      state.response_message = `Não consegui gerar o link de confirmação do pagamento agora: ${prepare.error || 'erro desconhecido'}`;
+      if (prepared.error === 'destination_not_found') {
+        state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie e-mail, CPF ou telefone do destinatário para salvar esse contato antes de transferir.`;
+      } else {
+        state.response_message = `Não consegui gerar o link de confirmação do pagamento agora: ${prepared.error || 'erro desconhecido'}`;
+      }
     } else {
       state.pending_payment = undefined;
       state.success = true;
-      if (receiveAssetCode !== assetCode) {
-        const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
-        state.response_message = [
-          `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
-          transparencyLine,
-          `Para confirmar, abra o link:\n\n${prepare.url}`,
-        ].filter(Boolean).join('\n');
-      } else {
-        state.response_message = prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`;
-      }
+      state.response_message = String(prepared.message || 'Link de confirmação gerado com sucesso.');
     }
 
     await this.saveAssistantResponse(state);
