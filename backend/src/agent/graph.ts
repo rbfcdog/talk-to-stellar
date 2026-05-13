@@ -963,8 +963,13 @@ ${onboardingUrl}`;
       contacts = await this.fetchContacts(resolvedUserId);
     }
 
-    const publicKey = String(sessionData?.public_key || walletData?.public_key || '').trim();
-    const transferKey = String(sessionData?.pix_key || walletData?.pix_key || '').trim();
+    const forceLoggedOut = Boolean((stateData?.action_params as any)?.force_logged_out);
+    const publicKey = forceLoggedOut
+      ? ''
+      : String(sessionData?.public_key || walletData?.public_key || '').trim();
+    const transferKey = forceLoggedOut
+      ? ''
+      : String(sessionData?.pix_key || walletData?.pix_key || '').trim();
     const email = String(sessionData?.email || '').trim();
     const phoneNumber = String(sessionData?.phone_number || '').trim();
     const hasActiveWallet = Boolean(publicKey);
@@ -986,6 +991,7 @@ ${onboardingUrl}`;
       `session_id=${normalizedSessionId || 'indisponivel'}`,
       `user_id=${resolvedUserId || 'indisponivel'}`,
       `session_active=${hasActiveWallet ? 'true' : 'false'}`,
+      `force_logged_out=${forceLoggedOut ? 'true' : 'false'}`,
       `wallet_public_key=${publicKey || 'indisponivel'}`,
       `wallet_public_key_display=${this.maskPublicKey(publicKey)}`,
       `transfer_key=${transferKey || publicKey || 'indisponivel'}`,
@@ -1236,49 +1242,25 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
   }
 
   private formatAddedContactMessage(toolResult: any): string {
-    const rawMessage = String(toolResult?.message || '').trim();
-    if (rawMessage) {
-      return rawMessage;
-    }
-
     const contact = toolResult?.contact || {};
     const profile = toolResult?.contact_profile || {};
+    const transferKey = String(profile.pix_key || contact.pix_key || '').trim();
     const lines = [
       contact.contact_name ? `Nome: ${contact.contact_name}` : null,
-      contact.stellar_public_key ? `Chave pública: ${contact.stellar_public_key}` : null,
-      profile.pix_key || contact.pix_key ? `Chave de transferência: ${profile.pix_key || contact.pix_key}` : null,
-      profile.email ? `E-mail: ${profile.email}` : null,
-      profile.phone_number ? `Telefone: ${profile.phone_number}` : null,
-      profile.cpf ? `CPF: ${profile.cpf}` : null,
+      `Chave de transferência: ${transferKey || 'indisponível'}`,
     ].filter(Boolean);
 
     return `Contato adicionado com sucesso.${lines.length ? `\n${lines.join('\n')}` : ''}`;
   }
 
-  private contactIdentifierLines(contact: any): string[] {
-    const profile = contact?.contact_profile || {};
-    const email = String(contact?.email || profile?.email || '').trim();
-    const cpf = String(contact?.cpf || profile?.cpf || '').trim();
-
-    return [
-      `E-mail: ${email || 'indisponível'}`,
-      `CPF: ${cpf || 'indisponível'}`,
-    ];
-  }
-
   private formatContactListLine(contact: any, index: number): string {
     const label = String(contact.display_label || contact.contact_name || contact.name || 'Contato').trim();
-    const publicKey = String(contact.stellar_public_key || contact.public_key || '').trim();
     const transferKey = String(contact.pix_key || contact.contact_profile?.pix_key || '').trim();
     const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
     const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
-    const keyParts = [
-      `Chave pública: ${publicKey || 'indisponível'}`,
-      `Chave de transferência: ${transferKey || 'indisponível'}`,
-      ...this.contactIdentifierLines(contact),
-    ];
+    const transferLine = `Chave de transferência: ${transferKey || 'indisponível'}`;
 
-    return `${index + 1}. ${label}${last}${freq}\n${keyParts.join('\n')}`;
+    return `${index + 1}. ${label}${last}${freq}\n${transferLine}`;
   }
 
   private async handleContactsRequest(state: AgentState): Promise<AgentState> {

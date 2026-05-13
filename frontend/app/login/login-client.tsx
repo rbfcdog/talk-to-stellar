@@ -51,6 +51,10 @@ function decodeJwtPayload(token: string): any {
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const searchParams = useSearchParams()
+  const rawNextPath = String(searchParams.get("next") || "").trim()
+  const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
+    ? rawNextPath
+    : ""
   const externalToken = searchParams.get("token") || ""
   const externalPayload = useMemo(() => decodeJwtPayload(externalToken), [externalToken])
   const externalProvider = String(externalPayload?.provider || "").trim().toLowerCase()
@@ -77,6 +81,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function finishLogin() {
     enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${email.trim() || "usuário"}`)
+    if (!hasExternalContext && nextPath) {
+      try {
+        window.location.replace(nextPath)
+        return
+      } catch {
+        // Fallback to intermediate close behavior below
+      }
+    }
     setLoginDone(true)
     closeIntermediatePage()
   }

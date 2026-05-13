@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { v4 as uuidv4 } from 'uuid';
 import { SessionData, AgentState } from '../agent/types';
 
 export class AgentRepository {
@@ -188,6 +189,7 @@ export class AgentRepository {
       .from('agent_sessions')
       .update({
         public_key: null,
+        session_token: uuidv4(),
         last_activity: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

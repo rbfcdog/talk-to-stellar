@@ -968,10 +968,18 @@ function executeGetIntentHelp(): string {
     success: true,
     commands,
     message: [
-      "Principais comandos:",
+      "Guia rápido TalkToStellar:",
+      "1) Comece por: saldo, contatos, histórico.",
+      "2) Para enviar: diga valor + destinatário (ex.: \"enviar 50 reais para Ana\").",
+      "3) Para converter: diga valor e moeda de origem/destino (ex.: \"converter 20 dólares para reais\").",
+      "4) Para cobrar: peça um \"link de pagamento\".",
+      "",
+      "Comandos disponíveis:",
       ...commands.map((item, index) =>
         `${index + 1}. ${item.command}: ${item.description} Exemplo: "${item.examples[0]}".`
       ),
+      "",
+      "Se você quiser, descreva seu objetivo em uma frase e eu te guio passo a passo.",
     ].join("\n"),
   });
 }
@@ -1042,6 +1050,7 @@ async function executeLogoutSession(input: any): Promise<string> {
       .from('agent_sessions')
       .update({
         public_key: null,
+        session_token: crypto.randomUUID(),
         last_activity: new Date().toISOString(),
       })
       .eq('session_id', sessionId);
@@ -1064,6 +1073,22 @@ async function executeLogoutSession(input: any): Promise<string> {
         updated_at: new Date().toISOString(),
       })
       .eq('session_id', sessionId);
+
+    const { error: unlinkError } = await supabase
+      .from('external_accounts')
+      .update({
+        session_id: null,
+        user_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('session_id', sessionId);
+
+    if (unlinkError) {
+      const message = String(unlinkError.message || '').toLowerCase();
+      if (!message.includes('external_accounts') && !message.includes('schema cache') && !message.includes('does not exist')) {
+        throw new Error(unlinkError.message || 'Falha ao desvincular sessão externa');
+      }
+    }
 
     return JSON.stringify({
       success: true,
