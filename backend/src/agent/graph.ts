@@ -1977,18 +1977,21 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     return state;
   }
 
-  private financialMemoryMode(message: string, allowLooseNicknameReply = false): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
+  private financialMemoryMode(message: string, allowNicknameSet = false): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
     if ((normalized.includes('apelido') || normalized.includes('nome da transacao') || normalized.includes('nome da transação')) &&
       (normalized.includes('qual') || normalized.includes('quanto') || normalized.includes('?'))) return 'nickname_lookup';
-    if ((normalized.includes('apelido') || normalized.includes('nome da transacao') || normalized.includes('nome da transação')) &&
-      (normalized.includes('definir') || normalized.includes('salvar') || normalized.includes('colocar') || normalized.includes(':'))) return 'nickname_set';
+    if (
+      allowNicknameSet &&
+      (normalized.includes('apelido') || normalized.includes('nome da transacao') || normalized.includes('nome da transação')) &&
+      (normalized.includes('definir') || normalized.includes('salvar') || normalized.includes('colocar') || normalized.includes(':'))
+    ) return 'nickname_set';
     if ((normalized.includes('qual foi o valor') || normalized.includes('quanto foi')) &&
       (normalized.includes('pagamento') || normalized.includes('transacao') || normalized.includes('transação'))) return 'nickname_lookup';
-    if (allowLooseNicknameReply && this.looksLikeNicknameReply(message)) return 'nickname_set';
+    if (allowNicknameSet && this.looksLikeNicknameReply(message)) return 'nickname_set';
     if (/\b(de novo|novamente|again|mesma carteira|mesmo pagamento)\b/.test(normalized)) return 'repeat_payment';
     if (/\b(favoritos?|recorrente|recorrencia|recorrência|destinatarios|destinatários|clientes)\b/.test(normalized)) return 'recipient_insights';
     if (normalized.includes('quanto recebi') || normalized.includes('recebi esse mes') || normalized.includes('recebimentos do mes')) return 'monthly_received';
@@ -2056,8 +2059,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     );
   }
 
-  private hasDeterministicFinancialMemoryIntent(message: string, allowLooseNicknameReply = false): boolean {
-    const mode = this.financialMemoryMode(message, allowLooseNicknameReply);
+  private hasDeterministicFinancialMemoryIntent(message: string, allowNicknameSet = false): boolean {
+    const mode = this.financialMemoryMode(message, allowNicknameSet);
     return mode === 'nickname_set' || mode === 'nickname_lookup';
   }
 
@@ -2142,7 +2145,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   }
 
   private async handleFinancialMemoryRequest(state: AgentState): Promise<AgentState> {
-    const mode = this.financialMemoryMode(state.current_input, this.hasPendingNicknamePrompt(state));
+    const allowNicknameSet = this.hasPendingNicknamePrompt(state);
+    const mode = this.financialMemoryMode(state.current_input, allowNicknameSet);
     const contactName = mode === 'repeat_payment' ? this.extractRepeatCounterparty(state.current_input) : '';
     const nickname = mode === 'nickname_set' || mode === 'nickname_lookup'
       ? this.extractTransactionNickname(state.current_input)
@@ -2153,6 +2157,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       mode,
       contact_name: contactName,
       nickname,
+      allow_nickname_set: allowNicknameSet,
     });
 
     let memory: any;
