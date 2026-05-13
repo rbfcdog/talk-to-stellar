@@ -63,74 +63,95 @@ function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
 }
 
 export class FinancialController {
+  private static async buildConversionPreviewPayload(req: Request, includeEstimatedSpreadWhenTreasuryDisabled: boolean) {
+    const rawAmount = String(req.query?.brl_amount || req.body?.brl_amount || req.query?.amount || req.body?.amount || '1000')
+      .replace(',', '.')
+      .trim();
+    const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
+    const rate = await fetchBrlPerUsdcRate();
+    const usdcPerBrl = rate.brlPerUsdc > 0 ? 1 / rate.brlPerUsdc : 0;
+    const grossUsdc = brlAmount * usdcPerBrl;
+
+    const spread = PlatformFeeService.calculateSpread({
+      sourceAmount: brlAmount.toFixed(7),
+      sourceAssetCode: 'BRL',
+      destinationAssetCode: 'USDC',
+      mode: 'deduct_from_source',
+    });
+
+    const spreadEstimateBrl = toPositiveNumber(spread.feeAmount, 0);
+    const spreadBrl = includeEstimatedSpreadWhenTreasuryDisabled
+      ? spreadEstimateBrl
+      : (spread.enabled ? spreadEstimateBrl : 0);
+    const netBrl = Math.max(0, brlAmount - spreadBrl);
+    const spreadUsdc = spreadBrl * usdcPerBrl;
+    const receiveUsdc = netBrl * usdcPerBrl;
+
+    const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
+    const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
+    const networkFeeUsdc = toPositiveNumber(networkFee.fee_usdc, 0);
+
+    const totalFeeBrl = spreadBrl + networkFeeBrl;
+    const totalFeeUsdc = spreadUsdc + networkFeeUsdc;
+    const totalFeePct = brlAmount > 0 ? (totalFeeBrl / brlAmount) * 100 : 0;
+
+    const traditionalFeePct = Math.max(0, EconomyEngineService.traditionalFeePct() * 100);
+    const traditionalFeeBrl = brlAmount * (traditionalFeePct / 100);
+    const savingsBrl = Math.max(0, traditionalFeeBrl - totalFeeBrl);
+
+    return {
+      success: true,
+      input: {
+        brl_amount: Number(brlAmount.toFixed(2)),
+      },
+      quote: {
+        brl_per_usdc: Number(rate.brlPerUsdc.toFixed(6)),
+        usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
+        source: rate.source,
+        symbol: rate.symbol,
+      },
+      output: {
+        gross_receive_usdc: Number(grossUsdc.toFixed(4)),
+        receive_usdc: Number(receiveUsdc.toFixed(4)),
+      },
+      fees: {
+        talktostellar_spread_brl: Number(spreadBrl.toFixed(6)),
+        talktostellar_spread_usdc: Number(spreadUsdc.toFixed(6)),
+        network_fee_brl: Number(networkFeeBrl.toFixed(8)),
+        network_fee_usdc: Number(networkFeeUsdc.toFixed(8)),
+        total_fee_brl: Number(totalFeeBrl.toFixed(8)),
+        total_fee_usdc: Number(totalFeeUsdc.toFixed(8)),
+        total_fee_pct: Number(totalFeePct.toFixed(6)),
+        spread_bps_config: spread.feeBps,
+        spread_min_brl_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_BRL, 0.05),
+        spread_min_usdc_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_USDC, 0.01),
+        spread_collection_active: Boolean(spread.enabled),
+        spread_estimated_brl: Number(spreadEstimateBrl.toFixed(6)),
+        network_fee_display: networkFee.display,
+      },
+      comparison: {
+        traditional_fee_pct: Number(traditionalFeePct.toFixed(4)),
+        traditional_fee_brl: Number(traditionalFeeBrl.toFixed(6)),
+        savings_brl: Number(savingsBrl.toFixed(6)),
+      },
+    };
+  }
+
   static async getConversionPreview(req: Request, res: Response) {
     try {
-      const rawAmount = String(req.query?.brl_amount || req.body?.brl_amount || req.query?.amount || req.body?.amount || '1000')
-        .replace(',', '.')
-        .trim();
-      const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
-      const rate = await fetchBrlPerUsdcRate();
-      const usdcPerBrl = rate.brlPerUsdc > 0 ? 1 / rate.brlPerUsdc : 0;
-      const grossUsdc = brlAmount * usdcPerBrl;
+      return res.status(200).json(
+        await FinancialController.buildConversionPreviewPayload(req, false)
+      );
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
 
-      const spread = PlatformFeeService.calculateSpread({
-        sourceAmount: brlAmount.toFixed(7),
-        sourceAssetCode: 'BRL',
-        destinationAssetCode: 'USDC',
-        mode: 'deduct_from_source',
-      });
-
-      const spreadBrl = spread.enabled ? toPositiveNumber(spread.feeAmount, 0) : 0;
-      const netBrl = Math.max(0, brlAmount - spreadBrl);
-      const spreadUsdc = spreadBrl * usdcPerBrl;
-      const receiveUsdc = netBrl * usdcPerBrl;
-
-      const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
-      const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
-      const networkFeeUsdc = toPositiveNumber(networkFee.fee_usdc, 0);
-
-      const totalFeeBrl = spreadBrl + networkFeeBrl;
-      const totalFeeUsdc = spreadUsdc + networkFeeUsdc;
-      const totalFeePct = brlAmount > 0 ? (totalFeeBrl / brlAmount) * 100 : 0;
-
-      const traditionalFeePct = Math.max(0, EconomyEngineService.traditionalFeePct() * 100);
-      const traditionalFeeBrl = brlAmount * (traditionalFeePct / 100);
-      const savingsBrl = Math.max(0, traditionalFeeBrl - totalFeeBrl);
-
-      return res.status(200).json({
-        success: true,
-        input: {
-          brl_amount: Number(brlAmount.toFixed(2)),
-        },
-        quote: {
-          brl_per_usdc: Number(rate.brlPerUsdc.toFixed(6)),
-          usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
-          source: rate.source,
-          symbol: rate.symbol,
-        },
-        output: {
-          gross_receive_usdc: Number(grossUsdc.toFixed(4)),
-          receive_usdc: Number(receiveUsdc.toFixed(4)),
-        },
-        fees: {
-          talktostellar_spread_brl: Number(spreadBrl.toFixed(6)),
-          talktostellar_spread_usdc: Number(spreadUsdc.toFixed(6)),
-          network_fee_brl: Number(networkFeeBrl.toFixed(6)),
-          network_fee_usdc: Number(networkFeeUsdc.toFixed(6)),
-          total_fee_brl: Number(totalFeeBrl.toFixed(6)),
-          total_fee_usdc: Number(totalFeeUsdc.toFixed(6)),
-          total_fee_pct: Number(totalFeePct.toFixed(4)),
-          spread_bps_config: spread.feeBps,
-          spread_min_brl_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_BRL, 0.05),
-          spread_min_usdc_config: toPositiveNumber(process.env.TALKTOSTELLAR_SPREAD_MIN_USDC, 0.01),
-          network_fee_display: networkFee.display,
-        },
-        comparison: {
-          traditional_fee_pct: Number(traditionalFeePct.toFixed(4)),
-          traditional_fee_brl: Number(traditionalFeeBrl.toFixed(6)),
-          savings_brl: Number(savingsBrl.toFixed(6)),
-        },
-      });
+  static async getConversionFeesPreview(req: Request, res: Response) {
+    try {
+      return res.status(200).json(
+        await FinancialController.buildConversionPreviewPayload(req, true)
+      );
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error?.message || String(error) });
     }
