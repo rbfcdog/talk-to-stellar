@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
@@ -267,7 +267,6 @@ export default function ConfirmPaymentClient({
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const requestedAuthMethod = useMemo(() => String(searchParams.get("auth") || "").trim().toLowerCase(), [searchParams])
   const publicKeyFromUrl = useMemo(() => searchParams.get("public_key") || searchParams.get("destination_public_key") || '', [searchParams])
-  const router = useRouter()
 
   const [token, setToken] = useState(tokenFromUrl)
   const [publicKey, setPublicKey] = useState(publicKeyFromUrl)
@@ -282,21 +281,24 @@ export default function ConfirmPaymentClient({
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
+  const urlScrubbedRef = useRef(false)
 
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
       // Preserve public key from URL before we strip query params for privacy
       if (publicKeyFromUrl) setPublicKey(publicKeyFromUrl)
-      // remove token from URL to avoid leaking it in history/refs
-      try {
-        // keep the same pathname (no token/query)
-        router.replace(window.location.pathname)
-      } catch (err) {
-        // ignore in environments where router/window aren't available
+      // remove token/query from URL to avoid leaking it in history/referrers
+      if (typeof window !== "undefined" && !urlScrubbedRef.current) {
+        try {
+          window.history.replaceState(null, "", window.location.pathname)
+          urlScrubbedRef.current = true
+        } catch {
+          // ignore
+        }
       }
     }
-  }, [tokenFromUrl])
+  }, [tokenFromUrl, publicKeyFromUrl])
 
   useEffect(() => {
     async function validateToken() {
@@ -381,6 +383,20 @@ export default function ConfirmPaymentClient({
     if (status !== "done") return
     closeIntermediatePage()
   }, [status])
+
+  const mobileRedirectUrl = useMemo(() => {
+    if (!token || typeof window === "undefined") return ""
+    const url = new URL(`${window.location.origin}/confirm-payment`)
+    url.searchParams.set("token", token)
+    const destinationKey = String(publicKey || publicKeyFromUrl || "").trim()
+    if (destinationKey) url.searchParams.set("public_key", destinationKey)
+    url.searchParams.set("auth", "passkey")
+    return url.toString()
+  }, [token, publicKey, publicKeyFromUrl])
+  const qrImageUrl = useMemo(() => {
+    if (!qrTargetUrl) return ""
+    return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
+  }, [qrTargetUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -474,10 +490,10 @@ export default function ConfirmPaymentClient({
       }
 
       // On success, ensure token is removed from URL (double-safety)
-      if (response.ok) {
+      if (response.ok && typeof window !== "undefined") {
         try {
-          router.replace(window.location.pathname)
-        } catch (err) {
+          window.history.replaceState(null, "", window.location.pathname)
+        } catch {
           // ignore
         }
       }
@@ -600,19 +616,6 @@ export default function ConfirmPaymentClient({
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const isExpiredLink = Boolean(validation?.valid === false && (validation as any)?.expired)
-  const mobileRedirectUrl = useMemo(() => {
-    if (!token || typeof window === "undefined") return ""
-    const url = new URL(`${window.location.origin}/confirm-payment`)
-    url.searchParams.set("token", token)
-    const destinationKey = String(publicKey || publicKeyFromUrl || "").trim()
-    if (destinationKey) url.searchParams.set("public_key", destinationKey)
-    url.searchParams.set("auth", "passkey")
-    return url.toString()
-  }, [token, publicKey, publicKeyFromUrl])
-  const qrImageUrl = useMemo(() => {
-    if (!qrTargetUrl) return ""
-    return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
-  }, [qrTargetUrl])
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
