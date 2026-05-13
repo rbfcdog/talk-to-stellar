@@ -342,6 +342,16 @@ export default function ConfirmPaymentClient({
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
+        if (response.status === 409 && payload?.processing) {
+          setValidation({
+            success: true,
+            valid: true,
+            payload: payload?.payload || fallbackPayload,
+            message: "Confirmação em andamento no celular...",
+          })
+          setMobileSyncStatus("Confirmação em andamento no celular...")
+          return
+        }
         if (!response.ok || !payload?.valid) {
           if (payload?.used) {
             setResult({
@@ -360,6 +370,7 @@ export default function ConfirmPaymentClient({
           })
           return
         }
+        setMobileSyncStatus("")
         setValidation(payload?.payload ? payload : { success: true, valid: true, payload: fallbackPayload })
       } catch (error) {
         setValidation({ success: true, valid: true, payload: fallbackPayload })
