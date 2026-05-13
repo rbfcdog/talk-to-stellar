@@ -1,9 +1,18 @@
 import { StellarService } from './stellar.service';
 import { logger } from '../../utils/logger';
-import { getDefaultTrustedAssets } from '../../config/assets';
+import { getAssetIssuer, getDefaultTrustedAssets } from '../../config/assets';
 
 export class TrustlineService {
   private static issuerReachabilityCache = new Map<string, boolean>();
+
+  private static getDefaultTrustlineAssets(): Array<{ code: string; issuer: string }> {
+    const assets = getDefaultTrustedAssets();
+    const eurcIssuer = String(getAssetIssuer('EURC') || '').trim();
+    if (eurcIssuer && !assets.some((asset) => asset.code === 'EURC' && asset.issuer === eurcIssuer)) {
+      assets.push({ code: 'EURC', issuer: eurcIssuer });
+    }
+    return assets;
+  }
 
   private static async isIssuerReachable(issuer: string): Promise<boolean> {
     const normalizedIssuer = String(issuer || '').trim();
@@ -36,7 +45,7 @@ export class TrustlineService {
         .map((balance: any) => `${String(balance.asset_code || '').toUpperCase()}:${String(balance.asset_issuer || '')}`)
     );
 
-    for (const asset of getDefaultTrustedAssets()) {
+    for (const asset of this.getDefaultTrustlineAssets()) {
       if (!asset.issuer) {
         logger.warn(`Skipping ${asset.code} trustline: issuer not configured in env`);
         results.errors.push(`${asset.code} issuer not configured`);
