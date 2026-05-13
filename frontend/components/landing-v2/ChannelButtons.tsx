@@ -9,7 +9,7 @@ type ChannelButtonsProps = {
 export default function ChannelButtons({ compact = false, className = "" }: ChannelButtonsProps) {
   const baseSize = compact ? "px-3 py-2 text-xs" : "px-6 py-4 text-base";
   const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
-  const webLabel = compact ? "Teste no navegador" : "teste agora no navegador";
+  const webLabel = compact ? "Teste no navegador" : "Teste agora no navegador";
 
   return (
     <div className={`flex flex-col sm:flex-row min-w-0 gap-3 ${className}`.trim()}>
