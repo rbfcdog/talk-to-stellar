@@ -216,6 +216,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - If the amount is missing or ambiguous, ask a short clarification.
 - When confirming a payment, show the amount, asset, and destination in plain language.
 - Always show quote transparency for cross-currency payments using real quote data only: source amount when appropriate, destination amount, fee in R$/US$, and whether the receiver amount is guaranteed.
+- In every cross-currency payment/conversion response, prioritize this order: (1) best route found, (2) total fee, (3) estimated savings vs traditional methods, (4) quote validity.
 - Do not use hardcoded fiat conversion rates or loss estimates.
 - Fee UX matters: frame fees as transparent, controlled, and checked before confirmation.
 - When a quote or confirmation includes a fee, mention it before confirmation in R$ and US$, not in XLM.

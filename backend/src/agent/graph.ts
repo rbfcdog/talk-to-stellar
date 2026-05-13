@@ -796,8 +796,11 @@ ${onboardingUrl}`;
     if (criteria) lines.push(`Critério: ${criteria}.`);
     if (totalFeeDisplay) lines.push(`Taxa total estimada: ${totalFeeDisplay}.`);
     if (savingsBrl > 0) {
-      const pctLabel = savingsPct > 0 ? ` (${savingsPct.toFixed(1).replace('.', ',')}%)` : '';
-      lines.push(`Rota mais barata encontrada agora: economia estimada de R$ ${savingsBrl.toFixed(2).replace('.', ',')}${pctLabel} vs métodos tradicionais.`);
+      const pctLabel = savingsPct > 0 ? `${savingsPct.toFixed(1).replace('.', ',')}%` : '';
+      lines.push(`Encontrei uma rota mais barata e você economiza aproximadamente R$ ${savingsBrl.toFixed(2).replace('.', ',')} em taxas.`);
+      if (pctLabel) {
+        lines.push(`Comparativo: cerca de ${pctLabel} mais barato que métodos tradicionais.`);
+      }
     }
     if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
 

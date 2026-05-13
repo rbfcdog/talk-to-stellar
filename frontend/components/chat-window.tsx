@@ -103,7 +103,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       avatar: "/talktostellar.png",
       isBot: true,
       starter: [
-        { id: "agent-welcome", role: "assistant", content: "Olá! Vou carregar seu saldo e os principais comandos da sessão. Você também pode digitar \"ajuda\" a qualquer momento.", createdAt: new Date() },
+        { id: "agent-welcome", role: "assistant", content: "Olá! Posso achar a rota mais barata para enviar/converter com taxa transparente antes da confirmação. Comece com: \"saldo\", \"enviar 200 dólares para Maria\" ou \"melhor rota para 200 dólares em BRL\".", createdAt: new Date() },
       ],
     },
     "contact-1": {
