@@ -989,18 +989,27 @@ function executeGetIntentHelp(): string {
     success: true,
     commands,
     message: [
-      "Guia rápido TalkToStellar:",
-      "1) Comece por: saldo, contatos, histórico.",
-      "2) Para enviar: diga valor + destinatário (ex.: \"enviar 50 reais para Ana\").",
-      "3) Para converter: diga valor e moeda de origem/destino (ex.: \"converter 20 dólares para reais\").",
-      "4) Para cobrar: peça um \"link de pagamento\".",
+      "Guia rápido TalkToStellar (o que você pode fazer agora):",
+      "1) saldo: ver dinheiro disponível em R$ e US$.",
+      "2) contatos: listar ou salvar destinatários.",
+      "3) enviar: fazer pagamento com confirmação segura.",
+      "4) converter: trocar R$ e US$ com cotação atual.",
+      "5) histórico: revisar operações recentes.",
+      "6) link de pagamento: gerar link para cobrar/receber.",
+      "7) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
       "",
       "Comandos disponíveis:",
       ...commands.map((item, index) =>
         `${index + 1}. ${item.command}: ${item.description} Exemplo: "${item.examples[0]}".`
       ),
       "",
-      "Se você quiser, descreva seu objetivo em uma frase e eu te guio passo a passo.",
+      "Exemplos prontos:",
+      "- \"enviar 10 dólares para Ana\"",
+      "- \"converter 200 reais para dólar\"",
+      "- \"criar link de pagamento de 50 dólares\"",
+      "- \"quanto economizei vs bancos?\"",
+      "",
+      "Se preferir, me diga seu objetivo em uma frase e eu te guio passo a passo.",
     ].join("\n"),
   });
 }

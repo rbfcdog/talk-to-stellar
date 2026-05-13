@@ -50,7 +50,7 @@ describe('PaymentReceiptService', () => {
       },
     });
 
-    expect(receipt).toContain('Você enviou US$ 89.12 para João.');
+    expect(receipt).toContain('Você converteu R$ 500.00 para US$ 89.12 e enviou para João.');
     expect(receipt).toContain('Status: Confirmado');
     expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.610412');
     expect(receipt).toContain('Taxa exata: R$ 0.08 / US$ 0.01');

@@ -6,6 +6,7 @@ import { buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForC
 import { buildUsedQuoteLabel } from '../../utils/quote-display';
 import { TransferNotificationService } from './transfer-notification.service';
 import { ReceiptImageService } from './receipt-image.service';
+import { EconomyEngineService } from './economy-engine.service';
 
 type ReceiptType = 'payment_sent' | 'payment_received' | 'conversion' | 'claim_redeemed';
 
@@ -260,6 +261,7 @@ export class PaymentReceiptService {
       : '';
     const settlementLine = this.settlementLine(input.settlementMs);
     const savingsLine = this.savingsLine(input.savings);
+    const cumulativeSavingsLine = await this.cumulativeSavingsLine(input);
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = String(input.status || 'Confirmado').trim();
@@ -270,6 +272,7 @@ export class PaymentReceiptService {
       quoteLine,
       feeLine,
       savingsLine,
+      cumulativeSavingsLine,
       settlementLine,
       timeLine,
       publicOperationId ? `ID da operação: ${publicOperationId}` : 'ID da operação: em processamento',
@@ -282,6 +285,31 @@ export class PaymentReceiptService {
     const value = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) return '';
     return `Economia estimada: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
+  }
+
+  private static async cumulativeSavingsLine(input: PaymentReceiptInput): Promise<string> {
+    const type = String(input.type || '').trim();
+    const shouldShow =
+      type === 'payment_sent' ||
+      type === 'claim_redeemed' ||
+      type === 'conversion';
+    if (!shouldShow) return '';
+
+    try {
+      const identity = await EconomyEngineService.calculateIdentity({
+        sessionId: input.sessionId,
+        userId: input.userId,
+        period: 'lifetime',
+      });
+      const value = Number(identity?.estimatedSavings || 0);
+      if (!Number.isFinite(value) || value <= 0) {
+        return 'Economia acumulada da conta: R$ 0.00 em relação a métodos tradicionais.';
+      }
+      return `Economia acumulada da conta: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
+    } catch (error) {
+      logger.debug(`[receipt] could not load cumulative savings: ${error instanceof Error ? error.message : String(error)}`);
+      return '';
+    }
   }
 
   private static operationLine(type: ReceiptType, sourceLabel: string, destinationLabel: string, counterparty?: string): string {
