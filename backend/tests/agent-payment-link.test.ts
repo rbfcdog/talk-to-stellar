@@ -81,11 +81,11 @@ describe('Agent payment link flow', () => {
     );
   });
 
-  it('uses the configured full frontend URL for login prompts', () => {
+  it('uses the configured full frontend URL for login prompts', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
 
-    const message = (graph as any).getOnboardingOrLoginMessage(undefined, true);
+    const message = await (graph as any).getOnboardingOrLoginMessage(undefined, true);
 
     expect(message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
     expect(message).not.toContain('talktostellar.com/login');

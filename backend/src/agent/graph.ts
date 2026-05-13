@@ -1930,13 +1930,17 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
   }
 
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
-    if (!state.session_data?.public_key) {
+    const sessionId = String(state.session_id || '').trim();
+    const sessionPublicKey = String(state.session_data?.public_key || '').trim();
+
+    if (!sessionId && !sessionPublicKey) {
       state.success = false;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
       const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_saldo_tecnico' : 'get_balance', {
-        public_key: state.session_data.public_key,
+        session_id: sessionId || undefined,
+        public_key: sessionPublicKey || undefined,
       });
 
       let toolResult: any;
