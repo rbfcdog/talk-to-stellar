@@ -75,6 +75,54 @@ function formatQuotePath(path: Array<{ code?: string; type?: string }>, sourceAs
   return route || `rota otimizada em ${path.length + 1} etapas`;
 }
 
+function toAmountNumber(value: unknown): number {
+  const parsed = Number(String(value || '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0,00%';
+  return `${value.toFixed(4).replace('.', ',')}%`;
+}
+
+async function buildTransparentFeeBreakdown(input: {
+  networkFeeXlm?: string;
+  platformFeeAmount?: string | null;
+  platformFeeAssetCode?: string | null;
+  sourceAssetCode?: string;
+  destinationAssetCode?: string;
+}): Promise<{
+  network_fee_display: string;
+  platform_fee_display: string;
+  total_fee_display: string;
+  estimated_fee_usdc: string | null;
+  estimated_fee_brl: string | null;
+}> {
+  const networkFee = await formatNetworkFeeForCustomer(input.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
+  const unifiedFee = buildUnifiedFeeDisplay({
+    networkFee,
+    platformFeeAmount: input.platformFeeAmount || null,
+    platformFeeAssetCode: input.platformFeeAssetCode || null,
+    sourceAssetCode: input.sourceAssetCode,
+    destinationAssetCode: input.destinationAssetCode,
+  });
+
+  const platformFeeAmount = String(input.platformFeeAmount || '').trim();
+  const platformFeeAssetCode = String(input.platformFeeAssetCode || '').trim().toUpperCase();
+  const platformFeeDisplay =
+    platformFeeAmount && platformFeeAssetCode
+      ? formatCustomerAssetAmount(platformFeeAmount, platformFeeAssetCode)
+      : 'R$ 0,00 / US$ 0,00';
+
+  return {
+    network_fee_display: networkFee.display || 'R$ 0,00 / US$ 0,00',
+    platform_fee_display: platformFeeDisplay,
+    total_fee_display: unifiedFee.display || 'R$ 0,00 / US$ 0,00',
+    estimated_fee_usdc: unifiedFee.fee_usdc || null,
+    estimated_fee_brl: unifiedFee.fee_brl || null,
+  };
+}
+
 function formatNoPathFallbackMessage(errorMessage: string): string {
   const raw = String(errorMessage || '').trim();
   const normalized = raw.toLowerCase();
@@ -1478,9 +1526,8 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           destAsset: normalizeAssetInput(input.dest_asset_code || input.destAssetCode, input.dest_asset_issuer || input.destAssetIssuer),
           sourceAsset: normalizeAssetInput(input.source_asset_code || input.sourceAssetCode, input.source_asset_issuer || input.sourceAssetIssuer),
         });
-    const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
-    const unifiedFee = buildUnifiedFeeDisplay({
-      networkFee: feeDisplay,
+    const feeBreakdown = await buildTransparentFeeBreakdown({
+      networkFeeXlm: quote.networkFeeXlm,
       platformFeeAmount: quote.platformFee?.feeAmount || null,
       platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
       sourceAssetCode: quote.sourceAsset?.code,
@@ -1488,16 +1535,37 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
     });
     const expiringQuote = attachQuoteExpiry({
       ...quote,
-      fee_display: unifiedFee.display,
-      fee_usdc: unifiedFee.fee_usdc,
-      fee_brl: unifiedFee.fee_brl,
+      fee_display: feeBreakdown.total_fee_display,
+      fee_usdc: feeBreakdown.estimated_fee_usdc,
+      fee_brl: feeBreakdown.estimated_fee_brl,
     });
     const sourceLabel = formatCustomerAssetAmount(expiringQuote.sourceAmount, expiringQuote.sourceAsset.code);
     const destinationLabel = formatCustomerAssetAmount(expiringQuote.destinationAmount, expiringQuote.destinationAsset.code);
+    const sourceNumeric = toAmountNumber(expiringQuote.sourceAmount);
+    const destinationNumeric = toAmountNumber(expiringQuote.destinationAmount);
+    const effectiveRate = sourceNumeric > 0 && destinationNumeric > 0 ? destinationNumeric / sourceNumeric : 0;
 
     return JSON.stringify({
       success: true,
       quote: expiringQuote,
+      optimization_criteria: sourceAmount
+        ? 'maximizar recebimento no destino para o valor de envio informado'
+        : 'minimizar gasto na origem para o valor de recebimento informado',
+      route: {
+        chain: formatRouteChain({
+          sourceAssetCode: quote.sourceAsset?.code,
+          destinationAssetCode: quote.destinationAsset?.code,
+          path: quote.path,
+        }),
+        hops_count: Array.isArray(quote.path) ? quote.path.length : 0,
+      },
+      fee_breakdown: feeBreakdown,
+      effective_rate: {
+        destination_per_source: Number.isFinite(effectiveRate) ? effectiveRate.toFixed(8) : null,
+        label: Number.isFinite(effectiveRate) && effectiveRate > 0
+          ? `1 ${quote.sourceAsset?.code} = ${effectiveRate.toFixed(8)} ${quote.destinationAsset?.code}`
+          : null,
+      },
       quote_expires_at: expiringQuote.quote_expires_at,
       quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
@@ -1505,7 +1573,9 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
           : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Rota usada: ${formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
-        `Taxa estimada total: ${unifiedFee.display}. ` +
+        `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
+        `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
+        `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
@@ -1555,9 +1625,8 @@ async function executeGetBestRoute(input: any): Promise<string> {
           destAmount: destinationAmount,
         });
 
-    const feeDisplay = await formatNetworkFeeForCustomer(quote.networkFeeXlm);
-    const unifiedFee = buildUnifiedFeeDisplay({
-      networkFee: feeDisplay,
+    const feeBreakdown = await buildTransparentFeeBreakdown({
+      networkFeeXlm: quote.networkFeeXlm,
       platformFeeAmount: quote.platformFee?.feeAmount || null,
       platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
       sourceAssetCode: quote.sourceAsset?.code,
@@ -1565,9 +1634,9 @@ async function executeGetBestRoute(input: any): Promise<string> {
     });
     const expiringQuote = attachQuoteExpiry({
       ...quote,
-      fee_display: unifiedFee.display,
-      fee_usdc: unifiedFee.fee_usdc,
-      fee_brl: unifiedFee.fee_brl,
+      fee_display: feeBreakdown.total_fee_display,
+      fee_usdc: feeBreakdown.estimated_fee_usdc,
+      fee_brl: feeBreakdown.estimated_fee_brl,
     });
 
     const routeChain = formatRouteChain({
@@ -1578,6 +1647,13 @@ async function executeGetBestRoute(input: any): Promise<string> {
     const criteria = usesStrictSend
       ? "maximizar recebimento no destino para o valor de envio informado"
       : "minimizar gasto na origem para o valor de recebimento informado";
+    const sourceNumeric = toAmountNumber(quote.sourceAmount);
+    const destinationNumeric = toAmountNumber(quote.destinationAmount);
+    const destinationPerSource = sourceNumeric > 0 && destinationNumeric > 0 ? destinationNumeric / sourceNumeric : 0;
+    const sourcePerDestination = sourceNumeric > 0 && destinationNumeric > 0 ? sourceNumeric / destinationNumeric : 0;
+    const totalFeeBrl = toAmountNumber(feeBreakdown.estimated_fee_brl);
+    const totalFeeUsdc = toAmountNumber(feeBreakdown.estimated_fee_usdc);
+    const feePctOverSource = sourceNumeric > 0 && totalFeeUsdc > 0 ? (totalFeeUsdc / sourceNumeric) * 100 : 0;
 
     return JSON.stringify({
       success: true,
@@ -1598,16 +1674,30 @@ async function executeGetBestRoute(input: any): Promise<string> {
         asset_code: quote.destinationAsset?.code,
         asset_issuer: quote.destinationAsset?.issuer || null,
       },
-      estimated_fee_display: unifiedFee.display,
-      estimated_fee_usdc: unifiedFee.fee_usdc || null,
-      estimated_fee_brl: unifiedFee.fee_brl || null,
+      fee_breakdown: {
+        ...feeBreakdown,
+        fee_pct_over_source_estimate: feePctOverSource > 0 ? formatPercent(feePctOverSource) : '0,00%',
+      },
+      effective_rate: {
+        destination_per_source: destinationPerSource > 0 ? destinationPerSource.toFixed(8) : null,
+        source_per_destination: sourcePerDestination > 0 ? sourcePerDestination.toFixed(8) : null,
+        label: destinationPerSource > 0
+          ? `1 ${quote.sourceAsset?.code} = ${destinationPerSource.toFixed(8)} ${quote.destinationAsset?.code}`
+          : null,
+      },
+      total_fee_estimate: {
+        brl: totalFeeBrl > 0 ? totalFeeBrl.toFixed(8) : '0',
+        usdc: totalFeeUsdc > 0 ? totalFeeUsdc.toFixed(8) : '0',
+      },
       quote: expiringQuote,
       quote_expires_at: expiringQuote.quote_expires_at,
       quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
         `Melhor rota agora: ${routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
         `Critério: ${criteria}. ` +
-        `Taxa estimada total: ${unifiedFee.display}. ` +
+        `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
+        `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
+        `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
         `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
