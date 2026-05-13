@@ -81,8 +81,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    // Use provided session_id or generate a new UUID
-    sessionId = session_id || generateSessionId();
+    const browserId = String(metadata?.browser_id || "").trim();
+    const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
+
+    // Always prioritize the linked web session when browser_id is mapped.
+    // This avoids sending chat messages with stale local session_id after login/linking.
+    sessionId = linkedSessionId || session_id || generateSessionId();
 
     const dataToSend = {
       query: userMessage.content,
