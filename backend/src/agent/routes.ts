@@ -519,8 +519,24 @@ export function createAgentRoutes(
           if (existing?.session_id) {
             const externalSession = await repository.getSession(String(existing.session_id));
             if (externalSession && !isSessionExpired(externalSession)) {
-              const linkedSessionHasWallet = Boolean(String((externalSession as any).public_key || '').trim());
-              if (!session_id || linkedSessionHasWallet) {
+              const linkedWallet = await walletRepo.getWalletBySession(String(existing.session_id)).catch(() => null);
+              const linkedSessionHasWallet =
+                Boolean(String((externalSession as any).public_key || '').trim()) ||
+                Boolean(String((linkedWallet as any)?.public_key || '').trim());
+
+              let requestedSessionHasWallet = Boolean(String((requestedSessionData as any)?.public_key || '').trim());
+              if (!requestedSessionHasWallet && requestedSessionId && requestedSessionData) {
+                const requestedWallet = await walletRepo.getWalletBySession(requestedSessionId).catch(() => null);
+                requestedSessionHasWallet = Boolean(String((requestedWallet as any)?.public_key || '').trim());
+              }
+
+              const shouldUseLinkedSession =
+                !requestedSessionData ||
+                requestedSessionId === String(existing.session_id) ||
+                linkedSessionHasWallet ||
+                !requestedSessionHasWallet;
+
+              if (shouldUseLinkedSession) {
                 req.body.session_id = String(existing.session_id);
               }
             }
