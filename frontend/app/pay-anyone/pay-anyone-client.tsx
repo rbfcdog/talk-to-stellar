@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
@@ -47,6 +47,7 @@ export default function PayAnyoneClient() {
   const [result, setResult] = useState<CreatePayLinkResponse | null>(null)
   const [copied, setCopied] = useState(false)
   const [booting, setBooting] = useState(true)
+  const submitLockRef = useRef(false)
 
   useEffect(() => {
     const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
@@ -98,6 +99,8 @@ export default function PayAnyoneClient() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitLockRef.current) return
+    submitLockRef.current = true
     setStatus("submitting")
     setResult(null)
     setCopied(false)
@@ -141,7 +144,11 @@ export default function PayAnyoneClient() {
       })
       const payload = await response.json().catch(() => ({}))
       setResult(payload)
-      setStatus(response.ok && payload?.success ? "done" : "error")
+      const success = response.ok && payload?.success
+      setStatus(success ? "done" : "error")
+      if (!success) {
+        submitLockRef.current = false
+      }
       if (response.ok && payload?.success && payload?.url) {
         enqueueWebChatFeedback([
           "Link de pagamento criado.",
@@ -151,6 +158,7 @@ export default function PayAnyoneClient() {
       }
     } catch (error) {
       setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao criar link." })
+      submitLockRef.current = false
       setStatus("error")
     }
   }
@@ -165,6 +173,7 @@ export default function PayAnyoneClient() {
   const shareText = result?.message && result?.url ? `${result.message}\n${result.url}` : result?.url || ""
   const whatsappUrl = shareText ? `https://wa.me/?text=${encodeURIComponent(shareText)}` : "#"
   const isReceiveMode = mode === "receive"
+  const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
@@ -220,6 +229,7 @@ export default function PayAnyoneClient() {
             <button
               type="button"
               onClick={() => {
+                submitLockRef.current = false
                 setMode("send")
                 setStatus("idle")
                 setResult(null)
@@ -232,6 +242,7 @@ export default function PayAnyoneClient() {
             <button
               type="button"
               onClick={() => {
+                submitLockRef.current = false
                 setMode("receive")
                 setStatus("idle")
                 setResult(null)
@@ -322,7 +333,7 @@ export default function PayAnyoneClient() {
 
             <button
               type="submit"
-              disabled={!loggedIn || status === "submitting" || (!isReceiveMode && (!amount.trim() || !pin.trim()))}
+              disabled={!loggedIn || submitLocked || (!isReceiveMode && (!amount.trim() || !pin.trim()))}
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Link2 className="h-4 w-4" />

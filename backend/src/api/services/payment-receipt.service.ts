@@ -67,10 +67,32 @@ export class PaymentReceiptService {
     userId: string;
     operationId: string;
     imageDataUrl: string;
+    txHash?: string | null;
+    receiptType?: ReceiptType;
+    metadata?: any;
   }): Promise<string> {
     const code = this.makeShortCode(`receipt:${input.sessionId}:${input.operationId}:${Date.now()}`);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const tokenHash = crypto.createHash('sha256').update(`receipt:${code}:${input.operationId}`).digest('hex');
+
+    const receiptInsert = await supabase
+      .from('receipt_images')
+      .upsert({
+        code,
+        operation_id: input.operationId,
+        tx_hash: input.txHash || null,
+        session_id: input.sessionId,
+        user_id: input.userId,
+        receipt_type: input.receiptType || null,
+        image_data_url: input.imageDataUrl,
+        image_mime: input.imageDataUrl.startsWith('data:image/png') ? 'image/png' : 'image/svg+xml',
+        metadata: input.metadata || {},
+        expires_at: expiresAt,
+        created_at: new Date().toISOString(),
+      }, { onConflict: 'code' });
+
+    if (receiptInsert.error) throw receiptInsert.error;
+
     const { error } = await supabase
       .from('short_links')
       .upsert({
@@ -83,7 +105,9 @@ export class PaymentReceiptService {
         expires_at: expiresAt,
         created_at: new Date().toISOString(),
       }, { onConflict: 'code' });
-    if (error) throw error;
+    if (error) {
+      logger.warn(`[receipt] could not write compatibility short link: ${error.message}`);
+    }
     return `${this.getFrontendBaseUrl()}/receipt/${encodeURIComponent(code)}`;
   }
 
@@ -152,6 +176,16 @@ export class PaymentReceiptService {
         userId: input.userId,
         operationId: operationId || input.hash || crypto.randomUUID(),
         imageDataUrl,
+        txHash: input.hash || null,
+        receiptType: input.type,
+        metadata: {
+          destinationAmount: input.destinationAmount,
+          destinationAssetCode: input.destinationAssetCode,
+          sourceAmount: input.sourceAmount || null,
+          sourceAssetCode: input.sourceAssetCode || null,
+          feeDisplay: input.feeDisplay || null,
+          completedAt: input.completedAt || null,
+        },
       });
       await this.saveReceiptMessage({
         sessionId: input.sessionId,
@@ -178,7 +212,7 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
     }
 
-    return text;
+    return viewerUrl || '';
   }
 
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
@@ -260,6 +294,11 @@ export class PaymentReceiptService {
     }
     if (type === 'claim_redeemed') {
       return `Seu link foi resgatado por ${target}: ${destinationLabel} enviados.`;
+    }
+    const sourceCode = String(sourceLabel || '').trim();
+    const destinationCode = String(destinationLabel || '').trim();
+    if (sourceCode && destinationCode && sourceCode !== destinationCode) {
+      return `Você converteu ${sourceLabel} para ${destinationLabel} e enviou para ${target}.`;
     }
     return `Você enviou ${destinationLabel} para ${target}.`;
   }

@@ -128,14 +128,15 @@ function qrPattern(seed: string): string {
 export class ReceiptImageService {
   static hostedReceiptInput(paymentData: HostedReceiptPaymentData): ReceiptImageInput {
     const estimatedSavings = Number(String(paymentData.estimated_savings || '').replace(',', '.'));
+    const hasAmount = String(paymentData.amount || '').trim().length > 0;
     return {
-      amount: formatDisplayAmount(paymentData.amount, 2),
-      currency: displaySymbol(paymentData.asset),
+      amount: hasAmount ? formatDisplayAmount(paymentData.amount, 2) : '-',
+      currency: hasAmount ? displaySymbol(paymentData.asset) : '',
       subtitle: 'Pagamento enviado com sucesso',
       recipientName: paymentData.destination || 'Destinatário',
       description: `De ${fitText(paymentData.sender || 'TalkToStellar', 24)}`,
-      convertedAmount: formatDisplayAmount(paymentData.amount, 2),
-      convertedCurrency: displaySymbol(paymentData.asset),
+      convertedAmount: hasAmount ? formatDisplayAmount(paymentData.amount, 2) : '-',
+      convertedCurrency: hasAmount ? displaySymbol(paymentData.asset) : '',
       feeLabel: sanitizeFeeLabel(paymentData.fee),
       quoteLabel: 'sem conversão',
       settlementSeconds: null,

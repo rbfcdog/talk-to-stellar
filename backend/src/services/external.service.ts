@@ -628,6 +628,24 @@ export class ExternalService {
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
+    await this.registerPaymentConfirmation({
+      token,
+      sessionId: payload.session_id,
+      userId: payload.owner_id,
+      destination: 'CONVERSION_SELF',
+      destinationName: null,
+      amount: payload.dest_amount,
+      assetCode: destAssetCode,
+      details: {
+        purpose: 'conversion_confirm',
+        source_amount: payload.source_amount || null,
+        source_asset_code: sourceAssetCode,
+        source_asset_issuer: sourceAssetIssuer || null,
+        dest_amount: payload.dest_amount,
+        dest_asset_code: destAssetCode,
+        dest_asset_issuer: destAssetIssuer || null,
+      },
+    });
     const longUrl = this.buildFrontendUrl('/confirm-conversion', token, externalContext);
     const url = await this.shortenFrontendUrl({
       token,

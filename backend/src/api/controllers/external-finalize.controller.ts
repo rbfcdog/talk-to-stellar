@@ -91,6 +91,51 @@ function formatBalanceNumber(value: number): string {
   return value.toFixed(7).replace(/\.?0+$/, '');
 }
 
+function sameAsset(left: { code: string; issuer?: string }, right: { code: string; issuer?: string }): boolean {
+  const leftCode = normalizeAssetCode(left.code);
+  const rightCode = normalizeAssetCode(right.code);
+  if (leftCode !== rightCode) return false;
+  if (leftCode === 'XLM') return true;
+  return String(left.issuer || '').trim() === String(right.issuer || '').trim();
+}
+
+function getSpendableAssetBalance(account: any, asset: { code: string; issuer?: string }, minimumReserve = 1.5): number {
+  const balance = getAccountAssetBalance(account, asset);
+  return normalizeAssetCode(asset.code) === 'XLM'
+    ? Math.max(0, balance - minimumReserve)
+    : balance;
+}
+
+function getTrustedSpendableAssets(account: any, destinationAsset: { code: string; issuer?: string }): Array<{ code: string; issuer?: string }> {
+  const trustedOrder = ['USDC', 'BRL', 'XLM'];
+  const byKey = new Map<string, { code: string; issuer?: string; balance: number }>();
+
+  for (const balance of account?.balances || []) {
+    const code = normalizeAssetCode(balance?.asset_type === 'native' ? 'XLM' : balance?.asset_code);
+    if (code !== 'XLM' && !trustedOrder.includes(code)) continue;
+
+    const asset = {
+      code,
+      issuer: code === 'XLM' ? undefined : String(balance?.asset_issuer || '').trim() || resolveAssetIssuer(code),
+    };
+    if (code !== 'XLM' && !asset.issuer) continue;
+
+    const parsedBalance = Number(String(balance?.balance || '0').replace(',', '.'));
+    if (!Number.isFinite(parsedBalance) || parsedBalance <= 0) continue;
+
+    const key = `${asset.code}:${asset.issuer || ''}`;
+    byKey.set(key, { ...asset, balance: parsedBalance });
+  }
+
+  return Array.from(byKey.values())
+    .sort((a, b) => {
+      if (sameAsset(a, destinationAsset)) return -1;
+      if (sameAsset(b, destinationAsset)) return 1;
+      return trustedOrder.indexOf(a.code) - trustedOrder.indexOf(b.code);
+    })
+    .map(({ balance: _balance, ...asset }) => asset);
+}
+
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
@@ -330,7 +375,7 @@ async function sendTelegramPaymentNotification(input: {
   quote?: any;
   settlementMs?: number;
   savings?: any;
-}) {
+}): Promise<string> {
   const destinationLabel = input.destinationName || input.destination;
   const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
     ? 'destinatário'
@@ -338,7 +383,7 @@ async function sendTelegramPaymentNotification(input: {
 
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-    await PaymentReceiptService.sendReceipt({
+    return await PaymentReceiptService.sendReceipt({
       type: 'payment_sent',
       sessionId: input.sessionId,
       userId: input.userId,
@@ -361,6 +406,7 @@ async function sendTelegramPaymentNotification(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[receipt] failed to send payment receipt: ${message}`);
+    return '';
   }
 }
 
@@ -378,10 +424,10 @@ async function sendTelegramConversionNotification(input: {
   quote?: any;
   settlementMs?: number;
   savings?: any;
-}) {
+}): Promise<string> {
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-    await PaymentReceiptService.sendReceipt({
+    return await PaymentReceiptService.sendReceipt({
       type: 'conversion',
       sessionId: input.sessionId,
       userId: input.userId,
@@ -403,6 +449,7 @@ async function sendTelegramConversionNotification(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`[receipt] failed to send conversion receipt: ${message}`);
+    return '';
   }
 }
 
@@ -459,6 +506,10 @@ async function hashPaymentToken(token: string): Promise<string> {
 }
 
 type PaymentTokenReservation =
+  | { ok: true; row: any }
+  | { ok: false; status: number; body: Record<string, any> };
+
+type OnboardingReservation =
   | { ok: true; row: any }
   | { ok: false; status: number; body: Record<string, any> };
 
@@ -521,6 +572,145 @@ async function reservePaymentTokenForExecution(tokenHash: string): Promise<Payme
   } catch (err: any) {
     logger.warn(`[payment-idempotency] error reserving token: ${err?.message || String(err)}`);
     throw err;
+  }
+}
+
+async function findOnboardingFinalization(tokenHash: string, provider: string, providerUserId: string): Promise<any | null> {
+  const byToken = await supabase
+    .from('onboarding_finalizations')
+    .select('*')
+    .eq('token_hash', tokenHash)
+    .limit(1)
+    .maybeSingle();
+
+  if (byToken.error) throw byToken.error;
+  if (byToken.data) return byToken.data;
+
+  const byProvider = await supabase
+    .from('onboarding_finalizations')
+    .select('*')
+    .eq('provider', provider)
+    .eq('provider_user_id', providerUserId)
+    .limit(1)
+    .maybeSingle();
+
+  if (byProvider.error) throw byProvider.error;
+  return byProvider.data || null;
+}
+
+async function reserveOnboardingFinalization(input: {
+  tokenHash: string;
+  provider: string;
+  providerUserId: string;
+  data?: any;
+}): Promise<OnboardingReservation> {
+  const now = new Date().toISOString();
+  const insert = await supabase
+    .from('onboarding_finalizations')
+    .insert({
+      token_hash: input.tokenHash,
+      provider: input.provider,
+      provider_user_id: input.providerUserId,
+      status: 'processing',
+      used: false,
+      used_at: null,
+      data: input.data || null,
+      created_at: now,
+      updated_at: now,
+    })
+    .select('*')
+    .single();
+
+  if (!insert.error) return { ok: true, row: insert.data };
+  if (String((insert.error as any)?.code || '') !== '23505') throw insert.error;
+
+  const existing = await findOnboardingFinalization(input.tokenHash, input.provider, input.providerUserId);
+  if (!existing) {
+    return {
+      ok: false,
+      status: 409,
+      body: { success: false, message: 'Este link de criação já está em processamento.' },
+    };
+  }
+
+  if (String(existing.status || '').toLowerCase() === 'completed' || existing.used) {
+    return {
+      ok: false,
+      status: 200,
+      body: {
+        ...(existing.result || {}),
+        success: true,
+        alreadyCompleted: true,
+        message: 'Conta já criada. Reutilizando a conta existente.',
+      },
+    };
+  }
+
+  if (String(existing.status || '').toLowerCase() === 'processing') {
+    return {
+      ok: false,
+      status: 409,
+      body: { success: false, message: 'Este link de criação já está em processamento.' },
+    };
+  }
+
+  const retry = await supabase
+    .from('onboarding_finalizations')
+    .update({
+      token_hash: input.tokenHash,
+      status: 'processing',
+      used: false,
+      used_at: null,
+      data: input.data || existing.data || null,
+      error: null,
+      updated_at: now,
+    })
+    .eq('id', existing.id)
+    .eq('status', 'failed')
+    .select('*')
+    .single();
+
+  if (retry.error) throw retry.error;
+  return { ok: true, row: retry.data };
+}
+
+async function completeOnboardingFinalization(tokenHash: string, result: Record<string, any>, statusCode: number) {
+  const { error } = await supabase
+    .from('onboarding_finalizations')
+    .update({
+      status: 'completed',
+      used: true,
+      used_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      response_status: statusCode,
+      result,
+      session_id: result.sessionId || null,
+      user_id: result.userId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('token_hash', tokenHash)
+    .eq('status', 'processing');
+
+  if (error) {
+    logger.warn(`[onboarding-idempotency] could not complete finalization: ${error.message}`);
+  }
+}
+
+async function failOnboardingFinalization(tokenHash: string, errorMessage: string) {
+  const { error } = await supabase
+    .from('onboarding_finalizations')
+    .update({
+      status: 'failed',
+      used: false,
+      used_at: null,
+      error: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('token_hash', tokenHash)
+    .eq('status', 'processing');
+
+  if (error) {
+    logger.warn(`[onboarding-idempotency] could not mark finalization failed: ${error.message}`);
   }
 }
 
@@ -707,6 +897,7 @@ export default class ExternalFinalizeController {
   // POST /api/external/finalize
   // body: { token, name?, email? }
   static async finalize(req: Request, res: Response) {
+    let onboardingReservationTokenHash: string | null = null;
     try {
       const { token, name, email, pin } = req.body;
       const rawPhoneNumber = String(req.body?.phone_number || req.body?.phoneNumber || '').trim();
@@ -837,6 +1028,29 @@ export default class ExternalFinalizeController {
               destAsset: { code: destAssetCode, issuer: destAssetIssuer },
             });
 
+        const unsignedXdr = usesStrictSend
+          ? await StellarService.buildStrictSendConversionXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              sourceAmount: String(source_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            })
+          : await StellarService.buildPathPaymentXdr({
+              sourcePublicKey: wallet.public_key,
+              destination: wallet.public_key,
+              destAmount: String(dest_amount).trim(),
+              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+            });
+
+        const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
+        const reservation = await reservePaymentTokenForExecution(tokenHash);
+        if (!reservation.ok) {
+          logger.warn(`[external-finalize] conversion confirmation token unavailable: ${tokenHash.substring(0, 16)}...`);
+          return res.status(reservation.status).json(reservation.body);
+        }
+
         const tokenClaimed = await claimPaymentToken(
           tokenHash,
           String(session_id),
@@ -860,7 +1074,11 @@ export default class ExternalFinalizeController {
         );
 
         if (!tokenClaimed) {
-          return res.status(400).json({
+          await updatePaymentTokenStatus(tokenHash, undefined, 'failed', {
+            type: 'conversion',
+            error: 'Could not reserve conversion token details',
+          });
+          return res.status(409).json({
             success: false,
             message: 'Este link de confirmação já foi utilizado. Solicite uma nova confirmação.',
           });
@@ -890,23 +1108,6 @@ export default class ExternalFinalizeController {
           }
         );
 
-        const unsignedXdr = usesStrictSend
-          ? await StellarService.buildStrictSendConversionXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              sourceAmount: String(source_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            })
-          : await StellarService.buildPathPaymentXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              destAmount: String(dest_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            });
-
-        const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
         const operationType = usesStrictSend ? 'PATH_PAYMENT_STRICT_SEND' : 'PATH_PAYMENT_STRICT_RECEIVE';
         const submitStartedAt = Date.now();
         const result = await StellarService.signAndSubmitXdr(
@@ -1318,119 +1519,147 @@ export default class ExternalFinalizeController {
           userId: String(session.user_id),
         });
 
-        // Determine actual source asset: if sender has the destination asset, use it directly
-        // This avoids unnecessary XLM to USDC conversions when user already has USDC
+        const destinationAsset = { code: assetCode, issuer: assetIssuer };
+        const minimumReserve = 1.5;
+
+        // Determine actual source asset automatically. If the sender does not hold
+        // the requested destination asset, use a trusted spendable balance and route it
+        // through a path payment so the user does not need a separate conversion step.
         let actualSourceAsset: any = isStrictSendPayment
           ? { code: requestedSourceAssetCode, issuer: requestedSourceAssetIssuer }
-          : { code: 'XLM' };
+          : destinationAsset;
         let senderHasDestinationAsset = false;
         let senderAccount: any = null;
-
-        if (!isStrictSendPayment && assetCode !== 'XLM') {
-          try {
-            senderAccount = await StellarService.loadAccount(wallet.public_key);
-            const destAssetBalance = senderAccount.balances.find((b: any) => 
-              b.asset_type !== 'native' && 
-              b.asset_code === assetCode && 
-              b.asset_issuer === assetIssuer
-            );
-            
-            if (destAssetBalance && parseFloat(destAssetBalance.balance) >= parseFloat(amount)) {
-              actualSourceAsset = { code: assetCode, issuer: assetIssuer };
-              senderHasDestinationAsset = true;
-            }
-          } catch (err) {
-            // If account lookup fails, fall back to XLM source (will be tried later)
-            console.warn('[external-finalize] could not check sender asset balance, will attempt XLM source:', err);
-          }
-        }
-
-        // Build quote and XDR using actual source asset
-        const isDirectPayment = assetCode === 'XLM' || senderHasDestinationAsset;
-        const directPlatformFee = isDirectPayment
-          ? PlatformFeeService.calculateSpread({
-              sourceAmount: String(amount),
-              sourceAssetCode: senderHasDestinationAsset ? assetCode : 'XLM',
-              destinationAssetCode: assetCode,
-              mode: 'add_on_top',
-            })
-          : null;
-        const directSourceAmount = directPlatformFee?.enabled
-          ? (Number(amount) + Number(directPlatformFee.feeAmount)).toFixed(7).replace(/\.?0+$/, '')
-          : String(amount);
         let quote: any;
+        let isDirectPayment = false;
+
         try {
-          quote = isStrictSendPayment
-            ? await StellarService.quoteStrictSendConversion({
-                sourcePublicKey: wallet.public_key,
-                destination: resolvedDestination,
-                sourceAmount: requestedSourceAmount,
-                sourceAsset: actualSourceAsset,
-                destAsset: { code: assetCode, issuer: assetIssuer },
-              })
-            : isDirectPayment
-            ? {
-                sourceAsset: {
-                  code: senderHasDestinationAsset ? assetCode : 'XLM',
-                  issuer: senderHasDestinationAsset ? assetIssuer : undefined,
-                },
-                destinationAsset: {
-                  code: assetCode,
-                  issuer: assetIssuer,
-                },
+          if (isStrictSendPayment) {
+            quote = await StellarService.quoteStrictSendConversion({
+              sourcePublicKey: wallet.public_key,
+              destination: resolvedDestination,
+              sourceAmount: requestedSourceAmount,
+              sourceAsset: actualSourceAsset,
+              destAsset: destinationAsset,
+            });
+          } else {
+            senderAccount = await StellarService.loadAccount(wallet.public_key);
+            const requestedAmount = Number(String(amount).replace(',', '.'));
+            const directSpendable = getSpendableAssetBalance(senderAccount, destinationAsset, minimumReserve);
+
+            if (Number.isFinite(requestedAmount) && requestedAmount > 0 && directSpendable >= requestedAmount) {
+              senderHasDestinationAsset = true;
+              isDirectPayment = true;
+              actualSourceAsset = destinationAsset;
+              const directPlatformFee = PlatformFeeService.calculateSpread({
+                sourceAmount: String(amount),
+                sourceAssetCode: assetCode,
+                destinationAssetCode: assetCode,
+                mode: 'add_on_top',
+              });
+              const directSourceAmount = directPlatformFee?.enabled
+                ? (Number(amount) + Number(directPlatformFee.feeAmount)).toFixed(7).replace(/\.?0+$/, '')
+                : String(amount);
+              quote = {
+                sourceAsset: destinationAsset,
+                destinationAsset,
                 sourceAmount: directSourceAmount,
                 destinationAmount: String(amount),
                 platformFee: directPlatformFee,
                 networkFeeXlm: DEFAULT_NETWORK_FEE_XLM,
                 path: [],
+              };
+            } else {
+              const candidates = getTrustedSpendableAssets(senderAccount, destinationAsset)
+                .filter((candidate) => !sameAsset(candidate, destinationAsset));
+              const failedRoutes: string[] = [];
+
+              for (const candidate of candidates) {
+                try {
+                  const candidateQuote = await StellarService.quotePathPayment({
+                    sourcePublicKey: wallet.public_key,
+                    destination: resolvedDestination,
+                    destAsset: destinationAsset,
+                    destAmount: String(amount),
+                    sourceAsset: candidate,
+                  });
+                  const required = Number(String(candidateQuote?.sourceMax || candidateQuote?.sourceAmount || '0').replace(',', '.'));
+                  const spendable = getSpendableAssetBalance(senderAccount, candidate, minimumReserve);
+
+                  if (Number.isFinite(required) && required > 0 && spendable >= required) {
+                    actualSourceAsset = candidate;
+                    quote = candidateQuote;
+                    break;
+                  }
+
+                  failedRoutes.push(
+                    `${candidate.code}: disponível ${formatBalanceNumber(spendable)}, necessário até ${formatBalanceNumber(required)}`
+                  );
+                } catch (candidateError) {
+                  failedRoutes.push(`${candidate.code}: ${candidateError instanceof Error ? candidateError.message : String(candidateError)}`);
+                }
               }
-            : await StellarService.quotePathPayment({
-                sourcePublicKey: wallet.public_key,
-                destination: resolvedDestination,
-                destAsset: { code: assetCode, issuer: assetIssuer },
-                destAmount: String(amount),
-                sourceAsset: actualSourceAsset,
-              });
+
+              if (!quote) {
+                return res.status(400).json({
+                  success: false,
+                  insufficientBalance: true,
+                  message:
+                    `Não encontrei saldo conversível suficiente para entregar ${formatCustomerAssetAmount(String(amount), assetCode)}. ` +
+                    `O backend tentou converter automaticamente antes do envio, mas nenhuma rota teve saldo suficiente` +
+                    (failedRoutes.length ? ` (${failedRoutes.join('; ')}).` : '.'),
+                });
+              }
+            }
+          }
         } catch (quoteError) {
           const message = quoteError instanceof Error ? quoteError.message : String(quoteError);
           logger.warn(`[external-finalize] payment quote failed before token claim: ${message}`);
           return res.status(400).json({
             success: false,
-            message: `Não consegui cotar esse pagamento antes da confirmação: ${message}`,
+            message: `Não consegui cotar a conversão automática antes da confirmação: ${message}`,
           });
         }
 
-        if (!isDirectPayment && !isStrictSendPayment) {
+        // Build XDR using the selected source asset.
+        if (!isStrictSendPayment && !isDirectPayment) {
+          logger.info(`[external-finalize] auto conversion selected: ${actualSourceAsset.code} -> ${assetCode}, sourceAmount=${quote?.sourceAmount}, destinationAmount=${quote?.destinationAmount}`);
+        }
+
+        if (!isStrictSendPayment && !isDirectPayment) {
           try {
             senderAccount = senderAccount || await StellarService.loadAccount(wallet.public_key);
-            const available = getAccountAssetBalance(senderAccount, actualSourceAsset);
+            const available = getSpendableAssetBalance(senderAccount, actualSourceAsset, minimumReserve);
             const required = Number(String(quote?.sourceMax || quote?.sourceAmount || '0').replace(',', '.'));
-            const xlmAvailable = getAccountAssetBalance(senderAccount, { code: 'XLM' });
-            const minimumReserve = 1.5;
-            const sourceIsXlm = normalizeAssetCode(actualSourceAsset.code) === 'XLM';
-            const wouldBreakReserve = sourceIsXlm && xlmAvailable - required < minimumReserve;
 
-            if (!Number.isFinite(required) || required <= 0 || available < required || wouldBreakReserve) {
+            if (!Number.isFinite(required) || required <= 0 || available < required) {
               const sourceCode = normalizeAssetCode(actualSourceAsset.code);
-              const directBalance = assetCode !== 'XLM'
-                ? getAccountAssetBalance(senderAccount, { code: assetCode, issuer: assetIssuer })
-                : xlmAvailable;
               return res.status(400).json({
                 success: false,
                 insufficientBalance: true,
                 message:
-                  `Saldo insuficiente para garantir ${formatCustomerAssetAmount(String(amount), assetCode)} no destino. ` +
-                  `Disponível: ${formatBalanceNumber(directBalance)} ${assetCode}` +
-                  (sourceCode !== assetCode ? ` e ${formatBalanceNumber(xlmAvailable)} XLM técnico` : '') +
-                  `. Necessário para a rota: até ${formatBalanceNumber(required)} ${sourceCode}` +
-                  (sourceIsXlm ? `, mantendo a reserva mínima da conta (${minimumReserve} XLM).` : '.') +
-                  ` Tente um valor menor, converta/funde saldo antes, ou envie no ativo que você já tem disponível.`,
+                  `Saldo insuficiente para converter automaticamente e entregar ${formatCustomerAssetAmount(String(amount), assetCode)}. ` +
+                  `Disponível: ${formatBalanceNumber(available)} ${sourceCode}. ` +
+                  `Necessário para a rota: até ${formatBalanceNumber(required)} ${sourceCode}.`,
               });
             }
           } catch (balanceCheckError) {
             logger.warn(`[external-finalize] pre-build balance check failed: ${balanceCheckError instanceof Error ? balanceCheckError.message : String(balanceCheckError)}`);
           }
         }
+
+        if (!quote) {
+          return res.status(400).json({
+            success: false,
+            message: 'Não consegui preparar a cotação do pagamento.',
+          });
+        }
+
+        const selectedSourceAssetCode = normalizeAssetCode(isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code);
+        const selectedSourceAssetIssuer = selectedSourceAssetCode === 'XLM'
+          ? undefined
+          : String(isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : actualSourceAsset.issuer || quote?.sourceAsset?.issuer || '').trim() || undefined;
+        const selectedDestinationAssetIssuer = assetCode === 'XLM' ? undefined : assetIssuer;
 
         let unsignedXdr: string;
         try {
@@ -1514,11 +1743,11 @@ export default class ExternalFinalizeController {
           wallet.public_key,
           resolvedDestination,
           isStrictSendPayment ? requestedSourceAmount : senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'pending'),
-          isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-          isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
+          selectedSourceAssetCode,
+          selectedSourceAssetIssuer,
           amount,
           assetCode,
-          assetIssuer,
+          selectedDestinationAssetIssuer,
           quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM,
           undefined,
           isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
@@ -1532,10 +1761,10 @@ export default class ExternalFinalizeController {
             source_public_key: wallet.public_key,
             destination_public_key: resolvedDestination,
             isDirectPayment,
-            source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
+            source_asset: selectedSourceAssetCode,
+            source_asset_issuer: selectedSourceAssetIssuer,
             destination_asset: assetCode,
-            destination_asset_issuer: assetIssuer,
+            destination_asset_issuer: selectedDestinationAssetIssuer,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
             quote,
@@ -1543,7 +1772,7 @@ export default class ExternalFinalizeController {
         );
 
         // Log payment attempt with full details
-        logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}, isStrictSendPayment=${isStrictSendPayment}`);
+        logger.info(`[external-finalize] Submitting payment: sessionId=${session_id}, userId=${session.user_id}, source=${wallet.public_key}, dest=${resolvedDestination}, destName=${destination_contact?.contact_name || destination_name}, sourceAsset=${selectedSourceAssetCode}, destAsset=${assetCode}, amount=${amount}, isDirectPayment=${isDirectPayment}, isStrictSendPayment=${isStrictSendPayment}`);
 
         const submitStartedAt = Date.now();
         const result = await StellarService.signAndSubmitXdr(
@@ -1552,15 +1781,15 @@ export default class ExternalFinalizeController {
           unsignedXdr,
           {
             user_id: String(session.user_id),
-            type: isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : assetCode === 'XLM' ? 'PAYMENT' : 'PATH_PAYMENT_STRICT_RECEIVE',
+            type: isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'PAYMENT' : 'PATH_PAYMENT_STRICT_RECEIVE',
             destination_key: resolvedDestination,
             asset_code: assetCode,
             amount: parseFloat(String(amount)),
-            context: assetCode === 'XLM'
+            context: isDirectPayment
               ? `Pagamento para ${destination_contact?.contact_name || destination_name || destination}`
               : isStrictSendPayment
                 ? `Pagamento com envio exato em ${actualSourceAsset.code} para ${destination_contact?.contact_name || destination_name || destination}; destino recebe ${assetCode}`
-                : `Pagamento em ${assetCode} para ${destination_contact?.contact_name || destination_name || destination}; origem liquidada em XLM`,
+                : `Pagamento em ${assetCode} para ${destination_contact?.contact_name || destination_name || destination}; origem convertida automaticamente de ${actualSourceAsset.code}`,
             source_public_key: wallet.public_key,
             source_session_id: wallet.session_id,
             destination_session_id: destinationWallet?.session_id || undefined,
@@ -1578,10 +1807,10 @@ export default class ExternalFinalizeController {
               source_public_key: wallet.public_key,
               destination_public_key: resolvedDestination,
               isDirectPayment,
-              source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-              source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
+              source_asset: selectedSourceAssetCode,
+              source_asset_issuer: selectedSourceAssetIssuer,
               destination_asset: assetCode,
-              destination_asset_issuer: assetIssuer,
+              destination_asset_issuer: selectedDestinationAssetIssuer,
               browser_id: browserId || null,
               public_key_from_body: publicKeyFromBody || null,
               quote,
@@ -1595,11 +1824,11 @@ export default class ExternalFinalizeController {
             wallet.public_key,
             resolvedDestination,
             isStrictSendPayment ? requestedSourceAmount : senderHasDestinationAsset ? amount : (quote?.sourceAmount || 'unknown'),
-            isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
+            selectedSourceAssetCode,
+            selectedSourceAssetIssuer,
             amount,
             assetCode,
-            assetIssuer,
+            selectedDestinationAssetIssuer,
             quote?.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM,
             undefined,
             isStrictSendPayment ? 'PATH_PAYMENT_STRICT_SEND' : isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
@@ -1613,10 +1842,10 @@ export default class ExternalFinalizeController {
               source_public_key: wallet.public_key,
               destination_public_key: resolvedDestination,
               isDirectPayment,
-              source_asset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-              source_asset_issuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
+              source_asset: selectedSourceAssetCode,
+              source_asset_issuer: selectedSourceAssetIssuer,
               destination_asset: assetCode,
-              destination_asset_issuer: assetIssuer,
+              destination_asset_issuer: selectedDestinationAssetIssuer,
               browser_id: browserId || null,
               public_key_from_body: publicKeyFromBody || null,
               quote,
@@ -1667,6 +1896,25 @@ export default class ExternalFinalizeController {
           platformFeeDisplay: null,
           totalFeeDisplay: unifiedFee.display,
         };
+        const sourceAssetForNotice = normalizeAssetCode(publicTransferDetails.sourceAssetCode || quote?.sourceAsset?.code || actualSourceAsset.code);
+        const destinationAssetForNotice = normalizeAssetCode(publicTransferDetails.destinationAssetCode || quote?.destinationAsset?.code || assetCode);
+        const autoConversion = sourceAssetForNotice !== destinationAssetForNotice
+          ? {
+              sourceAmount: String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''),
+              sourceAssetCode: sourceAssetForNotice,
+              destinationAmount: String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount),
+              destinationAssetCode: destinationAssetForNotice,
+              message:
+                `Conversão automática concluída: ${formatCustomerAssetAmount(String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''), sourceAssetForNotice)} ` +
+                `viraram ${formatCustomerAssetAmount(String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount), destinationAssetForNotice)} antes do envio.`,
+            }
+          : null;
+        const sourceIssuerForLog = sourceAssetForNotice === 'XLM'
+          ? undefined
+          : String(publicTransferDetails.sourceAssetIssuer || quote?.sourceAsset?.issuer || selectedSourceAssetIssuer || '').trim() || undefined;
+        const destinationIssuerForLog = destinationAssetForNotice === 'XLM'
+          ? undefined
+          : String(publicTransferDetails.destinationAssetIssuer || quote?.destinationAsset?.issuer || selectedDestinationAssetIssuer || '').trim() || undefined;
         const economy = buildSettlementEconomy({
           sourceAmount: String(publicTransferDetails.sourceAmount || quote?.sourceAmount || amount),
           sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote?.sourceAsset?.code || assetCode),
@@ -1674,7 +1922,7 @@ export default class ExternalFinalizeController {
           quote,
         });
 
-        await sendTelegramPaymentNotification({
+        const receiptUrl = await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
           provider: String((payload as any).provider || ''),
@@ -1729,10 +1977,10 @@ export default class ExternalFinalizeController {
           resolvedDestination,
           publicTransferDetails.sourceAmount,
           publicTransferDetails.sourceAssetCode,
-          publicTransferDetails.sourceAssetCode === 'XLM' ? undefined : assetIssuer,
+          sourceIssuerForLog,
           publicTransferDetails.destinationAmount,
           publicTransferDetails.destinationAssetCode,
-          assetIssuer,
+          destinationIssuerForLog,
           publicTransferDetails.feeXlm,
           result.hash,
           isDirectPayment ? 'DIRECT_PAYMENT' : 'PATH_PAYMENT',
@@ -1747,9 +1995,9 @@ export default class ExternalFinalizeController {
             destination_public_key: resolvedDestination,
             isDirectPayment,
             source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            source_asset_issuer: sourceIssuerForLog,
             destination_asset: assetCode,
-            destination_asset_issuer: assetIssuer,
+            destination_asset_issuer: destinationIssuerForLog,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
             quote,
@@ -1759,6 +2007,7 @@ export default class ExternalFinalizeController {
             gross_amount_brl: economy.gross_amount_brl,
             platform_spread_fee: quote?.platformFee || null,
             savings: economy.savings,
+            auto_conversion: autoConversion,
           }
         );
 
@@ -1773,14 +2022,15 @@ export default class ExternalFinalizeController {
             destination_public_key: resolvedDestination,
             isDirectPayment,
             source_asset: senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
-            source_asset_issuer: senderHasDestinationAsset ? assetIssuer : undefined,
+            source_asset_issuer: sourceIssuerForLog,
             destination_asset: assetCode,
-            destination_asset_issuer: assetIssuer,
+            destination_asset_issuer: destinationIssuerForLog,
             browser_id: browserId || null,
             public_key_from_body: publicKeyFromBody || null,
             quote,
             transferDetails: publicTransferDetails,
             savings: economy.savings,
+            auto_conversion: autoConversion,
           }
         );
         if (!tokenMarkedUsed) {
@@ -1826,7 +2076,6 @@ export default class ExternalFinalizeController {
         });
 
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
-        const receiptUrl = PaymentReceiptService.buildHostedReceiptUrl(result.hash);
         return res.status(200).json({
           success: true,
           paymentConfirmed: true,
@@ -1834,7 +2083,7 @@ export default class ExternalFinalizeController {
           amount: publicTransferDetails.destinationAmount || String(amount),
           asset: publicTransferDetails.destinationAssetCode || assetCode,
           completed_at: completedAt,
-          receipt_url: receiptUrl,
+          receipt_url: receiptUrl || PaymentReceiptService.buildHostedReceiptUrl(result.hash),
           sessionId: String(session_id),
           userId: String(session.user_id),
           destination: resolvedDestination,
@@ -1843,6 +2092,10 @@ export default class ExternalFinalizeController {
           hash: result.hash,
           transferDetails: publicTransferDetails,
           savings: economy.savings,
+          autoConversion,
+          message: autoConversion
+            ? `Pagamento enviado. ${autoConversion.message}`
+            : 'Pagamento enviado com sucesso.',
           receiptImageDataUrl,
         });
       }
@@ -1953,6 +2206,8 @@ export default class ExternalFinalizeController {
 
           return res.status(200).json({
             success: true,
+            alreadyCompleted: true,
+            message: 'Conta já criada. Reutilizando a conta existente.',
             sessionId: existingAccount.session_id,
             sessionToken: existingSession.session_token,
             userId: existingAccount.user_id,
@@ -1980,6 +2235,23 @@ export default class ExternalFinalizeController {
           },
         });
       }
+
+      const onboardingReservation = await reserveOnboardingFinalization({
+        tokenHash,
+        provider: String(provider),
+        providerUserId: String(provider_user_id),
+        data: {
+          name: name || null,
+          email: email || null,
+          phone_number: normalizedPhoneNumber || null,
+          cpf: normalizedCpf || null,
+          browser_id: browserId || null,
+        },
+      });
+      if (!onboardingReservation.ok) {
+        return res.status(onboardingReservation.status).json(onboardingReservation.body);
+      }
+      onboardingReservationTokenHash = tokenHash;
 
       let publicKey = '';
       let secretKey = '';
@@ -2036,6 +2308,17 @@ export default class ExternalFinalizeController {
             },
           });
 
+          const responseBody = {
+            success: true,
+            sessionId: existingWallet.session_id,
+            sessionToken: existingSession.session_token,
+            userId,
+            publicKey,
+            walletName: existingWallet.name || `Wallet for ${userId}`,
+          };
+          await completeOnboardingFinalization(tokenHash, responseBody, 200);
+          onboardingReservationTokenHash = null;
+
           const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
           const welcomePromise = TransferNotificationService.notifySessionWelcome({
             sessionId: existingWallet.session_id,
@@ -2050,14 +2333,7 @@ export default class ExternalFinalizeController {
             void welcomePromise;
           }
 
-          return res.status(200).json({
-            success: true,
-            sessionId: existingWallet.session_id,
-            sessionToken: existingSession.session_token,
-            userId,
-            publicKey,
-            walletName: existingWallet.name || `Wallet for ${userId}`,
-          });
+          return res.status(200).json(responseBody);
         }
       }
 
@@ -2139,6 +2415,19 @@ export default class ExternalFinalizeController {
         });
       }
 
+      const responseBody = {
+        success: true,
+        sessionId,
+        sessionToken,
+        userId,
+        publicKey,
+        walletName: name || `Wallet for ${userId}`,
+        transferKey: pixKey,
+        pixKey,
+      };
+      await completeOnboardingFinalization(tokenHash, responseBody, 201);
+      onboardingReservationTokenHash = null;
+
       const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
       const welcomePromise = TransferNotificationService.notifySessionWelcome({
         sessionId,
@@ -2153,15 +2442,18 @@ export default class ExternalFinalizeController {
         void welcomePromise;
       }
 
-      return res.status(201).json({ success: true, sessionId, sessionToken, userId, publicKey, walletName: name || `Wallet for ${userId}`, transferKey: pixKey, pixKey });
+      return res.status(201).json(responseBody);
     } catch (error: any) {
+      const message = error?.message || String(error);
+      if (onboardingReservationTokenHash) {
+        await failOnboardingFinalization(onboardingReservationTokenHash, message);
+      }
       if (isUniqueViolation(error)) {
         return res.status(409).json({
           success: false,
           message: 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).',
         });
       }
-      const message = error?.message || String(error);
       return res.status(500).json({ success: false, message });
     }
   }

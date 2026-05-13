@@ -41,6 +41,13 @@ type ConfirmResponse = {
     totalFeeDisplay?: string
     exact?: boolean
   }
+  autoConversion?: {
+    sourceAmount?: string
+    sourceAssetCode?: string
+    destinationAmount?: string
+    destinationAssetCode?: string
+    message?: string
+  } | null
   receiptImageDataUrl?: string
   message?: string
   error?: string
@@ -81,6 +88,15 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
   if (code === "XLM") return "saldo da carteira TalkToStellar"
   return `${truncated.toFixed(2)} ${code}`
+}
+
+function getAutoConversionMessage(result?: ConfirmResponse | null) {
+  if (result?.autoConversion?.message) return result.autoConversion.message
+  const details = result?.transferDetails
+  const sourceAsset = String(details?.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const destinationAsset = String(details?.destinationAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
+  return `Conversão automática concluída: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} viraram ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`
 }
 
 function formatRecipientLabel(payload: any) {
@@ -304,8 +320,10 @@ export default function ConfirmPaymentClient({
       if (response.ok && payload?.success) {
         const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
+        const conversionMessage = getAutoConversionMessage(payload)
         enqueueWebChatFeedback([
           "Pagamento enviado com sucesso.",
+          conversionMessage,
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
@@ -374,6 +392,7 @@ export default function ConfirmPaymentClient({
   const successDestination = String(result?.destination || result?.destinationName || "")
   const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
+  const successAutoConversionMessage = getAutoConversionMessage(result)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -496,6 +515,9 @@ export default function ConfirmPaymentClient({
                   </div>
                   {showResultFee && (
                     <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
+                  )}
+                  {successAutoConversionMessage && (
+                    <p>{successAutoConversionMessage}</p>
                   )}
                   {successReceiptUrl && (
                     <a

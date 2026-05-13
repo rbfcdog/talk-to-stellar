@@ -326,6 +326,7 @@ export default class PayLinkController {
     const recipientSessionId = String(req.body?.session_id || '').trim();
     const recipientSessionToken = String(req.body?.session_token || '').trim();
     const recipientPin = String(req.body?.pin || '').trim();
+    let reservedTokenHash: string | null = null;
 
     try {
       if (!token || !recipientSessionId || !recipientSessionToken) {
@@ -415,6 +416,7 @@ export default class PayLinkController {
       if (!reservation.ok) {
         return res.status(reservation.status).json(reservation.body);
       }
+      reservedTokenHash = tokenHash;
 
       const claimed = await claimToken({
         tokenHash,
@@ -496,7 +498,7 @@ export default class PayLinkController {
         transferDetails,
       });
 
-      await PaymentReceiptService.sendReceipt({
+      const receiptUrl = await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: recipientSessionId,
         userId: String(recipientSession.user_id),
@@ -531,7 +533,7 @@ export default class PayLinkController {
         asset: String(transferDetails?.destinationAssetCode || destinationAssetCode),
         destination: recipientWallet.public_key,
         completed_at: completedAt,
-        receipt_url: PaymentReceiptService.buildHostedReceiptUrl(result.hash),
+        receipt_url: receiptUrl || PaymentReceiptService.buildHostedReceiptUrl(result.hash),
         assetCode: sourceAssetCode,
         sourceAssetCode,
         destinationAssetCode,
@@ -541,6 +543,9 @@ export default class PayLinkController {
       });
     } catch (error: any) {
       logger.error(`[pay-link] claim failed: ${error?.message || String(error)}`);
+      if (reservedTokenHash) {
+        await updateClaimStatus(reservedTokenHash, 'failed', undefined, { error: error?.message || String(error) });
+      }
       return res.status(500).json({ success: false, error: error?.message || String(error), message: error?.message || String(error) });
     }
   }

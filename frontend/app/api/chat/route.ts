@@ -1,29 +1,57 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
+const getBackendBaseUrl = () => {
+  const raw =
+    process.env.BACKEND_URL ||
+    process.env.AGENT_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_AGENT_API_URL ||
+    "http://localhost:3001";
+
+  return raw
+    .replace(/\/api\/agent\/query\/?$/, "")
+    .replace(/\/api\/agent\/?$/, "")
+    .replace(/\/api\/?$/, "")
+    .replace(/\/$/, "");
+};
+
 const getAgentApiUrl = () => {
-  // Server-side can use BACKEND_URL directly
-  if (process.env.BACKEND_URL) {
-    return `${process.env.BACKEND_URL}/api/agent/query`;
-  }
-  
-  // Fallback to explicit agent URL if set
-  if (process.env.AGENT_API_URL) {
-    return process.env.AGENT_API_URL;
-  }
-  
-  // Final fallback for localhost
-  return "http://localhost:3001/api/agent/query";
+  return `${getBackendBaseUrl()}/api/agent/query`;
 };
 
 const AGENT_API_URL = getAgentApiUrl();
 
 const getAgentMessagesUrl = (sessionId: string, limit = 50) => {
   const queryUrl = new URL(AGENT_API_URL);
-  queryUrl.pathname = queryUrl.pathname.replace(/\/query$/, `/messages/${sessionId}`);
+  queryUrl.pathname = /\/query\/?$/.test(queryUrl.pathname)
+    ? queryUrl.pathname.replace(/\/query\/?$/, `/messages/${sessionId}`)
+    : `${queryUrl.pathname.replace(/\/$/, "")}/messages/${sessionId}`;
   queryUrl.search = `limit=${limit}`;
   return queryUrl.toString();
 };
+
+const getExternalCheckAccountUrl = () => {
+  return `${getBackendBaseUrl()}/api/external/check-account`;
+};
+
+async function resolveWebSessionId(browserId: string): Promise<string | null> {
+  if (!browserId) return null;
+
+  const response = await fetch(getExternalCheckAccountUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider: "web",
+      provider_user_id: browserId,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return null;
+  const payload = await response.json().catch(() => ({}));
+  return payload?.exists && payload?.sessionId ? String(payload.sessionId) : null;
+}
 
 /**
  * Generate a UUID v4 for session tracking
@@ -110,13 +138,17 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
+    const browserId = url.searchParams.get("browser_id") || "";
     const limit = url.searchParams.get("limit") || "50";
 
     if (!sessionId) {
       return NextResponse.json({ error: "session_id is required" }, { status: 400 });
     }
 
-    const agentApiResponse = await fetch(getAgentMessagesUrl(sessionId, Number(limit) || 50), {
+    const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
+    const resolvedSessionId = linkedSessionId || sessionId;
+
+    const agentApiResponse = await fetch(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50), {
       method: "GET",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
@@ -127,7 +159,11 @@ export async function GET(req: Request) {
       throw new Error(`Agent API Error: ${errorText}`);
     }
 
-    return NextResponse.json(await agentApiResponse.json());
+    return NextResponse.json(await agentApiResponse.json(), {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("Next.js API messages proxy error:", message);
