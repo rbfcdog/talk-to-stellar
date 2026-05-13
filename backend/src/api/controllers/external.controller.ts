@@ -46,6 +46,15 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function normalizeEmailForCompare(value?: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function looksLikeEmail(value?: string): boolean {
+  const normalized = normalizeEmailForCompare(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
 function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
@@ -218,7 +227,7 @@ export class ExternalController {
       let provider = String(req.body?.provider || '').trim().toLowerCase();
       let providerUserId = String(req.body?.provider_user_id || '').trim();
       const externalToken = String(req.body?.token || '').trim();
-      const email = String(req.body?.email || '').trim().toLowerCase();
+      const email = normalizeEmailForCompare(req.body?.email);
       const pin = String(req.body?.pin || '').trim();
       let externalPayload: any = null;
 
@@ -270,10 +279,22 @@ export class ExternalController {
 
       if (mappedSessionId && mappedUserId) {
         const linkedSession = await agentRepo.getSession(mappedSessionId);
+        if (!linkedSession) {
+          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+          return res.status(409).json({
+            success: false,
+            notAssociated: true,
+            message: `Este ${providerLabel} já está vinculado a outra conta.`,
+          });
+        }
+
         if (linkedSession) {
-          const linkedEmail = String((linkedSession as any)?.email || '').trim().toLowerCase();
-          const linkedUserId = String((linkedSession as any)?.user_id || '').trim().toLowerCase();
-          const emailMatchesMappedAccount = email === linkedEmail || email === linkedUserId;
+          const linkedEmail = normalizeEmailForCompare((linkedSession as any)?.email);
+          const linkedUserId = normalizeEmailForCompare((linkedSession as any)?.user_id);
+          const canonicalExternalLogin = linkedEmail || (looksLikeEmail(linkedUserId) ? linkedUserId : '');
+          const emailMatchesMappedAccount = canonicalExternalLogin
+            ? email === canonicalExternalLogin
+            : email === linkedEmail || email === linkedUserId;
           const linkedHash1 = String((linkedSession as any)?.session_password_hash || '').trim();
           const linkedHash2 = String((linkedSession as any)?.password_hash || '').trim();
           const pinMatchesMappedAccount = (linkedHash1 && linkedHash1 === pinHash) || (linkedHash2 && linkedHash2 === pinHash);

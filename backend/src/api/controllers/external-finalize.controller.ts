@@ -190,6 +190,11 @@ function normalizeEmailForCompare(value?: string): string {
   return String(value || '').trim().toLowerCase();
 }
 
+function looksLikeEmail(value?: string): boolean {
+  const normalized = normalizeEmailForCompare(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
 function isUniqueViolation(error: any): boolean {
   const code = String(error?.code || '').trim();
   const message = String(error?.message || '').toLowerCase();
@@ -2226,6 +2231,34 @@ export default class ExternalFinalizeController {
       if (existingAccount?.session_id && existingAccount?.user_id) {
         const existingSession = await agentRepo.getSession(String(existingAccount.session_id));
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
+        if (!existingSession || !existingWallet) {
+          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+          return res.status(409).json({
+            success: false,
+            notAssociated: true,
+            message: `Este ${providerLabel} já está vinculado a uma conta existente.`,
+          });
+        }
+        const existingEmail = normalizeEmailForCompare((existingSession as any)?.email);
+        const existingUserId = normalizeEmailForCompare((existingSession as any)?.user_id);
+        const canonicalExternalLogin = existingEmail || (looksLikeEmail(existingUserId) ? existingUserId : '');
+        if (canonicalExternalLogin && normalizedEmail !== canonicalExternalLogin) {
+          const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+          return res.status(409).json({
+            success: false,
+            notAssociated: true,
+            message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+          });
+        }
+
+        const sessionPinHash = String((existingSession as any)?.session_password_hash || (existingSession as any)?.password_hash || '').trim();
+        if (sessionPinHash && pinHash !== sessionPinHash) {
+          return res.status(401).json({
+            success: false,
+            message: 'PIN inválido para a conta já vinculada a este canal.',
+          });
+        }
+
         const collision = await detectIdentityCollision({
           email: normalizedEmail || undefined,
           phoneNumber: normalizedPhoneNumber || undefined,
@@ -2246,10 +2279,14 @@ export default class ExternalFinalizeController {
         }
 
         if (existingSession && existingWallet) {
+          const existingPhone = normalizePhoneForCompare((existingSession as any)?.phone_number);
+          const mergedPhone = existingPhone
+            ? (existingSession as any)?.phone_number
+            : (normalizedPhoneNumber || (existingSession as any)?.phone_number);
           await agentRepo.saveSession(String(existingAccount.session_id), {
             ...existingSession,
-            email: normalizedEmail || existingSession.email || '',
-            phone_number: normalizedPhoneNumber || existingSession.phone_number,
+            email: (existingSession as any)?.email || normalizedEmail || '',
+            phone_number: mergedPhone,
           } as any);
 
           void configureWalletAssetsAndContacts({
