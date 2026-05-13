@@ -369,7 +369,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 Entrar na sua conta
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Use seu PIN ou Passkey para voltar ao chat, confirmar pagamentos e receber links com segurança.
+                Entre para continuar de onde parou. Próximo passo depois do login: saldo, contatos e envio/recebimento.
               </p>
               {hasExternalContext && (
                 <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
@@ -387,11 +387,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">PIN</p>
-                <p className="mt-2 text-sm text-slate-200">Acesso rápido para a conta já criada.</p>
+                <p className="mt-2 text-sm text-slate-200">Caminho mais rápido para entrar e continuar.</p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Passkey</p>
-                <p className="mt-2 text-sm text-slate-200">Biometria ou desbloqueio do aparelho quando disponível.</p>
+                <p className="mt-2 text-sm text-slate-200">Biometria para entrar com menos atrito quando disponível.</p>
               </div>
             </div>
           </section>
@@ -438,7 +438,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />
-                {status === "pin" ? "Entrando..." : "Entrar com PIN"}
+                {status === "pin" ? "Entrando..." : "1) Entrar com PIN"}
               </button>
             </form>
 
@@ -449,11 +449,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KeyRound className="h-4 w-4" />
-              {status === "passkey" ? "Abrindo biometria..." : "Entrar com Passkey"}
+              {status === "passkey" ? "Abrindo biometria..." : "1) Entrar com Passkey"}
             </button>
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              Por segurança, sua sessão dura 24 horas. Depois disso, você entra de novo antes de continuar.
+              Depois de entrar, use: "saldo" para conferir conta, "contatos" para revisar destinatários e "enviar 10 dólares para [nome]" para iniciar pagamento.
             </p>
           </section>
         </div>

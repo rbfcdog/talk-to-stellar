@@ -214,7 +214,9 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             {senderName} criou um link de {sourceAmountLabel} para {recipientName}
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
-            Entre em uma conta existente ou crie uma nova conta global para receber. {isCrossAsset ? `Você recebe em ${destinationAssetCode}.` : "O dinheiro é enviado para a conta autenticada nesta página."}
+            Você vai receber {isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} com crédito final em ${destinationAssetCode}.` : sourceAmountLabel}. Para receber, entre ou crie sua conta global.
+            Esse processo leva cerca de 2 minutos.
+            {isCrossAsset ? ` Você recebe em ${destinationAssetCode}.` : " O dinheiro é enviado para a conta autenticada nesta página."}
             {loggedIn && !isSenderSession ? " Confirme com seu PIN para garantir que este pagamento entre na sua conta." : ""}
           </p>
 
@@ -227,7 +229,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   : (validation.message || "Link inválido.")}
               </p>
             ) : (
-              <p className="mt-1 text-emerald-300">Link pronto. A pessoa que recebe precisa entrar na própria conta.</p>
+              <p className="mt-1 text-emerald-300">Link pronto. Próximo passo: entrar ou criar conta para receber este valor.</p>
             )}
           </div>
 
@@ -257,14 +259,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
                 <LogIn className="h-4 w-4" />
-                Entrar para receber
+                1) Entrar para receber
               </Link>
               <Link
                 href={createAccountPath}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <UserPlus className="h-4 w-4" />
-                Criar conta para receber
+                1) Criar conta para receber
               </Link>
             </div>
           )}
@@ -290,7 +292,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                {status === "claiming" ? <span className="inline-flex items-center gap-2"><Spinner />Recebendo...</span> : `Receber ${receiveLabel}`}
+                {status === "claiming" ? <span className="inline-flex items-center gap-2"><Spinner />Recebendo...</span> : `2) Confirmar e receber ${receiveLabel}`}
               </button>
               <button
                 type="button"

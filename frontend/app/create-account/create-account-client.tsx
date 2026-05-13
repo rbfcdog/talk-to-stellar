@@ -541,8 +541,8 @@ export default function CreateAccountClient({
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 {isClaimPaymentContext
-                  ? "Cadastre sua conta global e volte automaticamente ao link de pagamento para confirmar o recebimento."
-                  : "Preencha seus dados para concluir o cadastro e começar a usar sua conta global com segurança."}
+                  ? "Você está a poucos passos de receber. Cadastre sua conta global e volte automaticamente ao link de pagamento."
+                  : "Preencha os dados abaixo e siga o passo a passo para concluir sua conta com segurança."}
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
@@ -577,15 +577,15 @@ export default function CreateAccountClient({
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">2. Conclua</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Informe seus dados, crie um PIN e confirme o recebimento depois do cadastro.
+                  Informe seus dados, crie o PIN e finalize. Tempo médio: cerca de 2 minutos.
                 </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-              Dica:
+              Guia rápido:
               <span className="ml-2 break-all font-mono text-cyan-100">
-                Se o link não abrir, volte ao Telegram e solicite um novo acesso.
+                1) Nome e contato, 2) PIN, 3) Finalizar conta, 4) voltar para receber.
               </span>
             </div>
           </section>
@@ -687,7 +687,7 @@ export default function CreateAccountClient({
                 disabled={submitLocked || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Finalizando conta...</span> : "Finalizar conta"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Finalizando conta...</span> : "3) Finalizar conta"}
               </button>
             </form>
 

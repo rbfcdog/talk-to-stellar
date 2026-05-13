@@ -148,6 +148,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - No primeiro contato da sessão, oriente o usuário com um mini-menu de próximos passos para ele não se perder.
 - Em toda saudação, abertura de conversa ou mensagem genérica, mostre de forma curta o que o usuário pode fazer agora (ex.: saldo, contatos, enviar, converter, histórico, link de pagamento).
 - Sempre que concluir uma tarefa, sugira 1 ou 2 próximos passos úteis dentro do produto para manter o usuário orientado.
+- Quando o usuário vier de um link de pagamento para receber dinheiro, priorize o menor caminho: explique o valor a receber, que precisa criar/entrar na conta para receber, que o processo leva cerca de 2 minutos, e diga exatamente o próximo passo.
 
 ## PRODUCT CONTEXT
 - TalkToStellar is a digital wallet for people who want to move money, manage saved contacts, and review wallet activity.
@@ -313,7 +314,7 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
     'Resumo rápido da sua conta:',
     balanceBlock,
     '',
-    'Como começar agora:',
+    'Como começar agora (caminho recomendado):',
     '1. Digite "saldo" para conferir seu dinheiro disponível.',
     '2. Digite "contatos" para ver para quem você já pode enviar.',
     '3. Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.',
