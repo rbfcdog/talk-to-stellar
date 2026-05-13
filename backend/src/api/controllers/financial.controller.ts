@@ -7,6 +7,14 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { InvoiceService } from '../services/invoice.service';
 import { GlobalProfileService } from '../services/global-profile.service';
 import { TransactionHistoryService } from '../services/transaction-history.service';
+import { AgentRepository } from '../../repositories/agent.repository';
+import { supabase } from '../../config/supabase';
+import ExternalService from '../../services/external.service';
+import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { isSessionExpired } from '../../utils/session-expiry';
+
+const agentRepo = new AgentRepository(supabase);
+const externalService = new ExternalService(supabase as any);
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
   return {
@@ -124,6 +132,90 @@ export class FinancialController {
         return res.status(404).json({ success: false, message: 'Perfil não encontrado.' });
       }
       return res.status(200).json({ success: true, profile });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
+  static async createPublicGlobalProfilePayment(req: Request, res: Response) {
+    try {
+      const username = String(req.params.username || '').trim();
+      const sessionId = String(req.body?.session_id || '').trim();
+      const sessionToken = String(req.body?.session_token || '').trim();
+      const amount = String(req.body?.amount || '').replace(',', '.').trim();
+      const assetCode = normalizeAssetCode(req.body?.asset_code || 'USDC');
+      const assetIssuer = getAssetIssuer(assetCode, req.body?.asset_issuer);
+      const memo = String(req.body?.memo || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+
+      if (!username || !sessionId || !sessionToken || !amount) {
+        return res.status(400).json({
+          success: false,
+          message: 'username, session_id, session_token e amount são obrigatórios.',
+        });
+      }
+
+      if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+        return res.status(400).json({ success: false, message: 'Informe um valor maior que zero.' });
+      }
+
+      if (assetCode !== 'XLM' && !assetIssuer) {
+        return res.status(400).json({ success: false, message: `${assetCode}_ISSUER não está configurado no backend.` });
+      }
+
+      const session = await agentRepo.getSession(sessionId);
+      if (!session?.user_id || isSessionExpired(session)) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+      }
+
+      const storedToken = String((session as any)?.session_token || '').trim();
+      if (!storedToken || storedToken !== sessionToken) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+      }
+
+      const profile = await GlobalProfileService.getPublicProfile(username);
+      if (!profile) {
+        return res.status(404).json({ success: false, message: 'Perfil não encontrado.' });
+      }
+
+      const destinationPublicKey = String((profile as any)?.destination_public_key || '').trim();
+      if (!destinationPublicKey) {
+        return res.status(400).json({
+          success: false,
+          message: 'Este perfil ainda não está pronto para receber pagamentos.',
+        });
+      }
+
+      const destinationName = String(
+        (profile as any)?.display_name ||
+        (profile as any)?.username ||
+        username
+      ).trim();
+
+      const { token, url } = await externalService.createPaymentConfirmUrl({
+        amount,
+        destination: destinationPublicKey,
+        destination_name: destinationName,
+        session_id: sessionId,
+        owner_id: String(session.user_id),
+        asset_code: assetCode,
+        asset_issuer: assetIssuer,
+      }, {
+        source_amount: amount,
+        source_asset_code: assetCode,
+        source_asset_issuer: assetIssuer || null,
+        destination_amount: amount,
+        destination_asset_code: assetCode,
+        destination_asset_issuer: assetIssuer || null,
+        transaction_context_message: memo || `Pagamento para ${destinationName}`,
+        memo: memo || `Pagamento para ${destinationName}`,
+      });
+
+      return res.status(201).json({
+        success: true,
+        token,
+        url,
+        message: `Link de confirmação gerado para pagar ${destinationName}.`,
+      });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error?.message || String(error) });
     }

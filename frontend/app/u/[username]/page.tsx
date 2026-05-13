@@ -1,21 +1,24 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ArrowRight, WalletCards } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { ArrowRight, Loader2, WalletCards } from "lucide-react"
 
 function displayName(profile: any, username: string) {
   return String(profile?.display_name || profile?.username || username || "TalkToStellar").trim()
 }
 
 export default function PublicReceivePage() {
+  const router = useRouter()
   const params = useParams<{ username: string }>()
   const username = String(params?.username || "").trim()
   const [profile, setProfile] = useState<any>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [amount, setAmount] = useState("")
   const [asset, setAsset] = useState("USDC")
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle")
+  const [submitMessage, setSubmitMessage] = useState("")
+  const submitLockRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -41,14 +44,49 @@ export default function PublicReceivePage() {
   }, [username])
 
   const name = displayName(profile, username)
-  const payHref = useMemo(() => {
-    const params = new URLSearchParams()
-    params.set("mode", "send")
-    params.set("recipient", name)
-    if (amount.trim()) params.set("amount", amount.trim())
-    params.set("asset", asset)
-    return `/pay-anyone?${params.toString()}`
-  }, [amount, asset, name])
+
+  async function handlePayNow() {
+    if (submitLockRef.current) return
+    submitLockRef.current = true
+    setSubmitStatus("submitting")
+    setSubmitMessage("")
+
+    try {
+      const sessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
+      const sessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+      const normalizedAmount = amount.trim().replace(",", ".")
+      if (!normalizedAmount || !Number.isFinite(Number(normalizedAmount)) || Number(normalizedAmount) <= 0) {
+        throw new Error("Informe um valor maior que zero.")
+      }
+
+      if (!sessionId || !sessionToken) {
+        const next = `/u/${encodeURIComponent(username)}`
+        router.push(`/login?next=${encodeURIComponent(next)}`)
+        return
+      }
+
+      const response = await fetch(`/api/financial/u/${encodeURIComponent(username)}/pay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          session_token: sessionToken,
+          amount: normalizedAmount,
+          asset_code: asset,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success || !payload?.url) {
+        throw new Error(payload?.message || "Não foi possível iniciar o pagamento agora.")
+      }
+
+      window.location.href = String(payload.url)
+    } catch (error) {
+      setSubmitStatus("error")
+      setSubmitMessage(error instanceof Error ? error.message : "Falha ao iniciar pagamento.")
+      submitLockRef.current = false
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -109,13 +147,27 @@ export default function PublicReceivePage() {
             </label>
           </div>
 
-          <Link
-            href={payHref}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+          <button
+            type="button"
+            onClick={handlePayNow}
+            disabled={submitStatus === "submitting" || submitLockRef.current}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Continuar pagamento
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+            {submitStatus === "submitting" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Gerando confirmação...
+              </>
+            ) : (
+              <>
+                Continuar pagamento
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </button>
+          {submitStatus === "error" && submitMessage && (
+            <p className="mt-3 text-sm text-rose-300">{submitMessage}</p>
+          )}
         </section>
       </div>
     </main>

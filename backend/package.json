@@ -25,6 +25,8 @@
     "stellar:debug-path-quotes": "ts-node scripts/debug-path-quotes.ts",
     "stellar:backfill-default-trustlines": "ts-node scripts/backfill-default-trustlines.ts",
     "stellar:backfill-all-wallets-trustlines": "ts-node scripts/backfill-trustlines-all-existing-wallets.ts",
+    "financial:backfill-global-profiles": "ts-node scripts/backfill-global-profiles.ts",
+    "financial:send-daily-summaries-once": "ts-node scripts/send-daily-summaries-once.ts",
     "migrate:financial-assistant": "ts-node scripts/run-financial-assistant-migration.ts",
     "migrate:required": "ts-node scripts/run-required-migrations.ts"
   },
