@@ -273,6 +273,7 @@ export default function ConfirmPaymentClient({
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
+  const [showPasskeyOptions, setShowPasskeyOptions] = useState(false)
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "starting" | "authenticating" | "submitting" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
   const [mobileSyncStatus, setMobileSyncStatus] = useState("")
@@ -667,25 +668,37 @@ export default function ConfirmPaymentClient({
               </button>
               <button
                 type="button"
-                onClick={handlePasskeyConfirm}
+                onClick={() => setShowPasskeyOptions((current) => !current)}
                 disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
-                  ? "Autenticando com biometria..."
-                  : "Confirmar com biometria (Passkey)"}
+                {showPasskeyOptions ? "Ocultar opções de Passkey" : "Usar Touch ID (Passkey)"}
               </button>
-              {passkeyError && (
-                <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
-                  {passkeyError}
-                </p>
+              {showPasskeyOptions && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePasskeyConfirm}
+                    disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
+                      ? "Autenticando com Touch ID..."
+                      : "Confirmar com Touch ID (Passkey)"}
+                  </button>
+                  {passkeyError && (
+                    <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                      {passkeyError}
+                    </p>
+                  )}
+                </>
               )}
             </form>
 
-            {qrImageUrl && status !== "done" && (
+            {showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Confirmar pelo celular com biometria</p>
-                <p className="mt-1 text-slate-300">Escaneie o QR com seu celular para abrir esta confirmação e autorizar com Face ID/Touch ID.</p>
+                <p className="font-medium text-white">Confirmar pelo celular com Touch ID</p>
+                <p className="mt-1 text-slate-300">Escaneie o QR com seu celular para abrir esta confirmação e autorizar com Touch ID.</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
