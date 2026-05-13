@@ -1849,8 +1849,14 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     const isSavingsAsk =
       normalized.includes('economizei') ||
       normalized.includes('economia') ||
+      normalized.includes('savings') ||
+      normalized.includes('saved') ||
+      normalized.includes('comparison') ||
+      normalized.includes('compare') ||
       normalized.includes('teria pago') ||
       normalized.includes('metodos tradicionais') ||
+      normalized.includes('traditional') ||
+      normalized.includes('banks') ||
       normalized.includes('banco');
 
     if (!isSavingsAsk) return null;
@@ -1859,7 +1865,13 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       return { period: 'lifetime', view: 'biggest_operation' };
     }
 
-    const view = normalized.includes('teria pago') || normalized.includes('quanto pagaria') || normalized.includes('no banco')
+    const view = normalized.includes('teria pago') ||
+      normalized.includes('quanto pagaria') ||
+      normalized.includes('no banco') ||
+      normalized.includes('comparison') ||
+      normalized.includes('compare') ||
+      normalized.includes('traditional') ||
+      normalized.includes('banks')
       ? 'traditional_cost'
       : 'summary';
     const period = normalized.includes('hoje')
@@ -1875,7 +1887,8 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
     period: 'today' | 'month' | 'lifetime';
     view: 'summary' | 'traditional_cost' | 'biggest_operation';
   }): Promise<AgentState> {
-    const resultRaw = await executeTool('get_savings_identity', {
+    const toolName = fixed.view === 'traditional_cost' ? 'get_savings_comparison' : 'get_savings_identity';
+    const resultRaw = await executeTool(toolName, {
       session_id: state.session_id,
       user_id: state.session_data?.user_id,
       period: fixed.period,
