@@ -936,7 +936,7 @@ function executeGetIntentHelp(): string {
     {
       command: "saldo",
       intent: "balance",
-      description: "Mostra o saldo disponível em R$ e US$.",
+      description: "Mostra o saldo disponível em R$, US$ e €.",
       examples: ["ver saldo", "qual meu saldo?"],
     },
     {
@@ -954,8 +954,8 @@ function executeGetIntentHelp(): string {
     {
       command: "converter",
       intent: "conversion",
-      description: "Cota e cria confirmação para converter saldo entre R$ e US$.",
-      examples: ["converter 10 us$ para r$"],
+      description: "Cota e cria confirmação para converter saldo entre R$, US$ e €.",
+      examples: ["converter 10 us$ para €"],
     },
     {
       command: "cotação",
@@ -1000,10 +1000,10 @@ function executeGetIntentHelp(): string {
     commands,
     message: [
       "Guia rápido TalkToStellar (o que você pode fazer agora):",
-      "1) saldo: ver dinheiro disponível em R$ e US$.",
+      "1) saldo: ver dinheiro disponível em R$, US$ e €.",
       "2) contatos: listar ou salvar destinatários.",
       "3) enviar: fazer pagamento com confirmação segura.",
-      "4) converter: trocar R$ e US$ com cotação atual.",
+      "4) converter: trocar R$, US$ e € com cotação atual.",
       "5) histórico: revisar operações recentes.",
       "6) link de pagamento: gerar link para cobrar/receber.",
       "7) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
@@ -1016,6 +1016,7 @@ function executeGetIntentHelp(): string {
       "Exemplos prontos:",
       "- \"enviar 10 dólares para Ana\"",
       "- \"converter 200 reais para dólar\"",
+      "- \"converter 50 euros para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
       "",
