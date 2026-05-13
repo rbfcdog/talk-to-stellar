@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
@@ -63,6 +63,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
   const [loginDone, setLoginDone] = useState(false)
+  const [externalLinkUsed, setExternalLinkUsed] = useState(false)
+  const actionLockRef = useRef(false)
 
   function getBrowserId() {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
@@ -78,6 +80,36 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     setLoginDone(true)
     closeIntermediatePage()
   }
+
+  function getExternalLoginLockKey() {
+    if (!hasExternalContext) return ""
+    return `talk-to-stellar.external-login-lock:${externalProvider}:${externalProviderUserId}`
+  }
+
+  function isExternalLoginAlreadyCompleted() {
+    if (typeof window === "undefined") return false
+    const lockKey = getExternalLoginLockKey()
+    if (!lockKey) return false
+    return window.sessionStorage.getItem(lockKey) === "done"
+  }
+
+  function markExternalLoginCompleted() {
+    if (typeof window === "undefined") return
+    const lockKey = getExternalLoginLockKey()
+    if (!lockKey) return
+    window.sessionStorage.setItem(lockKey, "done")
+    setExternalLinkUsed(true)
+    actionLockRef.current = true
+  }
+
+  useEffect(() => {
+    if (!hasExternalContext) return
+    if (!isExternalLoginAlreadyCompleted()) return
+    setExternalLinkUsed(true)
+    actionLockRef.current = true
+    setStatus("error")
+    setError("Link já usado.")
+  }, [hasExternalContext, externalProvider, externalProviderUserId])
 
   async function linkExternalSession(sessionId?: string, sessionToken?: string) {
     if (!hasExternalContext) return
@@ -103,6 +135,15 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   async function handlePinLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (actionLockRef.current) return
+    if (isExternalLoginAlreadyCompleted()) {
+      setExternalLinkUsed(true)
+      actionLockRef.current = true
+      setStatus("error")
+      setError("Link já usado.")
+      return
+    }
+    actionLockRef.current = true
     setStatus("pin")
     setError("")
 
@@ -132,15 +173,25 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         payload?.sessionId ? String(payload.sessionId) : undefined,
         payload?.sessionToken ? String(payload.sessionToken) : undefined
       )
+      markExternalLoginCompleted()
       localStorage.setItem("talk-to-stellar.userName", email.trim())
       finishLogin()
     } catch (err) {
+      actionLockRef.current = false
       setStatus("error")
       setError(err instanceof Error ? err.message : "Falha ao entrar com e-mail e PIN.")
     }
   }
 
   async function handlePasskeyLogin() {
+    if (actionLockRef.current) return
+    if (isExternalLoginAlreadyCompleted()) {
+      setExternalLinkUsed(true)
+      actionLockRef.current = true
+      setStatus("error")
+      setError("Link já usado.")
+      return
+    }
     if (!email.trim()) {
       setStatus("error")
       setError("Informe seu e-mail para entrar com Passkey.")
@@ -153,6 +204,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       return
     }
 
+    actionLockRef.current = true
     setStatus("passkey")
     setError("")
 
@@ -193,6 +245,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
         completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
       )
+      markExternalLoginCompleted()
       localStorage.setItem("talk-to-stellar.userName", email.trim())
       getBrowserId()
       await linkExternalSession(
@@ -201,6 +254,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       )
       finishLogin()
     } catch (err: any) {
+      actionLockRef.current = false
       setStatus("error")
       setError(getPasskeyErrorMessage(err))
     }
@@ -268,6 +322,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
+                  disabled={externalLinkUsed}
                   placeholder="voce@exemplo.com"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
@@ -281,6 +336,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
+                  disabled={externalLinkUsed}
                   placeholder="Digite seu PIN"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
@@ -290,7 +346,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
               <button
                 type="submit"
-                disabled={status === "pin" || !email.trim() || !pin.trim()}
+                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim() || !pin.trim()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />
@@ -301,7 +357,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             <button
               type="button"
               onClick={handlePasskeyLogin}
-              disabled={status === "passkey" || !email.trim()}
+              disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KeyRound className="h-4 w-4" />

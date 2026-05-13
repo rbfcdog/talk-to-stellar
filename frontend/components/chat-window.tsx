@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, FormEvent } from "react";
+import React, { useState, useEffect, useRef, FormEvent, useCallback } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,6 +21,17 @@ type Message = {
   content: string;
   createdAt?: Date;
 };
+
+const SERVER_MESSAGE_SYNC_INTERVAL_MS = 1500;
+
+function getStoredChatSessionId(chatId: string): string {
+  if (typeof window === "undefined") return "";
+  return (
+    localStorage.getItem("talk-to-stellar.sessionId") ||
+    sessionStorage.getItem(`chat-session-${chatId}`) ||
+    ""
+  );
+}
 
 function getFriendlyLinkLabel(rawUrl: string) {
   try {
@@ -66,6 +77,16 @@ function generateBrowserId(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+function getOrCreateBrowserId(): string {
+  if (typeof window === "undefined") return "";
+  let browserId = localStorage.getItem("talk-to-stellar.browserId");
+  if (!browserId) {
+    browserId = generateBrowserId();
+    localStorage.setItem("talk-to-stellar.browserId", browserId);
+  }
+  return browserId;
 }
 
 export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
@@ -150,7 +171,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const appendWebFeedback = (items: WebChatFeedback[]) => {
     if (!Array.isArray(items) || items.length === 0) return;
     setMessages((prev) => {
-      const contentKeys = new Set(prev.map((message) => `assistant:${message.content}`));
+      const existingIds = new Set(prev.map((message) => message.id));
       const next = items
         .map((item) => ({
           id: `web-feedback-${item.id}`,
@@ -160,8 +181,8 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         }))
         .filter((message) => {
           if (!message.content.trim()) return false;
-          if (contentKeys.has(`assistant:${message.content}`)) return false;
-          contentKeys.add(`assistant:${message.content}`);
+          if (existingIds.has(message.id)) return false;
+          existingIds.add(message.id);
           return true;
         });
 
@@ -234,12 +255,11 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     return () => clearTimeout(timer);
   }, [messages, isLoading]); // Roda sempre que as mensagens ou o estado de 'loading' mudam.
 
-  const mergeServerMessages = (serverMessages: any[]) => {
+  const mergeServerMessages = useCallback((serverMessages: any[]) => {
     if (!Array.isArray(serverMessages) || serverMessages.length === 0) return;
 
     setMessages((prev) => {
       const backendIds = new Set(prev.map((message) => message.backendId).filter(Boolean));
-      const contentKeys = new Set(prev.map((message) => `${message.role}:${message.content}`));
       const nextMessages = serverMessages
         .map((message) => ({
           id: `server-${message.id}`,
@@ -251,42 +271,60 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         .filter((message) => {
           if (!message.content) return false;
           if (backendIds.has(message.backendId)) return false;
-          if (contentKeys.has(`${message.role}:${message.content}`)) return false;
           return true;
         });
 
-      return nextMessages.length > 0 ? [...prev, ...nextMessages] : prev;
-    });
-  };
+      if (nextMessages.length === 0) return prev;
 
-  const fetchServerMessages = async () => {
+      const merged = [...prev.filter((message) => message.id !== "agent-welcome"), ...nextMessages];
+
+      return merged.sort((a, b) => {
+        const aTime = a.createdAt?.getTime() || 0;
+        const bTime = b.createdAt?.getTime() || 0;
+        return aTime - bTime;
+      });
+    });
+  }, []);
+
+  const fetchServerMessages = useCallback(async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
     if (isClientSessionExpired()) {
       redirectToExpiredLogin();
       return;
     }
 
-    const storedSessionId = typeof window !== "undefined"
-      ? localStorage.getItem("talk-to-stellar.sessionId")
-      : null;
-    const resolvedSessionId = storedSessionId || sessionId;
+    const resolvedSessionId = getStoredChatSessionId(chatId) || sessionId;
     if (!resolvedSessionId) return;
+    const browserId = getOrCreateBrowserId();
+    const params = new URLSearchParams({
+      session_id: resolvedSessionId,
+      limit: "50",
+    });
+    if (browserId) {
+      params.set("browser_id", browserId);
+    }
 
     pollInFlightRef.current = true;
     try {
-      const response = await fetch(`/api/chat?session_id=${encodeURIComponent(resolvedSessionId)}&limit=50`, {
+      const response = await fetch(`/api/chat?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
       });
       if (!response.ok) return;
       const data = await response.json();
+      if (data.session_id && data.session_id !== resolvedSessionId && typeof window !== "undefined") {
+        localStorage.setItem("talk-to-stellar.sessionId", data.session_id);
+        sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
+        setSessionId(data.session_id);
+        touchClientSessionActivity();
+      }
       mergeServerMessages(data.messages || []);
     } catch (error) {
       console.error("Erro ao sincronizar mensagens:", error);
     } finally {
       pollInFlightRef.current = false;
     }
-  };
+  }, [chatId, mergeServerMessages, sessionId]);
 
   useEffect(() => {
     if (chatId !== "agent" || !sessionId) return;
@@ -296,10 +334,60 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       if (document.visibilityState === "visible") {
         fetchServerMessages();
       }
-    }, 4000);
+    }, SERVER_MESSAGE_SYNC_INTERVAL_MS);
 
-    return () => window.clearInterval(interval);
-  }, [chatId, sessionId]);
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchServerMessages();
+      }
+    };
+    const syncOnSessionChange = (event: StorageEvent) => {
+      if (!event.key || event.key === "talk-to-stellar.sessionId") {
+        fetchServerMessages();
+      }
+    };
+
+    window.addEventListener("focus", fetchServerMessages);
+    window.addEventListener("visibilitychange", syncWhenVisible);
+    window.addEventListener("storage", syncOnSessionChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", fetchServerMessages);
+      window.removeEventListener("visibilitychange", syncWhenVisible);
+      window.removeEventListener("storage", syncOnSessionChange);
+    };
+  }, [chatId, fetchServerMessages, sessionId]);
+
+  useEffect(() => {
+    if (chatId !== "agent" || typeof window === "undefined") return;
+
+    const syncSoon = () => {
+      window.setTimeout(fetchServerMessages, 250);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === "talk-to-stellar.webChatFeedbackQueue") {
+        syncSoon();
+      }
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(WEB_CHAT_FEEDBACK_CHANNEL);
+      channel.onmessage = syncSoon;
+    } catch {}
+
+    window.addEventListener(WEB_CHAT_FEEDBACK_EVENT, syncSoon);
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener(WEB_CHAT_FEEDBACK_EVENT, syncSoon);
+      window.removeEventListener("storage", onStorage);
+      try {
+        channel?.close();
+      } catch {}
+    };
+  }, [chatId, fetchServerMessages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -379,11 +467,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         ? localStorage.getItem("talk-to-stellar.sessionId")
         : null;
       const resolvedSessionId = storedSessionId || sessionId;
-      let browserId = localStorage.getItem("talk-to-stellar.browserId");
-      if (!browserId) {
-        browserId = generateBrowserId();
-        localStorage.setItem("talk-to-stellar.browserId", browserId);
-      }
+      const browserId = getOrCreateBrowserId();
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await idempotentFetch('/api/chat', {

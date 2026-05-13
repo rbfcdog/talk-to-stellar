@@ -36,6 +36,15 @@ function formatAmount(amount?: string, assetCode?: string) {
   return `${n.toFixed(2)} ${code}`
 }
 
+function getAutoConversionMessage(result?: any) {
+  if (result?.autoConversion?.message) return String(result.autoConversion.message)
+  const details = result?.transferDetails
+  const sourceAsset = String(details?.sourceAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const destinationAsset = String(details?.destinationAssetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
+  return `Conversão automática concluída: ${formatAmount(details?.sourceAmount, sourceAsset)} viraram ${formatAmount(details?.destinationAmount, destinationAsset)} antes do envio.`
+}
+
 function shortenValue(value?: string, left = 6, right = 6) {
   const raw = String(value || "").trim()
   if (!raw) return "Indisponível"
@@ -132,8 +141,10 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       if (response.ok && payload?.success) {
         const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
+        const conversionMessage = getAutoConversionMessage(payload)
         enqueueWebChatFeedback([
           "Pagamento recebido com sucesso.",
+          conversionMessage,
           `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
           hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
           `Horário: ${formatTimestamp(payload.completed_at)}`,
@@ -171,6 +182,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const successDestination = String(result?.destination || "")
   const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
+  const successAutoConversionMessage = getAutoConversionMessage(result)
 
   function leaveSenderSession() {
     clearClientSession()
@@ -298,6 +310,9 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 >
                   Ver comprovante
                 </a>
+              )}
+              {successAutoConversionMessage && (
+                <p>{successAutoConversionMessage}</p>
               )}
               <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
             </motion.div>

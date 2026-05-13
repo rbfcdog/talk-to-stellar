@@ -161,21 +161,42 @@ export async function runMigrations(supabase: SupabaseClient): Promise<void> {
       logger.warn('Disable RLS phase had errors, but continuing...');
     }
 
-    try {
-      const idempotencySql = fs.readFileSync(
-        path.resolve(__dirname, '../../migrations/20260512_06_global_idempotency_uniqueness.sql'),
-        'utf-8'
-      );
-      const phase8Success = await executeMigrationPhase(
-        supabase,
-        'Global Idempotency & Uniqueness',
-        idempotencySql
-      );
-      if (!phase8Success) {
-        logger.warn('Global Idempotency & Uniqueness phase had errors, but continuing...');
+    const idempotencyMigrations = [
+      {
+        name: 'Payment Infrastructure Prereqs',
+        file: '20260512_00_payment_infra_prereqs.sql',
+      },
+      {
+        name: 'Payment Confirmation Single Use',
+        file: '20260513_00_payment_confirmation_single_use.sql',
+      },
+      {
+        name: 'Global Idempotency & Uniqueness',
+        file: '20260512_06_global_idempotency_uniqueness.sql',
+      },
+      {
+        name: 'Onboarding Finalization Idempotency',
+        file: '20260513_01_onboarding_finalization_idempotency.sql',
+      },
+      {
+        name: 'Receipt Images',
+        file: '20260513_02_receipt_images.sql',
+      },
+    ];
+
+    for (const migration of idempotencyMigrations) {
+      try {
+        const sql = fs.readFileSync(
+          path.resolve(__dirname, `../../migrations/${migration.file}`),
+          'utf-8'
+        );
+        const success = await executeMigrationPhase(supabase, migration.name, sql);
+        if (!success) {
+          logger.warn(`${migration.name} phase had errors, but continuing...`);
+        }
+      } catch (error) {
+        logger.warn(`Could not load migration file ${migration.file}: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      logger.warn(`Could not load idempotency migration file: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // Verify final state

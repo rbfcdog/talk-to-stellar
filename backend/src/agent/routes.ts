@@ -338,10 +338,13 @@ export function createAgentRoutes(
             }
           }
 
-          if (existing?.session_id && !session_id) {
+          if (existing?.session_id) {
             const externalSession = await repository.getSession(String(existing.session_id));
             if (externalSession && !isSessionExpired(externalSession)) {
-              req.body.session_id = String(existing.session_id);
+              const linkedSessionHasWallet = Boolean(String((externalSession as any).public_key || '').trim());
+              if (!session_id || linkedSessionHasWallet) {
+                req.body.session_id = String(existing.session_id);
+              }
             }
           }
         }

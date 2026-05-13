@@ -46,9 +46,14 @@ export default function ReceiptByCodePage() {
         return
       }
       try {
-        const response = await fetch(`/api/external/short-links/${encodeURIComponent(code)}`, { cache: "no-store" })
-        const payload = await response.json().catch(() => ({}))
-        const url = String(payload?.url || "").trim()
+        let response = await fetch(`/api/external/receipts/viewer/${encodeURIComponent(code)}`, { cache: "no-store" })
+        let payload = await response.json().catch(() => ({}))
+        let url = String(payload?.imageDataUrl || payload?.url || "").trim()
+        if (!response.ok || !/^data:image\//i.test(url)) {
+          response = await fetch(`/api/external/short-links/${encodeURIComponent(code)}`, { cache: "no-store" })
+          payload = await response.json().catch(() => ({}))
+          url = String(payload?.url || "").trim()
+        }
         if (active && response.ok && /^data:image\//i.test(url)) {
           setImageUrl(url)
         }

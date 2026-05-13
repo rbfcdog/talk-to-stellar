@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { ReceiptImageService, HostedReceiptPaymentData } from '../services/receipt-image.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
@@ -43,8 +44,84 @@ async function findPaymentByHash(txHash: string): Promise<any | null> {
     .limit(1)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('payment_logs') || message.includes('schema cache')) {
+      return null;
+    }
+    throw error;
+  }
   return data || null;
+}
+
+async function findPaymentConfirmationByHash(txHash: string): Promise<any | null> {
+  const { data, error } = await supabase
+    .from('payment_confirmations')
+    .select('*')
+    .eq('payment_hash', txHash)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('payment_confirmations') || message.includes('schema cache')) {
+      return null;
+    }
+    throw error;
+  }
+  return data || null;
+}
+
+async function findStoredReceiptImage(code: string): Promise<any | null> {
+  const normalized = String(code || '').trim();
+  if (!normalized) return null;
+
+  const { data, error } = await supabase
+    .from('receipt_images')
+    .select('code, image_data_url, image_mime, tx_hash, operation_id, expires_at, created_at')
+    .eq('code', normalized)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('receipt_images') || message.includes('schema cache')) {
+      return null;
+    }
+    throw error;
+  }
+
+  if (!data?.image_data_url) return null;
+  const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
+  if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+  return data;
+}
+
+async function findLegacyShortReceiptImage(code: string): Promise<any | null> {
+  const normalized = String(code || '').trim();
+  if (!normalized) return null;
+
+  const { data, error } = await supabase
+    .from('short_links')
+    .select('url, expires_at, created_at')
+    .eq('code', normalized)
+    .eq('purpose', 'receipt_image')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('short_links') || message.includes('schema cache')) {
+      return null;
+    }
+    throw error;
+  }
+
+  const url = String(data?.url || '').trim();
+  if (!/^data:image\//i.test(url)) return null;
+  const expiresAt = data?.expires_at ? Date.parse(String(data.expires_at)) : 0;
+  if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+  return { image_data_url: url, image_mime: url.startsWith('data:image/png') ? 'image/png' : 'image/svg+xml', created_at: data?.created_at };
 }
 
 function paymentDataFromLog(row: any, txHash: string): HostedReceiptPaymentData {
@@ -58,6 +135,107 @@ function paymentDataFromLog(row: any, txHash: string): HostedReceiptPaymentData 
     fee: formatFee(row),
     estimated_savings: String(row?.estimated_savings || row?.metadata?.savings?.estimated_savings || ''),
   };
+}
+
+function paymentDataFromConfirmation(row: any, txHash: string): HostedReceiptPaymentData {
+  const details = row?.details || {};
+  const transferDetails = details?.transferDetails || {};
+  return {
+    tx_hash: txHash,
+    amount: String(transferDetails?.destinationAmount || row?.amount || ''),
+    asset: String(transferDetails?.destinationAssetCode || details?.destination_asset_code || row?.asset_code || 'USDC'),
+    destination: String(row?.destination_name || row?.destination || details?.recipient_name || ''),
+    sender: String(details?.sender_name || row?.user_id || 'TalkToStellar'),
+    completed_at: String(row?.completed_at || row?.used_at || row?.created_at || new Date().toISOString()),
+    fee: String(transferDetails?.feeDisplay || transferDetails?.totalFeeDisplay || transferDetails?.feeXlm || ''),
+    estimated_savings: String(details?.savings?.estimated_savings || details?.savings?.estimatedSavings || ''),
+  };
+}
+
+function paymentDataFromHash(txHash: string): HostedReceiptPaymentData {
+  return {
+    tx_hash: txHash,
+    amount: '',
+    asset: '',
+    destination: 'Destinatário',
+    sender: 'TalkToStellar',
+    completed_at: new Date().toISOString(),
+    fee: 'Indisponível',
+    estimated_savings: '',
+  };
+}
+
+async function resolvePaymentData(txHash: string): Promise<HostedReceiptPaymentData | null> {
+  if (!txHash) return null;
+
+  const paymentLog = await findPaymentByHash(txHash);
+  if (paymentLog) return paymentDataFromLog(paymentLog, txHash);
+
+  const confirmation = await findPaymentConfirmationByHash(txHash);
+  if (confirmation) return paymentDataFromConfirmation(confirmation, txHash);
+
+  // Last-resort compatibility for old receipt links: render a downloadable receipt
+  // with the operation id instead of returning a dead page.
+  return paymentDataFromHash(txHash);
+}
+
+async function persistGeneratedReceiptByHash(txHash: string, paymentData: HostedReceiptPaymentData, imageBase64: string) {
+  if (!txHash) return;
+
+  const code = crypto.createHash('sha256').update(`receipt:${txHash}`).digest('base64url').slice(0, 10);
+  const operationId = PaymentReceiptService.toPublicOperationId(txHash) || '';
+  const imageDataUrl = `data:image/png;base64,${imageBase64}`;
+  const tokenHash = crypto.createHash('sha256').update(`receipt:${code}:${operationId || txHash}`).digest('hex');
+
+  const receiptInsert = await supabase
+    .from('receipt_images')
+    .upsert({
+      code,
+      operation_id: operationId || null,
+      tx_hash: txHash,
+      session_id: null,
+      user_id: null,
+      receipt_type: null,
+      image_data_url: imageDataUrl,
+      image_mime: 'image/png',
+      metadata: {
+        amount: paymentData.amount || '',
+        asset: paymentData.asset || '',
+        destination: paymentData.destination || '',
+        sender: paymentData.sender || '',
+        completed_at: paymentData.completed_at || '',
+        fee: paymentData.fee || '',
+      },
+      expires_at: null,
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'code' });
+
+  if (receiptInsert.error) {
+    const message = String(receiptInsert.error?.message || '').toLowerCase();
+    if (!message.includes('receipt_images') && !message.includes('schema cache')) {
+      throw receiptInsert.error;
+    }
+  }
+
+  const shortLinkUpsert = await supabase
+    .from('short_links')
+    .upsert({
+      code,
+      url: imageDataUrl,
+      purpose: 'receipt_image',
+      token_hash: tokenHash,
+      session_id: null,
+      user_id: null,
+      expires_at: null,
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'code' });
+
+  if (shortLinkUpsert.error) {
+    const message = String(shortLinkUpsert.error?.message || '').toLowerCase();
+    if (!message.includes('short_links') && !message.includes('schema cache')) {
+      throw shortLinkUpsert.error;
+    }
+  }
 }
 
 function notFoundPage(): string {
@@ -130,6 +308,35 @@ function receiptPage(input: { paymentData: HostedReceiptPaymentData; imageBase64
 }
 
 export class ReceiptImageController {
+  static async viewer(req: Request, res: Response) {
+    try {
+      const code = String(req.params.code || '').trim();
+      const stored = await findStoredReceiptImage(code);
+      const legacy = stored || await findLegacyShortReceiptImage(code);
+      if (!legacy) {
+        return res.status(404).json({
+          success: false,
+          message: 'Comprovante não encontrado. Confira o link ou solicite um novo comprovante.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        url: legacy.image_data_url,
+        imageDataUrl: legacy.image_data_url,
+        imageMime: legacy.image_mime || 'image/svg+xml',
+        txHash: legacy.tx_hash || null,
+        operationId: legacy.operation_id || null,
+        createdAt: legacy.created_at || null,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
   static async render(req: Request, res: Response) {
     try {
       const payload = req.body || {};
@@ -164,36 +371,48 @@ export class ReceiptImageController {
   }
 
   static async show(req: Request, res: Response) {
+    const txHash = String(req.params.tx_hash || '').trim();
     try {
-      const txHash = String(req.params.tx_hash || '').trim();
-      const row = txHash ? await findPaymentByHash(txHash) : null;
-      if (!row) {
+      if (!txHash) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.status(404).send(notFoundPage());
       }
+      const paymentData = await resolvePaymentData(txHash) || paymentDataFromHash(txHash);
 
-      const paymentData = paymentDataFromLog(row, txHash);
       const imageBase64 = ReceiptImageService.generateReceiptImageBase64(paymentData);
+      await persistGeneratedReceiptByHash(txHash, paymentData, imageBase64).catch(() => {});
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.status(200).send(receiptPage({ paymentData, imageBase64, txHash }));
     } catch (error: any) {
+      if (txHash) {
+        try {
+          const fallback = paymentDataFromHash(txHash);
+          const imageBase64 = ReceiptImageService.generateReceiptImageBase64(fallback);
+          await persistGeneratedReceiptByHash(txHash, fallback, imageBase64).catch(() => {});
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Cache-Control', 'public, max-age=300');
+          return res.status(200).send(receiptPage({ paymentData: fallback, imageBase64, txHash }));
+        } catch {
+          // ignore and return error page below
+        }
+      }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(500).send(notFoundPage().replace('Comprovante não encontrado', escapeHtml(error?.message || String(error))));
     }
   }
 
   static async download(req: Request, res: Response) {
+    const txHash = String(req.params.tx_hash || '').trim();
     try {
-      const txHash = String(req.params.tx_hash || '').trim();
-      const row = txHash ? await findPaymentByHash(txHash) : null;
-      if (!row) {
+      if (!txHash) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.status(404).send(notFoundPage());
       }
+      const paymentData = await resolvePaymentData(txHash) || paymentDataFromHash(txHash);
 
-      const paymentData = paymentDataFromLog(row, txHash);
       const png = ReceiptImageService.generateReceiptImage(paymentData);
+      await persistGeneratedReceiptByHash(txHash, paymentData, png.toString('base64')).catch(() => {});
       const short = shortHash(txHash, 8, 0).replace(/\W+/g, '');
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Content-Disposition', `attachment; filename="comprovante-${short || 'talktostellar'}.png"`);
