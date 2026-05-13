@@ -54,6 +54,22 @@ async function readOnboardingState(hash: string) {
   return data
 }
 
+async function readLogoutState(hash: string) {
+  const { data, error } = await supabase
+    .from('logout_confirmations')
+    .select('used, used_at, status, expires_at')
+    .eq('token_hash', hash)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    const message = String(error.message || '').toLowerCase()
+    if (message.includes('logout_confirmations') || message.includes('schema cache')) return null
+    throw error
+  }
+  return data
+}
+
 export default class ExternalValidateController {
   // GET /api/external/validate-token?token=...
   static async validate(req: Request, res: Response) {
@@ -133,12 +149,13 @@ export default class ExternalValidateController {
       if (sub === 'external_onboard') {
         const state = await readOnboardingState(hash)
         if (state?.used || String(state?.status || '').toLowerCase() === 'completed') {
-          return res.status(200).json({
-            ...(state?.result || {}),
-            success: true,
+          return res.status(409).json({
+            success: false,
             valid: false,
+            used: true,
             alreadyCompleted: true,
-            message: 'Conta já criada. Reutilizando a conta existente.',
+            used_at: state?.used_at || null,
+            message: 'Este link já foi utilizado.',
             payload,
           })
         }
@@ -148,6 +165,41 @@ export default class ExternalValidateController {
             valid: false,
             processing: true,
             message: 'Este link de criação já está em processamento. Aguarde a conclusão.',
+            payload,
+          })
+        }
+      }
+
+      if (sub === 'external_logout_confirm') {
+        const state = await readLogoutState(hash)
+        const expiresAtRaw = (state as any)?.expires_at
+        const expiresAtMs = expiresAtRaw ? Date.parse(String(expiresAtRaw)) : NaN
+        if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+          return res.status(410).json({
+            success: false,
+            valid: false,
+            expired: true,
+            expired_at: expiresAtRaw || null,
+            message: 'Este link expirou. Solicite um novo link.',
+            payload,
+          })
+        }
+        if (state?.used || String(state?.status || '').toLowerCase() === 'completed') {
+          return res.status(409).json({
+            success: false,
+            valid: false,
+            used: true,
+            used_at: state?.used_at || null,
+            message: 'Este link já foi utilizado.',
+            payload,
+          })
+        }
+        if (String(state?.status || '').toLowerCase() === 'processing') {
+          return res.status(409).json({
+            success: false,
+            valid: false,
+            processing: true,
+            message: 'Este link já está em processamento. Aguarde a conclusão.',
             payload,
           })
         }
