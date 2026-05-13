@@ -17,6 +17,7 @@ import ExternalService from "../services/external.service";
 import { supabase } from "../config/supabase";
 import { isSessionExpired } from "../utils/session-expiry";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
+import { normalizeExternalProviderUserId } from "../repositories/external.repository";
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || "dev-secret-change-me";
@@ -289,6 +290,52 @@ function isValidUUID(uuid: string): boolean {
   return uuidRegex.test(uuid);
 }
 
+function normalizeSourceProvider(source: string): "telegram" | "whatsapp" | "web" | "" {
+  const normalized = String(source || "").trim().toLowerCase();
+  if (normalized === "telegram") return "telegram";
+  if (normalized === "whatsapp" || normalized === "phone") return "whatsapp";
+  if (normalized === "web") return "web";
+  return "";
+}
+
+function extractProviderUserId(provider: "telegram" | "whatsapp" | "web" | "", metadata: any): string {
+  if (!provider) return "";
+  if (provider === "web") {
+    return String(metadata?.browser_id || metadata?.provider_user_id || "").trim();
+  }
+  if (provider === "telegram") {
+    const raw =
+      metadata?.from_id ??
+      metadata?.fromId ??
+      metadata?.provider_user_id ??
+      metadata?.telegram_user_id ??
+      metadata?.telegram_chat_id ??
+      metadata?.chat_id ??
+      metadata?.chatId ??
+      metadata?.user_id ??
+      "";
+    return String(raw || "").trim();
+  }
+  // whatsapp
+  const raw =
+    metadata?.provider_user_id ??
+    metadata?.phone_number ??
+    metadata?.phone ??
+    metadata?.from ??
+    metadata?.from_id ??
+    metadata?.wa_id ??
+    metadata?.user_id ??
+    "";
+  return String(raw || "").trim();
+}
+
+function providerLabel(provider: "telegram" | "whatsapp" | "web" | ""): string {
+  if (provider === "telegram") return "Telegram";
+  if (provider === "whatsapp") return "WhatsApp";
+  if (provider === "web") return "Web";
+  return "canal";
+}
+
 function formatStartupBalanceLine(balance: any, index: number): string {
   const asset = String(balance?.asset || balance?.asset_code || 'UNKNOWN').toUpperCase();
   const amount = String(balance?.balance || '0.0000000');
@@ -383,58 +430,63 @@ export function createAgentRoutes(
       // Backend-only onboarding gate for browser channel:
       // if user is not linked, return onboarding link from backend directly.
       const normalizedSource = String(source || "").trim().toLowerCase();
+      const normalizedProvider = normalizeSourceProvider(normalizedSource);
       let runtimeExternalContext: Record<string, string> = {};
-      if (normalizedSource === "telegram") {
-        const providerUserId = String(
-          metadata?.from_id ||
-          metadata?.fromId ||
-          metadata?.provider_user_id ||
-          ""
-        ).trim();
+      if (normalizedProvider === "telegram" || normalizedProvider === "whatsapp") {
+        const rawProviderUserId = extractProviderUserId(normalizedProvider, metadata);
+        const channelProviderUserId = normalizeExternalProviderUserId(normalizedProvider, rawProviderUserId);
+        const channelLabel = providerLabel(normalizedProvider);
 
-        if (providerUserId) {
-          runtimeExternalContext = {
-            external_provider: "telegram",
-            external_provider_user_id: providerUserId,
-            external_source: "telegram",
-          };
-          const existing = await externalService.checkExternalAccount("telegram", providerUserId);
+        // Hard guard: external channels must always identify the external user id.
+        if (!channelProviderUserId) {
+          return res.status(400).json({
+            success: false,
+            error: `Não foi possível validar sua identidade no ${channelLabel}. Solicite um novo link de acesso e tente novamente.`,
+          });
+        }
 
-          if (!existing) {
-            const { url } = await externalService.createOnboardUrlWithShortLink("telegram", providerUserId);
+        runtimeExternalContext = {
+          external_provider: normalizedProvider,
+          external_provider_user_id: channelProviderUserId,
+          external_source: normalizedProvider,
+        };
+
+        const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
+        if (!existing) {
+          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId);
+          return res.status(200).json({
+            session_id: session_id || null,
+            success: true,
+            onboardingRequired: true,
+            creationUrl: url,
+            message:
+              `Sua sessão não está ativa no momento.\n\n` +
+              `Abra este link para entrar na sua conta:\n${url}\n\n` +
+              `Na página, use a opção "Já tenho conta".`,
+          });
+        }
+
+        if (existing?.session_id) {
+          const externalSession = await repository.getSession(String(existing.session_id));
+          if (!externalSession || isSessionExpired(externalSession)) {
+            if (externalSession) {
+              await repository.clearSession(String(existing.session_id));
+            }
+            const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId);
             return res.status(200).json({
               session_id: session_id || null,
               success: true,
               onboardingRequired: true,
+              reason: "session_expired",
               creationUrl: url,
               message:
-                `Sua sessão não está ativa no momento.\n\n` +
-                `Abra este link para entrar na sua conta:\n${url}\n\n` +
+                `Sua sessão expirou.\n\n` +
+                `Abra este link para entrar novamente:\n${url}\n\n` +
                 `Na página, use a opção "Já tenho conta".`,
             });
           }
-
-          if (existing?.session_id) {
-            const externalSession = await repository.getSession(String(existing.session_id));
-            if (!externalSession || isSessionExpired(externalSession)) {
-              if (externalSession) {
-                await repository.clearSession(String(existing.session_id));
-              }
-              const { url } = await externalService.createOnboardUrlWithShortLink("telegram", providerUserId);
-              return res.status(200).json({
-                session_id: session_id || null,
-                success: true,
-                onboardingRequired: true,
-                reason: "session_expired",
-                creationUrl: url,
-                message:
-                  `Sua sessão expirou.\n\n` +
-                  `Abra este link para entrar novamente:\n${url}\n\n` +
-                  `Na página, use a opção "Já tenho conta".`,
-              });
-            }
-            req.body.session_id = String(existing.session_id);
-          }
+          // Never trust an incoming session_id over the channel identity mapping.
+          req.body.session_id = String(existing.session_id);
         }
       }
 
