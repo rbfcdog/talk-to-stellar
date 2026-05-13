@@ -12,6 +12,20 @@ function tokenHash(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
+function getOnboardingProcessingTtlSeconds(): number {
+  const parsed = Number(String(process.env.ONBOARDING_PROCESSING_TTL_SECONDS || '180').trim())
+  if (!Number.isFinite(parsed) || parsed <= 0) return 180
+  return Math.trunc(parsed)
+}
+
+function isOnboardingProcessingStale(state: any): boolean {
+  const ttlMs = getOnboardingProcessingTtlSeconds() * 1000
+  const lockAtRaw = String(state?.updated_at || state?.created_at || '').trim()
+  const lockAtMs = Date.parse(lockAtRaw)
+  if (!Number.isFinite(lockAtMs)) return false
+  return Date.now() - lockAtMs > ttlMs
+}
+
 async function readPaymentLinkState(hash: string) {
   const primary = await supabase
     .from('payment_confirmations')
@@ -41,7 +55,7 @@ async function readPaymentLinkState(hash: string) {
 async function readOnboardingState(hash: string) {
   const { data, error } = await supabase
     .from('onboarding_finalizations')
-    .select('used, used_at, status, result')
+    .select('used, used_at, status, result, created_at, updated_at')
     .eq('token_hash', hash)
     .limit(1)
     .maybeSingle()
@@ -157,9 +171,19 @@ export default class ExternalValidateController {
             used_at: state?.used_at || null,
             message: 'Este link já foi utilizado.',
             payload,
+            result: state?.result || null,
           })
         }
         if (String(state?.status || '').toLowerCase() === 'processing') {
+          if (isOnboardingProcessingStale(state)) {
+            return res.status(200).json({
+              success: true,
+              valid: true,
+              payload,
+              staleProcessing: true,
+              message: 'Foi detectado um processamento anterior interrompido. Você já pode tentar novamente.',
+            })
+          }
           return res.status(409).json({
             success: false,
             valid: false,

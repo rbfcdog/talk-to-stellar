@@ -16,7 +16,22 @@ type IdempotencyRow = {
   session_id?: string | null;
   user_id?: string | null;
   locked_at?: string | null;
+  updated_at?: string | null;
 };
+
+function getProcessingTtlSeconds(): number {
+  const parsed = Number(String(process.env.IDEMPOTENCY_PROCESSING_TTL_SECONDS || '120').trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return 120;
+  return Math.trunc(parsed);
+}
+
+function isProcessingLockStale(row: IdempotencyRow): boolean {
+  const ttlMs = getProcessingTtlSeconds() * 1000;
+  const lockAtRaw = String(row.locked_at || row.updated_at || '').trim();
+  const lockAtMs = Date.parse(lockAtRaw);
+  if (!Number.isFinite(lockAtMs)) return false;
+  return Date.now() - lockAtMs > ttlMs;
+}
 
 function normalizeForHash(value: any): any {
   if (Array.isArray(value)) return value.map(normalizeForHash);
@@ -136,6 +151,30 @@ export class IdempotencyService {
 
     if (existingRow.status === 'completed' || existingRow.status === 'failed') {
       return { replay: existingRow };
+    }
+
+    if (isProcessingLockStale(existingRow)) {
+      const takeoverAt = new Date().toISOString();
+      const { data: reclaimed, error: reclaimError } = await supabase
+        .from('idempotency_keys')
+        .update({
+          status: 'processing',
+          response_status: null,
+          response_body: null,
+          completed_at: null,
+          locked_at: takeoverAt,
+          updated_at: takeoverAt,
+        })
+        .eq('idempotency_key', key)
+        .eq('status', 'processing')
+        .eq('request_hash', requestHash)
+        .eq('locked_at', existingRow.locked_at || null)
+        .select('idempotency_key')
+        .limit(1)
+        .maybeSingle();
+
+      if (reclaimError) throw reclaimError;
+      if (reclaimed) return { active: true };
     }
 
     return { conflict: 'Requisição idempotente já está em processamento.' };

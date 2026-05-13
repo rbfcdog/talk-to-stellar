@@ -59,6 +59,20 @@ function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
+function getOnboardingProcessingTtlSeconds(): number {
+  const parsed = Number(String(process.env.ONBOARDING_PROCESSING_TTL_SECONDS || '180').trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return 180;
+  return Math.trunc(parsed);
+}
+
+function isOnboardingProcessingStale(state: any): boolean {
+  const ttlMs = getOnboardingProcessingTtlSeconds() * 1000;
+  const lockAtRaw = String(state?.updated_at || state?.created_at || '').trim();
+  const lockAtMs = Date.parse(lockAtRaw);
+  if (!Number.isFinite(lockAtMs)) return false;
+  return Date.now() - lockAtMs > ttlMs;
+}
+
 type ExternalIdentityLock = {
   sessionId?: string;
   userId?: string;
@@ -68,7 +82,7 @@ type ExternalIdentityLock = {
 async function readOnboardingLinkState(hash: string) {
   const { data, error } = await supabase
     .from('onboarding_finalizations')
-    .select('used, used_at, status')
+    .select('used, used_at, status, created_at, updated_at')
     .eq('token_hash', hash)
     .limit(1)
     .maybeSingle();
@@ -158,6 +172,9 @@ async function assertOnboardingLinkReusable(rawToken: string): Promise<{ ok: tru
     return { ok: false, status: 409, message: 'Este link já foi utilizado.' };
   }
   if (String(state?.status || '').toLowerCase() === 'processing') {
+    if (isOnboardingProcessingStale(state)) {
+      return { ok: true };
+    }
     return { ok: false, status: 409, message: 'Este link já está em processamento. Aguarde a conclusão.' };
   }
   return { ok: true };

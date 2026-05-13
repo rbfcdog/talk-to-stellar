@@ -636,6 +636,20 @@ type OnboardingReservation =
   | { ok: true; row: any }
   | { ok: false; status: number; body: Record<string, any> };
 
+function getOnboardingProcessingTtlSeconds(): number {
+  const parsed = Number(String(process.env.ONBOARDING_PROCESSING_TTL_SECONDS || '180').trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return 180;
+  return Math.trunc(parsed);
+}
+
+function isOnboardingProcessingStale(row: any): boolean {
+  const ttlMs = getOnboardingProcessingTtlSeconds() * 1000;
+  const lockAtRaw = String(row?.updated_at || row?.created_at || '').trim();
+  const lockAtMs = Date.parse(lockAtRaw);
+  if (!Number.isFinite(lockAtMs)) return false;
+  return Date.now() - lockAtMs > ttlMs;
+}
+
 async function reservePaymentTokenForExecution(tokenHash: string): Promise<PaymentTokenReservation> {
   try {
     const { data: existing, error: selectError } = await supabase
@@ -770,6 +784,30 @@ async function reserveOnboardingFinalization(input: {
   }
 
   if (String(existing.status || '').toLowerCase() === 'processing') {
+    if (isOnboardingProcessingStale(existing)) {
+      const staleErrorMessage = 'Processamento anterior interrompido. Link liberado para nova tentativa.';
+      const release = await supabase
+        .from('onboarding_finalizations')
+        .update({
+          status: 'failed',
+          used: false,
+          used_at: null,
+          error: staleErrorMessage,
+          updated_at: now,
+        })
+        .eq('id', existing.id)
+        .eq('status', 'processing')
+        .eq('updated_at', existing.updated_at || null)
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (release.error) throw release.error;
+      if (release.data) {
+        return reserveOnboardingFinalization(input);
+      }
+    }
+
     return {
       ok: false,
       status: 409,
@@ -2633,27 +2671,30 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
       } as any);
 
-      await configureWalletAssetsAndContacts({
-        userId,
-        publicKey,
-        vaultSecretId,
-      });
+      void (async () => {
+        await configureWalletAssetsAndContacts({
+          userId,
+          publicKey,
+          vaultSecretId,
+          sessionId,
+        });
 
-      try {
-        const freshAccount = await StellarService.loadAccount(publicKey);
-        await walletRepo.saveWallet({
-          session_id: sessionId,
-          public_key: publicKey,
-          vault_secret_id: vaultSecretId,
-          name: name || `Wallet for ${userId}`,
-          pix_key: pixKey,
-          balance: freshAccount.balances,
-          sequence: freshAccount.sequence,
-          account_data: freshAccount,
-        } as any);
-      } catch (walletSyncError) {
-        logger.warn(`[external-finalize] wallet sync after onboarding conversion failed for ${userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
-      }
+        try {
+          const freshAccount = await StellarService.loadAccount(publicKey);
+          await walletRepo.saveWallet({
+            session_id: sessionId,
+            public_key: publicKey,
+            vault_secret_id: vaultSecretId,
+            name: name || `Wallet for ${userId}`,
+            pix_key: pixKey,
+            balance: freshAccount.balances,
+            sequence: freshAccount.sequence,
+            account_data: freshAccount,
+          } as any);
+        } catch (walletSyncError) {
+          logger.warn(`[external-finalize] wallet sync after onboarding conversion failed for ${userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
+        }
+      })();
 
       // link external_accounts mapping
       await createExternalMappingsWithAliases({
