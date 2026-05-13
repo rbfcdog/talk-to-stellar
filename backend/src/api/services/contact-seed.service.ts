@@ -39,6 +39,12 @@ function stableHash(value: string, length = 8): string {
   return crypto.createHash('sha256').update(value).digest('hex').slice(0, length);
 }
 
+function stableNumericHash(value: string, length = 8): string {
+  const hex = crypto.createHash('sha256').update(value).digest('hex');
+  const digits = hex.replace(/[a-f]/g, (char) => String(char.charCodeAt(0) % 10));
+  return digits.slice(0, length);
+}
+
 function slug(value: string): string {
   const normalized = String(value || '')
     .normalize('NFD')
@@ -62,13 +68,28 @@ export function repairLegacyStarterContactKey(publicKey: string): string {
 }
 
 export class ContactSeedService {
-  static derivePixKey(userId: string, email?: string, name?: string): string {
-    const base = slug(email || name || userId);
-    return `${base}.${stableHash(`${userId}:${email || ''}:${name || ''}`, 6)}@talktostellar`;
+  static derivePixKey(userId: string, input?: {
+    email?: string;
+    phoneNumber?: string;
+    cpf?: string;
+    name?: string;
+  }): string {
+    const email = String(input?.email || '').trim().toLowerCase();
+    const phone = String(input?.phoneNumber || '').replace(/\D+/g, '');
+    const cpf = String(input?.cpf || '').replace(/\D+/g, '');
+    const name = String(input?.name || '').trim();
+
+    if (email) return email;
+    if (phone && phone.length >= 10) return phone;
+    if (cpf && cpf.length === 11) return cpf;
+
+    const base = slug(name || userId);
+    return `${base}-${stableHash(`${userId}:${name}`, 10)}`;
   }
 
   static deriveStarterPixKey(ownerId: string, pixPrefix: string): string {
-    return `${pixPrefix}.${stableHash(ownerId, 8)}@talktostellar`;
+    const seed = `${ownerId}:${pixPrefix}`;
+    return `55${stableNumericHash(seed, 11)}`;
   }
 
   static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {

@@ -672,7 +672,7 @@ ${onboardingUrl}`;
     if (forceLoggedOut) return true;
 
     const email = String(state.session_data?.email || '').trim().toLowerCase();
-    if (email && email !== 'unknown@example.com') return true;
+    if (email) return true;
 
     const userId = String(state.session_data?.user_id || '').trim().toLowerCase();
     if (userId && !userId.startsWith('user_')) return true;
@@ -822,7 +822,7 @@ ${onboardingUrl}`;
 
     if (!destination) {
       state.success = false;
-      state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie a chave pública ou salve esse contato antes de transferir.`;
+      state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie e-mail, CPF ou telefone do destinatário para salvar esse contato antes de transferir.`;
       await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
@@ -1043,11 +1043,10 @@ ${onboardingUrl}`;
     const hasActiveWallet = Boolean(publicKey);
     const contactLines = contacts.slice(0, 12).map((contact: any, index: number) => {
       const name = String(contact.contact_name || contact.name || `Contato ${index + 1}`).trim();
-      const key = String(contact.stellar_public_key || contact.public_key || '').trim();
       const contactTransferKey = String(contact.pix_key || '').trim();
       const email = String(contact.email || contact.contact_profile?.email || '').trim();
       const cpf = String(contact.cpf || contact.contact_profile?.cpf || '').trim();
-      return `${index + 1}. ${name} | public_key=${key || 'indisponivel'} | transfer_key=${contactTransferKey || 'indisponivel'} | email=${email || 'indisponivel'} | cpf=${cpf || 'indisponivel'}`;
+      return `${index + 1}. ${name} | transfer_key=${contactTransferKey || 'indisponivel'} | email=${email || 'indisponivel'} | cpf=${cpf || 'indisponivel'}`;
     });
 
     const pendingPayment = stateData?.pending_payment || (stateData?.action_params as any)?.pending_payment;
@@ -1060,9 +1059,8 @@ ${onboardingUrl}`;
       `user_id=${resolvedUserId || 'indisponivel'}`,
       `session_active=${hasActiveWallet ? 'true' : 'false'}`,
       `force_logged_out=${forceLoggedOut ? 'true' : 'false'}`,
-      `wallet_public_key=${publicKey || 'indisponivel'}`,
       `wallet_public_key_display=${this.maskPublicKey(publicKey)}`,
-      `transfer_key=${transferKey || publicKey || 'indisponivel'}`,
+      `transfer_key=${transferKey || 'indisponivel'}`,
       `email=${email || 'indisponivel'}`,
       `phone_number=${phoneNumber || 'indisponivel'}`,
       `contacts_count=${contacts.length}`,
@@ -1072,7 +1070,7 @@ ${onboardingUrl}`;
       '',
       '## CONTEXT RULES',
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
-      '- If session_active=true, never ask for user_id, session_id, or wallet public key. Use the provided session_id in tools.',
+      '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent wallet data. Return the login/onboarding link flow.',
       '- For balances, contacts, history, payments, conversions, reset PIN, and logout, prefer tools over free text.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
@@ -1313,9 +1311,13 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     const contact = toolResult?.contact || {};
     const profile = toolResult?.contact_profile || {};
     const transferKey = String(profile.pix_key || contact.pix_key || '').trim();
+    const email = String(profile.email || contact.email || '').trim().toLowerCase();
+    const phone = String(profile.phone_number || contact.phone_number || '').replace(/\D+/g, '');
+    const cpf = String(profile.cpf || contact.cpf || '').replace(/\D+/g, '');
+    const preferredIdentifier = email || phone || cpf || (transferKey.includes('@talktostellar') ? '' : transferKey);
     const lines = [
       contact.contact_name ? `Nome: ${contact.contact_name}` : null,
-      `Chave de transferência: ${transferKey || 'indisponível'}`,
+      `Identificador: ${preferredIdentifier || 'indisponível'}`,
     ].filter(Boolean);
 
     return `Contato adicionado com sucesso.${lines.length ? `\n${lines.join('\n')}` : ''}`;
@@ -1324,9 +1326,13 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
   private formatContactListLine(contact: any, index: number): string {
     const label = String(contact.display_label || contact.contact_name || contact.name || 'Contato').trim();
     const transferKey = String(contact.pix_key || contact.contact_profile?.pix_key || '').trim();
+    const email = String(contact.email || contact.contact_profile?.email || '').trim().toLowerCase();
+    const phone = String(contact.phone_number || contact.contact_profile?.phone_number || '').replace(/\D+/g, '');
+    const cpf = String(contact.cpf || contact.contact_profile?.cpf || '').replace(/\D+/g, '');
+    const preferredIdentifier = email || phone || cpf || (transferKey.includes('@talktostellar') ? '' : transferKey);
     const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
     const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
-    const transferLine = `Chave de transferência: ${transferKey || 'indisponível'}`;
+    const transferLine = `Identificador: ${preferredIdentifier || 'indisponível'}`;
 
     return `${index + 1}. ${label}${last}${freq}\n${transferLine}`;
   }
@@ -1472,21 +1478,15 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
   private formatOwnReceivingKeys(publicKey?: string, pixKey?: string): string {
     const lines: string[] = [];
 
-    if (publicKey) {
-      lines.push(`Chave pública da sua wallet: \`${publicKey}\``);
-    }
-
-    if (pixKey && pixKey !== publicKey) {
+    if (pixKey) {
       lines.push(`Chave de recebimento: \`${pixKey}\``);
     }
 
     if (!lines.length) {
-      return 'Não encontrei uma chave de recebimento vinculada à sua sessão atual.';
+      return 'Não encontrei uma chave de recebimento (e-mail/telefone/CPF) vinculada à sua sessão atual.';
     }
 
-    return lines.length === 1
-      ? `Sua chave para receber é:\n${lines[0]}`
-      : `Suas chaves para receber são:\n${lines.map((line, index) => `${index + 1}. ${line}`).join('\n')}`;
+    return `Sua chave para receber é:\n${lines[0]}`;
   }
 
   /**

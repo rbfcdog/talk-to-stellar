@@ -513,6 +513,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_external_accounts_data_cpf_unique
   ON public.external_accounts ((regexp_replace(coalesce(data->>'cpf', ''), '\D', '', 'g')))
   WHERE coalesce(data->>'cpf', '') <> '';
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_external_accounts_data_email_lower_unique
+  ON public.external_accounts ((lower(btrim(coalesce(data->>'email', '')))))
+  WHERE btrim(coalesce(data->>'email', '')) <> '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_external_accounts_data_phone_unique
+  ON public.external_accounts ((regexp_replace(coalesce(data->>'phone_number', ''), '\D', '', 'g')))
+  WHERE coalesce(data->>'phone_number', '') <> '';
+
 COMMIT;
 
 BEGIN;

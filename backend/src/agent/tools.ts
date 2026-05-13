@@ -3542,19 +3542,32 @@ async function executeAddContact(input: any): Promise<string> {
       throw new Error(error.message);
     }
     const profile = await resolveContactProfileByPublicKey(publicKey);
+    const preferredIdentifier = String(profile.email || '').trim().toLowerCase()
+      || String(profile.phone_number || '').replace(/\D+/g, '')
+      || String(profile.cpf || '').replace(/\D+/g, '')
+      || (String(profile.pix_key || '').includes('@talktostellar') ? '' : String(profile.pix_key || '').trim());
     const profileLines = [
       `Nome: ${contactName}`,
-      `Chave pública: ${publicKey}`,
-      profile.pix_key ? `Chave de transferência: ${profile.pix_key}` : null,
+      `Identificador: ${preferredIdentifier || 'indisponível'}`,
       profile.email ? `E-mail: ${profile.email}` : null,
       profile.phone_number ? `Telefone: ${profile.phone_number}` : null,
       profile.cpf ? `CPF: ${profile.cpf}` : null,
     ].filter(Boolean);
 
+    const safeContact = {
+      ...data,
+      stellar_public_key: undefined,
+      public_key: undefined,
+    };
+    const safeProfile = {
+      ...profile,
+      public_key: undefined,
+    };
+
     return JSON.stringify({
       success: true,
-      contact: data,
-      contact_profile: profile,
+      contact: safeContact,
+      contact_profile: safeProfile,
       message: `Contato adicionado com sucesso.\n${profileLines.join('\n')}`,
     });
   } catch (error) {
@@ -3669,9 +3682,14 @@ async function executeListContacts(input: any): Promise<string> {
 
       return {
         ...contact,
+        stellar_public_key: undefined,
+        public_key: undefined,
         email: contact.email || profile.email || null,
         cpf: contact.cpf || profile.cpf || null,
-        contact_profile: profile,
+        contact_profile: {
+          ...profile,
+          public_key: undefined,
+        },
         display_label: tags.length ? `${label} (${tags.join(', ')})` : label,
         favorite,
         recurring,

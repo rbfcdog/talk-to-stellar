@@ -19,6 +19,14 @@ function parsePositiveNumber(value: string | undefined, fallback: number): numbe
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeEmail(value?: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePhone(value?: string): string {
+  return String(value || '').replace(/\D+/g, '');
+}
+
 export interface OnboardUserPayload {
   name?: string;
   email?: string;
@@ -44,6 +52,37 @@ interface ListContactsPayload {
 }
 
 export class UserService {
+  private static async assertUniqueIdentity(input: { email?: string; phoneNumber?: string }): Promise<void> {
+    const email = normalizeEmail(input.email);
+    const phone = normalizePhone(input.phoneNumber);
+
+    if (email) {
+      const { data, error } = await supabase
+        .from('agent_sessions')
+        .select('session_id')
+        .eq('email', email)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(`Database error: ${error.message}`);
+      if (data?.session_id) {
+        throw new Error('Já existe uma conta com este e-mail.');
+      }
+    }
+
+    if (phone) {
+      const { data, error } = await supabase
+        .from('agent_sessions')
+        .select('session_id')
+        .eq('phone_number', phone)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(`Database error: ${error.message}`);
+      if (data?.session_id) {
+        throw new Error('Já existe uma conta com este telefone.');
+      }
+    }
+  }
+
   private static async autoConvertInitialFundingToUsdc(input: {
     userId: string;
     publicKey: string;
@@ -205,6 +244,13 @@ export class UserService {
     let publicKey: string;
     let secretKey: string | undefined;
     let vaultSecretId: string | undefined;
+    const normalizedEmail = normalizeEmail(input.email);
+    const normalizedPhone = normalizePhone(input.phoneNumber);
+
+    await this.assertUniqueIdentity({
+      email: normalizedEmail,
+      phoneNumber: normalizedPhone,
+    });
 
     if (input.secretKey) {
       try {
@@ -224,8 +270,8 @@ export class UserService {
     }
 
     const userToCreate = {
-      email: input.email,
-      phone_number: input.phoneNumber,
+      email: normalizedEmail || null,
+      phone_number: normalizedPhone || null,
       stellar_public_key: publicKey,
     };
 
@@ -251,14 +297,18 @@ export class UserService {
 
         const sessionToken = AuthService.generateTokenForUser(userId);
         const dbSessionToken = uuidv4();
-        pixKey = ContactSeedService.derivePixKey(userId, input.email, input.name);
+        pixKey = ContactSeedService.derivePixKey(userId, {
+          email: normalizedEmail || undefined,
+          phoneNumber: normalizedPhone || undefined,
+          name: input.name,
+        });
         const sessionRecord = {
           session_id: sessionId,
           user_id: userId,
-          email: input.email || `${userId}@local.test`,
+          email: normalizedEmail || '',
           session_token: dbSessionToken,
           public_key: publicKey,
-          phone_number: input.phoneNumber || null,
+          phone_number: normalizedPhone || null,
           pix_key: pixKey,
           created_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
@@ -275,14 +325,18 @@ export class UserService {
 
       const sessionToken = AuthService.generateTokenForUser(userId);
       const dbSessionToken = uuidv4();
-      pixKey = ContactSeedService.derivePixKey(userId, input.email, input.name);
+      pixKey = ContactSeedService.derivePixKey(userId, {
+        email: normalizedEmail || undefined,
+        phoneNumber: normalizedPhone || undefined,
+        name: input.name,
+      });
       const sessionRecord = {
         session_id: sessionId,
         user_id: userId,
-        email: input.email || `${userId}@local.test`,
+        email: normalizedEmail || '',
         session_token: dbSessionToken,
         public_key: publicKey,
-        phone_number: input.phoneNumber || null,
+        phone_number: normalizedPhone || null,
         pix_key: pixKey,
         created_at: new Date().toISOString(),
         last_activity: new Date().toISOString(),

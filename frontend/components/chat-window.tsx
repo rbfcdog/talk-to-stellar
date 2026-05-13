@@ -23,6 +23,13 @@ type Message = {
 };
 
 const SERVER_MESSAGE_SYNC_INTERVAL_MS = 1500;
+const STELLAR_PUBLIC_KEY_REGEX = /\bG[A-Z2-7]{55}\b/gi;
+
+function sanitizeVisibleChatText(content: string): string {
+  return String(content || "")
+    .replace(STELLAR_PUBLIC_KEY_REGEX, "[chave oculta]")
+    .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]");
+}
 
 function getStoredChatSessionId(chatId: string): string {
   if (typeof window === "undefined") return "";
@@ -555,9 +562,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   };
 
   const renderMessageContent = (content: string) => {
-    const receiptImageMatch = content.match(/RECEIPT_IMAGE_DATA_URL:(data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+)/);
+    const safeContent = sanitizeVisibleChatText(content);
+    const receiptImageMatch = safeContent.match(/RECEIPT_IMAGE_DATA_URL:(data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+)/);
     if (receiptImageMatch?.[1]) {
-      const text = content.replace(/RECEIPT_IMAGE_DATA_URL:data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/, '').trim();
+      const text = safeContent.replace(/RECEIPT_IMAGE_DATA_URL:data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/, '').trim();
       const inlineSvg = decodeSvgDataUrl(receiptImageMatch[1]);
       return (
         <div className="space-y-2">
@@ -598,7 +606,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     }
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = content.split(urlRegex);
+    const parts = safeContent.split(urlRegex);
     return (
       <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
         {parts.map((part, idx) => {
