@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -22,15 +21,18 @@ async function proxy(req: NextRequest, path: string[]) {
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/passkeys/${path.join("/")}${qs ? `?${qs}` : ""}`;
   const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
-  const idempotencyKey = req.headers.get("Idempotency-Key") ||
-    `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
+  const inboundIdempotencyKey = req.headers.get("Idempotency-Key");
+
+  const headers: Record<string, string> = {
+    "content-type": req.headers.get("content-type") || "application/json",
+  };
+  if (inboundIdempotencyKey) {
+    headers["Idempotency-Key"] = inboundIdempotencyKey;
+  }
 
   const init: RequestInit = {
     method: req.method,
-    headers: {
-      "content-type": req.headers.get("content-type") || "application/json",
-      "Idempotency-Key": idempotencyKey,
-    },
+    headers,
   };
 
   if (body !== undefined) {
