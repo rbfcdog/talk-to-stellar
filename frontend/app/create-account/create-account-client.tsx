@@ -79,6 +79,15 @@ function getPasskeyErrorMessage(error: any): string {
   return message || "Falha ao ativar biometria."
 }
 
+function isPasskeyChallengeExpiredMessage(message?: string) {
+  const normalized = String(message || "").toLowerCase()
+  return (
+    normalized.includes("passkey challenge expired") ||
+    normalized.includes("challenge expired") ||
+    normalized.includes("desafio expirado")
+  )
+}
+
 function looksLikeEmail(value?: string): boolean {
   const normalized = String(value || "").trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
@@ -563,7 +572,7 @@ export default function CreateAccountClient({
     }
   }
 
-  async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse) {
+  async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse, attempt = 0) {
     const currentResult = baseResult || result
     const userId = currentResult?.userId
     if (!userId) {
@@ -581,7 +590,7 @@ export default function CreateAccountClient({
     setPasskeyError("")
 
     try {
-      const initRes = await idempotentFetch(`/api/passkeys/register-init`, {
+      const initRes = await fetch(`/api/passkeys/register-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -592,7 +601,7 @@ export default function CreateAccountClient({
       const credential = await startRegistration({ optionsJSON: initPayload.options })
 
       setPasskeyStatus('registering')
-      const completeRes = await idempotentFetch(`/api/passkeys/register-complete`, {
+      const completeRes = await fetch(`/api/passkeys/register-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -602,7 +611,17 @@ export default function CreateAccountClient({
         }),
       })
       const completePayload = await completeRes.json()
-      if (!completeRes.ok || !completePayload.success) throw new Error(completePayload.message || 'Falha ao concluir configuração de acesso seguro')
+      if (!completeRes.ok || !completePayload.success) {
+        const serverMessage = String(completePayload?.message || "")
+        if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
+          submitLockRef.current = false
+          setPasskeyStatus('registering')
+          setPasskeyError('Desafio expirado. Gerando novo desafio...')
+          await registerAndSignInWithPasskey(baseResult, attempt + 1)
+          return
+        }
+        throw new Error(completePayload.message || 'Falha ao concluir configuração de acesso seguro')
+      }
 
       setPasskeyStatus('done')
       setResult({
@@ -619,9 +638,17 @@ export default function CreateAccountClient({
         finishAndClose(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
       }
     } catch (err: any) {
+      const message = getPasskeyErrorMessage(err)
+      if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
+        submitLockRef.current = false
+        setPasskeyStatus('registering')
+        setPasskeyError('Desafio expirado. Gerando novo desafio...')
+        await registerAndSignInWithPasskey(baseResult, attempt + 1)
+        return
+      }
       submitLockRef.current = false
       setPasskeyStatus('error')
-      setPasskeyError(getPasskeyErrorMessage(err))
+      setPasskeyError(message)
     }
   }
 

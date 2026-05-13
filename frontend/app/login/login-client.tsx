@@ -37,6 +37,15 @@ function getPasskeyErrorMessage(error: any): string {
   return message || "Não foi possível entrar com Passkey."
 }
 
+function isPasskeyChallengeExpiredMessage(message?: string) {
+  const normalized = String(message || "").toLowerCase()
+  return (
+    normalized.includes("passkey challenge expired") ||
+    normalized.includes("challenge expired") ||
+    normalized.includes("desafio expirado")
+  )
+}
+
 function decodeJwtPayload(token: string): any {
   try {
     const payload = token.split(".")[1]
@@ -321,7 +330,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }
 
-  async function handlePasskeyLogin() {
+  async function handlePasskeyLogin(attempt = 0) {
     if (actionLockRef.current) return
     if (isExternalLoginAlreadyCompleted()) {
       setExternalLinkUsed(true)
@@ -351,7 +360,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
       }
 
-      const initRes = await idempotentFetch(`/api/passkeys/auth-init`, {
+      const initRes = await fetch(`/api/passkeys/auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -365,7 +374,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       }
 
       const credential = await startAuthentication({ optionsJSON: initPayload.options })
-      const completeRes = await idempotentFetch(`/api/passkeys/auth-complete`, {
+      const completeRes = await fetch(`/api/passkeys/auth-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -376,6 +385,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       })
       const completePayload = await completeRes.json().catch(() => ({}))
       if (!completeRes.ok || !completePayload.success) {
+        const serverMessage = String(completePayload?.message || "")
+        if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
+          actionLockRef.current = false
+          setStatus("passkey")
+          setError("Desafio expirado. Gerando novo desafio...")
+          await handlePasskeyLogin(attempt + 1)
+          return
+        }
         throw new Error(completePayload.message || "Falha ao concluir Passkey.")
       }
 
@@ -392,9 +409,17 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       )
       finishLogin()
     } catch (err: any) {
+      const message = getPasskeyErrorMessage(err)
+      if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
+        actionLockRef.current = false
+        setStatus("passkey")
+        setError("Desafio expirado. Gerando novo desafio...")
+        await handlePasskeyLogin(attempt + 1)
+        return
+      }
       actionLockRef.current = false
       setStatus("error")
-      setError(getPasskeyErrorMessage(err))
+      setError(message)
     }
   }
 

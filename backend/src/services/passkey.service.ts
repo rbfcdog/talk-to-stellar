@@ -88,6 +88,12 @@ function hashBase64Url(value: string) {
   return crypto.createHash('sha256').update(value).digest('base64url');
 }
 
+function getPasskeyChallengeTtlMs() {
+  const parsedSeconds = Number(String(process.env.PASSKEY_CHALLENGE_TTL_SECONDS || '900').trim());
+  if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) return 15 * 60_000;
+  return Math.trunc(parsedSeconds * 1000);
+}
+
 type StoredPasskey = {
   id: string;
   user_id: string;
@@ -180,6 +186,7 @@ export class PasskeyService {
   }
 
   private static async storeChallenge(userId: string, type: string, challenge: string, payload: any) {
+    const ttlMs = getPasskeyChallengeTtlMs();
     const { data, error } = await supabase
       .from('passkey_challenges')
       .insert({
@@ -187,7 +194,7 @@ export class PasskeyService {
         type,
         challenge,
         payload,
-        expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+        expires_at: new Date(Date.now() + ttlMs).toISOString(),
       })
       .select('*')
       .single();
@@ -283,7 +290,7 @@ export class PasskeyService {
       sub: 'passkey_login',
       userId,
       nonce: crypto.randomUUID(),
-      expiresAt: Date.now() + 5 * 60_000,
+      expiresAt: Date.now() + getPasskeyChallengeTtlMs(),
     };
     const challenge = hashBase64Url(JSON.stringify(challengePayload));
     const options = await generateAuthenticationOptions({
@@ -473,7 +480,7 @@ export class PasskeyService {
       ...transaction,
       unsignedXdr: undefined,
       nonce: crypto.randomUUID(),
-      expiresAt: Date.now() + 5 * 60_000,
+      expiresAt: Date.now() + getPasskeyChallengeTtlMs(),
     };
     const challenge = hashBase64Url(JSON.stringify(challengePayload));
     const options = await generateAuthenticationOptions({
