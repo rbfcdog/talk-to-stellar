@@ -111,19 +111,6 @@ export default class ExternalValidateController {
 
       const sub = String(payload?.sub || '')
       const hash = tokenHash(token)
-      if (
-        ['external_payment_confirm', 'external_conversion_confirm'].includes(sub) &&
-        getQuoteExpiry(payload) &&
-        isQuoteExpired(payload)
-      ) {
-        return res.status(400).json({
-          success: false,
-          valid: false,
-          expiredQuote: true,
-          message: quoteExpiryMessage(),
-          payload,
-        })
-      }
 
       if (['external_payment_confirm', 'external_conversion_confirm', 'external_payment_claim'].includes(sub)) {
         const state = await readPaymentLinkState(hash)
@@ -155,6 +142,19 @@ export default class ExternalValidateController {
             valid: false,
             processing: true,
             message: 'Este link já está em processamento. Aguarde a conclusão.',
+            payload,
+          })
+        }
+        if (
+          ['external_payment_confirm', 'external_conversion_confirm'].includes(sub) &&
+          getQuoteExpiry(payload) &&
+          isQuoteExpired(payload)
+        ) {
+          return res.status(400).json({
+            success: false,
+            valid: false,
+            expiredQuote: true,
+            message: quoteExpiryMessage(),
             payload,
           })
         }

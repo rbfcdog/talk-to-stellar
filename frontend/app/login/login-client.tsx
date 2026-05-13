@@ -248,6 +248,34 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }, [hasExternalContext, externalToken])
 
+  useEffect(() => {
+    if (!hasExternalContext || loginDone || externalLinkUsed) return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(externalToken)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+        const message = String(payload?.message || "")
+        const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
+        const isExpired = Boolean(payload?.expired)
+        if (!response.ok && (isUsed || isExpired || message.toLowerCase().includes("já foi utilizado"))) {
+          redirectToUsed(message || "Este link já foi utilizado.")
+        }
+      } catch {
+        // ignore intermittent polling errors
+      }
+    }
+
+    const timer = window.setInterval(poll, 2500)
+    void poll()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [hasExternalContext, externalToken, loginDone, externalLinkUsed])
+
   async function linkExternalSession(sessionId?: string, sessionToken?: string) {
     if (!hasExternalContext) return
     if (!sessionId || !sessionToken) {
