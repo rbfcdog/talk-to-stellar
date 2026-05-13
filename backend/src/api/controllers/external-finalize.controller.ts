@@ -667,12 +667,12 @@ async function reserveOnboardingFinalization(input: {
   if (String(existing.status || '').toLowerCase() === 'completed' || existing.used) {
     return {
       ok: false,
-      status: 200,
+      status: 409,
       body: {
-        ...(existing.result || {}),
-        success: true,
+        success: false,
+        used: true,
         alreadyCompleted: true,
-        message: 'Conta já criada. Reutilizando a conta existente.',
+        message: 'Este link já foi utilizado.',
       },
     };
   }

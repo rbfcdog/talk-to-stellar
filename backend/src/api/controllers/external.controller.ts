@@ -46,6 +46,37 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function tokenHash(token: string): string {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+async function readOnboardingLinkState(hash: string) {
+  const { data, error } = await supabase
+    .from('onboarding_finalizations')
+    .select('used, used_at, status')
+    .eq('token_hash', hash)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || '').toLowerCase();
+    if (message.includes('onboarding_finalizations') || message.includes('schema cache')) return null;
+    throw error;
+  }
+  return data;
+}
+
+async function assertOnboardingLinkReusable(rawToken: string): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+  const state = await readOnboardingLinkState(tokenHash(rawToken));
+  if (state?.used || String(state?.status || '').toLowerCase() === 'completed') {
+    return { ok: false, status: 409, message: 'Este link já foi utilizado.' };
+  }
+  if (String(state?.status || '').toLowerCase() === 'processing') {
+    return { ok: false, status: 409, message: 'Este link já está em processamento. Aguarde a conclusão.' };
+  }
+  return { ok: true };
+}
+
 function externalDataFromPayload(payload: any): Record<string, unknown> {
   const provider = String(payload?.provider || '').trim().toLowerCase();
   const chatId = String(
@@ -200,6 +231,11 @@ export class ExternalController {
 
         if (String(externalPayload?.sub || '') !== 'external_onboard') {
           return res.status(400).json({ success: false, message: 'Token externo inválido.' });
+        }
+
+        const tokenState = await assertOnboardingLinkReusable(externalToken);
+        if (!tokenState.ok) {
+          return res.status(tokenState.status).json({ success: false, message: tokenState.message, used: true });
         }
 
         provider = String(externalPayload?.provider || '').trim().toLowerCase();
@@ -441,6 +477,11 @@ export class ExternalController {
 
       if (String(payload?.sub || '') !== 'external_onboard') {
         return res.status(400).json({ success: false, message: 'Token externo inválido.' });
+      }
+
+      const tokenState = await assertOnboardingLinkReusable(token);
+      if (!tokenState.ok) {
+        return res.status(tokenState.status).json({ success: false, message: tokenState.message, used: true });
       }
 
       const provider = String(payload?.provider || '').trim().toLowerCase();

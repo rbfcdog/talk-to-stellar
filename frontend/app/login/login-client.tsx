@@ -87,6 +87,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
   const actionLockRef = useRef(false)
 
+  function redirectToUsed(customMessage?: string) {
+    const params = new URLSearchParams()
+    if (customMessage) params.set("message", customMessage)
+    const query = params.toString()
+    window.location.replace(`/link-used${query ? `?${query}` : ""}`)
+  }
+
   function getBrowserId() {
     let browserId = localStorage.getItem("talk-to-stellar.browserId")
     if (!browserId) {
@@ -140,6 +147,36 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     setError("Link já usado.")
   }, [hasExternalContext, externalProvider, externalProviderUserId])
 
+  useEffect(() => {
+    if (!externalToken) return
+    if (hasExternalContext) return
+    redirectToUsed("Este link de login é inválido.")
+  }, [externalToken, hasExternalContext])
+
+  useEffect(() => {
+    if (!hasExternalContext) return
+    let active = true
+    async function validateToken() {
+      try {
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(externalToken)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (!active) return
+        const message = String(payload?.message || "")
+        const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
+        const isExpired = Boolean(payload?.expired)
+        if (!response.ok || payload?.valid === false || isUsed || isExpired || message.toLowerCase().includes("já foi utilizado")) {
+          redirectToUsed(message || "Este link já foi utilizado.")
+        }
+      } catch {
+        redirectToUsed("Não foi possível validar este link.")
+      }
+    }
+    void validateToken()
+    return () => {
+      active = false
+    }
+  }, [hasExternalContext, externalToken])
+
   async function linkExternalSession(sessionId?: string, sessionToken?: string) {
     if (!hasExternalContext) return
     if (!sessionId || !sessionToken) {
@@ -158,6 +195,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload?.success) {
+      const message = String(payload?.message || "")
+      if (payload?.used || payload?.alreadyCompleted || message.toLowerCase().includes("já foi utilizado")) {
+        redirectToUsed(message || "Este link já foi utilizado.")
+        return
+      }
       throw new Error(payload?.message || "Não foi possível vincular o Telegram a esta sessão.")
     }
   }
@@ -195,6 +237,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success) {
+        const message = String(payload?.message || "")
+        if (payload?.used || payload?.alreadyCompleted || message.toLowerCase().includes("já foi utilizado")) {
+          redirectToUsed(message || "Este link já foi utilizado.")
+          return
+        }
         throw new Error(payload?.message || "Não foi possível entrar com e-mail e PIN.")
       }
 

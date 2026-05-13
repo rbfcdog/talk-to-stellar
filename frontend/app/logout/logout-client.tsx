@@ -44,6 +44,13 @@ export default function LogoutClient() {
       ? "WhatsApp"
       : provider
 
+  function redirectToUsed(customMessage?: string) {
+    const params = new URLSearchParams()
+    if (customMessage) params.set("message", customMessage)
+    const query = params.toString()
+    window.location.replace(`/link-used${query ? `?${query}` : ""}`)
+  }
+
   const currentSessionId = useMemo(() => {
     if (sessionIdFromUrl) return sessionIdFromUrl
     if (typeof window === "undefined") return ""
@@ -51,12 +58,32 @@ export default function LogoutClient() {
   }, [sessionIdFromUrl])
 
   useEffect(() => {
-    if (!currentSessionId && !token) {
-      const doneMessage = "Nenhuma sessão ativa encontrada. Você já está deslogado."
-      setStatus("done")
-      setMessage(doneMessage)
+    if (!token) {
+      redirectToUsed("Este link de logout é inválido ou já foi utilizado.")
+      return
     }
-  }, [currentSessionId, token])
+
+    let active = true
+    async function validateToken() {
+      try {
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (!active) return
+        if (!response.ok || payload?.valid === false || payload?.used || payload?.alreadyCompleted || payload?.expired) {
+          const reason = String(payload?.message || "")
+          redirectToUsed(reason || "Este link de logout já foi utilizado.")
+          return
+        }
+      } catch {
+        redirectToUsed("Não foi possível validar este link de logout.")
+      }
+    }
+    void validateToken()
+
+    return () => {
+      active = false
+    }
+  }, [token])
 
   useEffect(() => {
     if (status !== "done" || completionRef.current) return
@@ -82,8 +109,7 @@ export default function LogoutClient() {
       if (!response.ok || payload?.success === false) {
         const errorMessage = String(payload?.error || payload?.message || "")
         if (payload?.alreadyUsed || payload?.expired || errorMessage.toLowerCase().includes("já foi utilizado")) {
-          setStatus("done")
-          setMessage(payload?.expired ? "Este link já expirou. Solicite um novo logout." : "Este link de logout já foi utilizado.")
+          redirectToUsed(payload?.expired ? "Este link expirou. Solicite um novo link." : "Este link de logout já foi utilizado.")
           return
         }
         throw new Error(errorMessage || "Falha ao encerrar sessão no servidor.")

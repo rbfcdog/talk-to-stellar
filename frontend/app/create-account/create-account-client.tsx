@@ -127,6 +127,13 @@ export default function CreateAccountClient({
     return query ? `/login?${query}` : "/login"
   }, [rawNextPath, token])
 
+  function redirectToUsed(customMessage?: string) {
+    const params = new URLSearchParams()
+    if (customMessage) params.set("message", customMessage)
+    const query = params.toString()
+    window.location.replace(`/link-used${query ? `?${query}` : ""}`)
+  }
+
   function finishTelegramFlow(feedback?: string) {
     if (feedback) enqueueWebChatFeedback(feedback)
     setTelegramDone(true)
@@ -192,8 +199,23 @@ export default function CreateAccountClient({
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
+        const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
+        const isExpired = Boolean(payload?.expired)
+        const responseMessage = String(payload?.message || "")
+        if (isUsed || isExpired || String(payload?.message || "").toLowerCase().includes("já foi utilizado")) {
+          redirectToUsed(String(payload?.message || "").trim() || "Este link já foi utilizado.")
+          return
+        }
         if (!response.ok) {
-          setValidation({ success: true, valid: true, message: "Link recebido. Continue para finalizar sua conta." })
+          if (responseMessage.toLowerCase().includes("fetch failed")) {
+            setValidation({ success: true, valid: true, message: "Link recebido. Continue para finalizar sua conta." })
+            return
+          }
+          redirectToUsed(responseMessage || "Este link é inválido ou já foi utilizado.")
+          return
+        }
+        if (payload?.valid === false) {
+          redirectToUsed(responseMessage || "Este link é inválido ou já foi utilizado.")
           return
         }
         const msg = String(payload?.message || "")
@@ -311,6 +333,12 @@ export default function CreateAccountClient({
       const payload = (await response.json()) as FinalizeResponse
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
+
+      const finalizeMessage = String(payload?.message || payload?.error || "")
+      if (!response.ok && (Boolean((payload as any)?.used || (payload as any)?.alreadyCompleted) || finalizeMessage.toLowerCase().includes("já foi utilizado"))) {
+        redirectToUsed(finalizeMessage || "Este link já foi utilizado.")
+        return
+      }
 
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false
@@ -453,6 +481,11 @@ export default function CreateAccountClient({
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success) {
+        const linkMessage = String(payload?.message || "")
+        if (payload?.used || payload?.alreadyCompleted || linkMessage.toLowerCase().includes("já foi utilizado")) {
+          redirectToUsed(linkMessage || "Este link já foi utilizado.")
+          return
+        }
         throw new Error(payload?.message || "Não foi possível entrar com e-mail e PIN.")
       }
 
