@@ -40,6 +40,10 @@ const orderedMigrations = [
   '20260512_05_savings_feed_spread.sql',
   '20260512_06_global_idempotency_uniqueness.sql',
   '20260513_00_payment_confirmation_single_use.sql',
+  '20260513_01_onboarding_finalization_idempotency.sql',
+  '20260513_02_receipt_images.sql',
+  '20260513_03_payment_link_expiry_and_transaction_nickname.sql',
+  '20260513_04_logout_confirmation_single_use.sql',
 ];
 
 function resolveExecutionList(): string[] {

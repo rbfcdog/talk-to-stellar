@@ -19,10 +19,11 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const sessionId = String(body?.session_id || "").trim();
+    const token = String(body?.token || "").trim();
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
-    if (!sessionId) {
-      return NextResponse.json({ success: false, error: "session_id is required" }, { status: 400 });
+    if (!sessionId && !token) {
+      return NextResponse.json({ success: false, error: "session_id or token is required" }, { status: 400 });
     }
 
     const response = await fetch(AGENT_LOGOUT_URL, {
@@ -30,10 +31,11 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": req.headers.get("Idempotency-Key") ||
-          `next_${crypto.createHash("sha256").update(JSON.stringify({ sessionId, provider, providerUserId })).digest("hex")}`,
+          `next_${crypto.createHash("sha256").update(JSON.stringify({ sessionId, token, provider, providerUserId })).digest("hex")}`,
       },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: sessionId || undefined,
+        token: token || undefined,
         provider: provider || undefined,
         provider_user_id: providerUserId || undefined,
       }),
@@ -42,7 +44,12 @@ export async function POST(req: Request) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       return NextResponse.json(
-        { success: false, error: payload?.error || payload?.message || "Logout failed" },
+        {
+          success: false,
+          error: payload?.error || payload?.message || "Logout failed",
+          alreadyUsed: Boolean(payload?.alreadyUsed),
+          expired: Boolean(payload?.expired),
+        },
         { status: response.status }
       );
     }

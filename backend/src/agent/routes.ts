@@ -4,6 +4,8 @@
 
 import { Router, Request, Response, NextFunction, RequestHandler } from "express";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { AgentState, IntentType, ActionType, SessionData } from "./types";
 import { AgentGraph } from "./graph";
 import { ALL_TOOLS, executeTool } from "./tools";
@@ -15,6 +17,112 @@ import ExternalService from "../services/external.service";
 import { supabase } from "../config/supabase";
 import { isSessionExpired } from "../utils/session-expiry";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "dev-secret-change-me";
+}
+
+function hashToken(value: string): string {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+type LogoutReservation =
+  | { ok: true }
+  | { ok: false; status: number; message: string; expired?: boolean };
+
+async function reserveLogoutConfirmation(tokenHash: string): Promise<LogoutReservation> {
+  const { data: existing, error: existingError } = await supabase
+    .from("logout_confirmations")
+    .select("used, used_at, status, expires_at")
+    .eq("token_hash", tokenHash)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
+  }
+  if (!existing) {
+    return { ok: false, status: 404, message: "Link de logout não encontrado ou inválido." };
+  }
+
+  const expiresAtMs = existing.expires_at ? Date.parse(String(existing.expires_at)) : 0;
+  if (expiresAtMs && Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
+    return { ok: false, status: 410, message: "Este link de logout expirou. Solicite um novo link.", expired: true };
+  }
+
+  if (existing.used) {
+    return { ok: false, status: 409, message: "Este link de logout já foi utilizado." };
+  }
+  if (String(existing.status || "").toLowerCase() === "processing") {
+    return { ok: false, status: 409, message: "Este link de logout já está em processamento." };
+  }
+
+  const { data: reserved, error: reserveError } = await supabase
+    .from("logout_confirmations")
+    .update({
+      status: "processing",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("token_hash", tokenHash)
+    .eq("used", false)
+    .in("status", ["pending", "failed"])
+    .select("token_hash")
+    .limit(1)
+    .maybeSingle();
+
+  if (reserveError) {
+    throw reserveError;
+  }
+  if (!reserved) {
+    const { data: latest } = await supabase
+      .from("logout_confirmations")
+      .select("used, status")
+      .eq("token_hash", tokenHash)
+      .limit(1)
+      .maybeSingle();
+    if (latest?.used) {
+      return { ok: false, status: 409, message: "Este link de logout já foi utilizado." };
+    }
+    return { ok: false, status: 409, message: "Este link de logout já está em processamento." };
+  }
+
+  return { ok: true };
+}
+
+async function completeLogoutConfirmation(tokenHash: string): Promise<void> {
+  const { error } = await supabase
+    .from("logout_confirmations")
+    .update({
+      status: "completed",
+      used: true,
+      used_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("token_hash", tokenHash)
+    .eq("status", "processing");
+  if (error) {
+    logger.warn(`[logout-idempotency] could not complete logout token: ${error.message}`);
+  }
+}
+
+async function failLogoutConfirmation(tokenHash: string, errorMessage: string): Promise<void> {
+  const { error } = await supabase
+    .from("logout_confirmations")
+    .update({
+      status: "failed",
+      used: false,
+      used_at: null,
+      error: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("token_hash", tokenHash)
+    .eq("status", "processing");
+  if (error) {
+    logger.warn(`[logout-idempotency] could not fail logout token: ${error.message}`);
+  }
+}
 
 const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a digital bank and wallet experience.
 
@@ -573,25 +681,68 @@ export function createAgentRoutes(
     res: Response,
     next: NextFunction
   ) => {
+    let logoutTokenHash: string | null = null;
     try {
-      const { session_id } = req.body;
+      const rawToken = String(req.body?.token || '').trim();
+      let tokenPayload: any = null;
+      let tokenSessionId = '';
+      let tokenProvider = '';
+      let tokenProviderUserId = '';
 
-      if (!session_id) {
+      if (rawToken) {
+        try {
+          tokenPayload = jwt.verify(rawToken, getJwtSecret());
+        } catch (error: any) {
+          if (String(error?.name || '') === 'TokenExpiredError') {
+            return res.status(410).json({ success: false, error: 'Este link de logout expirou. Solicite um novo link.', expired: true });
+          }
+          return res.status(400).json({ success: false, error: 'Link de logout inválido.' });
+        }
+
+        if (String(tokenPayload?.sub || '') !== 'external_logout_confirm') {
+          return res.status(400).json({ success: false, error: 'Link de logout inválido.' });
+        }
+
+        logoutTokenHash = hashToken(rawToken);
+        const reservation = await reserveLogoutConfirmation(logoutTokenHash);
+        if (!reservation.ok) {
+          return res.status(reservation.status).json({
+            success: false,
+            error: reservation.message,
+            expired: reservation.expired || false,
+            alreadyUsed: reservation.status === 409,
+          });
+        }
+
+        tokenSessionId = String(tokenPayload?.session_id || '').trim();
+        tokenProvider = String(tokenPayload?.provider || tokenPayload?.source || '').trim().toLowerCase();
+        tokenProviderUserId = String(tokenPayload?.provider_user_id || '').trim();
+      }
+
+      const { session_id } = req.body;
+      const sessionId = String(session_id || tokenSessionId || '').trim();
+      const provider = String(req.body?.provider || tokenProvider || '').trim();
+      const providerUserId = String(req.body?.provider_user_id || tokenProviderUserId || '').trim();
+
+      if (!sessionId) {
+        if (logoutTokenHash) {
+          await failLogoutConfirmation(logoutTokenHash, 'Session ID ausente no link de logout.');
+          logoutTokenHash = null;
+        }
         return res.status(400).json({ error: "Session ID is required" });
       }
-      if (!isValidUUID(session_id)) {
-        return res.status(400).json({ 
-          error: "Invalid session_id format. Must be a valid UUID." 
-        });
-      }
-      if (!isValidUUID(session_id)) {
+      if (!isValidUUID(sessionId)) {
+        if (logoutTokenHash) {
+          await failLogoutConfirmation(logoutTokenHash, 'Session ID inválido.');
+          logoutTokenHash = null;
+        }
         return res.status(400).json({ 
           error: "Invalid session_id format. Must be a valid UUID." 
         });
       }
 
-      const sessionData = await repository.getSession(session_id);
-      await repository.clearSession(session_id);
+      const sessionData = await repository.getSession(sessionId);
+      await repository.clearSession(sessionId);
       const { error: unlinkError } = await supabase
         .from('external_accounts')
         .update({
@@ -599,23 +750,37 @@ export function createAgentRoutes(
           user_id: null,
           updated_at: new Date().toISOString(),
         })
-        .eq('session_id', session_id);
+        .eq('session_id', sessionId);
       if (unlinkError) {
         const message = String(unlinkError.message || '').toLowerCase();
         if (!message.includes('external_accounts') && !message.includes('schema cache') && !message.includes('does not exist')) {
+          if (logoutTokenHash) {
+            await failLogoutConfirmation(logoutTokenHash, unlinkError.message || 'Falha ao desvincular sessão externa.');
+            logoutTokenHash = null;
+          }
           throw new Error(unlinkError.message || 'Falha ao desvincular sessão externa.');
         }
       }
       void TransferNotificationService.notifySessionLogout({
-        sessionId: session_id,
+        sessionId,
         userId: String(sessionData?.user_id || ''),
-        provider: String(req.body?.provider || '').trim() || undefined,
-        providerUserId: String(req.body?.provider_user_id || '').trim() || undefined,
+        provider: provider || undefined,
+        providerUserId: providerUserId || undefined,
       });
-      logger.info(`Session cleared: ${session_id}`);
+      logger.info(`Session cleared: ${sessionId}`);
+
+      if (logoutTokenHash) {
+        await completeLogoutConfirmation(logoutTokenHash);
+        logoutTokenHash = null;
+      }
 
       return res.status(200).json({ success: true });
     } catch (error) {
+      if (logoutTokenHash) {
+        const message = error instanceof Error ? error.message : String(error);
+        await failLogoutConfirmation(logoutTokenHash, message);
+        logoutTokenHash = null;
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error in /logout endpoint: ${errorMessage}`);
       next(error);

@@ -16,14 +16,28 @@ function generateSessionId(): string {
   });
 }
 
+function decodeJwtPayload(token: string): any {
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return {}
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
+    return JSON.parse(atob(padded))
+  } catch {
+    return {}
+  }
+}
+
 export default function LogoutClient() {
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [message, setMessage] = useState("")
   const completionRef = useRef(false)
-  const provider = String(searchParams.get("provider") || searchParams.get("source") || "").trim().toLowerCase()
-  const providerUserId = String(searchParams.get("provider_user_id") || "").trim()
-  const sessionIdFromUrl = String(searchParams.get("session_id") || "").trim()
+  const token = String(searchParams.get("token") || "").trim()
+  const tokenPayload = useMemo(() => decodeJwtPayload(token), [token])
+  const provider = String(searchParams.get("provider") || searchParams.get("source") || tokenPayload?.provider || tokenPayload?.source || "").trim().toLowerCase()
+  const providerUserId = String(searchParams.get("provider_user_id") || tokenPayload?.provider_user_id || "").trim()
+  const sessionIdFromUrl = String(searchParams.get("session_id") || tokenPayload?.session_id || "").trim()
   const providerLabel = provider === "telegram"
     ? "Telegram"
     : provider === "whatsapp" || provider === "phone"
@@ -37,12 +51,12 @@ export default function LogoutClient() {
   }, [sessionIdFromUrl])
 
   useEffect(() => {
-    if (!currentSessionId) {
+    if (!currentSessionId && !token) {
       const doneMessage = "Nenhuma sessão ativa encontrada. Você já está deslogado."
       setStatus("done")
       setMessage(doneMessage)
     }
-  }, [currentSessionId])
+  }, [currentSessionId, token])
 
   useEffect(() => {
     if (status !== "done" || completionRef.current) return
@@ -54,20 +68,25 @@ export default function LogoutClient() {
   async function handleConfirmLogout() {
     setStatus("loading")
     try {
-      if (currentSessionId) {
-        const response = await idempotentFetch("/api/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            session_id: currentSessionId,
-            provider: provider || undefined,
-            provider_user_id: providerUserId || undefined,
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok || payload?.success === false) {
-          throw new Error(payload?.error || payload?.message || "Falha ao encerrar sessão no servidor.")
+      const response = await idempotentFetch("/api/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: currentSessionId || undefined,
+          token: token || undefined,
+          provider: provider || undefined,
+          provider_user_id: providerUserId || undefined,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.success === false) {
+        const errorMessage = String(payload?.error || payload?.message || "")
+        if (payload?.alreadyUsed || payload?.expired || errorMessage.toLowerCase().includes("já foi utilizado")) {
+          setStatus("done")
+          setMessage(payload?.expired ? "Este link já expirou. Solicite um novo logout." : "Este link de logout já foi utilizado.")
+          return
         }
+        throw new Error(errorMessage || "Falha ao encerrar sessão no servidor.")
       }
       if (typeof window !== "undefined") {
         localStorage.removeItem("talk-to-stellar.sessionId")
