@@ -66,7 +66,7 @@ export class GlobalProfileService {
         avatar_url: null,
         bio: input.bio || 'Conta global para receber pagamentos internacionais.',
         default_currency: 'USD',
-        accepted_currencies: ['USD', 'BRL'],
+        accepted_currencies: ['USD', 'BRL', 'EUR'],
         is_public: true,
       })
       .select('*')

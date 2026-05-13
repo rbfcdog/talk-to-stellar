@@ -17,10 +17,15 @@ type CreatePayLinkResponse = {
 
 type LinkMode = "send" | "receive"
 
+function normalizeAssetCode(value: string) {
+  return String(value || "").toUpperCase().replace(/^USD$/, "USDC").replace(/^EUR$/, "EURC")
+}
+
 function displayAsset(assetCode: string) {
-  const code = String(assetCode || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = normalizeAssetCode(assetCode)
   if (code === "USDC") return "US$"
   if (code === "BRL") return "R$"
+  if (code === "EURC") return "€"
   return code
 }
 
@@ -60,9 +65,9 @@ export default function PayAnyoneClient() {
     setMode(searchParams.get("mode") === "receive" ? "receive" : "send")
     setRecipientName(searchParams.get("recipient") || "")
     setAmount(searchParams.get("amount") || "15")
-    const sourceAsset = (searchParams.get("asset") || "USDC").toUpperCase().replace(/^USD$/, "USDC")
+    const sourceAsset = normalizeAssetCode(searchParams.get("asset") || "USDC")
     setAssetCode(sourceAsset)
-    setDestinationAssetCode((searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset).toUpperCase().replace(/^USD$/, "USDC"))
+    setDestinationAssetCode(normalizeAssetCode(searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset))
     const expiresAtFromQuery = String(searchParams.get("expires_at") || "").trim()
     if (expiresAtFromQuery) {
       const parsed = new Date(expiresAtFromQuery)
@@ -296,6 +301,7 @@ export default function PayAnyoneClient() {
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
                   <option value="USDC">US$</option>
+                  <option value="EURC">€</option>
                   <option value="XLM">XLM</option>
                   <option value="BRL">R$</option>
                 </select>
@@ -308,6 +314,7 @@ export default function PayAnyoneClient() {
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
                   <option value="USDC">US$</option>
+                  <option value="EURC">€</option>
                   <option value="BRL">R$</option>
                   <option value="XLM">XLM</option>
                 </select>

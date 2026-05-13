@@ -2,7 +2,7 @@ import { Keypair, Operation, Asset, Memo, Networks, TransactionBuilder } from '@
 import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
-import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS, getTrustedPathAssetCodes } from '../../config/assets';
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
 
@@ -267,7 +267,8 @@ function hopAssetIsTrusted(pathAsset: any): boolean {
     if (type === 'native') return true;
 
     const code = String(pathAsset?.asset_code || '').toUpperCase();
-    if (!code || !['USDC', 'BRL'].includes(code)) return false;
+    const trustedAssetCodes = getTrustedPathAssetCodes();
+    if (!code || !trustedAssetCodes.includes(code)) return false;
 
     const expectedIssuer = getAssetIssuer(code);
     const actualIssuer = String(pathAsset?.asset_issuer || '').trim();
@@ -710,12 +711,12 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj, extraHints));
         }
 
-        // Filter paths to only use trusted assets (XLM, USDC, BRL)
+        // Filter paths to only use trusted assets (XLM and configured fiat rails)
         const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, sourceAssetObj, destAssetObj);
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas XLM, USDC e BRL.`);
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL/EURC).`);
         }
 
         let bestPath = trustedPaths[0];
@@ -787,12 +788,12 @@ export class StellarService {
             throw new Error(buildNoPathDiagnostic(sourceAssetObj, destAssetObj, extraHints));
         }
 
-        // Filter paths to only use trusted assets (XLM, USDC, BRL)
+        // Filter paths to only use trusted assets (XLM and configured fiat rails)
         const trustedPaths = selectTrustedConversionPaths(pathsResponse.records, sourceAssetObj, destAssetObj);
         
         if (trustedPaths.length === 0) {
             // All returned paths use assets outside our trusted set - reject them
-            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas XLM, USDC e BRL.`);
+            throw new Error(`A cotação encontrada não usa uma rota confiável entre ${assetCode(sourceAssetObj)} e ${assetCode(destAssetObj)}. Nenhum caminho encontrado usando apenas ativos confiáveis configurados (USDC/BRL/EURC).`);
         }
 
         let bestPath = trustedPaths[0];

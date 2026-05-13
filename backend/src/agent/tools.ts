@@ -340,7 +340,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL",
+          description: "Destination asset code, e.g. XLM, USDC, BRL, EURC",
         },
         dest_asset_issuer: {
           type: "string",
@@ -348,7 +348,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL",
+          description: "Source asset code, e.g. XLM, USDC, BRL, EURC",
         },
         source_asset_issuer: {
           type: "string",
@@ -360,7 +360,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
+    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, BRL, and EURC.",
     parameters: {
       type: "object",
       properties: {
@@ -382,7 +382,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL",
+          description: "Destination asset code, e.g. XLM, USDC, BRL, EURC",
         },
         dest_asset_issuer: {
           type: "string",
@@ -390,7 +390,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL",
+          description: "Source asset code, e.g. XLM, USDC, BRL, EURC",
         },
         source_asset_issuer: {
           type: "string",
@@ -402,7 +402,7 @@ export const toolDefinitions = [
   },
   {
     name: "ensure_trustline",
-    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the current session wallet.",
+    description: "Create a trustline for USDC, BRL, EURC, or another issued Stellar asset in the current session wallet.",
     parameters: {
       type: "object",
       properties: {
@@ -420,7 +420,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code, e.g. USDC or BRL",
+          description: "Asset code, e.g. USDC, BRL, or EURC",
         },
         asset_issuer: {
           type: "string",
@@ -492,7 +492,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code (XLM, USDC, BRL).",
+          description: "Source asset code (XLM, USDC, BRL, EURC).",
         },
         source_asset_issuer: {
           type: "string",
@@ -504,7 +504,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code (XLM, USDC, BRL).",
+          description: "Destination asset code (XLM, USDC, BRL, EURC).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -687,7 +687,7 @@ export const toolDefinitions = [
         title: { type: "string", description: "Título da cobrança." },
         description: { type: "string", description: "Descrição da cobrança." },
         amount: { type: "string", description: "Valor da cobrança." },
-        currency: { type: "string", description: "Moeda da cobrança (USD/BRL)." },
+        currency: { type: "string", description: "Moeda da cobrança (USD/BRL/EUR)." },
         due_date: { type: "string", description: "Vencimento em ISO date." },
       },
       required: ["recipient_name", "amount"],
@@ -1219,7 +1219,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${publicKey}`);
     const account = await stellarService.getAccount(publicKey);
 
-    const visibleAssets = ['BRL', 'USDC'];
+    const visibleAssets = ['BRL', 'USDC', 'EURC'];
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -1233,7 +1233,7 @@ async function executeGetBalance(input: any): Promise<string> {
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balance.asset === asset) || {
       asset,
       balance: '0.0000000',
-      asset_type: asset === 'BRL' || asset === 'USDC' ? 'credit_alphanum4' : 'native',
+      asset_type: asset === 'BRL' || asset === 'USDC' || asset === 'EURC' ? 'credit_alphanum4' : 'native',
       asset_issuer: undefined,
     });
     return JSON.stringify({
@@ -1302,7 +1302,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       balanceByAsset.set(String(item.asset || '').toUpperCase(), item);
     }
 
-    const technicalAssets = ['XLM', 'USDC', 'BRL'].map((assetCode) => {
+    const technicalAssets = ['XLM', 'USDC', 'BRL', 'EURC'].map((assetCode) => {
       const existing = balanceByAsset.get(assetCode);
       if (existing) return existing;
       return {
@@ -1319,7 +1319,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
-      message: "Technical balances retrieved for XLM, USDC, BRL",
+      message: "Technical balances retrieved for XLM, USDC, BRL, EURC",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
