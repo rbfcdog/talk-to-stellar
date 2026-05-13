@@ -170,3 +170,36 @@
     color: #111111 !important;
   }
 }
+
+.text-gradient {
+  background: linear-gradient(to right, #00d2ff, #4ca1ef);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-gradient-custom {
+  background: linear-gradient(to right, #00d2ff, #4ca1ef);
+}
+
+.border-gradient-card {
+  position: relative;
+  background: rgb(15 23 42);
+  background-clip: padding-box;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+}
+
+.border-gradient-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  margin: -1px;
+  border-radius: inherit;
+  background: linear-gradient(to right, rgba(34, 211, 238, 0.5), rgba(129, 140, 248, 0.5));
+}
+
+.glow-gradient {
+  box-shadow: 0 0 40px rgba(34, 211, 238, 0.15), 0 0 40px rgba(129, 140, 248, 0.15);
+}
