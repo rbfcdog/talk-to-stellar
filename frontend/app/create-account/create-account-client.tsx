@@ -17,6 +17,9 @@ type FinalizeResponse = {
   passkeySessionToken?: string
   message?: string
   error?: string
+  processing?: boolean
+  used?: boolean
+  alreadyCompleted?: boolean
 }
 
 function generateBrowserId(): string {
@@ -146,6 +149,44 @@ export default function CreateAccountClient({
     closeIntermediatePage()
   }
 
+  function finishWithCompletedResult(payload: any) {
+    const sessionId = String(payload?.sessionId || payload?.session_id || "").trim()
+    const sessionToken = String(payload?.sessionToken || payload?.session_token || "").trim()
+    const resolvedUserId = String(payload?.userId || payload?.user_id || "").trim()
+
+    if (sessionId && sessionToken) {
+      saveClientSession(sessionId, sessionToken)
+      try {
+        localStorage.setItem("talk-to-stellar.sessionId", sessionId)
+        localStorage.setItem("talk-to-stellar.sessionToken", sessionToken)
+      } catch {
+        // ignore storage failures
+      }
+    }
+
+    if (resolvedUserId) {
+      try {
+        localStorage.setItem("talk-to-stellar.userName", resolvedUserId)
+      } catch {
+        // ignore storage failures
+      }
+    }
+
+    setResult({
+      success: true,
+      sessionId: sessionId || undefined,
+      sessionToken: sessionToken || undefined,
+      userId: resolvedUserId || undefined,
+      message: "Conta criada com sucesso.",
+    })
+    setStatus("done")
+    if (isTelegramContext) {
+      finishTelegramFlow(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`)
+    } else {
+      finishAndClose(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`)
+    }
+  }
+
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
     let browserId = browserIdOverride || localStorage.getItem("talk-to-stellar.browserId")
     if (!browserId) {
@@ -199,9 +240,23 @@ export default function CreateAccountClient({
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
+        if (payload?.processing) {
+          setValidation({
+            success: true,
+            valid: true,
+            processing: true,
+            message: String(payload?.message || "Este link está em processamento. Aguarde alguns segundos."),
+            payload: payload?.payload || validation?.payload || decodeJwtPayload(token),
+          })
+          return
+        }
         const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
         const isExpired = Boolean(payload?.expired)
         const responseMessage = String(payload?.message || "")
+        if (isUsed && payload?.result) {
+          finishWithCompletedResult(payload.result)
+          return
+        }
         if (isUsed || isExpired || String(payload?.message || "").toLowerCase().includes("já foi utilizado")) {
           redirectToUsed(String(payload?.message || "").trim() || "Este link já foi utilizado.")
           return
@@ -231,6 +286,52 @@ export default function CreateAccountClient({
 
     validateToken()
   }, [token])
+
+  useEffect(() => {
+    if (!token.trim() || !validation?.processing) return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`, {
+          cache: "no-store",
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+
+        if (payload?.used || payload?.alreadyCompleted) {
+          if (payload?.result) {
+            finishWithCompletedResult(payload.result)
+            return
+          }
+          redirectToUsed(String(payload?.message || "").trim() || "Este link já foi utilizado.")
+          return
+        }
+
+        if (payload?.processing) {
+          setStatus("submitting")
+          return
+        }
+
+        if (response.ok && payload?.valid) {
+          setValidation(payload)
+          if (status === "submitting") {
+            setStatus("ready")
+            submitLockRef.current = false
+          }
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }
+
+    const timer = window.setInterval(poll, 2500)
+    void poll()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [token, validation?.processing, status])
 
   useEffect(() => {
     async function recoverTokenWhenMissing() {
@@ -331,6 +432,22 @@ export default function CreateAccountClient({
       })
 
       const payload = (await response.json()) as FinalizeResponse
+      if (!response.ok && payload?.processing) {
+        setValidation({
+          success: true,
+          valid: true,
+          processing: true,
+          message: String(payload?.message || "Este link de criação já está em processamento. Aguarde a conclusão."),
+          payload: validation?.payload || decodeJwtPayload(finalToken),
+        })
+        setStatus("submitting")
+        setResult({
+          success: false,
+          processing: true,
+          message: String(payload?.message || "Este link de criação já está em processamento. Aguarde a conclusão."),
+        })
+        return
+      }
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
 
