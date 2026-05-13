@@ -223,89 +223,121 @@ export class ExternalController {
         });
       }
 
-      const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
-        supabase
-          .from('agent_sessions')
-          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
-          .eq('email', email)
-          .order('updated_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('agent_sessions')
-          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
-          .eq('user_id', email)
-          .order('updated_at', { ascending: false })
-          .limit(20),
-      ]);
-
-      if (sessionsByEmailResp.error) {
-        console.error(`${reqTag} sessionsByEmail query error: ${sessionsByEmailResp.error.message}`);
-        return res.status(500).json({ success: false, message: sessionsByEmailResp.error.message });
-      }
-      if (sessionsByUserIdResp.error) {
-        console.error(`${reqTag} sessionsByUserId query error: ${sessionsByUserIdResp.error.message}`);
-        return res.status(500).json({ success: false, message: sessionsByUserIdResp.error.message });
-      }
-
-      const dedupeBySessionId = new Map<string, any>();
-      for (const row of [...(sessionsByEmailResp.data || []), ...(sessionsByUserIdResp.data || [])]) {
-        if (row?.session_id) {
-          dedupeBySessionId.set(String(row.session_id), row);
-        }
-      }
-
-      // Fallback: recover sessions from existing external mappings by user_id/email
-      const { data: mappedRows } = await supabase
-        .from('external_accounts')
-        .select('session_id, user_id')
-        .eq('user_id', email)
-        .limit(20);
-
-      const mappedSessionIds = (mappedRows || [])
-        .map((row: any) => String(row?.session_id || '').trim())
-        .filter(Boolean);
-
-      if (mappedSessionIds.length > 0) {
-        const { data: mappedSessions } = await supabase
-          .from('agent_sessions')
-          .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
-          .in('session_id', mappedSessionIds)
-          .order('updated_at', { ascending: false })
-          .limit(20);
-
-        for (const row of mappedSessions || []) {
-          if (row?.session_id) {
-            dedupeBySessionId.set(String(row.session_id), row);
-          }
-        }
-      }
-
-      const sessions = Array.from(dedupeBySessionId.values()).sort((a: any, b: any) => {
-        const aTime = new Date(a?.updated_at || a?.created_at || 0).getTime();
-        const bTime = new Date(b?.updated_at || b?.created_at || 0).getTime();
-        return bTime - aTime;
-      });
-      console.info(`${reqTag} candidates resolved: email=${(sessionsByEmailResp.data || []).length}, user_id=${(sessionsByUserIdResp.data || []).length}, mapped=${mappedSessionIds.length}, merged=${sessions.length}`);
-
       const pinHash = crypto
         .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
 
-      const matched = sessions.find((session: any) => {
-        const s1 = String(session?.session_password_hash || '').trim();
-        const s2 = String(session?.password_hash || '').trim();
-        return (s1 && s1 === pinHash) || (s2 && s2 === pinHash);
-      });
+      let matched: any = null;
+      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const mappedSessionId = String(existingMapping?.session_id || '').trim();
+      const mappedUserId = String(existingMapping?.user_id || '').trim();
+
+      if (mappedSessionId && mappedUserId) {
+        const linkedSession = await agentRepo.getSession(mappedSessionId);
+        if (linkedSession) {
+          const linkedEmail = String((linkedSession as any)?.email || '').trim().toLowerCase();
+          const linkedUserId = String((linkedSession as any)?.user_id || '').trim().toLowerCase();
+          const emailMatchesMappedAccount = email === linkedEmail || email === linkedUserId;
+          const linkedHash1 = String((linkedSession as any)?.session_password_hash || '').trim();
+          const linkedHash2 = String((linkedSession as any)?.password_hash || '').trim();
+          const pinMatchesMappedAccount = (linkedHash1 && linkedHash1 === pinHash) || (linkedHash2 && linkedHash2 === pinHash);
+
+          if (!emailMatchesMappedAccount || !pinMatchesMappedAccount) {
+            const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
+            return res.status(409).json({
+              success: false,
+              notAssociated: true,
+              message: `A conta informada não está associada a este ${providerLabel}. Faça login com a conta já vinculada.`,
+            });
+          }
+
+          matched = {
+            session_id: mappedSessionId,
+            user_id: String((linkedSession as any)?.user_id || mappedUserId),
+            email: String((linkedSession as any)?.email || ''),
+            session_token: String((linkedSession as any)?.session_token || ''),
+            password_hash: String((linkedSession as any)?.password_hash || ''),
+            session_password_hash: String((linkedSession as any)?.session_password_hash || ''),
+            updated_at: String((linkedSession as any)?.updated_at || ''),
+            created_at: String((linkedSession as any)?.created_at || ''),
+          };
+        }
+      }
+
+      if (!matched) {
+        const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
+          supabase
+            .from('agent_sessions')
+            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .eq('email', email)
+            .order('updated_at', { ascending: false })
+            .limit(20),
+          supabase
+            .from('agent_sessions')
+            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .eq('user_id', email)
+            .order('updated_at', { ascending: false })
+            .limit(20),
+        ]);
+
+        if (sessionsByEmailResp.error) {
+          console.error(`${reqTag} sessionsByEmail query error: ${sessionsByEmailResp.error.message}`);
+          return res.status(500).json({ success: false, message: sessionsByEmailResp.error.message });
+        }
+        if (sessionsByUserIdResp.error) {
+          console.error(`${reqTag} sessionsByUserId query error: ${sessionsByUserIdResp.error.message}`);
+          return res.status(500).json({ success: false, message: sessionsByUserIdResp.error.message });
+        }
+
+        const dedupeBySessionId = new Map<string, any>();
+        for (const row of [...(sessionsByEmailResp.data || []), ...(sessionsByUserIdResp.data || [])]) {
+          if (row?.session_id) {
+            dedupeBySessionId.set(String(row.session_id), row);
+          }
+        }
+
+        // Fallback: recover sessions from existing external mappings by user_id/email
+        const { data: mappedRows } = await supabase
+          .from('external_accounts')
+          .select('session_id, user_id')
+          .eq('user_id', email)
+          .limit(20);
+
+        const mappedSessionIds = (mappedRows || [])
+          .map((row: any) => String(row?.session_id || '').trim())
+          .filter(Boolean);
+
+        if (mappedSessionIds.length > 0) {
+          const { data: mappedSessions } = await supabase
+            .from('agent_sessions')
+            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .in('session_id', mappedSessionIds)
+            .order('updated_at', { ascending: false })
+            .limit(20);
+
+          for (const row of mappedSessions || []) {
+            if (row?.session_id) {
+              dedupeBySessionId.set(String(row.session_id), row);
+            }
+          }
+        }
+
+        const sessions = Array.from(dedupeBySessionId.values()).sort((a: any, b: any) => {
+          const aTime = new Date(a?.updated_at || a?.created_at || 0).getTime();
+          const bTime = new Date(b?.updated_at || b?.created_at || 0).getTime();
+          return bTime - aTime;
+        });
+        console.info(`${reqTag} candidates resolved: email=${(sessionsByEmailResp.data || []).length}, user_id=${(sessionsByUserIdResp.data || []).length}, mapped=${mappedSessionIds.length}, merged=${sessions.length}`);
+
+        matched = sessions.find((session: any) => {
+          const s1 = String(session?.session_password_hash || '').trim();
+          const s2 = String(session?.password_hash || '').trim();
+          return (s1 && s1 === pinHash) || (s2 && s2 === pinHash);
+        });
+      }
 
       if (!matched?.session_id) {
-        const hashPresence = sessions.slice(0, 5).map((session: any) => ({
-          session_id: String(session?.session_id || ''),
-          has_session_password_hash: Boolean(String(session?.session_password_hash || '').trim()),
-          has_password_hash: Boolean(String(session?.password_hash || '').trim()),
-          email: String(session?.email || ''),
-          user_id: String(session?.user_id || ''),
-        }));
-        console.warn(`${reqTag} pin mismatch for ${sessions.length} candidate session(s). top_candidates=${JSON.stringify(hashPresence)}`);
+        console.warn(`${reqTag} pin mismatch or account not found for provided email.`);
         return res.status(401).json({
           success: false,
           message: 'E-mail ou PIN inválido.',
@@ -337,9 +369,9 @@ export class ExternalController {
 
       const targetSessionId = String(matched.session_id);
       const targetUserId = String(matched.user_id || email);
-      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
-      const ownerSessionId = String(existingMapping?.session_id || '').trim();
-      const ownerUserId = String(existingMapping?.user_id || '').trim();
+      const confirmedMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const ownerSessionId = String(confirmedMapping?.session_id || '').trim();
+      const ownerUserId = String(confirmedMapping?.user_id || '').trim();
       if ((ownerSessionId && ownerSessionId !== targetSessionId) || (ownerUserId && ownerUserId !== targetUserId)) {
         const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
         return res.status(409).json({
