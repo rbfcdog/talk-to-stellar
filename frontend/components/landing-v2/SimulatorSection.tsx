@@ -27,12 +27,14 @@ type PreviewPayload = {
 };
 
 function formatBrl(value: number) {
+  const safe = Number.isFinite(value) ? value : 0;
+  const small = safe > 0 && safe < 0.01;
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
+    minimumFractionDigits: small ? 6 : 2,
+    maximumFractionDigits: small ? 6 : 2,
+  }).format(safe);
 }
 
 function formatUsdc(value: number, decimals = 2) {
@@ -52,7 +54,7 @@ export default function SimulatorSection() {
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/financial/conversion-preview?brl_amount=${encodeURIComponent(String(amount || 0))}`, {
+        const response = await fetch(`/api/financial/conversion-fees-preview?brl_amount=${encodeURIComponent(String(amount || 0))}`, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -183,7 +185,8 @@ export default function SimulatorSection() {
             Taxa total: {formatBrl(numbers.totalFeeBrl)} ({numbers.totalFeePct.toFixed(4)}%)
           </p>
           <p className="text-xs text-[#9BA4B5] mt-2">
-            Configuração backend: spread {payload?.fees?.spread_bps_config ?? 0} bps.
+            Configuração backend: spread {payload?.fees?.spread_bps_config ?? 0} bps
+            {payload?.fees?.spread_collection_active ? "" : " (estimado para simulação)"}.
           </p>
         </div>
 
@@ -236,4 +239,3 @@ export default function SimulatorSection() {
     </section>
   );
 }
-

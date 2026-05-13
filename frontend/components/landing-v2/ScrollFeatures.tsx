@@ -73,11 +73,11 @@ export default function ScrollFeatures() {
     },
     {
       title: "4. Transação Confirmada",
-      description: "Assim que você paga o Pix, os dólares aterrissam quase em tempo real do outro lado (com comprovante).",
+      description: "Assim que você confirma a transação, os dólares aterrissam quase em tempo real do outro lado (com comprovante).",
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={Zap} color="#4CA1EF" delay={1.5} />,
       messages: [
-        { type: 'bot', text: 'Pix de R$5.000,00 recebido com sucesso! 💸', time: '09:52' },
+        { type: 'bot', text: 'Transação de R$5.000,00 confirmada com sucesso! 💸', time: '09:52' },
         { type: 'bot', text: (
           <div className="flex flex-col gap-2">
             <span>Transação concluída! Aqui está o seu comprovante:</span>

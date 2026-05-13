@@ -4,6 +4,7 @@ import { FinancialController } from '../controllers/financial.controller';
 const router = Router();
 
 router.get('/conversion-preview', FinancialController.getConversionPreview);
+router.get('/conversion-fees-preview', FinancialController.getConversionFeesPreview);
 
 router.get('/activity-feed/:session_id', FinancialController.getActivityFeed);
 router.get('/insights/:session_id', FinancialController.getInsights);
