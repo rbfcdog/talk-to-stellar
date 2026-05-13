@@ -2283,6 +2283,25 @@ export default class ExternalFinalizeController {
           userId: String(session.user_id),
         });
 
+        let monthlySavingsSummary: any = null;
+        try {
+          const monthly = await EconomyEngineService.calculateMonthly({
+            sessionId: String(session_id),
+            userId: String(session.user_id),
+          });
+          monthlySavingsSummary = {
+            period: 'month_to_date',
+            estimated_savings_brl: Number(monthly?.savings?.estimatedSavings || 0).toFixed(8),
+            estimated_traditional_fee_brl: Number(monthly?.savings?.estimatedTraditionalFee || 0).toFixed(8),
+            actual_fee_brl: Number(monthly?.savings?.actualFee || 0).toFixed(8),
+            savings_percentage: Number(monthly?.savings?.savingsPercentage || 0).toFixed(4),
+            comparison_method: String(monthly?.savings?.comparisonMethod || ''),
+            message: String(monthly?.message || ''),
+          };
+        } catch (monthlyError: any) {
+          logger.warn(`[external-finalize] could not calculate monthly savings summary: ${monthlyError?.message || String(monthlyError)}`);
+        }
+
         logger.info(`[external-finalize] Payment successful: sessionId=${session_id}, hash=${result.hash}, source=${wallet.public_key}, dest=${resolvedDestination}, destinationAmount=${publicTransferDetails.destinationAmount}, destinationAsset=${publicTransferDetails.destinationAssetCode}`);
         return res.status(200).json({
           success: true,
@@ -2300,6 +2319,7 @@ export default class ExternalFinalizeController {
           hash: result.hash,
           transferDetails: publicTransferDetails,
           savings: economy.savings,
+          monthly_savings: monthlySavingsSummary,
           autoConversion,
           context_message: contextMessage || null,
           message: autoConversion

@@ -797,7 +797,7 @@ ${onboardingUrl}`;
     if (totalFeeDisplay) lines.push(`Taxa total estimada: ${totalFeeDisplay}.`);
     if (savingsBrl > 0) {
       const pctLabel = savingsPct > 0 ? ` (${savingsPct.toFixed(1).replace('.', ',')}%)` : '';
-      lines.push(`Economia estimada vs métodos tradicionais: R$ ${savingsBrl.toFixed(2).replace('.', ',')}${pctLabel}.`);
+      lines.push(`Rota mais barata encontrada agora: economia estimada de R$ ${savingsBrl.toFixed(2).replace('.', ',')}${pctLabel} vs métodos tradicionais.`);
     }
     if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
 
