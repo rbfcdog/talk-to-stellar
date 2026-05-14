@@ -129,6 +129,31 @@ function truncateKey(value?: string) {
   return `${value.slice(0, 7)}...${value.slice(-7)}`;
 }
 
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function buildExternalBankAccount(seed: string, email: string) {
+  const hash = stableHash(`${seed || "talktostellar"}:${email || "account"}`);
+  const digits = String(parseInt(hash.slice(0, 6), 16)).padStart(8, "0");
+  const account = `${digits.slice(0, 5)}-${digits.slice(5, 6)}`;
+  const branch = `${digits.slice(1, 5)}`;
+  const pixAlias = email.includes("@") ? email : `pix-${hash.slice(0, 6)}@talktostellar.bank`;
+  return {
+    id: `bank-${hash}`,
+    name: "Conta bancária externa TalkToStellar",
+    institution: "Banco externo vinculado",
+    branch,
+    account,
+    pixAlias,
+  };
+}
+
 function sanitizeForDebug(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(0, 8).map(sanitizeForDebug);
   if (!value || typeof value !== "object") return value;
@@ -176,7 +201,6 @@ export default function PixRampClient({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [walletPin, setWalletPin] = useState("");
-  const [externalPixDestination, setExternalPixDestination] = useState("Conta bancária externa vinculada ao seu PIX");
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
@@ -188,6 +212,11 @@ export default function PixRampClient({
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
+  const externalBankAccount = useMemo(
+    () => buildExternalBankAccount(walletPublicKey || sessionId || rampEmail, rampEmail),
+    [walletPublicKey, sessionId, rampEmail]
+  );
+  const externalPixDestination = `${externalBankAccount.institution} • Ag. ${externalBankAccount.branch} • Conta ${externalBankAccount.account}`;
 
   const hasSession = Boolean(sessionId && sessionToken);
   const canResolveWallet = Boolean(hasSession || rampEmail.trim());
@@ -790,6 +819,8 @@ export default function PixRampClient({
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
       fiat_amount: offRampFiatAmount.trim() || undefined,
+      fiat_account_id: externalBankAccount.id,
+      external_bank_account: externalBankAccount,
       pin: walletPin,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
@@ -838,7 +869,7 @@ export default function PixRampClient({
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
-                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : "Minha conta PIX"}</p>
+                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : externalBankAccount.name}</p>
               </div>
             </div>
           </section>
@@ -941,14 +972,28 @@ export default function PixRampClient({
                 <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">Destino final</label>
-              <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
-                <input
-                  className="w-full bg-transparent px-4 py-4 text-base font-black text-white outline-none"
-                  value={externalPixDestination}
-                  autoComplete="off"
-                  placeholder="Conta bancária externa vinculada ao seu PIX"
-                  onChange={(event) => setExternalPixDestination(event.target.value)}
-                />
+              <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-white">{externalBankAccount.name}</p>
+                    <p className="mt-1 text-xs font-bold text-cyan-100/70">{externalBankAccount.institution}</p>
+                  </div>
+                  <span className="rounded-full bg-cyan-300/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">vinculada</span>
+                </div>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div className="rounded-2xl bg-black/20 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Agência</p>
+                    <p className="mt-1 font-black text-white">{externalBankAccount.branch}</p>
+                  </div>
+                  <div className="rounded-2xl bg-black/20 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Conta</p>
+                    <p className="mt-1 font-black text-white">{externalBankAccount.account}</p>
+                  </div>
+                  <div className="rounded-2xl bg-black/20 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">PIX</p>
+                    <p className="mt-1 truncate font-black text-white">{externalBankAccount.pixAlias}</p>
+                  </div>
+                </div>
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
