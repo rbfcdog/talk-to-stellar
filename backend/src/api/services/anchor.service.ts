@@ -2869,7 +2869,12 @@ export class AnchorService {
       throw apiError(result.error || 'Could not submit PIX-funded transfer.', 400);
     }
 
-    const routeContext = `Escolhemos a melhor rota para essa conversão: ${asset.code} direto para ${recipient.displayName}.`;
+    const route = {
+      selected: `${asset.code} direto`,
+      criteria: 'menor custo após a conversão do PIX',
+      reason: `O saldo final já estava em ${asset.code}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
+    };
+    const routeContext = `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`;
     let receiptUrl = '';
     try {
       receiptUrl = await PaymentReceiptService.sendReceipt({
@@ -2925,6 +2930,7 @@ export class AnchorService {
       transaction_hash: result.hash,
       receipt_url: receiptUrl,
       route_summary: routeContext,
+      route,
       message: `PIX confirmado e transferencia de ${formatDisplayAmount(amount, asset.code)} enviada para ${recipient.displayName}.`,
     };
   }
