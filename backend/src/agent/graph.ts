@@ -630,13 +630,20 @@ ${onboardingUrl}`;
       return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
     }
 
+    const mentionsOwnPixDestination =
+      /\b(?:meu|minha|meus|minhas)\s+(?:pix|chave\s+pix|conta\s+pix)\b/.test(normalized) ||
+      /\b(?:para|pra|pro|a)\s+o\s+meu\s+pix\b/.test(normalized) ||
+      /\b(?:para|pra|pro|a)\s+a\s+minha\s+chave\s+pix\b/.test(normalized);
+
     const wantsPixFundedPayment =
       /\b(mandar|enviar|pagar|transferir|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
       /\b(para|pra|pro|a)\b/.test(normalized) &&
+      !mentionsOwnPixDestination &&
       !/\b(minha conta|meu banco|conta bancaria|conta bancária)\b/.test(normalized);
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
+      mentionsOwnPixDestination ||
       /\b(retirada|retiradas)\b/.test(normalized) ||
       normalized.includes('tirar dinheiro') ||
       normalized.includes('retirar dinheiro') ||
@@ -681,11 +688,11 @@ ${onboardingUrl}`;
     return {
       is_pix_ramp: true,
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
-      flow: wantsPixFundedPayment ? 'fund_and_pay' : 'fund_wallet',
+      flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1]?.replace(',', '.'),
       amount_currency: mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
       asset_code: wantsOffRamp && !wantsOnRamp ? 'TESOURO' : onRampTargetAsset,
-      recipient_query: wantsPixFundedPayment ? recipientQuery : undefined,
+      recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? recipientQuery : undefined,
     };
   }
 
@@ -748,7 +755,7 @@ ${onboardingUrl}`;
         const amountText = intent.amount_currency === 'BRL'
           ? this.formatMoneyByAsset(intent.amount, 'BRL')
           : this.formatMoneyByAsset(intent.amount, 'BRL');
-        state.response_message = `Para retirar ${amountText} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela mostra o saldo saindo da sua wallet e os reais entrando como conta bancária de teste.`;
+        state.response_message = `Para retirar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua wallet e confirma os reais chegando na sua conta PIX.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
       } else {
