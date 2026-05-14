@@ -176,6 +176,7 @@ export default function PixRampClient({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [walletPin, setWalletPin] = useState("");
+  const [pinInputArmed, setPinInputArmed] = useState(false);
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
@@ -585,6 +586,8 @@ export default function PixRampClient({
     setTemporaryOffRampTestResult(null);
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
+    setWalletPin("");
+    setPinInputArmed(false);
     setDebugLogs([]);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
@@ -608,6 +611,8 @@ export default function PixRampClient({
     setOnRampBalancesAfter([]);
     setQrDataUrl("");
     setCopied(false);
+    setWalletPin("");
+    setPinInputArmed(false);
     setPolling(false);
     setStep("quote");
   }
@@ -620,6 +625,8 @@ export default function PixRampClient({
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setTemporaryTestResult(null);
+    setWalletPin("");
+    setPinInputArmed(false);
 
     const auth = await resolveWalletFromEmail();
     const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
@@ -680,6 +687,8 @@ export default function PixRampClient({
     setOnboardingUrl("");
     setOrderPayload(payload);
     setStatusPayload(null);
+    setWalletPin("");
+    setPinInputArmed(false);
     setStep("checkout");
     setPolling(true);
   }
@@ -938,10 +947,17 @@ export default function PixRampClient({
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <input
                   className="w-full bg-transparent px-4 py-4 text-xl font-black text-white outline-none"
-                  value={walletPin}
+                  value={pinInputArmed ? walletPin : ""}
                   inputMode="numeric"
                   type="password"
+                  name={`pix-off-wallet-pin-${sessionId || "new"}`}
+                  autoComplete="new-password"
+                  readOnly={!pinInputArmed}
                   placeholder="Digite seu PIN"
+                  onFocus={() => {
+                    setWalletPin("");
+                    setPinInputArmed(true);
+                  }}
                   onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
                 />
               </div>
@@ -1073,8 +1089,8 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Requesting quote", async () => { await requestQuote(); })}>
-              {loading === "Requesting quote" ? "Preparando..." : "Continuar"}
+            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+              {loading === "Preparing PIX checkout" ? "Preparando..." : "Continuar"}
             </button>
 
             {quote && (
@@ -1095,12 +1111,9 @@ export default function PixRampClient({
                 </dl>
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
-                    A cotação expirou. Gere o PIX novamente.
+                    A cotação expirou. Toque em continuar para preparar um novo PIX.
                   </div>
                 )}
-                <button className="mt-5 w-full rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={Boolean(loading)} onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}>
-                  {quoteExpired ? "Gerar PIX novamente" : "Gerar PIX"}
-                </button>
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
                     <p className="font-bold">Precisamos concluir o cadastro PIX desta conta.</p>
@@ -1130,20 +1143,11 @@ export default function PixRampClient({
               <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
                 <p>
                   {quoteExpired
-                      ? "A cotação expirou. Gere o PIX novamente."
+                      ? "A cotação expirou. Toque em continuar para preparar um novo PIX."
                       : quote
-                      ? "Tudo pronto para gerar o PIX."
-                      : "Informe o valor para gerar o PIX."}
+                      ? "Preparando o PIX."
+                      : "Informe o valor e toque em continuar."}
                 </p>
-                {quote && (
-                  <button
-                    className="mt-5 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 shadow-lg disabled:opacity-50"
-                    disabled={Boolean(loading)}
-                    onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}
-                  >
-                    {quoteExpired ? "Gerar PIX novamente" : "Gerar PIX"}
-                  </button>
-                )}
               </div>
             ) : (
               <>
@@ -1203,10 +1207,17 @@ export default function PixRampClient({
                             <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
                             <input
                               className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-xl font-black text-white outline-none placeholder:text-amber-100/35 focus:border-amber-200/60"
-                              value={walletPin}
+                              value={pinInputArmed ? walletPin : ""}
                               inputMode="numeric"
                               type="password"
+                              name={`pix-on-wallet-pin-${orderId || "new"}`}
+                              autoComplete="new-password"
+                              readOnly={!pinInputArmed}
                               placeholder="Digite seu PIN"
+                              onFocus={() => {
+                                setWalletPin("");
+                                setPinInputArmed(true);
+                              }}
                               onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
                             />
                             <button
