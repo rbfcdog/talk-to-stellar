@@ -118,14 +118,6 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function finishLogin() {
     enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${email.trim() || "usuário"}`)
-    if (!hasExternalContext && nextPath) {
-      try {
-        window.location.replace(nextPath)
-        return
-      } catch {
-        // Fallback to intermediate close behavior below
-      }
-    }
     setLoginDone(true)
     closeIntermediatePage()
   }
