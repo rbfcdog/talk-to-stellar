@@ -60,9 +60,9 @@ export class PaymentReceiptService {
 
   private static getFrontendBaseUrl() {
     const preferred =
-      process.env.PAYMENT_CONFIRM_BASE ||
-      process.env.PUBLIC_APP_URL ||
       process.env.FRONTEND_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.PAYMENT_CONFIRM_BASE ||
       process.env.CREATE_ACCOUNT_BASE ||
       '';
     const trimmed = String(preferred || '').trim();

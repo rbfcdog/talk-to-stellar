@@ -1378,12 +1378,18 @@ export default function PixRampClient({
                 <div className={`relative mt-5 rounded-[1.75rem] border p-5 ${pixFundedTransferResult?.transaction_hash ? "border-cyan-300/25 bg-cyan-300/10" : "border-amber-300/30 bg-amber-300/10"}`}>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100">Transferência após PIX</p>
                   {pixFundedTransferResult?.transaction_hash ? (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
-                      <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} />
-                      <ReceiptRow label="Wallet destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
-                      <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
-                    </div>
+                    <>
+                      <p className="mt-3 rounded-2xl border border-cyan-200/20 bg-cyan-200/10 p-3 text-sm font-black text-cyan-50">
+                        {String(pixFundedTransferResult.route_summary || "Escolhemos a melhor rota para essa conversão.")}
+                      </p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
+                        <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} />
+                        <ReceiptRow label="Wallet destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
+                        <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
+                        {pixFundedTransferResult.receipt_url && <ReceiptRow label="Comprovante" value={String(pixFundedTransferResult.receipt_url)} />}
+                      </div>
+                    </>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
                       PIX confirmado. Enviando automaticamente {formatRampAsset(amountBrl, targetAsset)} para {transferRecipient || "destinatário"}...

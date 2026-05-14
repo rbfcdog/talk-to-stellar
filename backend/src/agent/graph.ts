@@ -750,7 +750,7 @@ ${onboardingUrl}`;
           : this.formatMoneyByAsset(intent.amount, 'BRL');
         state.response_message = `Para retirar ${amountText} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela mostra o saldo saindo da sua wallet e os reais entrando como conta bancária de teste.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
-        state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX testnet, abra:\n\n${url}\n\nA tela faz o PIX on-ramp, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}. Em sandbox, confirme com "Confirmar PIX (testnet)".`;
+        state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
       } else {
         state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet e receber em ${intent.asset_code}, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar o saldo final na sua wallet.`;
       }
