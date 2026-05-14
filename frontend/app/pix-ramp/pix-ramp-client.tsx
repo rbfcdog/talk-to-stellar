@@ -166,10 +166,12 @@ function WalletPinInput({
   value,
   onChange,
   tone = "emerald",
+  inputRef,
 }: {
   value: string;
   onChange: (next: string) => void;
   tone?: "emerald" | "cyan" | "amber";
+  inputRef?: (node: HTMLInputElement | null) => void;
 }) {
   const border = tone === "cyan"
     ? "focus-within:border-cyan-300/70"
@@ -182,15 +184,20 @@ function WalletPinInput({
       <div className="flex items-center gap-3">
         <input
           className="min-w-0 flex-1 bg-transparent px-4 py-4 text-xl font-black tracking-[0.35em] text-white outline-none placeholder:tracking-normal placeholder:text-white/30"
+          ref={inputRef}
           value={value}
           inputMode="numeric"
           pattern="[0-9]*"
-          type="password"
-          name="wallet-pin-manual-entry"
-          autoComplete="new-password"
+          type="text"
+          name="wallet-pin-code"
+          autoComplete="off"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
+          style={{ WebkitTextSecurity: "disc" } as any}
           placeholder="Digite seu PIN"
           onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
         />
@@ -228,6 +235,7 @@ export default function PixRampClient({
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
+  const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
   const [rampEmail, setRampEmail] = useState("");
@@ -716,11 +724,19 @@ export default function PixRampClient({
   }
 
   function getValidatedWalletPin() {
-    const pin = walletPin.replace(/\D/g, "").slice(0, 8);
+    const inputValue = walletPinInputRef.current?.value || "";
+    const pin = (inputValue || walletPin).replace(/\D/g, "").slice(0, 8);
+    if (pin !== walletPin) setWalletPin(pin);
     if (!/^\d{4,8}$/.test(pin)) {
       throw new Error("Digite o PIN da wallet com 4 a 8 dígitos antes de confirmar.");
     }
     return pin;
+  }
+
+  function updateWalletPin(next: string) {
+    const pin = next.replace(/\D/g, "").slice(0, 8);
+    setWalletPin(pin);
+    if (/pin/i.test(error)) setError("");
   }
 
   function clearResolvedRampWallet(nextEmail = rampEmail) {
@@ -1114,7 +1130,14 @@ export default function PixRampClient({
                 </div>
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
-              <WalletPinInput value={walletPin} onChange={setWalletPin} tone="cyan" />
+              <WalletPinInput
+                value={walletPin}
+                onChange={updateWalletPin}
+                tone="cyan"
+                inputRef={(node) => {
+                  walletPinInputRef.current = node;
+                }}
+              />
 
               <button
                 className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
@@ -1360,7 +1383,14 @@ export default function PixRampClient({
                         ) : (
                           <>
                             <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
-                            <WalletPinInput value={walletPin} onChange={setWalletPin} tone="amber" />
+                            <WalletPinInput
+                              value={walletPin}
+                              onChange={updateWalletPin}
+                              tone="amber"
+                              inputRef={(node) => {
+                                walletPinInputRef.current = node;
+                              }}
+                            />
                             <button
                               className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4}
