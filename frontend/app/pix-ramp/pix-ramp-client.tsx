@@ -235,6 +235,7 @@ export default function PixRampClient({
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
+  const atomicActionRef = useRef(false);
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
@@ -257,6 +258,8 @@ export default function PixRampClient({
   const [offRampAmount, setOffRampAmount] = useState("1");
   const [offRampFiatAmount, setOffRampFiatAmount] = useState("");
   const [offRampAmountLocked, setOffRampAmountLocked] = useState(false);
+  const [intentId, setIntentId] = useState("");
+  const [operationLocked, setOperationLocked] = useState(false);
   const [walletPublicKey, setWalletPublicKey] = useState("");
   const [onboardingUrl, setOnboardingUrl] = useState("");
   const [programmaticOnboarding, setProgrammaticOnboarding] = useState<RampResponse | null>(null);
@@ -281,6 +284,22 @@ export default function PixRampClient({
   const [externalBankAccount, setExternalBankAccount] = useState<ExternalBankAccount | null>(null);
   const displayedExternalBankAccount = externalBankAccount || fallbackExternalBankAccount;
   const externalPixDestination = `${displayedExternalBankAccount.institution} • Ag. ${displayedExternalBankAccount.branch} • Conta ${displayedExternalBankAccount.account_number}`;
+  const atomicIntentKey = intentId || `local-${stableHash([
+    queryString,
+    sessionId,
+    rampMode,
+    amountBrl,
+    offRampAmount,
+    offRampFiatAmount,
+    targetAsset,
+    transferRecipient,
+  ].join(":"))}`;
+  const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
+  const offRampInputValue = offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : offRampAmount;
+  const offRampDisplayAmount = offRampInputAsset === "BRL"
+    ? formatMoney(offRampInputValue || "0")
+    : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
+  const offRampInputPrefix = offRampInputAsset === "USDC" ? "US$" : "R$";
 
   const hasSession = Boolean(sessionId && sessionToken);
   const canResolveWallet = Boolean(hasSession || rampEmail.trim());
@@ -333,6 +352,10 @@ export default function PixRampClient({
     const params = new URLSearchParams(queryString);
     return params.get("debug") === "1";
   }, [queryString]);
+  const operationStorageKey = intentId ? `talk-to-stellar.pix-ramp.completed:${intentId}` : "";
+  const buildIdempotencyKey = useCallback((action: string) => (
+    `pix-ramp:${atomicIntentKey}:${action}`
+  ), [atomicIntentKey]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
   const liveSteps = useMemo<LiveStep[]>(() => {
     if (rampMode === "offramp") {
@@ -345,9 +368,9 @@ export default function PixRampClient({
         },
         {
           label: "Valor de saída",
-          detail: offRampFiatAmount.trim()
-            ? `Alvo: ${formatMoney(offRampFiatAmount)} entrando na conta PIX.`
-            : `Saída direta do saldo: ${formatMoney(offRampAmount)} estimado.`,
+          detail: offRampInputAsset === "BRL"
+            ? `Alvo: ${offRampDisplayAmount} entrando na conta PIX.`
+            : `Saída do saldo: ${offRampDisplayAmount}.`,
           state: hasTarget ? "done" : "pending",
         },
         {
@@ -426,6 +449,8 @@ export default function PixRampClient({
     loading,
     offRampAmount,
     offRampFiatAmount,
+    offRampDisplayAmount,
+    offRampInputAsset,
     externalPixDestination,
     order?.toAmount,
     orderId,
@@ -459,24 +484,30 @@ export default function PixRampClient({
 
     const params = new URLSearchParams(queryString);
     const mode = lockedMode || (params.get("mode") === "offramp" ? "offramp" : "onramp");
-    const amount = String(params.get("amount") || "").trim().replace(",", ".");
+    const amount = String(params.get("source_amount") || params.get("amount") || "").trim().replace(",", ".");
     const fiatAmount = String(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "").trim().replace(",", ".");
-    const asset = String(params.get("asset") || "").trim().toUpperCase();
+    const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
     const recipient = String(params.get("recipient") || "").trim();
+    const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
     const offRampBrlAmount = mode === "offramp" && (fiatAmount || (amount && (!currency || currency === "BRL" || asset === "BRL")))
       ? (fiatAmount || amount)
       : "";
 
     setRampMode(mode);
+    if (nextIntentId) setIntentId(nextIntentId);
     if (amount) {
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
     }
     if (offRampBrlAmount) {
       setOffRampFiatAmount(offRampBrlAmount);
+      setOffRampAmountLocked(true);
+    }
+    if (mode === "offramp" && amount && (currency === "USDC" || asset === "USDC")) {
+      setOffRampFiatAmount("");
       setOffRampAmountLocked(true);
     }
     if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
@@ -495,6 +526,15 @@ export default function PixRampClient({
     if (step !== "success") return;
     closeIntermediatePage();
   }, [step]);
+
+  useEffect(() => {
+    if (!operationStorageKey) return;
+    try {
+      if (window.localStorage.getItem(operationStorageKey) === "completed") {
+        setOperationLocked(true);
+      }
+    } catch {}
+  }, [operationStorageKey]);
 
   useEffect(() => {
     fetch("/api/ramp/etherfuse/config", { cache: "no-store" })
@@ -611,12 +651,13 @@ export default function PixRampClient({
     return null;
   }
 
-  const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth) => {
+  const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth, idempotencyKey?: string) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
     if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
-    const requestBody = { ...auth, ...(body || {}) };
+    const requestBody: Record<string, unknown> = { ...auth, ...(body || {}) };
     const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
     const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
     if (pin) {
       headers["X-Wallet-Pin"] = pin;
       headers["X-TalkToStellar-Wallet-Pin"] = pin;
@@ -699,10 +740,13 @@ export default function PixRampClient({
       setPolling(false);
       const after = await fetchBalances();
       setOnRampBalancesAfter(after);
-      if (isSuccessStatus(nextStatus)) setStep("success");
+      if (isSuccessStatus(nextStatus) && !transferFlow) {
+        markOperationCompleted();
+        setStep("success");
+      }
     }
     return payload;
-  }, [callRampGet, fetchBalances, operationId, orderId]);
+  }, [callRampGet, fetchBalances, operationId, orderId, transferFlow]);
 
   useEffect(() => {
     if (!polling || !orderId) return;
@@ -726,6 +770,29 @@ export default function PixRampClient({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading("");
+    }
+  }
+
+  function markOperationCompleted() {
+    setOperationLocked(true);
+    if (!operationStorageKey) return;
+    try {
+      window.localStorage.setItem(operationStorageKey, "completed");
+    } catch {}
+  }
+
+  async function runAtomicAction(action: string, fn: () => Promise<void>) {
+    if (operationLocked) {
+      throw new Error("Esta operação PIX já foi concluída. O comprovante foi enviado no chat.");
+    }
+    if (atomicActionRef.current) {
+      throw new Error(`Esta operação PIX já está em andamento (${action}).`);
+    }
+    atomicActionRef.current = true;
+    try {
+      await fn();
+    } finally {
+      atomicActionRef.current = false;
     }
   }
 
@@ -822,46 +889,49 @@ export default function PixRampClient({
   }
 
   async function confirmQuoteAndCreatePix() {
-    let quoteForOrder = quote;
-    let customerForOrder = customerPayload;
-    let authForOrder: RampAuth | undefined;
-    if (!quoteForOrder?.id || quoteStaleForOrder) {
-      addDebugLog({
-        label: quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
-        method: "POST",
-        path: "/api/ramp/etherfuse/quote",
-        request: { amount: amountBrl, targetAsset },
-        response: { reason: quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
-      });
-      const fresh = await requestQuote();
-      authForOrder = fresh.auth;
-      quoteForOrder = fresh.quoteResult?.quote;
-      customerForOrder = fresh.customerResult;
-    }
-    if (!quoteForOrder?.id) throw new Error("Request a quote first.");
-    authForOrder = authForOrder || await resolveWalletFromEmail();
-    const before = await fetchBalances(authForOrder);
-    setOnRampBalancesBefore(before);
-    setOnRampBalancesAfter([]);
-    const payload = await callRamp("/api/ramp/etherfuse/onramp", {
-      customer_id: String(customerForOrder?.customer?.id || customerId),
-      quote_id: quoteForOrder.id,
-      amount: amountBrl,
-      expected_to_amount: quoteForOrder.toAmount,
-      from_currency: "BRL",
-      to_currency: "TESOURO",
-      final_asset: targetAsset,
-    }, "POST", authForOrder);
-    if (payload?.quote) {
-      setQuotePayload(payload);
-      setQuoteReceivedAt(Date.now());
-    }
-    setOnboardingUrl("");
-    setOrderPayload(payload);
-    setStatusPayload(null);
-    setWalletPin("");
-    setStep("checkout");
-    setPolling(true);
+    await runAtomicAction("preparar-pix", async () => {
+      let quoteForOrder = quote;
+      let customerForOrder = customerPayload;
+      let authForOrder: RampAuth | undefined;
+      if (!quoteForOrder?.id || quoteStaleForOrder) {
+        addDebugLog({
+          label: quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
+          method: "POST",
+          path: "/api/ramp/etherfuse/quote",
+          request: { amount: amountBrl, targetAsset },
+          response: { reason: quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
+        });
+        const fresh = await requestQuote();
+        authForOrder = fresh.auth;
+        quoteForOrder = fresh.quoteResult?.quote;
+        customerForOrder = fresh.customerResult;
+      }
+      if (!quoteForOrder?.id) throw new Error("Request a quote first.");
+      authForOrder = authForOrder || await resolveWalletFromEmail();
+      const before = await fetchBalances(authForOrder);
+      setOnRampBalancesBefore(before);
+      setOnRampBalancesAfter([]);
+      const payload = await callRamp("/api/ramp/etherfuse/onramp", {
+        intent_id: atomicIntentKey,
+        customer_id: String(customerForOrder?.customer?.id || customerId),
+        quote_id: quoteForOrder.id,
+        amount: amountBrl,
+        expected_to_amount: quoteForOrder.toAmount,
+        from_currency: "BRL",
+        to_currency: "TESOURO",
+        final_asset: targetAsset,
+      }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
+      if (payload?.quote) {
+        setQuotePayload(payload);
+        setQuoteReceivedAt(Date.now());
+      }
+      setOnboardingUrl("");
+      setOrderPayload(payload);
+      setStatusPayload(null);
+      setWalletPin("");
+      setStep("checkout");
+      setPolling(true);
+    });
   }
 
   useEffect(() => {
@@ -869,11 +939,12 @@ export default function PixRampClient({
     if (params.get("autostart") !== "1") return;
     if (autoStartedRef.current) return;
     if (rampMode !== "onramp") return;
+    if (operationLocked) return;
     if (!canResolveWallet || loading || order || quote) return;
 
     autoStartedRef.current = true;
     void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
-  }, [canResolveWallet, loading, order, queryString, quote, rampMode]);
+  }, [canResolveWallet, loading, operationLocked, order, queryString, quote, rampMode]);
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
@@ -915,22 +986,29 @@ export default function PixRampClient({
   }
 
   async function simulatePixPayment() {
-    if (!orderId) throw new Error("Prepare o PIX antes de confirmar o pagamento.");
-    const pin = getValidatedWalletPin();
-    const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
-      order_id: orderId,
-      operation_id: operationId,
-      pin,
-      wallet_pin: pin,
-      walletPin: pin,
+    await runAtomicAction("confirmar-pix", async () => {
+      if (!orderId) throw new Error("Prepare o PIX antes de confirmar o pagamento.");
+      const pin = getValidatedWalletPin();
+      const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
+        intent_id: atomicIntentKey,
+        order_id: orderId,
+        operation_id: operationId,
+        pin,
+        wallet_pin: pin,
+        walletPin: pin,
+      }, "POST", undefined, buildIdempotencyKey("confirm-onramp"));
+      if (payload?.transaction) setStatusPayload(payload);
+      setPolling(true);
+      const refreshed = await refreshOrder();
+      const completedTransaction = refreshed?.transaction || payload?.transaction;
+      if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
+        await submitPixFundedTransfer(completedTransaction);
+      }
+      if (isSuccessStatus(completedTransaction?.status)) {
+        markOperationCompleted();
+        setStep("success");
+      }
     });
-    if (payload?.transaction) setStatusPayload(payload);
-    setPolling(true);
-    const refreshed = await refreshOrder();
-    const completedTransaction = refreshed?.transaction || payload?.transaction;
-    if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
-      await submitPixFundedTransfer(completedTransaction);
-    }
   }
 
   async function submitPixFundedTransfer(completedTransaction?: RampResponse) {
@@ -940,6 +1018,7 @@ export default function PixRampClient({
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
       : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || "");
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/pix-funded-transfer", {
+      intent_id: atomicIntentKey,
       recipient: transferRecipient,
       amount: transferAmount,
       asset_code: targetAsset,
@@ -948,17 +1027,18 @@ export default function PixRampClient({
       pin,
       wallet_pin: pin,
       walletPin: pin,
-    }, "POST", auth);
+    }, "POST", auth, buildIdempotencyKey("pix-funded-transfer"));
     setPixFundedTransferResult(payload);
   }
 
   async function runTemporaryEndpointTest() {
     const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-onramp", {
+      intent_id: atomicIntentKey,
       amount: amountBrl,
       to_currency: "TESOURO",
       final_asset: targetAsset,
-    }, "POST", auth);
+    }, "POST", auth, buildIdempotencyKey("test-onramp"));
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOnRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
@@ -966,35 +1046,48 @@ export default function PixRampClient({
   }
 
   async function runTemporaryOffRampEndpointTest() {
-    const pin = getValidatedWalletPin();
-    const auth = await resolveWalletFromEmail();
-    const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
-    addDebugLog({
-      label: "PIX off-ramp client validation",
-      method: "POST",
-      path: "/api/ramp/etherfuse/sandbox/test-offramp",
-      request: {
-        has_pin: true,
-        pin_digits: pin.length,
-        fiat_amount: offRampFiatAmount.trim() || undefined,
-        fallback_amount: offRampAmount,
+    await runAtomicAction("confirmar-retirada", async () => {
+      const pin = getValidatedWalletPin();
+      const auth = await resolveWalletFromEmail();
+      const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
+      const sourceAmount = offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim();
+      addDebugLog({
+        label: "PIX off-ramp client validation",
+        method: "POST",
+        path: "/api/ramp/etherfuse/sandbox/test-offramp",
+        request: {
+          has_pin: true,
+          pin_digits: pin.length,
+          source_amount: sourceAmount,
+          source_asset_code: offRampInputAsset,
+          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          fiat_account_id: bankAccount.id,
+          intent_id: atomicIntentKey,
+        },
+        response: { ready_to_submit: true },
+      });
+      const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
+        intent_id: atomicIntentKey,
+        amount: sourceAmount,
+        source_amount: sourceAmount,
+        source_asset_code: offRampInputAsset,
+        amount_currency: offRampInputAsset,
+        fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
         fiat_account_id: bankAccount.id,
-      },
-      response: { ready_to_submit: true },
+        external_bank_account: bankAccount,
+        pin,
+        wallet_pin: pin,
+        walletPin: pin,
+      }, "POST", auth, buildIdempotencyKey("submit-offramp"));
+      setTemporaryOffRampTestResult(payload);
+      setWalletPublicKey(String(payload.wallet_public_key || ""));
+      setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
+      setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
+      if (payload?.submitted || payload?.success) {
+        markOperationCompleted();
+        setStep("success");
+      }
     });
-    const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
-      amount: offRampAmount,
-      fiat_amount: offRampFiatAmount.trim() || undefined,
-      fiat_account_id: bankAccount.id,
-      external_bank_account: bankAccount,
-      pin,
-      wallet_pin: pin,
-      walletPin: pin,
-    }, "POST", auth);
-    setTemporaryOffRampTestResult(payload);
-    setWalletPublicKey(String(payload.wallet_public_key || ""));
-    setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
-    setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
   }
 
   const timeline = [
@@ -1003,6 +1096,15 @@ export default function PixRampClient({
     { label: "Payment detected", done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
     { label: transferFlow ? "Transfer sent" : "Balance delivered", done: status === "completed", active: status === "completed" },
   ];
+  const offRampReceiptAmount = temporaryOffRampTestResult
+    ? formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)
+    : offRampDisplayAmount;
+  const offRampReceiptReceived = temporaryOffRampTestResult
+    ? formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)
+    : offRampDisplayAmount;
+  const successTransaction = rampMode === "offramp"
+    ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
+    : order;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
@@ -1032,7 +1134,7 @@ export default function PixRampClient({
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Valor</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  {rampMode === "onramp" ? formatMoney(amountBrl) : offRampFiatAmount ? formatMoney(offRampFiatAmount) : formatMoney(offRampAmount)}
+                  {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -1062,6 +1164,12 @@ export default function PixRampClient({
                 Abrir cadastro PIX Etherfuse
               </a>
             )}
+          </section>
+        )}
+
+        {operationLocked && step !== "success" && (
+          <section className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm font-bold text-emerald-100">
+            Esta operação já foi concluída. O comprovante foi enviado no chat.
           </section>
         )}
 
@@ -1099,20 +1207,30 @@ export default function PixRampClient({
                 O saldo sai da sua wallet e aparece como dinheiro recebido por PIX.
               </p>
 
-              <label className="mt-6 block text-sm font-bold text-slate-200">Você quer receber</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">
+                {offRampInputAsset === "BRL" ? "Você quer receber" : "Você quer retirar"}
+              </label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
-                <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
+                <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">{offRampInputPrefix}</span>
                 <input
                   className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none disabled:opacity-100 disabled:text-white"
-                  value={offRampFiatAmount}
+                  value={offRampInputValue}
                   inputMode="decimal"
                   placeholder="100"
                   disabled={offRampAmountLocked}
                   title={offRampAmountLocked ? "Valor definido pelo chat" : undefined}
-                  aria-label="Valor em BRL para receber via PIX"
-                  onChange={(event) => setOffRampFiatAmount(event.target.value)}
+                  aria-label={`Valor em ${offRampInputAsset} para retirar via PIX`}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (offRampInputAsset === "BRL") {
+                      setOffRampFiatAmount(next);
+                      setOffRampAmount(next);
+                    } else {
+                      setOffRampAmount(next);
+                    }
+                  }}
                 />
-                <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
+                <span className="flex items-center px-4 text-sm font-black text-slate-300">{offRampInputAsset}</span>
               </div>
               {offRampAmountLocked && (
                 <p className="mt-2 text-xs font-bold text-cyan-100/65">Valor definido pelo chat.</p>
@@ -1153,10 +1271,10 @@ export default function PixRampClient({
 
               <button
                 className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
-                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4}
+                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
                 onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {loading === "Confirming PIX off-ramp" ? "Confirmando..." : "Confirmar retirada"}
+                {operationLocked ? "Retirada concluída" : loading === "Confirming PIX off-ramp" ? "Confirmando..." : "Confirmar retirada"}
               </button>
             </div>
 
@@ -1173,7 +1291,7 @@ export default function PixRampClient({
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da wallet</p>
-                    <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
+                    <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta externa</p>
@@ -1277,8 +1395,8 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {loading === "Preparing PIX checkout" ? "Preparando..." : "Continuar"}
+            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" ? "Preparando..." : "Continuar"}
             </button>
 
             {quote && (
@@ -1403,10 +1521,10 @@ export default function PixRampClient({
                             />
                             <button
                               className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
-                              disabled={Boolean(loading) || !orderId || walletPin.length < 4}
+                              disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {loading === "Confirming PIX received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
+                              {operationLocked ? "PIX concluído" : loading === "Confirming PIX received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
                             </button>
                           </>
                         )}
@@ -1437,7 +1555,7 @@ export default function PixRampClient({
               title="On-ramp temporary endpoint"
               endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
               description="Runs the whole on-ramp server-side and returns the final transaction status."
-              disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox}
+              disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox || operationLocked}
               hidden={!config?.sandbox}
               onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
               result={temporaryTestResult ? {
@@ -1457,7 +1575,7 @@ export default function PixRampClient({
             <label className="mt-5 block text-sm font-bold text-stone-600">Saldo amount to off-ramp</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
             {config?.sandbox ? (
-              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
+              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
                 Test off-ramp and asset delta
               </button>
             ) : (
@@ -1477,7 +1595,7 @@ export default function PixRampClient({
         </section>
         )}
 
-        {step === "success" && order && (
+        {step === "success" && successTransaction && (
           <section className="mt-5 overflow-hidden rounded-[2rem] border border-emerald-300/25 bg-[#0d1512] text-white shadow-2xl shadow-emerald-950/25">
             <div className="relative p-6 sm:p-8">
               <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-emerald-300/20 blur-3xl" />
@@ -1489,9 +1607,13 @@ export default function PixRampClient({
                   <div className="mt-5 flex items-center gap-4">
                     <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-300 text-3xl font-black text-[#0d1512]">✓</span>
                     <div>
-                      <h2 className="text-3xl font-black tracking-tight sm:text-5xl">{transferFlow ? "PIX e transferência confirmados" : "PIX confirmado"}</h2>
+                      <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
+                        {rampMode === "offramp" ? "Retirada confirmada" : transferFlow ? "PIX e transferência confirmados" : "PIX confirmado"}
+                      </h2>
                       <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/65">
-                        {transferFlow
+                        {rampMode === "offramp"
+                          ? "O saldo saiu da sua wallet e foi enviado para a conta externa vinculada."
+                          : transferFlow
                           ? "O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada."
                           : "O PIX foi confirmado e o saldo final entrou na sua wallet."}
                       </p>
@@ -1505,12 +1627,19 @@ export default function PixRampClient({
 
               <div className="relative mt-8 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
                 <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Valor recebido</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">
+                    {rampMode === "offramp" ? "Valor retirado" : "Valor recebido"}
+                  </p>
                   <p className="mt-3 text-4xl font-black tracking-tight text-white sm:text-5xl">
-                    {formatRampAsset(finalReceivedAmount || order.toAmount || quote?.toAmount, receivedCode)}
+                    {rampMode === "offramp"
+                      ? offRampReceiptAmount
+                      : formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)}
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <ReceiptRow label="Pago via PIX" value={formatMoney(order.fromAmount || quote?.fromAmount || amountBrl)} />
+                    <ReceiptRow
+                      label={rampMode === "offramp" ? "Recebido na conta externa" : "Pago via PIX"}
+                      value={rampMode === "offramp" ? offRampReceiptReceived : formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}
+                    />
                     <ReceiptRow label="Status" value="Concluído" />
                   </div>
                 </div>
@@ -1518,8 +1647,9 @@ export default function PixRampClient({
                 <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Detalhes do comprovante</p>
                   <dl className="mt-4 grid gap-3 text-sm">
-                    <ReceiptRow label="Destino" value={truncateKey(walletPublicKey)} />
-                    <ReceiptRow label="Ordem Etherfuse" value={order.id} />
+                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? displayedExternalBankAccount.label : truncateKey(walletPublicKey)} />
+                    <ReceiptRow label="Ordem" value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
+                    {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label="Comprovante" value={String(temporaryOffRampTestResult.receipt_url)} />}
                     <ReceiptRow label="Data" value={new Date().toLocaleString("pt-BR")} />
                   </dl>
                 </div>

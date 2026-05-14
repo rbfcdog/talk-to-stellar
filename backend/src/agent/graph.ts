@@ -14,6 +14,7 @@ import ExternalService from '../services/external.service';
 import { supabase } from '../config/supabase';
 import { getAssetIssuer } from '../config/assets';
 import { WalletRepository } from '../repositories/wallet.repository';
+import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
 
@@ -717,8 +718,10 @@ ${onboardingUrl}`;
   }): Promise<string> {
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
     const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
+    const intentId = crypto.randomUUID();
     url.searchParams.set('mode', intent.direction);
     url.searchParams.set('asset', intent.asset_code);
+    url.searchParams.set('intent_id', intentId);
     url.searchParams.set('from', 'chat');
     url.searchParams.set('autostart', '1');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
@@ -726,6 +729,10 @@ ${onboardingUrl}`;
     if (intent.amount) {
       url.searchParams.set('amount', intent.amount);
       url.searchParams.set('currency', intent.amount_currency || intent.asset_code);
+      if (intent.direction === 'offramp') {
+        url.searchParams.set('source_asset', intent.asset_code);
+        url.searchParams.set('source_amount', intent.amount);
+      }
       if (intent.direction === 'offramp' && intent.amount_currency === 'BRL') {
         url.searchParams.set('fiat_amount', intent.amount);
         url.searchParams.set('fiat_currency', 'BRL');
