@@ -102,6 +102,18 @@ export interface EtherfuseBankAccountRequest {
     account: EtherfuseSpeiAccountBody | EtherfusePixAccountBody;
 }
 
+/** Request body for `POST /ramp/customer/{id}/bank-account`. */
+export interface EtherfuseApiKeyBankAccountRequest {
+    /** Partner-generated UUID for the bank account. */
+    bankAccountId?: string;
+    /** Optional display label for the account. */
+    label?: string;
+    /** Sandbox/devnet flag. When false, sandbox auto-approval remains enabled. */
+    skipAutoApproval?: boolean;
+    /** Bank account details — PIX for Brazil or CLABE for Mexico. */
+    account: EtherfuseSpeiAccountBody | EtherfusePixAccountBody | Record<string, unknown>;
+}
+
 /** Request body for `POST /ramp/customer/{id}/kyc` (programmatic KYC identity submission). */
 export interface EtherfuseKycIdentityRequest {
     /** Wallet public key. */

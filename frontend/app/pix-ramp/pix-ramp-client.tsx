@@ -117,6 +117,7 @@ export default function PixRampClient() {
   const [offRampAmount, setOffRampAmount] = useState("1");
   const [walletPublicKey, setWalletPublicKey] = useState("");
   const [onboardingUrl, setOnboardingUrl] = useState("");
+  const [programmaticOnboarding, setProgrammaticOnboarding] = useState<RampResponse | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [receiptCopied, setReceiptCopied] = useState(false);
@@ -315,6 +316,7 @@ export default function PixRampClient() {
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
     setOnboardingUrl("");
+    setProgrammaticOnboarding(null);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setOffRampBalancesBefore([]);
@@ -341,7 +343,7 @@ export default function PixRampClient() {
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
     setCustomerPayload(customerResult);
-    setOnboardingUrl(String(customerResult?.kyc_url || ""));
+    setProgrammaticOnboarding(customerResult?.programmatic_onboarding || null);
 
     const before = await fetchBalances(auth);
     setOnRampBalancesBefore(before);
@@ -571,10 +573,15 @@ export default function PixRampClient() {
                 </button>
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                    <p className="font-bold">Se a Etherfuse retornar "Proxy account not found", conclua o cadastro PIX/KYC hospedado e tente gerar o PIX novamente.</p>
+                    <p className="font-bold">Fallback: a Etherfuse ainda exigiu concluir cadastro PIX/KYC hospedado para esta combinacao de customer/wallet.</p>
                     <a className="mt-3 inline-flex rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950" href={onboardingUrl} target="_blank" rel="noreferrer">
                       Abrir cadastro PIX Etherfuse
                     </a>
+                  </div>
+                )}
+                {programmaticOnboarding && !onboardingUrl && (
+                  <div className="mt-4 rounded-2xl border border-lime-200 bg-lime-50 p-4 text-sm text-lime-950">
+                    <p className="font-bold">KYC, wallet e conta PIX sandbox enviados programaticamente via API com dados mockados.</p>
                   </div>
                 )}
               </div>

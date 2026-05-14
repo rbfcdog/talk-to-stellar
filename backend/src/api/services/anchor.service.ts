@@ -162,6 +162,11 @@ function isTerminalRampStatus(status: string): boolean {
   );
 }
 
+function isDuplicateResourceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /already|duplicate|exists|409|conflict/i.test(message);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -223,6 +228,7 @@ function parseIssuedAssetIdentifier(identifier: string): { code: string; issuer?
 export class AnchorService {
   private static etherfuseClient?: EtherfuseClient;
   private static etherfuseConfigSignature?: string;
+  private static programmaticOnboardingCache = new Set<string>();
 
   static getTesouroIssuer(): string {
     return getAssetIssuer('TESOURO') || ETHERFUSE_TESOURO_ISSUER;
@@ -474,9 +480,165 @@ export class AnchorService {
     return error;
   }
 
+  private static buildSandboxKycPayload(publicKey: string): any {
+    return {
+      pubkey: publicKey,
+      identity: {
+        id: publicKey,
+        name: {
+          givenName: 'Ana',
+          familyName: 'Silva',
+        },
+        dateOfBirth: '1990-05-15',
+        address: {
+          street: 'Avenida Paulista 1000',
+          city: 'Sao Paulo',
+          region: 'SP',
+          postalCode: '01310-100',
+          country: 'BR',
+        },
+        idNumbers: [
+          {
+            value: '37155878661',
+            type: 'CPF',
+          },
+        ],
+      },
+    };
+  }
+
+  private static buildSandboxDocumentPayload(publicKey: string, documentType: 'document' | 'selfie'): any {
+    // 1x1 PNG data URL. Etherfuse sandbox accepts fake KYC images for devnet flows.
+    const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    return documentType === 'selfie'
+      ? {
+          pubkey: publicKey,
+          documentType,
+          images: [{ label: 'selfie', image }],
+        }
+      : {
+          pubkey: publicKey,
+          documentType,
+          images: [
+            { label: 'id_front', image },
+            { label: 'id_back', image },
+          ],
+        };
+  }
+
+  private static buildSandboxPixAccount(bankAccountId: string, email?: string): any {
+    const pixKey = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : crypto.randomUUID();
+    const pixKeyType = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? 'email' : 'evp';
+    return {
+      bankAccountId,
+      label: 'TalkToStellar PIX sandbox',
+      skipAutoApproval: false,
+      account: {
+        pixKey,
+        pixKeyType,
+        firstName: 'Ana',
+        lastName: 'Silva',
+        cpf: '37155878661',
+      },
+    };
+  }
+
+  private static async runSandboxProgrammaticOnboarding(input: {
+    customerId: string;
+    publicKey: string;
+    bankAccountId: string;
+    email?: string;
+    kycUrl?: string;
+  }): Promise<{
+    bankAccountId: string;
+    steps: Record<string, unknown>;
+  }> {
+    if (!this.getRuntimeInfo().sandbox) {
+      return { bankAccountId: input.bankAccountId, steps: { skipped: 'production' } };
+    }
+
+    const cacheKey = `${input.customerId}:${input.publicKey}:${input.bankAccountId}`;
+    if (this.programmaticOnboardingCache.has(cacheKey)) {
+      return { bankAccountId: input.bankAccountId, steps: { cached: true } };
+    }
+
+    const anchor = this.getEtherfuseClient() as any;
+    const steps: Record<string, unknown> = {};
+
+    try {
+      steps.wallet = await anchor.registerCustomerWallet(input.customerId, input.publicKey, false);
+    } catch (error) {
+      if (!isDuplicateResourceError(error)) throw error;
+      steps.wallet = 'already_registered';
+    }
+
+    try {
+      steps.kyc_identity = await anchor.submitKycIdentity(
+        input.customerId,
+        this.buildSandboxKycPayload(input.publicKey),
+      );
+    } catch (error) {
+      if (!isDuplicateResourceError(error)) throw error;
+      steps.kyc_identity = 'already_submitted';
+    }
+
+    try {
+      steps.kyc_documents = await anchor.submitKycDocuments(
+        input.customerId,
+        this.buildSandboxDocumentPayload(input.publicKey, 'document'),
+      );
+      steps.kyc_selfie = await anchor.submitKycDocuments(
+        input.customerId,
+        this.buildSandboxDocumentPayload(input.publicKey, 'selfie'),
+      );
+    } catch (error) {
+      if (!isDuplicateResourceError(error)) throw error;
+      steps.kyc_documents = 'already_submitted';
+    }
+
+    if (input.kycUrl && typeof anchor.acceptAgreements === 'function') {
+      try {
+        steps.agreements = await anchor.acceptAgreements(input.kycUrl);
+      } catch (error) {
+        if (!isDuplicateResourceError(error)) throw error;
+        steps.agreements = 'already_accepted';
+      }
+    }
+
+    try {
+      steps.bank_account = await anchor.createBankAccountForCustomer(
+        input.customerId,
+        this.buildSandboxPixAccount(input.bankAccountId, input.email),
+      );
+    } catch (error) {
+      if (isDuplicateResourceError(error)) {
+        steps.bank_account = 'already_registered';
+      } else if (input.kycUrl && typeof anchor.createBankAccountWithPresignedUrl === 'function') {
+        const pixAccount = this.buildSandboxPixAccount(input.bankAccountId, input.email);
+        try {
+          steps.bank_account = await anchor.createBankAccountWithPresignedUrl({
+            presignedUrl: input.kycUrl,
+            account: pixAccount.account,
+            skipAutoApproval: false,
+            label: pixAccount.label,
+          });
+        } catch (fallbackError) {
+          if (!isDuplicateResourceError(fallbackError)) throw fallbackError;
+          steps.bank_account = 'already_registered';
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    this.programmaticOnboardingCache.add(cacheKey);
+    return { bankAccountId: input.bankAccountId, steps };
+  }
+
   static async createCustomerForSession(input: CustomerForSessionInput): Promise<{
     customer: Customer;
     kyc_url?: string;
+    programmatic_onboarding?: Record<string, unknown>;
     provider: 'etherfuse';
     rail: 'pix';
     fiat_currency: 'BRL';
@@ -495,11 +657,19 @@ export class AnchorService {
       publicKey: context.publicKey,
       bankAccountId: customer.bankAccountId,
     });
-    customer = { ...customer, bankAccountId: preparedProxy.bankAccountId };
+    const programmatic = await this.runSandboxProgrammaticOnboarding({
+      customerId: customer.id,
+      publicKey: context.publicKey,
+      bankAccountId: preparedProxy.bankAccountId,
+      email: coalesceString(input.email, context.email) || undefined,
+      kycUrl: preparedProxy.kycUrl,
+    });
+    customer = { ...customer, bankAccountId: programmatic.bankAccountId };
 
     return {
       customer,
       kyc_url: preparedProxy.kycUrl,
+      programmatic_onboarding: programmatic.steps,
       provider: 'etherfuse',
       rail: 'pix',
       fiat_currency: 'BRL',
@@ -700,6 +870,15 @@ export class AnchorService {
       kycUrl = preparedProxy.kycUrl;
     }
 
+    const programmatic = await this.runSandboxProgrammaticOnboarding({
+      customerId,
+      publicKey: context.publicKey,
+      bankAccountId,
+      email: context.email,
+      kycUrl,
+    });
+    bankAccountId = programmatic.bankAccountId;
+
     const createOrder = () => anchor.createOnRamp({
       customerId,
       quoteId,
@@ -724,6 +903,14 @@ export class AnchorService {
       });
       bankAccountId = preparedProxy.bankAccountId;
       kycUrl = preparedProxy.kycUrl;
+      const retryProgrammatic = await this.runSandboxProgrammaticOnboarding({
+        customerId,
+        publicKey: context.publicKey,
+        bankAccountId,
+        email: context.email,
+        kycUrl,
+      });
+      bankAccountId = retryProgrammatic.bankAccountId;
 
       try {
         transaction = await createOrder();
