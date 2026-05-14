@@ -2,7 +2,7 @@ import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
   title: "PIX On-Ramp",
-  description: "Adicionar saldo via PIX testnet e receber TESOURO na wallet TalkToStellar.",
+  description: "Adicionar saldo via PIX testnet e receber BRL, USDC ou TESOURO na wallet TalkToStellar.",
 };
 
 function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {

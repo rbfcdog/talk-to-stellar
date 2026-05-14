@@ -54,6 +54,22 @@ export function resolveConfiguredAsset(assetCode: unknown, providedIssuer?: unkn
   return code === 'XLM' ? { code } : { code, issuer };
 }
 
+export function assetMatchesConfiguredIssuer(assetCode: unknown, assetIssuer?: unknown): boolean {
+  const code = normalizeAssetCode(assetCode);
+  if (code === 'XLM') return true;
+
+  const expectedIssuer = getAssetIssuer(code);
+  const actualIssuer = String(assetIssuer || '').trim();
+  if (!expectedIssuer || !actualIssuer) return false;
+  return actualIssuer === expectedIssuer;
+}
+
+export function getUserFacingAssetCodes(): string[] {
+  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
+  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
+  return [...(includeBrl ? ['BRL'] : []), 'USDC', ...(includeTesouro ? ['TESOURO'] : [])];
+}
+
 export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string {
   const code = normalizeAssetCode(assetCode);
   const issuer = getAssetIssuer(code, providedIssuer);

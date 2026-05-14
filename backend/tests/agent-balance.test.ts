@@ -58,7 +58,7 @@ describe('Agent balance flow', () => {
       public_key: undefined,
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Saldo na Stellar:');
+    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar:');
     expect(result.response_message).toContain('BRL: 12.3400000');
     expect(result.response_message).toContain('USDC: 8.9000000');
   });

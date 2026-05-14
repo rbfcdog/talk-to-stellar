@@ -1,4 +1,5 @@
 import {
+  assetMatchesConfiguredIssuer,
   getAssetIssuer,
   normalizeAssetCode,
   PUBLIC_BRL_ISSUER_NTOKENS,
@@ -44,6 +45,14 @@ describe('asset config', () => {
     expect(getAssetIssuer('BRL')).toBeUndefined();
     process.env.BRL_ISSUER_TESTNET = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
     expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
+  });
+
+  it('matches BRL only for the configured issuer', () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+
+    expect(assetMatchesConfiguredIssuer('BRL', 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF')).toBe(true);
+    expect(assetMatchesConfiguredIssuer('BRL', 'GDYAZKZBGC2NNI2FYVPJW5FNAGKUVJIIB3WO3JZFCGURG6TDU3JZNLTQ')).toBe(false);
   });
 
   it('keeps unknown asset aliases unchanged', () => {

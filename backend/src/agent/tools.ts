@@ -14,7 +14,7 @@ import { supabase } from "../config/supabase";
 import { WalletRepository } from "../repositories/wallet.repository";
 import VaultService from "../services/vault.service";
 import ExternalService from "../services/external.service";
-import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
@@ -42,6 +42,14 @@ function getAssetCode(value: any): string {
 
 function normalizeAssetInput(code: any, issuer: any) {
   return resolveConfiguredAsset(code || 'XLM', issuer);
+}
+
+function balanceMatchesConfiguredAsset(balance: any, assetCode: string): boolean {
+  const code = normalizeAssetCode(balance?.asset || balance?.asset_code || balance?.code);
+  const expectedCode = normalizeAssetCode(assetCode);
+  if (code !== expectedCode) return false;
+  if (expectedCode === 'XLM') return true;
+  return assetMatchesConfiguredIssuer(expectedCode, balance?.asset_issuer);
 }
 
 function formatRouteChain(input: {
@@ -1385,7 +1393,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${publicKey}`);
     const account = await stellarService.getAccount(publicKey);
 
-    const visibleAssets = ['BRL', 'USDC', 'TESOURO'];
+    const visibleAssets = getUserFacingAssetCodes();
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -1396,7 +1404,7 @@ async function executeGetBalance(input: any): Promise<string> {
       };
     });
 
-    const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balance.asset === asset) || {
+    const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset)) || {
       asset,
       balance: '0.0000000',
       asset_type: asset === 'XLM' ? 'native' : 'credit_alphanum4',
@@ -1463,13 +1471,8 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       asset_issuer: balance.asset_issuer,
     }));
 
-    const balanceByAsset = new Map<string, any>();
-    for (const item of mappedBalances) {
-      balanceByAsset.set(String(item.asset || '').toUpperCase(), item);
-    }
-
-    const technicalAssets = ['XLM', 'USDC', 'BRL', 'TESOURO'].map((assetCode) => {
-      const existing = balanceByAsset.get(assetCode);
+    const technicalAssets = ['XLM', ...getUserFacingAssetCodes()].map((assetCode) => {
+      const existing = mappedBalances.find((balance: any) => balanceMatchesConfiguredAsset(balance, assetCode));
       if (existing) return existing;
       return {
         asset: assetCode,

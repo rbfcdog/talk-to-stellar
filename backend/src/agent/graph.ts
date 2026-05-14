@@ -618,15 +618,22 @@ ${onboardingUrl}`;
   private extractPixRampIntentFromText(text: string): {
     is_pix_ramp: boolean;
     direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
     amount_currency?: 'BRL' | 'TESOURO';
-    asset_code: 'TESOURO';
+    asset_code: 'BRL' | 'USDC' | 'TESOURO';
+    recipient_query?: string;
   } {
     const normalized = this.normalizeTextForIntent(text);
     const mentionsPix = /\bpix\b/.test(normalized);
     if (!mentionsPix) {
       return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
     }
+
+    const wantsPixFundedPayment =
+      /\b(mandar|enviar|pagar|transferir|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
+      /\b(para|pra|pro|a)\b/.test(normalized) &&
+      !/\b(minha conta|meu banco|conta bancaria|conta bancária)\b/.test(normalized);
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
@@ -640,6 +647,7 @@ ${onboardingUrl}`;
 
     const wantsOnRamp =
       /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|on\s*ramp|onramp)\b/.test(normalized) ||
+      wantsPixFundedPayment ||
       normalized.includes('pagar com pix') ||
       normalized.includes('trazer dinheiro') ||
       normalized.includes('trazer saldo') ||
@@ -658,20 +666,35 @@ ${onboardingUrl}`;
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
     const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
     const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
+    const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
+    const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
+    const explicitReceiveTesouro = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:tesouro|tesouros)/.test(normalized);
+    const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
+    const onRampTargetAsset = explicitReceiveUsdc || (mentionsUsdc && !mentionsTesouro && !explicitReceiveBrl)
+      ? 'USDC'
+      : 'BRL';
+    const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,3})(?=\s*(?:,|\.|$|\b(?:via|por|com|faca|faça|fazer|transferencia|transferência)\b))/);
+    const recipientQuery = recipientMatch?.[1]
+      ?.replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
+      .trim();
     return {
       is_pix_ramp: true,
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
+      flow: wantsPixFundedPayment ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1]?.replace(',', '.'),
       amount_currency: mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
-      asset_code: 'TESOURO',
+      asset_code: wantsOffRamp && !wantsOnRamp ? 'TESOURO' : onRampTargetAsset,
+      recipient_query: wantsPixFundedPayment ? recipientQuery : undefined,
     };
   }
 
   private async buildPixRampUrl(state: AgentState, intent: {
     direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
     amount_currency?: 'BRL' | 'TESOURO';
-    asset_code: 'TESOURO';
+    asset_code: 'BRL' | 'USDC' | 'TESOURO';
+    recipient_query?: string;
   }): Promise<string> {
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
     const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
@@ -680,6 +703,8 @@ ${onboardingUrl}`;
     url.searchParams.set('from', 'chat');
     url.searchParams.set('network', 'testnet');
     url.searchParams.set('autostart', '1');
+    if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
+    if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
     if (intent.amount) {
       if (intent.direction === 'offramp' && intent.amount_currency === 'BRL') {
         url.searchParams.set('fiat_amount', intent.amount);
@@ -713,7 +738,7 @@ ${onboardingUrl}`;
     } else if (!intent.amount) {
       state.success = false;
       state.response_message = intent.direction === 'offramp'
-        ? 'Qual valor em TESOURO você quer retirar para PIX testnet?'
+        ? 'Qual valor em reais você quer retirar para PIX testnet?'
         : 'Qual valor em reais você quer colocar na sua conta via PIX testnet?';
     } else {
       const url = await this.buildPixRampUrl(state, intent);
@@ -721,10 +746,12 @@ ${onboardingUrl}`;
       if (intent.direction === 'offramp') {
         const amountText = intent.amount_currency === 'BRL'
           ? this.formatMoneyByAsset(intent.amount, 'BRL')
-          : this.formatMoneyByAsset(intent.amount, 'TESOURO');
-        state.response_message = `Para retirar ${amountText} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela converte o valor, mostra o TESOURO saindo da sua wallet e o saldo em reais entrando como conta bancária de teste.`;
+          : this.formatMoneyByAsset(intent.amount, 'BRL');
+        state.response_message = `Para retirar ${amountText} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela mostra o saldo saindo da sua wallet e os reais entrando como conta bancária de teste.`;
+      } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
+        state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX testnet, abra:\n\n${url}\n\nA tela faz o PIX on-ramp, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}. Em sandbox, confirme com "Confirmar PIX (testnet)".`;
       } else {
-        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar TESOURO na sua wallet.`;
+        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet e receber em ${intent.asset_code}, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar o saldo final na sua wallet.`;
       }
     }
 
@@ -1532,9 +1559,10 @@ Respond ONLY with the intent name. Examples:
 - "gerar link de pagamento de 15 dólares" -> payment_link
 - "cria um link para alguém receber 20 usdc" -> payment_link
 - "quero pagar com pix para colocar 100 reais na conta" -> pix
+- "quero mandar 5 brl pra ana por pix" -> pix
 - "quero trazer 100 brl pra minha conta via pix" -> pix
 - "depositar 150 reais via pix" -> pix
-- "sacar 20 tesouro por pix" -> pix
+- "sacar 20 reais por pix" -> pix
 - "sacar 100 reais para minha conta bancaria via pix" -> pix
 - "tirar dinheiro para minha conta bancaria via pix" -> pix
 - "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
@@ -2189,7 +2217,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         state.success = true;
         state.response_message = wantsTechnicalBalance
           ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
-          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nTESOURO é o saldo recebido no PIX testnet. Para ver o saldo técnico completo, peça "saldo técnico".`;
+          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX testnet agora entrega o asset escolhido no checkout. Para ver issuers e saldos técnicos, peça "saldo técnico".`;
       }
     }
 
