@@ -28,6 +28,7 @@ type BalanceDelta = {
 };
 
 type RampResponse = Record<string, any>;
+type RampAuth = { session_id: string; session_token: string };
 
 function getStoredSession() {
   if (typeof window === "undefined") return { sessionId: "", sessionToken: "" };
@@ -99,6 +100,8 @@ function truncateKey(value?: string) {
 export default function PixRampClient() {
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
+  const [rampEmail, setRampEmail] = useState("");
+  const [resolvedWallet, setResolvedWallet] = useState<RampResponse | null>(null);
   const [config, setConfig] = useState<RampConfig | null>(null);
   const [step, setStep] = useState<Step>("quote");
   const [amountBrl, setAmountBrl] = useState("100");
@@ -124,6 +127,7 @@ export default function PixRampClient() {
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
 
   const hasSession = Boolean(sessionId && sessionToken);
+  const canResolveWallet = Boolean(hasSession || rampEmail.trim());
   const customer = customerPayload?.customer;
   const customerId = String(customer?.id || "");
   const bankAccountId = String(customer?.bankAccountId || "");
@@ -160,6 +164,8 @@ export default function PixRampClient() {
     const stored = getStoredSession();
     setSessionId(stored.sessionId);
     setSessionToken(stored.sessionToken);
+    const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
+    if (storedName.includes("@")) setRampEmail(storedName);
   }, []);
 
   useEffect(() => {
@@ -174,36 +180,70 @@ export default function PixRampClient() {
       .catch(() => setConfig({ sandbox: false, network: "Stellar Testnet" }));
   }, []);
 
-  const basePayload = useMemo(
-    () => ({ session_id: sessionId, session_token: sessionToken }),
-    [sessionId, sessionToken],
-  );
+  async function resolveWalletFromEmail(): Promise<RampAuth> {
+    if (sessionId && sessionToken) {
+      return { session_id: sessionId, session_token: sessionToken };
+    }
 
-  const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST") => {
-    if (!hasSession) throw new Error("Sign in to a TalkToStellar wallet before using PIX Ramp.");
+    const email = rampEmail.trim().toLowerCase();
+    if (!email) {
+      throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
+    }
+
+    const response = await fetch("/api/ramp/etherfuse/resolve-wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || "Nao encontrei uma wallet TalkToStellar ativa para este email.");
+    }
+
+    const nextSessionId = String(payload.session_id || "");
+    const nextSessionToken = String(payload.session_token || "");
+    if (!nextSessionId || !nextSessionToken) {
+      throw new Error("A conta foi encontrada, mas nao retornou sessao valida para cotar.");
+    }
+
+    setSessionId(nextSessionId);
+    setSessionToken(nextSessionToken);
+    setResolvedWallet(payload);
+    setWalletPublicKey(String(payload.public_key || ""));
+    window.localStorage.setItem("talk-to-stellar.sessionId", nextSessionId);
+    window.localStorage.setItem("talk-to-stellar.sessionToken", nextSessionToken);
+    window.localStorage.setItem("talk-to-stellar.userName", email);
+
+    return { session_id: nextSessionId, session_token: nextSessionToken };
+  }
+
+  const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth) => {
+    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
+    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
     const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
-    if (method !== "GET") init.body = JSON.stringify({ ...basePayload, ...(body || {}) });
+    if (method !== "GET") init.body = JSON.stringify({ ...auth, ...(body || {}) });
     const response = await fetch(path, init);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.success === false) {
       throw new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`);
     }
     return payload;
-  }, [basePayload, hasSession]);
+  }, [sessionId, sessionToken]);
 
-  const callRampGet = useCallback(async (path: string, params?: Record<string, string>) => {
-    if (!hasSession) throw new Error("Sign in to a TalkToStellar wallet before using PIX Ramp.");
-    const search = new URLSearchParams({ ...basePayload, ...(params || {}) });
+  const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
+    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
+    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
+    const search = new URLSearchParams({ ...auth, ...(params || {}) });
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.success === false) {
       throw new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`);
     }
     return payload;
-  }, [basePayload, hasSession]);
+  }, [sessionId, sessionToken]);
 
-  const fetchBalances = useCallback(async () => {
-    const payload = await callRampGet("/api/ramp/etherfuse/wallet-balances");
+  const fetchBalances = useCallback(async (authOverride?: RampAuth) => {
+    const payload = await callRampGet("/api/ramp/etherfuse/wallet-balances", undefined, authOverride);
     setWalletPublicKey(String(payload.public_key || ""));
     return Array.isArray(payload.balances) ? payload.balances as BalanceItem[] : [];
   }, [callRampGet]);
@@ -263,10 +303,14 @@ export default function PixRampClient() {
     setOnRampBalancesAfter([]);
     setTemporaryTestResult(null);
 
-    const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", { country: "BR" });
+    const auth = await resolveWalletFromEmail();
+    const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
+      country: "BR",
+      email: rampEmail.trim().toLowerCase() || undefined,
+    }, "POST", auth);
     setCustomerPayload(customerResult);
 
-    const before = await fetchBalances();
+    const before = await fetchBalances(auth);
     setOnRampBalancesBefore(before);
 
     const payload = await callRamp("/api/ramp/etherfuse/quote", {
@@ -275,7 +319,7 @@ export default function PixRampClient() {
       from_currency: "BRL",
       to_currency: targetAsset,
       amount: amountBrl,
-    });
+    }, "POST", auth);
     setQuotePayload(payload);
   }
 
@@ -308,10 +352,11 @@ export default function PixRampClient() {
   }
 
   async function runTemporaryEndpointTest() {
+    const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-onramp", {
       amount: amountBrl,
       to_currency: targetAsset,
-    });
+    }, "POST", auth);
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOnRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
@@ -319,9 +364,10 @@ export default function PixRampClient() {
   }
 
   async function runTemporaryOffRampEndpointTest() {
+    const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
-    });
+    }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
@@ -378,7 +424,7 @@ export default function PixRampClient() {
 
         {!hasSession && (
           <section className="mt-5 rounded-2xl border border-amber-300 bg-amber-100 p-4 text-sm text-amber-950">
-            No active TalkToStellar wallet session was found in this browser. Sign in first, then return to this page.
+            Nenhuma sessao TalkToStellar ativa foi encontrada neste navegador. Digite o email da conta abaixo para localizar a wallet existente e continuar sem Freighter.
           </section>
         )}
 
@@ -400,6 +446,38 @@ export default function PixRampClient() {
               </div>
             </div>
 
+            <div className="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+              <label className="block text-sm font-bold text-emerald-950">TalkToStellar account email</label>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="min-w-0 flex-1 rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold text-emerald-950 outline-none ring-lime-200 placeholder:text-emerald-900/35 focus:ring-4"
+                  type="email"
+                  value={rampEmail}
+                  placeholder="jorge@gmail.com"
+                  disabled={hasSession}
+                  onChange={(event) => {
+                    setRampEmail(event.target.value);
+                    setResolvedWallet(null);
+                    if (!hasSession) setWalletPublicKey("");
+                  }}
+                />
+                <button
+                  className="rounded-2xl bg-[#17251d] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                  disabled={!rampEmail.trim() || hasSession || Boolean(loading)}
+                  onClick={() => run("Resolving wallet", async () => {
+                    await resolveWalletFromEmail();
+                  })}
+                >
+                  {loading === "Resolving wallet" ? "Finding..." : "Use wallet"}
+                </button>
+              </div>
+              <p className="mt-3 text-xs font-semibold text-emerald-900/65">
+                {walletPublicKey
+                  ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
+                  : "A cotacao usa a wallet criada/importada na infra TalkToStellar para este email."}
+              </p>
+            </div>
+
             <label className="mt-6 block text-sm font-bold text-stone-600">You send</label>
             <div className="mt-2 flex overflow-hidden rounded-3xl border border-stone-200 bg-stone-50 focus-within:ring-4 focus-within:ring-lime-200">
               <span className="flex items-center bg-stone-100 px-4 text-sm font-black text-stone-500">R$</span>
@@ -416,7 +494,7 @@ export default function PixRampClient() {
               ))}
             </div>
 
-            <button className="mt-6 w-full rounded-3xl bg-lime-300 px-5 py-4 text-sm font-black text-[#17251d] shadow-lg shadow-lime-900/10 disabled:opacity-50" disabled={!hasSession || Boolean(loading)} onClick={() => run("Requesting quote", requestQuote)}>
+            <button className="mt-6 w-full rounded-3xl bg-lime-300 px-5 py-4 text-sm font-black text-[#17251d] shadow-lg shadow-lime-900/10 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Requesting quote", requestQuote)}>
               {loading === "Requesting quote" ? "Getting quote..." : "Get quote"}
             </button>
 
@@ -522,7 +600,7 @@ export default function PixRampClient() {
             title="On-ramp temporary endpoint"
             endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
             description="Runs the whole sandbox on-ramp server-side and returns balances before, after, and delta."
-            disabled={!hasSession || Boolean(loading) || !config?.sandbox}
+            disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox}
             hidden={!config?.sandbox}
             onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
             result={temporaryTestResult ? {
@@ -541,7 +619,7 @@ export default function PixRampClient() {
             <label className="mt-5 block text-sm font-bold text-stone-600">TESOURO amount to off-ramp</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
             {config?.sandbox ? (
-              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!hasSession || Boolean(loading)} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
+              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
                 Test off-ramp and asset delta
               </button>
             ) : (

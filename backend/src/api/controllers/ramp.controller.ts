@@ -28,6 +28,15 @@ export class RampController {
     }
   }
 
+  static async resolveEtherfuseWalletByEmail(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.resolveWalletByEmail(requestInput(req));
+      res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
   static async createEtherfuseCustomer(req: Request, res: Response) {
     try {
       const result = await AnchorService.createCustomerForSession(requestInput(req));

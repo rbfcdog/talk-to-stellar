@@ -4,6 +4,7 @@ import { RampController } from '../controllers/ramp.controller';
 const router = Router();
 
 router.get('/etherfuse/config', RampController.getEtherfuseConfig);
+router.post('/etherfuse/resolve-wallet', RampController.resolveEtherfuseWalletByEmail);
 router.post('/etherfuse/customer', RampController.createEtherfuseCustomer);
 router.get('/etherfuse/kyc-status', RampController.getEtherfuseKycStatus);
 router.get('/etherfuse/assets', RampController.getEtherfuseAssets);
