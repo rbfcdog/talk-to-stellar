@@ -22,28 +22,34 @@ Fluxo on-ramp, ou seja, colocar saldo via PIX:
 Fluxo off-ramp, ou seja, tirar saldo:
 
 1. O usuario pede para sacar ou retirar TESOURO via PIX.
-2. A aplicacao abre a tela `/pix-ramp` em modo off-ramp.
+2. A aplicacao abre a tela `/pix-off`.
 3. A tela mostra TESOURO saindo da wallet e BRL entrando em uma conta PIX testnet/bancaria simulada.
 4. No sandbox, o fluxo e local/simulado quando a Etherfuse nao disponibiliza a conta fiat real pronta.
 
 ## Onde testar no frontend
 
-On-ramp:
+On-ramp usado pelo chat:
 
 ```text
-/pix-ramp?mode=onramp&amount=150&asset=TESOURO&autostart=1
+/pix-on?amount=150&asset=TESOURO&autostart=1
 ```
 
-Off-ramp:
+Off-ramp usado pelo chat:
 
 ```text
-/pix-ramp?mode=offramp&amount=5&asset=TESOURO
+/pix-off?amount=5&asset=TESOURO
 ```
 
 Off-ramp com alvo em reais, para a tela calcular quanto TESOURO precisa sair:
 
 ```text
-/pix-ramp?mode=offramp&fiat_amount=100&fiat_currency=BRL&asset=TESOURO
+/pix-off?fiat_amount=100&fiat_currency=BRL&asset=TESOURO
+```
+
+Rota legada/manual:
+
+```text
+/pix-ramp
 ```
 
 Via chat, exemplos de frases:
@@ -220,7 +226,8 @@ Isso e esperado para sandbox. PIX bancario real so deve ser apresentado quando a
 
 Estado atual:
 
-- A UI `/pix-ramp` existe para on-ramp e off-ramp.
+- A UI real usada pelo chat fica em `/pix-on` para on-ramp e `/pix-off` para off-ramp.
+- A UI legada `/pix-ramp` continua existindo como tela manual com alternancia de modo.
 - O chat detecta intencoes de PIX para deposito e saque.
 - A wallet e resolvida por email usando a infraestrutura TalkToStellar, sem Freighter.
 - O backend cria customer, quote e ordem.

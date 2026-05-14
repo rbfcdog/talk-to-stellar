@@ -673,7 +673,8 @@ ${onboardingUrl}`;
     amount_currency?: 'BRL' | 'TESOURO';
     asset_code: 'TESOURO';
   }): Promise<string> {
-    const url = new URL(`${this.getFrontendBaseUrl()}/pix-ramp`);
+    const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
+    const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
     url.searchParams.set('mode', intent.direction);
     url.searchParams.set('asset', intent.asset_code);
     url.searchParams.set('from', 'chat');
