@@ -38,6 +38,11 @@ interface RampSessionInput {
   session_token?: string;
   sessionToken?: string;
   pin?: string;
+  wallet_pin?: string;
+  walletPin?: string;
+  wallet_code?: string;
+  walletCode?: string;
+  passcode?: string;
 }
 
 interface SessionWalletContext {
@@ -610,7 +615,14 @@ export class AnchorService {
   }
 
   private static requireWalletPin(input: RampSessionInput, context: SessionWalletContext): void {
-    const pin = coalesceString(input.pin);
+    const pin = coalesceString(
+      input.pin,
+      input.wallet_pin,
+      input.walletPin,
+      input.wallet_code,
+      input.walletCode,
+      input.passcode,
+    );
     if (!/^\d{4,8}$/.test(pin)) {
       throw apiError('PIN da wallet é obrigatório para confirmar esta operação.', 400);
     }
