@@ -118,6 +118,7 @@ interface SandboxMockOnRampOrder {
   deliverySourceAmount?: string;
   deliveryError?: string;
   upstreamError?: string;
+  operationContext?: Record<string, unknown>;
 }
 
 interface SandboxMockOffRampOrder {
@@ -262,6 +263,25 @@ function mapAnchorStatusToOperationStatus(status: string): string {
   if (['failed', 'expired', 'cancelled', 'canceled', 'refunded'].includes(normalized)) return 'FAILED';
   if (normalized === 'processing') return 'PROCESSING';
   return 'PENDING';
+}
+
+function mapOperationStatusToRampStatus(status: string): string {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'COMPLETED' || normalized === 'SUCCESS') return 'completed';
+  if (normalized === 'PROCESSING' || normalized === 'FUNDED') return 'processing';
+  if (normalized === 'FAILED' || normalized === 'ERROR') return 'failed';
+  return 'pending';
+}
+
+function parseOperationContext(value: unknown): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === 'object') return value as Record<string, any>;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function isTesouroBalance(balance: any): boolean {
@@ -727,8 +747,124 @@ export class AnchorService {
     return transaction;
   }
 
-  private static async deliverSandboxOnRamp(orderId: string): Promise<SandboxMockOnRampOrder | null> {
-    const record = this.sandboxMockOnRampOrders.get(orderId);
+  private static async persistSandboxOnRampContext(
+    record: SandboxMockOnRampOrder,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    if (!record.operationId) return;
+    const context = {
+      ...(record.operationContext || {}),
+      ...patch,
+      payment_instructions: record.transaction.paymentInstructions,
+      sandbox_mock: true,
+    };
+    record.operationContext = context;
+    try {
+      await OperationRepository.update(record.operationId, { context: JSON.stringify(context) } as any);
+    } catch (error) {
+      console.warn(`[ramp] Could not persist sandbox on-ramp context ${record.operationId}:`, debugErrorMessage(error));
+    }
+  }
+
+  private static async hydrateSandboxOnRampFromOperation(
+    orderId: string,
+    operationId?: string,
+  ): Promise<SandboxMockOnRampOrder | null> {
+    const existing = this.sandboxMockOnRampOrders.get(orderId);
+    if (existing) return existing;
+    if (!operationId || !orderId.startsWith('sandbox-pix-')) return null;
+
+    const operation = await OperationRepository.findById(operationId);
+    if (!operation) return null;
+
+    const context = parseOperationContext(operation.context);
+    const storedOrderId = coalesceString(context.anchor_order_id, context.order_id);
+    if (storedOrderId !== orderId || context.sandbox_mock !== true || context.direction !== 'onramp') {
+      return null;
+    }
+
+    const amount = coalesceString(
+      context.source_amount_brl,
+      context.amount_brl,
+      context.payment_instructions?.amount,
+      operation.amount,
+      '0',
+    );
+    const targetAsset = coalesceString(context.target_asset, this.getTesouroIdentifier());
+    const storedInstructions = context.payment_instructions && typeof context.payment_instructions === 'object'
+      ? context.payment_instructions
+      : {};
+    const storedPixCode = coalesceString(storedInstructions.pixCode);
+    const shouldRegeneratePix = !storedPixCode || storedPixCode.startsWith('PIX-SANDBOX|');
+    const paymentInstructions = shouldRegeneratePix
+      ? this.buildSandboxPixInstructions(orderId, amount)
+      : {
+          ...storedInstructions,
+          type: 'pix' as const,
+          amount,
+          currency: coalesceString(storedInstructions.currency) || 'BRL',
+          reference: orderId,
+        };
+    const destinationAmount = coalesceString(
+      context.destination_amount,
+      context.to_amount,
+      estimateTesouroFromBrl(amount, coalesceString(context.expected_to_amount)),
+    );
+    const status = mapOperationStatusToRampStatus(operation.status);
+    const now = new Date().toISOString();
+    const transaction = {
+      id: orderId,
+      customerId: coalesceString(context.customer_id),
+      quoteId: coalesceString(context.quote_id),
+      status: status as any,
+      fromAmount: amount,
+      fromCurrency: 'BRL',
+      toAmount: destinationAmount,
+      toCurrency: targetAsset,
+      stellarAddress: coalesceString(operation.source_public_key, context.public_key),
+      paymentInstructions,
+      createdAt: operation.created_at || now,
+      updatedAt: operation.updated_at || now,
+      sandbox_mock: true,
+      upstream_error: coalesceString(context.upstream_error) || undefined,
+    } as OnRampTransaction & { sandbox_mock: boolean; upstream_error?: string; stellarTxHash?: string };
+
+    const deliveryHash = coalesceString(context.delivery_hash, context.stellar_tx_hash);
+    if (deliveryHash) transaction.stellarTxHash = deliveryHash;
+
+    const record: SandboxMockOnRampOrder = {
+      transaction,
+      userId: operation.user_id,
+      sessionId: coalesceString(operation.source_session_id),
+      publicKey: transaction.stellarAddress,
+      sourceAmountBrl: amount,
+      destinationAmount,
+      operationId,
+      deliveryHash: deliveryHash || undefined,
+      deliverySourceAmount: coalesceString(context.delivery_source_amount) || undefined,
+      deliveryError: coalesceString(context.delivery_error) || undefined,
+      upstreamError: coalesceString(context.upstream_error) || undefined,
+      operationContext: {
+        ...context,
+        payment_instructions: paymentInstructions,
+        destination_amount: destinationAmount,
+        source_amount_brl: amount,
+      },
+    };
+
+    this.sandboxMockOnRampOrders.set(orderId, record);
+    if (shouldRegeneratePix) {
+      await this.persistSandboxOnRampContext(record, {
+        payment_instructions: paymentInstructions,
+        destination_amount: destinationAmount,
+        source_amount_brl: amount,
+      });
+    }
+    return record;
+  }
+
+  private static async deliverSandboxOnRamp(orderId: string, operationId?: string): Promise<SandboxMockOnRampOrder | null> {
+    const record = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (!record) return null;
     if (record.transaction.status === 'completed') return record;
 
@@ -764,6 +900,11 @@ export class AnchorService {
       record.deliverySourceAmount = record.sourceAmountBrl;
       (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = directTesouroResult.hash;
       await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
+      await this.persistSandboxOnRampContext(record, {
+        delivery_hash: directTesouroResult.hash,
+        delivery_source_amount: record.sourceAmountBrl,
+        final_transaction_status: 'completed',
+      });
       return record;
     }
 
@@ -775,6 +916,10 @@ export class AnchorService {
         : '';
       record.deliveryError = `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
+      await this.persistSandboxOnRampContext(record, {
+        delivery_error: record.deliveryError,
+        final_transaction_status: 'failed',
+      });
       return record;
     }
 
@@ -802,6 +947,10 @@ export class AnchorService {
         ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`
         : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
+      await this.persistSandboxOnRampContext(record, {
+        delivery_error: record.deliveryError,
+        final_transaction_status: 'failed',
+      });
       return record;
     }
 
@@ -811,6 +960,11 @@ export class AnchorService {
     record.deliverySourceAmount = result.sourceAmount;
     (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = result.hash;
     await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
+    await this.persistSandboxOnRampContext(record, {
+      delivery_hash: result.hash,
+      delivery_source_amount: result.sourceAmount,
+      final_transaction_status: 'completed',
+    });
     return record;
   }
 
@@ -1478,6 +1632,23 @@ export class AnchorService {
       }
     }
 
+    const operationContext = {
+      provider: 'etherfuse',
+      rail: 'pix',
+      direction: 'onramp',
+      customer_id: customerId,
+      quote_id: quoteId,
+      quote_refresh_reason: quoteRefreshReason,
+      anchor_order_id: transaction.id,
+      target_asset: toCurrency,
+      crypto_wallet_id: cryptoWalletId,
+      source_amount_brl: amount,
+      destination_amount: transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
+      payment_instructions: transaction.paymentInstructions,
+      sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
+      upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
+    };
+
     const operationId = await this.persistRampOperation({
       userId: context.userId,
       type: 'PIX_ONRAMP',
@@ -1485,23 +1656,13 @@ export class AnchorService {
       assetCode: targetAsset.code || 'TESOURO',
       sessionId: context.sessionId,
       publicKey: context.publicKey,
-      context: {
-        provider: 'etherfuse',
-        rail: 'pix',
-        direction: 'onramp',
-        customer_id: customerId,
-        quote_id: quoteId,
-        quote_refresh_reason: quoteRefreshReason,
-        anchor_order_id: transaction.id,
-        target_asset: toCurrency,
-        crypto_wallet_id: cryptoWalletId,
-        payment_instructions: transaction.paymentInstructions,
-        sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
-        upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
-      },
+      context: operationContext,
     });
     const mockRecord = this.sandboxMockOnRampOrders.get(transaction.id);
-    if (mockRecord) mockRecord.operationId = operationId;
+    if (mockRecord) {
+      mockRecord.operationId = operationId;
+      mockRecord.operationContext = operationContext;
+    }
 
     return {
       transaction,
@@ -1515,13 +1676,17 @@ export class AnchorService {
   static async getOnRampStatus(orderId: string, operationId?: string): Promise<{
     transaction: OnRampTransaction;
   }> {
-    const mockRecord = this.sandboxMockOnRampOrders.get(orderId);
+    const mockRecord = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (mockRecord) {
       await this.updateRampOperationStatus(
         operationId || mockRecord.operationId,
         mapAnchorStatusToOperationStatus(mockRecord.transaction.status),
       );
       return { transaction: mockRecord.transaction };
+    }
+
+    if (orderId.startsWith('sandbox-pix-')) {
+      throw apiError('Sandbox on-ramp order not found. Generate a new PIX checkout or pass the operation_id returned when the checkout was created.', 404);
     }
 
     const transaction = await this.getEtherfuseClient().getOnRampTransaction(orderId);
@@ -1691,21 +1856,28 @@ export class AnchorService {
     return { ...result, order_id: orderId };
   }
 
-  static async simulateFiatReceivedForSession(input: RampSessionInput & { order_id?: string; orderId?: string }): Promise<{
+  static async simulateFiatReceivedForSession(input: RampSessionInput & {
+    order_id?: string;
+    orderId?: string;
+    operation_id?: string;
+    operationId?: string;
+  }): Promise<{
     order_id: string;
     upstream_status: number;
     success: boolean;
   }> {
     await this.resolveSessionWallet(input);
     const orderId = coalesceString(input.order_id, input.orderId);
+    const operationId = coalesceString(input.operation_id, input.operationId);
     if (!orderId) throw apiError('order_id is required.', 400);
 
-    const mockRecord = await this.deliverSandboxOnRamp(orderId);
+    const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId);
     if (mockRecord) {
       return {
         order_id: orderId,
         upstream_status: mockRecord.transaction.status === 'completed' ? 200 : 500,
         success: mockRecord.transaction.status === 'completed',
+        transaction: mockRecord.transaction,
         ...(mockRecord.deliveryHash ? { delivery_hash: mockRecord.deliveryHash } : {}),
         ...(mockRecord.deliverySourceAmount ? { delivery_source_amount: mockRecord.deliverySourceAmount } : {}),
         ...(mockRecord.deliveryError ? { error: mockRecord.deliveryError } : {}),
