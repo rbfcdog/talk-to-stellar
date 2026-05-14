@@ -1,10 +1,10 @@
-# Etherfuse PIX, KYC e entrega de TESOURO
+# Etherfuse PIX, KYC e entrega do asset final
 
 Este documento descreve como o fluxo de PIX ramp da TalkToStellar funciona hoje, quais endpoints internos e externos sao usados, como o KYC entra no processo e como o saldo chega na wallet Stellar.
 
 ## Resumo do fluxo
 
-A integracao atual usa a Etherfuse como anchor para simular/operar um fluxo de ramp entre BRL e TESOURO na Stellar Testnet.
+A integracao atual usa a Etherfuse como anchor para simular/operar um fluxo de ramp entre BRL e TESOURO na Stellar Testnet. TESOURO e o asset de liquidacao da anchor; a TalkToStellar pode converter automaticamente para o asset final escolhido pelo usuario (`BRL`, `USDC` ou `TESOURO`).
 
 Fluxo on-ramp, ou seja, colocar saldo via PIX:
 
@@ -12,11 +12,11 @@ Fluxo on-ramp, ou seja, colocar saldo via PIX:
 2. A aplicacao encontra a sessao/wallet TalkToStellar associada ao email.
 3. O backend cria ou recupera um customer na Etherfuse.
 4. O backend prepara wallet, KYC e conta PIX/fiat para esse customer.
-5. O backend cria uma quote BRL -> TESOURO.
+5. O backend cria uma quote BRL -> TESOURO na Etherfuse.
 6. O backend cria uma ordem de on-ramp.
 7. A UI mostra o checkout PIX/testnet.
 8. No sandbox, o usuario clica em `Confirmar PIX (testnet)`.
-9. O backend simula fiat recebido e entrega TESOURO na wallet Stellar Testnet.
+9. O backend simula fiat recebido, liquida via TESOURO e entrega o asset final escolhido na wallet Stellar Testnet.
 10. A UI mostra saldo antes/depois e o chat recebe uma mensagem de confirmacao.
 
 Fluxo off-ramp, ou seja, tirar saldo:
@@ -31,7 +31,7 @@ Fluxo off-ramp, ou seja, tirar saldo:
 On-ramp usado pelo chat:
 
 ```text
-/pix-on?amount=150&asset=TESOURO&autostart=1
+/pix-on?amount=150&asset=BRL&autostart=1
 ```
 
 Off-ramp usado pelo chat:
@@ -58,6 +58,8 @@ Via chat, exemplos de frases:
 depositar 150 reais via pix
 quero pagar com pix para colocar 100 reais na conta
 quero trazer 100 brl pra minha conta via pix
+quero trazer 100 reais via pix em usdc
+quero trazer 100 reais via pix em tesouro
 quero sacar 5 tesouro por pix
 quero sacar 100 reais para minha conta bancaria via pix
 quero tirar dinheiro para minha conta bancaria via pix
@@ -88,11 +90,11 @@ Endpoints principais:
 | `/api/ramp/etherfuse/assets` | `GET` | Lista assets disponiveis para ramp, incluindo TESOURO quando disponivel. |
 | `/api/ramp/etherfuse/wallet-balances` | `GET` | Consulta saldos da wallet Stellar para mostrar antes/depois. |
 | `/api/ramp/etherfuse/fiat-accounts` | `GET` | Lista contas fiat/PIX associadas ao customer. |
-| `/api/ramp/etherfuse/quote` | `POST` | Cria quote para BRL -> TESOURO ou TESOURO -> BRL. |
-| `/api/ramp/etherfuse/trustline` | `POST` | Garante trustline de TESOURO antes de entregar o asset. |
-| `/api/ramp/etherfuse/onramp` | `POST` | Cria ordem de on-ramp PIX/BRL -> TESOURO. |
+| `/api/ramp/etherfuse/quote` | `POST` | Cria quote anchor BRL -> TESOURO ou TESOURO -> BRL; no on-ramp aceita `final_asset` para BRL/USDC/TESOURO. |
+| `/api/ramp/etherfuse/trustline` | `POST` | Garante trustline de TESOURO; o on-ramp tambem garante trustline do asset final. |
+| `/api/ramp/etherfuse/onramp` | `POST` | Cria ordem de on-ramp PIX/BRL -> TESOURO e registra o asset final pedido. |
 | `/api/ramp/etherfuse/onramp/:orderId` | `GET` | Faz polling do status da ordem on-ramp. |
-| `/api/ramp/etherfuse/sandbox/simulate-fiat` | `POST` | Sandbox: simula recebimento do PIX e entrega TESOURO. |
+| `/api/ramp/etherfuse/sandbox/simulate-fiat` | `POST` | Sandbox: simula recebimento do PIX, liquida via TESOURO e entrega BRL/USDC/TESOURO conforme `final_asset`. |
 | `/api/ramp/etherfuse/offramp` | `POST` | Cria ordem de off-ramp TESOURO -> BRL/PIX. |
 | `/api/ramp/etherfuse/offramp/:orderId` | `GET` | Faz polling do status do off-ramp. |
 | `/api/ramp/etherfuse/offramp/:orderId/submit` | `POST` | Assina/submete a transacao Stellar de saida quando a anchor prepara o XDR. |
@@ -181,11 +183,11 @@ No sandbox/devnet atual, a diferenca e esta:
 - Esse codigo nao existe no DICT do Banco Central.
 - Apps reais como Nubank podem mostrar `chave nao encontrada`.
 - Para simular pagamento, o usuario clica em `Confirmar PIX (testnet)`.
-- O backend chama o simulador e entrega TESOURO na Stellar Testnet.
+- O backend chama o simulador, liquida via TESOURO e entrega o asset final na Stellar Testnet.
 
-## Entrega de TESOURO
+## Entrega do asset final
 
-Antes de entregar TESOURO, o backend garante a trustline da wallet:
+Antes de entregar o saldo, o backend garante a trustline de TESOURO e tambem a trustline do asset final quando ele for BRL ou USDC:
 
 ```text
 POST /api/ramp/etherfuse/trustline
@@ -197,7 +199,7 @@ Depois, no sandbox, ao confirmar PIX testnet:
 POST /api/ramp/etherfuse/sandbox/simulate-fiat
 ```
 
-O backend tenta liquidar TESOURO para a public key da wallet TalkToStellar. A UI consulta os saldos antes e depois com:
+O backend tenta liquidar TESOURO pela anchor. Se o usuario escolheu BRL ou USDC, a conversao final acontece automaticamente no backend antes de a UI mostrar a operacao como concluida. A UI consulta os saldos antes e depois com:
 
 ```text
 GET /api/ramp/etherfuse/wallet-balances
@@ -206,7 +208,7 @@ GET /api/ramp/etherfuse/wallet-balances
 A tela mostra delta de saldo para deixar explicito que:
 
 - BRL/testnet entrou como origem do pagamento.
-- TESOURO foi recebido na wallet.
+- O asset final escolhido foi recebido na wallet.
 - No off-ramp, TESOURO sai da wallet e BRL entra em uma conta PIX/bancaria simulada.
 - Quando o off-ramp vem com `fiat_amount`, a tela trata BRL como valor alvo e o backend calcula a quantidade de TESOURO necessaria antes de criar a ordem sandbox.
 
@@ -233,7 +235,7 @@ Estado atual:
 - O backend cria customer, quote e ordem.
 - Quotes sao renovadas no servidor antes de criar ordem para evitar `Quote not found or expired`.
 - KYC programatico sandbox e executado automaticamente com dados mockados.
-- O fluxo sandbox entrega TESOURO na Stellar Testnet.
+- O fluxo sandbox entrega o asset final escolhido na Stellar Testnet.
 - A tela mostra saldo antes/depois.
 - O chat recebe notificacao apos conclusao do on-ramp sandbox.
 

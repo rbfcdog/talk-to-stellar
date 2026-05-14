@@ -6,7 +6,7 @@ Este guia descreve a integracao do TalkToStellar com o Etherfuse sandbox usando 
 
 Conectar wallets TalkToStellar ao fluxo regional de on-ramp e off-ramp:
 
-- On-ramp: `BRL` via `PIX` para `TESOURO` na Stellar testnet/devnet.
+- On-ramp: `BRL` via `PIX` para `BRL`, `USDC` ou `TESOURO` na Stellar testnet/devnet. A anchor liquida em `TESOURO`; o backend converte automaticamente para o asset final escolhido.
 - Off-ramp: `TESOURO` na Stellar para `BRL` via `PIX`.
 - Customer, wallet e KYC sandbox sao enviados programaticamente para a Etherfuse.
 - A API key fica somente no backend.
@@ -61,7 +61,7 @@ Por isso o backend faz:
 
 1. Tenta o fluxo real Etherfuse primeiro.
 2. Se a Etherfuse negar a ordem com `Proxy account not found` em sandbox/devnet, usa fallback local explicito `sandbox_mock=true`.
-3. On-ramp sandbox: gera checkout PIX sandbox e, ao simular pagamento, entrega `TESOURO` on-chain na Stellar Testnet usando a liquidez BRL local.
+3. On-ramp sandbox: gera checkout PIX sandbox e, ao simular pagamento, liquida via `TESOURO` e entrega o asset final escolhido on-chain na Stellar Testnet usando a liquidez local.
 4. Off-ramp sandbox: cria uma ordem mockada e assina uma transferencia real de `TESOURO` da wallet TalkToStellar para o coletor sandbox.
 
 Esse fallback e controlado por:
@@ -117,7 +117,7 @@ Se a Etherfuse nao conseguir criar a proxy PIX real no sandbox, o backend retorn
 
 A versao atual da tela tambem tem:
 
-- Quote screen com seletor `TESOURO` ou `USDC`.
+- Quote screen com seletor `BRL`, `USDC` ou `TESOURO`.
 - Checkout PIX com QR code gerado a partir do `pixCode`.
 - Botao `Copy PIX code`.
 - Timeline: PIX generated, Waiting for payment, Payment detected, Stellar asset delivered.
@@ -305,7 +305,8 @@ Body:
   "session_id": "...",
   "session_token": "...",
   "amount": "100",
-  "to_currency": "TESOURO"
+  "to_currency": "TESOURO",
+  "final_asset": "BRL"
 }
 ```
 
@@ -313,14 +314,14 @@ Esse endpoint temporario executa:
 
 1. Snapshot dos balances da wallet.
 2. Customer/KYC URL.
-3. Quote `BRL -> TESOURO` ou `BRL -> USDC`.
+3. Quote anchor `BRL -> TESOURO` e registro de `final_asset` (`BRL`, `USDC` ou `TESOURO`).
 4. Ordem PIX.
 5. `simulateFiatReceived(orderId)`.
 6. Polling curto do status.
 7. Snapshot final dos balances.
 8. `balance_delta` explicito por asset.
 
-Em sandbox, se a Etherfuse retornar `Proxy account not found`, cria `sandbox-pix-*`, simula PIX e entrega `TESOURO` on-chain. Ele retorna `403` fora de sandbox/devnet.
+Em sandbox, se a Etherfuse retornar `Proxy account not found`, cria `sandbox-pix-*`, simula PIX e entrega o asset final escolhido on-chain. Ele retorna `403` fora de sandbox/devnet.
 
 ### Endpoint Temporario Off-Ramp
 

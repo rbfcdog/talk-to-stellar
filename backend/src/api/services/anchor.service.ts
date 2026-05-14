@@ -8,7 +8,14 @@ import type {
 } from '../../integrations/regional-starter-pack/anchors/types';
 import { AnchorError } from '../../integrations/regional-starter-pack/anchors/types';
 import { supabase } from '../../config/supabase';
-import { ETHERFUSE_TESOURO_ISSUER, getAssetIssuer } from '../../config/assets';
+import {
+  assetMatchesConfiguredIssuer,
+  ETHERFUSE_TESOURO_ISSUER,
+  getAssetIssuer,
+  getUserFacingAssetCodes,
+  normalizeAssetCode,
+  resolveConfiguredAsset,
+} from '../../config/assets';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletInfo, WalletRepository } from '../../repositories/wallet.repository';
 import VaultService from '../../services/vault.service';
@@ -57,6 +64,10 @@ interface QuoteForSessionInput extends RampSessionInput {
   from_currency?: string;
   toCurrency?: string;
   to_currency?: string;
+  final_asset?: string;
+  finalAsset?: string;
+  final_asset_code?: string;
+  finalAssetCode?: string;
 }
 
 interface CreateOnRampForSessionInput extends RampSessionInput {
@@ -71,6 +82,12 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   fromCurrency?: string;
   to_currency?: string;
   toCurrency?: string;
+  final_asset?: string;
+  finalAsset?: string;
+  final_asset_code?: string;
+  finalAssetCode?: string;
+  final_currency?: string;
+  finalCurrency?: string;
   bank_account_id?: string;
   bankAccountId?: string;
   memo?: string;
@@ -98,6 +115,19 @@ interface SubmitOffRampForSessionInput extends RampSessionInput {
   operationId?: string;
 }
 
+interface PixFundedTransferInput extends RampSessionInput {
+  recipient?: string;
+  recipient_query?: string;
+  recipientQuery?: string;
+  amount?: string;
+  asset_code?: string;
+  assetCode?: string;
+  order_id?: string;
+  orderId?: string;
+  operation_id?: string;
+  operationId?: string;
+}
+
 interface TrustlineResult {
   success: boolean;
   existing: boolean;
@@ -112,8 +142,15 @@ interface SandboxMockOnRampOrder {
   userId: string;
   sessionId: string;
   publicKey: string;
+  vaultSecretId?: string;
   sourceAmountBrl: string;
   destinationAmount: string;
+  finalAssetCode: string;
+  finalAssetIssuer?: string;
+  finalAmount?: string;
+  finalConversionHash?: string;
+  finalConversionSourceAmount?: string;
+  finalConversionError?: string;
   operationId?: string;
   deliveryHash?: string;
   deliverySourceAmount?: string;
@@ -157,6 +194,15 @@ function toStellarAmount(value: unknown): string {
     throw apiError('amount must be a positive decimal amount.', 400);
   }
   return amount.toFixed(7);
+}
+
+function formatDisplayAmount(value: unknown, assetCode: string): string {
+  const amount = String(value || '0').replace(',', '.');
+  return `${amount} ${normalizeAssetCode(assetCode)}`;
+}
+
+function truncatePublicKey(value: string): string {
+  return value ? `${value.slice(0, 7)}...${value.slice(-7)}` : 'wallet';
 }
 
 function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): string {
@@ -321,11 +367,17 @@ function normalizeBalances(balances: any[]): Array<{
   asset_issuer?: string;
   balance: string;
 }> {
-  return (Array.isArray(balances) ? balances : []).map((balance) => ({
-    asset_code: String(balance.asset_code || (balance.asset_type === 'native' ? 'XLM' : 'UNKNOWN')).toUpperCase(),
-    asset_issuer: balance.asset_issuer,
-    balance: String(balance.balance || '0'),
-  }));
+  const configuredCodes = new Set(['XLM', ...getUserFacingAssetCodes()]);
+  return (Array.isArray(balances) ? balances : [])
+    .map((balance) => ({
+      asset_code: normalizeAssetCode(balance.asset_code || (balance.asset_type === 'native' ? 'XLM' : 'UNKNOWN')),
+      asset_issuer: balance.asset_issuer,
+      balance: String(balance.balance || '0'),
+    }))
+    .filter((balance) => (
+      configuredCodes.has(balance.asset_code) &&
+      (balance.asset_code === 'XLM' || assetMatchesConfiguredIssuer(balance.asset_code, balance.asset_issuer))
+    ));
 }
 
 function balanceKey(balance: { asset_code: string; asset_issuer?: string }): string {
@@ -364,10 +416,36 @@ function calculateBalanceDeltas(before: any[], after: any[]): Array<{
 
 function parseIssuedAssetIdentifier(identifier: string): { code: string; issuer?: string } {
   const [code, issuer] = String(identifier || '').trim().split(':');
+  const normalizedCode = normalizeAssetCode(code || 'TESOURO');
   return {
-    code: String(code || '').toUpperCase(),
-    issuer: issuer ? String(issuer).trim() : undefined,
+    code: normalizedCode,
+    issuer: issuer ? String(issuer).trim() : getAssetIssuer(normalizedCode),
   };
+}
+
+function assetIdentifier(asset: { code: string; issuer?: string }): string {
+  const code = normalizeAssetCode(asset.code);
+  if (code === 'XLM') return 'XLM';
+  const issuer = String(asset.issuer || getAssetIssuer(code) || '').trim();
+  return issuer ? `${code}:${issuer}` : code;
+}
+
+function sameIssuedAsset(left: { code: string; issuer?: string }, right: { code: string; issuer?: string }): boolean {
+  const leftCode = normalizeAssetCode(left.code);
+  const rightCode = normalizeAssetCode(right.code);
+  if (leftCode !== rightCode) return false;
+  if (leftCode === 'XLM') return true;
+  return String(left.issuer || getAssetIssuer(leftCode) || '') === String(right.issuer || getAssetIssuer(rightCode) || '');
+}
+
+function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: string } {
+  const raw = coalesceString(...values) || 'TESOURO';
+  const parsed = parseIssuedAssetIdentifier(raw);
+  const code = normalizeAssetCode(parsed.code || 'TESOURO');
+  if (!getUserFacingAssetCodes().includes(code)) {
+    throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC ou TESOURO.`, 400);
+  }
+  return resolveConfiguredAsset(code, parsed.issuer);
 }
 
 export class AnchorService {
@@ -601,8 +679,8 @@ export class AnchorService {
         recipientSessionId: record.sessionId,
         recipientUserId: record.userId,
         senderLabel: 'PIX Etherfuse Testnet',
-        amount: record.destinationAmount,
-        assetCode: 'TESOURO',
+        amount: record.finalAmount || record.destinationAmount,
+        assetCode: record.finalAssetCode || 'TESOURO',
         sourceAmount: record.sourceAmountBrl,
         sourceAssetCode: 'BRL',
         hash: hash || record.deliveryHash || null,
@@ -729,12 +807,14 @@ export class AnchorService {
     quoteId: string;
     amount: string;
     toCurrency: string;
+    finalAsset: { code: string; issuer?: string };
     expectedToAmount?: string;
     upstreamError?: string;
   }): OnRampTransaction {
     const orderId = `sandbox-pix-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const destinationAmount = estimateTesouroFromBrl(input.amount, input.expectedToAmount);
+    const finalIsTesouro = sameIssuedAsset(input.finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
     const transaction = {
       id: orderId,
       customerId: input.customerId,
@@ -742,14 +822,24 @@ export class AnchorService {
       status: 'pending' as const,
       fromAmount: input.amount,
       fromCurrency: 'BRL',
-      toAmount: destinationAmount,
-      toCurrency: input.toCurrency,
+      toAmount: finalIsTesouro ? destinationAmount : '',
+      toCurrency: assetIdentifier(input.finalAsset),
       stellarAddress: input.context.publicKey,
       paymentInstructions: this.buildSandboxPixInstructions(orderId, input.amount),
       createdAt: now,
       updatedAt: now,
       sandbox_mock: true,
       upstream_error: input.upstreamError,
+      anchorAsset: this.getTesouroIdentifier(),
+      anchorAmount: destinationAmount,
+      finalAsset: input.finalAsset,
+      auto_conversion: finalIsTesouro ? { required: false } : {
+        required: true,
+        source_asset_code: 'TESOURO',
+        destination_asset_code: input.finalAsset.code,
+        destination_asset_issuer: input.finalAsset.issuer,
+        status: 'pending',
+      },
     } as OnRampTransaction & { sandbox_mock: boolean; upstream_error?: string };
 
     this.sandboxMockOnRampOrders.set(orderId, {
@@ -757,8 +847,12 @@ export class AnchorService {
       userId: input.context.userId,
       sessionId: input.context.sessionId,
       publicKey: input.context.publicKey,
+      vaultSecretId: input.context.vaultSecretId,
       sourceAmountBrl: input.amount,
       destinationAmount,
+      finalAssetCode: input.finalAsset.code,
+      finalAssetIssuer: input.finalAsset.issuer,
+      finalAmount: finalIsTesouro ? destinationAmount : undefined,
       upstreamError: input.upstreamError,
     });
 
@@ -808,7 +902,8 @@ export class AnchorService {
       operation.amount,
       '0',
     );
-    const targetAsset = coalesceString(context.target_asset, this.getTesouroIdentifier());
+    const finalAsset = resolveRampFinalAsset(context.target_asset, context.final_asset, this.getTesouroIdentifier());
+    const finalIsTesouro = sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
     const storedInstructions = context.payment_instructions && typeof context.payment_instructions === 'object'
       ? context.payment_instructions
       : {};
@@ -824,10 +919,13 @@ export class AnchorService {
           reference: orderId,
         };
     const destinationAmount = coalesceString(
+      context.destination_amount_anchor,
+      context.anchor_amount,
       context.destination_amount,
       context.to_amount,
       estimateTesouroFromBrl(amount, coalesceString(context.expected_to_amount)),
     );
+    const finalAmount = coalesceString(context.final_amount) || (finalIsTesouro ? destinationAmount : '');
     const status = mapOperationStatusToRampStatus(operation.status);
     const now = new Date().toISOString();
     const transaction = {
@@ -837,14 +935,29 @@ export class AnchorService {
       status: status as any,
       fromAmount: amount,
       fromCurrency: 'BRL',
-      toAmount: destinationAmount,
-      toCurrency: targetAsset,
+      toAmount: finalAmount,
+      toCurrency: assetIdentifier(finalAsset),
       stellarAddress: coalesceString(operation.source_public_key, context.public_key),
       paymentInstructions,
       createdAt: operation.created_at || now,
       updatedAt: operation.updated_at || now,
       sandbox_mock: true,
       upstream_error: coalesceString(context.upstream_error) || undefined,
+      anchorAsset: this.getTesouroIdentifier(),
+      anchorAmount: destinationAmount,
+      finalAsset,
+      finalAmount: finalAmount || undefined,
+      auto_conversion: finalIsTesouro ? { required: false } : {
+        required: true,
+        status: coalesceString(context.final_conversion_status) || (status === 'completed' ? 'completed' : 'pending'),
+        source_asset_code: 'TESOURO',
+        source_amount: destinationAmount,
+        destination_asset_code: finalAsset.code,
+        destination_asset_issuer: finalAsset.issuer,
+        destination_amount: finalAmount || undefined,
+        hash: coalesceString(context.final_conversion_hash) || undefined,
+        error: coalesceString(context.final_conversion_error) || undefined,
+      },
     } as OnRampTransaction & { sandbox_mock: boolean; upstream_error?: string; stellarTxHash?: string };
 
     const deliveryHash = coalesceString(context.delivery_hash, context.stellar_tx_hash);
@@ -857,6 +970,12 @@ export class AnchorService {
       publicKey: transaction.stellarAddress,
       sourceAmountBrl: amount,
       destinationAmount,
+      finalAssetCode: finalAsset.code,
+      finalAssetIssuer: finalAsset.issuer,
+      finalAmount: finalAmount || undefined,
+      finalConversionHash: coalesceString(context.final_conversion_hash) || undefined,
+      finalConversionSourceAmount: coalesceString(context.final_conversion_source_amount) || undefined,
+      finalConversionError: coalesceString(context.final_conversion_error) || undefined,
       operationId,
       deliveryHash: deliveryHash || undefined,
       deliverySourceAmount: coalesceString(context.delivery_source_amount) || undefined,
@@ -865,7 +984,8 @@ export class AnchorService {
       operationContext: {
         ...context,
         payment_instructions: paymentInstructions,
-        destination_amount: destinationAmount,
+        destination_amount_anchor: destinationAmount,
+        final_amount: finalAmount || undefined,
         source_amount_brl: amount,
       },
     };
@@ -874,119 +994,313 @@ export class AnchorService {
     if (shouldRegeneratePix) {
       await this.persistSandboxOnRampContext(record, {
         payment_instructions: paymentInstructions,
-        destination_amount: destinationAmount,
+        destination_amount_anchor: destinationAmount,
+        final_amount: finalAmount || undefined,
         source_amount_brl: amount,
       });
     }
     return record;
   }
 
-  private static async deliverSandboxOnRamp(orderId: string, operationId?: string): Promise<SandboxMockOnRampOrder | null> {
+  private static async completeSandboxOnRamp(record: SandboxMockOnRampOrder, hash?: string, patch: Record<string, unknown> = {}): Promise<SandboxMockOnRampOrder> {
+    record.transaction.status = 'completed' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    record.deliveryHash = hash || record.deliveryHash;
+    if (hash) {
+      (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = hash;
+    }
+    await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
+    await this.persistSandboxOnRampContext(record, {
+      delivery_hash: record.deliveryHash,
+      final_transaction_status: 'completed',
+      final_asset: assetIdentifier({ code: record.finalAssetCode, issuer: record.finalAssetIssuer }),
+      final_amount: record.finalAmount,
+      ...patch,
+    });
+    await this.notifySandboxOnRampCompleted(record, hash);
+    return record;
+  }
+
+  private static async failSandboxOnRamp(record: SandboxMockOnRampOrder, message: string): Promise<SandboxMockOnRampOrder> {
+    record.transaction.status = 'failed' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    record.deliveryError = message;
+    await this.updateRampOperationStatus(record.operationId, 'FAILED');
+    await this.persistSandboxOnRampContext(record, {
+      delivery_error: message,
+      final_transaction_status: 'failed',
+    });
+    return record;
+  }
+
+  private static async settleSandboxOnRampFinalAsset(input: {
+    record: SandboxMockOnRampOrder;
+    sourceSecret: string;
+    destinationAmountTesouro: string;
+  }): Promise<SandboxMockOnRampOrder> {
+    const { record, sourceSecret, destinationAmountTesouro } = input;
+    const finalAsset = resolveConfiguredAsset(record.finalAssetCode || 'TESOURO', record.finalAssetIssuer);
+    const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
+
+    if (sameIssuedAsset(finalAsset, tesouroAsset)) {
+      const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
+        sourceSecret,
+        destination: record.publicKey,
+        amount: destinationAmountTesouro,
+        assetCode: 'TESOURO',
+        assetIssuer: this.getTesouroIssuer(),
+        memoText: 'PIX ONRAMP SANDBOX',
+      });
+
+      if (directTesouroResult.success) {
+        record.finalAmount = destinationAmountTesouro;
+        record.deliverySourceAmount = record.sourceAmountBrl;
+        (record.transaction as any).toAmount = destinationAmountTesouro;
+        (record.transaction as any).toCurrency = this.getTesouroIdentifier();
+        (record.transaction as any).finalAmount = destinationAmountTesouro;
+        (record.transaction as any).auto_conversion = { required: false };
+        return this.completeSandboxOnRamp(record, directTesouroResult.hash, {
+          delivery_source_amount: record.sourceAmountBrl,
+        });
+      }
+
+      const brlIssuer = getAssetIssuer('BRL');
+      if (!brlIssuer) {
+        return this.failSandboxOnRamp(record, `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}.`);
+      }
+
+      const sourceMax = toStellarAmount(Math.max(
+        Number(record.sourceAmountBrl) * 2,
+        Number(record.sourceAmountBrl) + 1,
+      ));
+      const result = await StellarService.submitStrictReceivePaymentFromSecret({
+        sourceSecret,
+        destination: record.publicKey,
+        sourceAsset: { code: 'BRL', issuer: brlIssuer },
+        destinationAsset: tesouroAsset,
+        destinationAmount: destinationAmountTesouro,
+        sourceMax,
+        memoText: 'PIX ONRAMP SANDBOX',
+      });
+
+      if (!result.success) {
+        const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
+        const liquidityDetail = treasuryTesouroBalance !== undefined
+          ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmountTesouro}.`
+          : '';
+        return this.failSandboxOnRamp(
+          record,
+          result.error
+            ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`
+            : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`,
+        );
+      }
+
+      record.finalAmount = destinationAmountTesouro;
+      record.deliverySourceAmount = result.sourceAmount;
+      (record.transaction as any).toAmount = destinationAmountTesouro;
+      (record.transaction as any).toCurrency = this.getTesouroIdentifier();
+      (record.transaction as any).finalAmount = destinationAmountTesouro;
+      (record.transaction as any).auto_conversion = { required: false };
+      return this.completeSandboxOnRamp(record, result.hash, {
+        delivery_source_amount: result.sourceAmount,
+      });
+    }
+
+    const finalTrustline = await this.ensureIssuedAssetTrustline({
+      sessionId: record.sessionId,
+      sessionToken: '',
+      userId: record.userId,
+      publicKey: record.publicKey,
+      vaultSecretId: record.vaultSecretId,
+    }, finalAsset);
+    if (!finalTrustline.success) {
+      return this.failSandboxOnRamp(record, finalTrustline.error || `Could not create ${finalAsset.code} trustline before final PIX settlement.`);
+    }
+
+    if (finalAsset.code === 'BRL' && finalAsset.issuer) {
+      const exactBrl = toStellarAmount(record.sourceAmountBrl);
+      const exactBrlConversion = await StellarService.submitStrictReceivePaymentFromSecret({
+        sourceSecret,
+        destination: record.publicKey,
+        sourceAsset: tesouroAsset,
+        destinationAsset: finalAsset,
+        destinationAmount: exactBrl,
+        sourceMax: toStellarAmount(Math.max(Number(destinationAmountTesouro) * 1.2, Number(destinationAmountTesouro) + 1)),
+        memoText: 'PIX ONRAMP BRL',
+      });
+
+      if (exactBrlConversion.success) {
+        record.finalAmount = exactBrl;
+        record.finalConversionHash = exactBrlConversion.hash;
+        record.finalConversionSourceAmount = exactBrlConversion.sourceAmount || destinationAmountTesouro;
+        (record.transaction as any).toAmount = exactBrl;
+        (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+        (record.transaction as any).finalAmount = exactBrl;
+        (record.transaction as any).auto_conversion = {
+          required: true,
+          status: 'completed',
+          source_asset_code: 'TESOURO',
+          source_amount: record.finalConversionSourceAmount,
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          destination_amount: exactBrl,
+          hash: exactBrlConversion.hash,
+          mode: 'strict_receive_exact_brl',
+        };
+        return this.completeSandboxOnRamp(record, exactBrlConversion.hash, {
+          final_conversion_status: 'completed',
+          final_conversion_hash: exactBrlConversion.hash,
+          final_conversion_source_amount: record.finalConversionSourceAmount,
+          final_conversion_mode: 'strict_receive_exact_brl',
+        });
+      }
+    }
+
+    const converted = await StellarService.submitStrictSendPaymentFromSecret({
+      sourceSecret,
+      destination: record.publicKey,
+      sourceAsset: tesouroAsset,
+      sourceAmount: destinationAmountTesouro,
+      destinationAsset: finalAsset,
+      memoText: 'PIX ONRAMP CONVERT',
+    });
+
+    if (converted.success) {
+      record.finalAmount = converted.destinationAmount || destinationAmountTesouro;
+      record.finalConversionHash = converted.hash;
+      record.finalConversionSourceAmount = destinationAmountTesouro;
+      (record.transaction as any).toAmount = record.finalAmount;
+      (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+      (record.transaction as any).finalAmount = record.finalAmount;
+      (record.transaction as any).auto_conversion = {
+        required: true,
+        status: 'completed',
+        source_asset_code: 'TESOURO',
+        source_amount: destinationAmountTesouro,
+        destination_asset_code: finalAsset.code,
+        destination_asset_issuer: finalAsset.issuer,
+        destination_amount: record.finalAmount,
+        hash: converted.hash,
+      };
+      return this.completeSandboxOnRamp(record, converted.hash, {
+        final_conversion_status: 'completed',
+        final_conversion_hash: converted.hash,
+        final_conversion_source_amount: destinationAmountTesouro,
+      });
+    }
+
+    if (finalAsset.code === 'USDC' && finalAsset.issuer) {
+      const brlIssuer = getAssetIssuer('BRL');
+      if (brlIssuer) {
+        const brlToUsdc = await StellarService.submitStrictSendPaymentFromSecret({
+          sourceSecret,
+          destination: record.publicKey,
+          sourceAsset: { code: 'BRL', issuer: brlIssuer },
+          sourceAmount: toStellarAmount(record.sourceAmountBrl),
+          destinationAsset: finalAsset,
+          memoText: 'PIX ONRAMP USDC',
+        });
+        if (brlToUsdc.success) {
+          record.finalAmount = brlToUsdc.destinationAmount || '0';
+          record.finalConversionHash = brlToUsdc.hash;
+          record.finalConversionSourceAmount = toStellarAmount(record.sourceAmountBrl);
+          (record.transaction as any).toAmount = record.finalAmount;
+          (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+          (record.transaction as any).finalAmount = record.finalAmount;
+          (record.transaction as any).auto_conversion = {
+            required: true,
+            status: 'completed',
+            source_asset_code: 'BRL',
+            source_amount: record.finalConversionSourceAmount,
+            destination_asset_code: finalAsset.code,
+            destination_asset_issuer: finalAsset.issuer,
+            destination_amount: record.finalAmount,
+            hash: brlToUsdc.hash,
+            fallback: 'configured_brl_to_usdc_treasury_path',
+          };
+          return this.completeSandboxOnRamp(record, brlToUsdc.hash, {
+            final_conversion_status: 'completed',
+            final_conversion_hash: brlToUsdc.hash,
+            final_conversion_source_amount: record.finalConversionSourceAmount,
+            final_conversion_fallback: 'configured_brl_to_usdc_treasury_path',
+          });
+        }
+        record.finalConversionError = `${converted.error || 'TESOURO conversion path failed'}; BRL -> USDC fallback failed: ${brlToUsdc.error || 'unknown error'}`;
+      }
+    }
+
+    if (finalAsset.code === 'BRL' && finalAsset.issuer) {
+      const directBrl = await StellarService.submitAssetPaymentFromSecret({
+        sourceSecret,
+        destination: record.publicKey,
+        amount: toStellarAmount(record.sourceAmountBrl),
+        assetCode: 'BRL',
+        assetIssuer: finalAsset.issuer,
+        memoText: 'PIX ONRAMP BRL',
+      });
+      if (directBrl.success) {
+        record.finalAmount = toStellarAmount(record.sourceAmountBrl);
+        record.finalConversionHash = directBrl.hash;
+        record.finalConversionSourceAmount = destinationAmountTesouro;
+        (record.transaction as any).toAmount = record.finalAmount;
+        (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+        (record.transaction as any).finalAmount = record.finalAmount;
+        (record.transaction as any).auto_conversion = {
+          required: true,
+          status: 'completed',
+          source_asset_code: 'TESOURO',
+          source_amount: destinationAmountTesouro,
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          destination_amount: record.finalAmount,
+          hash: directBrl.hash,
+          fallback: 'direct_configured_brl_treasury_payment',
+        };
+        return this.completeSandboxOnRamp(record, directBrl.hash, {
+          final_conversion_status: 'completed',
+          final_conversion_hash: directBrl.hash,
+          final_conversion_source_amount: destinationAmountTesouro,
+          final_conversion_fallback: 'direct_configured_brl_treasury_payment',
+        });
+      }
+      record.finalConversionError = `${converted.error || 'TESOURO conversion path failed'}; direct BRL fallback failed: ${directBrl.error || 'unknown error'}`;
+    } else {
+      record.finalConversionError = converted.error || `Could not convert TESOURO to ${finalAsset.code}.`;
+    }
+
+    (record.transaction as any).auto_conversion = {
+      required: true,
+      status: 'failed',
+      source_asset_code: 'TESOURO',
+      source_amount: destinationAmountTesouro,
+      destination_asset_code: finalAsset.code,
+      destination_asset_issuer: finalAsset.issuer,
+      error: record.finalConversionError,
+    };
+    return this.failSandboxOnRamp(record, record.finalConversionError);
+  }
+
+  private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext): Promise<SandboxMockOnRampOrder | null> {
     const record = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (!record) return null;
     if (record.transaction.status === 'completed') return record;
+    if (context?.vaultSecretId && !record.vaultSecretId) {
+      record.vaultSecretId = context.vaultSecretId;
+    }
 
     record.transaction.status = 'processing' as any;
     record.transaction.updatedAt = new Date().toISOString();
     await this.updateRampOperationStatus(record.operationId, 'PROCESSING');
 
     const sourceSecret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
-    const brlIssuer = getAssetIssuer('BRL');
     if (!sourceSecret) {
-      record.transaction.status = 'failed' as any;
-      record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryError = 'BRL_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.';
-      await this.updateRampOperationStatus(record.operationId, 'FAILED');
-      return record;
+      return this.failSandboxOnRamp(record, 'BRL_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.');
     }
 
     const destinationAmount = toStellarAmount(record.destinationAmount);
-    const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
-    const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
-      sourceSecret,
-      destination: record.publicKey,
-      amount: destinationAmount,
-      assetCode: 'TESOURO',
-      assetIssuer: this.getTesouroIssuer(),
-      memoText: 'PIX ONRAMP SANDBOX',
-    });
-
-    if (directTesouroResult.success) {
-      record.transaction.status = 'completed' as any;
-      record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryHash = directTesouroResult.hash;
-      record.deliverySourceAmount = record.sourceAmountBrl;
-      (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = directTesouroResult.hash;
-      await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
-        await this.persistSandboxOnRampContext(record, {
-          delivery_hash: directTesouroResult.hash,
-          delivery_source_amount: record.sourceAmountBrl,
-          final_transaction_status: 'completed',
-        });
-        await this.notifySandboxOnRampCompleted(record, directTesouroResult.hash);
-        return record;
-      }
-
-    if (!brlIssuer) {
-      record.transaction.status = 'failed' as any;
-      record.transaction.updatedAt = new Date().toISOString();
-      const liquidityDetail = treasuryTesouroBalance !== undefined
-        ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmount}.`
-        : '';
-      record.deliveryError = `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
-      await this.updateRampOperationStatus(record.operationId, 'FAILED');
-      await this.persistSandboxOnRampContext(record, {
-        delivery_error: record.deliveryError,
-        final_transaction_status: 'failed',
-      });
-      return record;
-    }
-
-    const sourceMax = toStellarAmount(Math.max(
-      Number(record.sourceAmountBrl) * 2,
-      Number(record.sourceAmountBrl) + 1,
-    ));
-    const result = await StellarService.submitStrictReceivePaymentFromSecret({
-      sourceSecret,
-      destination: record.publicKey,
-      sourceAsset: { code: 'BRL', issuer: brlIssuer },
-      destinationAsset: { code: 'TESOURO', issuer: this.getTesouroIssuer() },
-      destinationAmount,
-      sourceMax,
-      memoText: 'PIX ONRAMP SANDBOX',
-    });
-
-    if (!result.success) {
-      const liquidityDetail = treasuryTesouroBalance !== undefined
-        ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmount}.`
-        : '';
-      record.transaction.status = 'failed' as any;
-      record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryError = result.error
-        ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`
-        : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
-      await this.updateRampOperationStatus(record.operationId, 'FAILED');
-      await this.persistSandboxOnRampContext(record, {
-        delivery_error: record.deliveryError,
-        final_transaction_status: 'failed',
-      });
-      return record;
-    }
-
-    record.transaction.status = 'completed' as any;
-    record.transaction.updatedAt = new Date().toISOString();
-    record.deliveryHash = result.hash;
-    record.deliverySourceAmount = result.sourceAmount;
-    (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = result.hash;
-    await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
-      await this.persistSandboxOnRampContext(record, {
-        delivery_hash: result.hash,
-        delivery_source_amount: result.sourceAmount,
-        final_transaction_status: 'completed',
-      });
-      await this.notifySandboxOnRampCompleted(record, result.hash);
-      return record;
-    }
+    return this.settleSandboxOnRampFinalAsset({ record, sourceSecret, destinationAmountTesouro: destinationAmount });
+  }
 
   private static async ensureSandboxTesouroCollectorTrustline(): Promise<{ publicKey: string; success: boolean; error?: string }> {
     const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
@@ -1381,6 +1695,8 @@ export class AnchorService {
     direction: 'onramp' | 'offramp';
     from_currency: string;
     to_currency: string;
+    final_asset?: { code: string; issuer?: string; identifier: string };
+    anchor_asset?: { code: 'TESOURO'; issuer: string; identifier: string };
   }> {
     const context = await this.resolveSessionWallet(input);
     const customerId = coalesceString(input.customer_id, input.customerId);
@@ -1388,16 +1704,20 @@ export class AnchorService {
 
     const direction = input.direction === 'offramp' ? 'offramp' : 'onramp';
     const amount = normalizeAmount(coalesceString(input.amount, input.from_amount));
+    const finalAsset = direction === 'onramp'
+      ? resolveRampFinalAsset(input.final_asset, input.finalAsset, input.final_asset_code, input.finalAssetCode, input.to_currency, input.toCurrency, 'TESOURO')
+      : undefined;
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) ||
       (direction === 'offramp' ? this.getTesouroIdentifier() : 'BRL');
     const toCurrency = coalesceString(input.to_currency, input.toCurrency) ||
       (direction === 'offramp' ? 'BRL' : this.getTesouroIdentifier());
+    const anchorToCurrency = direction === 'onramp' ? this.getTesouroIdentifier() : toCurrency;
 
     const quote = await this.getEtherfuseClient().getQuote({
       customerId,
       stellarAddress: context.publicKey,
       fromCurrency,
-      toCurrency,
+      toCurrency: anchorToCurrency,
       fromAmount: amount,
     });
 
@@ -1405,7 +1725,18 @@ export class AnchorService {
       quote,
       direction,
       from_currency: fromCurrency,
-      to_currency: toCurrency,
+      to_currency: anchorToCurrency,
+      ...(finalAsset ? {
+        final_asset: {
+          ...finalAsset,
+          identifier: assetIdentifier(finalAsset),
+        },
+        anchor_asset: {
+          code: 'TESOURO' as const,
+          issuer: this.getTesouroIssuer(),
+          identifier: this.getTesouroIdentifier(),
+        },
+      } : {}),
     };
   }
 
@@ -1499,6 +1830,7 @@ export class AnchorService {
     transaction: OnRampTransaction;
     operation_id?: string;
     trustline: TrustlineResult;
+    final_trustline?: TrustlineResult;
     quote?: Quote;
     quote_refreshed?: boolean;
   }> {
@@ -1507,8 +1839,20 @@ export class AnchorService {
     let quoteId = coalesceString(input.quote_id, input.quoteId);
     const amount = normalizeAmount(input.amount);
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) || 'BRL';
-    const toCurrency = coalesceString(input.to_currency, input.toCurrency) || this.getTesouroIdentifier();
-    const targetAsset = parseIssuedAssetIdentifier(toCurrency);
+    const requestedFinalCurrency = coalesceString(
+      input.final_asset,
+      input.finalAsset,
+      input.final_asset_code,
+      input.finalAssetCode,
+      input.final_currency,
+      input.finalCurrency,
+      input.to_currency,
+      input.toCurrency,
+      'TESOURO',
+    );
+    const finalAsset = resolveRampFinalAsset(requestedFinalCurrency);
+    const anchorToCurrency = this.getTesouroIdentifier();
+    const targetAsset = parseIssuedAssetIdentifier(anchorToCurrency);
 
     if (!customerId) throw apiError('customer_id is required.', 400);
 
@@ -1518,6 +1862,13 @@ export class AnchorService {
     });
     if (!trustline.success) {
       throw apiError(trustline.error || `Could not create ${targetAsset.code || 'asset'} trustline before on-ramp.`, 409);
+    }
+    let finalTrustline: TrustlineResult | undefined;
+    if (!sameIssuedAsset(finalAsset, targetAsset)) {
+      finalTrustline = await this.ensureIssuedAssetTrustline(context, finalAsset);
+      if (!finalTrustline.success) {
+        throw apiError(finalTrustline.error || `Could not create ${finalAsset.code} trustline before final PIX settlement.`, 409);
+      }
     }
 
     const anchor = this.getEtherfuseClient();
@@ -1553,11 +1904,11 @@ export class AnchorService {
     const refreshQuoteForOrder = async (reason: string) => {
       orderQuote = await anchor.getQuote({
         customerId,
-        stellarAddress: context.publicKey,
-        fromCurrency,
-        toCurrency,
-        fromAmount: amount,
-      });
+          stellarAddress: context.publicKey,
+          fromCurrency,
+          toCurrency: anchorToCurrency,
+          fromAmount: amount,
+        });
       quoteId = orderQuote.id;
       quoteRefreshReason = reason;
       return orderQuote;
@@ -1572,7 +1923,7 @@ export class AnchorService {
       quoteId,
       stellarAddress: context.publicKey,
       fromCurrency,
-      toCurrency,
+      toCurrency: anchorToCurrency,
       amount,
       bankAccountId,
       cryptoWalletId,
@@ -1594,7 +1945,8 @@ export class AnchorService {
       customerId,
       quoteId,
       amount,
-      toCurrency,
+      toCurrency: anchorToCurrency,
+      finalAsset,
       expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
       upstreamError: debugErrorMessage(error),
     });
@@ -1660,10 +2012,14 @@ export class AnchorService {
       quote_id: quoteId,
       quote_refresh_reason: quoteRefreshReason,
       anchor_order_id: transaction.id,
-      target_asset: toCurrency,
+      target_asset: assetIdentifier(finalAsset),
+      anchor_asset: anchorToCurrency,
       crypto_wallet_id: cryptoWalletId,
       source_amount_brl: amount,
-      destination_amount: transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
+      destination_amount_anchor: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount, transaction.toAmount),
+      final_amount: sameIssuedAsset(finalAsset, targetAsset) ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount)) : undefined,
+      final_asset_code: finalAsset.code,
+      final_asset_issuer: finalAsset.issuer,
       payment_instructions: transaction.paymentInstructions,
       sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
       upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
@@ -1673,7 +2029,7 @@ export class AnchorService {
       userId: context.userId,
       type: 'PIX_ONRAMP',
       amount,
-      assetCode: targetAsset.code || 'TESOURO',
+      assetCode: finalAsset.code || 'TESOURO',
       sessionId: context.sessionId,
       publicKey: context.publicKey,
       context: operationContext,
@@ -1688,9 +2044,172 @@ export class AnchorService {
       transaction,
       operation_id: operationId,
       trustline,
+      final_trustline: finalTrustline,
       quote: orderQuote,
       quote_refreshed: Boolean(orderQuote),
     };
+  }
+
+  private static async maybeAutoConvertCompletedOnRamp(
+    transaction: OnRampTransaction,
+    operationId?: string,
+  ): Promise<OnRampTransaction> {
+    if (!operationId || String(transaction.status || '').toLowerCase() !== 'completed') {
+      return transaction;
+    }
+
+    const operation = await OperationRepository.findById(operationId);
+    if (!operation) return transaction;
+
+    const context = parseOperationContext(operation.context);
+    const finalAsset = resolveRampFinalAsset(context.target_asset, context.final_asset, 'TESOURO');
+    const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
+    if (sameIssuedAsset(finalAsset, tesouroAsset)) {
+      return transaction;
+    }
+
+    const existingHash = coalesceString(context.final_conversion_hash);
+    if (existingHash) {
+      return {
+        ...transaction,
+        toAmount: coalesceString(context.final_amount, transaction.toAmount),
+        toCurrency: assetIdentifier(finalAsset),
+        finalAmount: coalesceString(context.final_amount, transaction.toAmount),
+        finalAsset,
+        auto_conversion: {
+          required: true,
+          status: 'completed',
+          source_asset_code: 'TESOURO',
+          source_amount: coalesceString(context.destination_amount_anchor, transaction.toAmount),
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          destination_amount: coalesceString(context.final_amount, transaction.toAmount),
+          hash: existingHash,
+        },
+      } as OnRampTransaction;
+    }
+
+    try {
+      const sessionId = coalesceString(operation.source_session_id, context.session_id);
+      const wallet = sessionId ? await new WalletRepository(supabase).getWalletBySession(sessionId) : null;
+      const publicKey = coalesceString(operation.source_public_key, wallet?.public_key, transaction.stellarAddress);
+      const vaultSecretId = coalesceString(wallet?.vault_secret_id);
+      const userId = coalesceString(operation.user_id, context.user_id, sessionId);
+      if (!publicKey || !vaultSecretId) {
+        throw new Error('Wallet private key is not available in Vault for automatic post-PIX conversion.');
+      }
+
+      const finalTrustline = await this.ensureIssuedAssetTrustline({
+        sessionId,
+        sessionToken: '',
+        userId,
+        publicKey,
+        vaultSecretId,
+      }, finalAsset);
+      if (!finalTrustline.success) {
+        throw new Error(finalTrustline.error || `Could not create ${finalAsset.code} trustline for automatic PIX conversion.`);
+      }
+
+      const sourceAmount = toStellarAmount(coalesceString(
+        context.destination_amount_anchor,
+        context.anchor_amount,
+        transaction.toAmount,
+      ));
+      const secret = await new VaultService(supabase).getSecret(vaultSecretId);
+      const exactFinalBrl = finalAsset.code === 'BRL'
+        ? coalesceString(context.source_amount_brl, transaction.fromAmount)
+        : '';
+      const usesStrictReceive = Boolean(exactFinalBrl);
+      const xdr = usesStrictReceive
+        ? await StellarService.buildPathPaymentXdr({
+            sourcePublicKey: publicKey,
+            destination: publicKey,
+            destAmount: toStellarAmount(exactFinalBrl),
+            sourceAsset: tesouroAsset,
+            destAsset: finalAsset,
+          })
+        : await StellarService.buildStrictSendConversionXdr({
+            sourcePublicKey: publicKey,
+            destination: publicKey,
+            sourceAmount,
+            sourceAsset: tesouroAsset,
+            destAsset: finalAsset,
+            memoText: 'PIX AUTO CONVERT',
+          });
+      const result = await StellarService.signAndSubmitXdr(userId, secret, xdr, {
+        user_id: userId,
+        type: (usesStrictReceive ? 'PATH_PAYMENT_STRICT_RECEIVE' : 'PATH_PAYMENT_STRICT_SEND') as any,
+        destination_key: publicKey,
+        asset_code: finalAsset.code,
+        amount: Number(usesStrictReceive ? exactFinalBrl : sourceAmount),
+        context: JSON.stringify({
+          provider: 'etherfuse',
+          rail: 'pix',
+          direction: 'onramp_auto_conversion',
+          anchor_order_id: transaction.id,
+          source_asset_code: 'TESOURO',
+          source_amount: sourceAmount,
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          conversion_mode: usesStrictReceive ? 'strict_receive_exact_final_asset' : 'strict_send_anchor_tesouro',
+        }),
+        source_public_key: publicKey,
+        source_session_id: sessionId,
+        destination_session_id: sessionId,
+      } as any);
+      if (!result.success) {
+        throw new Error(result.error || 'Could not submit automatic PIX conversion.');
+      }
+
+      const details = result.hash ? await StellarService.getSubmittedPaymentDetails(result.hash) : null;
+      const finalAmount = details?.destinationAmount || '';
+      const updatedContext = {
+        ...context,
+        final_conversion_status: 'completed',
+        final_conversion_hash: result.hash,
+        final_conversion_source_amount: sourceAmount,
+        final_amount: finalAmount,
+      };
+      await OperationRepository.update(operationId, { context: JSON.stringify(updatedContext) } as any);
+
+      return {
+        ...transaction,
+        toAmount: finalAmount || transaction.toAmount,
+        toCurrency: assetIdentifier(finalAsset),
+        finalAmount: finalAmount || transaction.toAmount,
+        finalAsset,
+        auto_conversion: {
+          required: true,
+          status: 'completed',
+          source_asset_code: 'TESOURO',
+          source_amount: sourceAmount,
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          destination_amount: finalAmount || undefined,
+          hash: result.hash,
+        },
+      } as OnRampTransaction;
+    } catch (error) {
+      const message = debugErrorMessage(error);
+      const updatedContext = {
+        ...context,
+        final_conversion_status: 'failed',
+        final_conversion_error: message,
+      };
+      await OperationRepository.update(operationId, { context: JSON.stringify(updatedContext) } as any).catch(() => undefined);
+      return {
+        ...transaction,
+        auto_conversion: {
+          required: true,
+          status: 'failed',
+          source_asset_code: 'TESOURO',
+          source_amount: coalesceString(context.destination_amount_anchor, transaction.toAmount),
+          destination_asset_code: finalAsset.code,
+          destination_asset_issuer: finalAsset.issuer,
+          error: message,
+        },
+      } as OnRampTransaction;
+    }
   }
 
   static async getOnRampStatus(orderId: string, operationId?: string): Promise<{
@@ -1713,7 +2232,8 @@ export class AnchorService {
     if (!transaction) throw apiError('On-ramp order not found.', 404);
 
     await this.updateRampOperationStatus(operationId, mapAnchorStatusToOperationStatus(transaction.status));
-    return { transaction };
+    const maybeConverted = await this.maybeAutoConvertCompletedOnRamp(transaction, operationId);
+    return { transaction: maybeConverted };
   }
 
   static async createOffRampForSession(input: CreateOffRampForSessionInput): Promise<{
@@ -1886,12 +2406,12 @@ export class AnchorService {
     upstream_status: number;
     success: boolean;
   }> {
-    await this.resolveSessionWallet(input);
+    const context = await this.resolveSessionWallet(input);
     const orderId = coalesceString(input.order_id, input.orderId);
     const operationId = coalesceString(input.operation_id, input.operationId);
     if (!orderId) throw apiError('order_id is required.', 400);
 
-    const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId);
+    const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId, context);
     if (mockRecord) {
       return {
         order_id: orderId,
@@ -1928,6 +2448,10 @@ export class AnchorService {
     amount?: string;
     to_currency?: string;
     toCurrency?: string;
+    final_asset?: string;
+    finalAsset?: string;
+    final_asset_code?: string;
+    finalAssetCode?: string;
   }): Promise<{
     success: boolean;
     temporary: true;
@@ -1950,7 +2474,15 @@ export class AnchorService {
 
     const context = await this.resolveSessionWallet(input);
     const amount = normalizeAmount(input.amount || '100');
-    const toCurrencyInput = coalesceString(input.to_currency, input.toCurrency) || this.getTesouroIdentifier();
+    const finalAsset = resolveRampFinalAsset(
+      input.final_asset,
+      input.finalAsset,
+      input.final_asset_code,
+      input.finalAssetCode,
+      input.to_currency,
+      input.toCurrency,
+      'TESOURO',
+    );
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
 
@@ -1966,7 +2498,8 @@ export class AnchorService {
       direction: 'onramp',
       amount,
       from_currency: 'BRL',
-      to_currency: toCurrencyInput,
+      to_currency: this.getTesouroIdentifier(),
+      final_asset: assetIdentifier(finalAsset),
     });
     const orderResult = await this.createOnRampForSession({
       session_id: context.sessionId,
@@ -1976,6 +2509,7 @@ export class AnchorService {
       amount,
       expected_to_amount: quoteResult.quote.toAmount,
       to_currency: quoteResult.quote.toCurrency,
+      final_asset: assetIdentifier(finalAsset),
       bank_account_id: customerResult.customer.bankAccountId,
     });
 
@@ -2190,6 +2724,136 @@ export class AnchorService {
       balances_before: balancesBefore,
       balances_after: balancesAfter,
       balance_delta: calculateBalanceDeltas(balancesBefore, balancesAfter),
+    };
+  }
+
+  private static async resolveTransferRecipient(userId: string, recipientQuery: string): Promise<{
+    publicKey: string;
+    displayName: string;
+    pixKey?: string;
+    vaultSecretId?: string;
+  }> {
+    const query = coalesceString(recipientQuery);
+    if (!query) throw apiError('recipient is required for PIX-funded transfer.', 400);
+    if (/^G[A-Z2-7]{55}$/i.test(query)) {
+      return { publicKey: query, displayName: truncatePublicKey(query) };
+    }
+
+    const normalized = query.toLowerCase();
+    const exactContact = await supabase
+      .from('contacts')
+      .select('contact_name, stellar_public_key, pix_key')
+      .eq('owner_id', userId)
+      .ilike('contact_name', query)
+      .maybeSingle();
+    if (exactContact.error) throw apiError(`Could not resolve transfer recipient: ${exactContact.error.message}`, 500);
+
+    let contact = exactContact.data as any;
+    if (!contact) {
+      const fuzzy = await supabase
+        .from('contacts')
+        .select('contact_name, stellar_public_key, pix_key')
+        .eq('owner_id', userId)
+        .or(`contact_name.ilike.%${normalized}%,pix_key.ilike.%${normalized}%`)
+        .limit(1)
+        .maybeSingle();
+      if (fuzzy.error) throw apiError(`Could not resolve transfer recipient: ${fuzzy.error.message}`, 500);
+      contact = fuzzy.data as any;
+    }
+
+    const contactPublicKey = coalesceString(contact?.stellar_public_key);
+    if (contactPublicKey) {
+      const walletRepository = new WalletRepository(supabase);
+      const destinationWallet = await walletRepository.getWalletByPublicKey(contactPublicKey).catch(() => null);
+      return {
+        publicKey: contactPublicKey,
+        displayName: coalesceString(contact?.contact_name) || query,
+        pixKey: coalesceString(contact?.pix_key) || undefined,
+        vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
+      };
+    }
+
+    const walletByPix = await supabase
+      .from('wallets')
+      .select('public_key, name, pix_key, vault_secret_id')
+      .ilike('pix_key', normalized)
+      .limit(1)
+      .maybeSingle();
+    if (walletByPix.error) throw apiError(`Could not resolve recipient wallet: ${walletByPix.error.message}`, 500);
+    if (walletByPix.data?.public_key) {
+      return {
+        publicKey: String(walletByPix.data.public_key),
+        displayName: coalesceString(walletByPix.data.name) || query,
+        pixKey: coalesceString(walletByPix.data.pix_key) || undefined,
+        vaultSecretId: coalesceString(walletByPix.data.vault_secret_id) || undefined,
+      };
+    }
+
+    throw apiError(`Recipient "${query}" was not found in contacts or TalkToStellar wallets.`, 404);
+  }
+
+  static async submitPixFundedTransferForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
+    if (!this.getRuntimeInfo().sandbox) {
+      throw apiError('PIX-funded transfer automation is available only in Etherfuse sandbox/devnet.', 403);
+    }
+
+    const context = await this.resolveSessionWallet(input);
+    if (!context.vaultSecretId) {
+      throw apiError('Source wallet secret is unavailable for the current TalkToStellar session.', 409);
+    }
+
+    const amount = normalizeAmount(input.amount, 'amount');
+    const assetCode = normalizeAssetCode(coalesceString(input.asset_code, input.assetCode) || 'BRL');
+    if (!['BRL', 'USDC'].includes(assetCode)) {
+      throw apiError('PIX-funded transfer can only expose BRL or USDC to the user.', 400);
+    }
+
+    const asset = resolveConfiguredAsset(assetCode);
+    if (asset.code === 'XLM' || !asset.issuer) {
+      throw apiError(`${assetCode} is not configured for PIX-funded transfer.`, 400);
+    }
+
+    const recipient = await this.resolveTransferRecipient(context.userId, coalesceString(input.recipient, input.recipient_query, input.recipientQuery));
+    if (recipient.vaultSecretId) {
+      const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
+      const trustline = await StellarService.ensureTrustlineFromSecret({
+        sourceSecret: destinationSecret,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer,
+      });
+      if (!trustline.success) {
+        throw apiError(`Could not activate ${asset.code} for recipient: ${trustline.error || 'unknown trustline error'}`, 409);
+      }
+    }
+
+    const sourceSecret = await new VaultService(supabase).getSecret(context.vaultSecretId);
+    const result = await StellarService.submitAssetPaymentFromSecret({
+      sourceSecret,
+      destination: recipient.publicKey,
+      amount: toStellarAmount(amount),
+      assetCode: asset.code,
+      assetIssuer: asset.issuer,
+      memoText: 'PIX funded',
+    });
+
+    if (!result.success) {
+      throw apiError(result.error || 'Could not submit PIX-funded transfer.', 400);
+    }
+
+    return {
+      success: true,
+      sandbox: true,
+      order_id: coalesceString(input.order_id, input.orderId) || undefined,
+      operation_id: coalesceString(input.operation_id, input.operationId) || undefined,
+      source_public_key: context.publicKey,
+      recipient_public_key: recipient.publicKey,
+      recipient_name: recipient.displayName,
+      recipient_pix_key: recipient.pixKey,
+      amount,
+      asset_code: asset.code,
+      asset_issuer: asset.issuer,
+      transaction_hash: result.hash,
+      message: `PIX confirmado e transferencia de ${formatDisplayAmount(amount, asset.code)} enviada para ${recipient.displayName}.`,
     };
   }
 

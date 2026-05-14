@@ -1046,6 +1046,76 @@ export class StellarService {
         }
     }
 
+    static async submitStrictSendPaymentFromSecret(input: {
+        sourceSecret: string;
+        destination: string;
+        sourceAsset: AssetInput;
+        sourceAmount: string;
+        destinationAsset: AssetInput;
+        memoText?: string;
+    }): Promise<{ success: boolean; hash?: string; error?: string; destinationAmount?: string; destinationMin?: string }> {
+        try {
+            const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
+            await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
+            await this.ensureTestnetAccountFunded(input.destination, 1);
+
+            const sourceAssetObj = createAsset(input.sourceAsset);
+            const destinationAssetObj = createAsset(input.destinationAsset);
+            const pathsResponse = await server.strictSendPaths(
+                sourceAssetObj,
+                input.sourceAmount,
+                [destinationAssetObj],
+            ).call();
+
+            const trustedPaths = selectTrustedConversionPaths(
+                Array.isArray(pathsResponse.records) ? pathsResponse.records : [],
+                sourceAssetObj,
+                destinationAssetObj,
+            );
+            if (trustedPaths.length === 0) {
+                throw new Error(buildNoPathDiagnostic(sourceAssetObj, destinationAssetObj));
+            }
+
+            const bestPath = trustedPaths
+                .sort((a: any, b: any) => Number(b.destination_amount) - Number(a.destination_amount))[0];
+            const destinationMin = (Number(bestPath.destination_amount) * 0.98).toFixed(7);
+            const pathAssets = (bestPath.path || []).map((pathAsset: any) => {
+                if (pathAsset.asset_type === 'native') return Asset.native();
+                return new Asset(pathAsset.asset_code, pathAsset.asset_issuer);
+            });
+
+            const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+            let builder = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            }).addOperation(Operation.pathPaymentStrictSend({
+                sendAsset: sourceAssetObj,
+                sendAmount: input.sourceAmount,
+                destination: input.destination,
+                destAsset: destinationAssetObj,
+                destMin: destinationMin,
+                path: pathAssets,
+            }));
+
+            const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
+            if (memo) {
+                builder = builder.addMemo(Memo.text(memo));
+            }
+
+            const transaction = builder.setTimeout(300).build();
+            transaction.sign(sourceKeypair);
+            const result = await server.submitTransaction(transaction);
+            return {
+                success: true,
+                hash: result.hash,
+                destinationAmount: String(bestPath.destination_amount),
+                destinationMin,
+            };
+        } catch (error) {
+            return { success: false, error: this.getHorizonErrorMessage(error) };
+        }
+    }
+
     static async getAccountBalance(publicKey: string): Promise<any[]> {
         try {
             const account = await server.loadAccount(publicKey);

@@ -18,6 +18,7 @@ router.post('/etherfuse/offramp', RampController.createEtherfuseOffRamp);
 router.get('/etherfuse/offramp/:orderId', RampController.getEtherfuseOffRamp);
 router.post('/etherfuse/offramp/:orderId/submit', RampController.submitEtherfuseOffRamp);
 router.post('/etherfuse/sandbox/simulate-fiat', RampController.simulateEtherfuseFiatReceived);
+router.post('/etherfuse/sandbox/pix-funded-transfer', RampController.submitPixFundedTransfer);
 router.post('/etherfuse/sandbox/test-onramp', RampController.runTemporaryEtherfuseOnRampTest);
 router.post('/etherfuse/sandbox/test-offramp', RampController.runTemporaryEtherfuseOffRampTest);
 
