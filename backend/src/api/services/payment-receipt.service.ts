@@ -7,6 +7,7 @@ import { buildUsedQuoteLabel } from '../../utils/quote-display';
 import { TransferNotificationService } from './transfer-notification.service';
 import { ReceiptImageService } from './receipt-image.service';
 import { EconomyEngineService } from './economy-engine.service';
+import { PlatformFeeService } from './platform-fee.service';
 
 type ReceiptType = 'payment_sent' | 'payment_received' | 'conversion' | 'claim_redeemed';
 
@@ -36,6 +37,16 @@ export type PaymentReceiptInput = {
   completedAt?: string | null;
   status?: string | null;
   contextMessage?: string | null;
+};
+
+type FeeBreakdown = {
+  actualDisplay: string;
+  actualFeeBrl?: number;
+  actualFeeUsdc?: number;
+  platformApplied: boolean;
+  traditionalFeePct: number;
+  traditionalFeeBrl?: number;
+  traditionalFeeUsdc?: number;
 };
 
 export class PaymentReceiptService {
@@ -221,8 +232,8 @@ export class PaymentReceiptService {
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
     const sourceAssetCode = String(input.sourceAssetCode || input.destinationAssetCode || '').trim().toUpperCase();
-    const feeLine = await this.feeLine(input);
-    const feeLabel = feeLine.replace(/^Taxa exata:\s*/i, '').trim();
+    const fee = await this.resolveFeeBreakdown(input);
+    const feeLabel = fee.actualDisplay || 'indisponivel';
 
     return ReceiptImageService.toSvg(
       ReceiptImageService.fromPaymentReceipt({
@@ -251,7 +262,6 @@ export class PaymentReceiptService {
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
     const counterparty = String(input.counterpartyLabel || '').trim();
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
-    const feeLine = await this.feeLine(input);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
     const quoteLine = hasConversion
       ? buildUsedQuoteLabel({
@@ -262,8 +272,11 @@ export class PaymentReceiptService {
           destinationAssetCode,
         })
       : '';
+    const fee = await this.resolveFeeBreakdown(input);
+    const feeLine = this.feeLine(fee);
+    const traditionalFeeLine = this.traditionalFeeLine(fee);
     const settlementLine = this.settlementLine(input.settlementMs);
-    const savingsLine = this.savingsLine(input.savings);
+    const savingsLine = this.savingsLine(input.savings, fee);
     const cumulativeSavingsLine = await this.cumulativeSavingsLine(input);
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
@@ -277,6 +290,7 @@ export class PaymentReceiptService {
       contextLine,
       quoteLine,
       feeLine,
+      traditionalFeeLine,
       savingsLine,
       cumulativeSavingsLine,
       settlementLine,
@@ -296,10 +310,17 @@ export class PaymentReceiptService {
     return `Mensagem: ${sanitized}`;
   }
 
-  private static savingsLine(savings?: PaymentReceiptInput['savings']): string {
-    const value = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
-    if (!Number.isFinite(value) || value <= 0) return '';
-    return `Economia estimada: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
+  private static savingsLine(savings: PaymentReceiptInput['savings'] | undefined, fee: FeeBreakdown): string {
+    const fromPayload = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
+    if (Number.isFinite(fromPayload) && fromPayload > 0) {
+      return `Economia estimada: R$ ${fromPayload.toFixed(2)} em relação a métodos tradicionais.`;
+    }
+
+    const traditional = Number(fee.traditionalFeeBrl || 0);
+    const actual = Number(fee.actualFeeBrl || 0);
+    const estimated = traditional - actual;
+    if (!Number.isFinite(estimated) || estimated <= 0) return '';
+    return `Economia estimada: R$ ${estimated.toFixed(2)} em relação a métodos tradicionais.`;
   }
 
   private static async cumulativeSavingsLine(input: PaymentReceiptInput): Promise<string> {
@@ -351,22 +372,140 @@ export class PaymentReceiptService {
     return 'Quer dar um nome para esta transação para encontrar depois? Exemplo: "apelido da transação: pagamento logo setembro".';
   }
 
-  private static async feeLine(input: PaymentReceiptInput): Promise<string> {
-    const exactFeeXlm = String(input.feeXlm || '').trim();
-    const display = String(input.feeDisplay || '').trim();
-    if (display && !/\bXLM\b/i.test(display)) return `Taxa exata: ${display}`;
-    if (exactFeeXlm) {
-      const networkFee = await formatNetworkFeeForCustomer(exactFeeXlm);
-      const unifiedFee = buildUnifiedFeeDisplay({
-        networkFee,
-        platformFeeAmount: input.quote?.platformFee?.feeAmount || null,
-        platformFeeAssetCode: input.quote?.platformFee?.feeAssetCode || null,
-        sourceAssetCode: input.sourceAssetCode || null,
-        destinationAssetCode: input.destinationAssetCode || null,
-      });
-      if (unifiedFee.display) return `Taxa exata: ${unifiedFee.display}`;
+  private static feeLine(fee: FeeBreakdown): string {
+    if (!fee.actualDisplay) return 'Taxa exata: indisponivel';
+    const scope = fee.platformApplied ? 'rede + spread' : 'rede';
+    return `Taxa exata (${scope}): ${fee.actualDisplay}`;
+  }
+
+  private static traditionalFeeLine(fee: FeeBreakdown): string {
+    const traditionalBrl = Number(fee.traditionalFeeBrl || 0);
+    const traditionalUsdc = Number(fee.traditionalFeeUsdc || 0);
+    if (!Number.isFinite(traditionalBrl) || traditionalBrl <= 0 || !Number.isFinite(traditionalUsdc) || traditionalUsdc <= 0) {
+      return '';
     }
-    return 'Taxa exata: indisponivel';
+    const pct = (Math.max(0, fee.traditionalFeePct) * 100).toFixed(2);
+    return `Taxa tradicional estimada (.env ${pct}%): ${this.formatSmallFiat(traditionalBrl, 'BRL')} / ${this.formatSmallFiat(traditionalUsdc, 'USDC')}`;
+  }
+
+  private static parseFeeDisplay(display?: string | null): { brl?: number; usdc?: number } {
+    const raw = String(display || '').trim();
+    if (!raw) return {};
+    const normalized = raw.replace(/\s+/g, ' ');
+    const brlMatch = normalized.match(/R\$\s*([0-9]+(?:[.,][0-9]+)?)/i);
+    const usdcMatch = normalized.match(/US\$\s*([0-9]+(?:[.,][0-9]+)?)/i);
+    const brl = brlMatch ? Number(String(brlMatch[1]).replace(',', '.')) : NaN;
+    const usdc = usdcMatch ? Number(String(usdcMatch[1]).replace(',', '.')) : NaN;
+    return {
+      brl: Number.isFinite(brl) ? brl : undefined,
+      usdc: Number.isFinite(usdc) ? usdc : undefined,
+    };
+  }
+
+  private static toPositiveNumber(value: unknown): number {
+    const parsed = Number(String(value || '').replace(',', '.'));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  private static formatSmallFiat(value: number, asset: 'BRL' | 'USDC'): string {
+    const symbol = asset === 'BRL' ? 'R$' : 'US$';
+    const decimals = value > 0 && value < 0.01 ? 6 : 2;
+    return `${symbol} ${value.toFixed(decimals)}`;
+  }
+
+  private static resolveUsdBrlRate(input: PaymentReceiptInput, feeBrl?: number, feeUsdc?: number): number {
+    if (Number.isFinite(feeBrl) && Number.isFinite(feeUsdc) && Number(feeBrl) > 0 && Number(feeUsdc) > 0) {
+      return Number(feeBrl) / Number(feeUsdc);
+    }
+
+    const quote = input.quote || {};
+    const sourceAmount = this.toPositiveNumber(quote.sourceAmount);
+    const destinationAmount = this.toPositiveNumber(quote.destinationAmount);
+    const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+
+    if (sourceAsset === 'BRL' && destinationAsset === 'USDC' && sourceAmount > 0 && destinationAmount > 0) {
+      return sourceAmount / destinationAmount;
+    }
+    if (sourceAsset === 'USDC' && destinationAsset === 'BRL' && sourceAmount > 0 && destinationAmount > 0) {
+      return destinationAmount / sourceAmount;
+    }
+
+    const fallback = Number(String(process.env.USD_BRL_FALLBACK_RATE || '').replace(',', '.'));
+    if (Number.isFinite(fallback) && fallback > 0) return fallback;
+    return 5;
+  }
+
+  private static async resolveFeeBreakdown(input: PaymentReceiptInput): Promise<FeeBreakdown> {
+    const display = String(input.feeDisplay || '').trim();
+    const parsedDisplay = this.parseFeeDisplay(display);
+
+    let networkFee: { display: string; fee_brl?: string; fee_usdc?: string; source: string } = {
+      display: display || '',
+      fee_brl: String(input.feeBrl || parsedDisplay.brl || ''),
+      fee_usdc: String(input.feeUsdc || parsedDisplay.usdc || ''),
+      source: 'provided',
+    };
+
+    if (!networkFee.fee_brl && !networkFee.fee_usdc && String(input.feeXlm || '').trim()) {
+      networkFee = await formatNetworkFeeForCustomer(String(input.feeXlm || '').trim());
+    }
+
+    const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
+    const sourceAssetCode = String(input.sourceAssetCode || input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const destinationAssetCode = String(input.destinationAssetCode || input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+
+    let platformFeeAmount = String(input.quote?.platformFee?.feeAmount || '').trim();
+    let platformFeeAssetCode = String(input.quote?.platformFee?.feeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    if (!platformFeeAmount || !platformFeeAssetCode) {
+      const spread = PlatformFeeService.calculateSpread({
+        sourceAmount,
+        sourceAssetCode,
+        destinationAssetCode,
+        mode: 'deduct_from_source',
+      });
+      if (spread.enabled && this.toPositiveNumber(spread.feeAmount) > 0) {
+        platformFeeAmount = spread.feeAmount;
+        platformFeeAssetCode = spread.feeAssetCode;
+      }
+    }
+
+    const unifiedFee = buildUnifiedFeeDisplay({
+      networkFee,
+      platformFeeAmount: platformFeeAmount || null,
+      platformFeeAssetCode: platformFeeAssetCode || null,
+      sourceAssetCode: sourceAssetCode || null,
+      destinationAssetCode: destinationAssetCode || null,
+    });
+
+    const actualFeeBrl = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl);
+    const actualFeeUsdc = this.toPositiveNumber(unifiedFee.fee_usdc || input.feeUsdc || parsedDisplay.usdc);
+    const actualDisplay = String(unifiedFee.display || display || '').trim();
+    const traditionalFeePct = EconomyEngineService.traditionalFeePct();
+
+    const grossAmountBrl = EconomyEngineService.estimateAmountInBrl({
+      amount: sourceAmount,
+      assetCode: sourceAssetCode,
+      quote: input.quote,
+    });
+
+    const savingsFromPayload = this.toPositiveNumber(input.savings?.estimatedSavings);
+    const traditionalFeeBrl = savingsFromPayload > 0 && actualFeeBrl > 0
+      ? actualFeeBrl + savingsFromPayload
+      : (grossAmountBrl > 0 ? grossAmountBrl * traditionalFeePct : 0);
+
+    const usdBrl = this.resolveUsdBrlRate(input, actualFeeBrl, actualFeeUsdc);
+    const traditionalFeeUsdc = traditionalFeeBrl > 0 && usdBrl > 0 ? traditionalFeeBrl / usdBrl : 0;
+
+    return {
+      actualDisplay,
+      actualFeeBrl: actualFeeBrl || undefined,
+      actualFeeUsdc: actualFeeUsdc || undefined,
+      platformApplied: Boolean(unifiedFee.platform_applied),
+      traditionalFeePct,
+      traditionalFeeBrl: traditionalFeeBrl || undefined,
+      traditionalFeeUsdc: traditionalFeeUsdc || undefined,
+    };
   }
 
   private static settlementLine(settlementMs?: number | null): string {
