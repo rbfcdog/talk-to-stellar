@@ -162,7 +162,7 @@ function buildExternalBankAccount(seed: string, email: string) {
   };
 }
 
-function PinPad({
+function WalletPinInput({
   value,
   onChange,
   tone = "emerald",
@@ -171,62 +171,37 @@ function PinPad({
   onChange: (next: string) => void;
   tone?: "emerald" | "cyan" | "amber";
 }) {
-  const accent = tone === "cyan"
-    ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+  const border = tone === "cyan"
+    ? "focus-within:border-cyan-300/70"
     : tone === "amber"
-      ? "bg-amber-300 text-amber-950 hover:bg-amber-200"
-      : "bg-emerald-400 text-slate-950 hover:bg-emerald-300";
-
-  const appendDigit = (digit: string) => onChange(`${value}${digit}`.replace(/\D/g, "").slice(0, 8));
-  const removeDigit = () => onChange(value.slice(0, -1));
+      ? "focus-within:border-amber-200/70"
+      : "focus-within:border-emerald-300/70";
 
   return (
-    <div className="mt-2 rounded-3xl border border-white/10 bg-black/20 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-2">
-          {Array.from({ length: Math.max(4, value.length || 4) }).slice(0, 8).map((_, index) => (
-            <span
-              key={index}
-              className={`h-3 w-3 rounded-full ${index < value.length ? "bg-white" : "bg-white/20"}`}
-            />
-          ))}
-        </div>
+    <div className={`mt-2 rounded-3xl border border-white/10 bg-black/20 transition ${border}`}>
+      <div className="flex items-center gap-3">
+        <input
+          className="min-w-0 flex-1 bg-transparent px-4 py-4 text-xl font-black tracking-[0.35em] text-white outline-none placeholder:tracking-normal placeholder:text-white/30"
+          value={value}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          type="password"
+          name="wallet-pin-manual-entry"
+          autoComplete="new-password"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="Digite seu PIN"
+          onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
+        />
         <button
           type="button"
-          className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white/75 transition hover:bg-white/15"
+          className="mr-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black text-white/75 transition hover:bg-white/15"
           onClick={() => onChange("")}
         >
           Limpar
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
-          <button
-            key={digit}
-            type="button"
-            className="rounded-2xl bg-white/10 py-4 text-xl font-black text-white transition hover:bg-white/15 active:scale-[0.98]"
-            onClick={() => appendDigit(digit)}
-          >
-            {digit}
-          </button>
-        ))}
-        <button
-          type="button"
-          className="rounded-2xl bg-white/10 py-4 text-sm font-black text-white/75 transition hover:bg-white/15 active:scale-[0.98]"
-          onClick={removeDigit}
-        >
-          Apagar
-        </button>
-        <button
-          type="button"
-          className={`rounded-2xl py-4 text-xl font-black transition active:scale-[0.98] ${accent}`}
-          onClick={() => appendDigit("0")}
-        >
-          0
-        </button>
-        <div className="rounded-2xl bg-white/[0.03]" />
-      </div>
-      <p className="mt-3 text-xs font-semibold text-white/45">Digite o PIN manualmente para autorizar a operação.</p>
     </div>
   );
 }
@@ -235,7 +210,7 @@ function sanitizeForDebug(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(0, 8).map(sanitizeForDebug);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
-    if (/token|secret|authorization|password/i.test(key)) return [key, "[redacted]"];
+    if (/token|secret|authorization|password|pin/i.test(key)) return [key, "[redacted]"];
     if (typeof item === "string" && item.length > 240) return [key, `${item.slice(0, 240)}...`];
     if (item && typeof item === "object") return [key, sanitizeForDebug(item)];
     return [key, item];
@@ -732,6 +707,14 @@ export default function PixRampClient({
     }
   }
 
+  function getValidatedWalletPin() {
+    const pin = walletPin.replace(/\D/g, "").slice(0, 8);
+    if (!/^\d{4,8}$/.test(pin)) {
+      throw new Error("Digite o PIN da wallet com 4 a 8 dígitos antes de confirmar.");
+    }
+    return pin;
+  }
+
   function clearResolvedRampWallet(nextEmail = rampEmail) {
     setSessionId("");
     setSessionToken("");
@@ -902,10 +885,11 @@ export default function PixRampClient({
 
   async function simulatePixPayment() {
     if (!orderId) throw new Error("Prepare o PIX antes de confirmar o pagamento.");
+    const pin = getValidatedWalletPin();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
       order_id: orderId,
       operation_id: operationId,
-      pin: walletPin,
+      pin,
     });
     if (payload?.transaction) setStatusPayload(payload);
     setPolling(true);
@@ -918,6 +902,7 @@ export default function PixRampClient({
 
   async function submitPixFundedTransfer(completedTransaction?: RampResponse) {
     const auth = await resolveWalletFromEmail();
+    const pin = getValidatedWalletPin();
     const transferAmount = targetAsset === "BRL"
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
       : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || "");
@@ -927,7 +912,7 @@ export default function PixRampClient({
       asset_code: targetAsset,
       order_id: orderId,
       operation_id: operationId,
-      pin: walletPin,
+      pin,
     }, "POST", auth);
     setPixFundedTransferResult(payload);
   }
@@ -946,14 +931,28 @@ export default function PixRampClient({
   }
 
   async function runTemporaryOffRampEndpointTest() {
+    const pin = getValidatedWalletPin();
     const auth = await resolveWalletFromEmail();
     const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
+    addDebugLog({
+      label: "PIX off-ramp client validation",
+      method: "POST",
+      path: "/api/ramp/etherfuse/sandbox/test-offramp",
+      request: {
+        has_pin: true,
+        pin_digits: pin.length,
+        fiat_amount: offRampFiatAmount.trim() || undefined,
+        fallback_amount: offRampAmount,
+        fiat_account_id: bankAccount.id,
+      },
+      response: { ready_to_submit: true },
+    });
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
       fiat_amount: offRampFiatAmount.trim() || undefined,
       fiat_account_id: bankAccount.id,
       external_bank_account: bankAccount,
-      pin: walletPin,
+      pin,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -1100,7 +1099,7 @@ export default function PixRampClient({
                 </div>
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
-              <PinPad value={walletPin} onChange={setWalletPin} tone="cyan" />
+              <WalletPinInput value={walletPin} onChange={setWalletPin} tone="cyan" />
 
               <button
                 className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
@@ -1346,7 +1345,7 @@ export default function PixRampClient({
                         ) : (
                           <>
                             <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
-                            <PinPad value={walletPin} onChange={setWalletPin} tone="amber" />
+                            <WalletPinInput value={walletPin} onChange={setWalletPin} tone="amber" />
                             <button
                               className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4}
