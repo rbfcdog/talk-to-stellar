@@ -94,7 +94,9 @@ export class TransferNotificationService {
       `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
       `2) Digite "contatos" para ver para quem já pode enviar.\n` +
       `3) Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.\n` +
-      `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente").`;
+      `4) Digite "quero trazer 100 reais via PIX" para receber PIX na conta.\n` +
+      `5) Digite "quero retirar 100 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
+      `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`;
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);
