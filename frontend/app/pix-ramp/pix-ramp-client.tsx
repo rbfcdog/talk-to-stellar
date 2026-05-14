@@ -1212,7 +1212,7 @@ export default function PixRampClient({
 
                   {isSandboxMockOrder ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      Use o QR acima para simular o pagamento. Depois digite seu PIN e confirme.
+                      Este QR ainda não está integrado ao PIX real. Use-o apenas para simular o pagamento; depois digite seu PIN e confirme.
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
