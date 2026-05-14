@@ -821,6 +821,9 @@ export class AnchorService {
     balances: Array<{ asset_code: string; asset_issuer?: string; balance: string }>;
   }> {
     const context = await this.resolveSessionWallet(input);
+    if (this.getRuntimeInfo().sandbox) {
+      await StellarService.ensureTestnetAccountFunded(context.publicKey, 1);
+    }
     const balances = await StellarService.getAccountBalance(context.publicKey);
     return {
       public_key: context.publicKey,

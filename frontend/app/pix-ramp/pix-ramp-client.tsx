@@ -296,6 +296,30 @@ export default function PixRampClient() {
     }
   }
 
+  function clearResolvedRampWallet(nextEmail = rampEmail) {
+    setSessionId("");
+    setSessionToken("");
+    setResolvedWallet(null);
+    setWalletPublicKey("");
+    setCustomerPayload(null);
+    setQuotePayload(null);
+    setOrderPayload(null);
+    setStatusPayload(null);
+    setTemporaryTestResult(null);
+    setTemporaryOffRampTestResult(null);
+    setOnRampBalancesBefore([]);
+    setOnRampBalancesAfter([]);
+    setOffRampBalancesBefore([]);
+    setOffRampBalancesAfter([]);
+    setPolling(false);
+    setStep("quote");
+    setRampEmail(nextEmail);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("talk-to-stellar.sessionId");
+      window.localStorage.removeItem("talk-to-stellar.sessionToken");
+    }
+  }
+
   async function requestQuote() {
     setStep("quote");
     setOrderPayload(null);
@@ -454,27 +478,34 @@ export default function PixRampClient() {
                   type="email"
                   value={rampEmail}
                   placeholder="jorge@gmail.com"
-                  disabled={hasSession}
+                  disabled={Boolean(loading)}
                   onChange={(event) => {
-                    setRampEmail(event.target.value);
-                    setResolvedWallet(null);
-                    if (!hasSession) setWalletPublicKey("");
+                    clearResolvedRampWallet(event.target.value);
                   }}
                 />
                 <button
                   className="rounded-2xl bg-[#17251d] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
-                  disabled={!rampEmail.trim() || hasSession || Boolean(loading)}
+                  disabled={!rampEmail.trim() || Boolean(loading)}
                   onClick={() => run("Resolving wallet", async () => {
                     await resolveWalletFromEmail();
                   })}
                 >
-                  {loading === "Resolving wallet" ? "Finding..." : "Use wallet"}
+                  {loading === "Resolving wallet" ? "Finding..." : hasSession ? "Refresh wallet" : "Use wallet"}
                 </button>
               </div>
+              {hasSession && (
+                <button
+                  className="mt-3 text-xs font-black uppercase tracking-[0.14em] text-emerald-700 underline decoration-emerald-300 underline-offset-4"
+                  disabled={Boolean(loading)}
+                  onClick={() => clearResolvedRampWallet("")}
+                >
+                  Trocar wallet/email
+                </button>
+              )}
               <p className="mt-3 text-xs font-semibold text-emerald-900/65">
                 {walletPublicKey
                   ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
-                  : "A cotacao usa a wallet criada/importada na infra TalkToStellar para este email."}
+                  : "A cotacao usa a wallet criada/importada na infra TalkToStellar para este email. Em sandbox, a conta e fundida na Testnet antes de ler saldo."}
               </p>
             </div>
 
