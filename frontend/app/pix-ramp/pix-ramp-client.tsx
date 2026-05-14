@@ -188,6 +188,8 @@ export default function PixRampClient() {
   const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
+  const sandboxSimulationComplete = Boolean(isSandboxMockOrder && isSuccessStatus(status));
+  const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
 
@@ -342,7 +344,7 @@ export default function PixRampClient() {
   }, [callRampGet]);
 
   useEffect(() => {
-    if (!pixCode) {
+    if (!pixCode || isSandboxMockOrder) {
       setQrDataUrl("");
       return;
     }
@@ -351,7 +353,7 @@ export default function PixRampClient() {
       margin: 1,
       color: { dark: "#10231b", light: "#ffffff" },
     }).then(setQrDataUrl).catch(() => setQrDataUrl(""));
-  }, [pixCode]);
+  }, [isSandboxMockOrder, pixCode]);
 
   const refreshOrder = useCallback(async () => {
     if (!orderId) return null;
@@ -800,10 +802,18 @@ export default function PixRampClient() {
               </div>
             ) : (
               <>
-                <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-                  <div className="rounded-3xl bg-white p-4">
-                    {qrDataUrl ? <img src={qrDataUrl} alt="PIX QR Code" className="h-auto w-full" /> : <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR unavailable</div>}
-                  </div>
+                  <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
+                    <div className="rounded-3xl bg-white p-4">
+                      {payablePixAvailable && qrDataUrl ? (
+                        <img src={qrDataUrl} alt="PIX QR Code" className="h-auto w-full" />
+                      ) : isSandboxMockOrder ? (
+                        <div className="grid aspect-square place-items-center rounded-2xl bg-amber-100 p-5 text-center text-xs font-black uppercase tracking-[0.12em] text-amber-800">
+                          Sandbox transfer simulator
+                        </div>
+                      ) : (
+                        <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR unavailable</div>
+                      )}
+                    </div>
                   <div className="space-y-3">
                     <div className="rounded-3xl bg-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Receiver</p>
@@ -820,21 +830,38 @@ export default function PixRampClient() {
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-3xl bg-black/20 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">PIX copy-and-paste code / BR-Code</p>
-                    <button className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-[#17251d]" onClick={() => run("Copying PIX code", copyPixCode)}>
-                      {copied ? "Copied" : "Copy PIX code"}
-                    </button>
-                  </div>
-                  <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-white/10 p-3 font-mono text-xs text-white/80">{pixCode || "PIX code not returned yet"}</p>
-                  <p className="mt-3 text-sm text-white/65">PIX key: <span className="font-mono text-white">{pixKey || "not returned"}</span></p>
-                  {isSandboxMockOrder && (
-                    <p className="mt-3 rounded-2xl border border-lime-200/30 bg-lime-200/10 p-3 text-sm font-bold text-lime-50">
-                      BR-Code sandbox em formato PIX EMV de teste. Nao envie dinheiro real neste ambiente; o PIX bancario real so vem do depositPixCode da Etherfuse. Use o botao abaixo para simular o PIX e entregar TESOURO na Stellar Testnet.
-                    </p>
+                  {isSandboxMockOrder ? (
+                    <div className="mt-5 rounded-3xl border border-amber-200/40 bg-amber-200/10 p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">Sandbox mode</p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        Este checkout segue o fluxo do regional starter pack: crie a ordem, simule o recebimento da transferencia bancaria no sandbox e entregue TESOURO na Stellar Testnet.
+                      </p>
+                      <p className="mt-3 rounded-2xl bg-black/20 p-3 text-sm text-amber-50">
+                        Nao tente pagar este codigo no Nubank. A chave PIX sandbox nao existe no DICT do Banco Central, entao apps bancarios reais vao mostrar "chave nao encontrada". PIX pagavel de verdade so aparece quando a Etherfuse retornar um `depositPixCode` real.
+                      </p>
+                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white/10 p-3">
+                          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Sandbox reference</p>
+                          <p className="mt-1 break-all font-mono text-xs text-white/80">{orderId}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white/10 p-3">
+                          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Asset delivery</p>
+                          <p className="mt-1 font-black text-white">{formatAsset(order.toAmount || quote?.toAmount, receivedCode)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-5 rounded-3xl bg-black/20 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">PIX copy-and-paste code / BR-Code</p>
+                        <button className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-[#17251d]" onClick={() => run("Copying PIX code", copyPixCode)}>
+                          {copied ? "Copied" : "Copy PIX code"}
+                        </button>
+                      </div>
+                      <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-white/10 p-3 font-mono text-xs text-white/80">{pixCode || "PIX code not returned yet"}</p>
+                      <p className="mt-3 text-sm text-white/65">PIX key: <span className="font-mono text-white">{pixKey || "not returned"}</span></p>
+                    </div>
                   )}
-                </div>
 
                 <div className="mt-5 rounded-3xl bg-white/10 p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Status timeline</p>
@@ -848,11 +875,27 @@ export default function PixRampClient() {
                   </div>
                 </div>
 
-                {config?.sandbox && (
-                  <button className="mt-5 w-full rounded-3xl border border-lime-200/50 bg-lime-200/10 px-5 py-4 text-sm font-black text-lime-100 transition hover:bg-lime-200/20 disabled:opacity-50" disabled={Boolean(loading) || isTerminalStatus(status)} onClick={() => run("Simulating PIX payment", simulatePixPayment)}>
-                    Simulate PIX payment and deliver TESOURO
-                  </button>
-                )}
+                  {config?.sandbox && (
+                    <div className="mt-5 rounded-3xl border border-amber-200/40 bg-amber-100 p-4 text-amber-950">
+                      <p className="text-sm font-black">Sandbox Mode</p>
+                      <p className="mt-1 text-xs font-bold">
+                        Simulate a bank transfer being received by the anchor.
+                      </p>
+                      {sandboxSimulationComplete ? (
+                        <p className="mt-3 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-800">
+                          Fiat received simulated successfully. TESOURO was delivered on Stellar Testnet.
+                        </p>
+                      ) : (
+                        <button
+                          className="mt-3 w-full rounded-2xl bg-amber-600 px-5 py-4 text-sm font-black text-white transition hover:bg-amber-700 disabled:opacity-50"
+                          disabled={Boolean(loading) || !orderId}
+                          onClick={() => run("Simulating fiat received", simulatePixPayment)}
+                        >
+                          {loading === "Simulating fiat received" ? "Simulating..." : "Simulate Fiat Received (Sandbox)"}
+                        </button>
+                      )}
+                    </div>
+                  )}
               </>
             )}
           </div>
