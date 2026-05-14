@@ -2017,6 +2017,12 @@ export class AnchorService {
 
   static async runTemporarySandboxOffRampTest(input: RampSessionInput & {
     amount?: string;
+    fiat_amount?: string;
+    fiatAmount?: string;
+    target_brl?: string;
+    targetBrl?: string;
+    to_amount?: string;
+    toAmount?: string;
     customer_id?: string;
     customerId?: string;
     fiat_account_id?: string;
@@ -2029,6 +2035,7 @@ export class AnchorService {
     submitted: boolean;
     wallet_public_key: string;
     amount_tesouro: string;
+    target_brl?: string;
     customer: Customer;
     fiat_account_id?: string;
     quote?: Quote;
@@ -2045,7 +2052,16 @@ export class AnchorService {
     }
 
     const context = await this.resolveSessionWallet(input);
-    const amount = normalizeAmount(input.amount || '1');
+    const requestedTargetBrl = coalesceString(
+      input.fiat_amount,
+      input.fiatAmount,
+      input.target_brl,
+      input.targetBrl,
+      input.to_amount,
+      input.toAmount,
+    );
+    let amount = normalizeAmount(input.amount || '1');
+    const targetBrl = requestedTargetBrl ? normalizeAmount(requestedTargetBrl, 'fiat_amount') : '';
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
 
@@ -2074,7 +2090,25 @@ export class AnchorService {
       throw apiError('No PIX fiat account registered for off-ramp test. Open the Etherfuse KYC/PIX URL and register a PIX account first.', 409);
     }
 
-    const quoteResult = await this.getQuoteForSession({
+    if (targetBrl) {
+      const probeQuote = await this.getQuoteForSession({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        customer_id: customerResult.customer.id,
+        direction: 'offramp',
+        amount: '1',
+        from_currency: this.getTesouroIdentifier(),
+        to_currency: 'BRL',
+      });
+      const probeReceive = Number(String(probeQuote.quote.toAmount || '').replace(',', '.'));
+      const impliedRate = Number(String(probeQuote.quote.exchangeRate || '').replace(',', '.'));
+      const brlPerTesouro = Number.isFinite(probeReceive) && probeReceive > 0
+        ? probeReceive
+        : (Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : 1.154);
+      amount = toStellarAmount(Number(targetBrl) / brlPerTesouro);
+    }
+
+    let quoteResult = await this.getQuoteForSession({
       session_id: context.sessionId,
       session_token: context.sessionToken,
       customer_id: customerResult.customer.id,
@@ -2083,6 +2117,22 @@ export class AnchorService {
       from_currency: this.getTesouroIdentifier(),
       to_currency: 'BRL',
     });
+    if (targetBrl) {
+      const quotedReceive = Number(String(quoteResult.quote.toAmount || '').replace(',', '.'));
+      const targetReceive = Number(targetBrl);
+      if (Number.isFinite(quotedReceive) && quotedReceive > 0 && Math.abs(quotedReceive - targetReceive) > 0.01) {
+        amount = toStellarAmount(Number(amount) * (targetReceive / quotedReceive));
+        quoteResult = await this.getQuoteForSession({
+          session_id: context.sessionId,
+          session_token: context.sessionToken,
+          customer_id: customerResult.customer.id,
+          direction: 'offramp',
+          amount,
+          from_currency: this.getTesouroIdentifier(),
+          to_currency: 'BRL',
+        });
+      }
+    }
 
     const orderResult = await this.createOffRampForSession({
       session_id: context.sessionId,
@@ -2130,6 +2180,7 @@ export class AnchorService {
       submitted: Boolean(submitResult?.success),
       wallet_public_key: context.publicKey,
       amount_tesouro: amount,
+      ...(targetBrl ? { target_brl: targetBrl } : {}),
       customer: customerResult.customer as Customer,
       fiat_account_id: fiatAccountId,
       quote: quoteResult.quote,

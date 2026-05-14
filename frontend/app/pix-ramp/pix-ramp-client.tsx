@@ -30,6 +30,12 @@ type BalanceDelta = {
 
 type RampResponse = Record<string, any>;
 type RampAuth = { session_id: string; session_token: string };
+type LiveStepState = "done" | "active" | "pending" | "warning";
+type LiveStep = {
+  label: string;
+  detail: string;
+  state: LiveStepState;
+};
 type DebugLogEntry = {
   id: string;
   at: string;
@@ -153,6 +159,7 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
   const [offRampBalancesBefore, setOffRampBalancesBefore] = useState<BalanceItem[]>([]);
   const [offRampBalancesAfter, setOffRampBalancesAfter] = useState<BalanceItem[]>([]);
   const [offRampAmount, setOffRampAmount] = useState("1");
+  const [offRampFiatAmount, setOffRampFiatAmount] = useState("");
   const [walletPublicKey, setWalletPublicKey] = useState("");
   const [onboardingUrl, setOnboardingUrl] = useState("");
   const [programmaticOnboarding, setProgrammaticOnboarding] = useState<RampResponse | null>(null);
@@ -209,6 +216,108 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
   }, [launchedFromChat, queryString]);
   const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
+  const liveSteps = useMemo<LiveStep[]>(() => {
+    if (rampMode === "offramp") {
+      const hasTarget = Boolean(offRampFiatAmount.trim() || offRampAmount.trim());
+      return [
+        {
+          label: "Wallet TalkToStellar",
+          detail: walletPublicKey ? `Wallet localizada: ${truncateKey(walletPublicKey)}` : "Digite o email para localizar a wallet.",
+          state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
+        },
+        {
+          label: "Valor de saída",
+          detail: offRampFiatAmount.trim()
+            ? `Alvo: ${formatMoney(offRampFiatAmount)} entrando na conta PIX testnet.`
+            : `Saída direta: ${formatAsset(offRampAmount, "TESOURO")}.`,
+          state: hasTarget ? "done" : "pending",
+        },
+        {
+          label: "Conversão TESOURO -> BRL",
+          detail: temporaryOffRampTestResult?.target_brl
+            ? `${formatAsset(temporaryOffRampTestResult.amount_tesouro, "TESOURO")} para chegar em ${formatMoney(temporaryOffRampTestResult.target_brl)}.`
+            : "A cotação é criada no backend quando você confirma o saque testnet.",
+          state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp testnet" ? "active" : "pending",
+        },
+        {
+          label: "Assinatura e saída",
+          detail: temporaryOffRampTestResult?.submitted
+            ? "Transação testnet assinada e submetida."
+            : "Aguardando confirmação para mostrar TESOURO saindo da wallet.",
+          state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp testnet" ? "active" : "pending",
+        },
+        {
+          label: "Conta PIX testnet",
+          detail: temporaryOffRampTestResult
+            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} mostrado como entrada bancária de teste.`
+            : "O recibo aparece aqui após a confirmação.",
+          state: temporaryOffRampTestResult ? "done" : "pending",
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "Wallet TalkToStellar",
+        detail: walletPublicKey ? `Wallet localizada: ${truncateKey(walletPublicKey)}` : "Digite o email para localizar a wallet.",
+        state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
+      },
+      {
+        label: "KYC sandbox e conta PIX",
+        detail: programmaticOnboarding
+          ? "KYC, wallet e conta PIX sandbox enviados via API com dados mockados."
+          : customerPayload
+            ? "Customer criado; preparando conta PIX sandbox."
+            : "Aguardando criação do customer Etherfuse.",
+        state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
+      },
+      {
+        label: "Cotação BRL -> TESOURO",
+        detail: quote
+          ? `${formatMoney(quote.fromAmount || amountBrl)} vira ${formatAsset(quote.toAmount, receivedCode)}.`
+          : `Alvo: colocar ${formatMoney(amountBrl)} na conta.`,
+        state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
+      },
+      {
+        label: "Checkout PIX testnet",
+        detail: orderId
+          ? `QR e referência mock prontos: ${orderId.slice(0, 18)}...`
+          : "A página cria a ordem e mostra QR, chave mock e botão de confirmação.",
+        state: orderId ? "done" : loading.includes("PIX") || loading.includes("Preparing") ? "active" : "pending",
+      },
+      {
+        label: "Confirmação do PIX",
+        detail: sandboxSimulationComplete
+          ? "PIX testnet confirmado."
+          : orderId ? "Clique em Confirmar PIX (testnet) para simular o pagamento." : "Aguardando geração do checkout.",
+        state: sandboxSimulationComplete ? "done" : orderId ? "active" : "pending",
+      },
+      {
+        label: "Entrega Stellar",
+        detail: sandboxSimulationComplete
+          ? `${formatAsset(order?.toAmount || quote?.toAmount, receivedCode)} entregue na wallet.`
+          : polling ? "Polling da ordem em andamento." : "Aguardando confirmação para entregar TESOURO.",
+        state: sandboxSimulationComplete ? "done" : polling ? "active" : "pending",
+      },
+    ];
+  }, [
+    amountBrl,
+    customerPayload,
+    loading,
+    offRampAmount,
+    offRampFiatAmount,
+    order?.toAmount,
+    orderId,
+    polling,
+    programmaticOnboarding,
+    quote,
+    quoteExpired,
+    rampMode,
+    receivedCode,
+    sandboxSimulationComplete,
+    temporaryOffRampTestResult,
+    walletPublicKey,
+  ]);
 
   const receiptText = useMemo(() => {
     if (!order) return "";
@@ -239,6 +348,7 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
     const params = new URLSearchParams(queryString);
     const mode = params.get("mode") === "offramp" ? "offramp" : "onramp";
     const amount = String(params.get("amount") || "").trim().replace(",", ".");
+    const fiatAmount = String(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "").trim().replace(",", ".");
     const asset = String(params.get("asset") || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
 
@@ -247,6 +357,7 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
     }
+    if (mode === "offramp" && fiatAmount) setOffRampFiatAmount(fiatAmount);
     if (asset === "TESOURO" || asset === "USDC") setTargetAsset(asset);
     if (email.includes("@")) setRampEmail(email);
   }, [queryString]);
@@ -621,6 +732,7 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
     const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
+      fiat_amount: offRampFiatAmount.trim() || undefined,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -721,6 +833,14 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
           </button>
         </section>
 
+        <LiveRampPanel
+          mode={rampMode}
+          steps={liveSteps}
+          loading={loading}
+          status={status}
+          launchedFromChat={launchedFromChat}
+        />
+
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
@@ -758,7 +878,23 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
                 </p>
               </div>
 
-              <label className="mt-6 block text-sm font-bold text-stone-600">Voce retira</label>
+              <label className="mt-6 block text-sm font-bold text-stone-600">Voce quer receber na conta PIX testnet</label>
+              <div className="mt-2 flex overflow-hidden rounded-3xl border border-stone-200 bg-stone-50 focus-within:ring-4 focus-within:ring-rose-200">
+                <span className="flex items-center bg-stone-100 px-4 text-sm font-black text-stone-500">R$</span>
+                <input
+                  className="w-full bg-transparent px-4 py-4 text-3xl font-black outline-none"
+                  value={offRampFiatAmount}
+                  inputMode="decimal"
+                  placeholder="100"
+                  onChange={(event) => setOffRampFiatAmount(event.target.value)}
+                />
+                <span className="flex items-center px-4 text-sm font-black text-stone-500">BRL</span>
+              </div>
+              <p className="mt-2 text-xs font-bold text-stone-500">
+                Se este campo estiver preenchido, o endpoint calcula quanto TESOURO precisa sair para chegar nesse alvo em BRL.
+              </p>
+
+              <label className="mt-6 block text-sm font-bold text-stone-600">Ou informe TESOURO exato para retirar</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-stone-200 bg-stone-50 focus-within:ring-4 focus-within:ring-rose-200">
                 <input
                   className="w-full bg-transparent px-4 py-4 text-3xl font-black outline-none"
@@ -797,8 +933,16 @@ export default function PixRampClient({ initialQuery = "" }: { initialQuery?: st
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta PIX testnet</p>
-                    <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.quote?.toAmount || offRampAmount)}</p>
+                    <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
                   </div>
+                  {temporaryOffRampTestResult.target_brl && (
+                    <div className="rounded-3xl bg-white/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Conversao usada</p>
+                      <p className="mt-1 text-sm font-bold text-white/75">
+                        Alvo de {formatMoney(temporaryOffRampTestResult.target_brl)} convertido para {formatAsset(temporaryOffRampTestResult.amount_tesouro || offRampAmount, "TESOURO")} antes do saque testnet.
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-3xl bg-emerald-200 p-4 text-emerald-950">
                     <p className="text-sm font-black">Saque PIX testnet concluido.</p>
                     <p className="mt-1 text-xs font-bold">O bloco "Wallet assets changing" abaixo mostra o delta antes/depois da retirada.</p>
@@ -1190,6 +1334,85 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
         <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify(result, null, 2)}</pre>
       )}
     </div>
+  );
+}
+
+function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
+  mode: RampMode;
+  steps: LiveStep[];
+  loading: string;
+  status: string;
+  launchedFromChat: boolean;
+}) {
+  const completed = steps.filter((step) => step.state === "done").length;
+  const progress = steps.length ? Math.round((completed / steps.length) * 100) : 0;
+  const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");
+
+  return (
+    <section className="mt-5 overflow-hidden rounded-[2rem] border border-[#d9ead7] bg-[#f8fff3] shadow-xl shadow-stone-300/35">
+      <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className={`${mode === "onramp" ? "bg-[#d9ff7a] text-[#17251d]" : "bg-rose-200 text-rose-950"} p-5 sm:p-6`}>
+          <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Fluxo PIX em tempo real</p>
+          <h2 className="mt-2 text-3xl font-black">
+            {mode === "onramp" ? "PIX entra, TESOURO chega na wallet" : "TESOURO sai, BRL aparece na conta PIX"}
+          </h2>
+          <p className="mt-3 text-sm font-bold opacity-75">
+            {launchedFromChat
+              ? "Aberto pelo chat. A página mantém o estado da operação e mostra cada request do ramp avançando."
+              : "Use esta tela para acompanhar sessão, KYC sandbox, quote, ordem, confirmação e saldo antes/depois."}
+          </p>
+          <div className="mt-5 rounded-full bg-black/10 p-1">
+            <div
+              className="h-3 rounded-full bg-[#17251d] transition-all duration-700"
+              style={{ width: `${Math.max(6, progress)}%` }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-[0.14em] opacity-70">
+            <span>{completed}/{steps.length} etapas</span>
+            <span>{loading || status}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 p-4 sm:p-5">
+          {activeStep && (
+            <div className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className={`h-3 w-3 rounded-full ${activeStep.state === "warning" ? "bg-amber-400" : "animate-pulse bg-emerald-500"}`} />
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-800">
+                  Agora
+                </p>
+              </div>
+              <p className="mt-2 text-lg font-black text-stone-950">{activeStep.label}</p>
+              <p className="mt-1 text-sm font-bold text-stone-500">{activeStep.detail}</p>
+            </div>
+          )}
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {steps.map((step, index) => (
+              <div key={`${step.label}-${index}`} className="rounded-2xl border border-stone-100 bg-white p-4">
+                <div className="flex items-start gap-3">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
+                    step.state === "done"
+                      ? "bg-emerald-500 text-white"
+                      : step.state === "active"
+                        ? "bg-[#17251d] text-lime-200"
+                        : step.state === "warning"
+                          ? "bg-amber-300 text-amber-950"
+                          : "bg-stone-100 text-stone-400"
+                  }`}>
+                    {step.state === "done" ? "OK" : index + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-black text-stone-950">{step.label}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-stone-500">{step.detail}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
