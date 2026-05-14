@@ -15,6 +15,7 @@ import VaultService from '../../services/vault.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { OperationRepository } from '../repository/operation.repository';
 import { StellarService } from './stellar.service';
+import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
   userId: string;
@@ -99,6 +100,10 @@ interface TrustlineResult {
   asset_issuer: string;
   hash?: string;
   error?: string;
+}
+
+interface ResolveWalletByEmailInput {
+  email?: string;
 }
 
 function apiError(message: string, statusCode = 400): Error {
@@ -317,6 +322,86 @@ export class AnchorService {
       publicKey,
       vaultSecretId: coalesceString(wallet?.vault_secret_id) || undefined,
       wallet,
+    };
+  }
+
+  static async resolveWalletByEmail(input: ResolveWalletByEmailInput): Promise<{
+    email: string;
+    session_id: string;
+    session_token: string;
+    public_key: string;
+    public_key_display: string;
+    wallet_found: boolean;
+  }> {
+    const email = String(input.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw apiError('Valid email is required to find a TalkToStellar wallet.', 400);
+    }
+
+    const runtime = this.getRuntimeInfo();
+    if (!runtime.sandbox) {
+      throw apiError('Email wallet lookup is only enabled for Etherfuse sandbox/devnet ramp testing.', 403);
+    }
+
+    const { data: sessions, error } = await supabase
+      .from('agent_sessions')
+      .select('*')
+      .ilike('email', email)
+      .order('last_activity', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .limit(5);
+
+    if (error) {
+      throw new Error(`Failed to resolve TalkToStellar session by email: ${error.message || JSON.stringify(error)}`);
+    }
+
+    const walletRepository = new WalletRepository(supabase);
+    let selectedSession: any | null = null;
+    let selectedWallet: WalletInfo | null = null;
+
+    for (const session of sessions || []) {
+      const wallet = await walletRepository.getWalletBySession(String(session.session_id || ''));
+      const publicKey = coalesceString(session.public_key, wallet?.public_key);
+      if (publicKey) {
+        selectedSession = session;
+        selectedWallet = wallet;
+        break;
+      }
+    }
+
+    if (!selectedSession) {
+      throw apiError('No TalkToStellar wallet was found for this email. Create or import a wallet first.', 404);
+    }
+
+    const sessionId = coalesceString(selectedSession.session_id);
+    const sessionToken = coalesceString(selectedSession.session_token) || crypto.randomUUID();
+    const publicKey = coalesceString(selectedSession.public_key, selectedWallet?.public_key);
+
+    if (!sessionId || !publicKey) {
+      throw apiError('The TalkToStellar account exists but does not have an active wallet session.', 409);
+    }
+
+    const { error: updateError } = await supabase
+      .from('agent_sessions')
+      .update({
+        session_token: sessionToken,
+        public_key: publicKey,
+        last_activity: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('session_id', sessionId);
+
+    if (updateError) {
+      throw new Error(`Failed to activate TalkToStellar ramp session: ${updateError.message || JSON.stringify(updateError)}`);
+    }
+
+    return {
+      email,
+      session_id: sessionId,
+      session_token: sessionToken,
+      public_key: publicKey,
+      public_key_display: `${publicKey.slice(0, 7)}...${publicKey.slice(-7)}`,
+      wallet_found: true,
     };
   }
 
