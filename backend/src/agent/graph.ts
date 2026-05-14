@@ -620,15 +620,16 @@ ${onboardingUrl}`;
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'TESOURO';
+    amount_currency?: 'BRL' | 'TESOURO' | 'USDC';
     asset_code: 'BRL' | 'USDC' | 'TESOURO';
     recipient_query?: string;
   } {
     const normalized = this.normalizeTextForIntent(text);
     const mentionsPix = /\bpix\b/.test(normalized);
-    if (!mentionsPix) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
-    }
+    const mentionsBankOffRamp =
+      /\b(off\s*ramp|offramp)\b/.test(normalized) ||
+      /\b(?:banco|bancaria|bancario|bancária|bancário|conta externa|outro banco)\b/.test(normalized) ||
+      /\b(?:retirar|sacar|saque|retirada|tirar|resgatar)\b/.test(normalized);
 
     const mentionsOwnPixDestination =
       /\b(?:meu|minha|meus|minhas)\s+(?:pix|chave\s+pix|conta\s+pix)\b/.test(normalized) ||
@@ -639,7 +640,8 @@ ${onboardingUrl}`;
       /\b(mandar|enviar|pagar|transferir|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
       /\b(para|pra|pro|a)\b/.test(normalized) &&
       !mentionsOwnPixDestination &&
-      !/\b(minha conta|meu banco|conta bancaria|conta bancária)\b/.test(normalized);
+      mentionsPix &&
+      !/\b(minha conta|meu banco|conta bancaria|conta bancária|outro banco|conta externa)\b/.test(normalized);
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
@@ -649,6 +651,11 @@ ${onboardingUrl}`;
       normalized.includes('retirar dinheiro') ||
       normalized.includes('mandar para minha conta bancaria') ||
       normalized.includes('mandar pra minha conta bancaria') ||
+      normalized.includes('mandar pra outro banco') ||
+      normalized.includes('mandar para outro banco') ||
+      normalized.includes('para outro banco') ||
+      normalized.includes('pra outro banco') ||
+      normalized.includes('conta externa') ||
       normalized.includes('enviar para o banco') ||
       normalized.includes('enviar pro banco') ||
       normalized.includes('cair no banco');
@@ -666,6 +673,10 @@ ${onboardingUrl}`;
       normalized.includes('pix pra wallet') ||
       normalized.includes('pix na conta') ||
       normalized.includes('saldo com pix');
+
+    if (!mentionsPix && !mentionsBankOffRamp) {
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
+    }
 
     if (!wantsOnRamp && !wantsOffRamp) {
       return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
@@ -690,8 +701,8 @@ ${onboardingUrl}`;
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
       flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1]?.replace(',', '.'),
-      amount_currency: mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
-      asset_code: wantsOffRamp && !wantsOnRamp ? 'TESOURO' : onRampTargetAsset,
+      amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
+      asset_code: wantsOffRamp && !wantsOnRamp ? (mentionsUsdc ? 'USDC' : 'BRL') : onRampTargetAsset,
       recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? recipientQuery : undefined,
     };
   }
@@ -700,7 +711,7 @@ ${onboardingUrl}`;
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'TESOURO';
+    amount_currency?: 'BRL' | 'TESOURO' | 'USDC';
     asset_code: 'BRL' | 'USDC' | 'TESOURO';
     recipient_query?: string;
   }): Promise<string> {
@@ -751,10 +762,8 @@ ${onboardingUrl}`;
       const url = await this.buildPixRampUrl(state, intent);
       state.success = true;
       if (intent.direction === 'offramp') {
-        const amountText = intent.amount_currency === 'BRL'
-          ? this.formatMoneyByAsset(intent.amount, 'BRL')
-          : this.formatMoneyByAsset(intent.amount, 'BRL');
-        state.response_message = `Para retirar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua wallet e confirma os reais chegando na sua conta PIX.`;
+        const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
+        state.response_message = `Para retirar ${amountText} para uma conta externa, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua wallet e confirma os reais chegando no destino bancário.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
       } else {
@@ -2859,12 +2868,12 @@ Sua carteira foi criada e já está pronta para usar.
         return await this.handleIntentHelpRequest(state);
       }
 
-      if (fixedSavings) {
-        return await this.handleFixedSavingsIntent(state, fixedSavings);
-      }
-
       if (state.action_type === ActionType.INITIATE_PIX) {
         return await this.handlePixRampRequest(state);
+      }
+
+      if (fixedSavings) {
+        return await this.handleFixedSavingsIntent(state, fixedSavings);
       }
 
       if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
