@@ -614,7 +614,7 @@ export class AnchorService {
     };
   }
 
-  private static requireWalletPin(input: RampSessionInput, context: SessionWalletContext): void {
+  private static requireWalletPin(input: RampSessionInput, context: SessionWalletContext): string {
     const pin = coalesceString(
       input.pin,
       input.wallet_pin,
@@ -629,6 +629,7 @@ export class AnchorService {
     if (!context.sessionPinHash || hashWalletPin(pin) !== context.sessionPinHash) {
       throw apiError('PIN inválido. Tente novamente.', 401);
     }
+    return pin;
   }
 
   static async getOrCreateExternalBankAccountForSession(input: ExternalBankAccountInput): Promise<{
@@ -2707,7 +2708,7 @@ export class AnchorService {
     }
 
     const context = await this.resolveSessionWallet(input);
-    this.requireWalletPin(input, context);
+    const walletPin = this.requireWalletPin(input, context);
     const requestedTargetBrl = coalesceString(
       input.fiat_amount,
       input.fiatAmount,
@@ -2813,6 +2814,8 @@ export class AnchorService {
         session_token: context.sessionToken,
         order_id: orderResult.transaction.id,
         operation_id: orderResult.operation_id,
+        pin: walletPin,
+        wallet_pin: walletPin,
       });
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
