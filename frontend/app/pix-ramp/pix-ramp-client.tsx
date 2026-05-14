@@ -176,6 +176,7 @@ export default function PixRampClient({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [receiptCopied, setReceiptCopied] = useState(false);
+  const [walletPin, setWalletPin] = useState("");
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
@@ -237,8 +238,8 @@ export default function PixRampClient({
   }, [queryString]);
   const debugEnabled = useMemo(() => {
     const params = new URLSearchParams(queryString);
-    return params.get("debug") === "1" || !launchedFromChat;
-  }, [launchedFromChat, queryString]);
+    return params.get("debug") === "1";
+  }, [queryString]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
   const liveSteps = useMemo<LiveStep[]>(() => {
     if (rampMode === "offramp") {
@@ -363,10 +364,10 @@ export default function PixRampClient({
       `Destination wallet: ${walletPublicKey}`,
       `Order id: ${order.id}`,
       `Timestamp: ${new Date().toISOString()}`,
-      `Network: ${config?.network || "Stellar Testnet"}`,
+      "Status: completed",
       `Status: ${order.status}`,
     ].join("\n");
-  }, [amountBrl, config?.network, finalReceivedAmount, order, pixFundedTransferResult, quote?.fromAmount, quote?.toAmount, receivedCode, targetAsset, transferRecipient, walletPublicKey]);
+  }, [amountBrl, finalReceivedAmount, order, pixFundedTransferResult, quote?.fromAmount, quote?.toAmount, receivedCode, targetAsset, transferRecipient, walletPublicKey]);
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -705,7 +706,7 @@ export default function PixRampClient({
     if (!canResolveWallet || loading || order || quote) return;
 
     autoStartedRef.current = true;
-    void run("Preparing PIX testnet checkout", confirmQuoteAndCreatePix);
+    void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
   }, [canResolveWallet, loading, order, queryString, quote, rampMode]);
 
   useEffect(() => {
@@ -752,6 +753,7 @@ export default function PixRampClient({
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
       order_id: orderId,
       operation_id: operationId,
+      pin: walletPin,
     });
     if (payload?.transaction) setStatusPayload(payload);
     setPolling(true);
@@ -773,6 +775,7 @@ export default function PixRampClient({
       asset_code: targetAsset,
       order_id: orderId,
       operation_id: operationId,
+      pin: walletPin,
     }, "POST", auth);
     setPixFundedTransferResult(payload);
   }
@@ -795,6 +798,7 @@ export default function PixRampClient({
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
       fiat_amount: offRampFiatAmount.trim() || undefined,
+      pin: walletPin,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -820,6 +824,7 @@ export default function PixRampClient({
     setPolling(false);
     setError("");
     setPixFundedTransferResult(null);
+    setWalletPin("");
   }
 
   const timeline = [
@@ -832,14 +837,14 @@ export default function PixRampClient({
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+        <header className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
               rampMode === "onramp"
                 ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
                 : "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
             }`}>
-              Etherfuse {config?.sandbox ? "sandbox" : "production"} checkout
+              PIX
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
@@ -848,24 +853,10 @@ export default function PixRampClient({
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 {rampMode === "onramp"
                   ? transferFlow && transferRecipient
-                    ? `Acompanhe o PIX testnet, a conversao para ${targetAsset} e a transferencia para ${transferRecipient}.`
-                    : "Acompanhe o PIX testnet do chat ate a entrega do saldo escolhido na sua wallet TalkToStellar."
-                  : "Acompanhe saldo saindo da wallet e BRL aparecendo como saldo bancario testnet."}
+                    ? `Faça o PIX, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
+                    : "Faça o PIX, confirme com seu PIN e receba o saldo na sua wallet."
+                  : "Confirme com seu PIN para retirar saldo via PIX."}
               </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {(rampMode === "onramp" ? ["Cotar", "Confirmar PIX", "Receber"] : ["Converter", "Autorizar", "Receber BRL"]).map((item, index) => {
-                const active = liveSteps.filter((liveStep) => liveStep.state === "done").length >= index + 1 || (index === 0 && Boolean(walletPublicKey));
-                return (
-                  <div key={item} className={`rounded-xl px-3 py-2 text-center transition ${
-                    active
-                      ? rampMode === "onramp" ? "bg-emerald-400/20 text-emerald-200" : "bg-cyan-400/20 text-cyan-100"
-                      : "text-slate-400"
-                  }`}>
-                    {item}
-                  </div>
-                );
-              })}
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -875,36 +866,16 @@ export default function PixRampClient({
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Rede</p>
-                <p className="mt-2 text-sm text-slate-200">{config?.network || "Stellar Testnet"}</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
+                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : "Minha conta PIX"}</p>
               </div>
-            </div>
-          </section>
-
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
-            <p className="text-sm font-medium text-white">Resumo importante</p>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <p>
-                {rampMode === "onramp"
-                  ? "Esta pagina e o checkout que o chat deve abrir para PIX on-ramp."
-                  : "Esta pagina e o fluxo que o chat deve abrir para PIX off-ramp."}
-              </p>
-              <p className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-cyan-50">
-                Sandbox: o QR e demonstrativo. Use o botao da tela para confirmar no testnet.
-              </p>
-              <p className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-emerald-50">
-                A movimentacao aparece em tempo real: sessao, KYC sandbox, quote, ordem, confirmacao, entrega e transferencia quando houver destinatario.
-              </p>
-              <Link href="/chat" className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
-                Voltar ao chat
-              </Link>
             </div>
           </section>
         </header>
 
         {!hasSession && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-            Nenhuma sessao TalkToStellar ativa foi encontrada neste navegador. Digite o email da conta abaixo para localizar a wallet existente e continuar sem Freighter.
+            Digite o email da conta para localizar sua wallet e continuar.
           </section>
         )}
 
@@ -949,25 +920,17 @@ export default function PixRampClient({
         </section>
         )}
 
-        <LiveRampPanel
-          mode={rampMode}
-          steps={liveSteps}
-          loading={loading}
-          status={status}
-          launchedFromChat={launchedFromChat}
-        />
-
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Off-ramp PIX testnet</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
               <h2 className="mt-1 text-3xl font-black text-white">Retirar saldo para PIX</h2>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Este modo simula uma saida para conta bancaria: o saldo sai da sua wallet na Stellar Testnet e o recibo mostra BRL entrando na conta PIX de teste.
+                O saldo sai da sua wallet e aparece como dinheiro recebido por PIX.
               </p>
 
               <div className="mt-6 rounded-3xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                <label className="block text-sm font-bold text-cyan-50">TalkToStellar account email</label>
+              <label className="block text-sm font-bold text-cyan-50">Email da conta</label>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                   <input
                     className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
@@ -990,11 +953,11 @@ export default function PixRampClient({
                 <p className="mt-3 text-xs font-semibold text-cyan-100/75">
                   {walletPublicKey
                     ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
-                    : "Informe o email da conta para buscar a wallet TalkToStellar existente."}
+                    : "Informe o email da conta para buscar sua wallet."}
                 </p>
               </div>
 
-              <label className="mt-6 block text-sm font-bold text-slate-200">Voce quer receber na conta PIX testnet</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">Você quer receber</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
                 <input
@@ -1006,36 +969,33 @@ export default function PixRampClient({
                 />
                 <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
               </div>
-              <p className="mt-2 text-xs font-bold text-slate-400">
-                Se este campo estiver preenchido, o endpoint calcula quanto saldo precisa sair para chegar nesse alvo em BRL.
-              </p>
-
-              <label className="mt-6 block text-sm font-bold text-slate-200">Ou informe saldo exato para retirar</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <input
-                  className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none"
-                  value={offRampAmount}
-                  inputMode="decimal"
-                  onChange={(event) => setOffRampAmount(event.target.value)}
+                  className="w-full bg-transparent px-4 py-4 text-xl font-black text-white outline-none"
+                  value={walletPin}
+                  inputMode="numeric"
+                  type="password"
+                  placeholder="Digite seu PIN"
+                  onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
                 />
-                <span className="flex items-center px-4 text-sm font-black text-slate-300">saldo</span>
               </div>
 
               <button
                 className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
-                disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox}
-                onClick={() => run("Confirming PIX off-ramp testnet", runTemporaryOffRampEndpointTest)}
+                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4}
+                onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {loading === "Confirming PIX off-ramp testnet" ? "Confirmando saque..." : "Confirmar saque PIX (testnet)"}
+                {loading === "Confirming PIX off-ramp" ? "Confirmando..." : "Confirmar retirada"}
               </button>
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta bancaria testnet</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta PIX</p>
               <h2 className="mt-1 text-2xl font-black">PIX de saida</h2>
               {!temporaryOffRampTestResult ? (
                 <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
-                  Confirme o saque testnet para criar a ordem Etherfuse sandbox, assinar a saida e mostrar o dinheiro saindo da wallet.
+                  Digite seu PIN e confirme a retirada para ver o dinheiro sair da wallet.
                 </div>
               ) : (
                 <div className="mt-6 space-y-4">
@@ -1048,20 +1008,19 @@ export default function PixRampClient({
                     <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta PIX testnet</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta PIX</p>
                     <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
                   </div>
                   {temporaryOffRampTestResult.target_brl && (
                     <div className="rounded-3xl bg-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Conversao usada</p>
                       <p className="mt-1 text-sm font-bold text-white/75">
-                        Alvo de {formatMoney(temporaryOffRampTestResult.target_brl)} calculado antes do saque testnet.
+                        Alvo de {formatMoney(temporaryOffRampTestResult.target_brl)} calculado antes da retirada.
                       </p>
                     </div>
                   )}
                   <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-100">
-                    <p className="text-sm font-black">Saque PIX testnet concluido.</p>
-                    <p className="mt-1 text-xs font-bold">O bloco "Wallet assets changing" abaixo mostra o delta antes/depois da retirada.</p>
+                    <p className="text-sm font-black">Retirada PIX concluída.</p>
                   </div>
                 </div>
               )}
@@ -1074,16 +1033,14 @@ export default function PixRampClient({
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">3. Quote screen</p>
-                <h2 className="mt-1 text-2xl font-black text-white">Choose amount</h2>
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-slate-300">
-                {config?.network || "Stellar Testnet"}
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">PIX</p>
+                <h2 className="mt-1 text-2xl font-black text-white">Quanto você quer colocar?</h2>
               </div>
             </div>
 
+            {!hasSession && (
             <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-              <label className="block text-sm font-bold text-emerald-50">TalkToStellar account email</label>
+              <label className="block text-sm font-bold text-emerald-50">Email da conta</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <input
                   className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
@@ -1102,26 +1059,18 @@ export default function PixRampClient({
                     await resolveWalletFromEmail();
                   })}
                 >
-                  {loading === "Resolving wallet" ? "Finding..." : hasSession ? "Refresh wallet" : "Use wallet"}
+                  {loading === "Resolving wallet" ? "Localizando..." : "Usar wallet"}
                 </button>
               </div>
-              {hasSession && (
-                <button
-                  className="mt-3 text-xs font-black uppercase tracking-[0.14em] text-emerald-200 underline decoration-emerald-300 underline-offset-4"
-                  disabled={Boolean(loading)}
-                  onClick={() => clearResolvedRampWallet("")}
-                >
-                  Trocar wallet/email
-                </button>
-              )}
               <p className="mt-3 text-xs font-semibold text-emerald-100/75">
                 {walletPublicKey
                   ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
-                  : "A cotacao usa a wallet criada/importada na infra TalkToStellar para este email. Em sandbox, a conta e fundida na Testnet antes de ler saldo."}
+                  : "Digite o email da conta para localizar sua wallet."}
               </p>
             </div>
+            )}
 
-            <label className="mt-6 block text-sm font-bold text-slate-200">You send</label>
+            <label className="mt-6 block text-sm font-bold text-slate-200">Valor</label>
             <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-emerald-400/60">
               <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
               <input
@@ -1136,7 +1085,7 @@ export default function PixRampClient({
               <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
             </div>
 
-            <label className="mt-5 block text-sm font-bold text-slate-200">{transferFlow ? "Transfer asset" : "You receive"}</label>
+            <label className="mt-5 block text-sm font-bold text-slate-200">{transferFlow ? "Enviar como" : "Receber como"}</label>
             <div className="mt-2 grid grid-cols-2 gap-2 rounded-3xl border border-white/10 bg-black/20 p-2">
               {(["BRL", "USDC"] as TargetAsset[]).map((asset) => (
                 <button
@@ -1155,19 +1104,19 @@ export default function PixRampClient({
             </div>
             {transferFlow && transferRecipient && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                Depois que o PIX testnet for confirmado, a tela envia automaticamente {formatMoney(amountBrl)} em {targetAsset} para {transferRecipient}.
+                Depois que você confirmar o PIX, enviaremos automaticamente {formatMoney(amountBrl)} em {targetAsset} para {transferRecipient}.
               </div>
             )}
 
             <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Requesting quote", async () => { await requestQuote(); })}>
-              {loading === "Requesting quote" ? "Getting quote..." : "Get quote"}
+              {loading === "Requesting quote" ? "Preparando..." : "Continuar"}
             </button>
 
             {quote && (
               <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Quote ready</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Pronto</p>
                     <h3 className="mt-1 text-2xl font-black text-white">{estimatedReceiveLabel}</h3>
                   </div>
                   <div className={`rounded-full px-3 py-1 text-xs font-black ${quoteExpired ? "bg-rose-400 text-slate-950" : "bg-emerald-400 text-slate-950"}`}>
@@ -1175,22 +1124,21 @@ export default function PixRampClient({
                   </div>
                 </div>
                 <dl className="mt-5 grid gap-3 text-sm">
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">BRL amount</dt><dd className="font-black text-white">{formatMoney(quote.fromAmount)}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Estimated received</dt><dd className="font-black text-white">{estimatedReceiveLabel}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Exchange rate</dt><dd className="font-black text-white">{quote.exchangeRate}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Fee</dt><dd className="font-black text-white">{quote.fee || "0"}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Você paga</dt><dd className="font-black text-white">{formatMoney(quote.fromAmount)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Você recebe</dt><dd className="font-black text-white">{estimatedReceiveLabel}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Taxa</dt><dd className="font-black text-white">{quote.fee || "0"}</dd></div>
                 </dl>
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
-                    Quote expirou. Isso normalmente nao e KYC; a Etherfuse expira cotacoes em poucos minutos. O botao abaixo vai gerar uma quote nova automaticamente antes de criar o PIX.
+                    A cotação expirou. Gere o PIX novamente.
                   </div>
                 )}
                 <button className="mt-5 w-full rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={Boolean(loading)} onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}>
-                  {quoteExpired ? "Refresh quote and generate PIX" : "Confirm quote and generate PIX"}
+                  {quoteExpired ? "Gerar PIX novamente" : "Gerar PIX"}
                 </button>
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-                    <p className="font-bold">Fallback: a Etherfuse ainda exigiu concluir cadastro PIX/KYC hospedado para esta combinacao de customer/wallet.</p>
+                    <p className="font-bold">Precisamos concluir o cadastro PIX desta conta.</p>
                     <a className="mt-3 inline-flex rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950" href={onboardingUrl} target="_blank" rel="noreferrer">
                       Abrir cadastro PIX Etherfuse
                     </a>
@@ -1198,7 +1146,7 @@ export default function PixRampClient({
                 )}
                 {programmaticOnboarding && !onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-                    <p className="font-bold">KYC, wallet e conta PIX sandbox enviados programaticamente via API com dados mockados.</p>
+                    <p className="font-bold">Cadastro PIX preparado.</p>
                   </div>
                 )}
               </div>
@@ -1208,20 +1156,19 @@ export default function PixRampClient({
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">4. PIX payment screen</p>
-                <h2 className="mt-1 text-2xl font-black">Etherfuse PIX checkout</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Pagamento</p>
+                <h2 className="mt-1 text-2xl font-black">Faça o PIX</h2>
               </div>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/70">{status}</span>
             </div>
 
             {!order ? (
               <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
                 <p>
                   {quoteExpired
-                    ? "A quote expirou antes da ordem PIX. Gere o PIX agora que a tela renova a quote automaticamente."
-                    : quote
-                      ? "Quote pronta. Confirme para gerar o PIX copy-and-paste code, chave, QR code e timeline."
-                      : "Confirm a quote to generate PIX copy-and-paste code, key, QR code, and timeline."}
+                      ? "A cotação expirou. Gere o PIX novamente."
+                      : quote
+                      ? "Tudo pronto para gerar o PIX."
+                      : "Informe o valor para gerar o PIX."}
                 </p>
                 {quote && (
                   <button
@@ -1229,7 +1176,7 @@ export default function PixRampClient({
                     disabled={Boolean(loading)}
                     onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}
                   >
-                    {quoteExpired ? "Refresh quote and generate PIX" : "Generate PIX checkout"}
+                    {quoteExpired ? "Gerar PIX novamente" : "Gerar PIX"}
                   </button>
                 )}
               </div>
@@ -1240,7 +1187,7 @@ export default function PixRampClient({
                         {qrDataUrl ? (
                           <img
                             src={qrDataUrl}
-                            alt={isSandboxMockOrder ? "QR testnet demonstrativo" : "PIX QR Code"}
+                            alt="QR Code PIX"
                             className="h-auto w-full"
                           />
                         ) : (
@@ -1249,92 +1196,62 @@ export default function PixRampClient({
                       </div>
                   <div className="space-y-3">
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Receiver</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Recebedor</p>
                       <p className="mt-1 text-lg font-black">Etherfuse</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Amount</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Valor</p>
                       <p className="mt-1 text-lg font-black">{formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)}</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Expires in</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Expira em</p>
                       <p className="mt-1 text-lg font-black">{quoteCountdown}</p>
                     </div>
                   </div>
                 </div>
 
                   {isSandboxMockOrder ? (
-                    <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">PIX testnet mock</p>
-                          <button className="rounded-full bg-amber-300 px-3 py-1 text-xs font-black text-amber-950" onClick={() => run("Copying PIX testnet reference", copyPixCode)}>
-                            {copied ? "Copied" : "Copy testnet reference"}
-                          </button>
-                        </div>
-                        <p className="mt-2 text-sm font-bold text-white">
-                          Este checkout segue o fluxo do regional starter pack: a ordem e criada, voce confirma o PIX testnet e o sandbox entrega {targetAsset} na wallet. Detalhes internos da anchor ficam escondidos do usuario.
-                        </p>
-                        <p className="mt-3 rounded-2xl bg-black/20 p-3 text-sm text-amber-50">
-                          O QR acima e demonstrativo e nao consulta o DICT do Banco Central. Nao use Nubank neste modo. Para concluir no testnet, use o botao "Confirmar PIX (testnet)" abaixo.
-                        </p>
-                        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                          <div className="rounded-2xl bg-white/10 p-3">
-                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Mock PIX key</p>
-                            <p className="mt-1 break-all font-mono text-xs text-white/80">{testnetPixKey}</p>
-                          </div>
-                          <div className="rounded-2xl bg-white/10 p-3">
-                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Sandbox reference</p>
-                            <p className="mt-1 break-all font-mono text-xs text-white/80">{orderId}</p>
-                          </div>
-                        <div className="rounded-2xl bg-white/10 p-3">
-                          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Asset delivery</p>
-                          <p className="mt-1 font-black text-white">{formatRampAsset(finalReceivedAmount || order.toAmount || quote?.toAmount, receivedCode)}</p>
-                        </div>
-                      </div>
+                    <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
+                      Use o QR acima para simular o pagamento. Depois digite seu PIN e confirme.
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">PIX copy-and-paste code / BR-Code</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Código PIX copia e cola</p>
                         <button className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-[#17251d]" onClick={() => run("Copying PIX code", copyPixCode)}>
-                          {copied ? "Copied" : "Copy PIX code"}
+                          {copied ? "Copiado" : "Copiar código PIX"}
                         </button>
                       </div>
                       <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-white/10 p-3 font-mono text-xs text-white/80">{pixCode || "PIX code not returned yet"}</p>
-                      <p className="mt-3 text-sm text-white/65">PIX key: <span className="font-mono text-white">{pixKey || "not returned"}</span></p>
+                      <p className="mt-3 text-sm text-white/65">Chave PIX: <span className="font-mono text-white">{pixKey || "indisponível"}</span></p>
                     </div>
                   )}
 
-                <div className="mt-5 rounded-3xl bg-white/10 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Status timeline</p>
-                  <div className="mt-4 space-y-3">
-                    {timeline.map((item, index) => (
-                      <div key={item.label} className="flex items-center gap-3">
-                        <span className={`grid h-8 w-8 place-items-center rounded-full text-xs font-black ${item.done ? "bg-emerald-400 text-slate-950" : item.active ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-white/45"}`}>{index + 1}</span>
-                        <span className={item.done || item.active ? "font-bold text-white" : "text-white/45"}>{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                   {config?.sandbox && (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-amber-100">
-                        <p className="text-sm font-black">Sandbox Mode</p>
-                        <p className="mt-1 text-xs font-bold">
-                          Confirma no testnet o recebimento da transferencia bancaria pelo anchor.
-                        </p>
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
-                            PIX testnet confirmado. {formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} foi entregue na Stellar Testnet.
+                            PIX confirmado. {transferFlow ? "A transferência foi enviada." : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na wallet.`}
                           </p>
                         ) : (
-                          <button
-                            className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
-                            disabled={Boolean(loading) || !orderId}
-                            onClick={() => run("Simulating fiat received", simulatePixPayment)}
-                          >
-                            {loading === "Simulating fiat received" ? "Confirmando PIX..." : "Confirmar PIX (testnet)"}
-                          </button>
+                          <>
+                            <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
+                            <input
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-xl font-black text-white outline-none placeholder:text-amber-100/35 focus:border-amber-200/60"
+                              value={walletPin}
+                              inputMode="numeric"
+                              type="password"
+                              placeholder="Digite seu PIN"
+                              onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                            />
+                            <button
+                              className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
+                              disabled={Boolean(loading) || !orderId || walletPin.length < 4}
+                              onClick={() => run("Simulating fiat received", simulatePixPayment)}
+                            >
+                              {loading === "Simulating fiat received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
+                            </button>
+                          </>
                         )}
                     </div>
                   )}
@@ -1344,7 +1261,7 @@ export default function PixRampClient({
         </section>
         )}
 
-        {rampMode === "offramp" && (
+        {debugEnabled && rampMode === "offramp" && (
           <section className="mt-5">
             <AssetMovement title="Off-ramp wallet assets" before={offRampBalancesBefore} after={offRampBalancesAfter} deltas={offRampAssetDeltas} walletPublicKey={walletPublicKey} />
           </section>
@@ -1411,15 +1328,15 @@ export default function PixRampClient({
 
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200">Comprovante PIX testnet</p>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200">Comprovante PIX</p>
                   <div className="mt-5 flex items-center gap-4">
                     <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-300 text-3xl font-black text-[#0d1512]">✓</span>
                     <div>
                       <h2 className="text-3xl font-black tracking-tight sm:text-5xl">{transferFlow ? "PIX e transferência confirmados" : "PIX confirmado"}</h2>
                       <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/65">
                         {transferFlow
-                          ? "A confirmação sandbox foi processada, o saldo foi convertido automaticamente e a transferência foi enviada pela Stellar Testnet."
-                          : "A confirmação sandbox foi processada e o saldo final foi entregue na wallet TalkToStellar pela Stellar Testnet."}
+                          ? "O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada."
+                          : "O PIX foi confirmado e o saldo final entrou na sua wallet."}
                       </p>
                     </div>
                   </div>
@@ -1437,7 +1354,7 @@ export default function PixRampClient({
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <ReceiptRow label="Pago via PIX" value={formatMoney(order.fromAmount || quote?.fromAmount || amountBrl)} />
-                    <ReceiptRow label="Rede" value={config?.network || "Stellar Testnet"} />
+                    <ReceiptRow label="Status" value="Concluído" />
                   </div>
                 </div>
 
@@ -1459,7 +1376,7 @@ export default function PixRampClient({
                       <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
                       <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} />
                       <ReceiptRow label="Wallet destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
-                      <ReceiptRow label="Tx Stellar" value={String(pixFundedTransferResult.transaction_hash)} />
+                      <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
                     </div>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
@@ -1470,7 +1387,7 @@ export default function PixRampClient({
               )}
 
               <div className="relative mt-6 rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-semibold leading-6 text-emerald-50">
-                Este é o comprovante do on-ramp PIX em sandbox. Em produção, o mesmo espaço deve mostrar o identificador real da transação PIX retornado pela Etherfuse.
+                Este comprovante confirma que o PIX foi processado e registrado na sua wallet.
               </div>
 
               <div className="relative mt-6 grid gap-3 sm:grid-cols-3">

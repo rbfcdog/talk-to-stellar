@@ -37,6 +37,7 @@ interface RampSessionInput {
   sessionId?: string;
   session_token?: string;
   sessionToken?: string;
+  pin?: string;
 }
 
 interface SessionWalletContext {
@@ -46,6 +47,7 @@ interface SessionWalletContext {
   email?: string;
   publicKey: string;
   vaultSecretId?: string;
+  sessionPinHash?: string;
   wallet?: WalletInfo | null;
 }
 
@@ -203,6 +205,12 @@ function formatDisplayAmount(value: unknown, assetCode: string): string {
 
 function truncatePublicKey(value: string): string {
   return value ? `${value.slice(0, 7)}...${value.slice(-7)}` : 'wallet';
+}
+
+function hashWalletPin(pin: string): string {
+  return crypto
+    .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+    .toString('hex');
 }
 
 function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): string {
@@ -552,8 +560,19 @@ export class AnchorService {
       email: coalesceString(session.email) || undefined,
       publicKey,
       vaultSecretId: coalesceString(wallet?.vault_secret_id) || undefined,
+      sessionPinHash: coalesceString((session as any).session_password_hash, (session as any).password_hash) || undefined,
       wallet,
     };
+  }
+
+  private static requireWalletPin(input: RampSessionInput, context: SessionWalletContext): void {
+    const pin = coalesceString(input.pin);
+    if (!/^\d{4,8}$/.test(pin)) {
+      throw apiError('PIN da wallet é obrigatório para confirmar esta operação.', 400);
+    }
+    if (!context.sessionPinHash || hashWalletPin(pin) !== context.sessionPinHash) {
+      throw apiError('PIN inválido. Tente novamente.', 401);
+    }
   }
 
   static async resolveWalletByEmail(input: ResolveWalletByEmailInput): Promise<{
@@ -2354,6 +2373,7 @@ export class AnchorService {
     order_id: string;
   }> {
     const context = await this.resolveSessionWallet(input);
+    this.requireWalletPin(input, context);
     const orderId = coalesceString(input.order_id, input.orderId);
     if (!orderId) throw apiError('order_id is required.', 400);
     const mockRecord = this.sandboxMockOffRampOrders.get(orderId);
@@ -2586,6 +2606,7 @@ export class AnchorService {
     }
 
     const context = await this.resolveSessionWallet(input);
+    this.requireWalletPin(input, context);
     const requestedTargetBrl = coalesceString(
       input.fiat_amount,
       input.fiatAmount,
@@ -2798,6 +2819,7 @@ export class AnchorService {
     }
 
     const context = await this.resolveSessionWallet(input);
+    this.requireWalletPin(input, context);
     if (!context.vaultSecretId) {
       throw apiError('Source wallet secret is unavailable for the current TalkToStellar session.', 409);
     }
