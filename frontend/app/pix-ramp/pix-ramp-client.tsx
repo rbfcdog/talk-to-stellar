@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "TESOURO" | "USDC";
+type RampMode = "onramp" | "offramp";
 
 type RampConfig = {
   sandbox?: boolean;
@@ -129,12 +130,16 @@ function sanitizeForDebug(value: unknown): unknown {
   }));
 }
 
-export default function PixRampClient() {
+export default function PixRampClient({ initialQuery = "" }: { initialQuery?: string }) {
+  const queryString = initialQuery;
+  const queryAppliedRef = useRef(false);
+  const autoStartedRef = useRef(false);
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
   const [rampEmail, setRampEmail] = useState("");
   const [resolvedWallet, setResolvedWallet] = useState<RampResponse | null>(null);
   const [config, setConfig] = useState<RampConfig | null>(null);
+  const [rampMode, setRampMode] = useState<RampMode>("onramp");
   const [step, setStep] = useState<Step>("quote");
   const [amountBrl, setAmountBrl] = useState("100");
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("TESOURO");
@@ -176,6 +181,7 @@ export default function PixRampClient() {
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
+  const testnetPixKey = isSandboxMockOrder ? (pixKey || `testnet-${orderId.slice(-8) || "pix"}@talktostellar.local`) : pixKey;
   const receivedCode = String(quote?.toCurrency || targetAsset).split(":")[0];
   const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
   const quoteExpiresAt = parseRampTimestamp(quote?.expiresAt);
@@ -190,6 +196,17 @@ export default function PixRampClient() {
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && isSuccessStatus(status));
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
+  const sandboxQrPayload = isSandboxMockOrder
+    ? `talktostellar-testnet://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(receivedCode)}`
+    : "";
+  const launchedFromChat = useMemo(() => {
+    const params = new URLSearchParams(queryString);
+    return params.get("from") === "chat";
+  }, [queryString]);
+  const debugEnabled = useMemo(() => {
+    const params = new URLSearchParams(queryString);
+    return params.get("debug") === "1" || !launchedFromChat;
+  }, [launchedFromChat, queryString]);
   const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
 
@@ -214,6 +231,25 @@ export default function PixRampClient() {
     const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
     if (storedName.includes("@")) setRampEmail(storedName);
   }, []);
+
+  useEffect(() => {
+    if (queryAppliedRef.current) return;
+    queryAppliedRef.current = true;
+
+    const params = new URLSearchParams(queryString);
+    const mode = params.get("mode") === "offramp" ? "offramp" : "onramp";
+    const amount = String(params.get("amount") || "").trim().replace(",", ".");
+    const asset = String(params.get("asset") || "").trim().toUpperCase();
+    const email = String(params.get("email") || "").trim().toLowerCase();
+
+    setRampMode(mode);
+    if (amount) {
+      if (mode === "offramp") setOffRampAmount(amount);
+      else setAmountBrl(amount);
+    }
+    if (asset === "TESOURO" || asset === "USDC") setTargetAsset(asset);
+    if (email.includes("@")) setRampEmail(email);
+  }, [queryString]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -344,16 +380,17 @@ export default function PixRampClient() {
   }, [callRampGet]);
 
   useEffect(() => {
-    if (!pixCode || isSandboxMockOrder) {
+    const qrPayload = payablePixAvailable ? pixCode : sandboxQrPayload;
+    if (!qrPayload) {
       setQrDataUrl("");
       return;
     }
-    QRCode.toDataURL(pixCode, {
+    QRCode.toDataURL(qrPayload, {
       width: 260,
       margin: 1,
       color: { dark: "#10231b", light: "#ffffff" },
     }).then(setQrDataUrl).catch(() => setQrDataUrl(""));
-  }, [isSandboxMockOrder, pixCode]);
+  }, [payablePixAvailable, pixCode, sandboxQrPayload]);
 
   const refreshOrder = useCallback(async () => {
     if (!orderId) return null;
@@ -508,6 +545,17 @@ export default function PixRampClient() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(queryString);
+    if (params.get("autostart") !== "1") return;
+    if (autoStartedRef.current) return;
+    if (rampMode !== "onramp") return;
+    if (!canResolveWallet || loading || order || quote) return;
+
+    autoStartedRef.current = true;
+    void run("Preparing PIX testnet checkout", confirmQuoteAndCreatePix);
+  }, [canResolveWallet, loading, order, queryString, quote, rampMode]);
+
+  useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
     if (!quoteDeadlineAt) return;
 
@@ -533,7 +581,15 @@ export default function PixRampClient() {
   }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, loading, order, quote, quoteDeadlineAt, targetAsset]);
 
   async function copyPixCode() {
-    await navigator.clipboard.writeText(pixCode || pixKey || orderId);
+    const sandboxReference = [
+      "TalkToStellar PIX testnet",
+      `Order: ${orderId}`,
+      `Operation: ${operationId || "not persisted"}`,
+      `Mock key: ${testnetPixKey}`,
+      `Amount: ${formatMoney(order?.fromAmount || amountBrl)}`,
+      `Delivery: ${formatAsset(order?.toAmount || quote?.toAmount, receivedCode)}`,
+    ].join("\n");
+    await navigator.clipboard.writeText(isSandboxMockOrder ? sandboxReference : pixCode || pixKey || orderId);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
@@ -607,12 +663,12 @@ export default function PixRampClient() {
               <p className="mb-3 inline-flex rounded-full bg-lime-300 px-3 py-1 text-xs font-black uppercase tracking-[0.22em] text-[#17251d]">
                 Etherfuse {config?.sandbox ? "sandbox" : "production"} checkout
               </p>
-              <h1 className="max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
-                PIX checkout to your TalkToStellar wallet
-              </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/70">
-                Quote BRL, generate PIX instructions, simulate sandbox payment, poll delivery, and show wallet asset changes before and after settlement.
-              </p>
+                <h1 className="max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
+                  PIX testnet para sua conta TalkToStellar
+                </h1>
+                <p className="mt-4 max-w-2xl text-sm leading-6 text-white/70">
+                  Coloque saldo com PIX sandbox, confirme no testnet, receba TESOURO na wallet e acompanhe a movimentacao como uma conta bancaria de teste.
+                </p>
             </div>
             <Link href="/chat" className="inline-flex w-fit rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
               Back to chat
@@ -642,6 +698,118 @@ export default function PixRampClient() {
           </section>
         )}
 
+        <section className="mt-5 grid gap-3 rounded-[2rem] bg-white p-3 shadow-xl shadow-stone-300/35 sm:grid-cols-2">
+          <button
+            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-[#17251d] text-white shadow-lg" : "bg-stone-100 text-stone-600 hover:bg-stone-200"}`}
+            onClick={() => {
+              setRampMode("onramp");
+              setError("");
+            }}
+          >
+            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Adicionar saldo</span>
+            <span className="mt-1 block text-lg font-black">PIX para TESOURO</span>
+          </button>
+          <button
+            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-rose-950 text-white shadow-lg" : "bg-stone-100 text-stone-600 hover:bg-stone-200"}`}
+            onClick={() => {
+              setRampMode("offramp");
+              setError("");
+            }}
+          >
+            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Retirar dinheiro</span>
+            <span className="mt-1 block text-lg font-black">TESOURO para PIX</span>
+          </button>
+        </section>
+
+        {rampMode === "offramp" && (
+          <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">Off-ramp PIX testnet</p>
+              <h2 className="mt-1 text-3xl font-black text-rose-950">Retirar TESOURO para PIX</h2>
+              <p className="mt-3 text-sm leading-6 text-stone-600">
+                Este modo simula uma saida para conta bancaria: TESOURO sai da sua wallet na Stellar Testnet e o recibo mostra BRL entrando na conta PIX de teste.
+              </p>
+
+              <div className="mt-6 rounded-3xl border border-rose-100 bg-rose-50 p-4">
+                <label className="block text-sm font-bold text-rose-950">TalkToStellar account email</label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold text-rose-950 outline-none ring-rose-200 placeholder:text-rose-900/35 focus:ring-4"
+                    type="email"
+                    value={rampEmail}
+                    placeholder="jorge@gmail.com"
+                    disabled={Boolean(loading)}
+                    onChange={(event) => clearResolvedRampWallet(event.target.value)}
+                  />
+                  <button
+                    className="rounded-2xl bg-rose-950 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                    disabled={!rampEmail.trim() || Boolean(loading)}
+                    onClick={() => run("Resolving wallet", async () => {
+                      await resolveWalletFromEmail();
+                    })}
+                  >
+                    {loading === "Resolving wallet" ? "Localizando..." : hasSession ? "Atualizar wallet" : "Usar wallet"}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs font-semibold text-rose-900/65">
+                  {walletPublicKey
+                    ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
+                    : "Informe o email da conta para buscar a wallet TalkToStellar existente."}
+                </p>
+              </div>
+
+              <label className="mt-6 block text-sm font-bold text-stone-600">Voce retira</label>
+              <div className="mt-2 flex overflow-hidden rounded-3xl border border-stone-200 bg-stone-50 focus-within:ring-4 focus-within:ring-rose-200">
+                <input
+                  className="w-full bg-transparent px-4 py-4 text-3xl font-black outline-none"
+                  value={offRampAmount}
+                  inputMode="decimal"
+                  onChange={(event) => setOffRampAmount(event.target.value)}
+                />
+                <span className="flex items-center px-4 text-sm font-black text-stone-500">TESOURO</span>
+              </div>
+
+              <button
+                className="mt-6 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 shadow-lg shadow-rose-900/10 disabled:opacity-50"
+                disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox}
+                onClick={() => run("Confirming PIX off-ramp testnet", runTemporaryOffRampEndpointTest)}
+              >
+                {loading === "Confirming PIX off-ramp testnet" ? "Confirmando saque..." : "Confirmar saque PIX (testnet)"}
+              </button>
+            </div>
+
+            <div className="rounded-[2rem] bg-rose-950 p-5 text-white shadow-xl shadow-rose-950/20 sm:p-6">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-200">Conta bancaria testnet</p>
+              <h2 className="mt-1 text-2xl font-black">PIX de saida</h2>
+              {!temporaryOffRampTestResult ? (
+                <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
+                  Confirme o saque testnet para criar a ordem Etherfuse sandbox, assinar a saida e mostrar o dinheiro saindo da wallet.
+                </div>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-3xl bg-white/10 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Status</p>
+                    <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
+                  </div>
+                  <div className="rounded-3xl bg-white/10 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da wallet</p>
+                    <p className="mt-1 text-lg font-black">{formatAsset(temporaryOffRampTestResult.amount_tesouro || offRampAmount, "TESOURO")}</p>
+                  </div>
+                  <div className="rounded-3xl bg-white/10 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta PIX testnet</p>
+                    <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.quote?.toAmount || offRampAmount)}</p>
+                  </div>
+                  <div className="rounded-3xl bg-emerald-200 p-4 text-emerald-950">
+                    <p className="text-sm font-black">Saque PIX testnet concluido.</p>
+                    <p className="mt-1 text-xs font-bold">O bloco "Wallet assets changing" abaixo mostra o delta antes/depois da retirada.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {rampMode === "onramp" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
             <div className="flex items-center justify-between gap-3">
@@ -802,18 +970,18 @@ export default function PixRampClient() {
               </div>
             ) : (
               <>
-                  <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-                    <div className="rounded-3xl bg-white p-4">
-                      {payablePixAvailable && qrDataUrl ? (
-                        <img src={qrDataUrl} alt="PIX QR Code" className="h-auto w-full" />
-                      ) : isSandboxMockOrder ? (
-                        <div className="grid aspect-square place-items-center rounded-2xl bg-amber-100 p-5 text-center text-xs font-black uppercase tracking-[0.12em] text-amber-800">
-                          Sandbox transfer simulator
-                        </div>
-                      ) : (
-                        <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR unavailable</div>
-                      )}
-                    </div>
+                    <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
+                      <div className="rounded-3xl bg-white p-4">
+                        {qrDataUrl ? (
+                          <img
+                            src={qrDataUrl}
+                            alt={isSandboxMockOrder ? "QR testnet demonstrativo" : "PIX QR Code"}
+                            className="h-auto w-full"
+                          />
+                        ) : (
+                          <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR unavailable</div>
+                        )}
+                      </div>
                   <div className="space-y-3">
                     <div className="rounded-3xl bg-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Receiver</p>
@@ -832,18 +1000,27 @@ export default function PixRampClient() {
 
                   {isSandboxMockOrder ? (
                     <div className="mt-5 rounded-3xl border border-amber-200/40 bg-amber-200/10 p-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">Sandbox mode</p>
-                      <p className="mt-2 text-sm font-bold text-white">
-                        Este checkout segue o fluxo do regional starter pack: crie a ordem, simule o recebimento da transferencia bancaria no sandbox e entregue TESOURO na Stellar Testnet.
-                      </p>
-                      <p className="mt-3 rounded-2xl bg-black/20 p-3 text-sm text-amber-50">
-                        Nao tente pagar este codigo no Nubank. A chave PIX sandbox nao existe no DICT do Banco Central, entao apps bancarios reais vao mostrar "chave nao encontrada". PIX pagavel de verdade so aparece quando a Etherfuse retornar um `depositPixCode` real.
-                      </p>
-                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white/10 p-3">
-                          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Sandbox reference</p>
-                          <p className="mt-1 break-all font-mono text-xs text-white/80">{orderId}</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">PIX testnet mock</p>
+                          <button className="rounded-full bg-amber-200 px-3 py-1 text-xs font-black text-amber-950" onClick={() => run("Copying PIX testnet reference", copyPixCode)}>
+                            {copied ? "Copied" : "Copy testnet reference"}
+                          </button>
                         </div>
+                        <p className="mt-2 text-sm font-bold text-white">
+                          Este checkout segue o fluxo do regional starter pack: a ordem e criada, voce confirma o PIX testnet e o sandbox entrega TESOURO na Stellar Testnet.
+                        </p>
+                        <p className="mt-3 rounded-2xl bg-black/20 p-3 text-sm text-amber-50">
+                          O QR acima e demonstrativo e nao consulta o DICT do Banco Central. Nao use Nubank neste modo. Para concluir no testnet, use o botao "Confirmar PIX (testnet)" abaixo.
+                        </p>
+                        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                          <div className="rounded-2xl bg-white/10 p-3">
+                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Mock PIX key</p>
+                            <p className="mt-1 break-all font-mono text-xs text-white/80">{testnetPixKey}</p>
+                          </div>
+                          <div className="rounded-2xl bg-white/10 p-3">
+                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Sandbox reference</p>
+                            <p className="mt-1 break-all font-mono text-xs text-white/80">{orderId}</p>
+                          </div>
                         <div className="rounded-2xl bg-white/10 p-3">
                           <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-100">Asset delivery</p>
                           <p className="mt-1 font-black text-white">{formatAsset(order.toAmount || quote?.toAmount, receivedCode)}</p>
@@ -877,39 +1054,43 @@ export default function PixRampClient() {
 
                   {config?.sandbox && (
                     <div className="mt-5 rounded-3xl border border-amber-200/40 bg-amber-100 p-4 text-amber-950">
-                      <p className="text-sm font-black">Sandbox Mode</p>
-                      <p className="mt-1 text-xs font-bold">
-                        Simulate a bank transfer being received by the anchor.
-                      </p>
-                      {sandboxSimulationComplete ? (
-                        <p className="mt-3 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-800">
-                          Fiat received simulated successfully. TESOURO was delivered on Stellar Testnet.
+                        <p className="text-sm font-black">Sandbox Mode</p>
+                        <p className="mt-1 text-xs font-bold">
+                          Confirma no testnet o recebimento da transferencia bancaria pelo anchor.
                         </p>
-                      ) : (
-                        <button
-                          className="mt-3 w-full rounded-2xl bg-amber-600 px-5 py-4 text-sm font-black text-white transition hover:bg-amber-700 disabled:opacity-50"
-                          disabled={Boolean(loading) || !orderId}
-                          onClick={() => run("Simulating fiat received", simulatePixPayment)}
-                        >
-                          {loading === "Simulating fiat received" ? "Simulating..." : "Simulate Fiat Received (Sandbox)"}
-                        </button>
-                      )}
+                        {sandboxSimulationComplete ? (
+                          <p className="mt-3 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-800">
+                            PIX testnet confirmado. TESOURO foi entregue na Stellar Testnet.
+                          </p>
+                        ) : (
+                          <button
+                            className="mt-3 w-full rounded-2xl bg-amber-600 px-5 py-4 text-sm font-black text-white transition hover:bg-amber-700 disabled:opacity-50"
+                            disabled={Boolean(loading) || !orderId}
+                            onClick={() => run("Simulating fiat received", simulatePixPayment)}
+                          >
+                            {loading === "Simulating fiat received" ? "Confirmando PIX..." : "Confirmar PIX (testnet)"}
+                          </button>
+                        )}
                     </div>
                   )}
               </>
             )}
           </div>
         </section>
+        )}
 
         <section className="mt-5 grid gap-5 lg:grid-cols-2">
           <AssetMovement title="On-ramp wallet assets" before={onRampBalancesBefore} after={onRampBalancesAfter} deltas={onRampAssetDeltas} walletPublicKey={walletPublicKey} />
           <AssetMovement title="Off-ramp wallet assets" before={offRampBalancesBefore} after={offRampBalancesAfter} deltas={offRampAssetDeltas} walletPublicKey={walletPublicKey} />
         </section>
 
-        <section className="mt-5">
-          <DebugLogPanel logs={debugLogs} onClear={() => setDebugLogs([])} />
-        </section>
+        {debugEnabled && (
+          <section className="mt-5">
+            <DebugLogPanel logs={debugLogs} onClear={() => setDebugLogs([])} />
+          </section>
+        )}
 
+        {debugEnabled && (
         <section className="mt-5 grid gap-5 lg:grid-cols-2">
           <TemporaryEndpointCard
             title="On-ramp temporary endpoint"
@@ -951,6 +1132,7 @@ export default function PixRampClient() {
             )}
           </div>
         </section>
+        )}
 
         {step === "success" && order && (
           <section className="mt-5 rounded-[2rem] bg-[#17251d] p-6 text-white shadow-2xl shadow-emerald-950/25 sm:p-8">

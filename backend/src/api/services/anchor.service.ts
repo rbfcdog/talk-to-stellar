@@ -15,6 +15,7 @@ import VaultService from '../../services/vault.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { OperationRepository } from '../repository/operation.repository';
 import { StellarService } from './stellar.service';
+import { TransferNotificationService } from './transfer-notification.service';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -594,6 +595,23 @@ export class AnchorService {
     }
   }
 
+  private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<void> {
+    try {
+      await TransferNotificationService.notifyIncomingTransfer({
+        recipientSessionId: record.sessionId,
+        recipientUserId: record.userId,
+        senderLabel: 'PIX Etherfuse Testnet',
+        amount: record.destinationAmount,
+        assetCode: 'TESOURO',
+        sourceAmount: record.sourceAmountBrl,
+        sourceAssetCode: 'BRL',
+        hash: hash || record.deliveryHash || null,
+      });
+    } catch (error) {
+      console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));
+    }
+  }
+
   private static isMissingEtherfuseProxyError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error || '');
     return /proxy account not found|bank account not found|account not found/i.test(message);
@@ -900,13 +918,14 @@ export class AnchorService {
       record.deliverySourceAmount = record.sourceAmountBrl;
       (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = directTesouroResult.hash;
       await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
-      await this.persistSandboxOnRampContext(record, {
-        delivery_hash: directTesouroResult.hash,
-        delivery_source_amount: record.sourceAmountBrl,
-        final_transaction_status: 'completed',
-      });
-      return record;
-    }
+        await this.persistSandboxOnRampContext(record, {
+          delivery_hash: directTesouroResult.hash,
+          delivery_source_amount: record.sourceAmountBrl,
+          final_transaction_status: 'completed',
+        });
+        await this.notifySandboxOnRampCompleted(record, directTesouroResult.hash);
+        return record;
+      }
 
     if (!brlIssuer) {
       record.transaction.status = 'failed' as any;
@@ -960,13 +979,14 @@ export class AnchorService {
     record.deliverySourceAmount = result.sourceAmount;
     (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = result.hash;
     await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
-    await this.persistSandboxOnRampContext(record, {
-      delivery_hash: result.hash,
-      delivery_source_amount: result.sourceAmount,
-      final_transaction_status: 'completed',
-    });
-    return record;
-  }
+      await this.persistSandboxOnRampContext(record, {
+        delivery_hash: result.hash,
+        delivery_source_amount: result.sourceAmount,
+        final_transaction_status: 'completed',
+      });
+      await this.notifySandboxOnRampCompleted(record, result.hash);
+      return record;
+    }
 
   private static async ensureSandboxTesouroCollectorTrustline(): Promise<{ publicKey: string; success: boolean; error?: string }> {
     const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);

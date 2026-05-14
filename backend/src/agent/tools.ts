@@ -344,7 +344,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list. If public_key is missing, resolves from current session.",
+    description: "Get the user-facing wallet balance summary. Returns BRL, USDC, and TESOURO by default, not the full technical asset list. If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
@@ -380,7 +380,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_saldo_tecnico",
-    description: "Get technical wallet balances focused on XLM, USDC, and BRL (with issuer details). If public_key is missing, resolves from current session.",
+    description: "Get technical wallet balances focused on XLM, USDC, BRL, and TESOURO (with issuer details). If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
@@ -1385,7 +1385,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${publicKey}`);
     const account = await stellarService.getAccount(publicKey);
 
-    const visibleAssets = ['BRL', 'USDC'];
+    const visibleAssets = ['BRL', 'USDC', 'TESOURO'];
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -1399,8 +1399,8 @@ async function executeGetBalance(input: any): Promise<string> {
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balance.asset === asset) || {
       asset,
       balance: '0.0000000',
-      asset_type: asset === 'BRL' || asset === 'USDC' ? 'credit_alphanum4' : 'native',
-      asset_issuer: undefined,
+      asset_type: asset === 'XLM' ? 'native' : 'credit_alphanum4',
+      asset_issuer: asset === 'XLM' ? undefined : getAssetIssuer(asset),
     });
     return JSON.stringify({
       success: true,
@@ -1468,7 +1468,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       balanceByAsset.set(String(item.asset || '').toUpperCase(), item);
     }
 
-    const technicalAssets = ['XLM', 'USDC', 'BRL'].map((assetCode) => {
+    const technicalAssets = ['XLM', 'USDC', 'BRL', 'TESOURO'].map((assetCode) => {
       const existing = balanceByAsset.get(assetCode);
       if (existing) return existing;
       return {
@@ -1485,7 +1485,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
-      message: "Technical balances retrieved for XLM, USDC, BRL",
+      message: "Technical balances retrieved for XLM, USDC, BRL, TESOURO",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
