@@ -70,6 +70,15 @@ function formatCountdown(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function parseRampTimestamp(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return NaN;
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) return parsed;
+  // Some APIs emit nanosecond precision; browsers only need milliseconds.
+  return Date.parse(raw.replace(/\.(\d{3})\d+(Z|[+-]\d\d:\d\d)?$/, ".$1$2"));
+}
+
 function normalizeStatus(status: unknown) {
   return String(status || "pending").toLowerCase();
 }
@@ -131,6 +140,7 @@ export default function PixRampClient() {
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("TESOURO");
   const [customerPayload, setCustomerPayload] = useState<RampResponse | null>(null);
   const [quotePayload, setQuotePayload] = useState<RampResponse | null>(null);
+  const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
   const [orderPayload, setOrderPayload] = useState<RampResponse | null>(null);
   const [statusPayload, setStatusPayload] = useState<RampResponse | null>(null);
   const [onRampBalancesBefore, setOnRampBalancesBefore] = useState<BalanceItem[]>([]);
@@ -147,6 +157,7 @@ export default function PixRampClient() {
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
+  const [autoRefreshingQuote, setAutoRefreshingQuote] = useState(false);
   const [error, setError] = useState("");
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
@@ -165,9 +176,16 @@ export default function PixRampClient() {
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
   const receivedCode = String(quote?.toCurrency || targetAsset).split(":")[0];
-  const quoteExpiresAt = Date.parse(String(quote?.expiresAt || ""));
-  const quoteCountdown = formatCountdown(quoteExpiresAt - now);
-  const quoteExpired = quoteCountdown === "expired";
+  const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
+  const quoteExpiresAt = parseRampTimestamp(quote?.expiresAt);
+  const quoteTtlMs = Number.isFinite(quoteCreatedAt) && Number.isFinite(quoteExpiresAt)
+    ? Math.max(0, quoteExpiresAt - quoteCreatedAt)
+    : 120000;
+  const quoteDeadlineAt = quote && quoteReceivedAt ? quoteReceivedAt + quoteTtlMs : 0;
+  const quoteTimeRemainingMs = quoteDeadlineAt ? quoteDeadlineAt - now : NaN;
+  const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs) : "not quoted";
+  const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
+  const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
   const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
@@ -379,6 +397,7 @@ export default function PixRampClient() {
     setWalletPublicKey("");
     setCustomerPayload(null);
     setQuotePayload(null);
+    setQuoteReceivedAt(0);
     setOrderPayload(null);
     setStatusPayload(null);
     setTemporaryTestResult(null);
@@ -399,10 +418,24 @@ export default function PixRampClient() {
     }
   }
 
+  function clearQuoteState() {
+    setQuotePayload(null);
+    setQuoteReceivedAt(0);
+    setOrderPayload(null);
+    setStatusPayload(null);
+    setOnRampBalancesBefore([]);
+    setOnRampBalancesAfter([]);
+    setQrDataUrl("");
+    setCopied(false);
+    setPolling(false);
+    setStep("quote");
+  }
+
   async function requestQuote(): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
     setStep("quote");
     setOrderPayload(null);
     setStatusPayload(null);
+    setQuoteReceivedAt(0);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setTemporaryTestResult(null);
@@ -423,6 +456,7 @@ export default function PixRampClient() {
       amount: amountBrl,
     }, "POST", auth);
     setQuotePayload(payload);
+    setQuoteReceivedAt(Date.now());
     return { auth, customerResult, quoteResult: payload };
   }
 
@@ -430,13 +464,13 @@ export default function PixRampClient() {
     let quoteForOrder = quote;
     let customerForOrder = customerPayload;
     let authForOrder: RampAuth | undefined;
-    if (!quoteForOrder?.id || quoteExpired) {
+    if (!quoteForOrder?.id || quoteStaleForOrder) {
       addDebugLog({
-        label: quoteForOrder?.id ? "Quote expired before order, refreshing" : "No quote available, creating quote before order",
+        label: quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
         method: "POST",
         path: "/api/ramp/etherfuse/quote",
         request: { amount: amountBrl, targetAsset },
-        response: { reason: quoteForOrder?.id ? "expired" : "missing" },
+        response: { reason: quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
       });
       const fresh = await requestQuote();
       authForOrder = fresh.auth;
@@ -461,6 +495,31 @@ export default function PixRampClient() {
     setStep("checkout");
     setPolling(true);
   }
+
+  useEffect(() => {
+    if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
+    if (!quoteDeadlineAt) return;
+
+    const refreshAtMs = quoteDeadlineAt - 30000;
+    const delayMs = Math.max(0, refreshAtMs - Date.now());
+    const timer = window.setTimeout(() => {
+      setAutoRefreshingQuote(true);
+      requestQuote()
+        .catch((err) => {
+          addDebugLog({
+            label: "Automatic quote refresh failed",
+            method: "POST",
+            path: "/api/ramp/etherfuse/quote",
+            request: { amount: amountBrl, targetAsset },
+            response: {},
+            error: err instanceof Error ? err.message : String(err),
+          });
+        })
+        .finally(() => setAutoRefreshingQuote(false));
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, loading, order, quote, quoteDeadlineAt, targetAsset]);
 
   async function copyPixCode() {
     await navigator.clipboard.writeText(pixCode || pixKey || orderId);
@@ -622,14 +681,31 @@ export default function PixRampClient() {
             <label className="mt-6 block text-sm font-bold text-stone-600">You send</label>
             <div className="mt-2 flex overflow-hidden rounded-3xl border border-stone-200 bg-stone-50 focus-within:ring-4 focus-within:ring-lime-200">
               <span className="flex items-center bg-stone-100 px-4 text-sm font-black text-stone-500">R$</span>
-              <input className="w-full bg-transparent px-4 py-4 text-3xl font-black outline-none" value={amountBrl} inputMode="decimal" onChange={(event) => setAmountBrl(event.target.value)} />
+              <input
+                className="w-full bg-transparent px-4 py-4 text-3xl font-black outline-none"
+                value={amountBrl}
+                inputMode="decimal"
+                onChange={(event) => {
+                  setAmountBrl(event.target.value);
+                  clearQuoteState();
+                }}
+              />
               <span className="flex items-center px-4 text-sm font-black text-stone-500">BRL</span>
             </div>
 
             <label className="mt-5 block text-sm font-bold text-stone-600">You receive</label>
             <div className="mt-2 grid grid-cols-2 gap-2 rounded-3xl bg-stone-100 p-2">
               {(["TESOURO", "USDC"] as TargetAsset[]).map((asset) => (
-                <button key={asset} className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-[#17251d] text-white shadow-lg" : "text-stone-500 hover:bg-white"}`} onClick={() => setTargetAsset(asset)}>
+                <button
+                  key={asset}
+                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-[#17251d] text-white shadow-lg" : "text-stone-500 hover:bg-white"}`}
+                  onClick={() => {
+                    if (asset !== targetAsset) {
+                      setTargetAsset(asset);
+                      clearQuoteState();
+                    }
+                  }}
+                >
                   {asset}
                 </button>
               ))}
