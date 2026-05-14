@@ -1,6 +1,70 @@
-    # TalkToStellar Technical State - 2026-05-12
+    # TalkToStellar Technical State - 2026-05-13
 
     This document is a technical handoff for another AI/engineer. It describes the current state of the TalkToStellar codebase, the features already implemented, the partially implemented areas, and the best next features to build.
+
+    ## Latest Update (2026-05-13)
+
+    ### 1) Claim-payment flow now enforces login/create-account first
+
+    Claim flow was hardened so users cannot confirm a claim directly from a stale/incomplete session:
+
+    - `frontend/app/claim-payment/claim-payment-client.tsx`
+      - Removed direct PIN confirmation step from claim page.
+      - Page now shows only two entry actions when not ready:
+        - `Entrar para receber`
+        - `Criar conta para receber`
+      - Session readiness is validated (`/api/agent/session/:session_id`) before claim execution.
+      - If session has no active wallet/public key, local session is cleared and user is forced back to login/create-account path.
+      - After a valid authenticated session is detected, claim is processed automatically.
+
+    - `backend/src/api/controllers/pay-link.controller.ts`
+      - `POST /api/external/pay-links/claim` no longer depends on claim-page PIN.
+      - Endpoint now returns `loginRequired/createAccountRequired` for incomplete recipient account states.
+      - Missing/invalid recipient wallet state now leads to guided auth response instead of raw Stellar-account technical error.
+
+    Practical result:
+    - User cannot “Confirmar e receber” directly without account readiness.
+    - Flow is now deterministic: login/create account first, then automatic claim processing.
+
+    ### 2) Receipt fee/economy messaging now emphasizes real fee vs traditional fee
+
+    Receipt output was updated to focus on savings while showing exact fee composition:
+
+    - `backend/src/api/services/payment-receipt.service.ts`
+      - Added fee breakdown resolution for receipts:
+        - exact TalkToStellar fee (`network + spread` when applicable)
+        - traditional fee estimate from `.env` (`TRADITIONAL_FEE_PCT`)
+      - Added explicit line:
+        - `Taxa tradicional estimada (.env X.XX%): R$ ... / US$ ...`
+      - `Taxa exata` line now indicates scope:
+        - `(rede)` or `(rede + spread)`
+      - Spread is included from quote platform fee when present; fallback spread estimation uses `PlatformFeeService` config.
+      - Savings line keeps `R$` comparison vs traditional methods and now has a fallback calculation when payload savings is absent.
+
+    ### 3) Balance resolution reliability improved
+
+    - `backend/src/agent/graph.ts`
+      - Balance checks now use `session_id` fallback when `public_key` is not preloaded in memory.
+      - Prevents false-negative “cannot read balance” paths caused by partial session context.
+
+    ### 4) Test coverage updates
+
+    Added/updated tests:
+
+    - `backend/tests/agent-balance.test.ts`
+      - Validates balance tool call via `session_id` fallback when `public_key` is missing.
+    - `backend/tests/agent-payment-link.test.ts`
+      - Async expectation fix for onboarding/login message helper behavior.
+    - `backend/tests/payment-receipt.service.test.ts`
+      - Validates fee/economy receipt formatting:
+        - exact fee wording
+        - traditional fee line from `.env`
+        - spread-inclusive fee behavior
+
+    Current tested set (recent run):
+    - `agent-balance.test.ts`
+    - `agent-payment-link.test.ts`
+    - `payment-receipt.service.test.ts`
 
     ## Product Direction
 

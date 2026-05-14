@@ -1,0 +1,3 @@
+[submodule "sandbox/regional-starter-pack"]
+	path = sandbox/regional-starter-pack
+	url = https://github.com/ElliotFriend/regional-starter-pack.git
