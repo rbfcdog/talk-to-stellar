@@ -2,7 +2,7 @@ import PixRampClient from "./pix-ramp-client";
 
 export const metadata = {
   title: "PIX Ramp",
-  description: "On-ramp e off-ramp PIX/TESOURO via Etherfuse sandbox.",
+  description: "Entrada e saída de saldo via PIX.",
 };
 
 export default function PixRampPage({

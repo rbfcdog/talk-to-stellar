@@ -202,7 +202,7 @@ export default function PixRampClient({
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
-  const testnetPixKey = isSandboxMockOrder ? (pixKey || `testnet-${orderId.slice(-8) || "pix"}@talktostellar.local`) : pixKey;
+  const displayPixKey = isSandboxMockOrder ? (pixKey || `pix-${orderId.slice(-8) || "checkout"}@talktostellar.local`) : pixKey;
   const finalAssetCode = String(order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
   const finalReceivedAmount = String(
     order?.finalAmount ||
@@ -230,7 +230,7 @@ export default function PixRampClient({
         : "Calculado automaticamente na confirmação";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const sandboxQrPayload = isSandboxMockOrder
-    ? `talktostellar-testnet://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
+    ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
     : "";
   const launchedFromChat = useMemo(() => {
     const params = new URLSearchParams(queryString);
@@ -253,7 +253,7 @@ export default function PixRampClient({
         {
           label: "Valor de saída",
           detail: offRampFiatAmount.trim()
-            ? `Alvo: ${formatMoney(offRampFiatAmount)} entrando na conta PIX testnet.`
+            ? `Alvo: ${formatMoney(offRampFiatAmount)} entrando na conta PIX.`
             : `Saída direta do saldo: ${formatMoney(offRampAmount)} estimado.`,
           state: hasTarget ? "done" : "pending",
         },
@@ -261,20 +261,20 @@ export default function PixRampClient({
           label: "Conversão para BRL",
           detail: temporaryOffRampTestResult?.target_brl
             ? `Saldo convertido para chegar em ${formatMoney(temporaryOffRampTestResult.target_brl)}.`
-            : "A cotação é criada no backend quando você confirma o saque testnet.",
-          state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp testnet" ? "active" : "pending",
+            : "A cotação é criada quando você confirma o saque.",
+          state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
           label: "Assinatura e saída",
           detail: temporaryOffRampTestResult?.submitted
-            ? "Transação testnet assinada e submetida."
+            ? "Transação assinada e submetida."
             : "Aguardando confirmação para mostrar o saldo saindo da wallet.",
-          state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp testnet" ? "active" : "pending",
+          state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Conta PIX testnet",
+          label: "Conta PIX",
           detail: temporaryOffRampTestResult
-            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} mostrado como entrada bancária de teste.`
+            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} mostrado como entrada na conta PIX.`
             : "O recibo aparece aqui após a confirmação.",
           state: temporaryOffRampTestResult ? "done" : "pending",
         },
@@ -288,11 +288,11 @@ export default function PixRampClient({
         state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
       },
       {
-        label: "KYC sandbox e conta PIX",
+        label: "Conta PIX",
         detail: programmaticOnboarding
-          ? "KYC, wallet e conta PIX sandbox enviados via API com dados mockados."
+          ? "Conta preparada para continuar o PIX."
           : customerPayload
-            ? "Customer criado; preparando conta PIX sandbox."
+            ? "Preparando conta PIX."
             : "Aguardando criação do customer Etherfuse.",
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
@@ -304,17 +304,17 @@ export default function PixRampClient({
         state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
       },
       {
-        label: "Checkout PIX testnet",
+        label: "Checkout PIX",
         detail: orderId
-          ? `QR e referência mock prontos: ${orderId.slice(0, 18)}...`
-          : "A página cria a ordem e mostra QR, chave mock e botão de confirmação.",
+          ? `QR e referência prontos: ${orderId.slice(0, 18)}...`
+          : "A página cria a ordem e mostra QR, chave e botão de confirmação.",
         state: orderId ? "done" : loading.includes("PIX") || loading.includes("Preparing") ? "active" : "pending",
       },
       {
         label: "Confirmação do PIX",
         detail: onRampComplete
-          ? "PIX testnet confirmado."
-          : orderId ? "Clique em Confirmar PIX (testnet) para simular o pagamento." : "Aguardando geração do checkout.",
+          ? "PIX confirmado."
+          : orderId ? "Clique em confirmar após fazer o PIX." : "Aguardando geração do checkout.",
         state: onRampComplete ? "done" : orderId ? "active" : "pending",
       },
       {
@@ -399,7 +399,7 @@ export default function PixRampClient({
     fetch("/api/ramp/etherfuse/config", { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => setConfig(payload))
-      .catch(() => setConfig({ sandbox: false, network: "Stellar Testnet" }));
+      .catch(() => setConfig({ sandbox: false, network: "Stellar" }));
   }, []);
 
   const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
@@ -470,7 +470,7 @@ export default function PixRampClient({
     const response = await fetch(path, init);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: path.includes("/customer") ? "Etherfuse customer + programmatic sandbox KYC/PIX" : path.includes("/quote") ? "Etherfuse quote" : path.includes("/onramp") ? "Etherfuse create/poll on-ramp order" : "Ramp API request",
+      label: path.includes("/customer") ? "Etherfuse customer + PIX setup" : path.includes("/quote") ? "Etherfuse quote" : path.includes("/onramp") ? "Etherfuse create/poll on-ramp order" : "Ramp API request",
       method,
       path,
       status: response.status,
@@ -731,10 +731,10 @@ export default function PixRampClient({
 
   async function copyPixCode() {
     const sandboxReference = [
-      "TalkToStellar PIX testnet",
+      "TalkToStellar PIX",
       `Order: ${orderId}`,
       `Operation: ${operationId || "not persisted"}`,
-      `Mock key: ${testnetPixKey}`,
+      `PIX key: ${displayPixKey}`,
       `Amount: ${formatMoney(order?.fromAmount || amountBrl)}`,
       `Delivery: ${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)}`,
     ].join("\n");
@@ -744,7 +744,7 @@ export default function PixRampClient({
   }
 
   async function simulatePixPayment() {
-    if (!orderId) throw new Error("Create a PIX order before simulating payment.");
+    if (!orderId) throw new Error("Prepare o PIX antes de confirmar o pagamento.");
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
       order_id: orderId,
       operation_id: operationId,
@@ -1181,7 +1181,7 @@ export default function PixRampClient({
 
                   {isSandboxMockOrder ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      Este QR ainda não está integrado ao PIX real. Use-o apenas para simular o pagamento; depois digite seu PIN e confirme.
+                      Este QR code ainda não conecta com transação bancária. Depois de fazer o PIX, digite seu PIN e confirme.
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
@@ -1223,9 +1223,9 @@ export default function PixRampClient({
                             <button
                               className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4}
-                              onClick={() => run("Simulating fiat received", simulatePixPayment)}
+                              onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {loading === "Simulating fiat received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
+                              {loading === "Confirming PIX received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
                             </button>
                           </>
                         )}
@@ -1255,7 +1255,7 @@ export default function PixRampClient({
             <TemporaryEndpointCard
               title="On-ramp temporary endpoint"
               endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
-              description="Runs the whole sandbox on-ramp server-side and returns the final transaction status."
+              description="Runs the whole on-ramp server-side and returns the final transaction status."
               disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox}
               hidden={!config?.sandbox}
               onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
@@ -1269,7 +1269,7 @@ export default function PixRampClient({
           {rampMode === "offramp" && (
           <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">Off-ramp test endpoint</p>
-            <h2 className="mt-1 text-2xl font-black">Saldo to PIX sandbox</h2>
+            <h2 className="mt-1 text-2xl font-black">Saldo para PIX</h2>
             <p className="mt-3 text-sm leading-6 text-stone-600">
               Endpoint shown in frontend: <span className="font-mono font-black text-stone-950">POST /api/ramp/etherfuse/sandbox/test-offramp</span>
             </p>
@@ -1428,7 +1428,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat
               ? "Aberto pelo chat. A página mantém o estado da operação e mostra cada request do ramp avançando."
-              : "Use esta tela para acompanhar sessão, KYC sandbox, quote, ordem, confirmação e saldo antes/depois."}
+              : "Use esta tela para acompanhar sessão, cotação, ordem, confirmação e saldo antes/depois."}
           </p>
           <div className="mt-5 rounded-full bg-black/30 p-1">
             <div

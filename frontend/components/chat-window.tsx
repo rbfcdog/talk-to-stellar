@@ -50,7 +50,7 @@ function getFriendlyLinkLabel(rawUrl: string) {
     if (path.endsWith("/change-pin")) return "Redefinir PIN";
     if (path.endsWith("/pay-anyone")) return "Abrir link de pagamento";
     if (path.endsWith("/claim-payment")) return "Resgatar pagamento";
-    if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return "Abrir PIX testnet";
+    if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return "Abrir PIX";
     if (url.hostname.includes("wa.me")) return "Compartilhar no WhatsApp";
     return "Abrir link";
   } catch {
