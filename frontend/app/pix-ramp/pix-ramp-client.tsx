@@ -161,7 +161,6 @@ export default function PixRampClient() {
   const order = statusPayload?.transaction || orderPayload?.transaction;
   const operationId = String(orderPayload?.operation_id || "");
   const orderId = String(order?.id || "");
-  const status = normalizeStatus(order?.status);
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
@@ -169,6 +168,7 @@ export default function PixRampClient() {
   const quoteExpiresAt = Date.parse(String(quote?.expiresAt || ""));
   const quoteCountdown = formatCountdown(quoteExpiresAt - now);
   const quoteExpired = quoteCountdown === "expired";
+  const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
   const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
 
@@ -403,6 +403,7 @@ export default function PixRampClient() {
     setStep("quote");
     setOrderPayload(null);
     setStatusPayload(null);
+    setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setTemporaryTestResult(null);
 
@@ -413,9 +414,6 @@ export default function PixRampClient() {
     }, "POST", auth);
     setCustomerPayload(customerResult);
     setProgrammaticOnboarding(customerResult?.programmatic_onboarding || null);
-
-    const before = await fetchBalances(auth);
-    setOnRampBalancesBefore(before);
 
     const payload = await callRamp("/api/ramp/etherfuse/quote", {
       customer_id: customerResult?.customer?.id,
@@ -431,6 +429,7 @@ export default function PixRampClient() {
   async function confirmQuoteAndCreatePix() {
     let quoteForOrder = quote;
     let customerForOrder = customerPayload;
+    let authForOrder: RampAuth | undefined;
     if (!quoteForOrder?.id || quoteExpired) {
       addDebugLog({
         label: quoteForOrder?.id ? "Quote expired before order, refreshing" : "No quote available, creating quote before order",
@@ -440,17 +439,22 @@ export default function PixRampClient() {
         response: { reason: quoteForOrder?.id ? "expired" : "missing" },
       });
       const fresh = await requestQuote();
+      authForOrder = fresh.auth;
       quoteForOrder = fresh.quoteResult?.quote;
       customerForOrder = fresh.customerResult;
     }
     if (!quoteForOrder?.id) throw new Error("Request a quote first.");
+    authForOrder = authForOrder || await resolveWalletFromEmail();
+    const before = await fetchBalances(authForOrder);
+    setOnRampBalancesBefore(before);
+    setOnRampBalancesAfter([]);
     const payload = await callRamp("/api/ramp/etherfuse/onramp", {
       customer_id: String(customerForOrder?.customer?.id || customerId),
       quote_id: quoteForOrder.id,
       amount: amountBrl,
       expected_to_amount: quoteForOrder.toAmount,
       to_currency: quoteForOrder.toCurrency || targetAsset,
-    });
+    }, "POST", authForOrder);
     setOnboardingUrl("");
     setOrderPayload(payload);
     setStatusPayload(null);
@@ -688,7 +692,22 @@ export default function PixRampClient() {
 
             {!order ? (
               <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
-                Confirm a quote to generate PIX copy-and-paste code, key, QR code, and timeline.
+                <p>
+                  {quoteExpired
+                    ? "A quote expirou antes da ordem PIX. Gere o PIX agora que a tela renova a quote automaticamente."
+                    : quote
+                      ? "Quote pronta. Confirme para gerar o PIX copy-and-paste code, chave, QR code e timeline."
+                      : "Confirm a quote to generate PIX copy-and-paste code, key, QR code, and timeline."}
+                </p>
+                {quote && (
+                  <button
+                    className="mt-5 w-full rounded-3xl bg-lime-300 px-5 py-4 text-sm font-black text-[#17251d] shadow-lg shadow-lime-950/20 disabled:opacity-50"
+                    disabled={Boolean(loading)}
+                    onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}
+                  >
+                    {quoteExpired ? "Refresh quote and generate PIX" : "Generate PIX checkout"}
+                  </button>
+                )}
               </div>
             ) : (
               <>
