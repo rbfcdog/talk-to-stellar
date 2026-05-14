@@ -145,11 +145,36 @@ export class IdempotencyService {
     if (!existing) return { conflict: 'Chave de idempotência em estado inconsistente.' };
 
     const existingRow = existing as IdempotencyRow;
+    if (existingRow.status === 'failed') {
+      const retryAt = new Date().toISOString();
+      const { data: retried, error: retryError } = await supabase
+        .from('idempotency_keys')
+        .update({
+          request_hash: requestHash,
+          method: req.method.toUpperCase(),
+          route,
+          status: 'processing',
+          response_status: null,
+          response_body: null,
+          completed_at: null,
+          locked_at: retryAt,
+          updated_at: retryAt,
+        })
+        .eq('idempotency_key', key)
+        .eq('status', 'failed')
+        .select('idempotency_key')
+        .limit(1)
+        .maybeSingle();
+
+      if (retryError) throw retryError;
+      if (retried) return { active: true };
+    }
+
     if (existingRow.request_hash !== requestHash) {
       return { conflict: 'Idempotency-Key reutilizada com payload diferente.' };
     }
 
-    if (existingRow.status === 'completed' || existingRow.status === 'failed') {
+    if (existingRow.status === 'completed') {
       return { replay: existingRow };
     }
 
@@ -181,7 +206,7 @@ export class IdempotencyService {
   }
 
   static async complete(key: string, statusCode: number, responseBody: any): Promise<void> {
-    const status: IdempotencyStatus = statusCode >= 500 ? 'failed' : 'completed';
+    const status: IdempotencyStatus = statusCode >= 400 ? 'failed' : 'completed';
     const { error } = await supabase
       .from('idempotency_keys')
       .update({

@@ -37,6 +37,10 @@ interface RampSessionInput {
   sessionId?: string;
   session_token?: string;
   sessionToken?: string;
+  intent_id?: string;
+  intentId?: string;
+  operation_key?: string;
+  operationKey?: string;
   pin?: string;
   wallet_pin?: string;
   walletPin?: string;
@@ -123,6 +127,16 @@ interface CreateOffRampForSessionInput extends RampSessionInput {
   quote_id?: string;
   quoteId?: string;
   amount?: string;
+  source_amount?: string;
+  sourceAmount?: string;
+  source_asset_code?: string;
+  sourceAssetCode?: string;
+  source_asset_issuer?: string;
+  sourceAssetIssuer?: string;
+  target_brl?: string;
+  targetBrl?: string;
+  force_sandbox_mock?: boolean;
+  forceSandboxMock?: boolean;
   fiat_account_id?: string;
   fiatAccountId?: string;
   bank_account_id?: string;
@@ -191,6 +205,11 @@ interface SandboxMockOffRampOrder {
   sessionId: string;
   publicKey: string;
   amountTesouro: string;
+  sourceAmount?: string;
+  sourceAssetCode?: string;
+  sourceAssetIssuer?: string;
+  targetBrl?: string;
+  externalBankAccount?: Record<string, unknown>;
   operationId?: string;
   submitHash?: string;
   submitError?: string;
@@ -239,6 +258,22 @@ function hashWalletPin(pin: string): string {
 
 function stableHex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function normalizeRampIntentId(input: RampSessionInput): string {
+  return coalesceString(input.intent_id, input.intentId, input.operation_key, input.operationKey)
+    .replace(/[^A-Za-z0-9._:-]/g, '')
+    .slice(0, 96);
+}
+
+function normalizeRampUserAsset(...values: unknown[]): { code: string; issuer?: string; identifier: string } {
+  const raw = normalizeAssetCode(coalesceString(...values) || 'BRL');
+  const code = raw === 'TESOURO' ? 'BRL' : raw;
+  if (!['BRL', 'USDC'].includes(code)) {
+    throw apiError('PIX ramp only supports BRL or USDC as user-facing assets.', 400);
+  }
+  const asset = resolveConfiguredAsset(code);
+  return { ...asset, identifier: assetIdentifier(asset) };
 }
 
 function buildExternalBankAccountFields(context: SessionWalletContext) {
@@ -1423,21 +1458,26 @@ export class AnchorService {
     return this.settleSandboxOnRampFinalAsset({ record, sourceSecret, destinationAmountTesouro: destinationAmount });
   }
 
-  private static async ensureSandboxTesouroCollectorTrustline(): Promise<{ publicKey: string; success: boolean; error?: string }> {
+  private static async ensureSandboxCollectorTrustline(asset: { code: string; issuer?: string }): Promise<{ publicKey: string; success: boolean; error?: string }> {
     const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
     const secret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
     if (!publicKey || !secret) {
       return {
         publicKey,
         success: false,
-        error: 'BRL_DISTRIBUTOR_PUBLIC and BRL_DISTRIBUTOR_SECRET are required for sandbox off-ramp settlement.',
+        error: 'BRL_DISTRIBUTOR_PUBLIC and BRL_DISTRIBUTOR_SECRET are required for sandbox PIX settlement.',
       };
+    }
+
+    const code = normalizeAssetCode(asset.code || 'TESOURO');
+    if (code === 'XLM') {
+      return { publicKey, success: true };
     }
 
     const trustline = await StellarService.ensureTrustlineFromSecret({
       sourceSecret: secret,
-      assetCode: 'TESOURO',
-      assetIssuer: this.getTesouroIssuer(),
+      assetCode: code,
+      assetIssuer: asset.issuer || getAssetIssuer(code) || '',
     });
 
     return { publicKey, success: trustline.success, error: trustline.error };
@@ -1448,6 +1488,11 @@ export class AnchorService {
     customerId: string;
     quoteId: string;
     amount: string;
+    sourceAmount?: string;
+    sourceAssetCode?: string;
+    sourceAssetIssuer?: string;
+    targetBrl?: string;
+    externalBankAccount?: Record<string, unknown>;
     fiatAccountId?: string;
     upstreamError?: string;
   }): OffRampTransaction {
@@ -1481,6 +1526,11 @@ export class AnchorService {
       sessionId: input.context.sessionId,
       publicKey: input.context.publicKey,
       amountTesouro: toStellarAmount(input.amount),
+      sourceAmount: input.sourceAmount ? normalizeAmount(input.sourceAmount, 'source_amount') : undefined,
+      sourceAssetCode: input.sourceAssetCode ? normalizeAssetCode(input.sourceAssetCode) : undefined,
+      sourceAssetIssuer: input.sourceAssetIssuer,
+      targetBrl: input.targetBrl,
+      externalBankAccount: input.externalBankAccount,
     });
 
     return transaction;
@@ -1502,11 +1552,15 @@ export class AnchorService {
       return { success: false, order_id: input.orderId, error: 'Wallet private key is not available in Vault.' };
     }
 
-    const collector = await this.ensureSandboxTesouroCollectorTrustline();
+    const sourceAsset = record.sourceAssetCode
+      ? resolveConfiguredAsset(record.sourceAssetCode, record.sourceAssetIssuer)
+      : { code: 'TESOURO', issuer: this.getTesouroIssuer() };
+    const debitAmount = toStellarAmount(record.sourceAmount || record.amountTesouro);
+    const collector = await this.ensureSandboxCollectorTrustline(sourceAsset);
     if (!collector.success || !collector.publicKey) {
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
-      record.submitError = collector.error || 'Could not prepare sandbox TESOURO collector.';
+      record.submitError = collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`;
       await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
       return { success: false, order_id: input.orderId, error: record.submitError };
     }
@@ -1519,9 +1573,9 @@ export class AnchorService {
     const result = await StellarService.submitAssetPaymentFromSecret({
       sourceSecret: secret,
       destination: collector.publicKey,
-      amount: record.amountTesouro,
-      assetCode: 'TESOURO',
-      assetIssuer: this.getTesouroIssuer(),
+      amount: debitAmount,
+      assetCode: sourceAsset.code,
+      assetIssuer: sourceAsset.issuer,
       memoText: 'PIX OFFRAMP SANDBOX',
     });
 
@@ -2129,6 +2183,7 @@ export class AnchorService {
       provider: 'etherfuse',
       rail: 'pix',
       direction: 'onramp',
+      intent_id: normalizeRampIntentId(input) || undefined,
       customer_id: customerId,
       quote_id: quoteId,
       quote_refresh_reason: quoteRefreshReason,
@@ -2365,6 +2420,9 @@ export class AnchorService {
     const customerId = coalesceString(input.customer_id, input.customerId);
     const quoteId = coalesceString(input.quote_id, input.quoteId);
     const amount = normalizeAmount(input.amount);
+    const sourceAsset = normalizeRampUserAsset(input.source_asset_code, input.sourceAssetCode, 'BRL');
+    const sourceAmount = coalesceString(input.source_amount, input.sourceAmount);
+    const targetBrl = coalesceString(input.target_brl, input.targetBrl);
     let fiatAccountId = coalesceString(
       input.fiat_account_id,
       input.fiatAccountId,
@@ -2380,18 +2438,25 @@ export class AnchorService {
       fiatAccountId = accounts[0]?.id || '';
     }
     let transaction: OffRampTransaction;
-    if (!fiatAccountId) {
+    const forceSandboxMock = this.getRuntimeInfo().sandbox && Boolean(input.force_sandbox_mock || input.forceSandboxMock);
+    if (!fiatAccountId || forceSandboxMock) {
       if (!this.sandboxPixFallbackEnabled()) {
         throw apiError('No PIX fiat account registered. Open the Etherfuse onboarding URL and register a PIX account first.', 409);
       }
-      fiatAccountId = crypto.randomUUID();
+      fiatAccountId = fiatAccountId || crypto.randomUUID();
       transaction = this.createSandboxOffRampFallback({
         context,
         customerId,
         quoteId,
         amount,
+        sourceAmount,
+        sourceAssetCode: sourceAsset.code,
+        sourceAssetIssuer: sourceAsset.issuer,
+        targetBrl,
         fiatAccountId,
-        upstreamError: 'No Etherfuse PIX fiat account is available in sandbox; using local mock settlement.',
+        upstreamError: forceSandboxMock
+          ? 'Sandbox test endpoint forced local off-ramp settlement.'
+          : 'No Etherfuse PIX fiat account is available in sandbox; using local mock settlement.',
       });
     } else {
       try {
@@ -2414,6 +2479,10 @@ export class AnchorService {
           customerId,
           quoteId,
           amount,
+          sourceAmount,
+          sourceAssetCode: sourceAsset.code,
+          sourceAssetIssuer: sourceAsset.issuer,
+          targetBrl,
           fiatAccountId,
           upstreamError: debugErrorMessage(error),
         });
@@ -2431,10 +2500,15 @@ export class AnchorService {
         provider: 'etherfuse',
         rail: 'pix',
         direction: 'offramp',
+        intent_id: normalizeRampIntentId(input) || undefined,
         customer_id: customerId,
         quote_id: quoteId,
         anchor_order_id: transaction.id,
         fiat_account_id: fiatAccountId,
+        source_amount: sourceAmount || amount,
+        source_asset_code: sourceAsset.code,
+        source_asset_issuer: sourceAsset.issuer,
+        target_brl: targetBrl,
         sandbox_mock: Boolean((transaction as OffRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
         upstream_error: (transaction as OffRampTransaction & { upstream_error?: string }).upstream_error,
       },
@@ -2626,6 +2700,7 @@ export class AnchorService {
     const orderResult = await this.createOnRampForSession({
       session_id: context.sessionId,
       session_token: context.sessionToken,
+      intent_id: normalizeRampIntentId(input),
       customer_id: customerResult.customer.id,
       quote_id: quoteResult.quote.id,
       amount,
@@ -2673,6 +2748,14 @@ export class AnchorService {
 
   static async runTemporarySandboxOffRampTest(input: RampSessionInput & {
     amount?: string;
+    amount_currency?: string;
+    amountCurrency?: string;
+    asset_code?: string;
+    assetCode?: string;
+    source_asset_code?: string;
+    sourceAssetCode?: string;
+    source_amount?: string;
+    sourceAmount?: string;
     fiat_amount?: string;
     fiatAmount?: string;
     target_brl?: string;
@@ -2683,6 +2766,8 @@ export class AnchorService {
     customerId?: string;
     fiat_account_id?: string;
     fiatAccountId?: string;
+    external_bank_account?: Record<string, unknown>;
+    externalBankAccount?: Record<string, unknown>;
   }): Promise<{
     success: boolean;
     temporary: true;
@@ -2691,7 +2776,11 @@ export class AnchorService {
     submitted: boolean;
     wallet_public_key: string;
     amount_tesouro: string;
+    source_amount: string;
+    source_asset_code: string;
+    source_asset_issuer?: string;
     target_brl?: string;
+    receipt_url?: string;
     customer: Customer;
     fiat_account_id?: string;
     quote?: Quote;
@@ -2709,6 +2798,15 @@ export class AnchorService {
 
     const context = await this.resolveSessionWallet(input);
     const walletPin = this.requireWalletPin(input, context);
+    const sourceAsset = normalizeRampUserAsset(
+      input.source_asset_code,
+      input.sourceAssetCode,
+      input.asset_code,
+      input.assetCode,
+      input.amount_currency,
+      input.amountCurrency,
+      'BRL',
+    );
     const requestedTargetBrl = coalesceString(
       input.fiat_amount,
       input.fiatAmount,
@@ -2717,8 +2815,11 @@ export class AnchorService {
       input.to_amount,
       input.toAmount,
     );
-    let amount = normalizeAmount(input.amount || '1');
-    const targetBrl = requestedTargetBrl ? normalizeAmount(requestedTargetBrl, 'fiat_amount') : '';
+    const requestedSourceAmount = normalizeAmount(coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'), 'amount');
+    let amount = requestedSourceAmount;
+    const targetBrl = sourceAsset.code === 'BRL'
+      ? normalizeAmount(requestedTargetBrl || requestedSourceAmount, 'fiat_amount')
+      : requestedTargetBrl ? normalizeAmount(requestedTargetBrl, 'fiat_amount') : '';
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
 
@@ -2794,10 +2895,16 @@ export class AnchorService {
     const orderResult = await this.createOffRampForSession({
       session_id: context.sessionId,
       session_token: context.sessionToken,
+      intent_id: normalizeRampIntentId(input),
       customer_id: customerResult.customer.id,
       quote_id: quoteResult.quote.id,
       amount,
+      source_amount: requestedSourceAmount,
+      source_asset_code: sourceAsset.code,
+      source_asset_issuer: sourceAsset.issuer,
+      target_brl: targetBrl,
       fiat_account_id: fiatAccountId,
+      force_sandbox_mock: true,
     });
 
     let statusResult = await this.getOffRampStatus(orderResult.transaction.id, orderResult.operation_id);
@@ -2830,6 +2937,34 @@ export class AnchorService {
 
     const afterRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesAfter = normalizeBalances(afterRaw);
+    const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, requestedSourceAmount);
+    const destinationAssetCode = (targetBrl || sourceAsset.code === 'BRL') ? 'BRL' : sourceAsset.code;
+    const externalBank = (input.external_bank_account || input.externalBankAccount || {}) as Record<string, unknown>;
+    const bankLabel = coalesceString(
+      externalBank.label,
+      externalBank.institution,
+      'Conta bancária externa PIX',
+    );
+    let receiptUrl = '';
+    if (submitResult?.success) {
+      try {
+        receiptUrl = await PaymentReceiptService.sendReceipt({
+          type: 'payment_sent',
+          sessionId: context.sessionId,
+          userId: context.userId,
+          counterpartyLabel: bankLabel,
+          sourceAmount: requestedSourceAmount,
+          sourceAssetCode: sourceAsset.code,
+          destinationAmount,
+          destinationAssetCode,
+          hash: submitResult.hash || orderResult.transaction.id,
+          status: 'completed',
+          contextMessage: 'Retirada via PIX concluída: o saldo saiu da wallet e entrou na conta externa.',
+        });
+      } catch (error) {
+        console.warn('[ramp] Could not send PIX off-ramp receipt:', debugErrorMessage(error));
+      }
+    }
 
     return {
       success: true,
@@ -2839,7 +2974,11 @@ export class AnchorService {
       submitted: Boolean(submitResult?.success),
       wallet_public_key: context.publicKey,
       amount_tesouro: amount,
+      source_amount: requestedSourceAmount,
+      source_asset_code: sourceAsset.code,
+      source_asset_issuer: sourceAsset.issuer,
       ...(targetBrl ? { target_brl: targetBrl } : {}),
+      ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
       customer: customerResult.customer as Customer,
       fiat_account_id: fiatAccountId,
       quote: quoteResult.quote,
