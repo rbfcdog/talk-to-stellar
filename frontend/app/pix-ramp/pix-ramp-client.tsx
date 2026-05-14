@@ -175,6 +175,7 @@ export default function PixRampClient() {
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
+  const isSandboxMockOrder = Boolean(order?.sandbox_mock);
   const receivedCode = String(quote?.toCurrency || targetAsset).split(":")[0];
   const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
   const quoteExpiresAt = parseRampTimestamp(quote?.expiresAt);
@@ -821,6 +822,11 @@ export default function PixRampClient() {
                   </div>
                   <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-white/10 p-3 font-mono text-xs text-white/80">{pixCode || "PIX code not returned yet"}</p>
                   <p className="mt-3 text-sm text-white/65">PIX key: <span className="font-mono text-white">{pixKey || "not returned"}</span></p>
+                  {isSandboxMockOrder && (
+                    <p className="mt-3 rounded-2xl border border-lime-200/30 bg-lime-200/10 p-3 text-sm font-bold text-lime-50">
+                      BR-Code sandbox em formato PIX EMV de teste. Nao envie dinheiro real neste ambiente; o PIX bancario real so vem do depositPixCode da Etherfuse. Use o botao abaixo para simular o PIX e entregar TESOURO na Stellar Testnet.
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-5 rounded-3xl bg-white/10 p-4">
@@ -837,7 +843,7 @@ export default function PixRampClient() {
 
                 {config?.sandbox && (
                   <button className="mt-5 w-full rounded-3xl border border-lime-200/50 bg-lime-200/10 px-5 py-4 text-sm font-black text-lime-100 transition hover:bg-lime-200/20 disabled:opacity-50" disabled={Boolean(loading) || isTerminalStatus(status)} onClick={() => run("Simulating PIX payment", simulatePixPayment)}>
-                    Simulate PIX payment
+                    Simulate PIX payment and deliver TESOURO
                   </button>
                 )}
               </>

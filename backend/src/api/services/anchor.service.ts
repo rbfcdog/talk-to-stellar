@@ -166,6 +166,80 @@ function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): s
   return toStellarAmount(brl * 0.8665);
 }
 
+function formatPixAmount(value: string): string {
+  const amount = Number(String(value || '0').replace(',', '.'));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw apiError('PIX amount must be a positive decimal amount.', 400);
+  }
+  return amount.toFixed(2);
+}
+
+function pixTlv(id: string, value: string): string {
+  const normalized = String(value || '');
+  const length = Buffer.byteLength(normalized, 'utf8');
+  if (!/^\d{2}$/.test(id) || length > 99) {
+    throw new Error(`Invalid PIX TLV field ${id}.`);
+  }
+  return `${id}${String(length).padStart(2, '0')}${normalized}`;
+}
+
+function sanitizePixText(value: string, maxLength: number): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9 .\-]/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function sanitizePixTxid(value: string): string {
+  const txid = String(value || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 25);
+  return txid || '***';
+}
+
+function crc16CcittFalse(value: string): string {
+  let crc = 0xffff;
+  for (const byte of Buffer.from(value, 'utf8')) {
+    crc ^= byte << 8;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      crc &= 0xffff;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+function buildPixBrCode(input: {
+  pixKey: string;
+  amount: string;
+  merchantName: string;
+  merchantCity: string;
+  txid: string;
+  description?: string;
+}): string {
+  const merchantAccount = pixTlv('00', 'br.gov.bcb.pix') +
+    pixTlv('01', input.pixKey) +
+    (input.description ? pixTlv('02', sanitizePixText(input.description, 72)) : '');
+  const additionalData = pixTlv('05', sanitizePixTxid(input.txid));
+  const payloadWithoutCrc = [
+    pixTlv('00', '01'),
+    pixTlv('01', '12'),
+    pixTlv('26', merchantAccount),
+    pixTlv('52', '0000'),
+    pixTlv('53', '986'),
+    pixTlv('54', formatPixAmount(input.amount)),
+    pixTlv('58', 'BR'),
+    pixTlv('59', sanitizePixText(input.merchantName, 25) || 'Etherfuse'),
+    pixTlv('60', sanitizePixText(input.merchantCity, 15) || 'SAO PAULO'),
+    pixTlv('62', additionalData),
+    '6304',
+  ].join('');
+
+  return `${payloadWithoutCrc}${crc16CcittFalse(payloadWithoutCrc)}`;
+}
+
 function coalesceString(...values: unknown[]): string {
   for (const value of values) {
     const normalized = String(value || '').trim();
@@ -278,7 +352,7 @@ function parseIssuedAssetIdentifier(identifier: string): { code: string; issuer?
 export class AnchorService {
   private static etherfuseClient?: EtherfuseClient;
   private static etherfuseConfigSignature?: string;
-  private static programmaticOnboardingCache = new Set<string>();
+  private static programmaticOnboardingCache = new Map<string, { cryptoWalletId?: string }>();
   private static sandboxMockOnRampOrders = new Map<string, SandboxMockOnRampOrder>();
   private static sandboxMockOffRampOrders = new Map<string, SandboxMockOffRampOrder>();
 
@@ -528,6 +602,29 @@ export class AnchorService {
     return { bankAccountId, kycUrl };
   }
 
+  private static async getActiveEtherfuseOrganizationBankAccountId(): Promise<string | undefined> {
+    const anchor = this.getEtherfuseClient() as EtherfuseClient & {
+      getOrganizationFiatAccounts?: () => Promise<Array<SavedFiatAccount & {
+        status?: string;
+        compliant?: boolean;
+        currency?: string;
+      }>>;
+    };
+    if (typeof anchor.getOrganizationFiatAccounts !== 'function') return undefined;
+
+    try {
+      const accounts = await anchor.getOrganizationFiatAccounts();
+      const active = accounts.find((account) =>
+        String(account.status || '').toLowerCase() === 'active' &&
+        account.compliant !== false
+      );
+      return active?.id;
+    } catch (error) {
+      console.warn('[ramp] Could not list Etherfuse organization bank accounts:', debugErrorMessage(error));
+      return undefined;
+    }
+  }
+
   private static missingProxySetupError(
     message: string,
     kycUrl?: string,
@@ -552,6 +649,16 @@ export class AnchorService {
 
   private static buildSandboxPixInstructions(orderId: string, amount: string) {
     const pixKey = `sandbox-${orderId.replace(/^sandbox-pix-/, '').slice(0, 8)}@etherfuse.dev`;
+    const txid = `TS${orderId.replace(/[^a-f0-9]/gi, '').slice(0, 23)}`;
+    const pixCode = buildPixBrCode({
+      pixKey,
+      amount,
+      merchantName: 'Etherfuse Sandbox',
+      merchantCity: 'SAO PAULO',
+      txid,
+      description: `TalkToStellar ${orderId.slice(-8)}`,
+    });
+
     return {
       type: 'pix' as const,
       amount,
@@ -559,16 +666,23 @@ export class AnchorService {
       reference: orderId,
       pixKey,
       pixKeyType: 'email',
-      pixCode: [
-        'PIX-SANDBOX',
-        'provider=Etherfuse',
-        `order=${orderId}`,
-        `amount=${amount}`,
-        'currency=BRL',
-        'network=stellar-testnet',
-      ].join('|'),
+      pixCode,
       beneficiary: 'Etherfuse Sandbox',
     };
+  }
+
+  private static async getSandboxTesouroTreasuryBalance(): Promise<string | undefined> {
+    const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
+    if (!publicKey) return undefined;
+
+    try {
+      const balances = await StellarService.getAccountBalance(publicKey);
+      const tesouro = balances.find(isTesouroBalance);
+      return String(tesouro?.balance || '0');
+    } catch (error) {
+      console.warn('[ramp] Could not read sandbox TESOURO treasury balance:', debugErrorMessage(error));
+      return undefined;
+    }
   }
 
   private static createSandboxOnRampFallback(input: {
@@ -633,6 +747,7 @@ export class AnchorService {
     }
 
     const destinationAmount = toStellarAmount(record.destinationAmount);
+    const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
     const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
       sourceSecret,
       destination: record.publicKey,
@@ -655,7 +770,10 @@ export class AnchorService {
     if (!brlIssuer) {
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryError = `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}`;
+      const liquidityDetail = treasuryTesouroBalance !== undefined
+        ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmount}.`
+        : '';
+      record.deliveryError = `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
       return record;
     }
@@ -675,11 +793,14 @@ export class AnchorService {
     });
 
     if (!result.success) {
+      const liquidityDetail = treasuryTesouroBalance !== undefined
+        ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmount}.`
+        : '';
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
       record.deliveryError = result.error
-        ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}`
-        : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}`;
+        ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`
+        : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
       return record;
     }
@@ -883,6 +1004,7 @@ export class AnchorService {
     kycUrl?: string;
   }): Promise<{
     bankAccountId: string;
+    cryptoWalletId?: string;
     steps: Record<string, unknown>;
   }> {
     if (!this.getRuntimeInfo().sandbox) {
@@ -890,17 +1012,52 @@ export class AnchorService {
     }
 
     const cacheKey = `${input.customerId}:${input.publicKey}:${input.bankAccountId}`;
-    if (this.programmaticOnboardingCache.has(cacheKey)) {
-      return { bankAccountId: input.bankAccountId, steps: { cached: true } };
+    const cached = this.programmaticOnboardingCache.get(cacheKey);
+    if (cached) {
+      return {
+        bankAccountId: input.bankAccountId,
+        cryptoWalletId: cached.cryptoWalletId,
+        steps: { cached: true, crypto_wallet_id: cached.cryptoWalletId },
+      };
     }
 
     const anchor = this.getEtherfuseClient() as any;
     const steps: Record<string, unknown> = {};
+    let cryptoWalletId: string | undefined;
 
     try {
       steps.wallet = await anchor.registerCustomerWallet(input.customerId, input.publicKey, false);
     } catch (error) {
       steps.wallet = isDuplicateResourceError(error) ? 'already_registered' : { error: debugErrorMessage(error) };
+    }
+
+    if (typeof anchor.registerOrganizationWallet === 'function') {
+      try {
+        const organizationWallet = await anchor.registerOrganizationWallet(input.publicKey, true);
+        steps.organization_wallet = organizationWallet;
+        cryptoWalletId = coalesceString(
+          organizationWallet?.walletId,
+          organizationWallet?.cryptoWalletId,
+          organizationWallet?.id,
+        );
+      } catch (error) {
+        try {
+          const organizationWallet = await anchor.registerOrganizationWallet(input.publicKey, false);
+          steps.organization_wallet = {
+            claim_ownership_error: debugErrorMessage(error),
+            registered_without_claim: organizationWallet,
+          };
+          cryptoWalletId = coalesceString(
+            organizationWallet?.walletId,
+            organizationWallet?.cryptoWalletId,
+            organizationWallet?.id,
+          );
+        } catch (fallbackError) {
+          steps.organization_wallet = isDuplicateResourceError(fallbackError)
+            ? 'already_registered'
+            : { error: debugErrorMessage(fallbackError), claim_ownership_error: debugErrorMessage(error) };
+        }
+      }
     }
 
     try {
@@ -960,8 +1117,8 @@ export class AnchorService {
       }
     }
 
-    this.programmaticOnboardingCache.add(cacheKey);
-    return { bankAccountId: input.bankAccountId, steps };
+    this.programmaticOnboardingCache.set(cacheKey, { cryptoWalletId });
+    return { bankAccountId: input.bankAccountId, cryptoWalletId, steps };
   }
 
   static async createCustomerForSession(input: CustomerForSessionInput): Promise<{
@@ -1191,6 +1348,7 @@ export class AnchorService {
 
     const anchor = this.getEtherfuseClient();
     let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId) || undefined;
+    let cryptoWalletId: string | undefined;
     let kycUrl: string | undefined;
 
     const preparedProxy = await this.prepareEtherfusePixProxy({
@@ -1210,6 +1368,11 @@ export class AnchorService {
       kycUrl,
     });
     bankAccountId = programmatic.bankAccountId;
+    cryptoWalletId = programmatic.cryptoWalletId;
+    const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+    if (organizationBankAccountId) {
+      bankAccountId = organizationBankAccountId;
+    }
 
     let orderQuote: Quote | undefined;
     let quoteRefreshReason: string | undefined;
@@ -1238,6 +1401,7 @@ export class AnchorService {
       toCurrency,
       amount,
       bankAccountId,
+      cryptoWalletId,
       memo: coalesceString(input.memo) || undefined,
     });
 
@@ -1287,6 +1451,11 @@ export class AnchorService {
           kycUrl,
         });
         bankAccountId = retryProgrammatic.bankAccountId;
+        cryptoWalletId = retryProgrammatic.cryptoWalletId || cryptoWalletId;
+        const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+        if (organizationBankAccountId) {
+          bankAccountId = organizationBankAccountId;
+        }
 
         try {
           transaction = await createOrderWithQuoteRetry();
@@ -1325,6 +1494,7 @@ export class AnchorService {
         quote_refresh_reason: quoteRefreshReason,
         anchor_order_id: transaction.id,
         target_asset: toCurrency,
+        crypto_wallet_id: cryptoWalletId,
         payment_instructions: transaction.paymentInstructions,
         sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
         upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,

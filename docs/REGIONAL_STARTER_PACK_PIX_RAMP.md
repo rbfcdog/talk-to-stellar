@@ -51,6 +51,7 @@ Investigacao feita contra `https://api.sand.etherfuse.com` e a especificacao ofi
 
 - `POST /ramp/onboarding-url` funciona e recupera o customer existente quando a public key ja foi registrada.
 - `POST /ramp/customer/{customerId}/wallet` funciona e retorna `walletId`.
+- `POST /ramp/wallet` e usado no sandbox com `claimOwnership=true` para registrar a wallet na organizacao Etherfuse aprovada.
 - `POST /ramp/customer/{customerId}/kyc` funciona e auto-aprova no sandbox.
 - `POST /ramp/quote` funciona para `BRL -> TESOURO` e `TESOURO -> BRL`.
 - `POST /ramp/customer/{customerId}/bank-account` rejeita o payload PIX do regional starter pack com `AccountRegistration`.
@@ -139,9 +140,11 @@ Em producao, o fluxo seria:
 No sandbox/testnet usado aqui:
 
 - Nao envie dinheiro real.
-- O `pixCode` e instrucao de teste/sandbox.
+- Quando a ordem Etherfuse real funciona, o `pixCode` vem da Etherfuse.
+- Quando o sandbox cai no fallback local, o `pixCode` e um BR-Code PIX EMV valido para QR/copia-e-cola de teste, com `br.gov.bcb.pix`, valor, txid e CRC16. Ele nao deve ser pago com dinheiro real.
 - O pagamento e simulado via `POST /api/ramp/etherfuse/sandbox/simulate-fiat`.
 - O ativo recebido e `TESOURO` em rede Stellar testnet/devnet. Quando a ordem Etherfuse real falha por proxy PIX, o fallback sandbox faz a entrega on-chain local.
+- Para ordem Etherfuse real, a API exige wallet aprovada e bank account ativa da organizacao. O backend registra a wallet em `/ramp/wallet` e tenta usar automaticamente uma conta ativa retornada por `/ramp/bank-accounts` antes de cair no fallback.
 - Esses tokens nao representam saldo financeiro real.
 
 Resumo: no ambiente atual, PIX e fake/simulado; a blockchain tambem esta em testnet/devnet. Dinheiro real so deve entrar quando trocar para ambiente de producao da anchor, com API key de producao, compliance/KYC aprovados e rails reais ativados.
@@ -456,5 +459,7 @@ O resultado esperado e `true`.
 - O issuer default de `TESOURO` e o mesmo usado pelo regional starter pack.
 - Off-ramp Etherfuse usa assinatura diferida: a ordem e criada primeiro, e o XDR aparece depois via polling.
 - KYC sandbox e wallet registration sao programaticos; conta PIX programatica ainda e rejeitada pela API sandbox atual da Etherfuse para o payload PIX do regional starter pack.
+- O fallback on-ramp gera BR-Code EMV de sandbox em vez de uma string interna `PIX-SANDBOX|...`, para que o QR exibido tenha o formato PIX correto.
+- Se o fallback nao tiver TESOURO suficiente no coletor sandbox, a simulacao retorna erro com saldo do treasury e valor necessario. Para R$ 100, o treasury precisa ter cerca de 86.65 TESOURO ou a ordem real Etherfuse precisa estar ativa.
 - O fallback sandbox nao roda em producao e nao deve ser tratado como liquidacao financeira real.
 - A API key nao deve ser exposta no frontend nem em variaveis `NEXT_PUBLIC_*`.

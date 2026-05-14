@@ -79,6 +79,20 @@ export interface EtherfuseOrderRequest {
     memo?: string;
 }
 
+/** Response from organization/customer wallet registration. */
+export interface EtherfuseWalletResponse {
+    /** Etherfuse wallet UUID. */
+    walletId: string;
+    /** Registered wallet public key. */
+    publicKey: string;
+    /** Blockchain associated with the wallet. */
+    blockchain: string;
+    /** KYC/compliance status for this wallet. */
+    kycStatus?: string;
+    /** Whether org-level ownership/KYB was claimed for the wallet. */
+    claimedOwnership?: boolean;
+}
+
 /** SPEI-shaped account body for Mexican (CLABE) bank-account registration. */
 export interface EtherfuseSpeiAccountBody {
     /** 18-digit CLABE interbank code. */

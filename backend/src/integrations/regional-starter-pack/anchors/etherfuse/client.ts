@@ -49,6 +49,7 @@ import type {
     EtherfuseOrderResponse,
     EtherfuseKycStatusResponse,
     EtherfuseBankAccountListResponse,
+    EtherfuseBankAccountListItem,
     EtherfuseBankAccountResponse,
     EtherfuseApiKeyBankAccountRequest,
     EtherfuseBankAccountRequest,
@@ -58,6 +59,7 @@ import type {
     EtherfuseOrderStatus,
     EtherfuseKycIdentityRequest,
     EtherfuseKycDocumentRequest,
+    EtherfuseWalletResponse,
 } from './types';
 
 /**
@@ -628,6 +630,39 @@ export class EtherfuseClient implements Anchor {
     }
 
     /**
+     * List bank accounts owned by the authenticated organization.
+     *
+     * On-ramp orders must use an organization/child-organization bank account,
+     * not the end user's payout account. The active/compliant status is kept on
+     * the returned objects for server-side selection.
+     */
+    async getOrganizationFiatAccounts(): Promise<Array<SavedFiatAccount & {
+        status?: string;
+        compliant?: boolean;
+        currency?: string;
+    }>> {
+        const response = await this.request<EtherfuseBankAccountListResponse>(
+            'GET',
+            '/ramp/bank-accounts',
+        );
+
+        return response.items.map((account) => {
+            const isPix = !!account.pixKey;
+            return {
+                id: account.bankAccountId,
+                type: isPix ? 'PIX' : 'SPEI',
+                accountNumber: isPix ? (account.pixKey ?? '') : (account.abbrClabe ?? ''),
+                bankName: '',
+                accountHolderName: account.accountHolderName ?? account.label ?? '',
+                createdAt: account.createdAt,
+                status: account.status,
+                compliant: account.compliant,
+                currency: (account as EtherfuseBankAccountListItem & { currency?: string }).currency,
+            };
+        });
+    }
+
+    /**
      * Create an off-ramp transaction (CETES on Stellar → fiat MXN via SPEI).
      *
      * The returned transaction will have `signableTransaction` set to `undefined`
@@ -804,8 +839,25 @@ export class EtherfuseClient implements Anchor {
         customerId: string,
         publicKey: string,
         claimOwnership = false,
-    ): Promise<unknown> {
-        return this.request('POST', `/ramp/customer/${customerId}/wallet`, {
+    ): Promise<EtherfuseWalletResponse> {
+        return this.request<EtherfuseWalletResponse>('POST', `/ramp/customer/${customerId}/wallet`, {
+            publicKey,
+            blockchain: this.blockchain,
+            claimOwnership,
+        });
+    }
+
+    /**
+     * Register a wallet under the authenticated organization.
+     *
+     * This is required by the current Etherfuse order flow before a wallet can be
+     * used in org-scoped on-ramp/off-ramp/swap orders.
+     */
+    async registerOrganizationWallet(
+        publicKey: string,
+        claimOwnership = true,
+    ): Promise<EtherfuseWalletResponse> {
+        return this.request<EtherfuseWalletResponse>('POST', '/ramp/wallet', {
             publicKey,
             blockchain: this.blockchain,
             claimOwnership,
