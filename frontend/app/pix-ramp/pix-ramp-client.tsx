@@ -176,7 +176,7 @@ export default function PixRampClient({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [walletPin, setWalletPin] = useState("");
-  const [pinInputArmed, setPinInputArmed] = useState(false);
+  const [externalPixDestination, setExternalPixDestination] = useState("Conta bancária externa vinculada ao seu PIX");
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
@@ -272,10 +272,10 @@ export default function PixRampClient({
           state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Conta PIX",
+          label: "Conta externa",
           detail: temporaryOffRampTestResult
-            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} mostrado como entrada na conta PIX.`
-            : "O recibo aparece aqui após a confirmação.",
+            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} chegou em ${externalPixDestination}.`
+            : `Destino final: ${externalPixDestination}.`,
           state: temporaryOffRampTestResult ? "done" : "pending",
         },
       ];
@@ -333,6 +333,7 @@ export default function PixRampClient({
     loading,
     offRampAmount,
     offRampFiatAmount,
+    externalPixDestination,
     order?.toAmount,
     orderId,
     polling,
@@ -587,7 +588,6 @@ export default function PixRampClient({
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
     setWalletPin("");
-    setPinInputArmed(false);
     setDebugLogs([]);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
@@ -612,7 +612,6 @@ export default function PixRampClient({
     setQrDataUrl("");
     setCopied(false);
     setWalletPin("");
-    setPinInputArmed(false);
     setPolling(false);
     setStep("quote");
   }
@@ -626,7 +625,6 @@ export default function PixRampClient({
     setOnRampBalancesAfter([]);
     setTemporaryTestResult(null);
     setWalletPin("");
-    setPinInputArmed(false);
 
     const auth = await resolveWalletFromEmail();
     const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
@@ -688,7 +686,6 @@ export default function PixRampClient({
     setOrderPayload(payload);
     setStatusPayload(null);
     setWalletPin("");
-    setPinInputArmed(false);
     setStep("checkout");
     setPolling(true);
   }
@@ -943,21 +940,33 @@ export default function PixRampClient({
                 />
                 <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
               </div>
+              <label className="mt-6 block text-sm font-bold text-slate-200">Destino final</label>
+              <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
+                <input
+                  className="w-full bg-transparent px-4 py-4 text-base font-black text-white outline-none"
+                  value={externalPixDestination}
+                  autoComplete="off"
+                  placeholder="Conta bancária externa vinculada ao seu PIX"
+                  onChange={(event) => setExternalPixDestination(event.target.value)}
+                />
+              </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
+                <input className="hidden" tabIndex={-1} autoComplete="username" aria-hidden="true" />
+                <input className="hidden" tabIndex={-1} type="password" autoComplete="current-password" aria-hidden="true" />
                 <input
                   className="w-full bg-transparent px-4 py-4 text-xl font-black text-white outline-none"
-                  value={pinInputArmed ? walletPin : ""}
+                  value={walletPin}
                   inputMode="numeric"
-                  type="password"
-                  name={`pix-off-wallet-pin-${sessionId || "new"}`}
-                  autoComplete="new-password"
-                  readOnly={!pinInputArmed}
+                  type="text"
+                  name="manual-wallet-code-off"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  style={{ WebkitTextSecurity: "disc" } as any}
                   placeholder="Digite seu PIN"
-                  onFocus={() => {
-                    setWalletPin("");
-                    setPinInputArmed(true);
-                  }}
+                  onPaste={(event) => event.preventDefault()}
+                  onDrop={(event) => event.preventDefault()}
                   onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
                 />
               </div>
@@ -972,11 +981,11 @@ export default function PixRampClient({
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta PIX</p>
-              <h2 className="mt-1 text-2xl font-black">PIX de saida</h2>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta externa</p>
+              <h2 className="mt-1 text-2xl font-black">Retirada para banco</h2>
               {!temporaryOffRampTestResult ? (
                 <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
-                  Digite seu PIN e confirme a retirada para ver o dinheiro sair da wallet.
+                  Digite seu PIN e confirme a retirada para ver o dinheiro sair da wallet e chegar na conta externa.
                 </div>
               ) : (
                 <div className="mt-6 space-y-4">
@@ -989,8 +998,9 @@ export default function PixRampClient({
                     <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta PIX</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta externa</p>
                     <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
+                    <p className="mt-1 text-sm font-bold text-white/60">{externalPixDestination}</p>
                   </div>
                   {temporaryOffRampTestResult.target_brl && (
                     <div className="rounded-3xl bg-white/10 p-4">
@@ -1001,7 +1011,7 @@ export default function PixRampClient({
                     </div>
                   )}
                   <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-100">
-                    <p className="text-sm font-black">Retirada PIX concluída.</p>
+                    <p className="text-sm font-black">Retirada concluída para a conta externa.</p>
                   </div>
                 </div>
               )}
@@ -1205,19 +1215,21 @@ export default function PixRampClient({
                         ) : (
                           <>
                             <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
+                            <input className="hidden" tabIndex={-1} autoComplete="username" aria-hidden="true" />
+                            <input className="hidden" tabIndex={-1} type="password" autoComplete="current-password" aria-hidden="true" />
                             <input
                               className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-xl font-black text-white outline-none placeholder:text-amber-100/35 focus:border-amber-200/60"
-                              value={pinInputArmed ? walletPin : ""}
+                              value={walletPin}
                               inputMode="numeric"
-                              type="password"
-                              name={`pix-on-wallet-pin-${orderId || "new"}`}
-                              autoComplete="new-password"
-                              readOnly={!pinInputArmed}
+                              type="text"
+                              name="manual-wallet-code-on"
+                              autoComplete="off"
+                              data-lpignore="true"
+                              data-1p-ignore="true"
+                              style={{ WebkitTextSecurity: "disc" } as any}
                               placeholder="Digite seu PIN"
-                              onFocus={() => {
-                                setWalletPin("");
-                                setPinInputArmed(true);
-                              }}
+                              onPaste={(event) => event.preventDefault()}
+                              onDrop={(event) => event.preventDefault()}
                               onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
                             />
                             <button
