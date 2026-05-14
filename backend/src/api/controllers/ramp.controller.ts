@@ -15,6 +15,7 @@ function errorPayload(error: any): Record<string, unknown> {
   const payload: Record<string, unknown> = { success: false, message: errorMessage(error) };
   if (error?.kyc_url) payload.kyc_url = error.kyc_url;
   if (error?.bank_account_id) payload.bank_account_id = error.bank_account_id;
+  if (error?.programmatic_onboarding) payload.programmatic_onboarding = error.programmatic_onboarding;
   return payload;
 }
 
