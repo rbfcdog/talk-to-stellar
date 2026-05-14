@@ -442,6 +442,38 @@ export class AnchorService {
     }
   }
 
+  private static isMissingEtherfuseProxyError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return /proxy account not found|bank account not found|account not found/i.test(message);
+  }
+
+  private static async prepareEtherfusePixProxy(input: {
+    customerId: string;
+    publicKey: string;
+    bankAccountId?: string;
+  }): Promise<{ bankAccountId: string; kycUrl?: string }> {
+    const bankAccountId = input.bankAccountId || crypto.randomUUID();
+    const anchor = this.getEtherfuseClient();
+    const kycUrl = await anchor.getKycUrl?.(input.customerId, input.publicKey, bankAccountId);
+
+    if (kycUrl && this.getRuntimeInfo().sandbox && typeof (anchor as any).acceptAgreements === 'function') {
+      try {
+        await (anchor as any).acceptAgreements(kycUrl);
+      } catch (error) {
+        console.warn('[ramp] Etherfuse sandbox agreement auto-accept failed:', error);
+      }
+    }
+
+    return { bankAccountId, kycUrl };
+  }
+
+  private static missingProxySetupError(message: string, kycUrl?: string, bankAccountId?: string): Error {
+    const error = apiError(message, 409) as Error & { kyc_url?: string; bank_account_id?: string };
+    if (kycUrl) error.kyc_url = kycUrl;
+    if (bankAccountId) error.bank_account_id = bankAccountId;
+    return error;
+  }
+
   static async createCustomerForSession(input: CustomerForSessionInput): Promise<{
     customer: Customer;
     kyc_url?: string;
@@ -452,17 +484,22 @@ export class AnchorService {
   }> {
     const context = await this.resolveSessionWallet(input);
     const anchor = this.getEtherfuseClient();
-    const customer = await anchor.createCustomer({
+    let customer = await anchor.createCustomer({
       email: coalesceString(input.email, context.email) || undefined,
       country: coalesceString(input.country) || 'BR',
       publicKey: context.publicKey,
     });
 
-    const kycUrl = await anchor.getKycUrl?.(customer.id, context.publicKey, customer.bankAccountId);
+    const preparedProxy = await this.prepareEtherfusePixProxy({
+      customerId: customer.id,
+      publicKey: context.publicKey,
+      bankAccountId: customer.bankAccountId,
+    });
+    customer = { ...customer, bankAccountId: preparedProxy.bankAccountId };
 
     return {
       customer,
-      kyc_url: kycUrl,
+      kyc_url: preparedProxy.kycUrl,
       provider: 'etherfuse',
       rail: 'pix',
       fiat_currency: 'BRL',
@@ -650,16 +687,55 @@ export class AnchorService {
       throw apiError(trustline.error || `Could not create ${targetAsset.code || 'asset'} trustline before on-ramp.`, 409);
     }
 
-    const transaction = await this.getEtherfuseClient().createOnRamp({
+    const anchor = this.getEtherfuseClient();
+    let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId) || undefined;
+    let kycUrl: string | undefined;
+
+    if (!bankAccountId) {
+      const preparedProxy = await this.prepareEtherfusePixProxy({
+        customerId,
+        publicKey: context.publicKey,
+      });
+      bankAccountId = preparedProxy.bankAccountId;
+      kycUrl = preparedProxy.kycUrl;
+    }
+
+    const createOrder = () => anchor.createOnRamp({
       customerId,
       quoteId,
       stellarAddress: context.publicKey,
       fromCurrency: 'BRL',
       toCurrency,
       amount,
-      bankAccountId: coalesceString(input.bank_account_id, input.bankAccountId) || undefined,
+      bankAccountId,
       memo: coalesceString(input.memo) || undefined,
     });
+
+    let transaction: OnRampTransaction;
+    try {
+      transaction = await createOrder();
+    } catch (error) {
+      if (!this.isMissingEtherfuseProxyError(error)) throw error;
+
+      const preparedProxy = await this.prepareEtherfusePixProxy({
+        customerId,
+        publicKey: context.publicKey,
+        bankAccountId,
+      });
+      bankAccountId = preparedProxy.bankAccountId;
+      kycUrl = preparedProxy.kycUrl;
+
+      try {
+        transaction = await createOrder();
+      } catch (retryError) {
+        if (!this.isMissingEtherfuseProxyError(retryError)) throw retryError;
+        throw this.missingProxySetupError(
+          'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet. Abra o link de cadastro PIX/KYC, conclua o onboarding hospedado da Etherfuse e tente gerar o PIX novamente.',
+          kycUrl,
+          bankAccountId,
+        );
+      }
+    }
 
     const operationId = await this.persistRampOperation({
       userId: context.userId,

@@ -11,6 +11,13 @@ function errorMessage(error: any): string {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
+function errorPayload(error: any): Record<string, unknown> {
+  const payload: Record<string, unknown> = { success: false, message: errorMessage(error) };
+  if (error?.kyc_url) payload.kyc_url = error.kyc_url;
+  if (error?.bank_account_id) payload.bank_account_id = error.bank_account_id;
+  return payload;
+}
+
 function requestInput(req: Request): Record<string, unknown> {
   return {
     ...req.query,
@@ -42,7 +49,7 @@ export class RampController {
       const result = await AnchorService.createCustomerForSession(requestInput(req));
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(errorPayload(error));
     }
   }
 
@@ -105,7 +112,7 @@ export class RampController {
       const result = await AnchorService.createOnRampForSession(requestInput(req));
       res.status(201).json({ success: true, ...result });
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(errorPayload(error));
     }
   }
 
