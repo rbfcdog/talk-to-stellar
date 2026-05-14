@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import QRCode from "qrcode";
 import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 
@@ -176,7 +175,6 @@ export default function PixRampClient({
   const [programmaticOnboarding, setProgrammaticOnboarding] = useState<RampResponse | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [receiptCopied, setReceiptCopied] = useState(false);
   const [walletPin, setWalletPin] = useState("");
   const [polling, setPolling] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -351,24 +349,6 @@ export default function PixRampClient({
     pixFundedTransferResult,
     walletPublicKey,
   ]);
-
-  const receiptText = useMemo(() => {
-    if (!order) return "";
-    return [
-      "PIX payment confirmed",
-      `BRL amount paid: ${formatMoney(order.fromAmount || quote?.fromAmount || amountBrl)}`,
-      `Asset received: ${formatRampAsset(finalReceivedAmount || order.toAmount || quote?.toAmount, receivedCode)}`,
-      ...(pixFundedTransferResult?.transaction_hash ? [
-        `Transfer sent: ${formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} to ${pixFundedTransferResult.recipient_name || transferRecipient}`,
-        `Transfer transaction: ${pixFundedTransferResult.transaction_hash}`,
-      ] : []),
-      `Destination wallet: ${walletPublicKey}`,
-      `Order id: ${order.id}`,
-      `Timestamp: ${new Date().toISOString()}`,
-      "Status: completed",
-      `Status: ${order.status}`,
-    ].join("\n");
-  }, [amountBrl, finalReceivedAmount, order, pixFundedTransferResult, quote?.fromAmount, quote?.toAmount, receivedCode, targetAsset, transferRecipient, walletPublicKey]);
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -810,27 +790,6 @@ export default function PixRampClient({
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
     setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
-  }
-
-  async function copyReceipt() {
-    await navigator.clipboard.writeText(receiptText);
-    setReceiptCopied(true);
-    window.setTimeout(() => setReceiptCopied(false), 1600);
-  }
-
-  function newTransfer() {
-    setStep("quote");
-    setQuotePayload(null);
-    setOrderPayload(null);
-    setStatusPayload(null);
-    setOnRampBalancesBefore([]);
-    setOnRampBalancesAfter([]);
-    setQrDataUrl("");
-    setCopied(false);
-    setPolling(false);
-    setError("");
-    setPixFundedTransferResult(null);
-    setWalletPin("");
   }
 
   const timeline = [
@@ -1398,16 +1357,7 @@ export default function PixRampClient({
                 </div>
               )}
 
-              <div className="relative mt-6 rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-semibold leading-6 text-emerald-50">
-                Este comprovante confirma que o PIX foi processado e registrado na sua wallet.
-              </div>
               <p className="relative mt-4 text-xs font-semibold text-white/45">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
-
-              <div className="relative mt-6 grid gap-3 sm:grid-cols-3">
-                <Link href={walletPublicKey ? `/profile/${encodeURIComponent(walletPublicKey)}` : "/chat"} className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-black text-[#0d1512] transition hover:bg-emerald-100">Ver wallet</Link>
-                <button className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15" onClick={() => run("Copying receipt", copyReceipt)}>{receiptCopied ? "Comprovante copiado" : "Copiar comprovante"}</button>
-                <button className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15" onClick={newTransfer}>Novo PIX</button>
-              </div>
             </div>
           </section>
         )}
