@@ -81,6 +81,15 @@ export class RampController {
     }
   }
 
+  static async getExternalBankAccount(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.getOrCreateExternalBankAccountForSession(requestInput(req));
+      res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
   static async getEtherfuseWalletBalances(req: Request, res: Response) {
     try {
       const result = await AnchorService.getWalletBalancesForSession(requestInput(req));
