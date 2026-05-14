@@ -51,6 +51,23 @@ interface SessionWalletContext {
   wallet?: WalletInfo | null;
 }
 
+interface ExternalBankAccount {
+  id: string;
+  session_id: string;
+  user_id: string;
+  wallet_public_key: string;
+  label: string;
+  institution: string;
+  branch: string;
+  account_number: string;
+  pix_key: string;
+  rail: string;
+  country: string;
+  currency: string;
+  status: string;
+  metadata?: Record<string, unknown>;
+}
+
 interface CustomerForSessionInput extends RampSessionInput {
   email?: string;
   country?: string;
@@ -107,6 +124,8 @@ interface CreateOffRampForSessionInput extends RampSessionInput {
   bankAccountId?: string;
   memo?: string;
 }
+
+interface ExternalBankAccountInput extends RampSessionInput {}
 
 interface SubmitOffRampForSessionInput extends RampSessionInput {
   order_id?: string;
@@ -211,6 +230,31 @@ function hashWalletPin(pin: string): string {
   return crypto
     .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
     .toString('hex');
+}
+
+function stableHex(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function buildExternalBankAccountFields(context: SessionWalletContext) {
+  const hash = stableHex(`${context.publicKey}:${context.email || context.userId}`);
+  const numeric = BigInt(`0x${hash.slice(0, 12)}`).toString().padStart(14, '0');
+  const email = String(context.email || '').trim().toLowerCase();
+  return {
+    label: 'Conta bancária externa TalkToStellar',
+    institution: 'Banco externo vinculado',
+    branch: numeric.slice(0, 4),
+    account_number: `${numeric.slice(4, 11)}-${numeric.slice(11, 12)}`,
+    pix_key: email.includes('@') ? email : `pix-${hash.slice(0, 8)}@talktostellar.bank`,
+    rail: 'PIX',
+    country: 'BR',
+    currency: 'BRL',
+    status: 'active',
+    metadata: {
+      generated_for: 'pix_off_ramp',
+      deterministic_hash: hash.slice(0, 16),
+    },
+  };
 }
 
 function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): string {
@@ -573,6 +617,48 @@ export class AnchorService {
     if (!context.sessionPinHash || hashWalletPin(pin) !== context.sessionPinHash) {
       throw apiError('PIN inválido. Tente novamente.', 401);
     }
+  }
+
+  static async getOrCreateExternalBankAccountForSession(input: ExternalBankAccountInput): Promise<{
+    external_bank_account: ExternalBankAccount;
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    const fields = buildExternalBankAccountFields(context);
+
+    const { data: existing, error: existingError } = await supabase
+      .from('external_bank_accounts')
+      .select('*')
+      .eq('wallet_public_key', context.publicKey)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (existingError && !String(existingError.message || '').toLowerCase().includes('does not exist')) {
+      throw new Error(`Failed to load external bank account: ${existingError.message}`);
+    }
+
+    if (existing) {
+      return { external_bank_account: existing as ExternalBankAccount };
+    }
+
+    const row = {
+      session_id: context.sessionId,
+      user_id: context.userId,
+      wallet_public_key: context.publicKey,
+      ...fields,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: created, error: createError } = await supabase
+      .from('external_bank_accounts')
+      .insert(row)
+      .select('*')
+      .single();
+
+    if (createError) {
+      throw new Error(`Failed to create external bank account: ${createError.message}`);
+    }
+
+    return { external_bank_account: created as ExternalBankAccount };
   }
 
   static async resolveWalletByEmail(input: ResolveWalletByEmailInput): Promise<{

@@ -10,6 +10,7 @@ router.get('/etherfuse/kyc-status', RampController.getEtherfuseKycStatus);
 router.get('/etherfuse/assets', RampController.getEtherfuseAssets);
 router.get('/etherfuse/wallet-balances', RampController.getEtherfuseWalletBalances);
 router.get('/etherfuse/fiat-accounts', RampController.listEtherfuseFiatAccounts);
+router.post('/etherfuse/external-bank-account', RampController.getExternalBankAccount);
 router.post('/etherfuse/quote', RampController.createEtherfuseQuote);
 router.post('/etherfuse/trustline', RampController.ensureEtherfuseTesouroTrustline);
 router.post('/etherfuse/onramp', RampController.createEtherfuseOnRamp);

@@ -30,6 +30,14 @@ type BalanceDelta = {
 
 type RampResponse = Record<string, any>;
 type RampAuth = { session_id: string; session_token: string };
+type ExternalBankAccount = {
+  id: string;
+  label: string;
+  institution: string;
+  branch: string;
+  account_number: string;
+  pix_key: string;
+};
 type LiveStepState = "done" | "active" | "pending" | "warning";
 type LiveStep = {
   label: string;
@@ -146,11 +154,11 @@ function buildExternalBankAccount(seed: string, email: string) {
   const pixAlias = email.includes("@") ? email : `pix-${hash.slice(0, 6)}@talktostellar.bank`;
   return {
     id: `bank-${hash}`,
-    name: "Conta bancária externa TalkToStellar",
+    label: "Conta bancária externa TalkToStellar",
     institution: "Banco externo vinculado",
     branch,
-    account,
-    pixAlias,
+    account_number: account,
+    pix_key: pixAlias,
   };
 }
 
@@ -212,11 +220,13 @@ export default function PixRampClient({
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
-  const externalBankAccount = useMemo(
+  const fallbackExternalBankAccount = useMemo(
     () => buildExternalBankAccount(walletPublicKey || sessionId || rampEmail, rampEmail),
     [walletPublicKey, sessionId, rampEmail]
   );
-  const externalPixDestination = `${externalBankAccount.institution} • Ag. ${externalBankAccount.branch} • Conta ${externalBankAccount.account}`;
+  const [externalBankAccount, setExternalBankAccount] = useState<ExternalBankAccount | null>(null);
+  const displayedExternalBankAccount = externalBankAccount || fallbackExternalBankAccount;
+  const externalPixDestination = `${displayedExternalBankAccount.institution} • Ag. ${displayedExternalBankAccount.branch} • Conta ${displayedExternalBankAccount.account_number}`;
 
   const hasSession = Boolean(sessionId && sessionToken);
   const canResolveWallet = Boolean(hasSession || rampEmail.trim());
@@ -432,6 +442,14 @@ export default function PixRampClient({
       .catch(() => setConfig({ sandbox: false, network: "Stellar" }));
   }, []);
 
+  useEffect(() => {
+    if (rampMode !== "offramp") return;
+    if (!sessionId || !sessionToken) return;
+    loadExternalBankAccount({ session_id: sessionId, session_token: sessionToken }).catch((err) => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, [rampMode, sessionId, sessionToken]);
+
   const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
     setDebugLogs((current) => [{
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -488,6 +506,36 @@ export default function PixRampClient({
     window.localStorage.setItem("talk-to-stellar.userName", email);
 
     return { session_id: nextSessionId, session_token: nextSessionToken };
+  }
+
+  async function loadExternalBankAccount(authOverride?: RampAuth) {
+    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
+    if (!auth.session_id || !auth.session_token) return null;
+    const startedAt = performance.now();
+    const response = await fetch("/api/ramp/etherfuse/external-bank-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(auth),
+    });
+    const payload = await response.json().catch(() => ({}));
+    addDebugLog({
+      label: "Load linked external bank account",
+      method: "POST",
+      path: "/api/ramp/etherfuse/external-bank-account",
+      status: response.status,
+      durationMs: Math.round(performance.now() - startedAt),
+      request: auth,
+      response: payload,
+      error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
+    });
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || payload?.error || "Nao consegui carregar a conta externa vinculada.");
+    }
+    if (payload?.external_bank_account) {
+      setExternalBankAccount(payload.external_bank_account);
+      return payload.external_bank_account as ExternalBankAccount;
+    }
+    return null;
   }
 
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth) => {
@@ -816,11 +864,12 @@ export default function PixRampClient({
 
   async function runTemporaryOffRampEndpointTest() {
     const auth = await resolveWalletFromEmail();
+    const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
       amount: offRampAmount,
       fiat_amount: offRampFiatAmount.trim() || undefined,
-      fiat_account_id: externalBankAccount.id,
-      external_bank_account: externalBankAccount,
+      fiat_account_id: bankAccount.id,
+      external_bank_account: bankAccount,
       pin: walletPin,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
@@ -869,7 +918,7 @@ export default function PixRampClient({
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
-                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : externalBankAccount.name}</p>
+                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : displayedExternalBankAccount.label}</p>
               </div>
             </div>
           </section>
@@ -975,23 +1024,23 @@ export default function PixRampClient({
               <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-white">{externalBankAccount.name}</p>
-                    <p className="mt-1 text-xs font-bold text-cyan-100/70">{externalBankAccount.institution}</p>
+                    <p className="text-sm font-black text-white">{displayedExternalBankAccount.label}</p>
+                    <p className="mt-1 text-xs font-bold text-cyan-100/70">{displayedExternalBankAccount.institution}</p>
                   </div>
                   <span className="rounded-full bg-cyan-300/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">vinculada</span>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                   <div className="rounded-2xl bg-black/20 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Agência</p>
-                    <p className="mt-1 font-black text-white">{externalBankAccount.branch}</p>
+                    <p className="mt-1 font-black text-white">{displayedExternalBankAccount.branch}</p>
                   </div>
                   <div className="rounded-2xl bg-black/20 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Conta</p>
-                    <p className="mt-1 font-black text-white">{externalBankAccount.account}</p>
+                    <p className="mt-1 font-black text-white">{displayedExternalBankAccount.account_number}</p>
                   </div>
                   <div className="rounded-2xl bg-black/20 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">PIX</p>
-                    <p className="mt-1 truncate font-black text-white">{externalBankAccount.pixAlias}</p>
+                    <p className="mt-1 truncate font-black text-white">{displayedExternalBankAccount.pix_key}</p>
                   </div>
                 </div>
               </div>
