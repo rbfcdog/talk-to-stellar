@@ -21,8 +21,8 @@ import { WalletInfo, WalletRepository } from '../../repositories/wallet.reposito
 import VaultService from '../../services/vault.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { OperationRepository } from '../repository/operation.repository';
+import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
-import { TransferNotificationService } from './transfer-notification.service';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -694,15 +694,18 @@ export class AnchorService {
 
   private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<void> {
     try {
-      await TransferNotificationService.notifyIncomingTransfer({
-        recipientSessionId: record.sessionId,
-        recipientUserId: record.userId,
-        senderLabel: 'PIX Etherfuse Testnet',
-        amount: record.finalAmount || record.destinationAmount,
-        assetCode: record.finalAssetCode || 'TESOURO',
+      await PaymentReceiptService.sendReceipt({
+        type: 'payment_received',
+        sessionId: record.sessionId,
+        userId: record.userId,
+        counterpartyLabel: 'PIX Etherfuse',
         sourceAmount: record.sourceAmountBrl,
         sourceAssetCode: 'BRL',
+        destinationAmount: record.finalAmount || record.destinationAmount,
+        destinationAssetCode: record.finalAssetCode || 'BRL',
         hash: hash || record.deliveryHash || null,
+        status: 'completed',
+        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${record.finalAssetCode || 'BRL'} na sua wallet.`,
       });
     } catch (error) {
       console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));
@@ -2752,6 +2755,8 @@ export class AnchorService {
     publicKey: string;
     displayName: string;
     pixKey?: string;
+    sessionId?: string;
+    userId?: string;
     vaultSecretId?: string;
   }> {
     const query = coalesceString(recipientQuery);
@@ -2790,13 +2795,14 @@ export class AnchorService {
         publicKey: contactPublicKey,
         displayName: coalesceString(contact?.contact_name) || query,
         pixKey: coalesceString(contact?.pix_key) || undefined,
+        sessionId: coalesceString(destinationWallet?.session_id) || undefined,
         vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
       };
     }
 
     const walletByPix = await supabase
       .from('wallets')
-      .select('public_key, name, pix_key, vault_secret_id')
+      .select('public_key, name, pix_key, session_id, vault_secret_id')
       .ilike('pix_key', normalized)
       .limit(1)
       .maybeSingle();
@@ -2806,6 +2812,7 @@ export class AnchorService {
         publicKey: String(walletByPix.data.public_key),
         displayName: coalesceString(walletByPix.data.name) || query,
         pixKey: coalesceString(walletByPix.data.pix_key) || undefined,
+        sessionId: coalesceString(walletByPix.data.session_id) || undefined,
         vaultSecretId: coalesceString(walletByPix.data.vault_secret_id) || undefined,
       };
     }
@@ -2862,6 +2869,47 @@ export class AnchorService {
       throw apiError(result.error || 'Could not submit PIX-funded transfer.', 400);
     }
 
+    const routeContext = `Escolhemos a melhor rota para essa conversão: ${asset.code} direto para ${recipient.displayName}.`;
+    let receiptUrl = '';
+    try {
+      receiptUrl = await PaymentReceiptService.sendReceipt({
+        type: 'payment_sent',
+        sessionId: context.sessionId,
+        userId: context.userId,
+        counterpartyLabel: recipient.displayName,
+        sourceAmount: amount,
+        sourceAssetCode: asset.code,
+        destinationAmount: amount,
+        destinationAssetCode: asset.code,
+        hash: result.hash || null,
+        status: 'completed',
+        contextMessage: routeContext,
+      });
+    } catch (error) {
+      console.warn('[ramp] Could not send PIX-funded transfer receipt:', debugErrorMessage(error));
+    }
+
+    if (recipient.sessionId) {
+      try {
+        const recipientSession = await new AgentRepository(supabase).getSession(recipient.sessionId);
+        await PaymentReceiptService.sendReceipt({
+          type: 'payment_received',
+          sessionId: recipient.sessionId,
+          userId: coalesceString(recipientSession?.user_id) || recipient.sessionId,
+          counterpartyLabel: 'PIX via TalkToStellar',
+          sourceAmount: amount,
+          sourceAssetCode: asset.code,
+          destinationAmount: amount,
+          destinationAssetCode: asset.code,
+          hash: result.hash || null,
+          status: 'completed',
+          contextMessage: routeContext,
+        });
+      } catch (error) {
+        console.warn('[ramp] Could not send recipient PIX-funded transfer receipt:', debugErrorMessage(error));
+      }
+    }
+
     return {
       success: true,
       sandbox: true,
@@ -2875,6 +2923,8 @@ export class AnchorService {
       asset_code: asset.code,
       asset_issuer: asset.issuer,
       transaction_hash: result.hash,
+      receipt_url: receiptUrl,
+      route_summary: routeContext,
       message: `PIX confirmado e transferencia de ${formatDisplayAmount(amount, asset.code)} enviada para ${recipient.displayName}.`,
     };
   }
