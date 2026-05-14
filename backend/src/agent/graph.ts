@@ -724,11 +724,11 @@ ${onboardingUrl}`;
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
     if (intent.amount) {
+      url.searchParams.set('amount', intent.amount);
+      url.searchParams.set('currency', intent.amount_currency || intent.asset_code);
       if (intent.direction === 'offramp' && intent.amount_currency === 'BRL') {
         url.searchParams.set('fiat_amount', intent.amount);
         url.searchParams.set('fiat_currency', 'BRL');
-      } else {
-        url.searchParams.set('amount', intent.amount);
       }
     }
     const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
