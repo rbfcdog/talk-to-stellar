@@ -1251,51 +1251,60 @@ export class AnchorService {
       }
     };
 
+    const createSandboxFallback = (error: unknown) => this.createSandboxOnRampFallback({
+      context,
+      customerId,
+      quoteId,
+      amount,
+      toCurrency,
+      expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
+      upstreamError: debugErrorMessage(error),
+    });
+
     let transaction: OnRampTransaction;
     try {
       transaction = await createOrderWithQuoteRetry();
     } catch (error) {
-      if (!this.isMissingEtherfuseProxyError(error)) throw error;
+      if (this.sandboxPixFallbackEnabled() && this.isExpiredEtherfuseQuoteError(error)) {
+        transaction = createSandboxFallback(error);
+      } else if (!this.isMissingEtherfuseProxyError(error)) {
+        throw error;
+      } else {
+        const freshBankAccountId = crypto.randomUUID();
+        const preparedProxy = await this.prepareEtherfusePixProxy({
+          customerId,
+          publicKey: context.publicKey,
+          bankAccountId: freshBankAccountId,
+          email: context.email,
+        });
+        bankAccountId = preparedProxy.bankAccountId;
+        kycUrl = preparedProxy.kycUrl;
+        const retryProgrammatic = await this.runSandboxProgrammaticOnboarding({
+          customerId,
+          publicKey: context.publicKey,
+          bankAccountId,
+          email: context.email,
+          kycUrl,
+        });
+        bankAccountId = retryProgrammatic.bankAccountId;
 
-      const freshBankAccountId = crypto.randomUUID();
-      const preparedProxy = await this.prepareEtherfusePixProxy({
-        customerId,
-        publicKey: context.publicKey,
-        bankAccountId: freshBankAccountId,
-        email: context.email,
-      });
-      bankAccountId = preparedProxy.bankAccountId;
-      kycUrl = preparedProxy.kycUrl;
-      const retryProgrammatic = await this.runSandboxProgrammaticOnboarding({
-        customerId,
-        publicKey: context.publicKey,
-        bankAccountId,
-        email: context.email,
-        kycUrl,
-      });
-      bankAccountId = retryProgrammatic.bankAccountId;
-
-      try {
-        transaction = await createOrderWithQuoteRetry();
-      } catch (retryError) {
-        if (!this.isMissingEtherfuseProxyError(retryError)) throw retryError;
-        if (this.sandboxPixFallbackEnabled()) {
-          transaction = this.createSandboxOnRampFallback({
-            context,
-            customerId,
-            quoteId,
-            amount,
-            toCurrency,
-            expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
-            upstreamError: debugErrorMessage(retryError),
-          });
-        } else {
-          throw this.missingProxySetupError(
-            'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
-            kycUrl,
-            bankAccountId,
-            retryProgrammatic.steps,
-          );
+        try {
+          transaction = await createOrderWithQuoteRetry();
+        } catch (retryError) {
+          const retryCanUseSandbox = this.isMissingEtherfuseProxyError(retryError) ||
+            this.isExpiredEtherfuseQuoteError(retryError);
+          if (this.sandboxPixFallbackEnabled() && retryCanUseSandbox) {
+            transaction = createSandboxFallback(retryError);
+          } else if (this.isMissingEtherfuseProxyError(retryError)) {
+            throw this.missingProxySetupError(
+              'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
+              kycUrl,
+              bankAccountId,
+              retryProgrammatic.steps,
+            );
+          } else {
+            throw retryError;
+          }
         }
       }
     }
