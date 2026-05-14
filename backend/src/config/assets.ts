@@ -8,6 +8,7 @@ export interface AssetConfig {
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
+export const ETHERFUSE_TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
 
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
@@ -41,6 +42,9 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
     return configuredTestnet || undefined;
   }
+  if (code === 'TESOURO') {
+    return String(process.env.TESOURO_ISSUER || '').trim() || ETHERFUSE_TESOURO_ISSUER;
+  }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
 
@@ -61,7 +65,8 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
   const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : [])];
+  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
+  const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
@@ -69,5 +74,6 @@ export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string 
 
 export function getTrustedPathAssetCodes(): string[] {
   const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  return ['USDC', ...(includeBrl ? ['BRL'] : [])];
+  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
+  return ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
 }

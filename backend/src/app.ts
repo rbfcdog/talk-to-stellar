@@ -10,6 +10,7 @@ import externalRouter from './api/routes/external.router';
 import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
+import rampRouter from './api/routes/ramp.router';
 import { idempotencyMiddleware } from './services/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 
@@ -53,6 +54,7 @@ app.use('/api/passkeys', passkeyRouter);
 // Register security routes (PIN reset, etc)
 app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
+app.use('/api/ramp', rampRouter);
 
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
