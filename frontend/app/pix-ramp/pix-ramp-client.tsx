@@ -71,18 +71,26 @@ function formatMoney(value: unknown, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(numeric);
 }
 
-function formatAsset(value: unknown, code = "TESOURO") {
+function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
+  const normalized = String(code || "").trim().toUpperCase().split(":")[0];
+  if (normalized === "USDC") return "USDC";
+  if (normalized === "BRL" || normalized === "TESOURO") return fallback === "USDC" ? "USDC" : "BRL";
+  return fallback;
+}
+
+function formatAsset(value: unknown, code = "BRL") {
   const numeric = Number(String(value || "0").replace(",", "."));
   if (!Number.isFinite(numeric)) return `${value || "0"} ${code}`;
   return `${numeric.toLocaleString("pt-BR", { maximumFractionDigits: 7 })} ${code}`;
 }
 
-function formatRampAsset(value: unknown, code = "TESOURO") {
-  return String(code || "").toUpperCase() === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, code);
+function formatRampAsset(value: unknown, code = "BRL") {
+  const displayCode = userFacingAssetCode(code);
+  return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
 }
 
 function formatCountdown(ms: number) {
-  if (!Number.isFinite(ms) || ms <= 0) return "expired";
+  if (!Number.isFinite(ms) || ms <= 0) return "expirada";
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -224,6 +232,24 @@ function sanitizeForDebug(value: unknown): unknown {
   }));
 }
 
+function hideInternalAssetNames(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(hideInternalAssetNames);
+  if (typeof value === "string") {
+    return value
+      .replace(/TESOURO:[A-Z2-7]{56}/g, "BRL")
+      .replace(/\bTESOURO\b/g, "BRL");
+  }
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+    if (/tesouro|anchor_asset/i.test(key)) return [key, "[interno]"];
+    return [key, hideInternalAssetNames(item)];
+  }));
+}
+
+function formatDebugJson(value: unknown) {
+  return JSON.stringify(hideInternalAssetNames(value || {}), null, 2);
+}
+
 export default function PixRampClient({
   initialQuery = "",
   lockedMode,
@@ -315,13 +341,13 @@ export default function PixRampClient({
   const pixKey = String(paymentInstructions?.pixKey || "");
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
   const displayPixKey = isSandboxMockOrder ? (pixKey || `pix-${orderId.slice(-8) || "checkout"}@talktostellar.local`) : pixKey;
-  const finalAssetCode = String(order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
+  const technicalFinalAssetCode = String(order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
+  const receivedCode = userFacingAssetCode(technicalFinalAssetCode, targetAsset);
   const finalReceivedAmount = String(
     order?.finalAmount ||
     order?.auto_conversion?.destination_amount ||
-    (finalAssetCode === "TESOURO" ? (order?.toAmount || quote?.toAmount || "") : "")
+    (receivedCode === "BRL" ? (order?.fromAmount || quote?.fromAmount || amountBrl) : "")
   );
-  const receivedCode = finalAssetCode || targetAsset;
   const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
   const quoteExpiresAt = parseRampTimestamp(quote?.expiresAt);
   const quoteTtlMs = Number.isFinite(quoteCreatedAt) && Number.isFinite(quoteExpiresAt)
@@ -332,7 +358,7 @@ export default function PixRampClient({
   const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs) : "not quoted";
   const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
-  const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
+  const status = order ? normalizeStatus(order.status) : quoteExpired ? "cotação expirada" : "não iniciado";
   const onRampComplete = Boolean(order && isSuccessStatus(status));
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = targetAsset === "BRL"
@@ -409,7 +435,7 @@ export default function PixRampClient({
           ? "Conta preparada para continuar o PIX."
           : customerPayload
             ? "Preparando conta PIX."
-            : "Aguardando criação do customer Etherfuse.",
+            : "Aguardando preparo do PIX.",
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
@@ -1125,9 +1151,9 @@ export default function PixRampClient({
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 {rampMode === "onramp"
                   ? transferFlow && transferRecipient
-                    ? `Faça o PIX, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
-                    : "Faça o PIX, confirme com seu PIN e receba o saldo na sua wallet."
-                  : "Confirme com seu PIN para retirar saldo via PIX."}
+                    ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
+                    : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua wallet."
+                  : "Confirme com seu PIN para retirar saldo via PIX integrado."}
               </p>
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -1466,7 +1492,7 @@ export default function PixRampClient({
                             className="h-auto w-full"
                           />
                         ) : (
-                          <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR unavailable</div>
+                          <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR indisponível</div>
                         )}
                       </div>
                   <div className="space-y-3">
@@ -1487,7 +1513,7 @@ export default function PixRampClient({
 
                   {isSandboxMockOrder ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      Este QR code ainda não conecta com transação bancária. Depois de fazer o PIX, digite seu PIN e confirme.
+                      PIX integrado ao checkout. Use o QR ou código PIX, depois digite seu PIN e confirme para liberar o saldo na wallet.
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
@@ -1804,7 +1830,7 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
           <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Frontend API debug</p>
           <h2 className="mt-1 text-2xl font-black">Etherfuse request log</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-            Mostra exatamente o que a tela enviou para `/api/ramp/...` e o que voltou. `session_token` e segredos sao mascarados.
+            Mostra os detalhes tecnicos enviados para `/api/ramp/...` e o que voltou. Segredos e ativos internos ficam mascarados.
           </p>
         </div>
         <button className="w-fit rounded-full border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white/70 disabled:opacity-40" disabled={logs.length === 0} onClick={onClear}>
@@ -1814,7 +1840,7 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
       <div className="mt-5 grid gap-3">
         {logs.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/15 p-5 text-sm font-bold text-white/45">
-            Nenhuma chamada ainda. Clique em `Use wallet`, `Get quote` ou `Generate PIX` para ver os requests.
+            Nenhuma chamada ainda. Use a tela para ver os requests mascarados.
           </div>
         ) : logs.map((log) => (
           <details key={log.id} className="rounded-2xl border border-white/10 bg-white/5 p-4" open={Boolean(log.error)}>
@@ -1839,11 +1865,11 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-lime-200">Request</p>
-                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{JSON.stringify(log.request || {}, null, 2)}</pre>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{formatDebugJson(log.request)}</pre>
               </div>
               <div>
                 <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-lime-200">Response</p>
-                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{JSON.stringify(log.response || {}, null, 2)}</pre>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{formatDebugJson(log.response)}</pre>
               </div>
             </div>
           </details>

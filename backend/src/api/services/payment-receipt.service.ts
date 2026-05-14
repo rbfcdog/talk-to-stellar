@@ -51,6 +51,12 @@ type FeeBreakdown = {
 
 export class PaymentReceiptService {
   private static agentRepo = new AgentRepository(supabase);
+
+  private static userFacingAssetCode(assetCode?: string | null): string {
+    const normalized = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    return normalized === 'TESOURO' ? 'BRL' : normalized;
+  }
+
   static buildHostedReceiptUrl(txHash?: string | null): string {
     const hash = String(txHash || '').trim();
     if (!hash) return '';
@@ -249,14 +255,15 @@ export class PaymentReceiptService {
 
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
-    const sourceAssetCode = String(input.sourceAssetCode || input.destinationAssetCode || '').trim().toUpperCase();
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     const fee = await this.resolveFeeBreakdown(input);
     const feeLabel = fee.actualDisplay || 'indisponivel';
 
     return ReceiptImageService.toSvg(
       ReceiptImageService.fromPaymentReceipt({
         destinationAmount: String(input.destinationAmount || ''),
-        destinationAssetCode: String(input.destinationAssetCode || ''),
+        destinationAssetCode,
         counterpartyLabel: String(input.counterpartyLabel || 'destinatário'),
         sourceAmount,
         sourceAssetCode,
@@ -273,9 +280,9 @@ export class PaymentReceiptService {
 
   static async buildReceiptText(input: PaymentReceiptInput): Promise<string> {
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
-    const sourceAssetCode = String(input.sourceAssetCode || input.destinationAssetCode || '').trim().toUpperCase();
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
     const destinationAmount = String(input.destinationAmount || '').trim();
-    const destinationAssetCode = String(input.destinationAssetCode || '').trim().toUpperCase();
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
     const counterparty = String(input.counterpartyLabel || '').trim();
@@ -470,11 +477,11 @@ export class PaymentReceiptService {
     }
 
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
-    const sourceAssetCode = String(input.sourceAssetCode || input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-    const destinationAssetCode = String(input.destinationAssetCode || input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode || input.sourceAssetCode);
 
     let platformFeeAmount = String(input.quote?.platformFee?.feeAmount || '').trim();
-    let platformFeeAssetCode = String(input.quote?.platformFee?.feeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    let platformFeeAssetCode = this.userFacingAssetCode(input.quote?.platformFee?.feeAssetCode);
     if (!platformFeeAmount || !platformFeeAssetCode) {
       const spread = PlatformFeeService.calculateSpread({
         sourceAmount,
@@ -484,7 +491,7 @@ export class PaymentReceiptService {
       });
       if (spread.enabled && this.toPositiveNumber(spread.feeAmount) > 0) {
         platformFeeAmount = spread.feeAmount;
-        platformFeeAssetCode = spread.feeAssetCode;
+        platformFeeAssetCode = this.userFacingAssetCode(spread.feeAssetCode);
       }
     }
 
