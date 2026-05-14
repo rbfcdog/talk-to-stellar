@@ -45,6 +45,7 @@ const orderedMigrations = [
   '20260513_03_payment_link_expiry_and_transaction_nickname.sql',
   '20260513_04_logout_confirmation_single_use.sql',
   '20260513_05_identity_uniqueness_email_phone_cpf.sql',
+  '20260514_00_payment_logs_destination_name.sql',
 ];
 
 function resolveExecutionList(): string[] {

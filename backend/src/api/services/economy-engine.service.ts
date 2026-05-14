@@ -244,7 +244,7 @@ export class EconomyEngineService {
 
     let query = supabase
       .from('payment_logs')
-      .select('source_amount, source_asset_code, destination_name, metadata, completed_at, status')
+      .select('source_amount, source_asset_code, metadata, completed_at, status')
       .eq('user_id', ctx.userId)
       .eq('status', 'success')
       .order('completed_at', { ascending: false });
@@ -296,7 +296,7 @@ export class EconomyEngineService {
           amountBrl: grossBrl,
           estimatedSavings: rowSavings,
           completedAt: String((row as Record<string, unknown>).completed_at || ''),
-          destinationLabel: String((row as Record<string, unknown>).destination_name || metadata.destination_name || '').trim() || undefined,
+          destinationLabel: String(metadata.destination_name || metadata.recipient_name || metadata.destination || '').trim() || undefined,
         };
       }
     }

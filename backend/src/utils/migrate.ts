@@ -182,6 +182,10 @@ export async function runMigrations(supabase: SupabaseClient): Promise<void> {
         name: 'Receipt Images',
         file: '20260513_02_receipt_images.sql',
       },
+      {
+        name: 'Payment Logs Destination Name',
+        file: '20260514_00_payment_logs_destination_name.sql',
+      },
     ];
 
     for (const migration of idempotencyMigrations) {
