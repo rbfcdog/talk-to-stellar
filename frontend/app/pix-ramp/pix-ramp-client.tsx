@@ -487,8 +487,13 @@ export default function PixRampClient() {
       quote_id: quoteForOrder.id,
       amount: amountBrl,
       expected_to_amount: quoteForOrder.toAmount,
+      from_currency: "BRL",
       to_currency: quoteForOrder.toCurrency || targetAsset,
     }, "POST", authForOrder);
+    if (payload?.quote) {
+      setQuotePayload(payload);
+      setQuoteReceivedAt(Date.now());
+    }
     setOnboardingUrl("");
     setOrderPayload(payload);
     setStatusPayload(null);
