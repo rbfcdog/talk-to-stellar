@@ -248,6 +248,7 @@ export default function PixRampClient({
   const [offRampBalancesAfter, setOffRampBalancesAfter] = useState<BalanceItem[]>([]);
   const [offRampAmount, setOffRampAmount] = useState("1");
   const [offRampFiatAmount, setOffRampFiatAmount] = useState("");
+  const [offRampAmountLocked, setOffRampAmountLocked] = useState(false);
   const [walletPublicKey, setWalletPublicKey] = useState("");
   const [onboardingUrl, setOnboardingUrl] = useState("");
   const [programmaticOnboarding, setProgrammaticOnboarding] = useState<RampResponse | null>(null);
@@ -453,16 +454,23 @@ export default function PixRampClient({
     const amount = String(params.get("amount") || "").trim().replace(",", ".");
     const fiatAmount = String(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "").trim().replace(",", ".");
     const asset = String(params.get("asset") || "").trim().toUpperCase();
+    const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
     const recipient = String(params.get("recipient") || "").trim();
+    const offRampBrlAmount = mode === "offramp" && (fiatAmount || (amount && (!currency || currency === "BRL" || asset === "BRL")))
+      ? (fiatAmount || amount)
+      : "";
 
     setRampMode(mode);
     if (amount) {
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
     }
-    if (mode === "offramp" && fiatAmount) setOffRampFiatAmount(fiatAmount);
+    if (offRampBrlAmount) {
+      setOffRampFiatAmount(offRampBrlAmount);
+      setOffRampAmountLocked(true);
+    }
     if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
     if (asset === "TESOURO") setTargetAsset("BRL");
     if (email.includes("@")) setRampEmail(email);
@@ -728,6 +736,7 @@ export default function PixRampClient({
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
     setExternalBankAccount(null);
+    setOffRampAmountLocked(false);
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
     setWalletPin("");
@@ -1066,14 +1075,20 @@ export default function PixRampClient({
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
                 <input
-                  className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none"
+                  className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none disabled:opacity-100 disabled:text-white"
                   value={offRampFiatAmount}
                   inputMode="decimal"
                   placeholder="100"
+                  disabled={offRampAmountLocked}
+                  title={offRampAmountLocked ? "Valor definido pelo chat" : undefined}
+                  aria-label="Valor em BRL para receber via PIX"
                   onChange={(event) => setOffRampFiatAmount(event.target.value)}
                 />
                 <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
               </div>
+              {offRampAmountLocked && (
+                <p className="mt-2 text-xs font-bold text-cyan-100/65">Valor definido pelo chat.</p>
+              )}
               <label className="mt-6 block text-sm font-bold text-slate-200">Destino final</label>
               <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start justify-between gap-4">
