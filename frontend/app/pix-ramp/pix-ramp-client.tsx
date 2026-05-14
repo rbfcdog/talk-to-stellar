@@ -162,6 +162,75 @@ function buildExternalBankAccount(seed: string, email: string) {
   };
 }
 
+function PinPad({
+  value,
+  onChange,
+  tone = "emerald",
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  tone?: "emerald" | "cyan" | "amber";
+}) {
+  const accent = tone === "cyan"
+    ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+    : tone === "amber"
+      ? "bg-amber-300 text-amber-950 hover:bg-amber-200"
+      : "bg-emerald-400 text-slate-950 hover:bg-emerald-300";
+
+  const appendDigit = (digit: string) => onChange(`${value}${digit}`.replace(/\D/g, "").slice(0, 8));
+  const removeDigit = () => onChange(value.slice(0, -1));
+
+  return (
+    <div className="mt-2 rounded-3xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex gap-2">
+          {Array.from({ length: Math.max(4, value.length || 4) }).slice(0, 8).map((_, index) => (
+            <span
+              key={index}
+              className={`h-3 w-3 rounded-full ${index < value.length ? "bg-white" : "bg-white/20"}`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white/75 transition hover:bg-white/15"
+          onClick={() => onChange("")}
+        >
+          Limpar
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+          <button
+            key={digit}
+            type="button"
+            className="rounded-2xl bg-white/10 py-4 text-xl font-black text-white transition hover:bg-white/15 active:scale-[0.98]"
+            onClick={() => appendDigit(digit)}
+          >
+            {digit}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="rounded-2xl bg-white/10 py-4 text-sm font-black text-white/75 transition hover:bg-white/15 active:scale-[0.98]"
+          onClick={removeDigit}
+        >
+          Apagar
+        </button>
+        <button
+          type="button"
+          className={`rounded-2xl py-4 text-xl font-black transition active:scale-[0.98] ${accent}`}
+          onClick={() => appendDigit("0")}
+        >
+          0
+        </button>
+        <div className="rounded-2xl bg-white/[0.03]" />
+      </div>
+      <p className="mt-3 text-xs font-semibold text-white/45">Digite o PIN manualmente para autorizar a operação.</p>
+    </div>
+  );
+}
+
 function sanitizeForDebug(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(0, 8).map(sanitizeForDebug);
   if (!value || typeof value !== "object") return value;
@@ -183,6 +252,7 @@ export default function PixRampClient({
   const queryString = initialQuery;
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
+  const offRampAutoResolvedRef = useRef(false);
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
   const [rampEmail, setRampEmail] = useState("");
@@ -450,6 +520,18 @@ export default function PixRampClient({
     });
   }, [rampMode, sessionId, sessionToken]);
 
+  useEffect(() => {
+    if (rampMode !== "offramp") return;
+    if (offRampAutoResolvedRef.current) return;
+    if (hasSession || !rampEmail.trim() || loading) return;
+
+    offRampAutoResolvedRef.current = true;
+    void run("Resolving wallet", async () => {
+      const auth = await resolveWalletFromEmail();
+      await loadExternalBankAccount(auth);
+    });
+  }, [hasSession, loading, rampEmail, rampMode]);
+
   const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
     setDebugLogs((current) => [{
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -662,6 +744,7 @@ export default function PixRampClient({
     setStatusPayload(null);
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
+    setExternalBankAccount(null);
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
     setWalletPin("");
@@ -924,7 +1007,7 @@ export default function PixRampClient({
           </section>
         </header>
 
-        {!hasSession && (
+        {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
             Digite o email da conta para localizar sua wallet e continuar.
           </section>
@@ -980,34 +1063,6 @@ export default function PixRampClient({
                 O saldo sai da sua wallet e aparece como dinheiro recebido por PIX.
               </p>
 
-              <div className="mt-6 rounded-3xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <label className="block text-sm font-bold text-cyan-50">Email da conta</label>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <input
-                    className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                    type="email"
-                    value={rampEmail}
-                    placeholder="jorge@gmail.com"
-                    disabled={Boolean(loading)}
-                    onChange={(event) => clearResolvedRampWallet(event.target.value)}
-                  />
-                  <button
-                    className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
-                    disabled={!rampEmail.trim() || Boolean(loading)}
-                    onClick={() => run("Resolving wallet", async () => {
-                      await resolveWalletFromEmail();
-                    })}
-                  >
-                    {loading === "Resolving wallet" ? "Localizando..." : hasSession ? "Atualizar wallet" : "Usar wallet"}
-                  </button>
-                </div>
-                <p className="mt-3 text-xs font-semibold text-cyan-100/75">
-                  {walletPublicKey
-                    ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
-                    : "Informe o email da conta para buscar sua wallet."}
-                </p>
-              </div>
-
               <label className="mt-6 block text-sm font-bold text-slate-200">Você quer receber</label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
@@ -1045,25 +1100,7 @@ export default function PixRampClient({
                 </div>
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
-              <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
-                <input className="hidden" tabIndex={-1} autoComplete="username" aria-hidden="true" />
-                <input className="hidden" tabIndex={-1} type="password" autoComplete="current-password" aria-hidden="true" />
-                <input
-                  className="w-full bg-transparent px-4 py-4 text-xl font-black text-white outline-none"
-                  value={walletPin}
-                  inputMode="numeric"
-                  type="text"
-                  name="manual-wallet-code-off"
-                  autoComplete="off"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  style={{ WebkitTextSecurity: "disc" } as any}
-                  placeholder="Digite seu PIN"
-                  onPaste={(event) => event.preventDefault()}
-                  onDrop={(event) => event.preventDefault()}
-                  onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
-                />
-              </div>
+              <PinPad value={walletPin} onChange={setWalletPin} tone="cyan" />
 
               <button
                 className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
@@ -1309,23 +1346,7 @@ export default function PixRampClient({
                         ) : (
                           <>
                             <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
-                            <input className="hidden" tabIndex={-1} autoComplete="username" aria-hidden="true" />
-                            <input className="hidden" tabIndex={-1} type="password" autoComplete="current-password" aria-hidden="true" />
-                            <input
-                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-xl font-black text-white outline-none placeholder:text-amber-100/35 focus:border-amber-200/60"
-                              value={walletPin}
-                              inputMode="numeric"
-                              type="text"
-                              name="manual-wallet-code-on"
-                              autoComplete="off"
-                              data-lpignore="true"
-                              data-1p-ignore="true"
-                              style={{ WebkitTextSecurity: "disc" } as any}
-                              placeholder="Digite seu PIN"
-                              onPaste={(event) => event.preventDefault()}
-                              onDrop={(event) => event.preventDefault()}
-                              onChange={(event) => setWalletPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
-                            />
+                            <PinPad value={walletPin} onChange={setWalletPin} tone="amber" />
                             <button
                               className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4}
