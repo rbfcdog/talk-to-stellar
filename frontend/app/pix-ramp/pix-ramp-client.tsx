@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
+import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -407,6 +408,11 @@ export default function PixRampClient({
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (step !== "success") return;
+    closeIntermediatePage();
+  }, [step]);
 
   useEffect(() => {
     fetch("/api/ramp/etherfuse/config", { cache: "no-store" })
@@ -1389,6 +1395,7 @@ export default function PixRampClient({
               <div className="relative mt-6 rounded-[1.5rem] border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-semibold leading-6 text-emerald-50">
                 Este comprovante confirma que o PIX foi processado e registrado na sua wallet.
               </div>
+              <p className="relative mt-4 text-xs font-semibold text-white/45">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
 
               <div className="relative mt-6 grid gap-3 sm:grid-cols-3">
                 <Link href={walletPublicKey ? `/profile/${encodeURIComponent(walletPublicKey)}` : "/chat"} className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-black text-[#0d1512] transition hover:bg-emerald-100">Ver wallet</Link>
