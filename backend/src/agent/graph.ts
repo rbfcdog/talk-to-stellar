@@ -621,8 +621,8 @@ ${onboardingUrl}`;
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'TESOURO' | 'USDC';
-    asset_code: 'BRL' | 'USDC' | 'TESOURO';
+    amount_currency?: 'BRL' | 'USDC';
+    asset_code: 'BRL' | 'USDC';
     recipient_query?: string;
   } {
     const normalized = this.normalizeTextForIntent(text);
@@ -676,11 +676,11 @@ ${onboardingUrl}`;
       normalized.includes('saldo com pix');
 
     if (!mentionsPix && !mentionsBankOffRamp) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
     }
 
     if (!wantsOnRamp && !wantsOffRamp) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
     }
 
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
@@ -688,7 +688,6 @@ ${onboardingUrl}`;
     const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
     const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
     const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
-    const explicitReceiveTesouro = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:tesouro|tesouros)/.test(normalized);
     const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
     const onRampTargetAsset = explicitReceiveUsdc || (mentionsUsdc && !mentionsTesouro && !explicitReceiveBrl)
       ? 'USDC'
@@ -702,7 +701,7 @@ ${onboardingUrl}`;
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
       flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1]?.replace(',', '.'),
-      amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
+      amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : 'BRL',
       asset_code: wantsOffRamp && !wantsOnRamp ? (mentionsUsdc ? 'USDC' : 'BRL') : onRampTargetAsset,
       recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? recipientQuery : undefined,
     };
@@ -712,8 +711,8 @@ ${onboardingUrl}`;
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'TESOURO' | 'USDC';
-    asset_code: 'BRL' | 'USDC' | 'TESOURO';
+    amount_currency?: 'BRL' | 'USDC';
+    asset_code: 'BRL' | 'USDC';
     recipient_query?: string;
   }): Promise<string> {
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
@@ -1128,11 +1127,22 @@ ${onboardingUrl}`;
   private formatMoneyByAsset(amount: string, assetCode: string): string {
     const n = Number(String(amount || '0').replace(',', '.'));
     if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
-    const upper = String(assetCode || '').toUpperCase();
+    const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
     if (upper === 'XLM') return 'saldo da carteira TalkToStellar';
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
+  }
+
+  private toUserFacingAssetCode(assetCode: unknown): string {
+    const upper = String(assetCode || '').trim().toUpperCase();
+    return upper === 'TESOURO' ? 'BRL' : upper;
+  }
+
+  private maskInternalAssetNames(value: unknown): string {
+    return String(value || '')
+      .replace(/TESOURO:[A-Z2-7]{56}/g, 'BRL')
+      .replace(/\bTESOURO\b/g, 'BRL');
   }
 
   private toAmountNumber(value: unknown): number {
@@ -1143,7 +1153,7 @@ ${onboardingUrl}`;
   private formatBestRouteTransparency(quoteResult: any): string {
     if (!quoteResult || typeof quoteResult !== 'object') return '';
 
-    const routeChain = String(quoteResult?.route?.chain || '').trim();
+    const routeChain = this.maskInternalAssetNames(quoteResult?.route?.chain).trim();
     const criteria = String(quoteResult?.optimization_criteria || '').trim();
     const totalFeeDisplay = String(quoteResult?.fee_breakdown?.total_fee_display || quoteResult?.quote?.fee_display || '').trim();
     const savingsBrl = this.toAmountNumber(quoteResult?.savings_estimate?.estimated_savings_brl);
@@ -2186,7 +2196,7 @@ Sua carteira foi criada e já está pronta para usar.
   }
 
   private formatAssetLine(balance: any, index: number): string {
-    const asset = balance.asset || balance.asset_code || 'UNKNOWN';
+    const asset = this.toUserFacingAssetCode(balance.asset || balance.asset_code || 'UNKNOWN');
     const amount = balance.balance || '0';
     return `${index + 1}. ${asset}: ${amount}`;
   }
@@ -2196,7 +2206,8 @@ Sua carteira foi criada e já está pronta para usar.
       transaction.direction === 'sent' ? 'Enviado' :
       transaction.direction === 'received' ? 'Recebido' :
       'Relacionado';
-    const amount = transaction.amount ? `${transaction.amount} ${transaction.asset || ''}`.trim() : transaction.type;
+    const asset = transaction.asset ? this.toUserFacingAssetCode(transaction.asset) : '';
+    const amount = transaction.amount ? `${transaction.amount} ${asset}`.trim() : transaction.type;
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
     const counterparty = String(transaction.counterparty || '').trim();
     const counterpartyLine = counterparty ? `\nCom: ${counterparty}` : '';
@@ -2235,13 +2246,13 @@ Sua carteira foi criada e já está pronta para usar.
         }
         const exactBalances = wantsTechnicalBalance
           ? balances
-          : ['BRL', 'USDC', 'TESOURO'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+          : ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
 
         state.success = true;
         state.response_message = wantsTechnicalBalance
           ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
-          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega o asset escolhido no checkout. Para ver issuers e saldos técnicos, peça "saldo técnico".`;
+          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega BRL ou USDC conforme você escolher no checkout.`;
       }
     }
 

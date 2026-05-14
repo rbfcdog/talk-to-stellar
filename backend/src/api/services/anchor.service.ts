@@ -828,6 +828,9 @@ export class AnchorService {
 
   private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<void> {
     try {
+      const userFacingFinalAsset = normalizeAssetCode(record.finalAssetCode) === 'TESOURO'
+        ? 'BRL'
+        : (record.finalAssetCode || 'BRL');
       await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: record.sessionId,
@@ -836,10 +839,10 @@ export class AnchorService {
         sourceAmount: record.sourceAmountBrl,
         sourceAssetCode: 'BRL',
         destinationAmount: record.finalAmount || record.destinationAmount,
-        destinationAssetCode: record.finalAssetCode || 'BRL',
+        destinationAssetCode: userFacingFinalAsset,
         hash: hash || record.deliveryHash || null,
         status: 'completed',
-        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${record.finalAssetCode || 'BRL'} na sua wallet.`,
+        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua wallet.`,
       });
     } catch (error) {
       console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));

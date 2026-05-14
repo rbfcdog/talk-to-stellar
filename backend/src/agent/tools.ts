@@ -14,7 +14,7 @@ import { supabase } from "../config/supabase";
 import { WalletRepository } from "../repositories/wallet.repository";
 import VaultService from "../services/vault.service";
 import ExternalService from "../services/external.service";
-import { assetMatchesConfiguredIssuer, getAssetIssuer, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../api/services/contact-seed.service";
 import { BalanceAlertService } from "../api/services/balance-alert.service";
 import { AutoConversionService } from "../api/services/auto-conversion.service";
@@ -352,7 +352,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing wallet balance summary. Returns BRL, USDC, and TESOURO by default, not the full technical asset list. If public_key is missing, resolves from current session.",
+    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list. If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
@@ -388,7 +388,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_saldo_tecnico",
-    description: "Get technical wallet balances focused on XLM, USDC, BRL, and TESOURO (with issuer details). If public_key is missing, resolves from current session.",
+    description: "Get technical wallet balances with issuer details. If public_key is missing, resolves from current session.",
     parameters: {
       type: "object",
       properties: {
@@ -1393,7 +1393,7 @@ async function executeGetBalance(input: any): Promise<string> {
     logger.debug(`Tool: Getting balance for ${publicKey}`);
     const account = await stellarService.getAccount(publicKey);
 
-    const visibleAssets = getUserFacingAssetCodes();
+    const visibleAssets = ['BRL', 'USDC'];
     const balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
@@ -1471,7 +1471,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       asset_issuer: balance.asset_issuer,
     }));
 
-    const technicalAssets = ['XLM', ...getUserFacingAssetCodes()].map((assetCode) => {
+    const technicalAssets = ['XLM', 'BRL', 'USDC'].map((assetCode) => {
       const existing = mappedBalances.find((balance: any) => balanceMatchesConfiguredAsset(balance, assetCode));
       if (existing) return existing;
       return {
@@ -1488,7 +1488,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
-      message: "Technical balances retrieved for XLM, USDC, BRL, TESOURO",
+      message: "Technical balances retrieved",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
