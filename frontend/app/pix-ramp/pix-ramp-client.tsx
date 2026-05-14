@@ -614,8 +614,14 @@ export default function PixRampClient({
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
     if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
-    const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
     const requestBody = { ...auth, ...(body || {}) };
+    const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (pin) {
+      headers["X-Wallet-Pin"] = pin;
+      headers["X-TalkToStellar-Wallet-Pin"] = pin;
+    }
+    const init: RequestInit = { method, headers };
     if (method !== "GET") init.body = JSON.stringify(requestBody);
     const startedAt = performance.now();
     const response = await fetch(path, init);
@@ -915,6 +921,8 @@ export default function PixRampClient({
       order_id: orderId,
       operation_id: operationId,
       pin,
+      wallet_pin: pin,
+      walletPin: pin,
     });
     if (payload?.transaction) setStatusPayload(payload);
     setPolling(true);
@@ -938,6 +946,8 @@ export default function PixRampClient({
       order_id: orderId,
       operation_id: operationId,
       pin,
+      wallet_pin: pin,
+      walletPin: pin,
     }, "POST", auth);
     setPixFundedTransferResult(payload);
   }
@@ -978,6 +988,8 @@ export default function PixRampClient({
       fiat_account_id: bankAccount.id,
       external_bank_account: bankAccount,
       pin,
+      wallet_pin: pin,
+      walletPin: pin,
     }, "POST", auth);
     setTemporaryOffRampTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -1152,9 +1164,7 @@ export default function PixRampClient({
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta externa</p>
               <h2 className="mt-1 text-2xl font-black">Retirada para banco</h2>
               {!temporaryOffRampTestResult ? (
-                <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
-                  Digite seu PIN e confirme a retirada para ver o dinheiro sair da wallet e chegar na conta externa.
-                </div>
+                <div className="mt-8 h-28 rounded-3xl border border-dashed border-white/10 bg-white/[0.03]" />
               ) : (
                 <div className="mt-6 space-y-4">
                   <div className="rounded-3xl bg-white/10 p-4">

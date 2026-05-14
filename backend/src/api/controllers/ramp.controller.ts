@@ -20,10 +20,12 @@ function errorPayload(error: any): Record<string, unknown> {
 }
 
 function requestInput(req: Request): Record<string, unknown> {
+  const headerPin = String(req.headers['x-wallet-pin'] || req.headers['x-talktostellar-wallet-pin'] || '').trim();
   return {
     ...req.query,
     ...req.body,
     ...req.params,
+    ...(headerPin ? { pin: headerPin, wallet_pin: headerPin } : {}),
   };
 }
 

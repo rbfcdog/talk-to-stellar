@@ -30,6 +30,8 @@ async function proxy(req: NextRequest, path: string[]) {
     headers: {
       "content-type": req.headers.get("content-type") || "application/json",
       "Idempotency-Key": idempotencyKey,
+      ...(req.headers.get("x-wallet-pin") ? { "X-Wallet-Pin": req.headers.get("x-wallet-pin") || "" } : {}),
+      ...(req.headers.get("x-talktostellar-wallet-pin") ? { "X-TalkToStellar-Wallet-Pin": req.headers.get("x-talktostellar-wallet-pin") || "" } : {}),
     },
   };
 
