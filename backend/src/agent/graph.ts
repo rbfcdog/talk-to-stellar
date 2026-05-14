@@ -552,10 +552,10 @@ ${onboardingUrl}`;
 
   private getFrontendBaseUrl(): string {
     return resolveFrontendBase([
-      process.env.PAYMENT_CONFIRM_BASE,
-      process.env.CREATE_ACCOUNT_BASE,
       process.env.FRONTEND_URL,
       process.env.PUBLIC_APP_URL,
+      process.env.PAYMENT_CONFIRM_BASE,
+      process.env.CREATE_ACCOUNT_BASE,
     ]);
   }
 
@@ -637,6 +637,7 @@ ${onboardingUrl}`;
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
+      /\b(retirada|retiradas)\b/.test(normalized) ||
       normalized.includes('tirar dinheiro') ||
       normalized.includes('retirar dinheiro') ||
       normalized.includes('mandar para minha conta bancaria') ||
@@ -1421,6 +1422,7 @@ ${onboardingUrl}`;
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
+      '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
