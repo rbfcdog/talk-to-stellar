@@ -116,6 +116,7 @@ export default function PixRampClient() {
   const [offRampBalancesAfter, setOffRampBalancesAfter] = useState<BalanceItem[]>([]);
   const [offRampAmount, setOffRampAmount] = useState("1");
   const [walletPublicKey, setWalletPublicKey] = useState("");
+  const [onboardingUrl, setOnboardingUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [receiptCopied, setReceiptCopied] = useState(false);
@@ -225,7 +226,9 @@ export default function PixRampClient() {
     const response = await fetch(path, init);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`);
+      const requestError = new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`) as Error & { payload?: RampResponse };
+      requestError.payload = payload;
+      throw requestError;
     }
     return payload;
   }, [sessionId, sessionToken]);
@@ -237,7 +240,9 @@ export default function PixRampClient() {
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`);
+      const requestError = new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`) as Error & { payload?: RampResponse };
+      requestError.payload = payload;
+      throw requestError;
     }
     return payload;
   }, [sessionId, sessionToken]);
@@ -290,6 +295,8 @@ export default function PixRampClient() {
     try {
       await fn();
     } catch (err) {
+      const payload = (err as Error & { payload?: RampResponse })?.payload;
+      if (payload?.kyc_url) setOnboardingUrl(String(payload.kyc_url));
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading("");
@@ -307,6 +314,7 @@ export default function PixRampClient() {
     setStatusPayload(null);
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
+    setOnboardingUrl("");
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setOffRampBalancesBefore([]);
@@ -333,6 +341,7 @@ export default function PixRampClient() {
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
     setCustomerPayload(customerResult);
+    setOnboardingUrl(String(customerResult?.kyc_url || ""));
 
     const before = await fetchBalances(auth);
     setOnRampBalancesBefore(before);
@@ -356,6 +365,7 @@ export default function PixRampClient() {
       to_currency: quote.toCurrency || targetAsset,
       bank_account_id: bankAccountId || undefined,
     });
+    setOnboardingUrl("");
     setOrderPayload(payload);
     setStatusPayload(null);
     setStep("checkout");
@@ -455,6 +465,16 @@ export default function PixRampClient() {
         {error && (
           <section className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             {error}
+            {onboardingUrl && (
+              <a
+                className="mt-3 inline-flex rounded-full bg-red-700 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white"
+                href={onboardingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir cadastro PIX Etherfuse
+              </a>
+            )}
           </section>
         )}
 
@@ -549,6 +569,14 @@ export default function PixRampClient() {
                 <button className="mt-5 w-full rounded-2xl bg-[#17251d] px-4 py-3 text-sm font-black text-white disabled:opacity-50" disabled={quoteExpired || Boolean(loading)} onClick={() => run("Creating PIX order", confirmQuoteAndCreatePix)}>
                   Confirm quote and generate PIX
                 </button>
+                {onboardingUrl && (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p className="font-bold">Se a Etherfuse retornar "Proxy account not found", conclua o cadastro PIX/KYC hospedado e tente gerar o PIX novamente.</p>
+                    <a className="mt-3 inline-flex rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950" href={onboardingUrl} target="_blank" rel="noreferrer">
+                      Abrir cadastro PIX Etherfuse
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>
