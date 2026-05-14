@@ -615,6 +615,102 @@ ${onboardingUrl}`;
     return `${this.getFrontendBaseUrl()}/pay-anyone${qs ? `?${qs}` : ''}`;
   }
 
+  private extractPixRampIntentFromText(text: string): {
+    is_pix_ramp: boolean;
+    direction: 'onramp' | 'offramp';
+    amount?: string;
+    asset_code: 'TESOURO';
+  } {
+    const normalized = this.normalizeTextForIntent(text);
+    const mentionsPix = /\bpix\b/.test(normalized);
+    if (!mentionsPix) {
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
+    }
+
+    const wantsOffRamp =
+      /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
+      normalized.includes('mandar para minha conta bancaria') ||
+      normalized.includes('mandar pra minha conta bancaria') ||
+      normalized.includes('enviar para o banco') ||
+      normalized.includes('enviar pro banco') ||
+      normalized.includes('cair no banco') ||
+      normalized.includes('receber em pix');
+
+    const wantsOnRamp =
+      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|entrar|on\s*ramp|onramp)\b/.test(normalized) ||
+      normalized.includes('pagar com pix') ||
+      normalized.includes('via pix') ||
+      normalized.includes('usar pix') ||
+      normalized.includes('pix para wallet') ||
+      normalized.includes('pix pra wallet') ||
+      normalized.includes('pix na conta') ||
+      normalized.includes('saldo com pix');
+
+    if (!wantsOnRamp && !wantsOffRamp) {
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'TESOURO' };
+    }
+
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    return {
+      is_pix_ramp: true,
+      direction: wantsOffRamp ? 'offramp' : 'onramp',
+      amount: amountMatch?.[1]?.replace(',', '.'),
+      asset_code: 'TESOURO',
+    };
+  }
+
+  private async buildPixRampUrl(state: AgentState, intent: {
+    direction: 'onramp' | 'offramp';
+    amount?: string;
+    asset_code: 'TESOURO';
+  }): Promise<string> {
+    const url = new URL(`${this.getFrontendBaseUrl()}/pix-ramp`);
+    url.searchParams.set('mode', intent.direction);
+    url.searchParams.set('asset', intent.asset_code);
+    url.searchParams.set('from', 'chat');
+    url.searchParams.set('network', 'testnet');
+    url.searchParams.set('autostart', '1');
+    if (intent.amount) url.searchParams.set('amount', intent.amount);
+    const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
+    if (email.includes('@')) url.searchParams.set('email', email);
+
+    try {
+      return await this.externalService.shortenPublicUrl({
+        url: url.toString(),
+        purpose: `pix_${intent.direction}_testnet`,
+        sessionId: state.session_id,
+        userId: String(state.session_data?.user_id || '').trim() || undefined,
+        expiresInHours: 24,
+      });
+    } catch (error) {
+      logger.warn(`[pix-ramp-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
+      return url.toString();
+    }
+  }
+
+  private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
+    const intent = this.extractPixRampIntentFromText(state.current_input);
+    if (!intent.is_pix_ramp) {
+      state.success = false;
+      state.response_message = 'Você quer colocar dinheiro via PIX na conta ou retirar dinheiro para PIX?';
+    } else if (!intent.amount) {
+      state.success = false;
+      state.response_message = intent.direction === 'offramp'
+        ? 'Qual valor em TESOURO você quer retirar para PIX testnet?'
+        : 'Qual valor em reais você quer colocar na sua conta via PIX testnet?';
+    } else {
+      const url = await this.buildPixRampUrl(state, intent);
+      state.success = true;
+      state.response_message = intent.direction === 'offramp'
+        ? `Para retirar ${this.formatMoneyByAsset(intent.amount, 'TESOURO')} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela mostra o TESOURO saindo da sua wallet e o saldo em reais entrando como conta bancária de teste.`
+        : `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar TESOURO na sua wallet.`;
+    }
+
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async handlePayAnyoneLinkRequest(state: AgentState): Promise<AgentState> {
     if (!state.session_data?.public_key) {
       state.success = false;
@@ -1413,6 +1509,10 @@ Respond ONLY with the intent name. Examples:
 - "quero criar um link de transacao de 10 usdc" -> payment_link
 - "gerar link de pagamento de 15 dólares" -> payment_link
 - "cria um link para alguém receber 20 usdc" -> payment_link
+- "quero pagar com pix para colocar 100 reais na conta" -> pix
+- "depositar 150 reais via pix" -> pix
+- "sacar 20 tesouro por pix" -> pix
+- "tirar dinheiro para minha conta bancaria via pix" -> pix
 - "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
 - "Create account" -> onboard
 - "Create wallet" -> wallet
@@ -2053,13 +2153,13 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         }
         const exactBalances = wantsTechnicalBalance
           ? balances
-          : ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+          : ['BRL', 'USDC', 'TESOURO'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
 
         state.success = true;
         state.response_message = wantsTechnicalBalance
           ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
-          : `Saldo na Stellar:\n${formattedBalances}\n\nPara ver o saldo técnico completo, peça "saldo técnico".`;
+          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nTESOURO é o saldo recebido no PIX testnet. Para ver o saldo técnico completo, peça "saldo técnico".`;
       }
     }
 
@@ -2618,6 +2718,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
+      const deterministicPixRamp = this.extractPixRampIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -2632,11 +2733,13 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
               ? IntentType.HISTORY
               : wantsIntentHelp
                 ? IntentType.GENERAL
-                : fixedSavings
-                  ? IntentType.FINANCIAL_MEMORY
-                  : deterministicFinancialMemory
+                : deterministicPixRamp.is_pix_ramp
+                  ? IntentType.PIX
+                  : fixedSavings
                     ? IntentType.FINANCIAL_MEMORY
-                  : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                    : deterministicFinancialMemory
+                      ? IntentType.FINANCIAL_MEMORY
+                    : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -2720,6 +2823,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.GET_PRICE_QUOTE) {
         return await this.handlePriceQuoteRequest(state);
+      }
+
+      if (state.action_type === ActionType.INITIATE_PIX) {
+        return await this.handlePixRampRequest(state);
       }
 
       if (state.action_type === ActionType.GET_FINANCIAL_MEMORY) {
