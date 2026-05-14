@@ -902,6 +902,150 @@ export class StellarService {
         }
     }
 
+    static async ensureTrustlineFromSecret(input: {
+        sourceSecret: string;
+        assetCode: string;
+        assetIssuer: string;
+    }): Promise<{ success: boolean; existing: boolean; hash?: string; error?: string }> {
+        try {
+            const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
+            await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
+            const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+            const asset = createAsset({ code: input.assetCode, issuer: input.assetIssuer });
+
+            const existing = sourceAccount.balances.some((balance: any) => (
+                balance.asset_type !== 'native' &&
+                String(balance.asset_code || '').toUpperCase() === asset.getCode() &&
+                String(balance.asset_issuer || '') === asset.getIssuer()
+            ));
+            if (existing) {
+                return { success: true, existing: true };
+            }
+
+            const transaction = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            })
+                .addOperation(Operation.changeTrust({ asset }))
+                .setTimeout(300)
+                .build();
+
+            transaction.sign(sourceKeypair);
+            const result = await server.submitTransaction(transaction);
+            return { success: true, existing: false, hash: result.hash };
+        } catch (error) {
+            const message = this.getHorizonErrorMessage(error);
+            return { success: false, existing: false, error: message };
+        }
+    }
+
+    static async submitAssetPaymentFromSecret(input: {
+        sourceSecret: string;
+        destination: string;
+        amount: string;
+        assetCode: string;
+        assetIssuer?: string;
+        memoText?: string;
+    }): Promise<{ success: boolean; hash?: string; error?: string }> {
+        try {
+            const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
+            await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
+            await this.ensureTestnetAccountFunded(input.destination, 1);
+
+            const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+            const asset = createAsset({ code: input.assetCode, issuer: input.assetIssuer });
+
+            let builder = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            }).addOperation(Operation.payment({
+                destination: input.destination,
+                asset,
+                amount: input.amount,
+            }));
+
+            const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
+            if (memo) {
+                builder = builder.addMemo(Memo.text(memo));
+            }
+
+            const transaction = builder.setTimeout(300).build();
+            transaction.sign(sourceKeypair);
+            const result = await server.submitTransaction(transaction);
+            return { success: true, hash: result.hash };
+        } catch (error) {
+            return { success: false, error: this.getHorizonErrorMessage(error) };
+        }
+    }
+
+    static async submitStrictReceivePaymentFromSecret(input: {
+        sourceSecret: string;
+        destination: string;
+        sourceAsset: AssetInput;
+        destinationAsset: AssetInput;
+        destinationAmount: string;
+        sourceMax: string;
+        memoText?: string;
+    }): Promise<{ success: boolean; hash?: string; error?: string; sourceAmount?: string }> {
+        try {
+            const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
+            await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
+            await this.ensureTestnetAccountFunded(input.destination, 1);
+
+            const sourceAssetObj = createAsset(input.sourceAsset);
+            const destinationAssetObj = createAsset(input.destinationAsset);
+            const pathsResponse = await server.strictReceivePaths(
+                [sourceAssetObj],
+                destinationAssetObj,
+                input.destinationAmount,
+            ).call();
+
+            const candidates = Array.isArray(pathsResponse.records) ? pathsResponse.records : [];
+            if (candidates.length === 0) {
+                throw new Error(buildNoPathDiagnostic(sourceAssetObj, destinationAssetObj));
+            }
+
+            const sourceMax = Number(input.sourceMax);
+            const affordable = candidates
+                .filter((record: any) => Number(record.source_amount) <= sourceMax)
+                .sort((a: any, b: any) => Number(a.source_amount) - Number(b.source_amount));
+            const bestPath = affordable[0];
+            if (!bestPath) {
+                throw new Error(`No path found within sourceMax=${input.sourceMax} ${assetCode(sourceAssetObj)}.`);
+            }
+
+            const pathAssets = (bestPath.path || []).map((pathAsset: any) => {
+                if (pathAsset.asset_type === 'native') return Asset.native();
+                return new Asset(pathAsset.asset_code, pathAsset.asset_issuer);
+            });
+
+            const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+            let builder = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            }).addOperation(Operation.pathPaymentStrictReceive({
+                sendAsset: sourceAssetObj,
+                sendMax: input.sourceMax,
+                destination: input.destination,
+                destAsset: destinationAssetObj,
+                destAmount: input.destinationAmount,
+                path: pathAssets,
+            }));
+
+            const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
+            if (memo) {
+                builder = builder.addMemo(Memo.text(memo));
+            }
+
+            const transaction = builder.setTimeout(300).build();
+            transaction.sign(sourceKeypair);
+            const result = await server.submitTransaction(transaction);
+            return { success: true, hash: result.hash, sourceAmount: bestPath.source_amount };
+        } catch (error) {
+            return { success: false, error: this.getHorizonErrorMessage(error) };
+        }
+    }
+
     static async getAccountBalance(publicKey: string): Promise<any[]> {
         try {
             const account = await server.loadAccount(publicKey);

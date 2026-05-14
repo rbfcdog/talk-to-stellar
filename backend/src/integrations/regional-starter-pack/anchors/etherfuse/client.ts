@@ -388,6 +388,7 @@ export class EtherfuseClient implements Anchor {
                 bankAccountId,
                 publicKey,
                 blockchain: this.blockchain,
+                userInfo: input.email ? { email: input.email, displayName: input.email } : undefined,
             });
 
             const now = new Date().toISOString();
@@ -505,6 +506,7 @@ export class EtherfuseClient implements Anchor {
             blockchain: this.blockchain,
             quoteAssets: { type, sourceAsset, targetAsset },
             sourceAmount: String(input.fromAmount || input.toAmount || ''),
+            walletAddress: input.stellarAddress || undefined,
         });
 
         return {
@@ -545,6 +547,7 @@ export class EtherfuseClient implements Anchor {
             orderId,
             bankAccountId,
             publicKey: input.stellarAddress,
+            cryptoWalletId: input.cryptoWalletId,
             quoteId: input.quoteId,
             memo: input.memo || undefined,
         });
@@ -651,6 +654,7 @@ export class EtherfuseClient implements Anchor {
             orderId,
             bankAccountId,
             publicKey: input.stellarAddress,
+            cryptoWalletId: input.cryptoWalletId,
             quoteId: input.quoteId,
             memo: input.memo || undefined,
         });
@@ -716,6 +720,7 @@ export class EtherfuseClient implements Anchor {
         customerId: string,
         publicKey?: string,
         bankAccountId?: string,
+        userInfo?: { email?: string; displayName?: string },
     ): Promise<string> {
         if (!publicKey) {
             throw new AnchorError(
@@ -735,6 +740,7 @@ export class EtherfuseClient implements Anchor {
                 bankAccountId: resolvedBankAccountId,
                 publicKey,
                 blockchain: this.blockchain,
+                userInfo,
             },
         );
 
