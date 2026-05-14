@@ -29,6 +29,18 @@ type BalanceDelta = {
 
 type RampResponse = Record<string, any>;
 type RampAuth = { session_id: string; session_token: string };
+type DebugLogEntry = {
+  id: string;
+  at: string;
+  label: string;
+  method: string;
+  path: string;
+  status?: number;
+  durationMs?: number;
+  request?: unknown;
+  response?: unknown;
+  error?: string;
+};
 
 function getStoredSession() {
   if (typeof window === "undefined") return { sessionId: "", sessionToken: "" };
@@ -97,6 +109,17 @@ function truncateKey(value?: string) {
   return `${value.slice(0, 7)}...${value.slice(-7)}`;
 }
 
+function sanitizeForDebug(value: unknown): unknown {
+  if (Array.isArray(value)) return value.slice(0, 8).map(sanitizeForDebug);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+    if (/token|secret|authorization|password/i.test(key)) return [key, "[redacted]"];
+    if (typeof item === "string" && item.length > 240) return [key, `${item.slice(0, 240)}...`];
+    if (item && typeof item === "object") return [key, sanitizeForDebug(item)];
+    return [key, item];
+  }));
+}
+
 export default function PixRampClient() {
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
@@ -125,6 +148,7 @@ export default function PixRampClient() {
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
+  const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
 
@@ -182,6 +206,16 @@ export default function PixRampClient() {
       .catch(() => setConfig({ sandbox: false, network: "Stellar Testnet" }));
   }, []);
 
+  const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
+    setDebugLogs((current) => [{
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      at: new Date().toLocaleTimeString("pt-BR"),
+      ...entry,
+      request: sanitizeForDebug(entry.request),
+      response: sanitizeForDebug(entry.response),
+    }, ...current].slice(0, 40));
+  }, []);
+
   async function resolveWalletFromEmail(): Promise<RampAuth> {
     if (sessionId && sessionToken) {
       return { session_id: sessionId, session_token: sessionToken };
@@ -192,12 +226,23 @@ export default function PixRampClient() {
       throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
     }
 
+    const startedAt = performance.now();
     const response = await fetch("/api/ramp/etherfuse/resolve-wallet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
     const payload = await response.json().catch(() => ({}));
+    addDebugLog({
+      label: "Resolve TalkToStellar wallet by email",
+      method: "POST",
+      path: "/api/ramp/etherfuse/resolve-wallet",
+      status: response.status,
+      durationMs: Math.round(performance.now() - startedAt),
+      request: { email },
+      response: payload,
+      error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
+    });
     if (!response.ok || payload?.success === false) {
       throw new Error(payload?.message || "Nao encontrei uma wallet TalkToStellar ativa para este email.");
     }
@@ -223,30 +268,53 @@ export default function PixRampClient() {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
     if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
     const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
-    if (method !== "GET") init.body = JSON.stringify({ ...auth, ...(body || {}) });
+    const requestBody = { ...auth, ...(body || {}) };
+    if (method !== "GET") init.body = JSON.stringify(requestBody);
+    const startedAt = performance.now();
     const response = await fetch(path, init);
     const payload = await response.json().catch(() => ({}));
+    addDebugLog({
+      label: path.includes("/customer") ? "Etherfuse customer + programmatic sandbox KYC/PIX" : path.includes("/quote") ? "Etherfuse quote" : path.includes("/onramp") ? "Etherfuse create/poll on-ramp order" : "Ramp API request",
+      method,
+      path,
+      status: response.status,
+      durationMs: Math.round(performance.now() - startedAt),
+      request: requestBody,
+      response: payload,
+      error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
+    });
     if (!response.ok || payload?.success === false) {
       const requestError = new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`) as Error & { payload?: RampResponse };
       requestError.payload = payload;
       throw requestError;
     }
     return payload;
-  }, [sessionId, sessionToken]);
+  }, [addDebugLog, sessionId, sessionToken]);
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
     if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
     const search = new URLSearchParams({ ...auth, ...(params || {}) });
+    const startedAt = performance.now();
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
+    addDebugLog({
+      label: path.includes("wallet-balances") ? "Stellar wallet balances" : path.includes("/onramp/") ? "Etherfuse order status poll" : "Ramp API GET request",
+      method: "GET",
+      path,
+      status: response.status,
+      durationMs: Math.round(performance.now() - startedAt),
+      request: { ...auth, ...(params || {}) },
+      response: payload,
+      error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
+    });
     if (!response.ok || payload?.success === false) {
       const requestError = new Error(payload?.message || payload?.error || `Ramp request failed: ${response.status}`) as Error & { payload?: RampResponse };
       requestError.payload = payload;
       throw requestError;
     }
     return payload;
-  }, [sessionId, sessionToken]);
+  }, [addDebugLog, sessionId, sessionToken]);
 
   const fetchBalances = useCallback(async (authOverride?: RampAuth) => {
     const payload = await callRampGet("/api/ramp/etherfuse/wallet-balances", undefined, authOverride);
@@ -317,6 +385,7 @@ export default function PixRampClient() {
     setTemporaryOffRampTestResult(null);
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
+    setDebugLogs([]);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setOffRampBalancesBefore([]);
@@ -330,7 +399,7 @@ export default function PixRampClient() {
     }
   }
 
-  async function requestQuote() {
+  async function requestQuote(): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
     setStep("quote");
     setOrderPayload(null);
     setStatusPayload(null);
@@ -356,16 +425,31 @@ export default function PixRampClient() {
       amount: amountBrl,
     }, "POST", auth);
     setQuotePayload(payload);
+    return { auth, customerResult, quoteResult: payload };
   }
 
   async function confirmQuoteAndCreatePix() {
-    if (!quote?.id) throw new Error("Request a quote first.");
+    let quoteForOrder = quote;
+    let customerForOrder = customerPayload;
+    if (!quoteForOrder?.id || quoteExpired) {
+      addDebugLog({
+        label: quoteForOrder?.id ? "Quote expired before order, refreshing" : "No quote available, creating quote before order",
+        method: "POST",
+        path: "/api/ramp/etherfuse/quote",
+        request: { amount: amountBrl, targetAsset },
+        response: { reason: quoteForOrder?.id ? "expired" : "missing" },
+      });
+      const fresh = await requestQuote();
+      quoteForOrder = fresh.quoteResult?.quote;
+      customerForOrder = fresh.customerResult;
+    }
+    if (!quoteForOrder?.id) throw new Error("Request a quote first.");
     const payload = await callRamp("/api/ramp/etherfuse/onramp", {
-      customer_id: customerId,
-      quote_id: quote.id,
+      customer_id: String(customerForOrder?.customer?.id || customerId),
+      quote_id: quoteForOrder.id,
       amount: amountBrl,
-      to_currency: quote.toCurrency || targetAsset,
-      bank_account_id: bankAccountId || undefined,
+      to_currency: quoteForOrder.toCurrency || targetAsset,
+      bank_account_id: String(customerForOrder?.customer?.bankAccountId || bankAccountId || "") || undefined,
     });
     setOnboardingUrl("");
     setOrderPayload(payload);
@@ -547,7 +631,7 @@ export default function PixRampClient() {
               ))}
             </div>
 
-            <button className="mt-6 w-full rounded-3xl bg-lime-300 px-5 py-4 text-sm font-black text-[#17251d] shadow-lg shadow-lime-900/10 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Requesting quote", requestQuote)}>
+            <button className="mt-6 w-full rounded-3xl bg-lime-300 px-5 py-4 text-sm font-black text-[#17251d] shadow-lg shadow-lime-900/10 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading)} onClick={() => run("Requesting quote", async () => { await requestQuote(); })}>
               {loading === "Requesting quote" ? "Getting quote..." : "Get quote"}
             </button>
 
@@ -568,8 +652,13 @@ export default function PixRampClient() {
                   <div className="flex justify-between gap-4"><dt className="text-emerald-900/60">Exchange rate</dt><dd className="font-black">{quote.exchangeRate}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-emerald-900/60">Fee</dt><dd className="font-black">{quote.fee || "0"}</dd></div>
                 </dl>
-                <button className="mt-5 w-full rounded-2xl bg-[#17251d] px-4 py-3 text-sm font-black text-white disabled:opacity-50" disabled={quoteExpired || Boolean(loading)} onClick={() => run("Creating PIX order", confirmQuoteAndCreatePix)}>
-                  Confirm quote and generate PIX
+                {quoteExpired && (
+                  <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-800">
+                    Quote expirou. Isso normalmente nao e KYC; a Etherfuse expira cotacoes em poucos minutos. O botao abaixo vai gerar uma quote nova automaticamente antes de criar o PIX.
+                  </div>
+                )}
+                <button className="mt-5 w-full rounded-2xl bg-[#17251d] px-4 py-3 text-sm font-black text-white disabled:opacity-50" disabled={Boolean(loading)} onClick={() => run(quoteExpired ? "Refreshing quote and creating PIX order" : "Creating PIX order", confirmQuoteAndCreatePix)}>
+                  {quoteExpired ? "Refresh quote and generate PIX" : "Confirm quote and generate PIX"}
                 </button>
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
@@ -659,6 +748,10 @@ export default function PixRampClient() {
         <section className="mt-5 grid gap-5 lg:grid-cols-2">
           <AssetMovement title="On-ramp wallet assets" before={onRampBalancesBefore} after={onRampBalancesAfter} deltas={onRampAssetDeltas} walletPublicKey={walletPublicKey} />
           <AssetMovement title="Off-ramp wallet assets" before={offRampBalancesBefore} after={offRampBalancesAfter} deltas={offRampAssetDeltas} walletPublicKey={walletPublicKey} />
+        </section>
+
+        <section className="mt-5">
+          <DebugLogPanel logs={debugLogs} onClear={() => setDebugLogs([])} />
         </section>
 
         <section className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -758,6 +851,63 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
       {result && (
         <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify(result, null, 2)}</pre>
       )}
+    </div>
+  );
+}
+
+function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () => void }) {
+  return (
+    <div className="rounded-[2rem] bg-[#111b16] p-5 text-white shadow-xl shadow-emerald-950/20 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Frontend API debug</p>
+          <h2 className="mt-1 text-2xl font-black">Etherfuse request log</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+            Mostra exatamente o que a tela enviou para `/api/ramp/...` e o que voltou. `session_token` e segredos sao mascarados.
+          </p>
+        </div>
+        <button className="w-fit rounded-full border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white/70 disabled:opacity-40" disabled={logs.length === 0} onClick={onClear}>
+          Clear logs
+        </button>
+      </div>
+      <div className="mt-5 grid gap-3">
+        {logs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/15 p-5 text-sm font-bold text-white/45">
+            Nenhuma chamada ainda. Clique em `Use wallet`, `Get quote` ou `Generate PIX` para ver os requests.
+          </div>
+        ) : logs.map((log) => (
+          <details key={log.id} className="rounded-2xl border border-white/10 bg-white/5 p-4" open={Boolean(log.error)}>
+            <summary className="cursor-pointer list-none">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black">{log.label}</p>
+                  <p className="mt-1 font-mono text-xs text-white/45">{log.method} {log.path}</p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs font-black">
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-white/70">{log.at}</span>
+                  {typeof log.durationMs === "number" && <span className="rounded-full bg-white/10 px-3 py-1 text-white/70">{log.durationMs}ms</span>}
+                  {typeof log.status === "number" && (
+                    <span className={`rounded-full px-3 py-1 ${log.status >= 200 && log.status < 300 ? "bg-lime-300 text-[#17251d]" : "bg-red-300 text-red-950"}`}>
+                      HTTP {log.status}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {log.error && <p className="mt-3 rounded-xl bg-red-400/15 p-3 text-sm font-bold text-red-100">{log.error}</p>}
+            </summary>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-lime-200">Request</p>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{JSON.stringify(log.request || {}, null, 2)}</pre>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-lime-200">Response</p>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-black/35 p-3 text-xs text-lime-50">{JSON.stringify(log.response || {}, null, 2)}</pre>
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
     </div>
   );
 }
