@@ -143,6 +143,7 @@ No sandbox/testnet usado aqui:
 - Quando a ordem Etherfuse real funciona, o `pixCode` vem da Etherfuse.
 - Quando o sandbox cai no fallback local, o `pixCode` e um BR-Code PIX EMV valido para QR/copia-e-cola de teste, com `br.gov.bcb.pix`, valor, txid e CRC16. Ele nao deve ser pago com dinheiro real.
 - O pagamento e simulado via `POST /api/ramp/etherfuse/sandbox/simulate-fiat`.
+- O mock `sandbox-pix-*` e recuperado pelo `operation_id` salvo no banco. Assim, polling e simulacao continuam funcionando depois de reload/restart/deploy.
 - O ativo recebido e `TESOURO` em rede Stellar testnet/devnet. Quando a ordem Etherfuse real falha por proxy PIX, o fallback sandbox faz a entrega on-chain local.
 - Para ordem Etherfuse real, a API exige wallet aprovada e bank account ativa da organizacao. O backend registra a wallet em `/ramp/wallet` e tenta usar automaticamente uma conta ativa retornada por `/ramp/bank-accounts` antes de cair no fallback.
 - Esses tokens nao representam saldo financeiro real.

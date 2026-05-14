@@ -372,7 +372,10 @@ export default function PixRampClient() {
   useEffect(() => {
     if (!polling || !orderId) return;
     const timer = window.setInterval(() => {
-      refreshOrder().catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      refreshOrder().catch((err) => {
+        setPolling(false);
+        setError(err instanceof Error ? err.message : String(err));
+      });
     }, 3500);
     return () => window.clearInterval(timer);
   }, [orderId, polling, refreshOrder]);
@@ -535,7 +538,11 @@ export default function PixRampClient() {
 
   async function simulatePixPayment() {
     if (!orderId) throw new Error("Create a PIX order before simulating payment.");
-    await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", { order_id: orderId });
+    const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
+      order_id: orderId,
+      operation_id: operationId,
+    });
+    if (payload?.transaction) setStatusPayload(payload);
     setPolling(true);
     await refreshOrder();
   }
