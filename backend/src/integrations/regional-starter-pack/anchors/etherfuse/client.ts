@@ -49,6 +49,9 @@ import type {
     EtherfuseOrderResponse,
     EtherfuseKycStatusResponse,
     EtherfuseBankAccountListResponse,
+    EtherfuseBankAccountResponse,
+    EtherfuseApiKeyBankAccountRequest,
+    EtherfuseBankAccountRequest,
     EtherfuseAssetsResponse,
     EtherfuseAgreementResponse,
     EtherfuseErrorResponse,
@@ -783,6 +786,51 @@ export class EtherfuseClient implements Anchor {
     ): Promise<EtherfuseAssetsResponse> {
         const params = new URLSearchParams({ blockchain, currency, wallet });
         return this.request<EtherfuseAssetsResponse>('GET', `/ramp/assets?${params.toString()}`);
+    }
+
+    /**
+     * Register a customer's crypto wallet programmatically.
+     *
+     * This is the white-label counterpart to wallet registration inside the
+     * hosted onboarding flow. It is idempotent for already-active wallets.
+     */
+    async registerCustomerWallet(
+        customerId: string,
+        publicKey: string,
+        claimOwnership = false,
+    ): Promise<unknown> {
+        return this.request('POST', `/ramp/customer/${customerId}/wallet`, {
+            publicKey,
+            blockchain: this.blockchain,
+            claimOwnership,
+        });
+    }
+
+    /**
+     * Create a customer's fiat account programmatically using API-key auth.
+     *
+     * No presigned URL or hosted page is required. In sandbox/devnet,
+     * `skipAutoApproval: false` lets Etherfuse auto-approve test data.
+     */
+    async createBankAccountForCustomer(
+        customerId: string,
+        input: EtherfuseApiKeyBankAccountRequest,
+    ): Promise<EtherfuseBankAccountResponse> {
+        return this.request<EtherfuseBankAccountResponse>(
+            'POST',
+            `/ramp/customer/${customerId}/bank-account`,
+            input,
+        );
+    }
+
+    /**
+     * Create a fiat account using a presigned onboarding URL without opening
+     * the hosted UI. Useful as a compatibility fallback in sandbox.
+     */
+    async createBankAccountWithPresignedUrl(
+        input: EtherfuseBankAccountRequest & { skipAutoApproval?: boolean; label?: string },
+    ): Promise<EtherfuseBankAccountResponse> {
+        return this.request<EtherfuseBankAccountResponse>('POST', '/ramp/bank-account', input);
     }
 
     /**
