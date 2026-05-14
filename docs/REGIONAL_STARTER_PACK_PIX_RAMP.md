@@ -8,7 +8,7 @@ Conectar wallets TalkToStellar ao fluxo regional de on-ramp e off-ramp:
 
 - On-ramp: `BRL` via `PIX` para `TESOURO` na Stellar testnet/devnet.
 - Off-ramp: `TESOURO` na Stellar para `BRL` via `PIX`.
-- Customer, KYC e registro de conta PIX acontecem no fluxo hospedado da Etherfuse.
+- Customer, wallet e KYC sandbox sao enviados programaticamente para a Etherfuse.
 - A API key fica somente no backend.
 
 ## Codigo Reutilizado
@@ -45,6 +45,36 @@ Tambem configure a mesma `ETHERFUSE_API_KEY` no `sandbox/regional-starter-pack/.
 
 Importante: a chave deve ser usada sem `Bearer`.
 
+## Estado Atual do Sandbox
+
+Investigacao feita contra `https://api.sand.etherfuse.com` e a especificacao oficial `https://docs.etherfuse.com/openapi.yaml`:
+
+- `POST /ramp/onboarding-url` funciona e recupera o customer existente quando a public key ja foi registrada.
+- `POST /ramp/customer/{customerId}/wallet` funciona e retorna `walletId`.
+- `POST /ramp/customer/{customerId}/kyc` funciona e auto-aprova no sandbox.
+- `POST /ramp/quote` funciona para `BRL -> TESOURO` e `TESOURO -> BRL`.
+- `POST /ramp/customer/{customerId}/bank-account` rejeita o payload PIX do regional starter pack com `AccountRegistration`.
+- Sem uma conta PIX/proxy criada pela Etherfuse, `POST /ramp/order` retorna `Proxy account not found`.
+
+Por isso o backend faz:
+
+1. Tenta o fluxo real Etherfuse primeiro.
+2. Se a Etherfuse negar a ordem com `Proxy account not found` em sandbox/devnet, usa fallback local explicito `sandbox_mock=true`.
+3. On-ramp sandbox: gera checkout PIX sandbox e, ao simular pagamento, entrega `TESOURO` on-chain na Stellar Testnet usando a liquidez BRL local.
+4. Off-ramp sandbox: cria uma ordem mockada e assina uma transferencia real de `TESOURO` da wallet TalkToStellar para o coletor sandbox.
+
+Esse fallback e controlado por:
+
+```bash
+ETHERFUSE_SANDBOX_PIX_FALLBACK=true
+```
+
+Para desativar e exigir somente ordem Etherfuse real:
+
+```bash
+ETHERFUSE_SANDBOX_PIX_FALLBACK=false
+```
+
 ## Tela Web
 
 A tela de teste foi adicionada em:
@@ -53,12 +83,12 @@ A tela de teste foi adicionada em:
 /pix-ramp
 ```
 
-Ela usa a sessao global salva no navegador:
+Ela usa a sessao global salva no navegador, quando existir:
 
 - `talk-to-stellar.sessionId`
 - `talk-to-stellar.sessionToken`
 
-Se esses valores nao existirem, entre em uma conta TalkToStellar antes de usar a tela.
+Se esses valores nao existirem, a tela permite digitar o email da conta TalkToStellar para localizar a wallet existente pela propria infra TalkToStellar. Nao usa Freighter.
 
 ### Teste Rapido
 
@@ -82,7 +112,7 @@ Ele executa automaticamente:
 4. Chama `fiat_received` no sandbox.
 5. Faz polling do status da ordem.
 
-Se a Etherfuse exigir KYC ou registro da conta PIX, abra o link `KYC/PIX`, conclua o fluxo hospedado e rode o teste rapido novamente.
+Se a Etherfuse nao conseguir criar a proxy PIX real no sandbox, o backend retorna um checkout PIX sandbox explicito e liquida a simulacao on-chain na Testnet.
 
 A versao atual da tela tambem tem:
 
@@ -94,6 +124,7 @@ A versao atual da tela tambem tem:
 - Polling automatico do status da ordem.
 - Recibo final com wallet, order id, timestamp, network e status.
 - Paineis `On-ramp wallet assets` e `Off-ramp wallet assets` com balances before/after/delta.
+- Os deltas so aparecem depois do snapshot final; antes disso a UI mostra `waiting` para nao transformar saldo ausente em zero.
 
 ## Como o PIX Funciona
 
@@ -110,7 +141,7 @@ No sandbox/testnet usado aqui:
 - Nao envie dinheiro real.
 - O `pixCode` e instrucao de teste/sandbox.
 - O pagamento e simulado via `POST /api/ramp/etherfuse/sandbox/simulate-fiat`.
-- O ativo recebido e `TESOURO` em rede Stellar testnet/devnet.
+- O ativo recebido e `TESOURO` em rede Stellar testnet/devnet. Quando a ordem Etherfuse real falha por proxy PIX, o fallback sandbox faz a entrega on-chain local.
 - Esses tokens nao representam saldo financeiro real.
 
 Resumo: no ambiente atual, PIX e fake/simulado; a blockchain tambem esta em testnet/devnet. Dinheiro real so deve entrar quando trocar para ambiente de producao da anchor, com API key de producao, compliance/KYC aprovados e rails reais ativados.
@@ -285,7 +316,7 @@ Esse endpoint temporario executa:
 7. Snapshot final dos balances.
 8. `balance_delta` explicito por asset.
 
-Ele retorna `403` fora de sandbox/devnet.
+Em sandbox, se a Etherfuse retornar `Proxy account not found`, cria `sandbox-pix-*`, simula PIX e entrega `TESOURO` on-chain. Ele retorna `403` fora de sandbox/devnet.
 
 ### Endpoint Temporario Off-Ramp
 
@@ -311,13 +342,13 @@ Esse endpoint temporario executa:
 2. Customer ou customer informado.
 3. Busca uma conta PIX registrada na Etherfuse.
 4. Quote `TESOURO -> BRL`.
-5. Cria ordem off-ramp.
-6. Faz polling ate a Etherfuse disponibilizar o XDR de burn.
-7. Assina/submete o XDR com a wallet TalkToStellar se `ready_to_sign=true`.
+5. Cria ordem off-ramp real quando existe conta PIX real.
+6. Se nao existe conta PIX no sandbox, cria `sandbox-offramp-*`.
+7. Assina/submete uma transferencia real de `TESOURO` com a wallet TalkToStellar se `ready_to_sign=true`.
 8. Snapshot final dos balances.
 9. `balance_delta` explicito por asset.
 
-Se nao existir conta PIX registrada, retorna `409` pedindo para abrir o KYC/PIX hospedado e registrar a conta.
+Fora de sandbox, se nao existir conta PIX registrada, retorna `409` pedindo para abrir o KYC/PIX hospedado e registrar a conta.
 
 ### Quote Off-Ramp
 
@@ -393,10 +424,9 @@ O backend busca o XDR, le a chave privada da wallet no Vault, assina e submete n
 
 1. Entrar em uma conta TalkToStellar.
 2. Abrir `/pix-ramp`.
-3. Clicar em `Criar customer/KYC`.
-4. Abrir `KYC/PIX` e concluir KYC + registro da conta PIX.
-5. Para on-ramp, cotar BRL, criar ordem PIX, copiar `pixCode` e simular `fiat_received` no sandbox.
-6. Para off-ramp, listar contas PIX, cotar TESOURO, criar off-ramp, pollar ate `ready_to_sign=true`, assinar e enviar.
+3. Digitar o email da conta se a sessao nao estiver no navegador.
+4. Para on-ramp, cotar BRL, criar ordem PIX, copiar `pixCode` e simular PIX no sandbox.
+5. Para off-ramp, usar o endpoint temporario ou fluxo de off-ramp para cotar TESOURO, criar ordem, assinar e enviar.
 
 ## Validacao Local
 
@@ -425,5 +455,6 @@ O resultado esperado e `true`.
 - `TESOURO` foi adicionado aos assets confiaveis do TalkToStellar.
 - O issuer default de `TESOURO` e o mesmo usado pelo regional starter pack.
 - Off-ramp Etherfuse usa assinatura diferida: a ordem e criada primeiro, e o XDR aparece depois via polling.
-- Registro de conta PIX e KYC sao hospedados pela Etherfuse, nao inline no TalkToStellar.
+- KYC sandbox e wallet registration sao programaticos; conta PIX programatica ainda e rejeitada pela API sandbox atual da Etherfuse para o payload PIX do regional starter pack.
+- O fallback sandbox nao roda em producao e nao deve ser tratado como liquidacao financeira real.
 - A API key nao deve ser exposta no frontend nem em variaveis `NEXT_PUBLIC_*`.

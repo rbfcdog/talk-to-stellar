@@ -30,6 +30,11 @@ export interface EtherfuseOnboardingRequest {
     publicKey: string;
     /** Blockchain identifier (e.g. `"stellar"`). */
     blockchain: string;
+    /** Optional user metadata displayed/associated in hosted onboarding. */
+    userInfo?: {
+        email?: string;
+        displayName?: string;
+    };
 }
 
 /** Quote asset pair with ramp direction. */
@@ -54,6 +59,8 @@ export interface EtherfuseQuoteRequest {
     quoteAssets: EtherfuseQuoteAssets;
     /** Amount of the source asset to convert. */
     sourceAmount: string;
+    /** Wallet address used by Etherfuse for wallet-scoped quotes. */
+    walletAddress?: string;
 }
 
 /** Request body for `POST /ramp/order` (both on-ramp and off-ramp). */
@@ -63,7 +70,9 @@ export interface EtherfuseOrderRequest {
     /** Bank account UUID. */
     bankAccountId: string;
     /** Stellar public key. */
-    publicKey: string;
+    publicKey?: string;
+    /** Etherfuse crypto wallet UUID returned by customer wallet registration. */
+    cryptoWalletId?: string;
     /** Quote ID for pricing (from `POST /ramp/quote`). */
     quoteId: string;
     /** Optional memo for the Stellar transaction. */

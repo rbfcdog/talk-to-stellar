@@ -64,6 +64,8 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   quote_id?: string;
   quoteId?: string;
   amount?: string;
+  expected_to_amount?: string;
+  expectedToAmount?: string;
   to_currency?: string;
   toCurrency?: string;
   bank_account_id?: string;
@@ -102,6 +104,31 @@ interface TrustlineResult {
   error?: string;
 }
 
+interface SandboxMockOnRampOrder {
+  transaction: OnRampTransaction;
+  userId: string;
+  sessionId: string;
+  publicKey: string;
+  sourceAmountBrl: string;
+  destinationAmount: string;
+  operationId?: string;
+  deliveryHash?: string;
+  deliverySourceAmount?: string;
+  deliveryError?: string;
+  upstreamError?: string;
+}
+
+interface SandboxMockOffRampOrder {
+  transaction: OffRampTransaction;
+  userId: string;
+  sessionId: string;
+  publicKey: string;
+  amountTesouro: string;
+  operationId?: string;
+  submitHash?: string;
+  submitError?: string;
+}
+
 interface ResolveWalletByEmailInput {
   email?: string;
 }
@@ -118,6 +145,23 @@ function normalizeAmount(value: unknown, label = 'amount'): string {
     throw apiError(`${label} must be a positive decimal amount.`, 400);
   }
   return amount;
+}
+
+function toStellarAmount(value: unknown): string {
+  const amount = Number(String(value || '0').replace(',', '.'));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw apiError('amount must be a positive decimal amount.', 400);
+  }
+  return amount.toFixed(7);
+}
+
+function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): string {
+  const expected = Number(String(expectedToAmount || '').replace(',', '.'));
+  if (Number.isFinite(expected) && expected > 0) {
+    return toStellarAmount(expected);
+  }
+  const brl = Number(String(amountBrl || '0').replace(',', '.'));
+  return toStellarAmount(brl * 0.8665);
 }
 
 function coalesceString(...values: unknown[]): string {
@@ -233,6 +277,8 @@ export class AnchorService {
   private static etherfuseClient?: EtherfuseClient;
   private static etherfuseConfigSignature?: string;
   private static programmaticOnboardingCache = new Set<string>();
+  private static sandboxMockOnRampOrders = new Map<string, SandboxMockOnRampOrder>();
+  private static sandboxMockOffRampOrders = new Map<string, SandboxMockOffRampOrder>();
 
   static getTesouroIssuer(): string {
     return getAssetIssuer('TESOURO') || ETHERFUSE_TESOURO_ISSUER;
@@ -461,18 +507,16 @@ export class AnchorService {
     customerId: string;
     publicKey: string;
     bankAccountId?: string;
+    email?: string;
   }): Promise<{ bankAccountId: string; kycUrl?: string }> {
     const bankAccountId = input.bankAccountId || crypto.randomUUID();
     const anchor = this.getEtherfuseClient();
-    const kycUrl = await anchor.getKycUrl?.(input.customerId, input.publicKey, bankAccountId);
-
-    if (kycUrl && this.getRuntimeInfo().sandbox && typeof (anchor as any).acceptAgreements === 'function') {
-      try {
-        await (anchor as any).acceptAgreements(kycUrl);
-      } catch (error) {
-        console.warn('[ramp] Etherfuse sandbox agreement auto-accept failed:', error);
-      }
-    }
+    const kycUrl = await anchor.getKycUrl?.(
+      input.customerId,
+      input.publicKey,
+      bankAccountId,
+      input.email ? { email: input.email, displayName: input.email } : undefined,
+    );
 
     return { bankAccountId, kycUrl };
   }
@@ -494,6 +538,242 @@ export class AnchorService {
     return error;
   }
 
+  private static sandboxPixFallbackEnabled(): boolean {
+    return this.getRuntimeInfo().sandbox &&
+      String(process.env.ETHERFUSE_SANDBOX_PIX_FALLBACK || 'true').trim().toLowerCase() !== 'false';
+  }
+
+  private static buildSandboxPixInstructions(orderId: string, amount: string) {
+    const pixKey = `sandbox-${orderId.replace(/^sandbox-pix-/, '').slice(0, 8)}@etherfuse.dev`;
+    return {
+      type: 'pix' as const,
+      amount,
+      currency: 'BRL',
+      reference: orderId,
+      pixKey,
+      pixKeyType: 'email',
+      pixCode: [
+        'PIX-SANDBOX',
+        'provider=Etherfuse',
+        `order=${orderId}`,
+        `amount=${amount}`,
+        'currency=BRL',
+        'network=stellar-testnet',
+      ].join('|'),
+      beneficiary: 'Etherfuse Sandbox',
+    };
+  }
+
+  private static createSandboxOnRampFallback(input: {
+    context: SessionWalletContext;
+    customerId: string;
+    quoteId: string;
+    amount: string;
+    toCurrency: string;
+    expectedToAmount?: string;
+    upstreamError?: string;
+  }): OnRampTransaction {
+    const orderId = `sandbox-pix-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    const destinationAmount = estimateTesouroFromBrl(input.amount, input.expectedToAmount);
+    const transaction = {
+      id: orderId,
+      customerId: input.customerId,
+      quoteId: input.quoteId,
+      status: 'pending' as const,
+      fromAmount: input.amount,
+      fromCurrency: 'BRL',
+      toAmount: destinationAmount,
+      toCurrency: input.toCurrency,
+      stellarAddress: input.context.publicKey,
+      paymentInstructions: this.buildSandboxPixInstructions(orderId, input.amount),
+      createdAt: now,
+      updatedAt: now,
+      sandbox_mock: true,
+      upstream_error: input.upstreamError,
+    } as OnRampTransaction & { sandbox_mock: boolean; upstream_error?: string };
+
+    this.sandboxMockOnRampOrders.set(orderId, {
+      transaction,
+      userId: input.context.userId,
+      sessionId: input.context.sessionId,
+      publicKey: input.context.publicKey,
+      sourceAmountBrl: input.amount,
+      destinationAmount,
+      upstreamError: input.upstreamError,
+    });
+
+    return transaction;
+  }
+
+  private static async deliverSandboxOnRamp(orderId: string): Promise<SandboxMockOnRampOrder | null> {
+    const record = this.sandboxMockOnRampOrders.get(orderId);
+    if (!record) return null;
+    if (record.transaction.status === 'completed') return record;
+
+    record.transaction.status = 'processing' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    await this.updateRampOperationStatus(record.operationId, 'PROCESSING');
+
+    const sourceSecret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
+    const brlIssuer = getAssetIssuer('BRL');
+    if (!sourceSecret || !brlIssuer) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.deliveryError = 'BRL_DISTRIBUTOR_SECRET and BRL issuer are required for sandbox PIX settlement.';
+      await this.updateRampOperationStatus(record.operationId, 'FAILED');
+      return record;
+    }
+
+    const sourceMax = toStellarAmount(Math.max(
+      Number(record.sourceAmountBrl) * 2,
+      Number(record.sourceAmountBrl) + 1,
+    ));
+    const result = await StellarService.submitStrictReceivePaymentFromSecret({
+      sourceSecret,
+      destination: record.publicKey,
+      sourceAsset: { code: 'BRL', issuer: brlIssuer },
+      destinationAsset: { code: 'TESOURO', issuer: this.getTesouroIssuer() },
+      destinationAmount: toStellarAmount(record.destinationAmount),
+      sourceMax,
+      memoText: 'PIX ONRAMP SANDBOX',
+    });
+
+    if (!result.success) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.deliveryError = result.error || 'Sandbox TESOURO delivery failed.';
+      await this.updateRampOperationStatus(record.operationId, 'FAILED');
+      return record;
+    }
+
+    record.transaction.status = 'completed' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    record.deliveryHash = result.hash;
+    record.deliverySourceAmount = result.sourceAmount;
+    (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = result.hash;
+    await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
+    return record;
+  }
+
+  private static async ensureSandboxTesouroCollectorTrustline(): Promise<{ publicKey: string; success: boolean; error?: string }> {
+    const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
+    const secret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
+    if (!publicKey || !secret) {
+      return {
+        publicKey,
+        success: false,
+        error: 'BRL_DISTRIBUTOR_PUBLIC and BRL_DISTRIBUTOR_SECRET are required for sandbox off-ramp settlement.',
+      };
+    }
+
+    const trustline = await StellarService.ensureTrustlineFromSecret({
+      sourceSecret: secret,
+      assetCode: 'TESOURO',
+      assetIssuer: this.getTesouroIssuer(),
+    });
+
+    return { publicKey, success: trustline.success, error: trustline.error };
+  }
+
+  private static createSandboxOffRampFallback(input: {
+    context: SessionWalletContext;
+    customerId: string;
+    quoteId: string;
+    amount: string;
+    fiatAccountId?: string;
+    upstreamError?: string;
+  }): OffRampTransaction {
+    const orderId = `sandbox-offramp-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    const transaction = {
+      id: orderId,
+      customerId: input.customerId,
+      quoteId: input.quoteId,
+      status: 'pending' as const,
+      fromAmount: toStellarAmount(input.amount),
+      fromCurrency: this.getTesouroIdentifier(),
+      toAmount: '',
+      toCurrency: 'BRL',
+      stellarAddress: input.context.publicKey,
+      fiatAccount: {
+        id: input.fiatAccountId || `sandbox-pix-${crypto.randomUUID()}`,
+        type: 'pix',
+        label: 'Etherfuse Sandbox PIX',
+      },
+      signableTransaction: `sandbox-mock-xdr:${orderId}`,
+      createdAt: now,
+      updatedAt: now,
+      sandbox_mock: true,
+      upstream_error: input.upstreamError,
+    } as OffRampTransaction & { sandbox_mock: boolean; upstream_error?: string };
+
+    this.sandboxMockOffRampOrders.set(orderId, {
+      transaction,
+      userId: input.context.userId,
+      sessionId: input.context.sessionId,
+      publicKey: input.context.publicKey,
+      amountTesouro: toStellarAmount(input.amount),
+    });
+
+    return transaction;
+  }
+
+  private static async submitSandboxOffRamp(input: {
+    context: SessionWalletContext;
+    orderId: string;
+    operationId?: string;
+  }): Promise<{ success: boolean; hash?: string; error?: string; order_id: string }> {
+    const record = this.sandboxMockOffRampOrders.get(input.orderId);
+    if (!record) {
+      return { success: false, order_id: input.orderId, error: 'Sandbox off-ramp order not found.' };
+    }
+    if (record.transaction.status === 'completed') {
+      return { success: true, order_id: input.orderId, hash: record.submitHash };
+    }
+    if (!input.context.vaultSecretId) {
+      return { success: false, order_id: input.orderId, error: 'Wallet private key is not available in Vault.' };
+    }
+
+    const collector = await this.ensureSandboxTesouroCollectorTrustline();
+    if (!collector.success || !collector.publicKey) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.submitError = collector.error || 'Could not prepare sandbox TESOURO collector.';
+      await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
+      return { success: false, order_id: input.orderId, error: record.submitError };
+    }
+
+    record.transaction.status = 'processing' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    await this.updateRampOperationStatus(record.operationId || input.operationId, 'PROCESSING');
+
+    const secret = await new VaultService(supabase).getSecret(input.context.vaultSecretId);
+    const result = await StellarService.submitAssetPaymentFromSecret({
+      sourceSecret: secret,
+      destination: collector.publicKey,
+      amount: record.amountTesouro,
+      assetCode: 'TESOURO',
+      assetIssuer: this.getTesouroIssuer(),
+      memoText: 'PIX OFFRAMP SANDBOX',
+    });
+
+    if (!result.success) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.submitError = result.error || 'Sandbox off-ramp payment failed.';
+      await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
+      return { ...result, order_id: input.orderId };
+    }
+
+    record.transaction.status = 'completed' as any;
+    record.transaction.updatedAt = new Date().toISOString();
+    record.submitHash = result.hash;
+    record.transaction.stellarTxHash = result.hash;
+    await this.updateRampOperationStatus(record.operationId || input.operationId, 'COMPLETED');
+    return { ...result, order_id: input.orderId };
+  }
+
   private static buildSandboxKycPayload(publicKey: string): any {
     return {
       pubkey: publicKey,
@@ -504,6 +784,7 @@ export class AnchorService {
           familyName: 'Silva',
         },
         dateOfBirth: '1990-05-15',
+        phoneNumber: '+5511999999999',
         address: {
           street: 'Avenida Paulista 1000',
           city: 'Sao Paulo',
@@ -667,6 +948,7 @@ export class AnchorService {
       customerId: customer.id,
       publicKey: context.publicKey,
       bankAccountId: customer.bankAccountId,
+      email: coalesceString(input.email, context.email) || undefined,
     });
     const programmatic = await this.runSandboxProgrammaticOnboarding({
       customerId: customer.id,
@@ -876,6 +1158,7 @@ export class AnchorService {
       customerId,
       publicKey: context.publicKey,
       bankAccountId,
+      email: context.email,
     });
     bankAccountId = preparedProxy.bankAccountId;
     kycUrl = preparedProxy.kycUrl;
@@ -911,6 +1194,7 @@ export class AnchorService {
         customerId,
         publicKey: context.publicKey,
         bankAccountId: freshBankAccountId,
+        email: context.email,
       });
       bankAccountId = preparedProxy.bankAccountId;
       kycUrl = preparedProxy.kycUrl;
@@ -927,12 +1211,24 @@ export class AnchorService {
         transaction = await createOrder();
       } catch (retryError) {
         if (!this.isMissingEtherfuseProxyError(retryError)) throw retryError;
-        throw this.missingProxySetupError(
-          'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
-          kycUrl,
-          bankAccountId,
-          retryProgrammatic.steps,
-        );
+        if (this.sandboxPixFallbackEnabled()) {
+          transaction = this.createSandboxOnRampFallback({
+            context,
+            customerId,
+            quoteId,
+            amount,
+            toCurrency,
+            expectedToAmount: coalesceString(input.expected_to_amount, input.expectedToAmount),
+            upstreamError: debugErrorMessage(retryError),
+          });
+        } else {
+          throw this.missingProxySetupError(
+            'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
+            kycUrl,
+            bankAccountId,
+            retryProgrammatic.steps,
+          );
+        }
       }
     }
 
@@ -952,8 +1248,12 @@ export class AnchorService {
         anchor_order_id: transaction.id,
         target_asset: toCurrency,
         payment_instructions: transaction.paymentInstructions,
+        sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
+        upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
       },
     });
+    const mockRecord = this.sandboxMockOnRampOrders.get(transaction.id);
+    if (mockRecord) mockRecord.operationId = operationId;
 
     return { transaction, operation_id: operationId, trustline };
   }
@@ -961,6 +1261,15 @@ export class AnchorService {
   static async getOnRampStatus(orderId: string, operationId?: string): Promise<{
     transaction: OnRampTransaction;
   }> {
+    const mockRecord = this.sandboxMockOnRampOrders.get(orderId);
+    if (mockRecord) {
+      await this.updateRampOperationStatus(
+        operationId || mockRecord.operationId,
+        mapAnchorStatusToOperationStatus(mockRecord.transaction.status),
+      );
+      return { transaction: mockRecord.transaction };
+    }
+
     const transaction = await this.getEtherfuseClient().getOnRampTransaction(orderId);
     if (!transaction) throw apiError('On-ramp order not found.', 404);
 
@@ -990,20 +1299,46 @@ export class AnchorService {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerId);
       fiatAccountId = accounts[0]?.id || '';
     }
+    let transaction: OffRampTransaction;
     if (!fiatAccountId) {
-      throw apiError('No PIX fiat account registered. Open the Etherfuse onboarding URL and register a PIX account first.', 409);
+      if (!this.sandboxPixFallbackEnabled()) {
+        throw apiError('No PIX fiat account registered. Open the Etherfuse onboarding URL and register a PIX account first.', 409);
+      }
+      fiatAccountId = crypto.randomUUID();
+      transaction = this.createSandboxOffRampFallback({
+        context,
+        customerId,
+        quoteId,
+        amount,
+        fiatAccountId,
+        upstreamError: 'No Etherfuse PIX fiat account is available in sandbox; using local mock settlement.',
+      });
+    } else {
+      try {
+        transaction = await this.getEtherfuseClient().createOffRamp({
+          customerId,
+          quoteId,
+          stellarAddress: context.publicKey,
+          fromCurrency: this.getTesouroIdentifier(),
+          toCurrency: 'BRL',
+          amount,
+          fiatAccountId,
+          memo: coalesceString(input.memo) || undefined,
+        });
+      } catch (error) {
+        if (!this.sandboxPixFallbackEnabled() || !this.isMissingEtherfuseProxyError(error)) {
+          throw error;
+        }
+        transaction = this.createSandboxOffRampFallback({
+          context,
+          customerId,
+          quoteId,
+          amount,
+          fiatAccountId,
+          upstreamError: debugErrorMessage(error),
+        });
+      }
     }
-
-    const transaction = await this.getEtherfuseClient().createOffRamp({
-      customerId,
-      quoteId,
-      stellarAddress: context.publicKey,
-      fromCurrency: this.getTesouroIdentifier(),
-      toCurrency: 'BRL',
-      amount,
-      fiatAccountId,
-      memo: coalesceString(input.memo) || undefined,
-    });
 
     const operationId = await this.persistRampOperation({
       userId: context.userId,
@@ -1020,8 +1355,12 @@ export class AnchorService {
         quote_id: quoteId,
         anchor_order_id: transaction.id,
         fiat_account_id: fiatAccountId,
+        sandbox_mock: Boolean((transaction as OffRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
+        upstream_error: (transaction as OffRampTransaction & { upstream_error?: string }).upstream_error,
       },
     });
+    const mockRecord = this.sandboxMockOffRampOrders.get(transaction.id);
+    if (mockRecord) mockRecord.operationId = operationId;
 
     return { transaction, operation_id: operationId };
   }
@@ -1030,6 +1369,18 @@ export class AnchorService {
     transaction: OffRampTransaction;
     ready_to_sign: boolean;
   }> {
+    const mockRecord = this.sandboxMockOffRampOrders.get(orderId);
+    if (mockRecord) {
+      await this.updateRampOperationStatus(
+        operationId || mockRecord.operationId,
+        mapAnchorStatusToOperationStatus(mockRecord.transaction.status),
+      );
+      return {
+        transaction: mockRecord.transaction,
+        ready_to_sign: Boolean(mockRecord.transaction.signableTransaction),
+      };
+    }
+
     const transaction = await this.getEtherfuseClient().getOffRampTransaction(orderId);
     if (!transaction) throw apiError('Off-ramp order not found.', 404);
 
@@ -1046,6 +1397,14 @@ export class AnchorService {
     const context = await this.resolveSessionWallet(input);
     const orderId = coalesceString(input.order_id, input.orderId);
     if (!orderId) throw apiError('order_id is required.', 400);
+    const mockRecord = this.sandboxMockOffRampOrders.get(orderId);
+    if (mockRecord) {
+      return this.submitSandboxOffRamp({
+        context,
+        orderId,
+        operationId: coalesceString(input.operation_id, input.operationId),
+      });
+    }
     if (!context.vaultSecretId) {
       throw apiError('Wallet private key is not available in Vault; cannot sign off-ramp transaction.', 409);
     }
@@ -1086,6 +1445,19 @@ export class AnchorService {
     await this.resolveSessionWallet(input);
     const orderId = coalesceString(input.order_id, input.orderId);
     if (!orderId) throw apiError('order_id is required.', 400);
+
+    const mockRecord = await this.deliverSandboxOnRamp(orderId);
+    if (mockRecord) {
+      return {
+        order_id: orderId,
+        upstream_status: mockRecord.transaction.status === 'completed' ? 200 : 500,
+        success: mockRecord.transaction.status === 'completed',
+        ...(mockRecord.deliveryHash ? { delivery_hash: mockRecord.deliveryHash } : {}),
+        ...(mockRecord.deliverySourceAmount ? { delivery_source_amount: mockRecord.deliverySourceAmount } : {}),
+        ...(mockRecord.deliveryError ? { error: mockRecord.deliveryError } : {}),
+        sandbox_mock: true,
+      } as any;
+    }
 
     const status = await this.getEtherfuseClient().simulateFiatReceived(orderId);
     return { order_id: orderId, upstream_status: status, success: status >= 200 && status < 300 };
@@ -1156,6 +1528,7 @@ export class AnchorService {
       customer_id: customerResult.customer.id,
       quote_id: quoteResult.quote.id,
       amount,
+      expected_to_amount: quoteResult.quote.toAmount,
       to_currency: quoteResult.quote.toCurrency,
       bank_account_id: customerResult.customer.bankAccountId,
     });
@@ -1251,7 +1624,7 @@ export class AnchorService {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerResult.customer.id);
       fiatAccountId = accounts[0]?.id || '';
     }
-    if (!fiatAccountId) {
+    if (!fiatAccountId && !this.sandboxPixFallbackEnabled()) {
       throw apiError('No PIX fiat account registered for off-ramp test. Open the Etherfuse KYC/PIX URL and register a PIX account first.', 409);
     }
 

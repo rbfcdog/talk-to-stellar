@@ -169,8 +169,8 @@ export default function PixRampClient() {
   const quoteExpiresAt = Date.parse(String(quote?.expiresAt || ""));
   const quoteCountdown = formatCountdown(quoteExpiresAt - now);
   const quoteExpired = quoteCountdown === "expired";
-  const onRampAssetDeltas = useMemo(() => calculateDeltas(onRampBalancesBefore, onRampBalancesAfter), [onRampBalancesBefore, onRampBalancesAfter]);
-  const offRampAssetDeltas = useMemo(() => calculateDeltas(offRampBalancesBefore, offRampBalancesAfter), [offRampBalancesBefore, offRampBalancesAfter]);
+  const onRampAssetDeltas = useMemo(() => onRampBalancesAfter.length > 0 ? calculateDeltas(onRampBalancesBefore, onRampBalancesAfter) : [], [onRampBalancesBefore, onRampBalancesAfter]);
+  const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
 
   const receiptText = useMemo(() => {
     if (!order) return "";
@@ -448,6 +448,7 @@ export default function PixRampClient() {
       customer_id: String(customerForOrder?.customer?.id || customerId),
       quote_id: quoteForOrder.id,
       amount: amountBrl,
+      expected_to_amount: quoteForOrder.toAmount,
       to_currency: quoteForOrder.toCurrency || targetAsset,
     });
     setOnboardingUrl("");
@@ -924,7 +925,28 @@ function AssetMovement({ title, before, after, deltas, walletPublicKey }: {
       <h2 className="mt-1 text-2xl font-black">{title}</h2>
       <p className="mt-2 text-xs text-stone-500">Wallet: {truncateKey(walletPublicKey)}</p>
       <div className="mt-5 grid gap-3">
-        {deltas.length === 0 ? (
+        {before.length > 0 && after.length === 0 ? (
+          <>
+            <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+              Snapshot inicial capturado. O delta so aparece quando o snapshot final existir, para nao mostrar saldo como zero antes da liquidacao.
+            </div>
+            {before.map((item) => (
+              <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-stone-100 bg-stone-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-stone-950">{item.asset_code}</p>
+                    <p className="mt-1 break-all text-[11px] text-stone-400">{item.asset_issuer || "native"}</p>
+                  </div>
+                  <span className="rounded-full bg-stone-200 px-3 py-1 text-xs font-black text-stone-600">pending</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-white p-3"><span className="text-stone-400">Before</span><p className="mt-1 font-black">{item.balance}</p></div>
+                  <div className="rounded-xl bg-white p-3"><span className="text-stone-400">After</span><p className="mt-1 font-black">waiting</p></div>
+                </div>
+              </div>
+            ))}
+          </>
+        ) : deltas.length === 0 ? (
           <div className="rounded-2xl bg-stone-100 p-4 text-sm font-bold text-stone-500">Run a quote/order or the temporary endpoint to capture asset movement.</div>
         ) : deltas.map((item) => {
           const deltaNumber = Number(item.delta || 0);
@@ -947,9 +969,6 @@ function AssetMovement({ title, before, after, deltas, walletPublicKey }: {
           );
         })}
       </div>
-      {before.length > 0 && after.length === 0 && (
-        <p className="mt-4 text-xs font-bold text-stone-500">Before snapshot captured. After snapshot appears once polling reaches a terminal status.</p>
-      )}
     </div>
   );
 }
