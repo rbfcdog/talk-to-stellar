@@ -66,6 +66,8 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   amount?: string;
   expected_to_amount?: string;
   expectedToAmount?: string;
+  from_currency?: string;
+  fromCurrency?: string;
   to_currency?: string;
   toCurrency?: string;
   bank_account_id?: string;
@@ -503,6 +505,11 @@ export class AnchorService {
     return /proxy account not found|bank account not found|account not found/i.test(message);
   }
 
+  private static isExpiredEtherfuseQuoteError(error: unknown): boolean {
+    const message = debugErrorMessage(error);
+    return /quote (not found|expired)|not found or expired|quote.*expired/i.test(message);
+  }
+
   private static async prepareEtherfusePixProxy(input: {
     customerId: string;
     publicKey: string;
@@ -617,10 +624,38 @@ export class AnchorService {
 
     const sourceSecret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
     const brlIssuer = getAssetIssuer('BRL');
-    if (!sourceSecret || !brlIssuer) {
+    if (!sourceSecret) {
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryError = 'BRL_DISTRIBUTOR_SECRET and BRL issuer are required for sandbox PIX settlement.';
+      record.deliveryError = 'BRL_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.';
+      await this.updateRampOperationStatus(record.operationId, 'FAILED');
+      return record;
+    }
+
+    const destinationAmount = toStellarAmount(record.destinationAmount);
+    const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
+      sourceSecret,
+      destination: record.publicKey,
+      amount: destinationAmount,
+      assetCode: 'TESOURO',
+      assetIssuer: this.getTesouroIssuer(),
+      memoText: 'PIX ONRAMP SANDBOX',
+    });
+
+    if (directTesouroResult.success) {
+      record.transaction.status = 'completed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.deliveryHash = directTesouroResult.hash;
+      record.deliverySourceAmount = record.sourceAmountBrl;
+      (record.transaction as OnRampTransaction & { stellarTxHash?: string }).stellarTxHash = directTesouroResult.hash;
+      await this.updateRampOperationStatus(record.operationId, 'COMPLETED');
+      return record;
+    }
+
+    if (!brlIssuer) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.deliveryError = `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
       return record;
     }
@@ -634,7 +669,7 @@ export class AnchorService {
       destination: record.publicKey,
       sourceAsset: { code: 'BRL', issuer: brlIssuer },
       destinationAsset: { code: 'TESOURO', issuer: this.getTesouroIssuer() },
-      destinationAmount: toStellarAmount(record.destinationAmount),
+      destinationAmount,
       sourceMax,
       memoText: 'PIX ONRAMP SANDBOX',
     });
@@ -642,7 +677,9 @@ export class AnchorService {
     if (!result.success) {
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
-      record.deliveryError = result.error || 'Sandbox TESOURO delivery failed.';
+      record.deliveryError = result.error
+        ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}`
+        : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}`;
       await this.updateRampOperationStatus(record.operationId, 'FAILED');
       return record;
     }
@@ -1131,16 +1168,18 @@ export class AnchorService {
     transaction: OnRampTransaction;
     operation_id?: string;
     trustline: TrustlineResult;
+    quote?: Quote;
+    quote_refreshed?: boolean;
   }> {
     const context = await this.resolveSessionWallet(input);
     const customerId = coalesceString(input.customer_id, input.customerId);
-    const quoteId = coalesceString(input.quote_id, input.quoteId);
+    let quoteId = coalesceString(input.quote_id, input.quoteId);
     const amount = normalizeAmount(input.amount);
+    const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) || 'BRL';
     const toCurrency = coalesceString(input.to_currency, input.toCurrency) || this.getTesouroIdentifier();
     const targetAsset = parseIssuedAssetIdentifier(toCurrency);
 
     if (!customerId) throw apiError('customer_id is required.', 400);
-    if (!quoteId) throw apiError('quote_id is required.', 400);
 
     const trustline = await this.ensureIssuedAssetTrustline(context, {
       code: targetAsset.code || 'TESOURO',
@@ -1172,20 +1211,49 @@ export class AnchorService {
     });
     bankAccountId = programmatic.bankAccountId;
 
+    let orderQuote: Quote | undefined;
+    let quoteRefreshReason: string | undefined;
+    const refreshQuoteForOrder = async (reason: string) => {
+      orderQuote = await anchor.getQuote({
+        customerId,
+        stellarAddress: context.publicKey,
+        fromCurrency,
+        toCurrency,
+        fromAmount: amount,
+      });
+      quoteId = orderQuote.id;
+      quoteRefreshReason = reason;
+      return orderQuote;
+    };
+
+    // Etherfuse quotes are intentionally short-lived. Create a server-side quote
+    // only after trustline/proxy/KYC preparation, right before /ramp/order.
+    await refreshQuoteForOrder(quoteId ? 'pre_order_freshness' : 'missing_quote_id');
+
     const createOrder = () => anchor.createOnRamp({
       customerId,
       quoteId,
       stellarAddress: context.publicKey,
-      fromCurrency: 'BRL',
+      fromCurrency,
       toCurrency,
       amount,
       bankAccountId,
       memo: coalesceString(input.memo) || undefined,
     });
 
+    const createOrderWithQuoteRetry = async () => {
+      try {
+        return await createOrder();
+      } catch (error) {
+        if (!this.isExpiredEtherfuseQuoteError(error)) throw error;
+        await refreshQuoteForOrder('retry_after_expired_quote');
+        return createOrder();
+      }
+    };
+
     let transaction: OnRampTransaction;
     try {
-      transaction = await createOrder();
+      transaction = await createOrderWithQuoteRetry();
     } catch (error) {
       if (!this.isMissingEtherfuseProxyError(error)) throw error;
 
@@ -1208,7 +1276,7 @@ export class AnchorService {
       bankAccountId = retryProgrammatic.bankAccountId;
 
       try {
-        transaction = await createOrder();
+        transaction = await createOrderWithQuoteRetry();
       } catch (retryError) {
         if (!this.isMissingEtherfuseProxyError(retryError)) throw retryError;
         if (this.sandboxPixFallbackEnabled()) {
@@ -1218,7 +1286,7 @@ export class AnchorService {
             quoteId,
             amount,
             toCurrency,
-            expectedToAmount: coalesceString(input.expected_to_amount, input.expectedToAmount),
+            expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
             upstreamError: debugErrorMessage(retryError),
           });
         } else {
@@ -1245,6 +1313,7 @@ export class AnchorService {
         direction: 'onramp',
         customer_id: customerId,
         quote_id: quoteId,
+        quote_refresh_reason: quoteRefreshReason,
         anchor_order_id: transaction.id,
         target_asset: toCurrency,
         payment_instructions: transaction.paymentInstructions,
@@ -1255,7 +1324,13 @@ export class AnchorService {
     const mockRecord = this.sandboxMockOnRampOrders.get(transaction.id);
     if (mockRecord) mockRecord.operationId = operationId;
 
-    return { transaction, operation_id: operationId, trustline };
+    return {
+      transaction,
+      operation_id: operationId,
+      trustline,
+      quote: orderQuote,
+      quote_refreshed: Boolean(orderQuote),
+    };
   }
 
   static async getOnRampStatus(orderId: string, operationId?: string): Promise<{
