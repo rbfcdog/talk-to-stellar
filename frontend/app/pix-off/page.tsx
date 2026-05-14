@@ -2,7 +2,7 @@ import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
   title: "PIX Off-Ramp",
-  description: "Retirar TESOURO para uma conta PIX testnet na TalkToStellar.",
+  description: "Retirar saldo para uma conta PIX na TalkToStellar.",
 };
 
 function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {

@@ -709,7 +709,6 @@ ${onboardingUrl}`;
     url.searchParams.set('mode', intent.direction);
     url.searchParams.set('asset', intent.asset_code);
     url.searchParams.set('from', 'chat');
-    url.searchParams.set('network', 'testnet');
     url.searchParams.set('autostart', '1');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
@@ -727,7 +726,7 @@ ${onboardingUrl}`;
     try {
       return await this.externalService.shortenPublicUrl({
         url: url.toString(),
-        purpose: `pix_${intent.direction}_testnet`,
+        purpose: `pix_${intent.direction}`,
         sessionId: state.session_id,
         userId: String(state.session_data?.user_id || '').trim() || undefined,
         expiresInHours: 24,
@@ -746,8 +745,8 @@ ${onboardingUrl}`;
     } else if (!intent.amount) {
       state.success = false;
       state.response_message = intent.direction === 'offramp'
-        ? 'Qual valor em reais você quer retirar para PIX testnet?'
-        : 'Qual valor em reais você quer colocar na sua conta via PIX testnet?';
+        ? 'Qual valor em reais você quer retirar para PIX?'
+        : 'Qual valor em reais você quer colocar na sua conta via PIX?';
     } else {
       const url = await this.buildPixRampUrl(state, intent);
       state.success = true;
@@ -759,7 +758,7 @@ ${onboardingUrl}`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
       } else {
-        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet e receber em ${intent.asset_code}, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar o saldo final na sua wallet.`;
+        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX e receber em ${intent.asset_code}, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para entregar o saldo final na sua wallet.`;
       }
     }
 
@@ -1987,7 +1986,7 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
     **Chave Pública (pode compartilhar):**
 \`${walletResult.publicKey}\`
 
-Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
+Sua carteira foi criada e já está pronta para usar.
 
     Use sua chave pública para receber valores na sua carteira.`;
 
@@ -2226,7 +2225,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         state.success = true;
         state.response_message = wantsTechnicalBalance
           ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
-          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX testnet agora entrega o asset escolhido no checkout. Para ver issuers e saldos técnicos, peça "saldo técnico".`;
+          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega o asset escolhido no checkout. Para ver issuers e saldos técnicos, peça "saldo técnico".`;
       }
     }
 
