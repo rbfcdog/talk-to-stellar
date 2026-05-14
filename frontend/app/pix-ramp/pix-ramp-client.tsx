@@ -449,7 +449,6 @@ export default function PixRampClient() {
       quote_id: quoteForOrder.id,
       amount: amountBrl,
       to_currency: quoteForOrder.toCurrency || targetAsset,
-      bank_account_id: String(customerForOrder?.customer?.bankAccountId || bankAccountId || "") || undefined,
     });
     setOnboardingUrl("");
     setOrderPayload(payload);

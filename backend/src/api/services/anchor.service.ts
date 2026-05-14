@@ -167,6 +167,10 @@ function isDuplicateResourceError(error: unknown): boolean {
   return /already|duplicate|exists|409|conflict/i.test(message);
 }
 
+function debugErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -473,10 +477,20 @@ export class AnchorService {
     return { bankAccountId, kycUrl };
   }
 
-  private static missingProxySetupError(message: string, kycUrl?: string, bankAccountId?: string): Error {
-    const error = apiError(message, 409) as Error & { kyc_url?: string; bank_account_id?: string };
+  private static missingProxySetupError(
+    message: string,
+    kycUrl?: string,
+    bankAccountId?: string,
+    programmaticOnboarding?: Record<string, unknown>,
+  ): Error {
+    const error = apiError(message, 409) as Error & {
+      kyc_url?: string;
+      bank_account_id?: string;
+      programmatic_onboarding?: Record<string, unknown>;
+    };
     if (kycUrl) error.kyc_url = kycUrl;
     if (bankAccountId) error.bank_account_id = bankAccountId;
+    if (programmaticOnboarding) error.programmatic_onboarding = programmaticOnboarding;
     return error;
   }
 
@@ -568,8 +582,7 @@ export class AnchorService {
     try {
       steps.wallet = await anchor.registerCustomerWallet(input.customerId, input.publicKey, false);
     } catch (error) {
-      if (!isDuplicateResourceError(error)) throw error;
-      steps.wallet = 'already_registered';
+      steps.wallet = isDuplicateResourceError(error) ? 'already_registered' : { error: debugErrorMessage(error) };
     }
 
     try {
@@ -578,8 +591,7 @@ export class AnchorService {
         this.buildSandboxKycPayload(input.publicKey),
       );
     } catch (error) {
-      if (!isDuplicateResourceError(error)) throw error;
-      steps.kyc_identity = 'already_submitted';
+      steps.kyc_identity = isDuplicateResourceError(error) ? 'already_submitted' : { error: debugErrorMessage(error) };
     }
 
     try {
@@ -592,16 +604,14 @@ export class AnchorService {
         this.buildSandboxDocumentPayload(input.publicKey, 'selfie'),
       );
     } catch (error) {
-      if (!isDuplicateResourceError(error)) throw error;
-      steps.kyc_documents = 'already_submitted';
+      steps.kyc_documents = isDuplicateResourceError(error) ? 'already_submitted' : { error: debugErrorMessage(error) };
     }
 
     if (input.kycUrl && typeof anchor.acceptAgreements === 'function') {
       try {
         steps.agreements = await anchor.acceptAgreements(input.kycUrl);
       } catch (error) {
-        if (!isDuplicateResourceError(error)) throw error;
-        steps.agreements = 'already_accepted';
+        steps.agreements = isDuplicateResourceError(error) ? 'already_accepted' : { error: debugErrorMessage(error) };
       }
     }
 
@@ -623,11 +633,12 @@ export class AnchorService {
             label: pixAccount.label,
           });
         } catch (fallbackError) {
-          if (!isDuplicateResourceError(fallbackError)) throw fallbackError;
-          steps.bank_account = 'already_registered';
+          steps.bank_account = isDuplicateResourceError(fallbackError)
+            ? 'already_registered'
+            : { error: debugErrorMessage(fallbackError) };
         }
       } else {
-        throw error;
+        steps.bank_account = { error: debugErrorMessage(error) };
       }
     }
 
@@ -861,14 +872,13 @@ export class AnchorService {
     let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId) || undefined;
     let kycUrl: string | undefined;
 
-    if (!bankAccountId) {
-      const preparedProxy = await this.prepareEtherfusePixProxy({
-        customerId,
-        publicKey: context.publicKey,
-      });
-      bankAccountId = preparedProxy.bankAccountId;
-      kycUrl = preparedProxy.kycUrl;
-    }
+    const preparedProxy = await this.prepareEtherfusePixProxy({
+      customerId,
+      publicKey: context.publicKey,
+      bankAccountId,
+    });
+    bankAccountId = preparedProxy.bankAccountId;
+    kycUrl = preparedProxy.kycUrl;
 
     const programmatic = await this.runSandboxProgrammaticOnboarding({
       customerId,
@@ -896,10 +906,11 @@ export class AnchorService {
     } catch (error) {
       if (!this.isMissingEtherfuseProxyError(error)) throw error;
 
+      const freshBankAccountId = crypto.randomUUID();
       const preparedProxy = await this.prepareEtherfusePixProxy({
         customerId,
         publicKey: context.publicKey,
-        bankAccountId,
+        bankAccountId: freshBankAccountId,
       });
       bankAccountId = preparedProxy.bankAccountId;
       kycUrl = preparedProxy.kycUrl;
@@ -917,9 +928,10 @@ export class AnchorService {
       } catch (retryError) {
         if (!this.isMissingEtherfuseProxyError(retryError)) throw retryError;
         throw this.missingProxySetupError(
-          'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet. Abra o link de cadastro PIX/KYC, conclua o onboarding hospedado da Etherfuse e tente gerar o PIX novamente.',
+          'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
           kycUrl,
           bankAccountId,
+          retryProgrammatic.steps,
         );
       }
     }
