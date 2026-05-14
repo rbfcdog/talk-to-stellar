@@ -619,6 +619,7 @@ ${onboardingUrl}`;
     is_pix_ramp: boolean;
     direction: 'onramp' | 'offramp';
     amount?: string;
+    amount_currency?: 'BRL' | 'TESOURO';
     asset_code: 'TESOURO';
   } {
     const normalized = this.normalizeTextForIntent(text);
@@ -629,18 +630,22 @@ ${onboardingUrl}`;
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
+      normalized.includes('tirar dinheiro') ||
+      normalized.includes('retirar dinheiro') ||
       normalized.includes('mandar para minha conta bancaria') ||
       normalized.includes('mandar pra minha conta bancaria') ||
       normalized.includes('enviar para o banco') ||
       normalized.includes('enviar pro banco') ||
-      normalized.includes('cair no banco') ||
-      normalized.includes('receber em pix');
+      normalized.includes('cair no banco');
 
     const wantsOnRamp =
-      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|entrar|on\s*ramp|onramp)\b/.test(normalized) ||
+      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|on\s*ramp|onramp)\b/.test(normalized) ||
       normalized.includes('pagar com pix') ||
-      normalized.includes('via pix') ||
-      normalized.includes('usar pix') ||
+      normalized.includes('trazer dinheiro') ||
+      normalized.includes('trazer saldo') ||
+      normalized.includes('por pix na conta') ||
+      normalized.includes('pra minha conta via pix') ||
+      normalized.includes('para minha conta via pix') ||
       normalized.includes('pix para wallet') ||
       normalized.includes('pix pra wallet') ||
       normalized.includes('pix na conta') ||
@@ -651,10 +656,13 @@ ${onboardingUrl}`;
     }
 
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
+    const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
     return {
       is_pix_ramp: true,
-      direction: wantsOffRamp ? 'offramp' : 'onramp',
+      direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
       amount: amountMatch?.[1]?.replace(',', '.'),
+      amount_currency: mentionsTesouro && !mentionsBrl ? 'TESOURO' : 'BRL',
       asset_code: 'TESOURO',
     };
   }
@@ -662,6 +670,7 @@ ${onboardingUrl}`;
   private async buildPixRampUrl(state: AgentState, intent: {
     direction: 'onramp' | 'offramp';
     amount?: string;
+    amount_currency?: 'BRL' | 'TESOURO';
     asset_code: 'TESOURO';
   }): Promise<string> {
     const url = new URL(`${this.getFrontendBaseUrl()}/pix-ramp`);
@@ -670,7 +679,14 @@ ${onboardingUrl}`;
     url.searchParams.set('from', 'chat');
     url.searchParams.set('network', 'testnet');
     url.searchParams.set('autostart', '1');
-    if (intent.amount) url.searchParams.set('amount', intent.amount);
+    if (intent.amount) {
+      if (intent.direction === 'offramp' && intent.amount_currency === 'BRL') {
+        url.searchParams.set('fiat_amount', intent.amount);
+        url.searchParams.set('fiat_currency', 'BRL');
+      } else {
+        url.searchParams.set('amount', intent.amount);
+      }
+    }
     const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
     if (email.includes('@')) url.searchParams.set('email', email);
 
@@ -701,9 +717,14 @@ ${onboardingUrl}`;
     } else {
       const url = await this.buildPixRampUrl(state, intent);
       state.success = true;
-      state.response_message = intent.direction === 'offramp'
-        ? `Para retirar ${this.formatMoneyByAsset(intent.amount, 'TESOURO')} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela mostra o TESOURO saindo da sua wallet e o saldo em reais entrando como conta bancária de teste.`
-        : `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar TESOURO na sua wallet.`;
+      if (intent.direction === 'offramp') {
+        const amountText = intent.amount_currency === 'BRL'
+          ? this.formatMoneyByAsset(intent.amount, 'BRL')
+          : this.formatMoneyByAsset(intent.amount, 'TESOURO');
+        state.response_message = `Para retirar ${amountText} para uma conta bancária testnet via PIX, abra:\n\n${url}\n\nA tela converte o valor, mostra o TESOURO saindo da sua wallet e o saldo em reais entrando como conta bancária de teste.`;
+      } else {
+        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX testnet, abra:\n\n${url}\n\nNa página, confirme "Confirmar PIX (testnet)". Em sandbox, não use Nubank: o QR é demonstrativo e a confirmação simula o PIX antes de entregar TESOURO na sua wallet.`;
+      }
     }
 
     await this.saveAssistantResponse(state);
@@ -1510,8 +1531,10 @@ Respond ONLY with the intent name. Examples:
 - "gerar link de pagamento de 15 dólares" -> payment_link
 - "cria um link para alguém receber 20 usdc" -> payment_link
 - "quero pagar com pix para colocar 100 reais na conta" -> pix
+- "quero trazer 100 brl pra minha conta via pix" -> pix
 - "depositar 150 reais via pix" -> pix
 - "sacar 20 tesouro por pix" -> pix
+- "sacar 100 reais para minha conta bancaria via pix" -> pix
 - "tirar dinheiro para minha conta bancaria via pix" -> pix
 - "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
 - "Create account" -> onboard
@@ -1709,12 +1732,18 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
 
+    if (this.extractPixRampIntentFromText(message).is_pix_ramp) {
+      return false;
+    }
+
     const selfRef = /\b(minha|minhas|meu|meus|my|da minha conta|da minha carteira)\b/.test(normalized);
     const keyRef =
-      /\b(chave|chave pix|pix|public key|chave publica|chave pública|endereco|endereço)\b/.test(normalized);
-    const transferRef = /\b(transfer|pagar|mandar|enviar|receber|depositar)\b/.test(normalized);
+      /\b(chave|chave pix|public key|chave publica|chave pública|endereco|endereço)\b/.test(normalized) ||
+      /\b(qual|mostrar|ver|me passa|manda)\b.*\bpix\b/.test(normalized);
+    const transferRef = /\b(transfer|pagar|mandar|enviar|receber|depositar|trazer|colocar|adicionar|carregar|recarregar|sacar|saque|tirar|retirar|resgatar|comprar|vender)\b/.test(normalized);
+    const amountRef = /(?:^|\s)(?:r\$\s*)?\d+(?:[.,]\d{1,8})?(?=\s|$)/.test(normalized);
 
-    return selfRef && keyRef && !transferRef;
+    return selfRef && keyRef && !transferRef && !amountRef;
   }
 
   private async resolveOwnReceivingKeys(state: AgentState): Promise<{ publicKey?: string; pixKey?: string }> {
@@ -2754,6 +2783,7 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         IntentType.ONBOARD,
         IntentType.LOGIN,
         IntentType.PRICE_QUOTE,
+        IntentType.PIX,
       ]);
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
@@ -2796,6 +2826,10 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
         return await this.handleFixedSavingsIntent(state, fixedSavings);
       }
 
+      if (state.action_type === ActionType.INITIATE_PIX) {
+        return await this.handlePixRampRequest(state);
+      }
+
       if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
         const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
         state.response_message = this.formatOwnReceivingKeys(publicKey, pixKey);
@@ -2823,10 +2857,6 @@ Sua carteira foi criada no ambiente de testes e já recebeu saldo de teste.
 
       if (state.action_type === ActionType.GET_PRICE_QUOTE) {
         return await this.handlePriceQuoteRequest(state);
-      }
-
-      if (state.action_type === ActionType.INITIATE_PIX) {
-        return await this.handlePixRampRequest(state);
       }
 
       if (state.action_type === ActionType.GET_FINANCIAL_MEMORY) {
