@@ -208,6 +208,88 @@ function resolveCanonicalSessionLogin(session: any): string {
   return looksLikeEmail(sessionUserId) ? sessionUserId : '';
 }
 
+function getFinalizationSessionId(row: any): string {
+  return String(row?.session_id || row?.result?.sessionId || row?.result?.session_id || '').trim();
+}
+
+function getFinalizationUserId(row: any): string {
+  return normalizeEmailForCompare(String(row?.user_id || row?.result?.userId || row?.result?.user_id || ''));
+}
+
+function isCompletedFinalization(row: any): boolean {
+  const status = String(row?.status || '').trim().toLowerCase();
+  return Boolean(row?.used) || status === 'completed';
+}
+
+function selectCompletedFinalization(rows: any[]): any | null {
+  return (rows || []).find((row) => {
+    if (!isCompletedFinalization(row)) return false;
+    return Boolean(getFinalizationSessionId(row) || getFinalizationUserId(row));
+  }) || null;
+}
+
+async function resolveExternalIdentityFromAgentState(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
+  const normalizedProvider = normalizeExternalProvider(provider);
+  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
+  if (!normalizedProvider || !normalizedProviderUserId) return null;
+
+  const { data: states, error: stateError } = await supabase
+    .from('agent_states')
+    .select('session_id, action_params, updated_at')
+    .eq('action_params->>external_provider', normalizedProvider)
+    .eq('action_params->>external_provider_user_id', normalizedProviderUserId)
+    .order('updated_at', { ascending: false })
+    .limit(10);
+
+  if (stateError) {
+    const message = String(stateError.message || '').toLowerCase();
+    if (message.includes('agent_states') || message.includes('schema cache') || message.includes('does not exist')) {
+      return null;
+    }
+    throw stateError;
+  }
+
+  const sessionIds = Array.from(
+    new Set((states || []).map((row: any) => String(row?.session_id || '').trim()).filter(Boolean))
+  );
+  if (sessionIds.length === 0) return null;
+
+  const { data: sessions, error: sessionError } = await supabase
+    .from('agent_sessions')
+    .select('session_id, user_id, email')
+    .in('session_id', sessionIds);
+
+  if (sessionError) {
+    const message = String(sessionError.message || '').toLowerCase();
+    if (message.includes('agent_sessions') || message.includes('schema cache') || message.includes('does not exist')) {
+      return null;
+    }
+    throw sessionError;
+  }
+
+  const sessionsById = new Map<string, any>();
+  for (const session of sessions || []) {
+    const sessionId = String((session as any)?.session_id || '').trim();
+    if (sessionId) sessionsById.set(sessionId, session);
+  }
+
+  for (const state of states || []) {
+    const sessionId = String((state as any)?.session_id || '').trim();
+    const session = sessionsById.get(sessionId);
+    if (!session) continue;
+    const canonicalLogin = resolveCanonicalSessionLogin(session);
+    const userId = normalizeEmailForCompare(String(session?.user_id || canonicalLogin || ''));
+    if (!sessionId && !userId && !canonicalLogin) continue;
+    return {
+      sessionId: sessionId || undefined,
+      userId: userId || undefined,
+      canonicalLogin: canonicalLogin || undefined,
+    };
+  }
+
+  return null;
+}
+
 async function resolveExternalIdentityLock(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
   const normalizedProvider = normalizeExternalProvider(provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
@@ -238,8 +320,7 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
     .eq('provider', normalizedProvider)
     .eq('provider_user_id', normalizedProviderUserId)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
 
   if (error) {
     const message = String(error.message || '').toLowerCase();
@@ -249,12 +330,13 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
     throw error;
   }
 
-  const status = String((data as any)?.status || '').trim().toLowerCase();
-  const used = Boolean((data as any)?.used);
-  if (!used && status !== 'completed') return null;
+  const completedFinalization = selectCompletedFinalization((data || []) as any[]);
+  if (!completedFinalization) {
+    return resolveExternalIdentityFromAgentState(normalizedProvider, normalizedProviderUserId);
+  }
 
-  const fallbackSessionId = String((data as any)?.session_id || (data as any)?.result?.sessionId || '').trim();
-  const fallbackUserId = normalizeEmailForCompare(String((data as any)?.user_id || (data as any)?.result?.userId || ''));
+  const fallbackSessionId = getFinalizationSessionId(completedFinalization);
+  const fallbackUserId = getFinalizationUserId(completedFinalization);
   let canonicalLogin = looksLikeEmail(fallbackUserId) ? fallbackUserId : '';
   if (fallbackSessionId) {
     const linkedSession = await agentRepo.getSession(fallbackSessionId);
