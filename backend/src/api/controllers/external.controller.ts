@@ -309,13 +309,13 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
   return data;
 }
 
-async function hasOnboardingCredentials(sessionId: string, userId: string): Promise<boolean> {
+async function hasOnboardingCredentials(sessionId: string, userId: string, options: { allowExpiredSession?: boolean } = {}): Promise<boolean> {
   const session = await agentRepo.getSession(sessionId);
   if (!session) {
     return false;
   }
 
-  if (isSessionExpired(session)) {
+  if (!options.allowExpiredSession && isSessionExpired(session)) {
     return false;
   }
 
@@ -389,13 +389,18 @@ export class ExternalController {
         const hasLinkedSession = Boolean(existing.session_id);
         const hasLinkedUser = Boolean(existing.user_id);
         let linkedWallet = null;
+        let linkedSession = null;
         let hasCredentials = false;
+        const canReuseLinkedChannelSession = !isBrowserExternalProvider(normalizedProvider);
 
         if (hasLinkedSession) {
           try {
+            linkedSession = await agentRepo.getSession(String(existing.session_id));
             linkedWallet = await walletRepo.getWalletBySession(String(existing.session_id));
             if (linkedWallet && hasLinkedUser) {
-              hasCredentials = await hasOnboardingCredentials(String(existing.session_id), String(existing.user_id));
+              hasCredentials = await hasOnboardingCredentials(String(existing.session_id), String(existing.user_id), {
+                allowExpiredSession: canReuseLinkedChannelSession,
+              });
             }
           } catch (error: any) {
             const message = String(error?.message || '').toLowerCase();
@@ -408,6 +413,9 @@ export class ExternalController {
         }
 
         if (hasLinkedSession && hasLinkedUser && linkedWallet && hasCredentials) {
+          if (canReuseLinkedChannelSession && linkedSession && isSessionExpired(linkedSession)) {
+            await agentRepo.saveSession(String(existing.session_id), linkedSession as any);
+          }
           return res.status(200).json({
             success: true,
             exists: true,

@@ -961,21 +961,6 @@ export class AgentGraph {
     const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
     if (email.includes('@')) url.searchParams.set('email', email);
 
-    if (externalProvider === 'telegram' && externalProviderUserId) {
-      try {
-        const login = await this.externalService.createLoginUrlWithShortLink(externalProvider, externalProviderUserId, {
-          source: externalSource || externalProvider,
-          next_path: `${url.pathname}${url.search}`,
-          sessionId: state.session_id,
-          userId: String(state.session_data?.user_id || '').trim() || undefined,
-          language: this.getLanguage(state),
-        });
-        return login.url;
-      } catch (error) {
-        logger.warn(`[pix-ramp-url] failed to create Telegram login redirect: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
     try {
       return await this.externalService.shortenPublicUrl({
         url: url.toString(),

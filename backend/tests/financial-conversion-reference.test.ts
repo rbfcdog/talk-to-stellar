@@ -37,6 +37,12 @@ function mockBrlQuote(amount: string | number, brlPerUsdc = 5) {
 
 describe('Financial conversion preview BRL reference', () => {
   beforeEach(() => {
+    delete process.env.DEFAULT_USD_BRL_RATE;
+    delete process.env.USD_BRL_FALLBACK_RATE;
+    delete process.env.USD_BRL_SANITY_MIN;
+    delete process.env.USD_BRL_SANITY_MAX;
+    delete process.env.TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY;
+    delete process.env.TALKTOSTELLAR_SPREAD_BPS;
     quoteBrlToUsdcMock.mockReset();
     quoteBrlToUsdcMock.mockImplementation((amount: string | number) => Promise.resolve(mockBrlQuote(amount, 5)));
   });
@@ -79,5 +85,26 @@ describe('Financial conversion preview BRL reference', () => {
     expect(payload.fees.talktostellar_spread_brl).toBe(3);
     expect(payload.output.gross_receive_usdc).toBe(200);
     expect(payload.output.receive_usdc).toBe(199.4);
+  });
+
+  it('does not use suspicious sandbox BRL/TESOURO rates for USD receive PIX estimates', async () => {
+    process.env.DEFAULT_USD_BRL_RATE = '5.60';
+    quoteBrlToUsdcMock.mockImplementation((amount: string | number) => Promise.resolve(mockBrlQuote(amount, 1.157)));
+
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+
+    await FinancialController.getConversionPreview(
+      { query: { brl_amount: '100' }, body: {}, params: {} } as any,
+      { status } as any,
+    );
+
+    const payload = json.mock.calls[0][0];
+    expect(status).toHaveBeenCalledWith(200);
+    expect(payload.quote.source).toBe('usd_brl_sanity_fallback');
+    expect(payload.quote.raw_brl_per_usdc).toBeCloseTo(1.157);
+    expect(payload.quote.brl_per_usdc).toBe(5.6);
+    expect(payload.output.gross_receive_usdc).toBeCloseTo(17.8571, 4);
+    expect(payload.output.receive_usdc).toBeCloseTo(17.8571, 4);
   });
 });
