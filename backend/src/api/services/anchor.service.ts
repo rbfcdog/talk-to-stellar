@@ -225,6 +225,7 @@ interface SandboxMockOffRampOrder {
   sourceAssetCode?: string;
   sourceAssetIssuer?: string;
   targetBrl?: string;
+  destinationBrl?: string;
   externalBankAccount?: Record<string, unknown>;
   operationId?: string;
   submitHash?: string;
@@ -1640,6 +1641,7 @@ export class AnchorService {
     sourceAssetCode?: string;
     sourceAssetIssuer?: string;
     targetBrl?: string;
+    destinationBrl?: string;
     externalBankAccount?: Record<string, unknown>;
     fiatAccountId?: string;
     upstreamError?: string;
@@ -1653,7 +1655,7 @@ export class AnchorService {
       status: 'pending' as const,
       fromAmount: toStellarAmount(input.amount),
       fromCurrency: this.getTesouroIdentifier(),
-      toAmount: '',
+      toAmount: input.destinationBrl || input.targetBrl || '',
       toCurrency: 'BRL',
       stellarAddress: input.context.publicKey,
       fiatAccount: {
@@ -1678,6 +1680,7 @@ export class AnchorService {
       sourceAssetCode: input.sourceAssetCode ? normalizeAssetCode(input.sourceAssetCode) : undefined,
       sourceAssetIssuer: input.sourceAssetIssuer,
       targetBrl: input.targetBrl,
+      destinationBrl: input.destinationBrl || input.targetBrl,
       externalBankAccount: input.externalBankAccount,
     });
 
@@ -1739,6 +1742,8 @@ export class AnchorService {
     record.transaction.updatedAt = new Date().toISOString();
     record.submitHash = result.hash;
     record.transaction.stellarTxHash = result.hash;
+    record.transaction.toAmount = record.destinationBrl || record.targetBrl || record.transaction.toAmount;
+    record.transaction.toCurrency = 'BRL';
     await this.updateRampOperationStatus(record.operationId || input.operationId, 'COMPLETED');
     return { ...result, order_id: input.orderId };
   }
@@ -2637,6 +2642,7 @@ export class AnchorService {
         sourceAssetCode: sourceAsset.code,
         sourceAssetIssuer: sourceAsset.issuer,
         targetBrl,
+        destinationBrl: targetBrl,
         fiatAccountId,
         upstreamError: forceSandboxMock
           ? 'Sandbox test endpoint forced local off-ramp settlement.'
@@ -2667,6 +2673,7 @@ export class AnchorService {
           sourceAssetCode: sourceAsset.code,
           sourceAssetIssuer: sourceAsset.issuer,
           targetBrl,
+          destinationBrl: targetBrl,
           fiatAccountId,
           upstreamError: debugErrorMessage(error),
         });
@@ -2971,6 +2978,8 @@ export class AnchorService {
     source_asset_code: string;
     source_asset_issuer?: string;
     target_brl?: string;
+    destination_amount?: string;
+    destination_asset_code?: string;
     receipt_url?: string;
     customer: Customer;
     fiat_account_id?: string;
@@ -3008,9 +3017,16 @@ export class AnchorService {
     );
     const requestedSourceAmount = normalizeAmount(coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'), 'amount');
     let amount = requestedSourceAmount;
-    const targetBrl = sourceAsset.code === 'BRL'
-      ? normalizeAmount(requestedTargetBrl || requestedSourceAmount, 'fiat_amount')
-      : requestedTargetBrl ? normalizeAmount(requestedTargetBrl, 'fiat_amount') : '';
+    const estimatedTargetBrl = sourceAsset.code === 'BRL'
+      ? requestedSourceAmount
+      : toStellarAmount(EconomyEngineService.estimateAmountInBrl({
+          amount: requestedSourceAmount,
+          assetCode: sourceAsset.code,
+        }));
+    const targetBrl = normalizeAmount(
+      requestedTargetBrl || estimatedTargetBrl,
+      sourceAsset.code === 'BRL' ? 'fiat_amount' : 'target_brl',
+    );
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
 
@@ -3128,13 +3144,7 @@ export class AnchorService {
 
     const afterRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesAfter = normalizeBalances(afterRaw);
-    const estimatedDestinationBrl = sourceAsset.code === 'BRL'
-      ? toStellarAmount(requestedSourceAmount)
-      : toStellarAmount(EconomyEngineService.estimateAmountInBrl({
-          amount: requestedSourceAmount,
-          assetCode: sourceAsset.code,
-        }));
-    const destinationAmount = targetBrl || estimatedDestinationBrl || coalesceString(quoteResult.quote.toAmount, requestedSourceAmount);
+    const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, estimatedTargetBrl, requestedSourceAmount);
     const destinationAssetCode = 'BRL';
     const externalBank = (input.external_bank_account || input.externalBankAccount || {}) as Record<string, unknown>;
     const bankLabel = coalesceString(
@@ -3189,7 +3199,9 @@ export class AnchorService {
       source_amount: requestedSourceAmount,
       source_asset_code: sourceAsset.code,
       source_asset_issuer: sourceAsset.issuer,
-      ...(targetBrl ? { target_brl: targetBrl } : {}),
+      target_brl: destinationAmount,
+      destination_amount: destinationAmount,
+      destination_asset_code: destinationAssetCode,
       ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
       customer: customerResult.customer as Customer,
       fiat_account_id: fiatAccountId,

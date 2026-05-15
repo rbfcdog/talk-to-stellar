@@ -321,7 +321,7 @@ export class ExternalController {
       let provider = String(req.body?.provider || '').trim().toLowerCase();
       let providerUserId = String(req.body?.provider_user_id || '').trim();
       const externalToken = String(req.body?.token || '').trim();
-      const email = normalizeEmailForCompare(req.body?.email);
+      let email = normalizeEmailForCompare(req.body?.email);
       const pin = String(req.body?.pin || '').trim();
       let externalPayload: any = null;
 
@@ -354,11 +354,11 @@ export class ExternalController {
 
       const reqTag = `[link-existing provider=${provider || 'n/a'} user=${email || 'n/a'} provider_user_id=${providerUserId ? providerUserId.slice(0, 8) + '***' : 'n/a'}]`;
 
-      if (!provider || !providerUserId || !email || !pin) {
+      if (!provider || !providerUserId || !pin) {
         console.warn(`${reqTag} missing required fields`);
         return res.status(400).json({
           success: false,
-          message: 'provider, provider_user_id, email e pin são obrigatórios',
+          message: 'provider, provider_user_id e pin são obrigatórios',
         });
       }
 
@@ -367,7 +367,10 @@ export class ExternalController {
         .toString('hex');
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
       const identityLock = await resolveExternalIdentityLock(provider, providerUserId);
-      if (identityLock?.canonicalLogin && email !== identityLock.canonicalLogin) {
+      if (!email && identityLock?.canonicalLogin) {
+        email = identityLock.canonicalLogin;
+      }
+      if (identityLock?.canonicalLogin && email && email !== identityLock.canonicalLogin) {
         return res.status(409).json({
           success: false,
           notAssociated: true,
@@ -395,8 +398,8 @@ export class ExternalController {
           const linkedUserId = normalizeEmailForCompare((linkedSession as any)?.user_id);
           const canonicalExternalLogin = linkedEmail || (looksLikeEmail(linkedUserId) ? linkedUserId : '');
           const emailMatchesMappedAccount = canonicalExternalLogin
-            ? email === canonicalExternalLogin
-            : email === linkedEmail || email === linkedUserId;
+            ? !email || email === canonicalExternalLogin
+            : !email || email === linkedEmail || email === linkedUserId;
           const linkedHash1 = String((linkedSession as any)?.session_password_hash || '').trim();
           const linkedHash2 = String((linkedSession as any)?.password_hash || '').trim();
           const pinMatchesMappedAccount = (linkedHash1 && linkedHash1 === pinHash) || (linkedHash2 && linkedHash2 === pinHash);
@@ -429,7 +432,7 @@ export class ExternalController {
           const lockedHash1 = String((lockedSession as any)?.session_password_hash || '').trim();
           const lockedHash2 = String((lockedSession as any)?.password_hash || '').trim();
           const lockedPinMatches = (lockedHash1 && lockedHash1 === pinHash) || (lockedHash2 && lockedHash2 === pinHash);
-          if (lockedLogin && email !== lockedLogin) {
+          if (lockedLogin && email && email !== lockedLogin) {
             return res.status(409).json({
               success: false,
               notAssociated: true,
@@ -456,6 +459,15 @@ export class ExternalController {
       }
 
       if (!matched) {
+        if (!email) {
+          console.warn(`${reqTag} no mapped session and no email fallback.`);
+          return res.status(401).json({
+            success: false,
+            message: provider === 'telegram'
+              ? 'Este Telegram ainda não está vinculado a uma conta. Abra o cadastro enviado no chat para vincular primeiro.'
+              : 'E-mail ou PIN inválido.',
+          });
+        }
         const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
           supabase
             .from('agent_sessions')
@@ -537,10 +549,12 @@ export class ExternalController {
       console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
 
       const wallet = await walletRepo.getWalletBySession(String(matched.session_id));
+      const targetUserId = String(matched.user_id || email || providerUserId);
+      const targetEmail = String(matched.email || email || '');
       await agentRepo.saveSession(String(matched.session_id), {
         ...matched,
-        user_id: String(matched.user_id || email),
-        email: String(matched.email || email),
+        user_id: targetUserId,
+        email: targetEmail,
         public_key: wallet?.public_key || undefined,
       } as any);
 
@@ -559,7 +573,6 @@ export class ExternalController {
         .eq('session_id', String(matched.session_id));
 
       const targetSessionId = String(matched.session_id);
-      const targetUserId = String(matched.user_id || email);
       if (identityLock?.sessionId && identityLock.sessionId !== targetSessionId) {
         return res.status(409).json({
           success: false,
@@ -593,10 +606,11 @@ export class ExternalController {
       });
 
       const shouldAwaitWelcome = provider === 'telegram';
+      const displayName = String(targetEmail || targetUserId || providerUserId);
       const welcomePromise = TransferNotificationService.notifySessionWelcome({
         sessionId: String(matched.session_id),
-        userId: String(matched.user_id || email),
-        name: String(matched.email || email),
+        userId: targetUserId,
+        name: displayName,
         provider,
         providerUserId,
       });
@@ -612,7 +626,10 @@ export class ExternalController {
         exists: true,
         sessionId: String(matched.session_id),
         sessionToken: String(matched.session_token || ''),
-        userId: String(matched.user_id || email),
+        userId: targetUserId,
+        email: targetEmail,
+        provider,
+        providerUserId,
         publicKey: wallet?.public_key || undefined,
       });
     } catch (error: any) {

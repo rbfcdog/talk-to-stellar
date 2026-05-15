@@ -10,11 +10,12 @@ jest.mock('../src/config/supabase', () => ({
 
 jest.mock('../src/services/external.service', () => ({
   __esModule: true,
-  default: jest.fn().mockImplementation(() => ({
-    checkExternalAccount: checkExternalAccountMock,
-    createOnboardUrl: createOnboardUrlMock,
-  })),
-}));
+	  default: jest.fn().mockImplementation(() => ({
+	    checkExternalAccount: checkExternalAccountMock,
+	    createOnboardUrl: createOnboardUrlMock,
+	    createOnboardUrlWithShortLink: createOnboardUrlMock,
+	  })),
+	}));
 
 jest.mock('../src/repositories/wallet.repository', () => ({
   WalletRepository: jest.fn().mockImplementation(() => ({
@@ -69,7 +70,7 @@ describe('ExternalController', () => {
 
     expect(checkExternalAccountMock).toHaveBeenCalledWith('telegram', '555');
     expect(getWalletBySessionMock).toHaveBeenCalledWith('session-123');
-    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555');
+	    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555', {});
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({

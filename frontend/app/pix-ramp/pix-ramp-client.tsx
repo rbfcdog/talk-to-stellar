@@ -394,6 +394,13 @@ export default function PixRampClient({
     ? formatMoney(offRampInputValue || "0")
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
   const offRampInputPrefix = offRampInputAsset === "USDC" ? "US$" : "R$";
+  const offRampPixTargetAmount = String(
+    temporaryOffRampTestResult?.target_brl ||
+    temporaryOffRampTestResult?.destination_amount ||
+    temporaryOffRampTestResult?.quote?.toAmount ||
+    (offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : "")
+  );
+  const offRampPixTargetDisplay = offRampPixTargetAmount ? formatMoney(offRampPixTargetAmount) : "Calculando BRL";
   const desiredFinalAmount = rampMode === "onramp" && desiredReceiveAmount && desiredReceiveAsset === targetAsset
     ? desiredReceiveAmount
     : "";
@@ -480,14 +487,14 @@ export default function PixRampClient({
           label: "Valor de saída",
           detail: offRampInputAsset === "BRL"
             ? `Alvo: ${offRampDisplayAmount} entrando no seu PIX.`
-            : `Saída do saldo: ${offRampDisplayAmount}.`,
+            : `Saída do saldo: ${offRampDisplayAmount}. Chega em BRL no seu PIX.`,
           state: hasTarget ? "done" : "pending",
         },
         {
           label: "Conversão para BRL",
-          detail: temporaryOffRampTestResult?.target_brl
-            ? `Saldo convertido para chegar em ${formatMoney(temporaryOffRampTestResult.target_brl)}.`
-            : "A cotação é criada quando você confirma o saque.",
+          detail: offRampPixTargetAmount
+            ? `Saldo convertido para chegar em ${offRampPixTargetDisplay}.`
+            : "A tela converte automaticamente para BRL quando você confirma.",
           state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
@@ -500,7 +507,7 @@ export default function PixRampClient({
         {
           label: "Seu PIX",
           detail: temporaryOffRampTestResult
-            ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} chegou em ${externalPixDestination}.`
+            ? `${offRampPixTargetDisplay} chegou em ${externalPixDestination}.`
             : `Destino final: ${externalPixDestination}.`,
           state: temporaryOffRampTestResult ? "done" : "pending",
         },
@@ -561,6 +568,8 @@ export default function PixRampClient({
     offRampFiatAmount,
     offRampDisplayAmount,
     offRampInputAsset,
+    offRampPixTargetAmount,
+    offRampPixTargetDisplay,
     externalPixDestination,
     order?.toAmount,
     orderId,
@@ -1249,32 +1258,34 @@ export default function PixRampClient({
       const auth = await resolveWalletFromEmail();
       const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
       const sourceAmount = offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim();
-      addDebugLog({
-        label: "PIX off-ramp client validation",
-        method: "POST",
-        path: "/api/ramp/etherfuse/sandbox/test-offramp",
-        request: {
-          has_pin: true,
-          pin_digits: pin.length,
+        addDebugLog({
+          label: "PIX off-ramp client validation",
+          method: "POST",
+          path: "/api/ramp/etherfuse/sandbox/test-offramp",
+          request: {
+            has_pin: true,
+            pin_digits: pin.length,
+            source_amount: sourceAmount,
+            source_asset_code: offRampInputAsset,
+            fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+            destination_currency: "BRL",
+            fiat_account_id: bankAccount.id,
+            intent_id: atomicIntentKey,
+          },
+          response: { ready_to_submit: true },
+        });
+        const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
+          intent_id: atomicIntentKey,
+          amount: sourceAmount,
           source_amount: sourceAmount,
           source_asset_code: offRampInputAsset,
+          amount_currency: offRampInputAsset,
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          target_currency: "BRL",
           fiat_account_id: bankAccount.id,
-          intent_id: atomicIntentKey,
-        },
-        response: { ready_to_submit: true },
-      });
-      const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
-        intent_id: atomicIntentKey,
-        amount: sourceAmount,
-        source_amount: sourceAmount,
-        source_asset_code: offRampInputAsset,
-        amount_currency: offRampInputAsset,
-        fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
-        fiat_account_id: bankAccount.id,
-        external_bank_account: bankAccount,
-        pin,
-        wallet_pin: pin,
+          external_bank_account: bankAccount,
+          pin,
+          wallet_pin: pin,
         walletPin: pin,
       }, "POST", auth, buildIdempotencyKey("submit-offramp"));
       setTemporaryOffRampTestResult(payload);
@@ -1298,7 +1309,7 @@ export default function PixRampClient({
     ? formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)
     : offRampDisplayAmount;
   const offRampReceiptReceived = temporaryOffRampTestResult
-    ? formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)
+    ? offRampPixTargetDisplay
     : offRampDisplayAmount;
   const successTransaction = rampMode === "offramp"
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
@@ -1326,16 +1337,16 @@ export default function PixRampClient({
               PIX
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {rampMode === "onramp" ? "Adicionar saldo com PIX" : "Mandar dinheiro para seu PIX"}
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                {rampMode === "onramp"
-                  ? transferFlow && transferRecipient
-                    ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
-                    : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta."
-                  : "Confirme com seu PIN para mandar saldo para seu PIX."}
-              </p>
+                <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
+                  {rampMode === "onramp" ? "Adicionar saldo com PIX" : "Mandar dinheiro para seu PIX"}
+                </h1>
+                <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
+                  {rampMode === "onramp"
+                    ? transferFlow && transferRecipient
+                      ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
+                      : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta."
+                    : "Confirme com seu PIN para mandar saldo para seu PIX em BRL."}
+                </p>
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -1344,10 +1355,10 @@ export default function PixRampClient({
                   {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
-                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha conta" : displayedExternalBankAccount.label}</p>
-              </div>
+                <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
+                  <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha conta" : "Seu PIX"}</p>
+                </div>
             </div>
           </section>
         </header>
@@ -1416,11 +1427,11 @@ export default function PixRampClient({
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
-              <h2 className="mt-1 text-3xl font-black text-white">Mandar saldo para seu PIX</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                O saldo sai da sua conta TalkToStellar e aparece como dinheiro recebido por PIX.
-              </p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
+                <h2 className="mt-1 text-3xl font-black text-white">Mandar saldo para seu PIX</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  O saldo sai da sua conta TalkToStellar e chega em BRL no seu PIX.
+                </p>
 
               <label className="mt-6 block text-sm font-bold text-slate-200">
                 {offRampInputAsset === "BRL" ? "Você quer receber" : "Você quer retirar"}
@@ -1492,27 +1503,27 @@ export default function PixRampClient({
                 <div className="mt-8 h-28 rounded-3xl border border-dashed border-white/10 bg-white/[0.03]" />
               ) : (
                 <div className="mt-6 space-y-4">
-                  <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Status</p>
-                    <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
-                  </div>
-                  <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da conta</p>
-                    <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
-                  </div>
-                  <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou no seu PIX</p>
-                    <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
-                    <p className="mt-1 text-sm font-bold text-white/60">{externalPixDestination}</p>
-                  </div>
-                  {temporaryOffRampTestResult.target_brl && (
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Conversao usada</p>
-                      <p className="mt-1 text-sm font-bold text-white/75">
-                        Alvo de {formatMoney(temporaryOffRampTestResult.target_brl)} calculado antes da retirada.
-                      </p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Status</p>
+                      <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
                     </div>
-                  )}
+                    <div className="rounded-3xl bg-white/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da conta</p>
+                      <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
+                    </div>
+                    <div className="rounded-3xl bg-white/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou no seu PIX</p>
+                      <p className="mt-1 text-lg font-black">{offRampPixTargetDisplay}</p>
+                      <p className="mt-1 text-sm font-bold text-white/60">{externalPixDestination}</p>
+                    </div>
+                    {temporaryOffRampTestResult.target_brl && (
+                      <div className="rounded-3xl bg-white/10 p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Conversão para BRL</p>
+                        <p className="mt-1 text-sm font-bold text-white/75">
+                          O valor foi convertido na saída para chegar em BRL no PIX.
+                        </p>
+                      </div>
+                    )}
                   <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-100">
                     <p className="text-sm font-black">Envio concluído para seu PIX.</p>
                   </div>
@@ -1600,15 +1611,15 @@ export default function PixRampClient({
               {(["BRL", "USDC"] as TargetAsset[]).map((asset) => (
                 <button
                   key={asset}
-	                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-emerald-400 text-slate-950 shadow-lg" : "text-slate-400 hover:bg-white/10"}`}
-	                  onClick={() => {
+                    className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-emerald-400 text-slate-950 shadow-lg" : "text-slate-400 hover:bg-white/10"}`}
+                    onClick={() => {
                     if (asset !== targetAsset) {
                       setTargetAsset(asset);
                       setDesiredReceiveAmount("");
                       setDesiredReceiveAsset("");
                       clearQuoteState();
                     }
-	                  }}
+                    }}
                 >
                   {friendlyAssetName(asset)}
                 </button>
