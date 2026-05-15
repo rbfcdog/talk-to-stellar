@@ -14,6 +14,7 @@ import ExternalService from '../services/external.service';
 import { supabase } from '../config/supabase';
 import { getAssetIssuer } from '../config/assets';
 import { WalletRepository } from '../repositories/wallet.repository';
+import { ActivityFeedService } from '../api/services/activity-feed.service';
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
@@ -494,6 +495,61 @@ export class AgentGraph {
     };
   }
 
+  private extractDirectPaymentIntentFromText(text: string): {
+    recipient_query?: string;
+    amount?: string;
+    asset_code?: string;
+    receive_asset_code?: string;
+    memo?: string;
+    category?: string;
+    is_payment_link?: boolean;
+    needs_clarification?: boolean;
+    clarification_question?: string;
+  } {
+    const normalized = this.normalizeTextForIntent(text);
+    if (!/\b(mandar|enviar|pagar|transferir|manda|envia|pague|fazer pagamento)\b/.test(normalized)) {
+      return {};
+    }
+    if (this.isPaymentLinkRequest(text) || this.extractPixRampIntentFromText(text).is_pix_ramp) {
+      return {};
+    }
+
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1]?.replace(',', '.');
+    if (!amount) return {};
+
+    let assetCode = 'USDC';
+    if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
+    if (/\b(xlm|lumen|lumens)\b/.test(normalized)) assetCode = 'XLM';
+    if (/\b(usd|usdc|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized)) assetCode = 'USDC';
+
+    let receiveAssetCode = '';
+    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
+    if (receiveMatch?.[1]) {
+      const receive = receiveMatch[1];
+      if (receive === 'brl' || receive === 'real' || receive === 'reais') receiveAssetCode = 'BRL';
+      else if (receive === 'xlm' || receive.startsWith('lumen')) receiveAssetCode = 'XLM';
+      else receiveAssetCode = 'USDC';
+    }
+
+    const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+(.+)$/);
+    const recipientQuery = recipientMatch?.[1]
+      ?.replace(/\b(?:mas|porque|pois|via|por|com|receber|em|sem saldo|saldo insuficiente|nao tenho saldo|não tenho saldo)\b.*$/i, '')
+      .replace(/^(?:o|a|ao|aos|as)\s+/, '')
+      .trim();
+
+    if (!recipientQuery || /\b(minha conta|meu pix|fora da minha conta|fora da conta)\b/.test(recipientQuery)) {
+      return {};
+    }
+
+    return {
+      recipient_query: recipientQuery,
+      amount,
+      asset_code: assetCode,
+      receive_asset_code: receiveAssetCode,
+    };
+  }
+
   private async getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): Promise<string> {
     const normalizedBase = resolveFrontendBase([
       process.env.FRONTEND_URL,
@@ -723,6 +779,8 @@ ${onboardingUrl}`;
     amount_currency?: 'BRL' | 'USDC';
     asset_code: 'BRL' | 'USDC';
     recipient_query?: string;
+    pay_amount?: string;
+    pay_asset_code?: 'BRL' | 'USDC';
   }): Promise<string> {
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
     const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
@@ -733,7 +791,10 @@ ${onboardingUrl}`;
     url.searchParams.set('from', 'chat');
     url.searchParams.set('autostart', '1');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
+    if (intent.flow === 'fund_and_pay') url.searchParams.set('auto_pay_after_ramp', '1');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
+    if (intent.pay_amount) url.searchParams.set('pay_amount', intent.pay_amount);
+    if (intent.pay_asset_code) url.searchParams.set('pay_asset', intent.pay_asset_code);
     if (intent.amount) {
       const amountCurrency = intent.amount_currency || intent.asset_code;
       if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
@@ -933,14 +994,7 @@ ${onboardingUrl}`;
       return { success: false, error: 'context_incomplete' };
     }
 
-    const contact = await this.getContactByPublicKeyOrName(recipientQuery, state.session_data?.user_id);
-    const destination = String(
-      contact?.destination_public_key ||
-      contact?.stellar_public_key ||
-      contact?.public_key ||
-      (/^G[A-Z2-7]{55}$/i.test(recipientQuery) ? recipientQuery : '')
-    ).trim();
-    const destinationName = String(contact?.contact_name || contact?.name || recipientQuery).trim();
+    const { contact, destination, destinationName } = await this.resolvePaymentRecipient(recipientQuery, state.session_data?.user_id);
 
     if (!destination) {
       return { success: false, error: 'destination_not_found' };
@@ -1198,6 +1252,170 @@ ${onboardingUrl}`;
     return lines.join(' ');
   }
 
+  private hasInsufficientBalanceLanguage(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    return (
+      /\b(?:nao|não)\s+tenho\s+(?:saldo|dinheiro|fundos?)\b/.test(normalized) ||
+      /\bsem\s+(?:saldo|dinheiro|fundos?)\b/.test(normalized) ||
+      /\bsaldo\s+insuficiente\b/.test(normalized) ||
+      /\bnao\s+vai\s+ter\s+saldo\b/.test(normalized)
+    );
+  }
+
+  private async resolvePaymentRecipient(recipientQuery: string, userId?: string): Promise<{
+    contact?: any;
+    destination: string;
+    destinationName: string;
+  }> {
+    const query = String(recipientQuery || '').trim();
+    const contact = await this.getContactByPublicKeyOrName(query, userId);
+    const destination = String(
+      contact?.destination_public_key ||
+      contact?.stellar_public_key ||
+      contact?.public_key ||
+      (/^G[A-Z2-7]{55}$/i.test(query) ? query : '')
+    ).trim();
+    const destinationName = String(contact?.contact_name || contact?.name || query).trim();
+
+    return { contact, destination, destinationName };
+  }
+
+  private async getWalletBalanceForAsset(state: AgentState, assetCode: string): Promise<{
+    amount: number;
+    formatted: string;
+  } | null> {
+    const normalizedAsset = this.toUserFacingAssetCode(assetCode).replace(/^USD$/, 'USDC');
+    if (!normalizedAsset || normalizedAsset === 'XLM') return null;
+
+    try {
+      const raw = await executeTool('get_balance', {
+        session_id: state.session_id,
+        public_key: state.session_data?.public_key,
+      });
+      const parsed = JSON.parse(raw);
+      if (!parsed?.success || !Array.isArray(parsed.balances)) return null;
+
+      const balance = parsed.balances.find((item: any) => (
+        this.toUserFacingAssetCode(item.asset || item.asset_code || '').replace(/^USD$/, 'USDC') === normalizedAsset
+      ));
+      const amount = this.toAmountNumber(balance?.balance);
+      return {
+        amount,
+        formatted: this.formatMoneyByAsset(amount.toFixed(7), normalizedAsset),
+      };
+    } catch (error) {
+      logger.warn(`[payment-balance-check] failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  private async formatPixFundingEstimate(amount: string, assetCode: string): Promise<string> {
+    const normalizedAsset = this.toUserFacingAssetCode(assetCode).replace(/^USD$/, 'USDC');
+    const numeric = this.toAmountNumber(amount);
+    if (normalizedAsset === 'BRL') {
+      return `PIX para completar: ${this.formatMoneyByAsset(amount, 'BRL')}.`;
+    }
+    if (normalizedAsset !== 'USDC' || numeric <= 0) {
+      return 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.';
+    }
+
+    try {
+      const raw = await executeTool('get_brl_usdc_quote', {});
+      const quote = JSON.parse(raw);
+      const brlPerUsdc = this.toAmountNumber(quote?.brl_per_usdc);
+      if (quote?.success && brlPerUsdc > 0) {
+        const estimatedBrl = numeric * brlPerUsdc;
+        return `PIX estimado pela cotação atual: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`;
+      }
+    } catch (error) {
+      logger.warn(`[pix-funding-estimate] failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.';
+  }
+
+  private async buildPixFundedPaymentMessage(state: AgentState, input: {
+    recipientQuery: string;
+    destinationName: string;
+    amount: string;
+    assetCode: string;
+    currentBalance?: { amount: number; formatted: string } | null;
+    explicitlyNeedsPix?: boolean;
+  }): Promise<string> {
+    const requestedAmount = this.toAmountNumber(input.amount);
+    const available = Math.max(0, input.currentBalance?.amount || 0);
+    const needsTopUp = input.currentBalance ? Math.max(0, requestedAmount - available) : requestedAmount;
+    const fundingAmount = needsTopUp > 0 ? needsTopUp.toFixed(input.assetCode === 'BRL' ? 2 : 7).replace(/0+$/, '').replace(/\.$/, '') : input.amount;
+    const url = await this.buildPixRampUrl(state, {
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount: fundingAmount,
+      amount_currency: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
+      asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
+      recipient_query: input.recipientQuery,
+      pay_amount: input.amount,
+      pay_asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
+    });
+    const fundingEstimate = await this.formatPixFundingEstimate(fundingAmount, input.assetCode);
+    const balanceLine = input.currentBalance
+      ? `Saldo disponível em ${this.toUserFacingAssetCode(input.assetCode)}: ${input.currentBalance.formatted}.`
+      : input.explicitlyNeedsPix
+        ? 'Você pediu para pagar usando PIX para completar saldo.'
+      : 'Não consegui confirmar saldo suficiente agora.';
+    const missingLine = input.currentBalance
+      ? `Para enviar ${this.formatMoneyByAsset(input.amount, input.assetCode)} para ${input.destinationName}, falta ${this.formatMoneyByAsset(fundingAmount, input.assetCode)}.`
+      : `Vou preparar o PIX para cobrir ${this.formatMoneyByAsset(input.amount, input.assetCode)} e enviar para ${input.destinationName}.`;
+
+    return [
+      `${balanceLine} ${missingLine}`,
+      fundingEstimate,
+      `Escolhemos a melhor rota disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
+      `Abra o link:\n\n${url}`,
+    ].join('\n\n');
+  }
+
+  private isRampHistoryRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    const mentionsRamp = /\b(pix|deposit|deposito|depositei|depositou|sacar|saque|saquei|sacou|retirada|retirei|ramp|onramp|offramp)\b/.test(normalized);
+    const asksAmount = /\b(quanto|total|historico|histórico|mes|mês|maio|hoje|depositei|saquei|movimentei)\b/.test(normalized);
+    return mentionsRamp && asksAmount && (
+      /\bquanto\s+(?:eu\s+)?(?:depositei|sacei|saquei|retirei)\b/.test(normalized) ||
+      /\b(?:depositos|depósitos|saques|retiradas)\s+(?:do|no|esse|este)\s+(?:mes|mês)\b/.test(normalized) ||
+      /\bhistorico\s+(?:de\s+)?(?:pix|ramp|depositos|saques)\b/.test(normalized)
+    );
+  }
+
+  private rampHistoryPeriodFromText(text: string): 'month' | 'today' | 'lifetime' {
+    const normalized = this.normalizeTextForIntent(text);
+    if (/\bhoje\b/.test(normalized)) return 'today';
+    if (/\b(total|sempre|todo\s+historico|histórico\s+todo|desde\s+o\s+inicio)\b/.test(normalized)) return 'lifetime';
+    return 'month';
+  }
+
+  private async handleRampHistoryRequest(state: AgentState): Promise<AgentState> {
+    if (!state.session_data?.public_key) {
+      state.success = false;
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+    } else {
+      try {
+        const summary = await ActivityFeedService.summarizeRamps({
+          sessionId: state.session_id,
+          userId: state.session_data?.user_id,
+          period: this.rampHistoryPeriodFromText(state.current_input),
+        });
+        state.success = true;
+        state.response_message = summary.message;
+      } catch (error) {
+        state.success = false;
+        state.response_message = `Não consegui consultar seu histórico de PIX agora: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async extractPaymentIntentWithLlm(userMessage: string, userId?: string): Promise<{
     recipient_query?: string;
     amount?: string;
@@ -1271,7 +1489,10 @@ ${onboardingUrl}`;
       return state;
     }
 
-    const llmParsed = await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+    const deterministicParsed = this.extractDirectPaymentIntentFromText(state.current_input);
+    const llmParsed = deterministicParsed.amount && deterministicParsed.recipient_query
+      ? deterministicParsed
+      : await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
     const recipientQuery = String(llmParsed.recipient_query || '').trim();
     const amountInfo = this.normalizePaymentAmountAndAsset(
       String(llmParsed.amount || ''),
@@ -1291,6 +1512,40 @@ ${onboardingUrl}`;
       await this.repository.saveState(state.session_id, state);
       return state;
     }
+
+    const recipient = await this.resolvePaymentRecipient(recipientQuery, state.session_data?.user_id);
+    if (!recipient.destination) {
+      state.success = false;
+      state.response_message = `Não encontrei ${recipientQuery} nos seus contatos. Me envie e-mail, CPF ou telefone do destinatário para salvar esse contato antes de transferir.`;
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const balance = await this.getWalletBalanceForAsset(state, assetCode);
+    const requestedAmount = this.toAmountNumber(amount);
+    const explicitlyNeedsPix = this.hasInsufficientBalanceLanguage(state.current_input);
+    const hasInsufficientBalance = Boolean(
+      explicitlyNeedsPix ||
+      (balance && requestedAmount > 0 && balance.amount + 0.0000001 < requestedAmount)
+    );
+
+    if (assetCode !== 'XLM' && hasInsufficientBalance) {
+      state.pending_payment = undefined;
+      state.success = true;
+      state.response_message = await this.buildPixFundedPaymentMessage(state, {
+        recipientQuery,
+        destinationName: recipient.destinationName,
+        amount,
+        assetCode,
+        currentBalance: balance,
+        explicitlyNeedsPix,
+      });
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
     const prepared = await this.preparePaymentConfirmationFromIntent(state, {
       recipient_query: recipientQuery,
       amount,
@@ -1309,7 +1564,10 @@ ${onboardingUrl}`;
     } else {
       state.pending_payment = undefined;
       state.success = true;
-      state.response_message = String(prepared.message || 'Link de confirmação gerado com sucesso.');
+      const balanceConfirmation = balance
+        ? `Saldo suficiente confirmado: ${balance.formatted} disponível para enviar ${this.formatMoneyByAsset(amount, assetCode)}.`
+        : 'Não consegui confirmar o saldo antes do link; a tela de confirmação valida novamente antes de enviar.';
+      state.response_message = `${balanceConfirmation}\n\n${String(prepared.message || 'Link de confirmação gerado com sucesso.')}`;
     }
 
     await this.saveAssistantResponse(state);
@@ -1481,6 +1739,8 @@ ${onboardingUrl}`;
       '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
       '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
+      '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
+      '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -2837,6 +3097,7 @@ Sua carteira foi criada e já está pronta para usar.
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
+      const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
       const deterministicPixRamp = this.extractPixRampIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
@@ -2853,13 +3114,15 @@ Sua carteira foi criada e já está pronta para usar.
               ? IntentType.HISTORY
               : wantsIntentHelp
                 ? IntentType.GENERAL
-                : deterministicPixRamp.is_pix_ramp
-                  ? IntentType.PIX
-                  : fixedSavings
-                    ? IntentType.FINANCIAL_MEMORY
-                    : deterministicFinancialMemory
+                : wantsRampHistory
+                  ? IntentType.FINANCIAL_MEMORY
+                  : deterministicPixRamp.is_pix_ramp
+                    ? IntentType.PIX
+                    : fixedSavings
                       ? IntentType.FINANCIAL_MEMORY
-                    : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                      : deterministicFinancialMemory
+                        ? IntentType.FINANCIAL_MEMORY
+                      : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -2911,6 +3174,10 @@ Sua carteira foi criada e já está pronta para usar.
 
       if (wantsIntentHelp) {
         return await this.handleIntentHelpRequest(state);
+      }
+
+      if (wantsRampHistory) {
+        return await this.handleRampHistoryRequest(state);
       }
 
       if (state.action_type === ActionType.INITIATE_PIX) {

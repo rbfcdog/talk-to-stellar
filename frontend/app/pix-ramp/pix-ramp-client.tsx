@@ -364,6 +364,8 @@ export default function PixRampClient({
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
+  const [autoPayAmount, setAutoPayAmount] = useState("");
+  const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
   const fallbackExternalBankAccount = useMemo(
     () => buildExternalBankAccount(walletPublicKey || sessionId || rampEmail, rampEmail),
@@ -383,6 +385,8 @@ export default function PixRampClient({
     desiredReceiveAmount,
     desiredReceiveAsset,
     transferRecipient,
+    autoPayAmount,
+    autoPayAsset,
   ].join(":"))}`;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
   const offRampInputValue = offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : offRampAmount;
@@ -394,6 +398,9 @@ export default function PixRampClient({
     ? desiredReceiveAmount
     : "";
   const desiredFinalAsset = desiredFinalAmount ? desiredReceiveAsset : "";
+  const autoPayDisplayAmount = autoPayAmount && autoPayAsset
+    ? formatRampAsset(autoPayAmount, autoPayAsset)
+    : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
   const hasSession = Boolean(sessionId && sessionToken);
@@ -540,7 +547,7 @@ export default function PixRampClient({
         label: transferFlow ? "Transferência para destinatário" : "Saldo entregue",
         detail: onRampComplete
           ? pixFundedTransferResult?.transaction_hash
-            ? `${formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`
+            ? `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`
             : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na conta.`
           : polling ? "Atualizando status automaticamente." : `Aguardando confirmação para entregar ${friendlyAssetName(targetAsset)}.`,
         state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
@@ -569,6 +576,8 @@ export default function PixRampClient({
     targetAsset,
     transferFlow,
     transferRecipient,
+    autoPayAmount,
+    autoPayAsset,
     pixFundedTransferResult,
     walletPublicKey,
   ]);
@@ -596,6 +605,8 @@ export default function PixRampClient({
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
     const recipient = String(params.get("recipient") || "").trim();
+    const payAmount = String(params.get("pay_amount") || "").trim().replace(",", ".");
+    const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
     const offRampBrlAmount = mode === "offramp" && (fiatAmount || (amount && (!currency || currency === "BRL" || asset === "BRL")))
       ? (fiatAmount || amount)
@@ -629,8 +640,10 @@ export default function PixRampClient({
       else setTargetAsset(mode === "onramp" ? "USDC" : "BRL");
     }
     if (email.includes("@")) setRampEmail(email);
-    if (flow === "fund_and_pay") setTransferFlow(true);
+    if (flow === "fund_and_pay" || params.get("auto_pay_after_ramp") === "1") setTransferFlow(true);
     if (recipient) setTransferRecipient(recipient);
+    if (payAmount) setAutoPayAmount(payAmount);
+    if (payAsset === "BRL" || payAsset === "USDC") setAutoPayAsset(payAsset);
   }, [lockedMode, queryString]);
 
   useEffect(() => {
@@ -1097,6 +1110,10 @@ export default function PixRampClient({
         final_asset: targetAsset,
         desired_final_amount: desiredFinalAmount || undefined,
         desired_final_asset: desiredFinalAsset || undefined,
+        auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
+        auto_pay_recipient: transferRecipient || undefined,
+        auto_pay_amount: autoPayAmount || undefined,
+        auto_pay_asset_code: autoPayAsset || targetAsset,
       }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
       if (payload?.quote) {
         setQuotePayload(payload);
@@ -1191,14 +1208,16 @@ export default function PixRampClient({
   async function submitPixFundedTransfer(completedTransaction?: RampResponse) {
     const auth = await resolveWalletFromEmail();
     const pin = getValidatedWalletPin();
-    const transferAmount = targetAsset === "BRL"
+    const requestedAutoPayAmount = autoPayAmount && autoPayAsset ? autoPayAmount : "";
+    const requestedAutoPayAsset = autoPayAsset || targetAsset;
+    const transferAmount = requestedAutoPayAmount || (targetAsset === "BRL"
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
-      : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || "");
+      : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || ""));
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/pix-funded-transfer", {
       intent_id: atomicIntentKey,
       recipient: transferRecipient,
       amount: transferAmount,
-      asset_code: targetAsset,
+      asset_code: requestedAutoPayAsset,
       order_id: orderId,
       operation_id: operationId,
       pin,
@@ -1597,7 +1616,7 @@ export default function PixRampClient({
             </div>
             {transferFlow && transferRecipient && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                Depois que você confirmar o PIX, enviaremos automaticamente {desiredFinalAmount ? formatRampAsset(desiredFinalAmount, targetAsset) : formatMoney(amountBrl)} para {transferRecipient}.
+                Depois que você confirmar o PIX, enviaremos automaticamente {autoPayDisplayAmount} para {transferRecipient}.
               </div>
             )}
 
@@ -1897,7 +1916,7 @@ export default function PixRampClient({
                       </p>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
-                        <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} />
+                        <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
                         <ReceiptRow label="Conta destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
                         <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
                         {pixFundedTransferResult.receipt_url && <ReceiptRow label="Comprovante" value={String(pixFundedTransferResult.receipt_url)} />}
@@ -1905,7 +1924,7 @@ export default function PixRampClient({
                     </>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
-                      PIX confirmado. Enviando automaticamente {formatRampAsset(amountBrl, targetAsset)} para {transferRecipient || "destinatário"}...
+                      PIX confirmado. Enviando automaticamente {autoPayDisplayAmount} para {transferRecipient || "destinatário"}...
                     </p>
                   )}
                 </div>
