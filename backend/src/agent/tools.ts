@@ -464,7 +464,7 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, destination amount, customer-facing fee, and route. For user-facing conversions, follow this with prepare_conversion_confirmation so the user gets a frontend confirmation link.",
+    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, source/origin asset, destination amount, destination asset, customer-facing fee, and route. For requests like 'enviar 200 BRL para receber em USDC', source_asset_code must be BRL and dest_asset_code must be USDC. For user-facing conversions, follow this with prepare_conversion_confirmation so the user gets a frontend confirmation link.",
     parameters: {
       type: "object",
       properties: {
@@ -506,7 +506,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_best_route",
-    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real na Stellar. Retorna a rota escolhida, taxa estimada, critério de otimização e validade da cotação.",
+    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real na Stellar. Sempre informe explicitamente source_asset_code como ativo de origem/gasto e dest_asset_code como ativo de destino/recebimento. Ex.: 'transferir 200 BRL para Carlos receber em USDC' => source_asset_code=BRL, dest_asset_code=USDC, source_amount=200. Retorna rota, taxa estimada, critério de otimização e validade da cotação.",
     parameters: {
       type: "object",
       properties: {
@@ -548,7 +548,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
+    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Always set source_asset_code to the asset being spent and dest_asset_code to the asset being received. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
     parameters: {
       type: "object",
       properties: {
@@ -620,7 +620,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_payment_confirmation",
-    description: "Create a one-time frontend payment confirmation link for a confirmed recipient and amount. Use this for normal user chat payment requests instead of build_payment.",
+    description: "Create a one-time frontend payment confirmation link for a confirmed recipient and amount. For cross-asset transfers, amount/asset_code are the destination amount/asset the recipient receives, and source_amount/source_asset_code must identify the origin amount/asset the sender spends. Use this for normal user chat payment requests instead of build_payment.",
     parameters: {
       type: "object",
       properties: {
@@ -635,6 +635,30 @@ export const toolDefinitions = [
         asset_issuer: {
           type: "string",
           description: "Issuer public key for non-native assets.",
+        },
+        source_amount: {
+          type: "string",
+          description: "Origin/source amount the sender spends for a cross-asset transfer. Example: 200 in 'send 200 BRL so Carlos receives USDC'.",
+        },
+        source_asset_code: {
+          type: "string",
+          description: "Origin/source asset the sender spends (BRL, USDC, XLM). Must not be confused with destination_asset_code.",
+        },
+        source_asset_issuer: {
+          type: "string",
+          description: "Issuer public key for the origin/source asset when non-native.",
+        },
+        destination_amount: {
+          type: "string",
+          description: "Destination amount the recipient receives after conversion. Usually comes from quote.destinationAmount.",
+        },
+        destination_asset_code: {
+          type: "string",
+          description: "Destination asset the recipient receives (BRL, USDC, XLM).",
+        },
+        destination_asset_issuer: {
+          type: "string",
+          description: "Issuer public key for the destination asset when non-native.",
         },
         destination: {
           type: "string",
@@ -662,7 +686,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_conversion_confirmation",
-    description: "Create a one-time frontend conversion confirmation link for a wallet self-conversion. Use this for normal user chat conversion requests after quoting.",
+    description: "Create a one-time frontend conversion confirmation link for a wallet self-conversion. source_asset_code is the origin asset being spent; dest_asset_code is the destination asset being received. Use this for normal user chat conversion requests after quoting.",
     parameters: {
       type: "object",
       properties: {
@@ -1162,6 +1186,12 @@ function executeGetIntentHelp(): string {
       examples: ["qual a melhor rota pra enviar 300 reais em dólar?"],
     },
     {
+      command: "PIX",
+      intent: "pix",
+      description: "Coloca dinheiro na conta via PIX ou retira saldo para chegar em BRL no seu PIX.",
+      examples: ["colocar 100 reais via PIX", "sacar 50 reais por PIX"],
+    },
+    {
       command: "histórico",
       intent: "history",
       description: "Mostra pagamentos e operações recentes.",
@@ -1202,10 +1232,11 @@ function executeGetIntentHelp(): string {
       "2) contatos: listar ou salvar destinatários.",
       "3) enviar: fazer pagamento com confirmação segura.",
       "4) converter: trocar R$, US$ e XLM com cotação atual.",
-      "5) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
-      "6) histórico: revisar operações recentes.",
-      "7) link de pagamento: gerar link para cobrar/receber.",
-      "8) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
+      "5) PIX: colocar dinheiro na conta via PIX ou retirar saldo para o seu PIX.",
+      "6) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
+      "7) histórico: revisar operações recentes.",
+      "8) link de pagamento: gerar link para cobrar/receber.",
+      "9) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
       "",
       "Comandos disponíveis:",
       ...commands.map((item, index) =>
@@ -1215,6 +1246,8 @@ function executeGetIntentHelp(): string {
       "Exemplos prontos:",
       "- \"enviar 10 dólares para Ana\"",
       "- \"converter 200 reais para dólar\"",
+      "- \"colocar 100 reais via PIX\"",
+      "- \"sacar 50 reais por PIX\"",
       "- \"converter 50 reais para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
