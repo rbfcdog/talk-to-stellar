@@ -1,6 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ExternalRepository } from '../repositories/external.repository';
+import {
+  ExternalRepository,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from '../repositories/external.repository';
 import { ContactRepository } from '../api/repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -377,17 +381,88 @@ export class ExternalService {
       throw error;
     }
 
-    if (!row) return null;
+    if (!row) {
+      return this.resolveExternalAccountFromAgentState(provider, providerUserId);
+    }
 
     // Placeholder rows can exist before onboarding is finalized.
     // Only consider account as existing when it is actually linked.
     const hasLinkedSession = Boolean(row.session_id);
     const hasLinkedUser = Boolean(row.user_id);
     if (!hasLinkedSession || !hasLinkedUser) {
-      return null;
+      return this.resolveExternalAccountFromAgentState(provider, providerUserId);
     }
 
     return row;
+  }
+
+  private async resolveExternalAccountFromAgentState(provider: string, providerUserId: string) {
+    const normalizedProvider = normalizeExternalProvider(provider);
+    const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
+    if (!normalizedProvider || !normalizedProviderUserId) return null;
+
+    const { data: stateRows, error: stateError } = await this.supabase
+      .from('agent_states')
+      .select('session_id, action_params, updated_at')
+      .eq('action_params->>external_provider', normalizedProvider)
+      .eq('action_params->>external_provider_user_id', normalizedProviderUserId)
+      .order('updated_at', { ascending: false })
+      .limit(10);
+
+    if (stateError) {
+      const message = String(stateError.message || '').toLowerCase();
+      if (message.includes('agent_states') || message.includes('schema cache') || message.includes('does not exist')) {
+        return null;
+      }
+      throw stateError;
+    }
+
+    const sessionIds = Array.from(
+      new Set(
+        (stateRows || [])
+          .map((row: any) => String(row?.session_id || '').trim())
+          .filter(Boolean)
+      )
+    );
+    if (sessionIds.length === 0) return null;
+
+    const { data: sessionRows, error: sessionError } = await this.supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email')
+      .in('session_id', sessionIds);
+
+    if (sessionError) {
+      const message = String(sessionError.message || '').toLowerCase();
+      if (message.includes('agent_sessions') || message.includes('schema cache') || message.includes('does not exist')) {
+        return null;
+      }
+      throw sessionError;
+    }
+
+    const sessionsById = new Map<string, any>();
+    for (const session of sessionRows || []) {
+      const sessionId = String((session as any)?.session_id || '').trim();
+      if (sessionId) sessionsById.set(sessionId, session);
+    }
+
+    for (const state of stateRows || []) {
+      const sessionId = String((state as any)?.session_id || '').trim();
+      const session = sessionsById.get(sessionId);
+      const userId = String(session?.user_id || session?.email || '').trim();
+      if (!sessionId || !userId) continue;
+      return {
+        provider: normalizedProvider,
+        provider_user_id: normalizedProviderUserId,
+        session_id: sessionId,
+        user_id: userId,
+        data: {
+          ...((state as any)?.action_params || {}),
+          recovered_from: 'agent_states',
+        },
+      };
+    }
+
+    return null;
   }
 
   // Create a one-time JWT + URL to onboard the external user

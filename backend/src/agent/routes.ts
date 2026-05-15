@@ -491,7 +491,11 @@ export function createAgentRoutes(
             if (externalSession) {
               await repository.clearSession(String(existing.session_id));
             }
-            const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId);
+            const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+              sessionId: String(existing.session_id || '').trim() || undefined,
+              userId: String(existing.user_id || '').trim() || undefined,
+              source: normalizedProvider,
+            });
             return res.status(200).json({
               session_id: session_id || null,
               success: true,
@@ -581,7 +585,11 @@ export function createAgentRoutes(
         const providerUserId = String(runtimeExternalContext.external_provider_user_id || '').trim();
         const fallbackProviderUserId = String(metadata?.browser_id || metadata?.provider_user_id || sessionId).trim();
         const { url } = provider && providerUserId
-          ? await externalService.createLoginUrlWithShortLink(provider, providerUserId)
+          ? await externalService.createLoginUrlWithShortLink(provider, providerUserId, {
+              sessionId,
+              userId: String(sessionData.user_id || sessionData.email || '').trim() || undefined,
+              source: provider,
+            })
           : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId);
 
         return res.status(200).json({

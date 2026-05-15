@@ -81,9 +81,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     : ""
   const externalToken = searchParams.get("token") || ""
   const externalPayload = useMemo(() => decodeJwtPayload(externalToken), [externalToken])
-  const externalProvider = String(externalPayload?.provider || "").trim().toLowerCase()
-  const externalProviderUserId = String(externalPayload?.provider_user_id || "").trim()
-  const hasExternalContext = Boolean(externalToken && externalProvider && externalProviderUserId)
+  const externalProvider = String(externalPayload?.provider || searchParams.get("provider") || "").trim().toLowerCase()
+  const externalProviderUserId = String(
+    externalPayload?.provider_user_id || searchParams.get("provider_user_id") || ""
+  ).trim()
+  const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
   const useTelegramIdPinLogin = hasExternalContext && isTelegramContext
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
@@ -547,7 +549,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                     disabled={externalLinkUsed}
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
                   />
-                  <span className="block text-xs text-slate-400">Digite seu PIN para conectar este Telegram à sua conta.</span>
+                  <span className="block text-xs text-slate-400">Digite seu PIN para entrar na conta vinculada a este Telegram.</span>
                 </label>
               ) : (
                 <label className="block space-y-2">
