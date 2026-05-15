@@ -121,6 +121,14 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   desiredFinalAmount?: string;
   desired_final_asset?: string;
   desiredFinalAsset?: string;
+  auto_pay_after_ramp?: boolean;
+  autoPayAfterRamp?: boolean;
+  auto_pay_recipient?: string;
+  autoPayRecipient?: string;
+  auto_pay_amount?: string;
+  autoPayAmount?: string;
+  auto_pay_asset_code?: string;
+  autoPayAssetCode?: string;
   bank_account_id?: string;
   bankAccountId?: string;
   memo?: string;
@@ -2175,6 +2183,10 @@ export class AnchorService {
     const desiredFinalAssetCode = desiredFinalAmount
       ? normalizeAssetCode(coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset.code))
       : '';
+    const autoPayAfterRamp = Boolean(input.auto_pay_after_ramp || input.autoPayAfterRamp);
+    const autoPayRecipient = coalesceString(input.auto_pay_recipient, input.autoPayRecipient);
+    const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
+    const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
 
     if (!customerId) throw apiError('customer_id is required.', 400);
     const existingIntent = await this.findActiveRampOperationByIntent({
@@ -2355,6 +2367,10 @@ export class AnchorService {
       final_asset_issuer: finalAsset.issuer,
       desired_final_amount: desiredFinalAmount || undefined,
       desired_final_asset_code: desiredFinalAssetCode || undefined,
+      auto_pay_after_ramp: autoPayAfterRamp || undefined,
+      auto_pay_recipient: autoPayRecipient || undefined,
+      auto_pay_amount: autoPayAmount || undefined,
+      auto_pay_asset_code: autoPayAfterRamp ? autoPayAssetCode : undefined,
       payment_instructions: transaction.paymentInstructions,
       sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
       upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,

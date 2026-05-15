@@ -153,6 +153,63 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('builds PIX fund-and-pay URL with top-up amount and final payment amount', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const url = await (graph as any).buildPixRampUrl({
+        session_id: 'session-1',
+        session_data: { email: 'rodrigo@example.com', user_id: 'user-1' },
+      }, {
+        direction: 'onramp',
+        flow: 'fund_and_pay',
+        amount: '40',
+        amount_currency: 'USDC',
+        asset_code: 'USDC',
+        recipient_query: 'Carlos',
+        pay_amount: '50',
+        pay_asset_code: 'USDC',
+      });
+      const parsed = new URL(url);
+
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+      expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
+      expect(parsed.searchParams.get('receive_amount')).toBe('40');
+      expect(parsed.searchParams.get('receive_asset')).toBe('USDC');
+      expect(parsed.searchParams.get('recipient')).toBe('Carlos');
+      expect(parsed.searchParams.get('pay_amount')).toBe('50');
+      expect(parsed.searchParams.get('pay_asset')).toBe('USDC');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
+  it('extracts direct payment wording with insufficient balance as a normal payment intent', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+
+    const intent = (graph as any).extractDirectPaymentIntentFromText('manda 50 dólares pro Carlos mas não tenho saldo');
+
+    expect(intent).toMatchObject({
+      recipient_query: 'carlos',
+      amount: '50',
+      asset_code: 'USDC',
+    });
+  });
+
+  it('detects monthly PIX ramp history questions deterministically', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+
+    expect((graph as any).isRampHistoryRequest('quanto depositei esse mês?')).toBe(true);
+    expect((graph as any).rampHistoryPeriodFromText('quanto depositei esse mês?')).toBe('month');
+  });
+
   it('defaults ambiguous PIX amount in dollars to on-ramp receive amount instead of BRL payment amount', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 

@@ -1,6 +1,8 @@
 import { supabase } from '../../config/supabase';
+import { getAssetIssuer } from '../../config/assets';
 import { EconomyEngineService } from './economy-engine.service';
-import { FinancialContextService, toNumber, trackFinancialEvent } from './financial-context.service';
+import { FinancialContextService, formatMoney, startOfMonth, toNumber, trackFinancialEvent } from './financial-context.service';
+import { StellarService } from './stellar.service';
 
 export type FinancialEventItem = {
   id: string;
@@ -14,6 +16,18 @@ export type FinancialEventItem = {
   semantic_color?: string;
   created_at: string;
   metadata_json?: Record<string, unknown>;
+};
+
+export type RampHistorySummary = {
+  period: 'month' | 'today' | 'lifetime';
+  period_label: string;
+  deposits_brl: number;
+  deposits_count: number;
+  withdrawals_brl: number;
+  withdrawals_count: number;
+  current_balance_usdc: number;
+  current_balance_brl: number;
+  message: string;
 };
 
 function normalizeEventVisual(eventType: string): { icon: string; color: string } {
@@ -55,6 +69,44 @@ function formatAmountForFeed(amount: number, currency: string): string {
   if (currency === 'BRL') return `R$ ${amount.toFixed(2).replace('.', ',')}`;
   if (currency === 'USDC') return `US$ ${amount.toFixed(2)}`;
   return `${amount.toFixed(2)} ${currency}`;
+}
+
+function pluralizeOperation(count: number): string {
+  return count === 1 ? 'operação' : 'operações';
+}
+
+function periodStart(period: 'month' | 'today' | 'lifetime'): Date | null {
+  if (period === 'lifetime') return null;
+  const now = new Date();
+  if (period === 'today') {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+  return startOfMonth(now);
+}
+
+function periodLabel(period: 'month' | 'today' | 'lifetime'): string {
+  if (period === 'today') return 'hoje';
+  if (period === 'lifetime') return 'no total';
+  return `em ${new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' }).format(new Date())}`;
+}
+
+function metadataContext(row: Record<string, unknown>): Record<string, unknown> {
+  const metadata = parseJsonObject(row.metadata_json);
+  return parseJsonObject(metadata.raw_context);
+}
+
+function balanceForConfiguredAsset(balances: any[], assetCode: 'BRL' | 'USDC'): number {
+  const issuer = getAssetIssuer(assetCode);
+  return balances
+    .filter((balance) => {
+      const code = String(balance?.asset_code || balance?.asset || '').toUpperCase();
+      if (code !== assetCode) return false;
+      if (!issuer) return true;
+      return String(balance?.asset_issuer || '') === issuer;
+    })
+    .reduce((sum, balance) => sum + toNumber(balance?.balance), 0);
 }
 
 export class ActivityFeedService {
@@ -306,5 +358,91 @@ export class ActivityFeedService {
     });
 
     return (data || []) as FinancialEventItem[];
+  }
+
+  static async summarizeRamps(input: {
+    sessionId?: string;
+    userId?: string;
+    period?: 'month' | 'today' | 'lifetime';
+  }): Promise<RampHistorySummary> {
+    const ctx = await FinancialContextService.resolve({ sessionId: input.sessionId, userId: input.userId });
+    const period = input.period || 'month';
+    await this.syncFromRampOperations({ sessionId: ctx.sessionId, userId: ctx.userId });
+
+    let query = supabase
+      .from('financial_events')
+      .select('event_type, amount, currency, metadata_json, created_at')
+      .eq('user_id', ctx.userId)
+      .in('event_type', ['pix_onramp_completed', 'pix_offramp_completed']);
+
+    const start = periodStart(period);
+    if (start) query = query.gte('created_at', start.toISOString());
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Falha ao carregar histórico de PIX: ${error.message}`);
+    }
+
+    let depositsBrl = 0;
+    let depositsCount = 0;
+    let withdrawalsBrl = 0;
+    let withdrawalsCount = 0;
+
+    for (const row of (data || []) as Array<Record<string, unknown>>) {
+      const eventType = String(row.event_type || '');
+      const currency = userFacingAsset(row.currency);
+      const context = metadataContext(row);
+      if (eventType === 'pix_onramp_completed') {
+        const paidBrl = toNumber(
+          context.source_amount_brl ||
+          context.from_amount_brl ||
+          context.pix_amount_brl ||
+          (currency === 'BRL' ? row.amount : 0)
+        );
+        depositsBrl += paidBrl;
+        depositsCount += 1;
+      }
+      if (eventType === 'pix_offramp_completed') {
+        const withdrawnBrl = toNumber(
+          context.target_brl ||
+          context.destination_amount ||
+          context.received_brl ||
+          (currency === 'BRL' ? row.amount : 0)
+        );
+        withdrawalsBrl += withdrawnBrl;
+        withdrawalsCount += 1;
+      }
+    }
+
+    let currentBalanceUsdc = 0;
+    let currentBalanceBrl = 0;
+    if (ctx.walletPublicKey) {
+      try {
+        const balances = await StellarService.getAccountBalance(ctx.walletPublicKey);
+        currentBalanceUsdc = balanceForConfiguredAsset(balances, 'USDC');
+        currentBalanceBrl = balanceForConfiguredAsset(balances, 'BRL');
+      } catch {
+        currentBalanceUsdc = 0;
+        currentBalanceBrl = 0;
+      }
+    }
+
+    const label = periodLabel(period);
+    const message = [
+      `${label.charAt(0).toUpperCase()}${label.slice(1)} você depositou ${formatMoney(depositsBrl, 'BRL')} em ${depositsCount} ${pluralizeOperation(depositsCount)} e sacou ${formatMoney(withdrawalsBrl, 'BRL')} em ${withdrawalsCount} ${pluralizeOperation(withdrawalsCount)}.`,
+      `Saldo atual: ${formatMoney(currentBalanceUsdc, 'USDC')} USDC${currentBalanceBrl > 0 ? ` e ${formatMoney(currentBalanceBrl, 'BRL')}` : ''}.`,
+    ].join('\n');
+
+    return {
+      period,
+      period_label: label,
+      deposits_brl: Number(depositsBrl.toFixed(2)),
+      deposits_count: depositsCount,
+      withdrawals_brl: Number(withdrawalsBrl.toFixed(2)),
+      withdrawals_count: withdrawalsCount,
+      current_balance_usdc: Number(currentBalanceUsdc.toFixed(7)),
+      current_balance_brl: Number(currentBalanceBrl.toFixed(7)),
+      message,
+    };
   }
 }
