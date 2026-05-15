@@ -82,12 +82,106 @@ function escapeXml(value: string): string {
 
 function fitText(value: string, maxLength: number): string {
   const normalized = String(value || '').replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+  void maxLength;
+  return normalized;
 }
 
-function receiptText(value: string, maxLength: number): string {
-  return escapeXml(fitText(value, maxLength));
+function compactReceiptMessage(value: string): string {
+  const normalized = fitText(value, 0);
+  if (!normalized) return '';
+  if (/retirada via pix conclu[ií]da|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
+    return 'PIX enviado ao seu PIX';
+  }
+  if (/pix.*recebid|depositad/i.test(normalized)) {
+    return 'PIX recebido';
+  }
+  return normalized;
+}
+
+function wrapReceiptText(value: string, maxLineLength: number, maxLines = 2): string[] {
+  const normalized = fitText(value, maxLineLength);
+  if (!normalized) return ['-'];
+
+  const lines: string[] = [];
+  let current = '';
+  for (const word of normalized.split(' ')) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxLineLength || !current) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+  }
+  if (current) lines.push(current);
+  if (lines.length <= maxLines) return lines;
+  return [
+    ...lines.slice(0, Math.max(0, maxLines - 1)),
+    lines.slice(Math.max(0, maxLines - 1)).join(' '),
+  ];
+}
+
+function lengthAdjust(value: string, maxChars: number, width: number): string {
+  const normalized = fitText(value, maxChars);
+  return normalized.length > maxChars
+    ? ` textLength="${width}" lengthAdjust="spacingAndGlyphs"`
+    : '';
+}
+
+function centeredTextSvg(input: {
+  value: string;
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number;
+  fill: string;
+  weight?: number;
+  family?: string;
+  maxChars: number;
+}): string {
+  const raw = fitText(input.value, input.maxChars);
+  const fontSize = raw.length > input.maxChars + 8
+    ? Math.max(14, input.fontSize - Math.ceil((raw.length - input.maxChars) / 2))
+    : input.fontSize;
+  return `<text x="${input.x}" y="${input.y}" text-anchor="middle" fill="${input.fill}" font-size="${fontSize}"${input.weight ? ` font-weight="${input.weight}"` : ''} font-family="${input.family || 'Inter'}"${lengthAdjust(raw, input.maxChars, input.width)}>${escapeXml(raw)}</text>`;
+}
+
+function rightTextSvg(input: {
+  value: string;
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number;
+  fill: string;
+  weight?: number;
+  family?: string;
+  maxChars: number;
+}): string {
+  const raw = fitText(input.value, input.maxChars);
+  const fontSize = raw.length > input.maxChars + 8
+    ? Math.max(13, input.fontSize - Math.ceil((raw.length - input.maxChars) / 4))
+    : input.fontSize;
+  return `<text x="${input.x}" y="${input.y}" text-anchor="end" fill="${input.fill}" font-size="${fontSize}"${input.weight ? ` font-weight="${input.weight}"` : ''} font-family="${input.family || 'Inter'}"${lengthAdjust(raw, input.maxChars, input.width)}>${escapeXml(raw)}</text>`;
+}
+
+function rowValueSvg(value: string, y: number): string {
+  const raw = fitText(value, 34);
+  const lines = wrapReceiptText(raw, 31, 2);
+  if (lines.length <= 1) {
+    return rightTextSvg({
+      value: raw,
+      x: 658,
+      y,
+      width: 350,
+      fontSize: 22,
+      fill: '#F4F7FF',
+      weight: 600,
+      maxChars: 34,
+    });
+  }
+
+  const [first, second] = lines;
+  return `<text x="658" y="${y - 9}" text-anchor="end" fill="#F4F7FF" font-size="16" font-weight="600" font-family="Inter"><tspan x="658"${lengthAdjust(first, 31, 350)}>${escapeXml(first)}</tspan><tspan x="658" dy="20"${lengthAdjust(second, 31, 350)}>${escapeXml(second)}</tspan></text>`;
 }
 
 function formatDatePtBr(value?: string | null): string {
@@ -172,20 +266,48 @@ export class ReceiptImageService {
     const statusBadge = String(input.statusBadge || 'Transferência concluída').trim();
     const instantBadge = String(input.instantBadge || 'Liquidado instantaneamente').trim();
     const protectedBadge = String(input.protectedBadge || 'Protegido').trim();
-    const amount = receiptText(`${input.currency}${input.amount}`, 18);
-    const subtitle = receiptText(String(input.subtitle || 'Pagamento internacional enviado com sucesso'), 46);
-    const recipient = receiptText(String(input.recipientName || 'Destinatário'), 34);
-    const description = receiptText(String(input.description || 'Transferência internacional'), 34);
-    const converted = receiptText(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`, 24);
-    const fee = receiptText(String(input.feeLabel || '-'), 30);
-    const quote = receiptText(String(input.quoteLabel || '-'), 34);
+    const amount = fitText(`${input.currency}${input.amount}`, 18);
+    const subtitle = fitText(String(input.subtitle || 'Pagamento enviado com sucesso'), 46);
+    const recipient = fitText(String(input.recipientName || 'Destinatário'), 34);
+    const description = compactReceiptMessage(String(input.description || 'Transferência internacional'));
+    const converted = fitText(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`, 24);
+    const fee = fitText(String(input.feeLabel || '-'), 30);
+    const quote = fitText(String(input.quoteLabel || '-'), 34);
     const settlement = Number.isFinite(Number(input.settlementSeconds || 0))
       ? `${Number(input.settlementSeconds || 0).toFixed(1)} segundos`
       : 'confirmada';
-    const dateLabel = receiptText(formatDatePtBr(input.completedAt), 28);
-    const savingsLabel = receiptText(String(input.savingsLabel || 'R$ 0,00'), 18);
-    const savingsPercentLabel = receiptText(String(input.savingsPercentLabel || 'menor que métodos tradicionais'), 28);
-    const safeOpId = escapeXml(opId);
+    const dateLabel = fitText(formatDatePtBr(input.completedAt), 28);
+    const savingsLabel = fitText(String(input.savingsLabel || 'R$ 0,00'), 18);
+    const savingsPercentLabel = fitText(String(input.savingsPercentLabel || 'menor que métodos tradicionais'), 28);
+    const amountSvg = centeredTextSvg({
+      value: amount,
+      x: 360,
+      y: 294,
+      width: 560,
+      fontSize: 72,
+      fill: '#F8FBFF',
+      weight: 800,
+      maxChars: 18,
+    });
+    const subtitleSvg = centeredTextSvg({
+      value: subtitle,
+      x: 360,
+      y: 336,
+      width: 560,
+      fontSize: 24,
+      fill: '#9FB0DB',
+      maxChars: 46,
+    });
+    const savingsLabelSvg = rightTextSvg({
+      value: savingsPercentLabel,
+      x: 628,
+      y: 421,
+      width: 245,
+      fontSize: 17,
+      fill: '#B8C8EE',
+      weight: 600,
+      maxChars: 28,
+    });
 
     const lines = [
       ['Destinatário', recipient],
@@ -195,16 +317,16 @@ export class ReceiptImageService {
       ['Cotação', quote],
       ['Liquidação', settlement],
       ['Data', dateLabel],
-      ['ID', safeOpId],
+      ['ID', opId],
     ];
 
     const rows = lines.map((line, index) => {
-      const y = 500 + index * 44;
+      const y = 500 + index * 54;
       return [
         `<text x="64" y="${y}" fill="#94A1C8" font-size="20" font-family="Inter">${line[0]}</text>`,
-        `<text x="658" y="${y}" text-anchor="end" fill="#F4F7FF" font-size="22" font-weight="600" font-family="Inter">${line[1]}</text>`,
+        rowValueSvg(line[1], y),
         index < lines.length - 1
-          ? `<line x1="64" y1="${y + 20}" x2="658" y2="${y + 20}" stroke="#1B2545" stroke-width="1"/>`
+          ? `<line x1="64" y1="${y + 27}" x2="658" y2="${y + 27}" stroke="#1B2545" stroke-width="1"/>`
           : '',
       ].join('');
     }).join('');
@@ -237,22 +359,22 @@ export class ReceiptImageService {
   <circle cx="360" cy="196" r="42" fill="#163D2D" stroke="#2CCB84" stroke-width="2"/>
   <path d="M341 196 L356 210 L382 184" fill="none" stroke="#A7FFD6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <text x="360" y="294" text-anchor="middle" fill="#F8FBFF" font-size="72" font-weight="800" font-family="Inter">${amount}</text>
-  <text x="360" y="336" text-anchor="middle" fill="#9FB0DB" font-size="24" font-family="Inter">${subtitle}</text>
+  ${amountSvg}
+  ${subtitleSvg}
 
   <rect x="64" y="356" width="594" height="96" rx="18" fill="#101B34" stroke="#2B406F" stroke-width="1"/>
   <text x="92" y="397" fill="#8DA0CB" font-size="18" font-family="Inter">Economia estimada</text>
-  <text x="92" y="431" fill="#95FFD1" font-size="36" font-weight="800" font-family="Inter">${savingsLabel}</text>
-  <text x="628" y="421" text-anchor="end" fill="#B8C8EE" font-size="17" font-weight="600" font-family="Inter">${savingsPercentLabel}</text>
+  <text x="92" y="431" fill="#95FFD1" font-size="36" font-weight="800" font-family="Inter">${escapeXml(savingsLabel)}</text>
+  ${savingsLabelSvg}
   <text x="64" y="478" fill="#7C8BB3" font-size="14" font-family="Inter">comparado a métodos tradicionais</text>
 
   ${rows}
 
   <rect x="64" y="930" width="274" height="40" rx="20" fill="#152642" stroke="#254273" stroke-width="1"/>
-  <text x="201" y="956" text-anchor="middle" fill="#B8C8EE" font-size="16" font-weight="600" font-family="Inter">${escapeXml(instantBadge)}</text>
+  ${centeredTextSvg({ value: instantBadge, x: 201, y: 956, width: 240, fontSize: 16, fill: '#B8C8EE', weight: 600, maxChars: 25 })}
 
   <rect x="356" y="930" width="132" height="40" rx="20" fill="#183A2C" stroke="#2A8F66" stroke-width="1"/>
-  <text x="422" y="956" text-anchor="middle" fill="#8EF0C6" font-size="16" font-weight="600" font-family="Inter">${escapeXml(protectedBadge)}</text>
+  ${centeredTextSvg({ value: protectedBadge, x: 422, y: 956, width: 104, fontSize: 16, fill: '#8EF0C6', weight: 600, maxChars: 10 })}
 
   <rect x="542" y="912" width="116" height="116" rx="16" fill="#0D1328" stroke="#26365F"/>
   <g transform="translate(560 930)">
@@ -290,8 +412,8 @@ export class ReceiptImageService {
     const estimatedSavings = Number(String(input.savings?.estimatedSavings || '').replace(',', '.'));
     const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
-    const contextMessage = String(input.contextMessage || '').replace(/\s+/g, ' ').trim();
-    const description = contextMessage ? fitText(contextMessage, 34) : 'Transferência internacional';
+    const contextMessage = compactReceiptMessage(String(input.contextMessage || '').replace(/\s+/g, ' ').trim());
+    const description = contextMessage || 'Transferência internacional';
 
     return {
       amount: formatDisplayAmount(input.destinationAmount, 2),

@@ -63,4 +63,21 @@ describe('ReceiptImageService', () => {
     expect(svg).not.toContain('BRL');
     expect(svg).not.toContain('XLM');
   });
+
+  it('keeps PIX off-ramp receipt copy short and without ellipsis', () => {
+    const svg = ReceiptImageService.toSvg(ReceiptImageService.fromPaymentReceipt({
+      destinationAmount: '10',
+      destinationAssetCode: 'BRL',
+      sourceAmount: '10',
+      sourceAssetCode: 'USDC',
+      counterpartyLabel: 'Conta bancária externa TalkToStellar',
+      contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
+      hash: 'pix-off-hash-1',
+      completedAt: '2026-05-14T21:00:13.000Z',
+    }));
+
+    expect(svg).toContain('PIX enviado ao seu PIX');
+    expect(svg).not.toContain('Retirada via PIX conclu');
+    expect(svg).not.toContain('…');
+  });
 });
