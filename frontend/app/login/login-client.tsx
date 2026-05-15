@@ -538,12 +538,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_pin_card_title")}</p>
                 <p className="mt-2 text-sm text-slate-200">{t("login_pin_card_body")}</p>
               </div>
-              {/* Passkey UI temporarily hidden on desktop while mobile handoff is disabled.
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Passkey</p>
-                <p className="mt-2 text-sm text-slate-200">Biometria para entrar com menos atrito quando disponível.</p>
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_passkey_card_title")}</p>
+                <p className="mt-2 text-sm text-slate-200">{t("login_passkey_card_body")}</p>
               </div>
-              */}
             </div>
           </section>
 
@@ -628,7 +626,6 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               </button>
             </form>
 
-            {/* Passkey UI temporarily hidden on desktop while mobile handoff is disabled.
             <button
               type="button"
               onClick={handlePasskeyLogin}
@@ -636,27 +633,22 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KeyRound className="h-4 w-4" />
-              {status === "passkey" ? "Abrindo biometria..." : "1) Entrar com Passkey"}
+              {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
             </button>
             {qrImageUrl && !externalLinkUsed && (
               <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Entrar com Passkey no celular</p>
-                <p className="mt-1 text-slate-300">Escaneie para abrir este login no celular e confirmar com Touch ID.</p>
+                <p className="font-medium text-white">{t("login_passkey_qr_title")}</p>
+                <p className="mt-1 text-slate-300">{t("login_passkey_qr_body")}</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
-                    alt="QR Code para login com Passkey no celular"
+                    alt={t("login_passkey_qr_alt")}
                     className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
                   />
                 </div>
                 {qrTargetUrl && <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>}
               </div>
             )}
-            */}
-
-            <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              {t("login_footer_help")}
-            </p>
           </section>
         </div>
       </div>
