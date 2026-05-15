@@ -124,7 +124,7 @@ export default function CreateAccountClient({
   const [pin, setPin] = useState("")
   const [pinConfirm, setPinConfirm] = useState("")
   const [pinError, setPinError] = useState("")
-  const [requestPasskey, setRequestPasskey] = useState(true)
+  const [requestPasskey, setRequestPasskey] = useState(false)
   const [status, setStatus] = useState("ready")
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
