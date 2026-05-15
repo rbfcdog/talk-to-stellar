@@ -771,6 +771,38 @@ export class AgentGraph {
   } {
     const normalized = this.normalizeTextForIntent(text);
     const mentionsPix = /\bpix\b/.test(normalized);
+    const extractPixFundedPaymentRecipient = (): string => {
+      const stopAtFlowWords = (value: string) => String(value || '')
+        .replace(/\s+\b(?:de|do|da)\s+(?:r\$\s*)?\d.*$/i, '')
+        .replace(/\s+\b(?:na|no)\s+qual\b.*$/i, '')
+        .replace(/\s+\b(?:via|por|com|usando|pago|paga|pagando)\b.*$/i, '')
+        .replace(/\s+\b(?:receber|receba|em)\s+(?:brl|real|reais|usd|usdc|dolar|dolares|xlm)\b.*$/i, '')
+        .replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const patterns = [
+        /\b(?:direto|diretamente)\s+(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
+        /\b(?:transacao|transação|trasacao|transferencia|transferência|pagamento)\s+(?:direto\s+|diretamente\s+)?(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
+        /\b(?:mandar|enviar|pagar|transferir)\s+(?:direto\s+|diretamente\s+)?(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
+      ];
+
+      for (const pattern of patterns) {
+        const candidate = stopAtFlowWords(normalized.match(pattern)?.[1] || '');
+        if (candidate) return candidate;
+      }
+
+      const genericMatches = Array.from(normalized.matchAll(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/g));
+      for (const match of genericMatches.reverse()) {
+        const candidate = stopAtFlowWords(match[1] || '');
+        if (candidate && !/\b(?:minha conta|meu pix|meu banco|outro banco|conta externa)\b/.test(candidate)) {
+          return candidate;
+        }
+      }
+
+      return '';
+    };
+    const pixFundedPaymentRecipient = extractPixFundedPaymentRecipient();
     const mentionsMoneyOutOfOwnAccount =
       /\b(?:pra|para|pro)\s+fora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
       /\b(?:mandar|enviar|tirar|retirar|sacar)\b.*\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
@@ -787,11 +819,11 @@ export class AgentGraph {
       /\b(?:para|pra|pro|a)\s+a\s+minha\s+chave\s+pix\b/.test(normalized);
 
     const wantsPixFundedPayment =
-      /\b(mandar|enviar|pagar|transferir|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
-      /\b(para|pra|pro|a)\b/.test(normalized) &&
+      /\b(mandar|enviar|pagar|transferir|transacao|transação|trasacao|transferencia|transferência|pagamento|fazer uma transacao|fazer uma transação|fazer uma trasacao|fazer transacao|fazer transação|fazer trasacao|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
+      Boolean(pixFundedPaymentRecipient) &&
       !mentionsOwnPixDestination &&
       mentionsPix &&
-      !/\b(minha conta|meu banco|conta bancaria|conta bancária|outro banco|conta externa)\b/.test(normalized);
+      !/\b(meu banco|conta bancaria|conta bancária|outro banco|conta externa)\b/.test(normalized);
 
     const wantsOffRamp =
       /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
@@ -843,10 +875,6 @@ export class AgentGraph {
       ? 'BRL'
       : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? 'USDC' : 'BRL');
     const fundAndPayAsset = mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL';
-    const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,3})(?=\s*(?:,|\.|$|\b(?:via|por|com|faca|faça|fazer|transferencia|transferência)\b))/);
-    const recipientQuery = recipientMatch?.[1]
-      ?.replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
-      .trim();
     return {
       is_pix_ramp: true,
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
@@ -856,7 +884,7 @@ export class AgentGraph {
       asset_code: wantsOffRamp && !wantsOnRamp
         ? (mentionsUsdc ? 'USDC' : 'BRL')
         : (wantsPixFundedPayment ? fundAndPayAsset : onRampTargetAsset),
-      recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? recipientQuery : undefined,
+      recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? pixFundedPaymentRecipient : undefined,
     };
   }
 
@@ -2121,6 +2149,8 @@ Respond ONLY with the intent name. Examples:
 - "cria um link para alguém receber 20 usdc" -> payment_link
 - "quero pagar com pix para colocar 100 reais na conta" -> pix
 - "quero mandar 5 brl pra ana por pix" -> pix
+- "quero fazer uma transacao pra ana silva de 100 brl na qual eu pago via pix" -> pix
+- "quero colocar 100 brl pra minha conta via pix e fazer essa transacao direto pra ana silva" -> pix
 - "quero trazer 100 brl pra minha conta via pix" -> pix
 - "depositar 150 reais via pix" -> pix
 - "sacar 20 reais por pix" -> pix
