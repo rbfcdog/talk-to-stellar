@@ -16,10 +16,11 @@ interface ChatSidebarProps {
 
 const STELLAR_PUBLIC_KEY_REGEX = /\bG[A-Z2-7]{55}\b/gi;
 
-function sanitizeVisiblePreview(content: string): string {
+function sanitizeVisiblePreview(content: string, hiddenKeyLabel: string): string {
   return String(content || "")
-    .replace(STELLAR_PUBLIC_KEY_REGEX, "[chave oculta]")
-    .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]");
+    .replace(/\s+/g, " ")
+    .replace(STELLAR_PUBLIC_KEY_REGEX, hiddenKeyLabel)
+    .replace(/public_key\s*=\s*[^\s|]+/gi, `public_key=${hiddenKeyLabel}`);
 }
 
 export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
@@ -29,6 +30,8 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     content: string;
     createdAt?: string;
   } | null>(null);
+  const hiddenKeyLabel = language === "pt-BR" ? "[chave oculta]" : "[hidden key]";
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
 
   const peopleFallbackColors = [
     "bg-rose-500",
@@ -43,7 +46,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     "bg-orange-500",
   ];
 
-  const baseConversations = [
+  const baseConversations = useMemo(() => [
     {
       id: "agent",
       title: "TalkToStellar",
@@ -55,74 +58,74 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "contact-1",
       title: "Ana Silva",
-      lastMessage: "Received. You can pay me through the wallet now.",
+      lastMessage: L("Recebido. Você já pode me pagar pela carteira.", "Received. You can pay me through the wallet now."),
       lastMessageTime: new Date(Date.now() - 3600000).toISOString(),
       avatar: "/avatar-ana.svg",
     },
     {
       id: "contact-2",
       title: "Carlos Souza",
-      lastMessage: "Send me today's amount to the wallet.",
+      lastMessage: L("Envie o valor de hoje para a carteira.", "Send me today's amount to the wallet."),
       lastMessageTime: new Date(Date.now() - 7200000).toISOString(),
       avatar: "/avatar-carlos.svg",
     },
     {
       id: "contact-3",
       title: "Marina Costa",
-      lastMessage: "Pin this contact for quick transfers.",
+      lastMessage: L("Fixe este contato para transferências rápidas.", "Pin this contact for quick transfers."),
       lastMessageTime: new Date(Date.now() - 10800000).toISOString(),
       avatar: "/avatar-marina.svg",
     },
     {
       id: "contact-4",
       title: "Fernando Oliveira",
-      lastMessage: "Payment scheduled for the main wallet.",
+      lastMessage: L("Pagamento agendado para a carteira principal.", "Payment scheduled for the main wallet."),
       lastMessageTime: new Date(Date.now() - 14400000).toISOString(),
       avatar: "/avatar-fernando.svg",
     },
     {
       id: "contact-5",
       title: "Juliana Lima",
-      lastMessage: "Keep this contact for recurring payments.",
+      lastMessage: L("Guarde este contato para pagamentos recorrentes.", "Keep this contact for recurring payments."),
       lastMessageTime: new Date(Date.now() - 18000000).toISOString(),
       avatar: "/avatar-juliana.svg",
     },
     {
       id: "contact-6",
       title: "Roberto Dias",
-      lastMessage: "I confirm balance and wallet address before sending.",
+      lastMessage: L("Confirmo saldo e endereço antes do envio.", "I confirm balance and wallet address before sending."),
       lastMessageTime: new Date(Date.now() - 21600000).toISOString(),
       avatar: "/avatar-roberto.svg",
     },
     {
       id: "contact-7",
       title: "Patricia Ferreira",
-      lastMessage: "Use for withdrawals and internal transfers.",
+      lastMessage: L("Use para retiradas e transferências internas.", "Use for withdrawals and internal transfers."),
       lastMessageTime: new Date(Date.now() - 25200000).toISOString(),
       avatar: "/avatar-patricia.svg",
     },
     {
       id: "contact-8",
       title: "Leonardo Santos",
-      lastMessage: "Support contact for XLM movements.",
+      lastMessage: L("Contato de suporte para movimentos em XLM.", "Support contact for XLM movements."),
       lastMessageTime: new Date(Date.now() - 28800000).toISOString(),
       avatar: "/avatar-leonardo.svg",
     },
     {
       id: "contact-9",
       title: "Isabella Rodrigues",
-      lastMessage: "Preferred contact for receiving payments.",
+      lastMessage: L("Contato preferencial para receber pagamentos.", "Preferred contact for receiving payments."),
       lastMessageTime: new Date(Date.now() - 32400000).toISOString(),
       avatar: "/avatar-isabella.svg",
     },
     {
       id: "contact-10",
       title: "Gustavo Martins",
-      lastMessage: "Quick contact for priority transactions.",
+      lastMessage: L("Contato rápido para transações prioritárias.", "Quick contact for priority transactions."),
       lastMessageTime: new Date(Date.now() - 36000000).toISOString(),
       avatar: "/avatar-gustavo.svg",
     },
-  ];
+  ], [language, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,7 +147,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         if (!message) return;
 
         const role = String(message.role || "").toLowerCase();
-        const content = sanitizeVisiblePreview(String(message.content || "").trim());
+        const content = sanitizeVisiblePreview(String(message.content || "").trim(), hiddenKeyLabel);
         if (!content || role !== "assistant") return;
 
         if (!cancelled) {
@@ -164,7 +167,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [hiddenKeyLabel]);
 
   const conversations = useMemo(() => {
     return baseConversations.map((chat) => {
@@ -175,7 +178,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         lastMessageTime: agentPreview.createdAt || chat.lastMessageTime,
       };
     });
-  }, [agentPreview, t]);
+  }, [agentPreview, baseConversations]);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -232,12 +235,12 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
                   )}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex min-w-0 items-start justify-between gap-3">
-                  <h3 className="min-w-0 flex-1 truncate text-[17px] font-normal text-[#e9edef]">{chat.title}</h3>
+                  <h3 className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-normal text-[#e9edef]">{chat.title}</h3>
                   <span className="shrink-0 text-xs text-[#8696a0]">{formatTime(chat.lastMessageTime)}</span>
                 </div>
-                <p className="truncate text-sm text-[#8696a0]">{chat.lastMessage}</p>
+                <p className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap break-normal text-sm text-[#8696a0]">{chat.lastMessage}</p>
               </div>
             </div>
           ))}
