@@ -689,9 +689,10 @@ ${onboardingUrl}`;
     const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
     const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
     const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
-    const onRampTargetAsset = explicitReceiveUsdc || (mentionsUsdc && !mentionsTesouro && !explicitReceiveBrl)
-      ? 'USDC'
-      : 'BRL';
+    const onRampTargetAsset = explicitReceiveBrl
+      ? 'BRL'
+      : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? 'USDC' : 'BRL');
+    const fundAndPayAsset = mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL';
     const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,3})(?=\s*(?:,|\.|$|\b(?:via|por|com|faca|faça|fazer|transferencia|transferência)\b))/);
     const recipientQuery = recipientMatch?.[1]
       ?.replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
@@ -702,7 +703,9 @@ ${onboardingUrl}`;
       flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1]?.replace(',', '.'),
       amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : 'BRL',
-      asset_code: wantsOffRamp && !wantsOnRamp ? (mentionsUsdc ? 'USDC' : 'BRL') : onRampTargetAsset,
+      asset_code: wantsOffRamp && !wantsOnRamp
+        ? (mentionsUsdc ? 'USDC' : 'BRL')
+        : (wantsPixFundedPayment ? fundAndPayAsset : onRampTargetAsset),
       recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? recipientQuery : undefined,
     };
   }
@@ -769,11 +772,11 @@ ${onboardingUrl}`;
       state.success = true;
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
-        state.response_message = `Para retirar ${amountText} para uma conta externa, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua wallet e confirma os reais chegando no destino bancário.`;
+        state.response_message = `Para retirar ${amountText} para uma conta externa, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua conta TalkToStellar e confirma os reais chegando no destino bancário.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
       } else {
-        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX e receber em ${intent.asset_code}, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para entregar o saldo final na sua wallet.`;
+        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX e receber em ${this.formatUserFacingAssetName(intent.asset_code)}, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar na sua conta.`;
       }
     }
 
@@ -1134,6 +1137,13 @@ ${onboardingUrl}`;
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
   }
 
+  private formatUserFacingAssetName(assetCode: unknown): string {
+    const upper = this.toUserFacingAssetCode(assetCode);
+    if (upper === 'USDC' || upper === 'USD') return 'dólar digital';
+    if (upper === 'BRL') return 'real digital';
+    return upper || 'saldo';
+  }
+
   private toUserFacingAssetCode(assetCode: unknown): string {
     const upper = String(assetCode || '').trim().toUpperCase();
     return upper === 'TESOURO' ? 'BRL' : upper;
@@ -1455,6 +1465,9 @@ ${onboardingUrl}`;
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
+      '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as BRL or real digital.',
+      '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
+      '- For PIX to the user own bank/account, use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',

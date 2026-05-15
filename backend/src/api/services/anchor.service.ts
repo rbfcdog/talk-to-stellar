@@ -197,6 +197,7 @@ interface SandboxMockOnRampOrder {
   deliveryError?: string;
   upstreamError?: string;
   operationContext?: Record<string, unknown>;
+  receiptUrl?: string;
 }
 
 interface SandboxMockOffRampOrder {
@@ -243,7 +244,13 @@ function toStellarAmount(value: unknown): string {
 
 function formatDisplayAmount(value: unknown, assetCode: string): string {
   const amount = String(value || '0').replace(',', '.');
-  return `${amount} ${normalizeAssetCode(assetCode)}`;
+  const code = normalizeAssetCode(assetCode) === 'TESOURO' ? 'BRL' : normalizeAssetCode(assetCode);
+  const numeric = Number(amount);
+  if (Number.isFinite(numeric)) {
+    if (code === 'BRL') return `R$ ${numeric.toFixed(2).replace('.', ',')}`;
+    if (code === 'USDC') return `US$ ${numeric.toFixed(2)}`;
+  }
+  return `${amount} ${code}`;
 }
 
 function truncatePublicKey(value: string): string {
@@ -826,12 +833,56 @@ export class AnchorService {
     }
   }
 
-  private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<void> {
+  private static async findActiveRampOperationByIntent(input: {
+    userId: string;
+    type: 'PIX_ONRAMP' | 'PIX_OFFRAMP';
+    intentId?: string;
+  }): Promise<Record<string, unknown> | null> {
+    if (!input.intentId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('operations')
+        .select('id, status, context, created_at')
+        .eq('user_id', input.userId)
+        .eq('type', input.type)
+        .order('created_at', { ascending: false })
+        .limit(25);
+
+      if (error) {
+        console.warn(`[ramp] Could not check idempotent ${input.type} intent:`, error.message);
+        return null;
+      }
+
+      return ((data || []) as Array<Record<string, unknown>>).find((row) => {
+        const context = parseOperationContext(row.context);
+        const status = String(row.status || '').toUpperCase();
+        return context.intent_id === input.intentId && !['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(status);
+      }) || null;
+    } catch (error) {
+      console.warn(`[ramp] Could not check idempotent ${input.type} intent:`, debugErrorMessage(error));
+      return null;
+    }
+  }
+
+  private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<string> {
     try {
       const userFacingFinalAsset = normalizeAssetCode(record.finalAssetCode) === 'TESOURO'
         ? 'BRL'
         : (record.finalAssetCode || 'BRL');
-      await PaymentReceiptService.sendReceipt({
+      let balanceContext = '';
+      try {
+        const balances = normalizeBalances(await StellarService.getAccountBalance(record.publicKey));
+        const updated = balances.find((balance) => (
+          normalizeAssetCode(balance.asset_code) === normalizeAssetCode(userFacingFinalAsset) &&
+          (normalizeAssetCode(userFacingFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(userFacingFinalAsset, balance.asset_issuer))
+        ));
+        if (updated?.balance) {
+          balanceContext = ` Saldo atualizado: ${formatDisplayAmount(updated.balance, userFacingFinalAsset)}.`;
+        }
+      } catch (balanceError) {
+        console.warn('[ramp] Could not read updated balance for PIX receipt:', debugErrorMessage(balanceError));
+      }
+      return await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: record.sessionId,
         userId: record.userId,
@@ -842,10 +893,11 @@ export class AnchorService {
         destinationAssetCode: userFacingFinalAsset,
         hash: hash || record.deliveryHash || null,
         status: 'completed',
-        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua wallet.`,
+        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`,
       });
     } catch (error) {
       console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));
+      return '';
     }
   }
 
@@ -1121,6 +1173,11 @@ export class AnchorService {
 
     const deliveryHash = coalesceString(context.delivery_hash, context.stellar_tx_hash);
     if (deliveryHash) transaction.stellarTxHash = deliveryHash;
+    const receiptUrl = coalesceString(context.receipt_url);
+    if (receiptUrl) {
+      (transaction as OnRampTransaction & { receiptUrl?: string; receipt_url?: string }).receiptUrl = receiptUrl;
+      (transaction as OnRampTransaction & { receiptUrl?: string; receipt_url?: string }).receipt_url = receiptUrl;
+    }
 
     const record: SandboxMockOnRampOrder = {
       transaction,
@@ -1140,6 +1197,7 @@ export class AnchorService {
       deliverySourceAmount: coalesceString(context.delivery_source_amount) || undefined,
       deliveryError: coalesceString(context.delivery_error) || undefined,
       upstreamError: coalesceString(context.upstream_error) || undefined,
+      receiptUrl: receiptUrl || undefined,
       operationContext: {
         ...context,
         payment_instructions: paymentInstructions,
@@ -1176,7 +1234,12 @@ export class AnchorService {
       final_amount: record.finalAmount,
       ...patch,
     });
-    await this.notifySandboxOnRampCompleted(record, hash);
+    record.receiptUrl = await this.notifySandboxOnRampCompleted(record, hash);
+    if (record.receiptUrl) {
+      (record.transaction as OnRampTransaction & { receiptUrl?: string; receipt_url?: string }).receiptUrl = record.receiptUrl;
+      (record.transaction as OnRampTransaction & { receiptUrl?: string; receipt_url?: string }).receipt_url = record.receiptUrl;
+      await this.persistSandboxOnRampContext(record, { receipt_url: record.receiptUrl });
+    }
     return record;
   }
 
@@ -2031,8 +2094,17 @@ export class AnchorService {
     const finalAsset = resolveRampFinalAsset(requestedFinalCurrency);
     const anchorToCurrency = this.getTesouroIdentifier();
     const targetAsset = parseIssuedAssetIdentifier(anchorToCurrency);
+    const intentId = normalizeRampIntentId(input);
 
     if (!customerId) throw apiError('customer_id is required.', 400);
+    const existingIntent = await this.findActiveRampOperationByIntent({
+      userId: context.userId,
+      type: 'PIX_ONRAMP',
+      intentId,
+    });
+    if (existingIntent) {
+      throw apiError('Esta operação PIX já foi criada. Use o link aberto ou gere uma nova solicitação no chat.', 409);
+    }
 
     const trustline = await this.ensureIssuedAssetTrustline(context, {
       code: targetAsset.code || 'TESOURO',
@@ -2186,7 +2258,7 @@ export class AnchorService {
       provider: 'etherfuse',
       rail: 'pix',
       direction: 'onramp',
-      intent_id: normalizeRampIntentId(input) || undefined,
+      intent_id: intentId || undefined,
       customer_id: customerId,
       quote_id: quoteId,
       quote_refresh_reason: quoteRefreshReason,
@@ -2426,6 +2498,7 @@ export class AnchorService {
     const sourceAsset = normalizeRampUserAsset(input.source_asset_code, input.sourceAssetCode, 'BRL');
     const sourceAmount = coalesceString(input.source_amount, input.sourceAmount);
     const targetBrl = coalesceString(input.target_brl, input.targetBrl);
+    const intentId = normalizeRampIntentId(input);
     let fiatAccountId = coalesceString(
       input.fiat_account_id,
       input.fiatAccountId,
@@ -2435,6 +2508,14 @@ export class AnchorService {
 
     if (!customerId) throw apiError('customer_id is required.', 400);
     if (!quoteId) throw apiError('quote_id is required.', 400);
+    const existingIntent = await this.findActiveRampOperationByIntent({
+      userId: context.userId,
+      type: 'PIX_OFFRAMP',
+      intentId,
+    });
+    if (existingIntent) {
+      throw apiError('Esta retirada via PIX já foi criada. Use o link aberto ou gere uma nova solicitação no chat.', 409);
+    }
 
     if (!fiatAccountId) {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerId);
@@ -2503,7 +2584,7 @@ export class AnchorService {
         provider: 'etherfuse',
         rail: 'pix',
         direction: 'offramp',
-        intent_id: normalizeRampIntentId(input) || undefined,
+        intent_id: intentId || undefined,
         customer_id: customerId,
         quote_id: quoteId,
         anchor_order_id: transaction.id,
@@ -2619,6 +2700,7 @@ export class AnchorService {
         transaction: mockRecord.transaction,
         ...(mockRecord.deliveryHash ? { delivery_hash: mockRecord.deliveryHash } : {}),
         ...(mockRecord.deliverySourceAmount ? { delivery_source_amount: mockRecord.deliverySourceAmount } : {}),
+        ...(mockRecord.receiptUrl ? { receipt_url: mockRecord.receiptUrl } : {}),
         ...(mockRecord.deliveryError ? { error: mockRecord.deliveryError } : {}),
         sandbox_mock: true,
       } as any;
@@ -2962,8 +3044,23 @@ export class AnchorService {
           destinationAssetCode,
           hash: submitResult.hash || orderResult.transaction.id,
           status: 'completed',
-          contextMessage: 'Retirada via PIX concluída: o saldo saiu da wallet e entrou na conta externa.',
+          contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou na conta externa.',
         });
+        if (receiptUrl && orderResult.operation_id) {
+          const operation = await OperationRepository.findById(orderResult.operation_id).catch(() => null);
+          const previousContext = parseOperationContext(operation?.context);
+          await OperationRepository.update(orderResult.operation_id, {
+            context: JSON.stringify({
+              ...previousContext,
+              receipt_url: receiptUrl,
+              submit_hash: submitResult.hash || '',
+              destination_amount: destinationAmount,
+              destination_asset_code: destinationAssetCode,
+            }),
+          } as any).catch((error) => {
+            console.warn('[ramp] Could not persist PIX off-ramp receipt URL:', debugErrorMessage(error));
+          });
+        }
       } catch (error) {
         console.warn('[ramp] Could not send PIX off-ramp receipt:', debugErrorMessage(error));
       }

@@ -104,7 +104,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       avatar: "/talktostellar.png",
       isBot: true,
       starter: [
-        { id: "agent-welcome", role: "assistant", content: "Olá! Posso achar a rota mais barata para enviar/converter com taxa transparente antes da confirmação. Comece com: \"saldo\", \"enviar 200 dólares para Maria\" ou \"melhor rota para 200 dólares em BRL\".", createdAt: new Date() },
+        { id: "agent-welcome", role: "assistant", content: "Olá! Posso mostrar saldo, receber dinheiro via PIX, retirar para uma conta externa, enviar para contatos e converter com taxa transparente. Comece com: \"saldo\", \"depositar 150 reais via PIX\", \"sacar 100 reais para minha conta\" ou \"enviar 200 dólares para Maria\".", createdAt: new Date() },
       ],
     },
     "contact-1": {
@@ -749,7 +749,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Digite uma mensagem"
+            placeholder="Digite: saldo, depositar via PIX, sacar via PIX ou enviar para alguém"
             className="h-11 flex-1 rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
             disabled={isLoading}
           />
