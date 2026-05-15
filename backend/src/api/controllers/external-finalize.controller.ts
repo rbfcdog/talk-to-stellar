@@ -873,7 +873,34 @@ async function reserveOnboardingFinalization(input: {
     };
   }
 
-  if (String(existing.status || '').toLowerCase() === 'completed' || existing.used) {
+  const existingTokenHash = String(existing.token_hash || '').trim();
+  const existingCompleted = String(existing.status || '').toLowerCase() === 'completed' || Boolean(existing.used);
+  if (existingCompleted && existingTokenHash && existingTokenHash !== input.tokenHash) {
+    const recycle = await supabase
+      .from('onboarding_finalizations')
+      .update({
+        token_hash: input.tokenHash,
+        status: 'processing',
+        used: false,
+        used_at: null,
+        data: input.data || null,
+        error: null,
+        result: null,
+        response_status: null,
+        session_id: null,
+        user_id: null,
+        updated_at: now,
+      })
+      .eq('id', existing.id)
+      .eq('token_hash', existingTokenHash)
+      .select('*')
+      .single();
+
+    if (recycle.error) throw recycle.error;
+    return { ok: true, row: recycle.data };
+  }
+
+  if (existingCompleted) {
     return {
       ok: false,
       status: 409,
