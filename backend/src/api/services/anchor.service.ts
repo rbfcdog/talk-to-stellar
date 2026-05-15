@@ -25,6 +25,7 @@ import { EconomyEngineService } from './economy-engine.service';
 import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
+import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -244,7 +245,7 @@ function apiError(message: string, statusCode = 400): Error {
 }
 
 function normalizeAmount(value: unknown, label = 'amount'): string {
-  const amount = String(value || '').trim().replace(',', '.');
+  const amount = normalizeHumanAmountText(value);
   if (!/^\d+(\.\d+)?$/.test(amount) || Number(amount) <= 0) {
     throw apiError(`${label} must be a positive decimal amount.`, 400);
   }
@@ -252,7 +253,7 @@ function normalizeAmount(value: unknown, label = 'amount'): string {
 }
 
 function toStellarAmount(value: unknown): string {
-  const amount = Number(String(value || '0').replace(',', '.'));
+  const amount = parseHumanAmountNumber(value);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw apiError('amount must be a positive decimal amount.', 400);
   }
@@ -260,7 +261,7 @@ function toStellarAmount(value: unknown): string {
 }
 
 function formatDisplayAmount(value: unknown, assetCode: string): string {
-  const amount = String(value || '0').replace(',', '.');
+  const amount = normalizeHumanAmountText(value) || '0';
   const code = normalizeAssetCode(assetCode) === 'TESOURO' ? 'BRL' : normalizeAssetCode(assetCode);
   const numeric = Number(amount);
   if (Number.isFinite(numeric)) {
@@ -331,7 +332,7 @@ function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): s
 }
 
 function formatPixAmount(value: string): string {
-  const amount = Number(String(value || '0').replace(',', '.'));
+  const amount = parseHumanAmountNumber(value);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw apiError('PIX amount must be a positive decimal amount.', 400);
   }
@@ -494,6 +495,30 @@ function normalizeBalances(balances: any[]): Array<{
       configuredCodes.has(balance.asset_code) &&
       (balance.asset_code === 'XLM' || assetMatchesConfiguredIssuer(balance.asset_code, balance.asset_issuer))
     ));
+}
+
+function assertSufficientBalance(
+  balances: Array<{ asset_code: string; asset_issuer?: string; balance: string }>,
+  asset: { code: string; issuer?: string },
+  amount: string,
+): void {
+  const assetCode = normalizeAssetCode(asset.code);
+  const expectedIssuer = String(asset.issuer || getAssetIssuer(assetCode) || '').trim();
+  const requested = parseHumanAmountNumber(amount);
+  const available = balances
+    .filter((balance) => (
+      normalizeAssetCode(balance.asset_code) === assetCode &&
+      (assetCode === 'XLM' || String(balance.asset_issuer || '') === expectedIssuer)
+    ))
+    .reduce((sum, balance) => sum + parseHumanAmountNumber(balance.balance), 0);
+
+  if (available + 0.0000001 < requested) {
+    throw apiError(
+      `Saldo insuficiente para esta retirada. Disponível: ${formatDisplayAmount(available.toFixed(7), assetCode)}. ` +
+      `Valor solicitado: ${formatDisplayAmount(requested.toFixed(7), assetCode)}.`,
+      409,
+    );
+  }
 }
 
 function balanceKey(balance: { asset_code: string; asset_issuer?: string }): string {
@@ -1708,6 +1733,8 @@ export class AnchorService {
       ? resolveConfiguredAsset(record.sourceAssetCode, record.sourceAssetIssuer)
       : { code: 'TESOURO', issuer: this.getTesouroIssuer() };
     const debitAmount = toStellarAmount(record.sourceAmount || record.amountTesouro);
+    const currentBalances = normalizeBalances(await StellarService.getAccountBalance(input.context.publicKey));
+    assertSufficientBalance(currentBalances, sourceAsset, debitAmount);
     const collector = await this.ensureSandboxCollectorTrustline(sourceAsset);
     if (!collector.success || !collector.publicKey) {
       record.transaction.status = 'failed' as any;
@@ -3034,6 +3061,7 @@ export class AnchorService {
     );
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
+    assertSufficientBalance(balancesBefore, sourceAsset, requestedSourceAmount);
 
     const customerIdInput = coalesceString(input.customer_id, input.customerId);
     const customerResult = customerIdInput

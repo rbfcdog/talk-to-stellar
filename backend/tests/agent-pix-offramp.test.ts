@@ -68,6 +68,20 @@ describe('Agent PIX off-ramp detection', () => {
     });
   });
 
+  it('parses pt-BR thousands in PIX off-ramp amounts', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+
+    const intent = (graph as any).extractPixRampIntentFromText('quero mandar 10.000 usdc pra fora da minha conta');
+
+    expect(intent).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'offramp',
+      amount: '10000',
+      amount_currency: 'USDC',
+      asset_code: 'USDC',
+    });
+  });
+
   it('builds PIX off-ramp URL with fixed BRL receive amount from the parsed tool intent', async () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
     const previousFrontendUrl = process.env.FRONTEND_URL;

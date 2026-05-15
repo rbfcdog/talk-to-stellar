@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { normalizeHumanAmountText } from '../utils/amount';
 
 type IdempotencyStatus = 'processing' | 'completed' | 'failed';
 
@@ -68,7 +69,7 @@ export function buildOperationFingerprint(input: {
     sourceSessionId: input.sourceSessionId || '',
     sourceUserId: input.sourceUserId || '',
     destination: String(input.destination || '').trim(),
-    amount: String(input.amount || '').replace(',', '.').trim(),
+    amount: normalizeHumanAmountText(input.amount),
     assetCode: String(input.assetCode || '').trim().toUpperCase(),
     tokenHash: input.tokenHash || '',
     operationType: String(input.operationType || '').trim().toUpperCase(),
