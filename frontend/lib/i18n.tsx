@@ -59,6 +59,9 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     login_pin_placeholder: "Digite seu PIN",
     login_submit: "1) Entrar com PIN",
     login_submitting: "Entrando...",
+    login_email_code: "Código enviado por e-mail",
+    login_email_code_help: "Confira seu e-mail e informe o código para continuar.",
+    login_confirm_submit: "Confirmar entrada",
     login_footer_help:
       'Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "mandar 100 reais para meu PIX" para retirar e "enviar 10 dólares para [nome]" para pagar.',
     login_connected_channel: "{{provider}} conectado",
@@ -134,6 +137,9 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     login_pin_placeholder: "Enter your PIN",
     login_submit: "1) Sign in with PIN",
     login_submitting: "Signing in...",
+    login_email_code: "Code sent by email",
+    login_email_code_help: "Check your email and enter the code to continue.",
+    login_confirm_submit: "Confirm sign-in",
     login_footer_help:
       'After signing in, use: "balance" to check your account, "deposit 150 reais with PIX" to add money, "send 100 reais to my PIX" to withdraw, and "send 10 dollars to [name]" to pay.',
     login_connected_channel: "{{provider}} connected",

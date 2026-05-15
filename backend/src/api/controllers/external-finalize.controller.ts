@@ -30,6 +30,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service';
 import { buildOperationFingerprint } from '../../services/idempotency.service';
+import {
+  EmailConfirmationError,
+  EmailConfirmationPurpose,
+  EmailConfirmationService,
+} from '../services/email-confirmation.service';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -210,6 +215,65 @@ function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
 function isBrowserExternalProvider(provider: string): boolean {
   const normalized = normalizeExternalProvider(provider);
   return normalized === 'web' || normalized === 'browser';
+}
+
+function readEmailConfirmationCode(req: Request): string {
+  return String(
+    req.body?.email_confirmation_code ||
+    req.body?.emailConfirmationCode ||
+    req.body?.email_code ||
+    req.body?.emailCode ||
+    ''
+  ).trim();
+}
+
+async function ensureEmailConfirmation(req: Request, res: Response, input: {
+  email?: string | null;
+  purpose: EmailConfirmationPurpose;
+  language: 'pt-BR' | 'en';
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  const email = normalizeEmailForCompare(input.email || '');
+  if (!email) return true;
+
+  try {
+    const confirmation = await EmailConfirmationService.requireVerified({
+      email,
+      purpose: input.purpose,
+      code: readEmailConfirmationCode(req),
+      language: input.language,
+      metadata: input.metadata,
+    });
+
+    if (!confirmation.verified) {
+      res.status(202).json({
+        success: false,
+        emailConfirmationRequired: true,
+        email: confirmation.maskedEmail,
+        expiresAt: confirmation.expiresAt,
+        devCode: confirmation.devCode,
+        message: confirmation.message,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (error: any) {
+    if (error instanceof EmailConfirmationError) {
+      const isServerError = error.statusCode >= 500;
+      res.status(error.statusCode).json({
+        success: false,
+        ...(isServerError ? {} : {
+          emailConfirmationRequired: true,
+          email: EmailConfirmationService.maskEmail(email),
+        }),
+        message: error.message,
+        error: error.code,
+      });
+      return false;
+    }
+    throw error;
+  }
 }
 
 function resolveCanonicalSessionLogin(session: any): string {
@@ -2452,9 +2516,12 @@ export default class ExternalFinalizeController {
         .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
 
-      // create deterministic user id for external users, or use email if provided
-      const userId = email ? String(email) : `external:${provider}:${provider_user_id}`;
       const normalizedEmail = normalizeEmailForCompare(email);
+      if (email && !looksLikeEmail(normalizedEmail)) {
+        return res.status(400).json({ success: false, message: 'Informe um e-mail válido.' });
+      }
+      // create deterministic user id for external users, or use email if provided
+      const userId = normalizedEmail || `external:${provider}:${provider_user_id}`;
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
       const isBrowserProvider = isBrowserExternalProvider(provider);
       const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, provider_user_id);
@@ -2515,6 +2582,21 @@ export default class ExternalFinalizeController {
             },
           });
         }
+
+        const emailConfirmed = await ensureEmailConfirmation(req, res, {
+          email: normalizedEmail,
+          purpose: 'create_account',
+          language,
+          metadata: {
+            provider,
+            provider_user_id,
+            token_hash: tokenHash,
+            session_id: String(existingAccount.session_id),
+            user_id: String(existingAccount.user_id),
+            browser_id: browserId || null,
+          },
+        });
+        if (!emailConfirmed) return;
 
         if (existingSession && existingWallet) {
           const existingPhone = normalizePhoneForCompare((existingSession as any)?.phone_number);
@@ -2610,6 +2692,21 @@ export default class ExternalFinalizeController {
             });
           }
 
+          const emailConfirmed = await ensureEmailConfirmation(req, res, {
+            email: normalizedEmail || lockedLogin,
+            purpose: 'create_account',
+            language,
+            metadata: {
+              provider,
+              provider_user_id,
+              token_hash: tokenHash,
+              session_id: String(identityLock.sessionId),
+              user_id: String((lockedSession as any)?.user_id || identityLock.userId || ''),
+              browser_id: browserId || null,
+            },
+          });
+          if (!emailConfirmed) return;
+
           await createExternalMappingsWithAliases({
             provider,
             provider_user_id,
@@ -2654,6 +2751,19 @@ export default class ExternalFinalizeController {
           },
         });
       }
+
+      const emailConfirmed = await ensureEmailConfirmation(req, res, {
+        email: normalizedEmail,
+        purpose: 'create_account',
+        language,
+        metadata: {
+          provider,
+          provider_user_id,
+          token_hash: tokenHash,
+          browser_id: browserId || null,
+        },
+      });
+      if (!emailConfirmed) return;
 
       const onboardingReservation = await reserveOnboardingFinalization({
         tokenHash,

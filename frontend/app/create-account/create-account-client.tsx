@@ -21,6 +21,10 @@ type FinalizeResponse = {
   processing?: boolean
   used?: boolean
   alreadyCompleted?: boolean
+  emailConfirmationRequired?: boolean
+  email?: string
+  expiresAt?: string
+  devCode?: string
 }
 
 function generateBrowserId(): string {
@@ -113,6 +117,8 @@ export default function CreateAccountClient({
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false)
+  const [emailConfirmationCode, setEmailConfirmationCode] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [cpf, setCpf] = useState("")
   const [pin, setPin] = useState("")
@@ -126,6 +132,8 @@ export default function CreateAccountClient({
   const [result, setResult] = useState<FinalizeResponse | null>(null)
   const [existingEmail, setExistingEmail] = useState("")
   const [existingPin, setExistingPin] = useState("")
+  const [, setExistingEmailConfirmationRequired] = useState(false)
+  const [existingEmailConfirmationCode, setExistingEmailConfirmationCode] = useState("")
   const [existingStatus, setExistingStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
   const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
@@ -502,6 +510,7 @@ export default function CreateAccountClient({
           phone_number: phoneNumber || undefined,
           cpf: cpf || undefined,
           pin,
+          email_confirmation_code: emailConfirmationCode || undefined,
           browser_id: browserId,
           language,
         }),
@@ -524,6 +533,15 @@ export default function CreateAccountClient({
         })
         return
       }
+      if (payload?.emailConfirmationRequired) {
+        setEmailConfirmationRequired(true)
+        setResult(payload)
+        setStatus("ready")
+        submitLockRef.current = false
+        return
+      }
+      setEmailConfirmationRequired(false)
+      setEmailConfirmationCode("")
       setResult(payload)
       setStatus(response.ok ? "done" : "error")
 
@@ -696,11 +714,19 @@ export default function CreateAccountClient({
           token: externalProvider && externalProviderUserId ? token : undefined,
           email: existingEmail,
           pin: existingPin,
+          email_confirmation_code: existingEmailConfirmationCode || undefined,
           language,
         }),
       })
 
       const payload = await response.json().catch(() => ({}))
+      if (payload?.emailConfirmationRequired) {
+        setExistingEmailConfirmationRequired(true)
+        setExistingStatus("idle")
+        setExistingError(String(payload?.message || "Informe o código enviado por e-mail para continuar."))
+        submitLockRef.current = false
+        return
+      }
       if (!response.ok || !payload?.success) {
         const linkMessage = String(payload?.message || "")
         if (payload?.used || payload?.alreadyCompleted || linkMessage.toLowerCase().includes("já foi utilizado")) {
@@ -718,6 +744,8 @@ export default function CreateAccountClient({
       }
       localStorage.setItem("talk-to-stellar.userName", existingEmail.trim())
 
+      setExistingEmailConfirmationRequired(false)
+      setExistingEmailConfirmationCode("")
       setExistingStatus("done")
       if (isTelegramContext) {
         finishTelegramFlow(`Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
@@ -835,7 +863,11 @@ export default function CreateAccountClient({
                 <span className="text-sm font-medium text-slate-200">{L("E-mail", "Email")}</span>
                 <input
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                    setEmailConfirmationRequired(false)
+                    setEmailConfirmationCode("")
+                  }}
                   type="email"
                   placeholder="voce@exemplo.com"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
@@ -901,14 +933,31 @@ export default function CreateAccountClient({
                 <span>{L("Ativar passkey agora (recomendado para login rápido e seguro).", "Enable passkey now (recommended for fast, secure login).")}</span>
               </label>
 
+              {emailConfirmationRequired && (
+                <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
+                  <span className="text-sm font-medium text-cyan-50">{L("Código enviado por e-mail", "Code sent by email")}</span>
+                  <input
+                    value={emailConfirmationCode}
+                    onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
+                  />
+                  <span className="block text-xs text-cyan-100">{result?.message || L("Confira seu e-mail e informe o código para continuar.", "Check your email and enter the code to continue.")}</span>
+                  {result?.devCode && <span className="block text-xs text-cyan-100">Dev code: {result.devCode}</span>}
+                </label>
+              )}
+
               {pinError && <p className="text-rose-300">{pinError}</p>}
 
               <button
                 type="submit"
-                disabled={submitLocked || !pin.trim() || !pinConfirm.trim()}
+                disabled={submitLocked || !pin.trim() || !pinConfirm.trim() || (emailConfirmationRequired && emailConfirmationCode.length !== 6)}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : L("3) Finalizar conta", "3) Finish account")}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("3) Finalizar conta", "3) Finish account")}
               </button>
             </form>
 
