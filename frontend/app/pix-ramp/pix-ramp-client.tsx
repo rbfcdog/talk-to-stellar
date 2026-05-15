@@ -1056,8 +1056,12 @@ export default function PixRampClient({
 
     if (input.kind === "offramp") {
       enqueueWebChatFeedback([
-        L("PIX enviado.", "PIX sent."),
-        L(`${offRampPixTargetDisplay} chegou no seu PIX.`, `${offRampPixTargetDisplay} arrived in your PIX.`),
+        L("PIX enviado com sucesso.", "PIX sent successfully."),
+        L(`Valor retirado: ${offRampReceiptAmount}`, `Withdrawn amount: ${offRampReceiptAmount}`),
+        L(`Chegou no seu PIX: ${offRampPixTargetDisplay}`, `Arrived in your PIX: ${offRampPixTargetDisplay}`),
+        L(`Destino: ${externalPixDestination}`, `Destination: ${externalPixDestination}`),
+        L("Status: concluído", "Status: completed"),
+        L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
         receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
@@ -1069,7 +1073,12 @@ export default function PixRampClient({
       const recipient = String(transfer.recipient_name || transferRecipient || L("destinatário", "recipient")).trim();
       enqueueWebChatFeedback([
         L("PIX confirmado e transferência enviada.", "PIX confirmed and transfer sent."),
-        L(`${sentAmount} enviado para ${recipient}.`, `${sentAmount} sent to ${recipient}.`),
+        L(`PIX pago: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`, `PIX paid: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`),
+        L(`Transferência: ${sentAmount}`, `Transfer: ${sentAmount}`),
+        L(`Destino: ${recipient}`, `Destination: ${recipient}`),
+        L("Rota: melhor conversão disponível", "Route: best available conversion"),
+        L("Status: concluído", "Status: completed"),
+        L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
         receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
@@ -1077,9 +1086,16 @@ export default function PixRampClient({
 
     const finalAmount = String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || finalReceivedAmount || order?.toAmount || quote?.toAmount || amountBrl);
     const finalAsset = userFacingAssetCode(input.completedTransaction?.finalAssetCode || input.completedTransaction?.toCurrency || receivedCode || targetAsset, targetAsset);
+    const paidAmount = formatMoney(input.completedTransaction?.fromAmount || order?.fromAmount || quote?.fromAmount || amountBrl);
+    const receivedAmount = formatRampAsset(finalAmount, finalAsset);
     enqueueWebChatFeedback([
-      L("PIX confirmado.", "PIX confirmed."),
-      L(`${formatRampAsset(finalAmount, finalAsset)} entrou na sua conta.`, `${formatRampAsset(finalAmount, finalAsset)} arrived in your account.`),
+      L("PIX confirmado com sucesso.", "PIX confirmed successfully."),
+      L(`Valor pago: ${paidAmount}`, `Paid amount: ${paidAmount}`),
+      L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
+      L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
+      L("Rota: melhor conversão disponível", "Route: best available conversion"),
+      L("Status: concluído", "Status: completed"),
+      L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
       receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));
   }

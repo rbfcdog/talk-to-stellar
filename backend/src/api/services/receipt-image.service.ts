@@ -86,16 +86,21 @@ function fitText(value: string, maxLength: number): string {
   return normalized;
 }
 
+function limitWords(value: string, maxWords: number): string {
+  const words = String(value || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  return words.slice(0, Math.max(1, maxWords)).join(' ');
+}
+
 function compactReceiptMessage(value: string): string {
   const normalized = fitText(value, 0);
   if (!normalized) return '';
   if (/retirada via pix conclu[ií]da|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
-    return 'PIX enviado ao seu PIX';
+    return 'PIX enviado';
   }
   if (/pix.*recebid|depositad/i.test(normalized)) {
     return 'PIX recebido';
   }
-  return normalized;
+  return limitWords(normalized, 3);
 }
 
 function wrapReceiptText(value: string, maxLineLength: number, maxLines = 2): string[] {
