@@ -1,12 +1,61 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createTelegramBot, formatWelcomeMessage } = require('../src/bot');
+const { createTelegramBot, formatWelcomeMessage, resolveBrandImageSource } = require('../src/bot');
 
 test('formatWelcomeMessage includes usage guidance (Portuguese)', () => {
   const message = formatWelcomeMessage();
   assert.match(message, /Olá — TalkToStellar está online no Telegram!/);
   assert.match(message, /\/reset/);
+});
+
+test('resolveBrandImageSource uses frontend public talktostellar image URL', () => {
+  const source = resolveBrandImageSource({
+    PUBLIC_APP_URL: 'https://app.talktostellar.com/',
+  });
+
+  assert.equal(source, 'https://app.talktostellar.com/talktostellar.png');
+});
+
+test('telegram welcome sends the TalkToStellar image when available', async () => {
+  const sentPhotos = [];
+  const replies = [];
+  const { sendWelcomeMessage } = createTelegramBot({
+    botToken: 'test-token',
+    agentClient: {
+      sendQuery: async () => ({ message: 'processed' }),
+    },
+    logger: {
+      info: () => {},
+      error: () => {},
+      warn: () => {},
+    },
+  });
+
+  const previousPublicAppUrl = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = 'https://app.talktostellar.com';
+
+  try {
+    await sendWelcomeMessage({
+      chat: { id: 42 },
+      telegram: {
+        sendPhoto: async (chatId, photo, options) => {
+          sentPhotos.push({ chatId, photo, options });
+          return { message_id: 123 };
+        },
+      },
+      reply: async text => replies.push(text),
+    });
+  } finally {
+    if (previousPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicAppUrl;
+  }
+
+  assert.equal(sentPhotos.length, 1);
+  assert.equal(sentPhotos[0].chatId, 42);
+  assert.equal(sentPhotos[0].photo, 'https://app.talktostellar.com/talktostellar.png');
+  assert.match(sentPhotos[0].options.caption, /TalkToStellar está online no Telegram/);
+  assert.equal(replies.length, 0);
 });
 
 test('telegram text handler forwards the message to the agent', async () => {
