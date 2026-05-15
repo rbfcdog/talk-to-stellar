@@ -3216,9 +3216,20 @@ Sua carteira foi criada e já está pronta para usar.
       logger.info(`[Agent] Processing for session: ${state.session_id}`);
       const explicitLanguage = this.extractLanguagePreference(state.current_input);
       if (explicitLanguage) {
+        const toolResultRaw = await executeTool('set_language', {
+          session_id: state.session_id,
+          language: explicitLanguage,
+        });
+        let toolResult: any;
+        try {
+          toolResult = JSON.parse(toolResultRaw);
+        } catch {
+          toolResult = { success: false };
+        }
+        const nextLanguage = this.normalizeLanguage(toolResult?.language || explicitLanguage);
         state.action_params = {
           ...(state.action_params || {}),
-          language: explicitLanguage,
+          language: nextLanguage,
         };
         await this.repository.saveMessage(
           state.session_id,
@@ -3226,8 +3237,8 @@ Sua carteira foi criada e já está pronta para usar.
           this.sanitizeUserMessage(state.current_input)
         );
         state.success = true;
-        state.response_message = this.text(
-          explicitLanguage,
+        state.response_message = String(toolResult?.message || '').trim() || this.text(
+          nextLanguage,
           'Pronto. Vou responder em português.',
           'Done. I will answer in English.'
         );
