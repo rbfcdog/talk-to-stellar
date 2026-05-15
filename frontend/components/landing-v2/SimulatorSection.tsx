@@ -126,7 +126,7 @@ export default function SimulatorSection() {
             {numbers.rate > 0 ? `1 BRL = ${numbers.rate.toFixed(6)} USDC` : "Carregando cotação..."}
           </p>
           <p className="text-[11px] text-[#9BA4B5] mt-1">
-            Fonte: {payload?.quote?.source === "binance" ? "Binance" : "Fallback configurado no backend"}
+            Fonte: BRL da sua conta
           </p>
         </div>
 

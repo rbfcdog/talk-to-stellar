@@ -30,6 +30,7 @@ import { EconomyEngineService } from "../api/services/economy-engine.service";
 import { PlatformFeeService } from "../api/services/platform-fee.service";
 import { InvoiceService } from "../api/services/invoice.service";
 import { GlobalProfileService } from "../api/services/global-profile.service";
+import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -190,98 +191,14 @@ async function fetchBrlUsdcQuote(): Promise<{
   usdcPerBrl: string;
   fetchedAt: string;
 }> {
-  const source = String(process.env.BRL_USDC_QUOTE_SOURCE || 'binance').trim().toLowerCase();
-  const symbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
-  const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
-
-  const parsePrice = (rawPrice: unknown) => {
-    const price = Number(String(rawPrice || '').trim());
-    if (!Number.isFinite(price) || price <= 0) {
-      throw new Error('Resposta de cotação inválida da fonte externa.');
-    }
-    const inverse = 1 / price;
-    return {
-      brlPerUsdc: price.toFixed(8),
-      usdcPerBrl: inverse.toFixed(8),
-    };
+  const quote = await BrlReferenceRateService.getReferenceRate();
+  return {
+    source: quote.source,
+    symbol: quote.symbol,
+    brlPerUsdc: quote.brlPerUsdc,
+    usdcPerBrl: quote.usdcPerBrl,
+    fetchedAt: quote.fetchedAt,
   };
-
-  const fetchWithTimeout = async (endpoint: string) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
-    try {
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-      const body = await response.text();
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${body.slice(0, 160)}`);
-      }
-      return JSON.parse(body);
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-
-  const tryBinance = async () => {
-    const endpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
-    const payload = await fetchWithTimeout(endpoint) as { symbol?: string; price?: string };
-    const parsed = parsePrice(payload?.price);
-    return {
-      source: 'binance',
-      symbol: String(payload?.symbol || symbol).toUpperCase(),
-      ...parsed,
-      fetchedAt: new Date().toISOString(),
-    };
-  };
-
-  const tryAwesomeApi = async () => {
-    const payload = await fetchWithTimeout('https://economia.awesomeapi.com.br/json/last/USD-BRL') as {
-      USDBRL?: { bid?: string; ask?: string; create_date?: string };
-    };
-    const parsed = parsePrice(payload?.USDBRL?.bid || payload?.USDBRL?.ask);
-    return {
-      source: 'awesomeapi',
-      symbol: 'USDBRL',
-      ...parsed,
-      fetchedAt: payload?.USDBRL?.create_date || new Date().toISOString(),
-    };
-  };
-
-  const tryFrankfurter = async () => {
-    const payload = await fetchWithTimeout('https://api.frankfurter.app/latest?from=USD&to=BRL') as {
-      rates?: { BRL?: number };
-      date?: string;
-    };
-    const parsed = parsePrice(payload?.rates?.BRL);
-    return {
-      source: 'frankfurter',
-      symbol: 'USDBRL',
-      ...parsed,
-      fetchedAt: new Date().toISOString(),
-    };
-  };
-
-  const providers = source === 'binance'
-    ? [tryBinance, tryAwesomeApi, tryFrankfurter]
-    : source === 'awesomeapi'
-      ? [tryAwesomeApi, tryFrankfurter, tryBinance]
-      : source === 'frankfurter'
-        ? [tryFrankfurter, tryAwesomeApi, tryBinance]
-        : [tryBinance, tryAwesomeApi, tryFrankfurter];
-
-  const errors: string[] = [];
-  for (const provider of providers) {
-    try {
-      return await provider();
-    } catch (error: any) {
-      errors.push(error?.message || String(error));
-    }
-  }
-
-  throw new Error(`Cotação indisponível nas fontes configuradas: ${errors.join(' | ')}`);
 }
 
 /**
@@ -299,7 +216,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_brl_usdc_quote",
-    description: "Get the current BRL-USDC market quote in real time from configured external source. Returns both BRL per 1 USDC and USDC per 1 BRL.",
+    description: "Get the current BRL-USDC quote from the configured on-chain BRL asset. Returns both BRL per 1 USDC and USDC per 1 BRL.",
     parameters: {
       type: "object",
       properties: {},
@@ -1229,7 +1146,7 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
       usdc_per_brl: quote.usdcPerBrl,
       fetched_at: quote.fetchedAt,
       message:
-        `Cotação atual (${quote.source.toUpperCase()}): ` +
+        `Cotação atual do BRL da sua conta: ` +
         `1 US$ = R$ ${quote.brlPerUsdc} | ` +
         `1 R$ = US$ ${quote.usdcPerBrl}.`,
     });

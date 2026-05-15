@@ -726,7 +726,10 @@ export default function PixRampClient({
     fetch("/api/financial/conversion-preview?brl_amount=100", { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => {
-        const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 5.6);
+        const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
+        if (!brlPerUsdc) {
+          throw new Error(payload?.message || "Cotação BRL/USDC indisponível.");
+        }
         const feeBuffer = Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.05);
         const estimatedBrl = (receiveUsdc * brlPerUsdc) + feeBuffer;
         if (cancelled) return;
@@ -744,15 +747,14 @@ export default function PixRampClient({
         });
       })
       .catch((err) => {
-        const fallbackBrl = (receiveUsdc * 5.6) + 0.05;
         if (!cancelled) {
-          setAmountBrl(fallbackBrl.toFixed(2));
+          setError("Não consegui calcular o PIX pela cotação do BRL da sua conta. Tente novamente em alguns segundos.");
           addDebugLog({
-            label: "PIX amount estimated with fallback rate",
+            label: "PIX amount estimate failed",
             method: "GET",
             path: "/api/financial/conversion-preview",
             request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-            response: { amount_brl: fallbackBrl.toFixed(2), brl_per_usdc: 5.6 },
+            response: {},
             error: err instanceof Error ? err.message : String(err),
           });
         }

@@ -3103,7 +3103,7 @@ Sua carteira foi criada e já está pronta para usar.
       state.response_message =
         `Cotação agora: 1 USDC = R$ ${brlLabel}.\n` +
         `Inverso: 1 BRL = US$ ${usdcLabel}.\n` +
-        `Fonte: ${String(toolResult.source || 'mercado').toUpperCase()} (${toolResult.symbol || 'USDCBRL'}).`;
+        `Fonte: BRL da sua conta.`;
     }
 
     await this.saveAssistantResponse(state);

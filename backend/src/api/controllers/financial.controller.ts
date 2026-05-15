@@ -14,6 +14,7 @@ import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { PlatformFeeService } from '../services/platform-fee.service';
+import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -21,38 +22,6 @@ const externalService = new ExternalService(supabase as any);
 function toPositiveNumber(value: unknown, fallback = 0): number {
   const parsed = Number(String(value ?? '').replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-async function fetchBrlPerUsdcRate(): Promise<{ brlPerUsdc: number; source: string; symbol: string }> {
-  const symbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
-  const timeoutMs = toPositiveNumber(process.env.BRL_USDC_QUOTE_TIMEOUT_MS, 8000);
-  const fallback = toPositiveNumber(process.env.DEFAULT_USD_BRL_RATE, 5.6);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      return { brlPerUsdc: fallback, source: 'fallback', symbol };
-    }
-
-    const payload = await response.json() as { price?: string; symbol?: string };
-    const brlPerUsdc = toPositiveNumber(payload?.price, fallback);
-    return {
-      brlPerUsdc,
-      source: 'binance',
-      symbol: String(payload?.symbol || symbol).toUpperCase(),
-    };
-  } catch {
-    return { brlPerUsdc: fallback, source: 'fallback', symbol };
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
@@ -68,9 +37,10 @@ export class FinancialController {
       .replace(',', '.')
       .trim();
     const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
-    const rate = await fetchBrlPerUsdcRate();
-    const usdcPerBrl = rate.brlPerUsdc > 0 ? 1 / rate.brlPerUsdc : 0;
-    const grossUsdc = brlAmount * usdcPerBrl;
+    const grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(brlAmount.toFixed(7));
+    const brlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
+    const usdcPerBrl = toPositiveNumber(grossQuote.usdcPerBrl, 0);
+    const grossUsdc = toPositiveNumber(grossQuote.destinationAmount, 0);
 
     const spread = PlatformFeeService.calculateSpread({
       sourceAmount: brlAmount.toFixed(7),
@@ -85,7 +55,10 @@ export class FinancialController {
       : (spread.enabled ? spreadEstimateBrl : 0);
     const netBrl = Math.max(0, brlAmount - spreadBrl);
     const spreadUsdc = spreadBrl * usdcPerBrl;
-    const receiveUsdc = netBrl * usdcPerBrl;
+    const receiveQuote = netBrl > 0
+      ? await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7))
+      : null;
+    const receiveUsdc = receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : 0;
 
     const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
     const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
@@ -105,10 +78,13 @@ export class FinancialController {
         brl_amount: Number(brlAmount.toFixed(2)),
       },
       quote: {
-        brl_per_usdc: Number(rate.brlPerUsdc.toFixed(6)),
+        brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
         usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
-        source: rate.source,
-        symbol: rate.symbol,
+        source: grossQuote.source,
+        symbol: grossQuote.symbol,
+        path: grossQuote.path,
+        source_asset: grossQuote.sourceAsset,
+        destination_asset: grossQuote.destinationAsset,
       },
       output: {
         gross_receive_usdc: Number(grossUsdc.toFixed(4)),
