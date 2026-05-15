@@ -251,6 +251,72 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('extracts PIX-funded contact transfer from direct-to-recipient wording', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+
+    const depositThenTransfer = (graph as any).extractPixRampIntentFromText(
+      'quero colocar 100 brl pra minha conta via pix e fazer essa trasacao direto pra ana silva'
+    );
+    const paidByPix = (graph as any).extractPixRampIntentFromText(
+      'quero fazer uma transacao pra ana silva de 100 brl na qual eu pago via pix'
+    );
+
+    expect(depositThenTransfer).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount: '100',
+      amount_currency: 'BRL',
+      asset_code: 'BRL',
+      recipient_query: 'ana silva',
+    });
+    expect(paidByPix).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount: '100',
+      amount_currency: 'BRL',
+      asset_code: 'BRL',
+      recipient_query: 'ana silva',
+    });
+  });
+
+  it('processes PIX-funded contact transfer as auto-pay link instead of wallet top-up', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState(
+        'quero fazer uma transacao pra ana silva de 100 brl na qual eu pago via pix'
+      ));
+      const url = String(result.response_message.match(/https?:\/\/\S+/)?.[0] || '');
+      const parsed = new URL(url);
+
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('ana silva');
+      expect(result.response_message).toContain('via PIX');
+      expect(result.response_message).toContain('envia para ana silva');
+      expect(result.response_message).not.toContain('saldo entrar como dólar digital');
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('currency')).toBe('BRL');
+      expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+      expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
+      expect(parsed.searchParams.get('recipient')).toBe('ana silva');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('extracts direct payment wording with insufficient balance as a normal payment intent', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 
