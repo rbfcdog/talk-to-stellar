@@ -159,6 +159,26 @@ function buildSavingsEstimate(input: {
   };
 }
 
+function normalizeToolLanguage(value: unknown): 'pt-BR' | 'en' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english') || normalized.includes('ingles')) {
+    return 'en';
+  }
+  return 'pt-BR';
+}
+
+async function executeSetLanguage(input: Record<string, any>): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  return JSON.stringify({
+    success: true,
+    language,
+    session_id: String(input.session_id || '').trim() || null,
+    message: language === 'en'
+      ? 'Done. I will answer in English.'
+      : 'Pronto. Vou responder em português.',
+  });
+}
+
 function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unknown): boolean {
   const source = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const destination = String(destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
@@ -205,6 +225,25 @@ async function fetchBrlUsdcQuote(): Promise<{
  * Tool definitions for OpenAI function calling
  */
 export const toolDefinitions = [
+  {
+    name: "set_language",
+    description: "Switch the assistant language between Brazilian Portuguese and English when the user asks to change language.",
+    parameters: {
+      type: "object",
+      properties: {
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Target language. Use en for English and pt-BR for Brazilian Portuguese.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+      },
+      required: ["language"],
+    },
+  },
   {
     name: "get_intent_help",
     description: "Mostra os principais comandos/intents disponíveis no TalkToStellar com explicações curtas em pt-BR.",
@@ -928,6 +967,8 @@ export async function executeTool(
   try {
     logger.info(`Tool call: ${toolName} ${JSON.stringify(toolInput || {})}`);
     switch (toolName) {
+      case "set_language":
+        return await executeSetLanguage(toolInput);
       case "get_intent_help":
         return executeGetIntentHelp();
       case "get_brl_usdc_quote":
