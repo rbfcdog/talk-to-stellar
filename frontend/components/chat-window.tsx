@@ -95,7 +95,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       avatar: "/talktostellar.png",
       isBot: true,
       starter: [
-        { id: "agent-welcome", role: "assistant", content: "Entre na sua conta para começar. Depois disso eu te guio para ver saldo, receber via PIX, retirar para uma conta externa, enviar para contatos ou converter saldo. Se ainda não entrou, toque em Entrar/Criar conta.", createdAt: new Date() },
+        { id: "agent-welcome", role: "assistant", content: "Entre na sua conta para começar. Depois disso eu te guio para ver saldo, receber via PIX, mandar saldo para seu PIX, enviar para contatos ou converter saldo. Se ainda não entrou, toque em Entrar/Criar conta.", createdAt: new Date() },
       ],
     },
     "contact-1": {

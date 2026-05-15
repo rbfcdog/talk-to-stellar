@@ -591,7 +591,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             */}
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "sacar 100 reais para minha conta" para retirar e "enviar 10 dólares para [nome]" para pagar.
+              Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "mandar 100 reais para meu PIX" para retirar e "enviar 10 dólares para [nome]" para pagar.
             </p>
           </section>
         </div>

@@ -295,8 +295,8 @@ function buildExternalBankAccountFields(context: SessionWalletContext) {
   const numeric = BigInt(`0x${hash.slice(0, 12)}`).toString().padStart(14, '0');
   const email = String(context.email || '').trim().toLowerCase();
   return {
-    label: 'Conta bancária externa TalkToStellar',
-    institution: 'Banco externo vinculado',
+    label: 'Seu PIX',
+    institution: 'Destino PIX vinculado',
     branch: numeric.slice(0, 4),
     account_number: `${numeric.slice(4, 11)}-${numeric.slice(11, 12)}`,
     pix_key: email.includes('@') ? email : `pix-${hash.slice(0, 8)}@talktostellar.bank`,
@@ -3124,7 +3124,7 @@ export class AnchorService {
     const bankLabel = coalesceString(
       externalBank.label,
       externalBank.institution,
-      'Conta bancária externa PIX',
+      'Seu PIX',
     );
     let receiptUrl = '';
     if (submitResult?.success) {
@@ -3140,7 +3140,7 @@ export class AnchorService {
           destinationAssetCode,
           hash: submitResult.hash || orderResult.transaction.id,
           status: 'completed',
-          contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou na conta externa.',
+          contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
         });
         if (receiptUrl && orderResult.operation_id) {
           const operation = await OperationRepository.findById(orderResult.operation_id).catch(() => null);

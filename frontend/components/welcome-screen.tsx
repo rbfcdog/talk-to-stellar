@@ -20,7 +20,7 @@ export function WelcomeScreen() {
       </h1>
 
       <p className="mb-8 max-w-md text-[14px] leading-[1.5] text-[#8696a0]">
-        Selecione WhatsDap na barra lateral. Comece por aqui: 1) "saldo", 2) "depositar 150 reais via PIX", 3) "sacar 100 reais para minha conta", 4) "enviar 200 dólares para Maria".
+        Selecione WhatsDap na barra lateral. Comece por aqui: 1) "saldo", 2) "depositar 150 reais via PIX", 3) "mandar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".
       </p>
 
       <div className="mb-8 flex items-center gap-1 text-[14px] text-[#8696a0]">

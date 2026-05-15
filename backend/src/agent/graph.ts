@@ -627,10 +627,15 @@ ${onboardingUrl}`;
   } {
     const normalized = this.normalizeTextForIntent(text);
     const mentionsPix = /\bpix\b/.test(normalized);
+    const mentionsMoneyOutOfOwnAccount =
+      /\b(?:pra|para|pro)\s+fora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
+      /\b(?:mandar|enviar|tirar|retirar|sacar)\b.*\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
+      /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized);
     const mentionsBankOffRamp =
       /\b(off\s*ramp|offramp)\b/.test(normalized) ||
       /\b(?:banco|bancaria|bancario|bancária|bancário|conta externa|outro banco)\b/.test(normalized) ||
-      /\b(?:retirar|sacar|saque|retirada|tirar|resgatar)\b/.test(normalized);
+      /\b(?:retirar|sacar|saque|retirada|tirar|resgatar)\b/.test(normalized) ||
+      mentionsMoneyOutOfOwnAccount;
 
     const mentionsOwnPixDestination =
       /\b(?:meu|minha|meus|minhas)\s+(?:pix|chave\s+pix|conta\s+pix)\b/.test(normalized) ||
@@ -659,7 +664,8 @@ ${onboardingUrl}`;
       normalized.includes('conta externa') ||
       normalized.includes('enviar para o banco') ||
       normalized.includes('enviar pro banco') ||
-      normalized.includes('cair no banco');
+      normalized.includes('cair no banco') ||
+      mentionsMoneyOutOfOwnAccount;
 
     const wantsOnRamp =
       /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|receber|on\s*ramp|onramp)\b/.test(normalized) ||
@@ -779,7 +785,7 @@ ${onboardingUrl}`;
       state.success = true;
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
-        state.response_message = `Para retirar ${amountText} para uma conta externa, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua conta TalkToStellar e confirma os reais chegando no destino bancário.`;
+        state.response_message = `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua conta TalkToStellar e confirma o dinheiro chegando no seu PIX.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`;
@@ -1473,7 +1479,8 @@ ${onboardingUrl}`;
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
       '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as BRL or real digital.',
       '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
-      '- For PIX to the user own bank/account, use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
+      '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
+      '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -1618,6 +1625,7 @@ Respond ONLY with the intent name. Examples:
 - "sacar 20 reais por pix" -> pix
 - "sacar 100 reais para minha conta bancaria via pix" -> pix
 - "tirar dinheiro para minha conta bancaria via pix" -> pix
+- "quero mandar 10 usdc pra fora da minha conta" -> pix
 - "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
 - "Create account" -> onboard
 - "Create wallet" -> wallet

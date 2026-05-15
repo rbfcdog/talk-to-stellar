@@ -1,8 +1,8 @@
 import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
-  title: "PIX Off-Ramp",
-  description: "Retirar saldo para uma conta PIX na TalkToStellar.",
+  title: "Mandar para PIX",
+  description: "Mandar saldo para seu PIX pela TalkToStellar.",
 };
 
 function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {
