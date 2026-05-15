@@ -512,6 +512,61 @@ async function configureWalletAssetsAndContacts(input: {
   }
 }
 
+function runPostOnboardingTasks(input: {
+  userId: string;
+  publicKey: string;
+  vaultSecretId?: string | null;
+  sessionId?: string | null;
+  walletName?: string | null;
+  pixKey?: string | null;
+  provider?: string | null;
+  providerUserId?: string | null;
+  name?: string | null;
+  language?: string;
+}) {
+  void (async () => {
+    await configureWalletAssetsAndContacts({
+      userId: input.userId,
+      publicKey: input.publicKey,
+      vaultSecretId: input.vaultSecretId,
+      sessionId: input.sessionId,
+    });
+
+    if (input.sessionId) {
+      try {
+        const freshAccount = await StellarService.loadAccount(input.publicKey);
+        await walletRepo.saveWallet({
+          session_id: input.sessionId,
+          public_key: input.publicKey,
+          vault_secret_id: input.vaultSecretId || null,
+          name: input.walletName || `Wallet for ${input.userId}`,
+          pix_key: input.pixKey || undefined,
+          balance: freshAccount.balances,
+          sequence: freshAccount.sequence,
+          account_data: freshAccount,
+        } as any);
+      } catch (walletSyncError) {
+        logger.warn(`[external-finalize] wallet sync after onboarding failed for ${input.userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
+      }
+    }
+
+    try {
+      await TransferNotificationService.notifySessionWelcome({
+        sessionId: input.sessionId || '',
+        userId: input.userId,
+        name: input.name || null,
+        provider: input.provider || undefined,
+        providerUserId: input.providerUserId || undefined,
+        language: input.language,
+      });
+    } catch (welcomeError) {
+      logger.warn(`[external-finalize] welcome notification failed for ${input.userId}: ${welcomeError instanceof Error ? welcomeError.message : String(welcomeError)}`);
+    }
+  })().catch((error) => {
+    logger.warn(`[external-finalize] post-onboarding tasks failed for ${input.userId}: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
 async function upsertRecentContactFromPayment(input: {
   ownerId: string;
   sourcePublicKey: string;
@@ -2615,20 +2670,16 @@ export default class ExternalFinalizeController {
             });
           }
 
-          const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
-          const welcomePromise = TransferNotificationService.notifySessionWelcome({
+          void TransferNotificationService.notifySessionWelcome({
             sessionId: String(existingAccount.session_id),
             userId: String(existingAccount.user_id),
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
             language,
+          }).catch((welcomeError) => {
+            logger.warn(`[external-finalize] welcome notification failed for ${existingAccount.user_id}: ${welcomeError instanceof Error ? welcomeError.message : String(welcomeError)}`);
           });
-          if (shouldAwaitWelcome) {
-            await welcomePromise;
-          } else {
-            void welcomePromise;
-          }
 
           return res.status(200).json({
             success: true,
@@ -2820,20 +2871,16 @@ export default class ExternalFinalizeController {
           await completeOnboardingFinalization(tokenHash, responseBody, 200);
           onboardingReservationTokenHash = null;
 
-          const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
-          const welcomePromise = TransferNotificationService.notifySessionWelcome({
+          void TransferNotificationService.notifySessionWelcome({
             sessionId: existingWallet.session_id,
             userId,
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
             language,
+          }).catch((welcomeError) => {
+            logger.warn(`[external-finalize] welcome notification failed for ${userId}: ${welcomeError instanceof Error ? welcomeError.message : String(welcomeError)}`);
           });
-          if (shouldAwaitWelcome) {
-            await welcomePromise;
-          } else {
-            void welcomePromise;
-          }
 
           return res.status(200).json(responseBody);
         }
@@ -2870,29 +2917,6 @@ export default class ExternalFinalizeController {
         name: name || `Wallet for ${userId}`,
         pix_key: pixKey,
       } as any);
-
-      await configureWalletAssetsAndContacts({
-        userId,
-        publicKey,
-        vaultSecretId,
-        sessionId,
-      });
-
-      try {
-        const freshAccount = await StellarService.loadAccount(publicKey);
-        await walletRepo.saveWallet({
-          session_id: sessionId,
-          public_key: publicKey,
-          vault_secret_id: vaultSecretId,
-          name: name || `Wallet for ${userId}`,
-          pix_key: pixKey,
-          balance: freshAccount.balances,
-          sequence: freshAccount.sequence,
-          account_data: freshAccount,
-        } as any);
-      } catch (walletSyncError) {
-        logger.warn(`[external-finalize] wallet sync after onboarding conversion failed for ${userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
-      }
 
       // link external_accounts mapping
       await createExternalMappingsWithAliases({
@@ -2936,20 +2960,18 @@ export default class ExternalFinalizeController {
       await completeOnboardingFinalization(tokenHash, responseBody, 201);
       onboardingReservationTokenHash = null;
 
-      const shouldAwaitWelcome = String(provider).toLowerCase() === 'telegram';
-      const welcomePromise = TransferNotificationService.notifySessionWelcome({
+      runPostOnboardingTasks({
         sessionId,
         userId,
+        publicKey,
+        vaultSecretId,
+        walletName: name || `Wallet for ${userId}`,
+        pixKey,
         name: name || email || null,
         provider,
         providerUserId: provider_user_id,
         language,
       });
-      if (shouldAwaitWelcome) {
-        await welcomePromise;
-      } else {
-        void welcomePromise;
-      }
 
       return res.status(201).json(responseBody);
     } catch (error: any) {
