@@ -547,7 +547,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                     disabled={externalLinkUsed}
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
                   />
-                  <span className="block text-xs text-slate-400">Conta já vinculada. Digite apenas seu PIN.</span>
+                  <span className="block text-xs text-slate-400">Digite seu PIN para conectar este Telegram à sua conta.</span>
                 </label>
               ) : (
                 <label className="block space-y-2">

@@ -223,6 +223,14 @@ async function hasOnboardingCredentials(sessionId: string, userId: string): Prom
   }
 }
 
+function getTokenSessionId(payload: any): string {
+  return String(payload?.session_id || payload?.sessionId || '').trim();
+}
+
+function getTokenUserId(payload: any): string {
+  return normalizeEmailForCompare(String(payload?.user_id || payload?.userId || payload?.owner_id || payload?.ownerId || ''));
+}
+
 export class ExternalController {
   // POST /api/external/check-account
   static async checkAccount(req: Request, res: Response) {
@@ -455,6 +463,48 @@ export class ExternalController {
             updated_at: String((lockedSession as any)?.updated_at || ''),
             created_at: String((lockedSession as any)?.created_at || ''),
           };
+        }
+      }
+
+      if (!matched && provider === 'telegram' && externalPayload) {
+        const tokenSessionId = getTokenSessionId(externalPayload);
+        const tokenUserId = getTokenUserId(externalPayload);
+        if (tokenSessionId) {
+          const tokenSession = await agentRepo.getSession(tokenSessionId);
+          if (tokenSession && !isSessionExpired(tokenSession)) {
+            const sessionUserId = normalizeEmailForCompare(String((tokenSession as any)?.user_id || ''));
+            const sessionEmail = normalizeEmailForCompare(String((tokenSession as any)?.email || ''));
+            const tokenMatchesSession = !tokenUserId || tokenUserId === sessionUserId || tokenUserId === sessionEmail;
+            if (!tokenMatchesSession) {
+              return res.status(409).json({
+                success: false,
+                notAssociated: true,
+                message: 'Este link do Telegram não pertence à conta vinculada.',
+              });
+            }
+
+            const tokenHash1 = String((tokenSession as any)?.session_password_hash || '').trim();
+            const tokenHash2 = String((tokenSession as any)?.password_hash || '').trim();
+            const tokenPinMatches = (tokenHash1 && tokenHash1 === pinHash) || (tokenHash2 && tokenHash2 === pinHash);
+            if (!tokenPinMatches) {
+              return res.status(401).json({
+                success: false,
+                message: 'PIN inválido para esta conta.',
+              });
+            }
+
+            email = resolveCanonicalSessionLogin(tokenSession) || email;
+            matched = {
+              session_id: String((tokenSession as any)?.session_id || tokenSessionId),
+              user_id: String((tokenSession as any)?.user_id || tokenUserId || ''),
+              email: String((tokenSession as any)?.email || ''),
+              session_token: String((tokenSession as any)?.session_token || ''),
+              password_hash: String((tokenSession as any)?.password_hash || ''),
+              session_password_hash: String((tokenSession as any)?.session_password_hash || ''),
+              updated_at: String((tokenSession as any)?.updated_at || ''),
+              created_at: String((tokenSession as any)?.created_at || ''),
+            };
+          }
         }
       }
 
