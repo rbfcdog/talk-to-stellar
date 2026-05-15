@@ -221,8 +221,8 @@ function buildExternalBankAccount(seed: string, email: string) {
   const pixAlias = email.includes("@") ? email : `pix-${hash.slice(0, 6)}@talktostellar.bank`;
   return {
     id: `bank-${hash}`,
-    label: "Conta bancária externa TalkToStellar",
-    institution: "Banco externo vinculado",
+    label: "Seu PIX",
+    institution: "Destino PIX vinculado",
     branch,
     account_number: account,
     pix_key: pixAlias,
@@ -371,7 +371,7 @@ export default function PixRampClient({
   );
   const [externalBankAccount, setExternalBankAccount] = useState<ExternalBankAccount | null>(null);
   const displayedExternalBankAccount = externalBankAccount || fallbackExternalBankAccount;
-  const externalPixDestination = `${displayedExternalBankAccount.institution} • Ag. ${displayedExternalBankAccount.branch} • Conta ${displayedExternalBankAccount.account_number}`;
+  const externalPixDestination = `PIX ${displayedExternalBankAccount.pix_key}`;
   const atomicIntentKey = intentId || `local-${stableHash([
     queryString,
     sessionId,
@@ -472,7 +472,7 @@ export default function PixRampClient({
         {
           label: "Valor de saída",
           detail: offRampInputAsset === "BRL"
-            ? `Alvo: ${offRampDisplayAmount} entrando na conta PIX.`
+            ? `Alvo: ${offRampDisplayAmount} entrando no seu PIX.`
             : `Saída do saldo: ${offRampDisplayAmount}.`,
           state: hasTarget ? "done" : "pending",
         },
@@ -491,7 +491,7 @@ export default function PixRampClient({
           state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Conta externa",
+          label: "Seu PIX",
           detail: temporaryOffRampTestResult
             ? `${formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)} chegou em ${externalPixDestination}.`
             : `Destino final: ${externalPixDestination}.`,
@@ -802,7 +802,7 @@ export default function PixRampClient({
     });
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: "Load linked external bank account",
+      label: "Load linked PIX destination",
       method: "POST",
       path: "/api/ramp/etherfuse/external-bank-account",
       status: response.status,
@@ -812,7 +812,7 @@ export default function PixRampClient({
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || payload?.error || "Nao consegui carregar a conta externa vinculada.");
+      throw new Error(payload?.message || payload?.error || "Não consegui carregar seu PIX vinculado.");
     }
     if (payload?.external_bank_account) {
       setExternalBankAccount(payload.external_bank_account);
@@ -1308,14 +1308,14 @@ export default function PixRampClient({
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {rampMode === "onramp" ? "Adicionar saldo com PIX" : "Retirar dinheiro via PIX"}
+                {rampMode === "onramp" ? "Adicionar saldo com PIX" : "Mandar dinheiro para seu PIX"}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 {rampMode === "onramp"
                   ? transferFlow && transferRecipient
                     ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
                     : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta."
-                  : "Confirme com seu PIN para retirar saldo via PIX integrado."}
+                  : "Confirme com seu PIN para mandar saldo para seu PIX."}
               </p>
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -1388,7 +1388,7 @@ export default function PixRampClient({
               setError("");
             }}
           >
-            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Retirar dinheiro</span>
+            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Mandar para PIX</span>
             <span className="mt-1 block text-lg font-black">Saldo para PIX</span>
           </button>
         </section>
@@ -1398,7 +1398,7 @@ export default function PixRampClient({
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
-              <h2 className="mt-1 text-3xl font-black text-white">Retirar saldo para PIX</h2>
+              <h2 className="mt-1 text-3xl font-black text-white">Mandar saldo para seu PIX</h2>
               <p className="mt-3 text-sm leading-6 text-slate-300">
                 O saldo sai da sua conta TalkToStellar e aparece como dinheiro recebido por PIX.
               </p>
@@ -1431,26 +1431,18 @@ export default function PixRampClient({
               {offRampAmountLocked && (
                 <p className="mt-2 text-xs font-bold text-cyan-100/65">Valor definido pelo chat.</p>
               )}
-              <label className="mt-6 block text-sm font-bold text-slate-200">Destino final</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">PIX de destino</label>
               <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-white">{displayedExternalBankAccount.label}</p>
-                    <p className="mt-1 text-xs font-bold text-cyan-100/70">{displayedExternalBankAccount.institution}</p>
+                    <p className="text-sm font-black text-white">Seu PIX</p>
+                    <p className="mt-1 text-xs font-bold text-cyan-100/70">Destino vinculado à sua conta</p>
                   </div>
                   <span className="rounded-full bg-cyan-300/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">vinculada</span>
                 </div>
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 text-sm">
                   <div className="rounded-2xl bg-black/20 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Agência</p>
-                    <p className="mt-1 font-black text-white">{displayedExternalBankAccount.branch}</p>
-                  </div>
-                  <div className="rounded-2xl bg-black/20 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Conta</p>
-                    <p className="mt-1 font-black text-white">{displayedExternalBankAccount.account_number}</p>
-                  </div>
-                  <div className="rounded-2xl bg-black/20 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">PIX</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Chave PIX</p>
                     <p className="mt-1 truncate font-black text-white">{displayedExternalBankAccount.pix_key}</p>
                   </div>
                 </div>
@@ -1470,13 +1462,13 @@ export default function PixRampClient({
                 disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
                 onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {operationLocked ? "Retirada concluída" : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />Confirmando...</span> : "Confirmar retirada"}
+                {operationLocked ? "PIX concluído" : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />Confirmando...</span> : "Confirmar envio para PIX"}
               </button>
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Conta externa</p>
-              <h2 className="mt-1 text-2xl font-black">Retirada para banco</h2>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Seu PIX</p>
+              <h2 className="mt-1 text-2xl font-black">Envio para PIX</h2>
               {!temporaryOffRampTestResult ? (
                 <div className="mt-8 h-28 rounded-3xl border border-dashed border-white/10 bg-white/[0.03]" />
               ) : (
@@ -1490,7 +1482,7 @@ export default function PixRampClient({
                     <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou na conta externa</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou no seu PIX</p>
                     <p className="mt-1 text-lg font-black">{formatMoney(temporaryOffRampTestResult.target_brl || temporaryOffRampTestResult.quote?.toAmount || offRampFiatAmount || offRampAmount)}</p>
                     <p className="mt-1 text-sm font-bold text-white/60">{externalPixDestination}</p>
                   </div>
@@ -1503,7 +1495,7 @@ export default function PixRampClient({
                     </div>
                   )}
                   <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-100">
-                    <p className="text-sm font-black">Retirada concluída para a conta externa.</p>
+                    <p className="text-sm font-black">Envio concluído para seu PIX.</p>
                   </div>
                 </div>
               )}
@@ -1848,7 +1840,7 @@ export default function PixRampClient({
                       </h2>
                       <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/65">
                         {rampMode === "offramp"
-                          ? "O saldo saiu da sua conta TalkToStellar e foi enviado para a conta externa vinculada."
+                          ? "O saldo saiu da sua conta TalkToStellar e entrou no seu PIX."
                           : transferFlow
                           ? "O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada."
                           : "O PIX foi confirmado e o saldo final entrou na sua conta."}
@@ -1873,7 +1865,7 @@ export default function PixRampClient({
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <ReceiptRow
-                      label={rampMode === "offramp" ? "Recebido na conta externa" : "Pago via PIX"}
+                      label={rampMode === "offramp" ? "Recebido no seu PIX" : "Pago via PIX"}
                       value={rampMode === "offramp" ? offRampReceiptReceived : formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}
                     />
                     <ReceiptRow label="Status" value="Concluído" />
@@ -1886,7 +1878,7 @@ export default function PixRampClient({
                 <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Detalhes do comprovante</p>
                   <dl className="mt-4 grid gap-3 text-sm">
-                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? displayedExternalBankAccount.label : "Minha conta TalkToStellar"} />
+                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? "Seu PIX" : "Minha conta TalkToStellar"} />
                     <ReceiptRow label="Ordem" value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
                     {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label="Comprovante" value={String(temporaryOffRampTestResult.receipt_url)} />}
                     {rampMode === "onramp" && onRampReceiptUrl && <ReceiptRow label="Comprovante" value={onRampReceiptUrl} />}
@@ -1974,7 +1966,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
         <div className={`${mode === "onramp" ? "bg-emerald-400/15 text-emerald-50" : "bg-cyan-400/15 text-cyan-50"} p-5 sm:p-6`}>
           <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Fluxo PIX em tempo real</p>
           <h2 className="mt-2 text-3xl font-black">
-            {mode === "onramp" ? "PIX entra e vira saldo na conta" : "Saldo sai e chega no banco"}
+            {mode === "onramp" ? "PIX entra e vira saldo na conta" : "Saldo sai e chega no seu PIX"}
           </h2>
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat

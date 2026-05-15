@@ -237,7 +237,7 @@ export class ActivityFeedService {
             ? 'O checkout PIX não foi concluído. Gere um novo PIX para tentar de novo.'
             : 'Checkout PIX criado. Aguardando confirmação.'
         : completed
-          ? `${amountText} saiu da conta TalkToStellar e entrou na conta externa vinculada.`
+          ? `${amountText} saiu da conta TalkToStellar e entrou no seu PIX.`
           : failed
             ? 'A retirada para PIX não foi concluída. Confira saldo e tente novamente.'
             : 'Retirada criada. Aguardando confirmação.';
