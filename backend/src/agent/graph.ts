@@ -585,13 +585,22 @@ export class AgentGraph {
     if (preferLogin) {
       let loginUrl = `${normalizedBase}/login`;
       try {
-        loginUrl = await this.externalService.shortenPublicUrl({
-          url: loginUrl,
-          purpose: 'login_entry',
-          sessionId: String(state?.session_id || '').trim() || undefined,
-          userId: String(state?.session_data?.user_id || '').trim() || undefined,
-          expiresInHours: 24,
-        });
+        if (externalProvider && externalProviderUserId) {
+          const login = await this.externalService.createLoginUrlWithShortLink(externalProvider, externalProviderUserId, {
+            source: externalProvider,
+            sessionId: String(state?.session_id || '').trim() || undefined,
+            userId: String(state?.session_data?.user_id || '').trim() || undefined,
+          });
+          loginUrl = login.url;
+        } else {
+          loginUrl = await this.externalService.shortenPublicUrl({
+            url: loginUrl,
+            purpose: 'login_entry',
+            sessionId: String(state?.session_id || '').trim() || undefined,
+            userId: String(state?.session_data?.user_id || '').trim() || undefined,
+            expiresInHours: 24,
+          });
+        }
       } catch (error) {
         logger.warn(`[login-url] failed to shorten login URL: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -785,11 +794,17 @@ ${onboardingUrl}`;
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
     const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
     const intentId = crypto.randomUUID();
+    const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const externalProviderUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
+    const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
     url.searchParams.set('mode', intent.direction);
     url.searchParams.set('asset', intent.asset_code);
     url.searchParams.set('intent_id', intentId);
     url.searchParams.set('from', 'chat');
     url.searchParams.set('autostart', '1');
+    if (externalProvider) url.searchParams.set('provider', externalProvider);
+    if (externalProviderUserId) url.searchParams.set('provider_user_id', externalProviderUserId);
+    if (externalSource) url.searchParams.set('source', externalSource);
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('auto_pay_after_ramp', '1');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
@@ -816,6 +831,20 @@ ${onboardingUrl}`;
     }
     const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
     if (email.includes('@')) url.searchParams.set('email', email);
+
+    if (externalProvider === 'telegram' && externalProviderUserId) {
+      try {
+        const login = await this.externalService.createLoginUrlWithShortLink(externalProvider, externalProviderUserId, {
+          source: externalSource || externalProvider,
+          next_path: `${url.pathname}${url.search}`,
+          sessionId: state.session_id,
+          userId: String(state.session_data?.user_id || '').trim() || undefined,
+        });
+        return login.url;
+      } catch (error) {
+        logger.warn(`[pix-ramp-url] failed to create Telegram login redirect: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
     try {
       return await this.externalService.shortenPublicUrl({

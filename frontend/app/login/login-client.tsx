@@ -121,6 +121,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "usuário").trim()
     enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${label}`)
     setLoginDone(true)
+    if (nextPath) {
+      window.setTimeout(() => {
+        window.location.replace(nextPath)
+      }, 450)
+      return
+    }
     closeIntermediatePage()
   }
 
@@ -470,10 +476,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           </p>
           <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            {hasExternalContext ? `Volte ao ${externalProviderLabel} e envie sua próxima mensagem.` : "Entrada concluída."}
+            {nextPath ? "Continuando para a operação..." : hasExternalContext ? `Volte ao ${externalProviderLabel} e envie sua próxima mensagem.` : "Entrada concluída."}
           </p>
           <p className="mt-2 text-xs text-slate-400">
-            {INTERMEDIATE_PAGE_CLOSE_COPY}
+            {nextPath ? "Abrindo a operação em instantes." : INTERMEDIATE_PAGE_CLOSE_COPY}
           </p>
         </section>
       </main>

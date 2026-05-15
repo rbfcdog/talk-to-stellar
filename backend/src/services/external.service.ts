@@ -430,6 +430,35 @@ export class ExternalService {
     return { token, url: shortUrl, longUrl };
   }
 
+  createLoginUrl(provider: string, providerUserId: string, extra: Record<string, any> = {}) {
+    const { token } = this.createOnboardUrl(provider, providerUserId, extra);
+    const urlObj = new URL(`${getPaymentConfirmBase()}/login`);
+    urlObj.searchParams.set('token', token);
+    urlObj.searchParams.set('provider', provider);
+    urlObj.searchParams.set('provider_user_id', providerUserId);
+    urlObj.searchParams.set('source', String(extra.source || provider).trim().toLowerCase());
+
+    const nextPath = String(extra.next_path || extra.nextPath || '').trim();
+    if (nextPath && nextPath.startsWith('/') && !nextPath.startsWith('//')) {
+      urlObj.searchParams.set('next', nextPath);
+    }
+
+    return { token, url: urlObj.toString() };
+  }
+
+  async createLoginUrlWithShortLink(provider: string, providerUserId: string, extra: Record<string, any> = {}) {
+    const { token, url: longUrl } = this.createLoginUrl(provider, providerUserId, extra);
+    const shortUrl = await this.shortenFrontendUrl({
+      token,
+      url: longUrl,
+      purpose: 'external_login',
+      sessionId: String(extra.session_id || extra.sessionId || '').trim() || null,
+      userId: String(extra.user_id || extra.userId || '').trim() || null,
+      expiresInHours: Number(extra.expires_in_hours || extra.expiresInHours || 24),
+    });
+    return { token, url: shortUrl, longUrl };
+  }
+
   async createLogoutUrl(input: {
     sessionId?: string;
     provider?: string;
