@@ -255,6 +255,12 @@ async function main() {
   const agentClient = createAgentClient({ agentUrl });
   const backendBaseUrl = new URL(agentUrl).origin;
   const externalCheck = async ({ provider, provider_user_id, chat_id, username }) => {
+    console.log('[telegram] check-account request', JSON.stringify({
+      provider,
+      provider_user_id,
+      chat_id,
+      username: username || null,
+    }));
     const response = await fetch(`${backendBaseUrl.replace(/\/$/, '')}/api/external/check-account`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -266,7 +272,16 @@ async function main() {
       throw new Error(`check-account failed: ${errorText}`);
     }
 
-    return response.json();
+    const payload = await response.json();
+    console.log('[telegram] check-account response', JSON.stringify({
+      provider,
+      provider_user_id,
+      chat_id,
+      exists: payload?.exists,
+      session_id: payload?.sessionId || null,
+      onboarding_required: payload?.onboardingRequired || false,
+    }));
+    return payload;
   };
 
   const { bot } = createTelegramBot({
@@ -399,6 +414,7 @@ async function main() {
         return;
       }
       if (req.url === normalizedPath && req.method === 'POST') {
+        console.log('[telegram] webhook update received');
         webhookCallback(req, res);
         return;
       }

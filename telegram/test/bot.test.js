@@ -25,6 +25,7 @@ test('telegram text handler forwards the message to the agent', async () => {
     logger: {
       info: () => {},
       error: () => {},
+      warn: () => {},
     },
   });
 
@@ -51,7 +52,7 @@ test('telegram text handler forwards the message to the agent', async () => {
   assert.equal(replies[0], 'processed');
 });
 
-test('telegram text handler sends creation URL when account is missing', async () => {
+test('telegram text handler forwards to the agent when account is missing', async () => {
   const queries = [];
   const replies = [];
   const { handleTextMessage } = createTelegramBot({
@@ -83,13 +84,14 @@ test('telegram text handler sends creation URL when account is missing', async (
 
   await handleTextMessage(ctx);
 
-  assert.equal(queries.length, 0);
+  assert.equal(queries.length, 1);
+  assert.equal(queries[0].source, 'telegram');
+  assert.equal(queries[0].fromId, 7);
   assert.equal(replies.length, 1);
-  assert.match(replies[0], /crie sua conta/i);
-  assert.match(replies[0], /create-account\?token=abc123/);
+  assert.equal(replies[0], 'processed');
 });
 
-test('telegram text handler does not forward to agent when account check fails', async () => {
+test('telegram text handler forwards to the agent when account check fails', async () => {
   const queries = [];
   const replies = [];
   const { handleTextMessage } = createTelegramBot({
@@ -120,7 +122,9 @@ test('telegram text handler does not forward to agent when account check fails',
 
   await handleTextMessage(ctx);
 
-  assert.equal(queries.length, 0);
+  assert.equal(queries.length, 1);
+  assert.equal(queries[0].source, 'telegram');
+  assert.equal(queries[0].fromId, 7);
   assert.equal(replies.length, 1);
-  assert.match(replies[0], /Nao consegui validar seu cadastro agora/i);
+  assert.equal(replies[0], 'processed');
 });
