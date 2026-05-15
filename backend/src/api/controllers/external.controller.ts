@@ -14,6 +14,11 @@ import {
   normalizeExternalProviderUserId,
 } from '../../repositories/external.repository';
 import { TransferNotificationService } from '../services/transfer-notification.service';
+import {
+  EmailConfirmationError,
+  EmailConfirmationPurpose,
+  EmailConfirmationService,
+} from '../services/email-confirmation.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 
 const externalService = new ExternalService(supabase);
@@ -68,6 +73,65 @@ function isBrowserExternalProvider(provider: string): boolean {
 
 function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function readEmailConfirmationCode(req: Request): string {
+  return String(
+    req.body?.email_confirmation_code ||
+    req.body?.emailConfirmationCode ||
+    req.body?.email_code ||
+    req.body?.emailCode ||
+    ''
+  ).trim();
+}
+
+async function ensureEmailConfirmation(req: Request, res: Response, input: {
+  email?: string | null;
+  purpose: EmailConfirmationPurpose;
+  language: 'pt-BR' | 'en';
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  const email = normalizeEmailForCompare(input.email || '');
+  if (!email) return true;
+
+  try {
+    const confirmation = await EmailConfirmationService.requireVerified({
+      email,
+      purpose: input.purpose,
+      code: readEmailConfirmationCode(req),
+      language: input.language,
+      metadata: input.metadata,
+    });
+
+    if (!confirmation.verified) {
+      res.status(202).json({
+        success: false,
+        emailConfirmationRequired: true,
+        email: confirmation.maskedEmail,
+        expiresAt: confirmation.expiresAt,
+        devCode: confirmation.devCode,
+        message: confirmation.message,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (error: any) {
+    if (error instanceof EmailConfirmationError) {
+      const isServerError = error.statusCode >= 500;
+      res.status(error.statusCode).json({
+        success: false,
+        ...(isServerError ? {} : {
+          emailConfirmationRequired: true,
+          email: EmailConfirmationService.maskEmail(email),
+        }),
+        message: error.message,
+        error: error.code,
+      });
+      return false;
+    }
+    throw error;
+  }
 }
 
 function getOnboardingProcessingTtlSeconds(): number {
@@ -703,31 +767,9 @@ export class ExternalController {
       }
       console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
 
-      const wallet = await walletRepo.getWalletBySession(String(matched.session_id));
+      const targetSessionId = String(matched.session_id);
       const targetUserId = String(matched.user_id || email || providerUserId);
       const targetEmail = String(matched.email || email || '');
-      await agentRepo.saveSession(String(matched.session_id), {
-        ...matched,
-        user_id: targetUserId,
-        email: targetEmail,
-        public_key: wallet?.public_key || undefined,
-      } as any);
-
-      await supabase
-        .from('agent_states')
-        .update({
-          action_params: {
-            force_logged_out: false,
-            waiting_for_wallet_input: false,
-            pending_payment: null,
-            pending_conversion: null,
-          },
-          pending_payment: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('session_id', String(matched.session_id));
-
-      const targetSessionId = String(matched.session_id);
       if (identityLock?.sessionId && identityLock.sessionId !== targetSessionId) {
         return res.status(409).json({
           success: false,
@@ -751,6 +793,43 @@ export class ExternalController {
           message: `Este ${providerLabel} já está vinculado a outra conta.`,
         });
       }
+
+      const confirmationEmail = normalizeEmailForCompare(targetEmail)
+        || (looksLikeEmail(targetUserId) ? normalizeEmailForCompare(targetUserId) : '');
+      const emailConfirmed = await ensureEmailConfirmation(req, res, {
+        email: confirmationEmail,
+        purpose: 'login',
+        language,
+        metadata: {
+          provider,
+          provider_user_id: providerUserId,
+          session_id: targetSessionId,
+          user_id: targetUserId,
+        },
+      });
+      if (!emailConfirmed) return;
+
+      const wallet = await walletRepo.getWalletBySession(targetSessionId);
+      await agentRepo.saveSession(targetSessionId, {
+        ...matched,
+        user_id: targetUserId,
+        email: targetEmail,
+        public_key: wallet?.public_key || undefined,
+      } as any);
+
+      await supabase
+        .from('agent_states')
+        .update({
+          action_params: {
+            force_logged_out: false,
+            waiting_for_wallet_input: false,
+            pending_payment: null,
+            pending_conversion: null,
+          },
+          pending_payment: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('session_id', targetSessionId);
 
       await createExternalMappingWithAliases({
         provider,

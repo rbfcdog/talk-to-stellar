@@ -47,6 +47,7 @@ const orderedMigrations = [
   '20260513_05_identity_uniqueness_email_phone_cpf.sql',
   '20260514_00_payment_logs_destination_name.sql',
   '20260514_01_external_bank_accounts.sql',
+  '20260515_00_email_confirmations.sql',
 ];
 
 function resolveExecutionList(): string[] {
@@ -209,6 +210,7 @@ async function verifyCoreObjects(): Promise<void> {
     'public.idempotency_keys',
     'public.short_links',
     'public.telegram_update_dedupes',
+    'public.email_confirmations',
   ];
 
   for (const objectName of checks) {

@@ -97,6 +97,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   )
   const [email, setEmail] = useState("")
   const [pin, setPin] = useState("")
+  const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false)
+  const [emailConfirmationCode, setEmailConfirmationCode] = useState("")
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
   const [qrTargetUrl, setQrTargetUrl] = useState("")
@@ -336,11 +338,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           token: hasExternalContext ? externalToken : undefined,
           email,
           pin,
+          email_confirmation_code: emailConfirmationCode || undefined,
           language,
         }),
       })
 
       const payload = await response.json().catch(() => ({}))
+      if (payload?.emailConfirmationRequired) {
+        setEmailConfirmationRequired(true)
+        actionLockRef.current = false
+        setStatus("idle")
+        setError(String(payload?.message || "Informe o código enviado por e-mail para continuar."))
+        return
+      }
       if (!response.ok || !payload?.success) {
         const message = String(payload?.message || "")
         if (payload?.used || payload?.alreadyCompleted || message.toLowerCase().includes("já foi utilizado")) {
@@ -355,6 +365,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         payload?.sessionToken ? String(payload.sessionToken) : undefined
       )
       markExternalLoginCompleted()
+      setEmailConfirmationRequired(false)
+      setEmailConfirmationCode("")
       const resolvedLogin = String(payload?.email || payload?.userId || email.trim() || externalIdentifierLabel).trim()
       if (resolvedLogin) {
         localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
@@ -560,7 +572,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                   <span className="text-sm font-medium text-slate-200">{t("login_email")}</span>
                   <input
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value)
+                      setEmailConfirmationRequired(false)
+                      setEmailConfirmationCode("")
+                    }}
                     type="email"
                     disabled={externalLinkUsed}
                     placeholder="voce@exemplo.com"
@@ -583,15 +599,32 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 />
               </label>
 
+              {emailConfirmationRequired && (
+                <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
+                  <span className="text-sm font-medium text-cyan-50">{t("login_email_code")}</span>
+                  <input
+                    value={emailConfirmationCode}
+                    onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    disabled={externalLinkUsed}
+                    placeholder="000000"
+                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
+                  />
+                  <span className="block text-xs text-cyan-100">{t("login_email_code_help")}</span>
+                </label>
+              )}
+
               {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">{error}</p>}
 
               <button
                 type="submit"
-                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim()}
+                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim() || (emailConfirmationRequired && emailConfirmationCode.length !== 6)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />
-                {status === "pin" ? t("login_submitting") : t("login_submit")}
+                {status === "pin" ? t("login_submitting") : emailConfirmationRequired ? t("login_confirm_submit") : t("login_submit")}
               </button>
             </form>
 

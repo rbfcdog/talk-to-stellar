@@ -4,6 +4,7 @@ import { UserService } from '../services/user.service';
 import { OperationService } from '../services/operation.service';
 import { AuthService } from '../services/auth.service';
 import { AnchorService } from '../services/anchor.service';
+import { EmailConfirmationError, EmailConfirmationService } from '../services/email-confirmation.service';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -16,8 +17,25 @@ export class ActionsController {
   static async login(req: Request, res: Response) {
     try {
       const { email } = req.body;
-      
       const result = await AuthService.login(email);
+      const confirmation = await EmailConfirmationService.requireVerified({
+        email,
+        purpose: 'login',
+        code: String(req.body?.email_confirmation_code || req.body?.emailConfirmationCode || '').trim(),
+        language: req.body?.language || req.body?.lang || req.body?.locale,
+        metadata: { endpoint: 'actions.login' },
+      });
+
+      if (!confirmation.verified) {
+        return res.status(202).json({
+          success: false,
+          emailConfirmationRequired: true,
+          email: confirmation.maskedEmail,
+          expiresAt: confirmation.expiresAt,
+          devCode: confirmation.devCode,
+          message: confirmation.message,
+        });
+      }
       
       res.status(200).json({ 
         success: true, 
@@ -27,6 +45,15 @@ export class ActionsController {
       });
 
     } catch (error: any) {
+      if (error instanceof EmailConfirmationError) {
+        const isServerError = error.statusCode >= 500;
+        return res.status(error.statusCode).json({
+          success: false,
+          ...(isServerError ? {} : { emailConfirmationRequired: true }),
+          message: error.message,
+          error: error.code,
+        });
+      }
       if (error.message.includes('não foi encontrado')) {
         return res.status(404).json({ success: false, message: error.message });
       }
