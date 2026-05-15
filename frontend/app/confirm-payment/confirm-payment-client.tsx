@@ -265,6 +265,48 @@ function buildFeeSummary(input: {
   return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
+function buildMobileConfirmedFeedback(payload: any) {
+  const amount = String(
+    payload?.destination_amount ||
+    payload?.amount ||
+    payload?.source_amount ||
+    payload?.quote?.destinationAmount ||
+    payload?.quote?.sourceAmount ||
+    ""
+  ).trim()
+  const asset = String(
+    payload?.destination_asset_code ||
+    payload?.asset_code ||
+    payload?.source_asset_code ||
+    payload?.quote?.destinationAsset?.code ||
+    payload?.quote?.sourceAsset?.code ||
+    ""
+  ).trim()
+  const route = formatRouteChainFromPayload(payload)
+  const sourceCode = normalizeAssetCode(String(payload?.source_asset_code || payload?.quote?.sourceAsset?.code || ""))
+  const destinationCode = normalizeAssetCode(String(payload?.destination_asset_code || payload?.quote?.destinationAsset?.code || payload?.asset_code || ""))
+  const isCrossAsset = Boolean(sourceCode && destinationCode && sourceCode !== destinationCode)
+  const fee = buildFeeSummary({
+    feeDisplay: String(payload?.estimated_fee_display || payload?.quote?.fee_display || ""),
+    feeUsdc: String(payload?.estimated_fee_usdc || payload?.quote?.fee_usdc || ""),
+    feeBrl: String(payload?.estimated_fee_brl || payload?.quote?.fee_brl || ""),
+    sourceAmount: String(payload?.source_amount || payload?.quote?.sourceAmount || payload?.amount || ""),
+    sourceAssetCode: String(payload?.source_asset_code || payload?.quote?.sourceAsset?.code || payload?.asset_code || ""),
+  })
+  const savings = formatBrl(String(payload?.savings_estimate?.estimated_savings_brl || ""))
+
+  return [
+    "Pagamento confirmado pelo celular.",
+    amount && asset ? `Valor: ${formatPaymentAmount(amount, asset)}` : "",
+    `Destino: ${formatRecipientLabel(payload)}`,
+    isCrossAsset && route ? `Melhor caminho: ${route}` : "",
+    hasUsableFeeDisplay(fee) ? `Taxa estimada: ${fee}` : "",
+    isCrossAsset && savings ? `Economia estimada: ${savings}` : "",
+    `Horário: ${formatTimestamp()}`,
+    "Comprovante registrado no histórico.",
+  ].filter(Boolean).join("\n")
+}
+
 function getProviderLabel(provider?: string) {
   const normalized = String(provider || "").trim().toLowerCase()
   if (normalized === "telegram") return "Telegram"
@@ -407,14 +449,16 @@ export default function ConfirmPaymentClient({
         }
 
         if (response.status === 409 && payload?.used) {
+          const payloadForFeedback = payload?.payload || validation?.payload || decodeJwtPayload(token)
+          const feedback = buildMobileConfirmedFeedback(payloadForFeedback)
           submitLockRef.current = true
           setResult((prev) => prev || {
             success: true,
-            message: "Pagamento confirmado pelo celular.",
+            message: feedback,
           })
           setStatus("done")
           setMobileSyncStatus("")
-          enqueueWebChatFeedback("Pagamento confirmado pelo celular.")
+          enqueueWebChatFeedback(feedback)
           return
         }
 
