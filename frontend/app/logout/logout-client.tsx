@@ -59,7 +59,7 @@ export default function LogoutClient() {
 
   useEffect(() => {
     if (!token) {
-      redirectToUsed("Este link de logout é inválido ou já foi utilizado.")
+      redirectToUsed("This logout link is invalid or has already been used.")
       return
     }
 
@@ -71,11 +71,11 @@ export default function LogoutClient() {
         if (!active) return
         if (!response.ok || payload?.valid === false || payload?.used || payload?.alreadyCompleted || payload?.expired) {
           const reason = String(payload?.message || "")
-          redirectToUsed(reason || "Este link de logout já foi utilizado.")
+          redirectToUsed(reason || "This logout link has already been used.")
           return
         }
       } catch {
-        redirectToUsed("Não foi possível validar este link de logout.")
+        redirectToUsed("Could not validate this logout link.")
       }
     }
     void validateToken()
@@ -88,7 +88,7 @@ export default function LogoutClient() {
   useEffect(() => {
     if (status !== "done" || completionRef.current) return
     completionRef.current = true
-    enqueueWebChatFeedback(`Saída concluída.\n${message || "Sua sessão foi encerrada."}`)
+    enqueueWebChatFeedback(`Signed out.\n${message || "Your session has ended."}`)
     closeIntermediatePage()
   }, [status, message])
 
@@ -109,10 +109,10 @@ export default function LogoutClient() {
       if (!response.ok || payload?.success === false) {
         const errorMessage = String(payload?.error || payload?.message || "")
         if (payload?.alreadyUsed || payload?.expired || errorMessage.toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(payload?.expired ? "Este link expirou. Solicite um novo link." : "Este link de logout já foi utilizado.")
+          redirectToUsed(payload?.expired ? "This link expired. Request a new link." : "This logout link has already been used.")
           return
         }
-        throw new Error(errorMessage || "Falha ao encerrar sessão no servidor.")
+        throw new Error(errorMessage || "Failed to end the session on the server.")
       }
       if (typeof window !== "undefined") {
         localStorage.removeItem("talk-to-stellar.sessionId")
@@ -123,10 +123,10 @@ export default function LogoutClient() {
         sessionStorage.setItem("chat-session-agent", generateSessionId())
       }
       setStatus("done")
-      setMessage(providerLabel ? `Logout concluído. Volte ao ${providerLabel} para continuar.` : "Você saiu da conta com sucesso.")
+      setMessage(providerLabel ? `Signed out. Go back to ${providerLabel} to continue.` : "You signed out successfully.")
     } catch {
       setStatus("error")
-      setMessage("Não foi possível concluir o logout agora. Tente novamente.")
+      setMessage("Could not complete sign-out now. Try again.")
     }
   }
 
@@ -134,8 +134,8 @@ export default function LogoutClient() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4 py-12 sm:px-6">
         <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
-          <h1 className="text-3xl font-semibold text-white">Sair da conta</h1>
-          <p className="mt-3 text-slate-300">{status === "loading" ? "Encerrando sua sessão..." : message || "Confirme para encerrar sua sessão atual."}</p>
+          <h1 className="text-3xl font-semibold text-white">Sign out</h1>
+          <p className="mt-3 text-slate-300">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
           {status === "done" && (
             <p className="mt-2 text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
           )}
@@ -147,7 +147,7 @@ export default function LogoutClient() {
                 disabled={status === "loading"}
                 className="inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-60"
               >
-                {status === "loading" ? "Saindo..." : "Confirmar logout"}
+                {status === "loading" ? "Signing out..." : "Confirm sign-out"}
               </button>
             )}
           </div>

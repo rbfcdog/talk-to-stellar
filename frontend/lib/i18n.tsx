@@ -9,94 +9,13 @@ const STORAGE_KEY = "talk-to-stellar.language";
 const COOKIE_KEY = "tts_lang";
 
 export function normalizeLanguage(value: unknown): AppLanguage {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "en" || normalized.startsWith("en-") || normalized.includes("english")) return "en";
-  return "pt-BR";
+  return "en";
 }
 
 type Dictionary = Record<string, string>;
 
-const dictionaries: Record<AppLanguage, Dictionary> = {
-  "pt-BR": {
+const englishDictionary: Dictionary = {
     language_button: "English",
-    language_label: "Idioma",
-    language_current: "Português",
-    chat_agent_welcome:
-      "Entre na sua conta para começar. Depois disso eu te guio para ver saldo, receber via PIX, mandar saldo para seu PIX, enviar para contatos ou converter saldo. Se ainda não entrou, toque em Entrar/Criar conta.",
-    chat_search_placeholder: "Pesquisar contatos da carteira...",
-    chat_sidebar_preview: "Olá! Como posso ajudar com sua carteira, saldo e contatos hoje?",
-    chat_input_placeholder: "Digite: saldo, depositar via PIX, sacar via PIX ou enviar para alguém",
-    chat_wait_session: "Aguarde um momento enquanto iniciamos a sessão...",
-    chat_api_error: "Falha na resposta da API",
-    chat_no_response: "Sem resposta recebida",
-    chat_error_prefix: "Desculpe, ocorreu um erro",
-    chat_online: "online",
-    chat_link_payment: "Abrir confirmação de pagamento",
-    chat_link_conversion: "Abrir confirmação de conversão",
-    chat_link_account: "Criar ou entrar na conta",
-    chat_link_pin: "Redefinir PIN",
-    chat_link_pay_anyone: "Abrir link de pagamento",
-    chat_link_claim: "Resgatar pagamento",
-    chat_link_pix: "Abrir PIX",
-    chat_link_whatsapp: "Compartilhar no WhatsApp",
-    chat_link_generic: "Abrir link",
-    welcome_select:
-      'Selecione WhatsDap na barra lateral. Comece por aqui: 1) "saldo", 2) "depositar 150 reais via PIX", 3) "mandar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
-    welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua carteira.",
-    login_title: "Entrar na sua conta",
-    login_subtitle:
-      "Entre para continuar de onde parou. Próximo passo depois do login: saldo, contatos, PIX para entrar/sair dinheiro e pagamentos.",
-    login_channel_detected: "Canal detectado",
-    login_identifier: "Identificador",
-    login_expired: "Sua sessão expirou. Entre novamente para continuar.",
-    login_pin_card_title: "PIN",
-    login_pin_card_body: "Caminho mais rápido para entrar e continuar.",
-    login_via: "Entrando via",
-    login_telegram_id: "ID do Telegram",
-    login_telegram_help: "Digite seu PIN para entrar na conta vinculada a este Telegram.",
-    login_email: "E-mail",
-    login_pin: "PIN",
-    login_pin_placeholder: "Digite seu PIN",
-    login_submit: "1) Entrar com PIN",
-    login_submitting: "Entrando...",
-    login_email_code: "Código enviado por e-mail",
-    login_email_code_help: "Confira seu e-mail e informe o código para continuar.",
-    login_confirm_submit: "Confirmar entrada",
-    login_footer_help:
-      'Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "mandar 100 reais para meu PIX" para retirar e "enviar 10 dólares para [nome]" para pagar.',
-    login_connected_channel: "{{provider}} conectado",
-    login_connected_account: "Conta conectada",
-    login_linked_title: "Sua conta foi vinculada.",
-    login_continue_operation: "Continuando para a operação...",
-    login_back_to_channel: "Volte ao {{provider}} e envie sua próxima mensagem.",
-    login_done: "Entrada concluída.",
-    login_opening_operation: "Abrindo a operação em instantes.",
-    hero_title_1: "Converta pro mundo todo.",
-    hero_title_2: "Em uma mensagem.",
-    hero_subtitle:
-      "Envie dinheiro, gerencie contatos e use a blockchain com linguagem natural. Direto do Telegram ou WhatsApp, sem burocracia.",
-    hero_card_1_title: "Linguagem natural",
-    hero_card_1_body: "Use mensagens simples para simular, transferir e organizar transações.",
-    hero_card_2_title: "Conversão com menor taxa",
-    hero_card_2_body:
-      "A plataforma compara rotas em tempo real para reduzir custo efetivo em BRL e USDC, com transparência de taxa antes da confirmação.",
-    nav_solution: "A Solução",
-    nav_simulator: "Simulação de Conversão",
-    nav_how: "Como Funciona",
-    pix_add_title: "Adicionar saldo com PIX",
-    pix_send_title: "Mandar dinheiro para seu PIX",
-    pix_add_subtitle: "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta.",
-    pix_transfer_subtitle: "Faça o PIX integrado, confirme com seu PIN e envie automaticamente para {{recipient}}.",
-    pix_off_subtitle: "Confirme com seu PIN para mandar saldo para seu PIX em BRL.",
-    pix_value: "Valor",
-    pix_destination: "Destino",
-    pix_my_account: "Minha conta",
-    pix_your_pix: "Seu PIX",
-    pix_need_email: "Digite o email da conta para localizar sua conta e continuar.",
-    pix_done_sent_chat: "Esta operação já foi concluída. O comprovante foi enviado no chat.",
-  },
-  en: {
-    language_button: "Português",
     language_label: "Language",
     language_current: "English",
     chat_agent_welcome:
@@ -172,7 +91,11 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     pix_your_pix: "Your PIX",
     pix_need_email: "Enter the account email to find your account and continue.",
     pix_done_sent_chat: "This operation has already been completed. The receipt was sent in chat.",
-  },
+};
+
+const dictionaries: Record<AppLanguage, Dictionary> = {
+  "pt-BR": englishDictionary,
+  en: englishDictionary,
 };
 
 type LanguageContextValue = {
@@ -185,23 +108,19 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function readStoredLanguage(): AppLanguage {
-  if (typeof window === "undefined") return "pt-BR";
-  const query = new URLSearchParams(window.location.search);
-  const queryLanguage = query.get("lang") || query.get("language");
-  if (queryLanguage) return normalizeLanguage(queryLanguage);
-  return normalizeLanguage(window.localStorage.getItem(STORAGE_KEY));
+  return "en";
 }
 
 function persistLanguage(language: AppLanguage) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, language);
   document.cookie = `${COOKIE_KEY}=${language}; path=/; max-age=31536000; SameSite=Lax`;
-  document.documentElement.lang = language === "en" ? "en" : "pt-BR";
+  document.documentElement.lang = "en";
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
-  const [language, setLanguageState] = useState<AppLanguage>("pt-BR");
+  const [language, setLanguageState] = useState<AppLanguage>("en");
 
   useEffect(() => {
     const next = readStoredLanguage();
@@ -225,7 +144,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<LanguageContextValue>(() => ({
     language,
     setLanguage,
-    toggleLanguage: () => setLanguage(language === "en" ? "pt-BR" : "en"),
+    toggleLanguage: () => setLanguage("en"),
     t: (key, replacements = {}) => {
       const template = dictionaries[language][key] || dictionaries["pt-BR"][key] || key;
       return Object.entries(replacements).reduce(

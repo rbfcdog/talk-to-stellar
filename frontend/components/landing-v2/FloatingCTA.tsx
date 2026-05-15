@@ -35,7 +35,7 @@ export default function FloatingCTA() {
             className="flex items-center justify-center gap-2 bg-gradient-custom text-white px-6 py-3 md:px-8 md:py-4 rounded-full font-bold text-sm md:text-base shadow-[0_0_40px_rgba(129,140,248,0.5)] hover:shadow-[0_0_60px_rgba(34,211,238,0.6)] transition-all duration-300 transform hover:scale-105 active:scale-95 border border-white/[0.03]"
           >
             <MessageCircle size={22} />
-            Começar Agora
+            Get Started
           </button>
         </motion.div>
       )}

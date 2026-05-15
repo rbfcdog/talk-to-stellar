@@ -2,7 +2,7 @@ import PixRampClient from "./pix-ramp-client";
 
 export const metadata = {
   title: "PIX Ramp",
-  description: "Entrada e saída de saldo via PIX.",
+  description: "Add and withdraw balance through PIX.",
 };
 
 export default function PixRampPage({

@@ -69,7 +69,7 @@ function getStoredSession() {
 function formatMoney(value: unknown, currency = "BRL") {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${currency}`;
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(numeric);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(numeric);
 }
 
 function toPositiveNumber(value: unknown, fallback = 0) {
@@ -104,7 +104,7 @@ function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USD
 function formatAsset(value: unknown, code = "BRL") {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${code}`;
-  return `${numeric.toLocaleString("pt-BR", { maximumFractionDigits: 7 })} ${code}`;
+  return `${numeric.toLocaleString("en-US", { maximumFractionDigits: 7 })} ${code}`;
 }
 
 function formatRampAsset(value: unknown, code = "BRL") {
@@ -114,12 +114,12 @@ function formatRampAsset(value: unknown, code = "BRL") {
 
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
-  if (displayCode === "USDC") return language === "en" ? "digital dollar" : "dólar digital";
-  return language === "en" ? "digital real" : "real digital";
+  if (displayCode === "USDC") return "digital dollar";
+  return "digital real";
 }
 
 function formatCountdown(ms: number, language: "pt-BR" | "en" = "pt-BR") {
-  if (!Number.isFinite(ms) || ms <= 0) return language === "en" ? "expired" : "expirada";
+  if (!Number.isFinite(ms) || ms <= 0) return "expired";
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -153,16 +153,16 @@ function isFailureStatus(status: unknown) {
 
 function statusLabel(status: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const normalized = normalizeStatus(status);
-  if (normalized === "completed") return language === "en" ? "Completed" : "Concluído";
-  if (normalized === "processing" || normalized === "funded") return language === "en" ? "Processing" : "Processando";
-  if (normalized === "pending") return language === "en" ? "Waiting" : "Aguardando";
-  if (normalized === "failed") return language === "en" ? "Failed" : "Falhou";
-  if (normalized === "expired") return language === "en" ? "Expired" : "Expirou";
-  if (normalized === "cancelled" || normalized === "canceled") return language === "en" ? "Cancelled" : "Cancelado";
-  if (normalized === "refunded") return language === "en" ? "Refunded" : "Estornado";
-  if (normalized === "cotação expirada") return language === "en" ? "Quote expired" : "Cotação expirada";
-  if (normalized === "não iniciado") return language === "en" ? "Not started" : "Não iniciado";
-  return normalized || (language === "en" ? "Waiting" : "Aguardando");
+  if (normalized === "completed") return "Completed";
+  if (normalized === "processing" || normalized === "funded") return "Processing";
+  if (normalized === "pending") return "Waiting";
+  if (normalized === "failed") return "Failed";
+  if (normalized === "expired") return "Expired";
+  if (normalized === "cancelled" || normalized === "canceled") return "Cancelled";
+  if (normalized === "refunded") return "Refunded";
+  if (normalized === "cotação expirada" || normalized === "quote expired") return "Quote expired";
+  if (normalized === "não iniciado" || normalized === "not started") return "Not started";
+  return normalized || "Waiting";
 }
 
 function balanceKey(balance: BalanceItem) {
@@ -201,7 +201,7 @@ function formatVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
 }
 
 function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset, language: "pt-BR" | "en" = "pt-BR") {
-  if (!after.length) return language === "en" ? "Updating" : "Aguardando";
+  if (!after.length) return "Updating";
   const delta = sumVisibleBalance(after, assetCode) - sumVisibleBalance(before, assetCode);
   const sign = delta > 0 ? "+" : "";
   return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
@@ -210,12 +210,12 @@ function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCo
 function assertSufficientVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset, requestedValue: unknown) {
   const requested = parseHumanAmount(requestedValue);
   if (!Number.isFinite(requested) || requested <= 0) {
-    throw new Error("Informe um valor válido para retirar.");
+    throw new Error("Enter a valid withdrawal amount.");
   }
   const available = sumVisibleBalance(balances, assetCode);
   if (available + 0.0000001 < requested) {
     throw new Error(
-      `Saldo insuficiente. Você tem ${formatRampAsset(available.toFixed(7), assetCode)} disponível e tentou retirar ${formatRampAsset(requested.toFixed(7), assetCode)}.`
+      `Insufficient balance. You have ${formatRampAsset(available.toFixed(7), assetCode)} available and tried to withdraw ${formatRampAsset(requested.toFixed(7), assetCode)}.`
     );
   }
 }
@@ -253,8 +253,8 @@ function buildExternalBankAccount(seed: string, email: string) {
   const pixAlias = email.includes("@") ? email : `pix-${hash.slice(0, 6)}@talktostellar.bank`;
   return {
     id: `bank-${hash}`,
-    label: "Seu PIX",
-    institution: "Destino PIX vinculado",
+    label: "Your PIX",
+    institution: "Linked PIX destination",
     branch,
     account_number: account,
     pix_key: pixAlias,
@@ -266,8 +266,8 @@ function WalletPinInput({
   onChange,
   tone = "emerald",
   inputRef,
-  placeholder = "Digite seu PIN",
-  clearLabel = "Limpar",
+  placeholder = "Enter your PIN",
+  clearLabel = "Clear",
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -354,7 +354,7 @@ export default function PixRampClient({
 }) {
   const { language, t } = useLanguage();
   const queryString = initialQuery;
-  const L = (pt: string, en: string) => language === "en" ? en : pt;
+  const L = (_pt: string, en: string) => en;
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
@@ -403,6 +403,8 @@ export default function PixRampClient({
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
+  const [transferRecipientKey, setTransferRecipientKey] = useState("");
+  const [transferRecipientPublicKey, setTransferRecipientPublicKey] = useState("");
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
@@ -424,6 +426,8 @@ export default function PixRampClient({
     desiredReceiveAmount,
     desiredReceiveAsset,
     transferRecipient,
+    transferRecipientKey,
+    transferRecipientPublicKey,
     autoPayAmount,
     autoPayAsset,
   ].join(":"))}`;
@@ -447,6 +451,15 @@ export default function PixRampClient({
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
+  const transferRecipientLabel = String(pixFundedTransferResult?.recipient_name || transferRecipient || "").trim();
+  const transferRecipientDisplayKey = String(
+    pixFundedTransferResult?.recipient_key ||
+    pixFundedTransferResult?.recipient_email ||
+    pixFundedTransferResult?.recipient_pix_key ||
+    transferRecipientKey ||
+    ""
+  ).trim();
+  const transferRecipientPublicKeyDisplay = String(pixFundedTransferResult?.recipient_public_key || transferRecipientPublicKey || "").trim();
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
   const hasSession = Boolean(sessionId && sessionToken);
@@ -478,10 +491,10 @@ export default function PixRampClient({
     : 120000;
   const quoteDeadlineAt = quote && quoteReceivedAt ? quoteReceivedAt + quoteTtlMs : 0;
   const quoteTimeRemainingMs = quoteDeadlineAt ? quoteDeadlineAt - now : NaN;
-  const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs, language) : L("sem cotação", "not quoted");
+  const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs, language) : "not quoted";
   const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
-  const status = order ? normalizeStatus(order.status) : quoteExpired ? "cotação expirada" : "não iniciado";
+  const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
   const onRampComplete = Boolean(order && isSuccessStatus(status));
   const orderFailed = Boolean(order && isFailureStatus(status));
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
@@ -491,7 +504,7 @@ export default function PixRampClient({
         ? formatRampAsset(desiredFinalAmount, targetAsset)
       : finalReceivedAmount
         ? formatRampAsset(finalReceivedAmount, targetAsset)
-        : "Calculado automaticamente na confirmação";
+        : "Calculated automatically on confirmation";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.sandbox && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
@@ -555,7 +568,7 @@ export default function PixRampClient({
 
     return [
       {
-        label: "Conta TalkToStellar",
+        label: "TalkToStellar account",
         detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
         state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
       },
@@ -593,7 +606,7 @@ export default function PixRampClient({
         label: transferFlow ? L("Transferência para destinatário", "Transfer to recipient") : L("Saldo entregue", "Balance delivered"),
         detail: onRampComplete
           ? pixFundedTransferResult?.transaction_hash
-            ? L(`${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`, `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} sent to ${pixFundedTransferResult.recipient_name || transferRecipient}.`)
+            ? L(`${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${transferRecipientLabel}.`, `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} sent to ${transferRecipientLabel}.`)
             : L(`${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na conta.`, `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} delivered to the account.`)
           : polling ? L("Atualizando status automaticamente.", "Updating status automatically.") : L(`Aguardando confirmação para entregar ${friendlyAssetName(targetAsset, language)}.`, `Waiting for confirmation to deliver ${friendlyAssetName(targetAsset, language)}.`),
         state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
@@ -624,6 +637,7 @@ export default function PixRampClient({
     targetAsset,
     transferFlow,
     transferRecipient,
+    transferRecipientLabel,
     autoPayAmount,
     autoPayAsset,
     pixFundedTransferResult,
@@ -655,6 +669,8 @@ export default function PixRampClient({
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
     const recipient = String(params.get("recipient") || "").trim();
+    const recipientKey = String(params.get("recipient_key") || params.get("recipient_email") || "").trim();
+    const recipientPublicKey = String(params.get("recipient_public_key") || "").trim();
     const payAmount = normalizeHumanAmount(params.get("pay_amount") || "");
     const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
@@ -692,6 +708,8 @@ export default function PixRampClient({
     if (email.includes("@")) setRampEmail(email);
     if (flow === "fund_and_pay" || params.get("auto_pay_after_ramp") === "1") setTransferFlow(true);
     if (recipient) setTransferRecipient(recipient);
+    if (recipientKey) setTransferRecipientKey(recipientKey);
+    if (recipientPublicKey) setTransferRecipientPublicKey(recipientPublicKey);
     if (payAmount) setAutoPayAmount(payAmount);
     if (payAsset === "BRL" || payAsset === "USDC") setAutoPayAsset(payAsset);
   }, [lockedMode, queryString]);
@@ -745,7 +763,7 @@ export default function PixRampClient({
   const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
     setDebugLogs((current) => [{
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      at: new Date().toLocaleTimeString("pt-BR"),
+      at: new Date().toLocaleTimeString("en-US"),
       ...entry,
       request: sanitizeForDebug(entry.request),
       response: sanitizeForDebug(entry.response),
@@ -1061,7 +1079,7 @@ export default function PixRampClient({
         L(`Chegou no seu PIX: ${offRampPixTargetDisplay}`, `Arrived in your PIX: ${offRampPixTargetDisplay}`),
         L(`Destino: ${externalPixDestination}`, `Destination: ${externalPixDestination}`),
         L("Status: concluído", "Status: completed"),
-        L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+        L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
         receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
@@ -1077,7 +1095,7 @@ export default function PixRampClient({
         L(`Transferência: ${sentAmount}`, `Transfer: ${sentAmount}`),
         L(`Destino: ${recipient}`, `Destination: ${recipient}`),
         L("Status: concluído", "Status: completed"),
-        L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+        L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
         receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
@@ -1093,7 +1111,7 @@ export default function PixRampClient({
       L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
       L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
       L("Status: concluído", "Status: completed"),
-      L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+      L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
       receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));
   }
@@ -1339,6 +1357,9 @@ export default function PixRampClient({
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/pix-funded-transfer", {
       intent_id: atomicIntentKey,
       recipient: transferRecipient,
+      recipient_name: transferRecipient,
+      recipient_key: transferRecipientKey || undefined,
+      recipient_public_key: transferRecipientPublicKey || undefined,
       amount: transferAmount,
       asset_code: requestedAutoPayAsset,
       order_id: orderId,
@@ -1461,8 +1482,8 @@ export default function PixRampClient({
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                   {rampMode === "onramp"
-                    ? transferFlow && transferRecipient
-                      ? t("pix_transfer_subtitle", { recipient: transferRecipient })
+                    ? transferFlow && transferRecipientLabel
+                      ? t("pix_transfer_subtitle", { recipient: transferRecipientLabel })
                       : t("pix_add_subtitle")
                     : t("pix_off_subtitle")}
                 </p>
@@ -1476,7 +1497,10 @@ export default function PixRampClient({
               </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                   <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{t("pix_destination")}</p>
-                  <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
+                  <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipientLabel ? transferRecipientLabel : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
+                  {transferFlow && transferRecipientDisplayKey && (
+                    <p className="mt-1 break-all text-xs text-slate-400">{transferRecipientDisplayKey}</p>
+                  )}
                 </div>
             </div>
           </section>
@@ -1747,9 +1771,12 @@ export default function PixRampClient({
                 </button>
               ))}
             </div>
-            {transferFlow && transferRecipient && (
+            {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${autoPayDisplayAmount} para ${transferRecipient}.`, `After you confirm the PIX, we will automatically send ${autoPayDisplayAmount} to ${transferRecipient}.`)}
+                <p>
+                  {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${autoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${autoPayDisplayAmount} to ${transferRecipientLabel}.`)}
+                </p>
+                {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-emerald-100/75">{transferRecipientDisplayKey}</p>}
               </div>
             )}
 
@@ -1950,11 +1977,11 @@ export default function PixRampClient({
           {rampMode === "offramp" && (
           <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">Off-ramp test endpoint</p>
-            <h2 className="mt-1 text-2xl font-black">Saldo para PIX</h2>
+            <h2 className="mt-1 text-2xl font-black">Balance to PIX</h2>
             <p className="mt-3 text-sm leading-6 text-stone-600">
               Endpoint shown in frontend: <span className="font-mono font-black text-stone-950">POST /api/ramp/etherfuse/sandbox/test-offramp</span>
             </p>
-            <label className="mt-5 block text-sm font-bold text-stone-600">Saldo amount to off-ramp</label>
+            <label className="mt-5 block text-sm font-bold text-stone-600">Balance amount to off-ramp</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
             {config?.sandbox ? (
               <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
@@ -2047,16 +2074,17 @@ export default function PixRampClient({
                   {pixFundedTransferResult?.transaction_hash ? (
                     <>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <ReceiptRow label={L("Enviado para", "Sent to")} value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
+                        <ReceiptRow label={L("Enviado para", "Sent to")} value={transferRecipientLabel || "recipient"} />
+                        {transferRecipientDisplayKey && <ReceiptRow label="Key" value={transferRecipientDisplayKey} />}
                         <ReceiptRow label={L("Valor transferido", "Transferred amount")} value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
-                        <ReceiptRow label={L("Conta destino", "Destination account")} value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
+                        <ReceiptRow label={L("Conta destino", "Destination account")} value={truncateKey(transferRecipientPublicKeyDisplay)} />
                         <ReceiptRow label={L("Transação", "Transaction")} value={String(pixFundedTransferResult.transaction_hash)} />
                         {pixFundedTransferResult.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(pixFundedTransferResult.receipt_url)} />}
                       </div>
                     </>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
-                      {L(`PIX confirmado. Enviando automaticamente ${autoPayDisplayAmount} para ${transferRecipient || "destinatário"}...`, `PIX confirmed. Automatically sending ${autoPayDisplayAmount} to ${transferRecipient || "recipient"}...`)}
+                      {L(`PIX confirmado. Enviando automaticamente ${autoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}...`, `PIX confirmed. Automatically sending ${autoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}...`)}
                     </p>
                   )}
                 </div>
@@ -2108,7 +2136,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
   launchedFromChat: boolean;
   language: "pt-BR" | "en";
 }) {
-  const L = (pt: string, en: string) => language === "en" ? en : pt;
+  const L = (_pt: string, en: string) => en;
   const completed = steps.filter((step) => step.state === "done").length;
   const progress = steps.length ? Math.round((completed / steps.length) * 100) : 0;
   const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");

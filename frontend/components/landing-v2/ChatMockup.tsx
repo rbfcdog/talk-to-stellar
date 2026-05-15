@@ -37,7 +37,7 @@ export default function ChatMockup({ messages, className = '' }: ChatMockupProps
         <div className="absolute inset-0 bg-gradient-to-b from-[#00D2FF]/5 to-transparent pointer-events-none" />
 
         <div className="flex justify-center my-1 z-10">
-          <span className="bg-[#162032] text-[#9BA4B5] text-[10px] px-3 py-1 rounded-lg border border-white/[0.03] shadow-sm uppercase tracking-wider font-semibold">Hoje</span>
+          <span className="bg-[#162032] text-[#9BA4B5] text-[10px] px-3 py-1 rounded-lg border border-white/[0.03] shadow-sm uppercase tracking-wider font-semibold">Today</span>
         </div>
 
         {messages.map((msg, idx) => (

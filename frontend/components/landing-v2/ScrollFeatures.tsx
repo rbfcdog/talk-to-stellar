@@ -36,57 +36,57 @@ const PhaseIconAnim = ({ Icon, color, delay }: { Icon: any, color: string, delay
 export default function ScrollFeatures() {
   const steps: { title: string, description: string, messages: ChatMessage[], color: string, animIcon: React.ReactNode }[] = [
     {
-      title: "1. Fale com o Chat e se cadastre",
-      description: "Iniciar é simples. Mande um 'Olá' e nosso sistema já te envia um link seguro para finalizar seu onboarding num instante.",
+      title: "1. Message the Chat and Sign Up",
+      description: "Getting started is simple. Send a quick hello and the system sends you a secure link to finish onboarding in moments.",
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={MessageCircle} color="#00D2FF" delay={0} />,
       messages: [
-        { type: 'user', text: 'Olá!', time: '09:40' },
-        { type: 'bot', text: 'Olá! Bem-vindo ao TalkToStellar. Para começar, por favor, clique no link abaixo para criar sua conta rapidamente.', time: '09:40' },
-        { type: 'bot', text: <a href="#" className="text-blue-500 underline font-medium">Criar minha conta 🚀</a>, time: '09:40' },
-        { type: 'user', text: 'Pronto! Conta criada.', time: '09:42' },
+        { type: 'user', text: 'Hi!', time: '09:40' },
+        { type: 'bot', text: 'Hi. Welcome to TalkToStellar. To get started, open the secure link below and create your account.', time: '09:40' },
+        { type: 'bot', text: <a href="#" className="text-blue-500 underline font-medium">Create my account</a>, time: '09:40' },
+        { type: 'user', text: 'Done. Account created.', time: '09:42' },
       ]
     },
     {
-      title: "2. Cadastrar Contato",
-      description: "Salve os dados de quem vai receber ou as suas próprias contas globais. Você faz isso de forma intuitiva, conversando.",
+      title: "2. Add a Contact",
+      description: "Save recipient details or your own global accounts through a natural chat flow.",
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={UserPlus} color="#4CA1EF" delay={0.5} />,
       messages: [
-        { type: 'user', text: 'Quero cadastrar minha conta Nomad.', time: '09:45' },
-        { type: 'bot', text: 'Certo! Por favor, me informe o número da conta e o routing number (ABA) da sua Nomad.', time: '09:45' },
-        { type: 'user', text: 'Conta 12345678, Routing 122105155', time: '09:46' },
-        { type: 'bot', text: 'Contato salvo com sucesso como "Minha Conta Nomad". ✅', time: '09:46' },
+        { type: 'user', text: 'I want to add my Nomad account.', time: '09:45' },
+        { type: 'bot', text: 'Sure. Send me your Nomad account number and routing number (ABA).', time: '09:45' },
+        { type: 'user', text: 'Account 12345678, routing 122105155', time: '09:46' },
+        { type: 'bot', text: 'Contact saved successfully as "My Nomad Account".', time: '09:46' },
       ]
     },
     {
-      title: "3. Enviar Para o Contato",
-      description: "Peça uma cotação e aprove para a conta cadastrada. Nossa IA estrutura a operação e mostra o valor da conversão.",
+      title: "3. Send to the Contact",
+      description: "Ask for a quote and approve the payment to the saved account. The AI structures the operation and shows the conversion amount.",
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={Send} color="#00D2FF" delay={1} />,
       messages: [
-        { type: 'user', text: 'Converter R$5.000 para dólar e enviar para minha conta Nomad', time: '09:50' },
-        { type: 'bot', text: 'Você está enviando R$5.000,00 para "Minha Conta Nomad".\n\nCotação atual: 1 USDC = R$ 5,02.\nVocê receberá: 994.50 USDC.', time: '09:50' },
-        { type: 'bot', text: 'Para prosseguir, escaneie o código abaixo ou copie o Pix Copia e Cola:', time: '09:50' },
+        { type: 'user', text: 'Convert R$5,000 to dollars and send it to my Nomad account', time: '09:50' },
+        { type: 'bot', text: 'You are sending R$5,000.00 to "My Nomad Account".\n\nCurrent quote: 1 USDC = R$5.02.\nYou will receive: 994.50 USDC.', time: '09:50' },
+        { type: 'bot', text: 'To continue, scan the code below or copy the PIX payment code:', time: '09:50' },
         { type: 'bot', text: <div className="bg-[#0C1421] text-[#9BA4B5] p-2.5 rounded-lg border border-white/[0.03] break-all text-[11px] font-mono text-center shadow-inner">00020101021126580014br.gov.bcb.pix.gui<br/>...</div>, time: '09:50' },
       ]
     },
     {
-      title: "4. Transação Confirmada",
-      description: "Assim que você confirma a transação, os dólares aterrissam quase em tempo real do outro lado (com comprovante).",
+      title: "4. Transaction Confirmed",
+      description: "Once you confirm the transaction, digital dollars settle on the other side almost in real time, with a receipt.",
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={Zap} color="#4CA1EF" delay={1.5} />,
       messages: [
-        { type: 'bot', text: 'Transação de R$5.000,00 confirmada com sucesso! 💸', time: '09:52' },
+        { type: 'bot', text: 'R$5,000.00 transaction confirmed successfully.', time: '09:52' },
         { type: 'bot', text: (
           <div className="flex flex-col gap-2">
-            <span>Transação concluída! Aqui está o seu comprovante:</span>
+            <span>Transaction complete. Here is your receipt:</span>
             <div className="bg-[#0C1421] border border-white/[0.03] rounded-xl p-3 flex items-center gap-3 w-[200px] mt-1 relative overflow-hidden group hover:bg-[#162032] transition-colors cursor-pointer shadow-sm">
               <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5 text-red-500" />
               </div>
               <div className="flex flex-col min-w-0 flex-1">
-                <span className="text-[#e9edef] text-sm font-medium truncate">Comprovante</span>
+                <span className="text-[#e9edef] text-sm font-medium truncate">Receipt</span>
                 <span className="text-[#9BA4B5] text-[10px] uppercase tracking-wider">PDF • 120 KB</span>
               </div>
               <Download className="w-4 h-4 text-[#9BA4B5] absolute right-3 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -110,9 +110,9 @@ export default function ScrollFeatures() {
             transition={{ duration: 0.8 }}
             className="text-4xl md:text-5xl lg:text-[72px] font-extrabold leading-[1.1] tracking-tight text-white w-full"
           >
-            Faça sua transação em <br className="hidden md:block" />
+            Complete your transaction in <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00D2FF] to-[#4CA1EF] drop-shadow-[0_0_15px_rgba(0,210,255,0.4)]">
-              poucos minutos
+              just a few minutes
             </span>
           </motion.h2>
         </div>

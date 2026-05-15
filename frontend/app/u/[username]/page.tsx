@@ -56,7 +56,7 @@ export default function PublicReceivePage() {
       const sessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
       const normalizedAmount = amount.trim().replace(",", ".")
       if (!normalizedAmount || !Number.isFinite(Number(normalizedAmount)) || Number(normalizedAmount) <= 0) {
-        throw new Error("Informe um valor maior que zero.")
+        throw new Error("Enter an amount greater than zero.")
       }
 
       if (!sessionId || !sessionToken) {
@@ -77,13 +77,13 @@ export default function PublicReceivePage() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success || !payload?.url) {
-        throw new Error(payload?.message || "Não foi possível iniciar o pagamento agora.")
+        throw new Error(payload?.message || "Could not start the payment now.")
       }
 
       window.location.href = String(payload.url)
     } catch (error) {
       setSubmitStatus("error")
-      setSubmitMessage(error instanceof Error ? error.message : "Falha ao iniciar pagamento.")
+      setSubmitMessage(error instanceof Error ? error.message : "Failed to start payment.")
       submitLockRef.current = false
     }
   }
@@ -91,7 +91,7 @@ export default function PublicReceivePage() {
   if (status === "loading") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <p className="text-sm text-slate-300">Carregando link de recebimento...</p>
+        <p className="text-sm text-slate-300">Loading payment link...</p>
       </main>
     )
   }
@@ -100,8 +100,8 @@ export default function PublicReceivePage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
         <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 p-6">
-          <h1 className="text-2xl font-semibold text-white">Link não encontrado</h1>
-          <p className="mt-3 text-sm text-slate-300">Confira o endereço ou peça um novo link para quem vai receber.</p>
+          <h1 className="text-2xl font-semibold text-white">Link not found</h1>
+          <p className="mt-3 text-sm text-slate-300">Check the address or ask the recipient for a new link.</p>
         </section>
       </main>
     )
@@ -113,17 +113,17 @@ export default function PublicReceivePage() {
         <section className="w-full rounded-lg border border-white/10 bg-slate-950/85 p-5 shadow-2xl sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
             <WalletCards className="h-4 w-4" />
-            Link para receber
+            Payment link
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-white">Pagar {name}</h1>
+          <h1 className="mt-5 text-3xl font-semibold text-white">Pay {name}</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            Digite o valor e continue para autorizar o pagamento pela sua conta TalkToStellar.
+            Enter the amount and continue to authorize the payment from your TalkToStellar account.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px]">
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Valor</span>
+              <span className="text-sm font-medium text-slate-200">Amount</span>
               <input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
@@ -133,7 +133,7 @@ export default function PublicReceivePage() {
               />
             </label>
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Moeda</span>
+              <span className="text-sm font-medium text-slate-200">Currency</span>
               <select
                 value={asset}
                 onChange={(event) => setAsset(event.target.value)}
@@ -155,11 +155,11 @@ export default function PublicReceivePage() {
             {submitStatus === "submitting" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Gerando confirmação...
+                Generating confirmation...
               </>
             ) : (
               <>
-                Continuar pagamento
+                Continue payment
                 <ArrowRight className="h-4 w-4" />
               </>
             )}

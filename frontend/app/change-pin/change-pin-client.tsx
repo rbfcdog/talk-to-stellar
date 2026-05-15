@@ -26,7 +26,7 @@ export default function ChangePinClient() {
     newPin: '',
     confirmPin: '',
     currentPin: '',
-    message: 'Verificando seu link...',
+    message: 'Checking your link...',
     isLoading: true,
     errorMessage: '',
   });
@@ -40,7 +40,7 @@ export default function ChangePinClient() {
         ...prev,
         stage: 'error',
         isLoading: false,
-        errorMessage: 'Link inválido ou expirado.',
+        errorMessage: 'Invalid or expired link.',
       }));
       return;
     }
@@ -64,7 +64,7 @@ export default function ChangePinClient() {
           ...prev,
           stage: 'error',
           isLoading: false,
-          errorMessage: data.message || 'Link inválido ou expirado.',
+          errorMessage: data.message || 'Invalid or expired link.',
         }));
         return;
       }
@@ -75,14 +75,14 @@ export default function ChangePinClient() {
         token,
         userId,
         isLoading: false,
-        message: 'Crie um novo PIN (4-8 dígitos)',
+        message: 'Create a new PIN (4-8 digits)',
       }));
     } catch (error) {
       setState((prev) => ({
         ...prev,
         stage: 'error',
         isLoading: false,
-        errorMessage: `Erro ao verificar o link: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: `Error checking link: ${error instanceof Error ? error.message : String(error)}`,
       }));
     }
   };
@@ -93,7 +93,7 @@ export default function ChangePinClient() {
     if (state.newPin.length < 4 || state.newPin.length > 8) {
       setState((prev) => ({
         ...prev,
-        errorMessage: 'PIN deve ter entre 4 e 8 caracteres',
+        errorMessage: 'PIN must be 4 to 8 characters long',
       }));
       return;
     }
@@ -101,7 +101,7 @@ export default function ChangePinClient() {
     if (state.newPin !== state.confirmPin) {
       setState((prev) => ({
         ...prev,
-        errorMessage: 'Os PINs não coincidem',
+        errorMessage: 'PINs do not match',
       }));
       return;
     }
@@ -109,7 +109,7 @@ export default function ChangePinClient() {
     if (!/^\d+$/.test(state.newPin)) {
       setState((prev) => ({
         ...prev,
-        errorMessage: 'PIN deve conter apenas números',
+        errorMessage: 'PIN must contain numbers only',
       }));
       return;
     }
@@ -138,7 +138,7 @@ export default function ChangePinClient() {
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          errorMessage: data.message || 'Erro ao mudar PIN',
+          errorMessage: data.message || 'Error changing PIN',
         }));
         return;
       }
@@ -147,16 +147,16 @@ export default function ChangePinClient() {
         ...prev,
         stage: 'success',
         isLoading: false,
-        message: 'PIN alterado com sucesso!',
+        message: 'PIN changed successfully.',
       }));
 
-      enqueueWebChatFeedback('PIN alterado com sucesso.\nSeu novo PIN já está ativo.')
+      enqueueWebChatFeedback('PIN changed successfully.\nYour new PIN is now active.')
       closeIntermediatePage()
     } catch (error) {
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        errorMessage: `Erro ao finalizar: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: `Error finishing: ${error instanceof Error ? error.message : String(error)}`,
       }));
     }
   };
@@ -167,18 +167,18 @@ export default function ChangePinClient() {
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
-              Segurança
+              Security
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Redefinir PIN
+                Reset PIN
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Use este fluxo para verificar seu link e cadastrar um novo PIN com segurança.
+                Use this flow to verify your link and set a new PIN securely.
               </p>
             </div>
             <div className="min-w-0 overflow-hidden rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-              O PIN deve conter apenas números e ter entre 4 e 8 dígitos.
+              The PIN must contain only numbers and be 4 to 8 digits long.
             </div>
           </section>
 
@@ -195,7 +195,7 @@ export default function ChangePinClient() {
                 <p className="text-sm text-slate-300">{state.message}</p>
 
                 <div className="space-y-2">
-                  <label htmlFor="newPin" className="text-sm font-medium text-slate-200">Novo PIN</label>
+                  <label htmlFor="newPin" className="text-sm font-medium text-slate-200">New PIN</label>
                   <input
                     id="newPin"
                     type="password"
@@ -209,14 +209,14 @@ export default function ChangePinClient() {
                         errorMessage: '',
                       }))
                     }
-                    placeholder="Digite seu novo PIN"
+                    placeholder="Enter your new PIN"
                     disabled={state.isLoading}
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="confirmPin" className="text-sm font-medium text-slate-200">Confirmar PIN</label>
+                  <label htmlFor="confirmPin" className="text-sm font-medium text-slate-200">Confirm PIN</label>
                   <input
                     id="confirmPin"
                     type="password"
@@ -230,7 +230,7 @@ export default function ChangePinClient() {
                         errorMessage: '',
                       }))
                     }
-                    placeholder="Confirme seu novo PIN"
+                    placeholder="Confirm your new PIN"
                     disabled={state.isLoading}
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                   />
@@ -245,14 +245,14 @@ export default function ChangePinClient() {
                   className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={state.isLoading || !state.newPin || !state.confirmPin}
                 >
-                  {state.isLoading ? 'Processando...' : 'Confirmar Novo PIN'}
+                  {state.isLoading ? 'Processing...' : 'Confirm New PIN'}
                 </button>
               </form>
             )}
 
             {state.stage === 'success' && (
               <div className="space-y-3 py-8 text-center">
-                <h2 className="text-2xl font-semibold text-emerald-300">PIN Alterado com Sucesso!</h2>
+                <h2 className="text-2xl font-semibold text-emerald-300">PIN Changed Successfully</h2>
                 <p className="text-slate-200">{state.message}</p>
                 <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
               </div>
@@ -260,13 +260,13 @@ export default function ChangePinClient() {
 
             {state.stage === 'error' && (
               <div className="space-y-3 py-8 text-center">
-                <h2 className="text-2xl font-semibold text-rose-300">Erro</h2>
+                <h2 className="text-2xl font-semibold text-rose-300">Error</h2>
                 <p className="text-slate-200">{state.errorMessage}</p>
                 <button
                   onClick={() => (window.location.href = '/')}
                   className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                 >
-                  Voltar para Home
+                  Back to Home
                 </button>
               </div>
             )}

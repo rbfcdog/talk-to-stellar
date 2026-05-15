@@ -284,8 +284,14 @@ describe('Agent PIX off-ramp detection', () => {
   it('processes PIX-funded contact transfer as auto-pay link instead of wallet top-up', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    jest.spyOn(graph as any, 'getContactByPublicKeyOrName').mockResolvedValue({
+      contact_name: 'Ana Silva',
+      email: 'ana.silva@example.com',
+      stellar_public_key: anaPublicKey,
+    });
     (graph as any).externalService = {
       shortenPublicUrl: jest.fn(async ({ url }) => url),
     };
@@ -300,9 +306,9 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.success).toBe(true);
       expect(result.detected_intent).toBe(IntentType.PIX);
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
-      expect(result.response_message).toContain('ana silva');
+      expect(result.response_message).toContain('Ana Silva');
       expect(result.response_message).toContain('via PIX');
-      expect(result.response_message).toContain('envia para ana silva');
+      expect(result.response_message).toContain('envia para Ana Silva');
       expect(result.response_message).not.toContain('saldo entrar como dólar digital');
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('amount')).toBe('100');
@@ -310,7 +316,9 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.searchParams.get('asset')).toBe('BRL');
       expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
       expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
-      expect(parsed.searchParams.get('recipient')).toBe('ana silva');
+      expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
+      expect(parsed.searchParams.get('recipient_key')).toBe('ana.silva@example.com');
+      expect(parsed.searchParams.get('recipient_public_key')).toBe(anaPublicKey);
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;

@@ -174,6 +174,14 @@ interface PixFundedTransferInput extends RampSessionInput {
   recipient?: string;
   recipient_query?: string;
   recipientQuery?: string;
+  recipient_name?: string;
+  recipientName?: string;
+  recipient_key?: string;
+  recipientKey?: string;
+  recipient_email?: string;
+  recipientEmail?: string;
+  recipient_public_key?: string;
+  recipientPublicKey?: string;
   amount?: string;
   asset_code?: string;
   assetCode?: string;
@@ -3260,18 +3268,29 @@ export class AnchorService {
     };
   }
 
-  private static async resolveTransferRecipient(userId: string, recipientQuery: string): Promise<{
+  private static async resolveTransferRecipient(userId: string, recipientQuery: string, options: {
+    preferredName?: string;
+    preferredKey?: string;
+  } = {}): Promise<{
     publicKey: string;
     displayName: string;
     pixKey?: string;
+    recipientKey?: string;
     sessionId?: string;
     userId?: string;
     vaultSecretId?: string;
   }> {
     const query = coalesceString(recipientQuery);
     if (!query) throw apiError('recipient is required for PIX-funded transfer.', 400);
+    const preferredName = coalesceString(options.preferredName);
+    const preferredKey = coalesceString(options.preferredKey);
     if (/^G[A-Z2-7]{55}$/i.test(query)) {
-      return { publicKey: query, displayName: truncatePublicKey(query) };
+      return {
+        publicKey: query,
+        displayName: preferredName || truncatePublicKey(query),
+        pixKey: preferredKey || undefined,
+        recipientKey: preferredKey || undefined,
+      };
     }
 
     const normalized = query.toLowerCase();
@@ -3302,8 +3321,9 @@ export class AnchorService {
       const destinationWallet = await walletRepository.getWalletByPublicKey(contactPublicKey).catch(() => null);
       return {
         publicKey: contactPublicKey,
-        displayName: coalesceString(contact?.contact_name) || query,
-        pixKey: coalesceString(contact?.pix_key) || undefined,
+        displayName: preferredName || coalesceString(contact?.contact_name) || query,
+        pixKey: preferredKey || coalesceString(contact?.pix_key) || undefined,
+        recipientKey: preferredKey || coalesceString(contact?.pix_key) || undefined,
         sessionId: coalesceString(destinationWallet?.session_id) || undefined,
         vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
       };
@@ -3319,8 +3339,9 @@ export class AnchorService {
     if (walletByPix.data?.public_key) {
       return {
         publicKey: String(walletByPix.data.public_key),
-        displayName: coalesceString(walletByPix.data.name) || query,
-        pixKey: coalesceString(walletByPix.data.pix_key) || undefined,
+        displayName: preferredName || coalesceString(walletByPix.data.name) || query,
+        pixKey: preferredKey || coalesceString(walletByPix.data.pix_key) || undefined,
+        recipientKey: preferredKey || coalesceString(walletByPix.data.pix_key) || undefined,
         sessionId: coalesceString(walletByPix.data.session_id) || undefined,
         vaultSecretId: coalesceString(walletByPix.data.vault_secret_id) || undefined,
       };
@@ -3351,7 +3372,14 @@ export class AnchorService {
       throw apiError(`${assetCode} is not configured for PIX-funded transfer.`, 400);
     }
 
-    const recipient = await this.resolveTransferRecipient(context.userId, coalesceString(input.recipient, input.recipient_query, input.recipientQuery));
+    const recipient = await this.resolveTransferRecipient(
+      context.userId,
+      coalesceString(input.recipient_public_key, input.recipientPublicKey, input.recipient, input.recipient_query, input.recipientQuery),
+      {
+        preferredName: coalesceString(input.recipient_name, input.recipientName),
+        preferredKey: coalesceString(input.recipient_key, input.recipientKey, input.recipient_email, input.recipientEmail),
+      }
+    );
     if (recipient.vaultSecretId) {
       const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
       const trustline = await StellarService.ensureTrustlineFromSecret({
@@ -3432,6 +3460,7 @@ export class AnchorService {
       source_public_key: context.publicKey,
       recipient_public_key: recipient.publicKey,
       recipient_name: recipient.displayName,
+      recipient_key: recipient.recipientKey || recipient.pixKey,
       recipient_pix_key: recipient.pixKey,
       amount,
       asset_code: asset.code,

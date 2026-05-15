@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import ChangePinClient from "./change-pin-client";
 
 export const metadata: Metadata = {
-  title: "Alterar PIN",
-  description: "Defina um novo PIN para sua conta TalkToStellar.",
+  title: "Change PIN",
+  description: "Set a new PIN for your TalkToStellar account.",
 };
 
 export default function ChangePinPage() {

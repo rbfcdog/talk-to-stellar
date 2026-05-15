@@ -54,13 +54,13 @@ function normalizeAssetCode(value?: string) {
 }
 
 function formatAmount(amount?: string, assetCode?: string) {
-  if (!String(amount || "").trim()) return "Valor indisponível"
+  if (!String(amount || "").trim()) return "Amount unavailable"
   const code = normalizeAssetCode(assetCode || "")
   const n = Number(String(amount || "").replace(",", "."))
-  if (!Number.isFinite(n)) return "Valor indisponível"
+  if (!Number.isFinite(n)) return "Amount unavailable"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
-  if (code === "XLM") return "saldo da carteira TalkToStellar"
+  if (code === "XLM") return "TalkToStellar wallet balance"
   return `${n.toFixed(2)} ${code}`
 }
 
@@ -79,7 +79,7 @@ function hasUsableFeeDisplay(value?: string) {
 function formatBrl(value?: string) {
   const amount = Number(String(value || "").replace(",", "."))
   if (!Number.isFinite(amount) || amount <= 0) return ""
-  return new Intl.NumberFormat("pt-BR", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
@@ -149,7 +149,7 @@ export default function ConfirmConversionClient({
             success: false,
             valid: false,
             payload: fallbackPayload,
-            message: payload?.message || "Link inválido ou expirado. Gere um novo link de confirmação.",
+            message: payload?.message || "Invalid or expired link. Generate a new confirmation link.",
           })
           return
         }
@@ -195,16 +195,16 @@ export default function ConfirmConversionClient({
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
         const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
-          "Conversão concluída.",
+          "Conversion completed.",
           payload.transferDetails?.sourceAmount
-            ? `Origem debitada: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode)}`
+            ? `Source debited: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode)}`
             : "",
           payload.transferDetails?.destinationAmount
-            ? `Destino recebeu: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
+            ? `Destination received: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
             : "",
-          feedbackIsCrossAsset && routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
-          payload.transferDetails?.feeDisplay ? `Taxa: ${payload.transferDetails.feeDisplay}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? `Best path: ${routeForFeedback}` : "",
+          payload.transferDetails?.feeDisplay ? `Fee: ${payload.transferDetails.feeDisplay}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -217,7 +217,7 @@ export default function ConfirmConversionClient({
       }
     } catch (error) {
       submitLockRef.current = false
-      const message = error instanceof Error ? error.message : "Falha ao confirmar conversão"
+      const message = error instanceof Error ? error.message : "Failed to confirm conversion"
       setResult({ success: false, error: message })
       setStatus("error")
     }
@@ -226,7 +226,7 @@ export default function ConfirmConversionClient({
   const payload = validation?.payload || decodeJwtPayload(token)
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
-  const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
+  const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "XLM")
   const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "XLM")
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
@@ -247,28 +247,28 @@ export default function ConfirmConversionClient({
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-emerald-200">
-              Confirmação de conversão
+              Conversion Confirmation
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Confirme esta conversão
+                Confirm this conversion
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Confira os dados e digite seu PIN para executar a conversão na sua carteira.
+                Review the details and enter your PIN to execute the conversion in your wallet.
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
                   <strong>Status: </strong>
                   {validation.valid ? (
-                    <span className="text-emerald-300">Link válido</span>
+                    <span className="text-emerald-300">Valid link</span>
                   ) : (
-                    <span className="text-rose-300">{validation.message || 'Link inválido ou ausente'}</span>
+                    <span className="text-rose-300">{validation.message || 'Invalid or missing link'}</span>
                   )}
                 </div>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {["Revisar", "Autorizar", "Concluído"].map((step, index) => (
+              {["Review", "Authorize", "Complete"].map((step, index) => (
                 <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-emerald-400/20 text-emerald-200" : "text-slate-400"}`}>
                   {step}
                 </motion.div>
@@ -277,13 +277,13 @@ export default function ConfirmConversionClient({
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Origem</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Source</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {formatAmount(sourceAmount, sourceAssetCode)}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destination</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {formatAmount(destAmount, destAssetCode)}
                 </p>
@@ -294,18 +294,18 @@ export default function ConfirmConversionClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Resumo</p>
-                <p className="mt-2 text-slate-300">Debitar: {formatAmount(sourceAmount, sourceAssetCode)}</p>
-                <p className="text-slate-300">Receber: {formatAmount(destAmount, destAssetCode)}</p>
+                <p className="font-medium text-white">Summary</p>
+                <p className="mt-2 text-slate-300">Debit: {formatAmount(sourceAmount, sourceAssetCode)}</p>
+                <p className="text-slate-300">Receive: {formatAmount(destAmount, destAssetCode)}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Taxa total estimada: {estimatedFeeDisplay}</p>
+                  <p className="text-slate-300">Estimated total fee: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-slate-300">Melhor caminho agora: {routeChain}</p>
+                  <p className="text-slate-300">Best path now: {routeChain}</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300">
-                    Economia estimada vs métodos tradicionais: {formatBrl(estimatedSavingsBrl)}
+                    Estimated savings vs traditional methods: {formatBrl(estimatedSavingsBrl)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
                   </p>
                 )}
@@ -320,7 +320,7 @@ export default function ConfirmConversionClient({
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Digite seu PIN"
+                  placeholder="Enter your PIN"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
                 />
               </div>
@@ -330,39 +330,39 @@ export default function ConfirmConversionClient({
                 disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando conversão...</span> : "Confirmar conversão"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming conversion...</span> : "Confirm conversion"}
               </button>
             </form>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">Resultado</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">Aguardando confirmação.</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Executando conversão...</div>}
+              <p className="font-medium text-white">Result</p>
+              {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Executing conversion...</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
-                  <p>Conversão confirmada com sucesso.</p>
+                  <p>Conversion confirmed successfully.</p>
                   {result.transferDetails?.sourceAmount && (
                     <p>
-                      Origem debitada: {formatAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
+                      Source debited: {formatAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
                     </p>
                   )}
                   {result.transferDetails?.destinationAmount && (
                     <p>
-                      Destino recebeu: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
+                      Destination received: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
                     </p>
                   )}
                   {showResultFee && (
-                    <p>Taxa aplicada: {resultFeeDisplay}</p>
+                    <p>Applied fee: {resultFeeDisplay}</p>
                   )}
                   {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
-                    <p>Economia estimada nesta operação: {formatBrl(estimatedSavingsBrl)}</p>
+                    <p>Estimated savings on this operation: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Something went wrong."}</motion.p>}
               </AnimatePresence>
             </div>
           </section>

@@ -26,16 +26,16 @@ function getPasskeyErrorMessage(error: any): string {
   const normalized = message.toLowerCase()
 
   if (name === "NotAllowedError") {
-    return "A biometria foi cancelada ou expirou. Toque em \"Entrar com Passkey\" e confirme no celular."
+    return "Biometric authentication was canceled or expired. Tap \"Sign in with Passkey\" and confirm on your phone."
   }
   if (name === "SecurityError" || normalized.includes("rp id")) {
-    return "A Passkey precisa abrir no domínio correto e com HTTPS."
+    return "Passkey must open on the correct domain with HTTPS."
   }
   if (normalized.includes("registrationrequired")) {
-    return "Ainda não existe Passkey registrada para esta conta. Entre com PIN e ative a biometria no cadastro."
+    return "No Passkey is registered for this account yet. Sign in with PIN and enable biometrics during setup."
   }
 
-  return message || "Não foi possível entrar com Passkey."
+  return message || "Could not sign in with Passkey."
 }
 
 function isPasskeyChallengeExpiredMessage(message?: string) {
@@ -62,7 +62,7 @@ function decodeJwtPayload(token: string): any {
 function formatExternalIdentifier(provider: string, value: string): string {
   const normalizedProvider = String(provider || "").trim().toLowerCase()
   const raw = String(value || "").trim()
-  if (!raw) return "indisponível"
+  if (!raw) return "unavailable"
   if (normalizedProvider === "whatsapp" || normalizedProvider === "phone") {
     const digits = raw.replace(/\D+/g, "")
     if (!digits) return raw
@@ -90,7 +90,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
   const useTelegramIdPinLogin = false
-  const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
+  const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Account"
   const externalIdentifierLabel = useMemo(
     () => formatExternalIdentifier(externalProvider, externalProviderUserId),
     [externalProvider, externalProviderUserId]
@@ -124,8 +124,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   function finishLogin(accountLabel?: string) {
-    const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "usuário").trim()
-    enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${label}`)
+    const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "user").trim()
+    enqueueWebChatFeedback(`Sign-in completed.\nConnected account: ${label}`)
     setLoginDone(true)
     if (nextPath) {
       window.setTimeout(() => {
@@ -169,13 +169,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     setExternalLinkUsed(true)
     actionLockRef.current = true
     setStatus("error")
-    setError("Link já usado.")
+    setError("Link already used.")
   }, [hasExternalContext, externalProvider, externalProviderUserId])
 
   useEffect(() => {
     if (!externalToken) return
     if (hasExternalContext) return
-    redirectToUsed("Este link de login é inválido.")
+    redirectToUsed("This login link is invalid.")
   }, [externalToken, hasExternalContext])
 
   const mobileRedirectUrl = useMemo(() => {
@@ -242,10 +242,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
         const isExpired = Boolean(payload?.expired)
         if (!response.ok || payload?.valid === false || isUsed || isExpired || message.toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(message || "Este link já foi utilizado.")
+          redirectToUsed(message || "This link has already been used.")
         }
       } catch {
-        redirectToUsed("Não foi possível validar este link.")
+        redirectToUsed("Could not validate this link.")
       }
     }
     void validateToken()
@@ -267,7 +267,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         const isUsed = Boolean(payload?.used || payload?.alreadyCompleted)
         const isExpired = Boolean(payload?.expired)
         if (!response.ok && (isUsed || isExpired || message.toLowerCase().includes("já foi utilizado"))) {
-          redirectToUsed(message || "Este link já foi utilizado.")
+          redirectToUsed(message || "This link has already been used.")
         }
       } catch {
         // ignore intermittent polling errors
@@ -285,7 +285,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   async function linkExternalSession(sessionId?: string, sessionToken?: string) {
     if (!hasExternalContext) return
     if (!sessionId || !sessionToken) {
-      throw new Error("Não foi possível vincular o Telegram a esta sessão.")
+      throw new Error("Could not link Telegram to this session.")
     }
 
     const response = await idempotentFetch(`/api/external/link-session`, {
@@ -303,10 +303,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     if (!response.ok || !payload?.success) {
       const message = String(payload?.message || "")
       if (payload?.used || payload?.alreadyCompleted || message.toLowerCase().includes("já foi utilizado")) {
-        redirectToUsed(message || "Este link já foi utilizado.")
+        redirectToUsed(message || "This link has already been used.")
         return
       }
-      throw new Error(payload?.message || "Não foi possível vincular o Telegram a esta sessão.")
+      throw new Error(payload?.message || "Could not link Telegram to this session.")
     }
   }
 
@@ -317,7 +317,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       setExternalLinkUsed(true)
       actionLockRef.current = true
       setStatus("error")
-      setError("Link já usado.")
+      setError("Link already used.")
       return
     }
     actionLockRef.current = true
@@ -326,7 +326,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
     try {
       if (externalToken && !hasExternalContext) {
-        throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
+        throw new Error("Invalid external link. Return to Telegram and request a new access link.")
       }
 
       const response = await idempotentFetch(`/api/external/link-existing`, {
@@ -348,16 +348,16 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         setEmailConfirmationRequired(true)
         actionLockRef.current = false
         setStatus("idle")
-        setError(String(payload?.message || "Informe o código enviado por e-mail para continuar."))
+        setError(String(payload?.message || "Enter the code sent by email to continue."))
         return
       }
       if (!response.ok || !payload?.success) {
         const message = String(payload?.message || "")
         if (payload?.used || payload?.alreadyCompleted || message.toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(message || "Este link já foi utilizado.")
+          redirectToUsed(message || "This link has already been used.")
           return
         }
-        throw new Error(payload?.message || "Não foi possível entrar com e-mail e PIN.")
+        throw new Error(payload?.message || "Could not sign in with email and PIN.")
       }
 
       saveClientSession(
@@ -375,7 +375,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     } catch (err) {
       actionLockRef.current = false
       setStatus("error")
-      setError(err instanceof Error ? err.message : "Falha ao entrar com e-mail e PIN.")
+      setError(err instanceof Error ? err.message : "Failed to sign in with email and PIN.")
     }
   }
 
@@ -385,18 +385,18 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       setExternalLinkUsed(true)
       actionLockRef.current = true
       setStatus("error")
-      setError("Link já usado.")
+      setError("Link already used.")
       return
     }
     if (!email.trim()) {
       setStatus("error")
-      setError("Informe seu e-mail para entrar com Passkey.")
+      setError("Enter your email to sign in with Passkey.")
       return
     }
 
     if (!window.PublicKeyCredential) {
       setStatus("error")
-      setError("Este navegador não suporta Passkey/WebAuthn.")
+      setError("This browser does not support Passkey/WebAuthn.")
       return
     }
 
@@ -406,7 +406,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
     try {
       if (externalToken && !hasExternalContext) {
-        throw new Error("Link externo inválido. Volte ao Telegram e solicite um novo acesso.")
+        throw new Error("Invalid external link. Return to Telegram and request a new access link.")
       }
 
       const initRes = await fetch(`/api/passkeys/auth-init`, {
@@ -416,7 +416,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       })
       const initPayload = await initRes.json().catch(() => ({}))
       if (!initRes.ok || !initPayload.success) {
-        throw new Error(initPayload.message || "Falha ao iniciar Passkey.")
+        throw new Error(initPayload.message || "Failed to start Passkey.")
       }
       if (initPayload.registrationRequired) {
         throw new Error("registrationRequired")
@@ -438,11 +438,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
           actionLockRef.current = false
           setStatus("passkey")
-          setError("Desafio expirado. Gerando novo desafio...")
+          setError("Challenge expired. Generating a new challenge...")
           await handlePasskeyLogin(attempt + 1)
           return
         }
-        throw new Error(completePayload.message || "Falha ao concluir Passkey.")
+        throw new Error(completePayload.message || "Failed to complete Passkey.")
       }
 
       saveClientSession(
@@ -462,7 +462,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
         actionLockRef.current = false
         setStatus("passkey")
-        setError("Desafio expirado. Gerando novo desafio...")
+        setError("Challenge expired. Generating a new challenge...")
         await handlePasskeyLogin(attempt + 1)
         return
       }
@@ -579,7 +579,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                     }}
                     type="email"
                     disabled={externalLinkUsed}
-                    placeholder="voce@exemplo.com"
+                    placeholder="you@example.com"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                   />
                 </label>

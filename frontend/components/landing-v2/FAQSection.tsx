@@ -4,24 +4,24 @@ import { Plus, Minus } from 'lucide-react';
 
 const faqs = [
   {
-    question: "O que é o TalkToStellar?",
-    answer: "O TalkToStellar é um assistente inteligente no WhatsApp e Telegram que permite converter Reais (BRL) em Dólar Digital (USDC) e enviar para qualquer lugar do mundo, apenas enviando mensagens, usando a rede Stellar por trás."
+    question: "What is TalkToStellar?",
+    answer: "TalkToStellar is an intelligent assistant for WhatsApp and Telegram that lets you convert Brazilian reais (BRL) into digital dollars (USDC) and send money worldwide by sending messages, powered by Stellar."
   },
   {
-    question: "Como funciona a conversão de BRL para USDC?",
-    answer: "Você diz o quanto quer converter e nós encontramos a rota mais barata no mercado. Você paga via Pix e o valor correspondente em Dólar Digital (USDC) cai na sua carteira na mesma hora."
+    question: "How does BRL to USDC conversion work?",
+    answer: "You tell us how much you want to convert and we find a low-cost route. You pay with PIX and the corresponding USDC is credited to your wallet."
   },
   {
-    question: "É seguro usar o TalkToStellar?",
-    answer: "Sim. Todas as transações são registradas publicamente na blockchain da Stellar, garantindo transparência total e segurança criptográfica. Nós não temos acesso aos fundos da sua carteira após a liquidação da transação."
+    question: "Is TalkToStellar secure?",
+    answer: "Yes. Transactions settle on Stellar, providing transparent settlement and cryptographic security. We do not keep access to your wallet funds after the transaction is settled."
   },
   {
-    question: "Quais são as taxas cobradas?",
-    answer: "Nós eliminamos spread oculto e taxas abusivas de bancos tradicionais. Usamos a liquidez descentralizada da rede Stellar para garantir taxas a partir de 0.05% por operação, sempre mostrando o valor final antes de você confirmar."
+    question: "What fees do you charge?",
+    answer: "We avoid hidden spread and excessive traditional-bank fees. TalkToStellar uses Stellar liquidity and shows the final amount before you confirm."
   },
   {
-    question: "Preciso baixar algum aplicativo novo?",
-    answer: "Não! Todo o processo acontece dentro dos aplicativos de mensagens que você já usa todos os dias, como WhatsApp ou Telegram. Basta iniciar uma conversa com o nosso bot."
+    question: "Do I need to download a new app?",
+    answer: "No. The experience runs inside messaging apps you already use, such as WhatsApp or Telegram. Start a conversation with the bot to begin."
   }
 ];
 
@@ -36,7 +36,7 @@ export default function FAQSection() {
     <section id="faq" className="py-20 md:py-32 w-full max-w-4xl mx-auto px-4 sm:px-0 scroll-mt-24">
       <div className="text-center mb-16">
         <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">
-          Perguntas Frequentes
+          Frequently Asked Questions
         </h2>
       </div>
 
