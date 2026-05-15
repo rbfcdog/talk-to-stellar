@@ -189,8 +189,8 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-[#313d45] bg-[#111b21]">
       <div className="flex items-center justify-between gap-3 bg-[#202c33] px-4 py-4">
-        <h1 className="text-[19px] font-bold text-[#e9edef]">WhatsDap</h1>
-        <div className="flex items-center gap-4 text-[#aebac1]">
+        <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-[#e9edef]">TalkToStellar</h1>
+        <div className="flex shrink-0 items-center gap-4 text-[#aebac1]">
           <Users className="h-5 w-5" />
           <MessageCircle className="h-5 w-5" />
           <MoreVertical className="h-5 w-5" />
@@ -233,11 +233,11 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="truncate text-[17px] font-normal text-[#e9edef]">{chat.title}</h3>
-                  <span className="text-xs text-[#8696a0]">{formatTime(chat.lastMessageTime)}</span>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <h3 className="min-w-0 flex-1 truncate text-[17px] font-normal text-[#e9edef]">{chat.title}</h3>
+                  <span className="shrink-0 text-xs text-[#8696a0]">{formatTime(chat.lastMessageTime)}</span>
                 </div>
-                <p className="text-sm text-[#8696a0] truncate">{chat.lastMessage}</p>
+                <p className="truncate text-sm text-[#8696a0]">{chat.lastMessage}</p>
               </div>
             </div>
           ))}

@@ -42,7 +42,7 @@ const englishDictionary: Dictionary = {
     chat_link_whatsapp: "Share on WhatsApp",
     chat_link_generic: "Open link",
     welcome_select:
-      'Select WhatsDap in the sidebar. Start with: 1) "balance", 2) "deposit 150 reais with PIX", 3) "send 100 reais to my PIX", 4) "send 200 dollars to Maria".',
+      'Select TalkToStellar in the sidebar. Start with: 1) "balance", 2) "deposit 150 reais with PIX", 3) "send 100 reais to my PIX", 4) "send 200 dollars to Maria".',
     welcome_protected: "Your conversations stay protected while you use your wallet.",
     login_title: "Sign in to your account",
     login_subtitle:
@@ -126,7 +126,7 @@ const portugueseDictionary: Dictionary = {
     chat_link_whatsapp: "Compartilhar no WhatsApp",
     chat_link_generic: "Abrir link",
     welcome_select:
-      'Selecione WhatsDap na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
+      'Selecione TalkToStellar na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
     welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua carteira.",
     login_title: "Entre na sua conta",
     login_subtitle:
