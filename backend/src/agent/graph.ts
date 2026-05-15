@@ -1730,6 +1730,106 @@ export class AgentGraph {
     }
   }
 
+  private isFullBalanceConversionRequest(message: string): boolean {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return (
+      /\b(todo|tudo|inteiro|total|all|entire)\b/.test(normalized) ||
+      /\b(saldo inteiro|saldo total|todo o saldo|all balance|entire balance)\b/.test(normalized)
+    );
+  }
+
+  private inferConversionAssetsFromText(message: string): { sourceAssetCode?: string; destAssetCode?: string } {
+    const normalized = String(message || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\busd\b/g, 'usdc')
+      .replace(/\bdolares?\b/g, 'usdc')
+      .replace(/\breais?\b/g, 'brl');
+
+    const assets = ['XLM', 'USDC', 'BRL'];
+    const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(xlm|usdc|brl)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(xlm|usdc|brl)\b/);
+
+    const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
+    const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
+
+    return {
+      sourceAssetCode,
+      destAssetCode,
+    };
+  }
+
+  private async resolveFullBalanceConversionAmount(state: AgentState, sourceAssetCode: string): Promise<{
+    success: boolean;
+    amount?: string;
+    availableBalance?: string;
+    keptReserve?: string;
+    error?: string;
+  }> {
+    const normalizedAsset = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    if (!normalizedAsset || !state.session_data?.public_key) {
+      return { success: false, error: 'Não consegui identificar o ativo de origem.' };
+    }
+
+    const raw = await executeTool('get_saldo_tecnico', {
+      session_id: state.session_id,
+      public_key: state.session_data.public_key,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      return { success: false, error: 'Não consegui ler seu saldo técnico agora.' };
+    }
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'Não consegui consultar seu saldo.' };
+    }
+
+    const balances = Array.isArray(result.balances) ? result.balances : [];
+    const balance = balances.find((item: any) => String(item.asset || item.asset_code || '').toUpperCase() === normalizedAsset);
+    const balanceText = String(balance?.balance || '0').replace(',', '.');
+    const total = Number(balanceText);
+    if (!Number.isFinite(total) || total <= 0) {
+      return { success: false, error: `Você não tem saldo disponível em ${normalizedAsset}.` };
+    }
+
+    const keptReserve = normalizedAsset === 'XLM' ? 1.6 : 0;
+    const toSevenDecimalUnits = (value: string): number => {
+      const [integerRaw, fractionRaw = ''] = String(value || '0').replace(',', '.').split('.');
+      const integer = Number(integerRaw || '0');
+      const fraction = Number(fractionRaw.padEnd(7, '0').slice(0, 7) || '0');
+      return (Number.isFinite(integer) ? integer : 0) * 1e7 + (Number.isFinite(fraction) ? fraction : 0);
+    };
+    const totalUnits = toSevenDecimalUnits(balanceText);
+    const reserveUnits = Math.ceil(keptReserve * 1e7);
+    const spendable = Math.max(0, totalUnits - reserveUnits) / 1e7;
+    if (!Number.isFinite(spendable) || spendable <= 0.0000001) {
+      return {
+        success: false,
+        availableBalance: total.toFixed(7),
+        keptReserve: keptReserve ? keptReserve.toFixed(7) : undefined,
+        error: normalizedAsset === 'XLM'
+          ? 'Seu XLM está reservado para manter a conta ativa e pagar taxas da rede.'
+          : `Você não tem saldo disponível em ${normalizedAsset}.`,
+      };
+    }
+
+    return {
+      success: true,
+      amount: spendable.toFixed(7),
+      availableBalance: total.toFixed(7),
+      keptReserve: keptReserve ? keptReserve.toFixed(7) : undefined,
+    };
+  }
+
   private async prependContactsContext(messages: BaseMessage[], userId?: string): Promise<BaseMessage[]> {
     return messages;
   }
@@ -3060,9 +3160,27 @@ Sua carteira foi criada e já está pronta para usar.
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
-      const finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
-      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-      const finalDestAssetCode = String(llmParsed.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
+      let finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
+      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const finalDestAssetCode = String(llmParsed.destAssetCode || inferredAssets.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+
+      let fullBalanceConversion: { availableBalance?: string; keptReserve?: string } | null = null;
+      if (!finalSourceAmount && finalSourceAssetCode && this.isFullBalanceConversionRequest(state.current_input)) {
+        const fullBalance = await this.resolveFullBalanceConversionAmount(state, finalSourceAssetCode);
+        if (!fullBalance.success || !fullBalance.amount) {
+          state.success = false;
+          state.response_message = fullBalance.error || `Não consegui calcular o saldo disponível em ${finalSourceAssetCode}.`;
+          await this.saveAssistantResponse(state);
+          await this.repository.saveState(state.session_id, state);
+          return state;
+        }
+        finalSourceAmount = fullBalance.amount;
+        fullBalanceConversion = {
+          availableBalance: fullBalance.availableBalance,
+          keptReserve: fullBalance.keptReserve,
+        };
+      }
 
       if (!finalSourceAmount || !finalSourceAssetCode || !finalDestAssetCode) {
         state.success = false;
@@ -3160,7 +3278,13 @@ Sua carteira foi criada e já está pronta para usar.
               const sourceLabel = this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
               const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
               const transparencyLine = this.formatBestRouteTransparency(toolResult);
+              const fullBalanceLine = fullBalanceConversion
+                ? finalSourceAssetCode === 'XLM'
+                  ? `Usei seu XLM disponível: ${sourceLabel}. Mantive ${fullBalanceConversion.keptReserve || '1.6000000'} XLM de reserva para a conta continuar ativa.`
+                  : `Usei seu saldo disponível em ${finalSourceAssetCode}: ${sourceLabel}.`
+                : '';
               state.response_message = [
+                fullBalanceLine,
                 `Conversão cotada: ${sourceLabel} para aproximadamente ${destLabel}.`,
                 transparencyLine || toolResult.message,
                 `Para confirmar a conversão, abra o link:\n\n${conversionPrepare.url}`,

@@ -62,4 +62,40 @@ describe('Agent balance flow', () => {
     expect(result.response_message).toContain('BRL: 12.3400000');
     expect(result.response_message).toContain('USDC: 8.9000000');
   });
+
+  it('calculates spendable XLM when user asks to convert the whole balance', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const state = createState('GTESTPUBLICKEY');
+    state.current_input = 'converta todo o xlm da conta pra usdc';
+
+    (executeTool as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        success: true,
+        balances: [
+          { asset: 'XLM', balance: '9999.9999600' },
+          { asset: 'USDC', balance: '0.0000000' },
+        ],
+      })
+    );
+
+    expect((graph as any).isFullBalanceConversionRequest(state.current_input)).toBe(true);
+    expect((graph as any).inferConversionAssetsFromText(state.current_input)).toMatchObject({
+      sourceAssetCode: 'XLM',
+      destAssetCode: 'USDC',
+    });
+
+    const resolved = await (graph as any).resolveFullBalanceConversionAmount(state, 'XLM');
+
+    expect(executeTool).toHaveBeenCalledWith('get_saldo_tecnico', {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      public_key: 'GTESTPUBLICKEY',
+    });
+    expect(resolved).toMatchObject({
+      success: true,
+      amount: '9998.3999600',
+      availableBalance: '9999.9999600',
+      keptReserve: '1.6000000',
+    });
+  });
 });
