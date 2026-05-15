@@ -1874,7 +1874,7 @@ export default function PixRampClient({
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{L("PIX integrado em preparação", "Integrated PIX in progress")}</p>
                       <p className="mt-2">
-                        {L("Este QR ainda não está integrado a uma transação bancária real. Não pague este QR em bancos como Nubank, Itaú ou Mercado Pago.", "This QR is not yet connected to a real bank transaction. Do not pay this QR in banking apps like Nubank, Itaú, or Mercado Pago.")}
+                        {L("Este QR é demonstrativo e usado apenas para simular o fluxo PIX nesta tela.", "This QR is a demo code used only to simulate the PIX flow on this screen.")}
                       </p>
                       <p className="mt-2 text-amber-100/80">
                         {L("Digite seu PIN e confirme nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real.", "Enter your PIN and confirm on this screen to continue. When bank PIX is active, this same screen will show the real copy-and-paste PIX code.")}
