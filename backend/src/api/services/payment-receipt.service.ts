@@ -169,18 +169,50 @@ export class PaymentReceiptService {
     return `OP-${digest}`;
   }
 
+  static async createReceiptLink(input: PaymentReceiptInput): Promise<string> {
+    let receiptSvg = '';
+    const operationId = this.toPublicOperationId(input.hash);
+
+    receiptSvg = await this.buildReceiptImageSvg(input);
+    const imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(receiptSvg, 'utf-8').toString('base64')}`;
+    return await this.createReceiptViewerUrl({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      operationId: operationId || input.hash || crypto.randomUUID(),
+      imageDataUrl,
+      txHash: input.hash || null,
+      receiptType: input.type,
+      metadata: {
+        destinationAmount: input.destinationAmount,
+        destinationAssetCode: input.destinationAssetCode,
+        sourceAmount: input.sourceAmount || null,
+        sourceAssetCode: input.sourceAssetCode || null,
+        feeDisplay: input.feeDisplay || null,
+        contextMessage: input.contextMessage || null,
+        completedAt: input.completedAt || null,
+      },
+    });
+  }
+
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
     const text = await this.buildReceiptText(input);
-    let imageDataUrl = '';
-    let receiptSvg = '';
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
 
     try {
+      viewerUrl = await this.createReceiptLink(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[receipt] failed to create receipt link: ${message}`);
+    }
+
+    const textWithLink = viewerUrl ? `${text}\nComprovante: ${viewerUrl}` : text;
+
+    try {
       await this.saveReceiptMessage({
         sessionId: input.sessionId,
-        content: text,
+        content: textWithLink,
         dedupeKey: `${receiptDedupeKey}:text`,
       });
     } catch (error) {
@@ -189,60 +221,13 @@ export class PaymentReceiptService {
     }
 
     try {
-      receiptSvg = await this.buildReceiptImageSvg(input);
-      imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(receiptSvg, 'utf-8').toString('base64')}`;
-      viewerUrl = await this.createReceiptViewerUrl({
-        sessionId: input.sessionId,
-        userId: input.userId,
-        operationId: operationId || input.hash || crypto.randomUUID(),
-        imageDataUrl,
-        txHash: input.hash || null,
-        receiptType: input.type,
-        metadata: {
-          destinationAmount: input.destinationAmount,
-          destinationAssetCode: input.destinationAssetCode,
-          sourceAmount: input.sourceAmount || null,
-          sourceAssetCode: input.sourceAssetCode || null,
-          feeDisplay: input.feeDisplay || null,
-          contextMessage: input.contextMessage || null,
-          completedAt: input.completedAt || null,
-        },
-      });
-      await this.saveReceiptMessage({
-        sessionId: input.sessionId,
-        content: `RECEIPT_IMAGE_DATA_URL:${imageDataUrl}`,
-        dedupeKey: `${receiptDedupeKey}:image`,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn(`[receipt] failed to save receipt image: ${message}`);
-    }
-
-    if (receiptSvg) {
-      try {
-        await TransferNotificationService.notifyExternalChannelImage({
-          sessionId: input.sessionId,
-          userId: input.userId,
-          provider: input.provider,
-          providerUserId: input.providerUserId,
-          svg: receiptSvg,
-          caption: viewerUrl ? `Comprovante TalkToStellar\n${viewerUrl}` : 'Comprovante TalkToStellar',
-          filename: `comprovante-${operationId || 'talktostellar'}.svg`,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`[receipt] failed to deliver receipt image: ${message}`);
-      }
-    }
-
-    try {
       await TransferNotificationService.notifyExternalChannelMessage({
         sessionId: input.sessionId,
         userId: input.userId,
         provider: input.provider,
         providerUserId: input.providerUserId,
-        text: viewerUrl ? `${text}\nRecibo online: ${viewerUrl}` : text,
-        buttonText: viewerUrl ? 'Abrir recibo e baixar' : null,
+        text: textWithLink,
+        buttonText: viewerUrl ? 'Abrir comprovante' : null,
         buttonUrl: viewerUrl || null,
       });
     } catch (error) {
@@ -305,7 +290,7 @@ export class PaymentReceiptService {
     const cumulativeSavingsLine = await this.cumulativeSavingsLine(input);
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
-    const status = String(input.status || 'Confirmado').trim();
+    const status = this.statusLabel(input.status);
     const nicknamePrompt = this.transactionNicknamePrompt(input.type);
     const contextLine = this.contextLine(input.contextMessage);
 
@@ -330,9 +315,17 @@ export class PaymentReceiptService {
   private static contextLine(contextMessage?: string | null): string {
     const raw = String(contextMessage || '').trim();
     if (!raw) return '';
-    const sanitized = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+    const sanitized = raw
+      .replace(/\s+/g, ' ')
+      .replace(/\bwallet\b/gi, 'conta')
+      .replace(/\btestnet\b/gi, '')
+      .replace(/\bsandbox\b/gi, '')
+      .replace(/\bdevnet\b/gi, '')
+      .replace(/\.env/gi, '')
+      .trim()
+      .slice(0, 120);
     if (!sanitized) return '';
-    return `Mensagem: ${sanitized}`;
+    return `Resumo: ${sanitized}`;
   }
 
   private static savingsLine(savings: PaymentReceiptInput['savings'] | undefined, fee: FeeBreakdown): string {
@@ -384,6 +377,9 @@ export class PaymentReceiptService {
     if (type === 'claim_redeemed') {
       return `Seu link foi resgatado por ${target}: ${destinationLabel} enviados.`;
     }
+    if (/conta banc[aá]ria externa|pix|banco/i.test(target)) {
+      return `Você retirou ${destinationLabel} para ${target}.`;
+    }
     const sourceCode = String(sourceLabel || '').trim();
     const destinationCode = String(destinationLabel || '').trim();
     if (sourceCode && destinationCode && sourceCode !== destinationCode) {
@@ -392,15 +388,21 @@ export class PaymentReceiptService {
     return `Você enviou ${destinationLabel} para ${target}.`;
   }
 
-  private static transactionNicknamePrompt(type: ReceiptType): string {
-    if (type !== 'payment_sent' && type !== 'claim_redeemed') return '';
-    return 'Quer dar um nome para esta transação para encontrar depois? Exemplo: "apelido da transação: pagamento logo setembro".';
+  private static transactionNicknamePrompt(_type: ReceiptType): string {
+    return '';
+  }
+
+  private static statusLabel(status?: string | null): string {
+    const normalized = String(status || 'confirmado').trim().toLowerCase();
+    if (normalized === 'completed' || normalized === 'success' || normalized === 'confirmado') return 'concluído';
+    if (normalized === 'processing' || normalized === 'pending') return 'processando';
+    if (normalized === 'failed' || normalized === 'error') return 'não concluído';
+    return normalized || 'concluído';
   }
 
   private static feeLine(fee: FeeBreakdown): string {
-    if (!fee.actualDisplay) return 'Taxa exata: indisponivel';
-    const scope = fee.platformApplied ? 'rede + spread' : 'rede';
-    return `Taxa exata (${scope}): ${fee.actualDisplay}`;
+    if (!fee.actualDisplay) return 'Taxa: indisponivel';
+    return `Taxa: ${fee.actualDisplay}`;
   }
 
   private static traditionalFeeLine(fee: FeeBreakdown): string {
@@ -409,8 +411,7 @@ export class PaymentReceiptService {
     if (!Number.isFinite(traditionalBrl) || traditionalBrl <= 0 || !Number.isFinite(traditionalUsdc) || traditionalUsdc <= 0) {
       return '';
     }
-    const pct = (Math.max(0, fee.traditionalFeePct) * 100).toFixed(2);
-    return `Taxa tradicional estimada (.env ${pct}%): ${this.formatSmallFiat(traditionalBrl, 'BRL')} / ${this.formatSmallFiat(traditionalUsdc, 'USDC')}`;
+    return `Taxa estimada em métodos tradicionais: ${this.formatSmallFiat(traditionalBrl, 'BRL')} / ${this.formatSmallFiat(traditionalUsdc, 'USDC')}`;
   }
 
   private static parseFeeDisplay(display?: string | null): { brl?: number; usdc?: number } {

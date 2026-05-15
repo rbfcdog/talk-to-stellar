@@ -21,6 +21,7 @@ import { WalletInfo, WalletRepository } from '../../repositories/wallet.reposito
 import VaultService from '../../services/vault.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { OperationRepository } from '../repository/operation.repository';
+import { EconomyEngineService } from './economy-engine.service';
 import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import crypto from 'crypto';
@@ -3022,8 +3023,14 @@ export class AnchorService {
 
     const afterRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesAfter = normalizeBalances(afterRaw);
-    const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, requestedSourceAmount);
-    const destinationAssetCode = (targetBrl || sourceAsset.code === 'BRL') ? 'BRL' : sourceAsset.code;
+    const estimatedDestinationBrl = sourceAsset.code === 'BRL'
+      ? toStellarAmount(requestedSourceAmount)
+      : toStellarAmount(EconomyEngineService.estimateAmountInBrl({
+          amount: requestedSourceAmount,
+          assetCode: sourceAsset.code,
+        }));
+    const destinationAmount = targetBrl || estimatedDestinationBrl || coalesceString(quoteResult.quote.toAmount, requestedSourceAmount);
+    const destinationAssetCode = 'BRL';
     const externalBank = (input.external_bank_account || input.externalBankAccount || {}) as Record<string, unknown>;
     const bankLabel = coalesceString(
       externalBank.label,
