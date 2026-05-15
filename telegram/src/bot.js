@@ -1,7 +1,5 @@
 const { Telegraf, session } = require('telegraf');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
 const { createSessionStore } = require('./session-store');
 
 function formatWelcomeMessage() {
@@ -11,38 +9,6 @@ function formatWelcomeMessage() {
     'Envie uma mensagem como “enviar 10 USDC para Ana” e eu enviarei para o agente.',
     'Use /reset para limpar a sessão local.',
   ].join('\n');
-}
-
-function normalizeBaseUrl(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  return withProtocol.replace(/\/$/, '');
-}
-
-function resolveBrandImageSource(env = process.env) {
-  const explicitUrl = String(env.TELEGRAM_WELCOME_IMAGE_URL || env.TELEGRAM_BRAND_IMAGE_URL || '').trim();
-  if (explicitUrl) return explicitUrl;
-
-  const frontendBase = normalizeBaseUrl(env.PUBLIC_APP_URL || env.FRONTEND_URL || env.NEXT_PUBLIC_APP_URL);
-  if (frontendBase) return `${frontendBase}/talktostellar.png`;
-
-  const candidates = [
-    String(env.TELEGRAM_WELCOME_IMAGE_PATH || env.TELEGRAM_BRAND_IMAGE_PATH || '').trim(),
-    path.resolve(__dirname, '../../frontend/public/talktostellar.png'),
-    path.resolve(process.cwd(), '../frontend/public/talktostellar.png'),
-    path.resolve(process.cwd(), 'frontend/public/talktostellar.png'),
-  ].filter(Boolean);
-
-  const filePath = candidates.find(candidate => {
-    try {
-      return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
-    } catch {
-      return false;
-    }
-  });
-
-  return filePath ? { source: filePath, filename: 'talktostellar.png', contentType: 'image/png' } : null;
 }
 
 function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', logger = console, externalCheck, backendBaseUrl = null }) {
@@ -122,26 +88,6 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     }
 
     throw new Error('Telegram reply API is unavailable');
-  }
-
-  async function sendWelcomeMessage(ctx) {
-    const caption = formatWelcomeMessage();
-    const chatId = ctx.chat?.id;
-    const imageSource = resolveBrandImageSource();
-
-    if (chatId && imageSource) {
-      try {
-        if (ctx.telegram && typeof ctx.telegram.sendPhoto === 'function') {
-          const result = await ctx.telegram.sendPhoto(chatId, imageSource, { caption });
-          info(`[telegram] welcome image sent chat=${chatId} message_id=${result?.message_id || 'n/a'}`);
-          return result;
-        }
-      } catch (error) {
-        warn(`[telegram] welcome image failed, falling back to text: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    return sendTelegramResponse(ctx, caption);
   }
 
   const handleTextMessage = async ctx => {
@@ -273,7 +219,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
   bot.start(async ctx => {
     ctx.session = ctx.session || {};
     ctx.session.sessionId = sessionStore.getSessionId(ctx.chat?.id);
-    await sendWelcomeMessage(ctx);
+    await sendTelegramResponse(ctx, formatWelcomeMessage());
   });
 
   bot.command('reset', async ctx => {
@@ -296,8 +242,6 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
     bot,
     handleTextMessage,
     formatWelcomeMessage,
-    resolveBrandImageSource,
-    sendWelcomeMessage,
     sessionStore,
   };
 }
@@ -305,5 +249,4 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
 module.exports = {
   createTelegramBot,
   formatWelcomeMessage,
-  resolveBrandImageSource,
 };

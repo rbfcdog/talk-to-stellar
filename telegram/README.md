@@ -25,6 +25,10 @@ The bot derives the backend origin from `TELEGRAM_AGENT_URL` and calls `/api/ext
 
 If the sender does not yet have an account, the bot replies with a dynamic onboarding URL that points to the frontend `/create-account` page.
 
+## Bot avatar
+
+Use `frontend/public/talktostellar.png` as the Telegram bot profile/avatar image in BotFather. The bot should not send this image as a chat message or welcome attachment.
+
 ## Run
 
 ```bash
