@@ -168,16 +168,14 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
-  it('wraps Telegram PIX links in login and preserves the PIX operation as next path', async () => {
+  it('opens Telegram PIX links directly once the account session is active', async () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
-    const createLoginUrlWithShortLink = jest.fn(async (_provider, _providerUserId, extra) => ({
-      url: `https://app.talktostellar.test/login?token=test-token&next=${encodeURIComponent(extra.next_path)}`,
-    }));
+    const shortenPublicUrl = jest.fn(async ({ url }) => url);
     (graph as any).externalService = {
-      createLoginUrlWithShortLink,
-      shortenPublicUrl: jest.fn(async ({ url }) => url),
+      createLoginUrlWithShortLink: jest.fn(),
+      shortenPublicUrl,
     };
 
     try {
@@ -196,17 +194,17 @@ describe('Agent PIX off-ramp detection', () => {
         asset_code: 'BRL',
       });
       const parsed = new URL(url);
-      const nextPath = parsed.searchParams.get('next') || '';
-      const nextUrl = new URL(`https://app.talktostellar.test${nextPath}`);
 
-      expect(createLoginUrlWithShortLink).toHaveBeenCalledWith('telegram', '123456', expect.objectContaining({
-        next_path: expect.stringContaining('/pix-on?'),
+      expect((graph as any).externalService.createLoginUrlWithShortLink).not.toHaveBeenCalled();
+      expect(shortenPublicUrl).toHaveBeenCalledWith(expect.objectContaining({
+        purpose: 'pix_onramp',
+        sessionId: 'session-telegram',
+        userId: 'user-telegram',
       }));
-      expect(parsed.pathname).toBe('/login');
-      expect(nextUrl.pathname).toBe('/pix-on');
-      expect(nextUrl.searchParams.get('amount')).toBe('100');
-      expect(nextUrl.searchParams.get('provider')).toBe('telegram');
-      expect(nextUrl.searchParams.get('provider_user_id')).toBe('123456');
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('provider')).toBe('telegram');
+      expect(parsed.searchParams.get('provider_user_id')).toBe('123456');
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;

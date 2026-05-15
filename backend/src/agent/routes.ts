@@ -516,13 +516,10 @@ export function createAgentRoutes(
         }
 
         if (existing?.session_id) {
-          const externalSession = await repository.getSession(String(existing.session_id));
+          let externalSession = await repository.getSession(String(existing.session_id));
           const expiredExternalSession = Boolean(externalSession && isSessionExpired(externalSession));
           const ownerMatchesExternalMapping = sessionMatchesExternalOwner(externalSession, existing.user_id);
-          if (!externalSession || expiredExternalSession || !ownerMatchesExternalMapping) {
-            if (externalSession && expiredExternalSession) {
-              await repository.clearSession(String(existing.session_id));
-            }
+          if (!externalSession || !ownerMatchesExternalMapping) {
             const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
               sessionId: String(existing.session_id || '').trim() || undefined,
               userId: String(existing.user_id || '').trim() || undefined,
@@ -545,6 +542,10 @@ export function createAgentRoutes(
                   : `I could not confirm this ${channelLabel} is still connected to the same account.\n\nOpen this link to sign in again:\n${url}`
               ),
             });
+          }
+          if (expiredExternalSession && externalSession) {
+            await repository.saveSession(String(existing.session_id), externalSession);
+            externalSession = await repository.getSession(String(existing.session_id)) || externalSession;
           }
           // Never trust an incoming session_id over the channel identity mapping.
           req.body.session_id = String(existing.session_id);

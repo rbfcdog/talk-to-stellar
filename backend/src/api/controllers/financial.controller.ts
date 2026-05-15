@@ -18,10 +18,61 @@ import { BrlReferenceRateService } from '../services/brl-reference-rate.service'
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
+const DEFAULT_USD_BRL_REFERENCE_RATE = 5;
+const DEFAULT_USD_BRL_SANITY_MIN = 3;
+const DEFAULT_USD_BRL_SANITY_MAX = 10;
 
 function toPositiveNumber(value: unknown, fallback = 0): number {
   const parsed = Number(String(value ?? '').replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function configuredPositiveNumber(keys: string[], fallback: number): number {
+  for (const key of keys) {
+    const value = toPositiveNumber(process.env[key], 0);
+    if (value > 0) return value;
+  }
+  return fallback;
+}
+
+function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number): {
+  brlPerUsdc: number;
+  fallbackApplied: boolean;
+  fallbackReason?: string;
+} {
+  const fallbackRate = configuredPositiveNumber(
+    ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE'],
+    DEFAULT_USD_BRL_REFERENCE_RATE,
+  );
+  const minRate = configuredPositiveNumber(
+    ['USD_BRL_SANITY_MIN', 'DEFAULT_USD_BRL_SANITY_MIN'],
+    DEFAULT_USD_BRL_SANITY_MIN,
+  );
+  const maxRate = configuredPositiveNumber(
+    ['USD_BRL_SANITY_MAX', 'DEFAULT_USD_BRL_SANITY_MAX'],
+    DEFAULT_USD_BRL_SANITY_MAX,
+  );
+
+  if (!Number.isFinite(rawBrlPerUsdc) || rawBrlPerUsdc <= 0) {
+    return {
+      brlPerUsdc: fallbackRate,
+      fallbackApplied: true,
+      fallbackReason: 'missing_or_invalid_brl_usdc_quote',
+    };
+  }
+
+  if (rawBrlPerUsdc < minRate || rawBrlPerUsdc > maxRate) {
+    return {
+      brlPerUsdc: fallbackRate,
+      fallbackApplied: true,
+      fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds',
+    };
+  }
+
+  return {
+    brlPerUsdc: rawBrlPerUsdc,
+    fallbackApplied: false,
+  };
 }
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
@@ -38,9 +89,13 @@ export class FinancialController {
       .trim();
     const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
     const grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(brlAmount.toFixed(7));
-    const brlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
-    const usdcPerBrl = toPositiveNumber(grossQuote.usdcPerBrl, 0);
-    const grossUsdc = toPositiveNumber(grossQuote.destinationAmount, 0);
+    const rawBrlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
+    const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
+    const brlPerUsdc = rate.brlPerUsdc;
+    const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
+    const grossUsdc = brlPerUsdc > 0
+      ? brlAmount / brlPerUsdc
+      : toPositiveNumber(grossQuote.destinationAmount, 0);
 
     const spread = PlatformFeeService.calculateSpread({
       sourceAmount: brlAmount.toFixed(7),
@@ -55,10 +110,12 @@ export class FinancialController {
       : (spread.enabled ? spreadEstimateBrl : 0);
     const netBrl = Math.max(0, brlAmount - spreadBrl);
     const spreadUsdc = spreadBrl * usdcPerBrl;
-    const receiveQuote = netBrl > 0
+    const receiveQuote = netBrl > 0 && !rate.fallbackApplied
       ? await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7))
       : null;
-    const receiveUsdc = receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : 0;
+    const receiveUsdc = rate.fallbackApplied
+      ? netBrl * usdcPerBrl
+      : (receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : 0);
 
     const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
     const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
@@ -80,11 +137,15 @@ export class FinancialController {
       quote: {
         brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
         usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
-        source: grossQuote.source,
+        source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
         symbol: grossQuote.symbol,
         path: grossQuote.path,
         source_asset: grossQuote.sourceAsset,
         destination_asset: grossQuote.destinationAsset,
+        ...(rate.fallbackApplied ? {
+          fallback_reason: rate.fallbackReason,
+          raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+        } : {}),
       },
       output: {
         gross_receive_usdc: Number(grossUsdc.toFixed(4)),
