@@ -91,7 +91,7 @@ function getOrCreateBrowserId(): string {
 
 export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
   const { language, t } = useLanguage();
-  const L = (pt: string, en: string) => language === "en" ? en : pt;
+  const L = (_pt: string, en: string) => en;
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
     agent: {
       title: "TalkToStellar",
@@ -235,27 +235,21 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     };
   }, [chatId]);
   
-  // --- Refs para controlar os elementos da tela ---
   const inputRef = useRef<HTMLInputElement>(null);
-  const scrollAreaViewportRef = useRef<HTMLDivElement>(null); // Ref para a área de scroll
+  const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const pollInFlightRef = useRef(false);
 
-  // --- CORREÇÃO DE AUTO-SCROLL (MAIS ROBUSTO) ---
   useEffect(() => {
-    // Esta função rola a área de chat para o final.
     const scrollToBottom = () => {
       if (scrollAreaViewportRef.current) {
         scrollAreaViewportRef.current.scrollTop = scrollAreaViewportRef.current.scrollHeight;
       }
     };
     
-    // Usamos um pequeno timeout para garantir que o React já renderizou a nova mensagem na tela
-    // antes de tentarmos rolar. Isso resolve problemas de timing.
     const timer = setTimeout(scrollToBottom, 50);
 
-    // Limpamos o timeout se o componente for desmontado para evitar erros.
     return () => clearTimeout(timer);
-  }, [messages, isLoading]); // Roda sempre que as mensagens ou o estado de 'loading' mudam.
+  }, [messages, isLoading]);
 
   const mergeServerMessages = useCallback((serverMessages: any[]) => {
     if (!Array.isArray(serverMessages) || serverMessages.length === 0) return;
@@ -332,7 +326,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
       mergeServerMessages(data.messages || []);
     } catch (error) {
-      console.error("Erro ao sincronizar mensagens:", error);
+      console.error("Error syncing messages:", error);
     } finally {
       pollInFlightRef.current = false;
     }
@@ -471,7 +465,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         const localReply: Message = {
           id: `contact-${Date.now()}`,
           role: "assistant",
-          content: `${selectedMeta.title}: mensagem recebida. Vou considerar esse valor para a próxima transferência.`,
+          content: `${selectedMeta.title}: message received. I will consider this amount for the next transfer.`,
           createdAt: new Date(),
         };
         setMessages((prev) => [...prev, localReply]);
@@ -551,7 +545,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
 
     } catch (error) {
-      console.error("Erro no handleSubmit:", error);
+      console.error("Error in handleSubmit:", error);
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
@@ -560,8 +554,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      // --- CORREÇÃO DE AUTO-FOCO ---
-      // Garante que, após todo o processo, o cursor volte para a caixa de texto.
       inputRef.current?.focus(); 
     }
   };
@@ -615,7 +607,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             type="button"
             onClick={onBack}
             className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#aebac1] hover:bg-white/5 md:hidden"
-            aria-label="Voltar para a lista de contatos"
+            aria-label="Back to contacts list"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -685,7 +677,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         </div>
       </div>
 
-      {/* Input de Mensagem (Fixo embaixo) */}
       <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
         <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3">
           <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />

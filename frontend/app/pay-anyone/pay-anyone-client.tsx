@@ -30,9 +30,9 @@ function displayAsset(assetCode: string) {
 
 function friendlyName(value: string) {
   const raw = String(value || "").trim()
-  if (!raw) return "usuário"
+  if (!raw) return "user"
   const base = raw.includes("@") ? raw.split("@")[0] : raw
-  return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim() || "usuário"
+  return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim() || "user"
 }
 
 export default function PayAnyoneClient() {
@@ -41,7 +41,7 @@ export default function PayAnyoneClient() {
   const [sessionId, setSessionId] = useState("")
   const [sessionToken, setSessionToken] = useState("")
   const [mode, setMode] = useState<LinkMode>("send")
-  const [userName, setUserName] = useState("usuário")
+  const [userName, setUserName] = useState("user")
   const [recipientName, setRecipientName] = useState("")
   const [amount, setAmount] = useState("15")
   const [assetCode, setAssetCode] = useState("USDC")
@@ -126,7 +126,7 @@ export default function PayAnyoneClient() {
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}
         if (!response.ok || !payload?.success || !profile?.public_link) {
-          throw new Error(payload?.message || "Não foi possível criar seu link para receber.")
+          throw new Error(payload?.message || "Could not create your receive link.")
         }
         const link = String(profile.public_link)
         const displayName = friendlyName(String(profile.display_name || profile.username || userName))
@@ -135,9 +135,9 @@ export default function PayAnyoneClient() {
         setResult({
           success: true,
           url: link,
-          message: `Compartilhe este link para receber pagamentos. Quem paga acessa, digita o valor e envia para sua conta.`,
+          message: `Share this link to receive payments. The payer opens it, enters the amount, and sends it to your account.`,
         })
-        enqueueWebChatFeedback(`Link para receber criado.\nCompartilhe este link com seu cliente:\n${link}`)
+        enqueueWebChatFeedback(`Receive link created.\nShare this link with your customer:\n${link}`)
         setStatus("done")
         return
       }
@@ -165,13 +165,13 @@ export default function PayAnyoneClient() {
       }
       if (response.ok && payload?.success && payload?.url) {
         enqueueWebChatFeedback([
-          "Link de pagamento criado.",
+          "Payment link created.",
           payload.message ? String(payload.message) : "",
           String(payload.url),
         ].filter(Boolean).join("\n"))
       }
     } catch (error) {
-      setResult({ success: false, message: error instanceof Error ? error.message : "Falha ao criar link." })
+      setResult({ success: false, message: error instanceof Error ? error.message : "Failed to create link." })
       submitLockRef.current = false
       setStatus("error")
     }
@@ -198,25 +198,25 @@ export default function PayAnyoneClient() {
             Pay Anyone
           </div>
           <div className="space-y-4">
-            <p className="text-lg font-semibold text-emerald-200">Bem vindo, {userName}</p>
+            <p className="text-lg font-semibold text-emerald-200">Welcome, {userName}</p>
             <h1 className="max-w-xl text-4xl font-semibold text-white md:text-6xl">
-              {isReceiveMode ? "Receba dinheiro pelo seu link global" : "Envie dinheiro para quem ainda não tem conta"}
+              {isReceiveMode ? "Receive money through your global link" : "Send money to someone who does not have an account yet"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
               {isReceiveMode
-                ? "Compartilhe seu link com clientes. Eles acessam, digitam o valor e pagam direto para sua conta."
-                : "O PIN autoriza a criação do link. Quem recebe precisa entrar ou criar a própria conta global para receber o valor."}
+                ? "Share your link with customers. They open it, enter the amount, and pay directly to your account."
+                : "Your PIN authorizes link creation. The recipient must sign in or create their own global account to receive the amount."}
             </p>
           </div>
 
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-            {(isReceiveMode ? ["Crie", "Compartilhe", "Receba"] : ["Crie", "Compartilhe", "Receba"]).map((label, index) => (
+            {(isReceiveMode ? ["Create", "Share", "Receive"] : ["Create", "Share", "Receive"]).map((label, index) => (
               <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  {index === 0 && (isReceiveMode ? "Gere seu link público de recebimento." : "Digite valor, destinatário e PIN.")}
-                  {index === 1 && "Envie o link pelo canal que preferir."}
-                  {index === 2 && (isReceiveMode ? "O pagamento cai na sua conta." : "O destinatário recebe na própria conta.")}
+                  {index === 0 && (isReceiveMode ? "Generate your public receive link." : "Enter amount, recipient, and PIN.")}
+                  {index === 1 && "Send the link through your preferred channel."}
+                  {index === 2 && (isReceiveMode ? "The payment lands in your account." : "The recipient receives it in their own account.")}
                 </p>
               </div>
             ))}
@@ -232,9 +232,9 @@ export default function PayAnyoneClient() {
           )}
           {!loggedIn && (
             <div className="mb-5 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-              Entre na sua conta antes de criar um link de pagamento.
+              Sign in before creating a payment link.
               <Link href="/login?next=/pay-anyone" className="ml-2 font-semibold text-white underline">
-                Entrar
+                Sign in
               </Link>
             </div>
           )}
@@ -251,7 +251,7 @@ export default function PayAnyoneClient() {
               }}
               className={`rounded-md px-4 py-2 font-semibold transition ${!isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
             >
-              Enviar
+              Send
             </button>
             <button
               type="button"
@@ -264,18 +264,18 @@ export default function PayAnyoneClient() {
               }}
               className={`rounded-md px-4 py-2 font-semibold transition ${isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
             >
-              Receber
+              Receive
             </button>
           </div>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Nome do destinatário</span>
+                <span className="text-sm font-medium text-slate-200">Recipient name</span>
                 <input
                   value={recipientName}
                   onChange={(event) => setRecipientName(event.target.value)}
-                  placeholder="João"
+                  placeholder="John"
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
                 />
               </label>
@@ -283,7 +283,7 @@ export default function PayAnyoneClient() {
 
             {!isReceiveMode && <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Valor</span>
+                <span className="text-sm font-medium text-slate-200">Amount</span>
                 <input
                   value={amount}
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
@@ -293,7 +293,7 @@ export default function PayAnyoneClient() {
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Você paga</span>
+                <span className="text-sm font-medium text-slate-200">You pay</span>
                 <select
                   value={assetCode}
                   onChange={(event) => setAssetCode(event.target.value)}
@@ -305,7 +305,7 @@ export default function PayAnyoneClient() {
                 </select>
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Recebe em</span>
+                <span className="text-sm font-medium text-slate-200">Receives in</span>
                 <select
                   value={destinationAssetCode}
                   onChange={(event) => setDestinationAssetCode(event.target.value)}
@@ -317,7 +317,7 @@ export default function PayAnyoneClient() {
                 </select>
               </label>
               <label className="block space-y-2 sm:col-span-3">
-                <span className="text-sm font-medium text-slate-200">Expira em (opcional)</span>
+                <span className="text-sm font-medium text-slate-200">Expires at (optional)</span>
                 <input
                   value={expiresAtLocal}
                   onChange={(event) => setExpiresAtLocal(event.target.value)}
@@ -329,26 +329,26 @@ export default function PayAnyoneClient() {
 
             {isReceiveMode && (
               <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
-                Seu link de recebimento é fixo. O cliente escolhe o valor na página pública e o pagamento é identificado como entrada para você.
+                Your receive link is fixed. The customer chooses the amount on the public page and the payment is identified as an incoming payment for you.
               </div>
             )}
 
             {!isReceiveMode && destinationAssetCode !== assetCode && (
               <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
-                O link debita {amount || "0"} {displayAsset(assetCode)} da sua conta e o destinatário recebe em {displayAsset(destinationAssetCode)} ao entrar.
+                The link debits {amount || "0"} {displayAsset(assetCode)} from your account and the recipient receives it in {displayAsset(destinationAssetCode)} when they sign in.
               </p>
             )}
 
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Seu PIN</span>
+                <span className="text-sm font-medium text-slate-200">Your PIN</span>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Autorize a criação do link"
+                  placeholder="Authorize link creation"
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
                 />
               </label>
@@ -361,16 +361,16 @@ export default function PayAnyoneClient() {
             >
               <Link2 className="h-4 w-4" />
               {status === "submitting"
-                ? <span className="inline-flex items-center gap-2"><Spinner />Criando link...</span>
-                : isReceiveMode ? "Criar link para receber" : "Criar link de pagamento"}
+                ? <span className="inline-flex items-center gap-2"><Spinner />Creating link...</span>
+                : isReceiveMode ? "Create receive link" : "Create payment link"}
             </button>
           </form>
 
           <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4 text-sm">
             <p className="font-medium text-white">Link</p>
-            {status === "idle" && <p className="mt-2 text-slate-400">O link aparece aqui depois da autorização.</p>}
-            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />Gerando link seguro...</div>}
-            {status === "error" && <p className="mt-2 text-rose-300">{result?.message || "Não foi possível criar o link."}</p>}
+            {status === "idle" && <p className="mt-2 text-slate-400">The link appears here after authorization.</p>}
+            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />Generating secure link...</div>}
+            {status === "error" && <p className="mt-2 text-rose-300">{result?.message || "Could not create the link."}</p>}
             <AnimatePresence mode="wait">
             {status === "done" && result?.url && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
@@ -382,7 +382,7 @@ export default function PayAnyoneClient() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 font-semibold text-white transition hover:bg-white/10"
                   >
                     <Copy className="h-4 w-4" />
-                    {copied ? "Copiado" : "Copiar"}
+                    {copied ? "Copied" : "Copy"}
                   </button>
                   <a
                     href={whatsappUrl}
@@ -391,7 +391,7 @@ export default function PayAnyoneClient() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 font-semibold text-slate-950 transition hover:bg-[#35e176]"
                   >
                     <Send className="h-4 w-4" />
-                    Enviar
+                    Send
                   </a>
                 </div>
                 <p className="text-slate-300">{result.message}</p>

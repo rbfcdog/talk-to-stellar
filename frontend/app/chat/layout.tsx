@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Chat",
-  description: "Converse com a TalkToStellar para saldo, contatos, pagamentos e conversões.",
+  description: "Chat with TalkToStellar for balances, contacts, payments, and conversions.",
 }
 
 export default function ChatLayout({
@@ -12,4 +12,3 @@ export default function ChatLayout({
 }>) {
   return children
 }
-

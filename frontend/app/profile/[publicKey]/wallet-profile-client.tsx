@@ -27,7 +27,7 @@ function formatAssetBalance(item: BalanceItem) {
 
 function shorten(value?: string, left = 6, right = 6) {
   const raw = String(value || "").trim()
-  if (!raw) return "indisponível"
+  if (!raw) return "unavailable"
   if (raw.length <= left + right + 3) return raw
   return `${raw.slice(0, left)}...${raw.slice(-right)}`
 }
@@ -48,13 +48,13 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
         })
         const body = await response.json().catch(() => ({}))
         if (!response.ok || !body?.success) {
-          throw new Error(body?.message || "Não foi possível carregar o perfil da carteira.")
+          throw new Error(body?.message || "Could not load wallet profile.")
         }
         setPayload(body)
         setStatus("ready")
       } catch (error) {
         setStatus("error")
-        setMessage(error instanceof Error ? error.message : "Falha ao carregar perfil.")
+        setMessage(error instanceof Error ? error.message : "Failed to load profile.")
       }
     }
     void loadProfile()
@@ -71,52 +71,52 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-300/35 bg-indigo-300/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-indigo-100">
               <UserCircle2 className="h-4 w-4" />
-              Perfil da carteira
+              Wallet profile
             </div>
             <Link
               href="/transactions"
               className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
             >
-              Voltar ao histórico
+              Back to history
             </Link>
           </div>
 
           {status === "loading" && (
             <div className="mt-8 inline-flex items-center gap-2 text-slate-300">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando perfil...
+              Loading profile...
             </div>
           )}
 
           {status === "error" && (
-            <p className="mt-8 text-rose-300">{message || "Não foi possível carregar o perfil."}</p>
+            <p className="mt-8 text-rose-300">{message || "Could not load profile."}</p>
           )}
 
           {status === "ready" && (
             <>
               <h1 className="mt-5 text-3xl font-semibold text-white md:text-5xl">
-                {profile?.name || "Contato"}
+                {profile?.name || "Contact"}
               </h1>
-              <p className="mt-2 text-sm text-slate-300">Identificador: {profile?.identifier || "indisponível"}</p>
-              <p className="mt-1 text-xs text-slate-400">Carteira: {shorten(profile?.public_key || publicKey, 10, 10)}</p>
+              <p className="mt-2 text-sm text-slate-300">Identifier: {profile?.identifier || "unavailable"}</p>
+              <p className="mt-1 text-xs text-slate-400">Wallet: {shorten(profile?.public_key || publicKey, 10, 10)}</p>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Operações recebidas</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Received operations</p>
                   <p className="mt-2 text-xl font-semibold text-white">{Number(stats?.total_received_operations || 0)}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Último recebimento</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Last received</p>
                   <p className="mt-2 text-sm text-slate-200">
-                    {stats?.last_received_at ? new Date(stats.last_received_at).toLocaleString("pt-BR") : "Sem operações concluídas"}
+                    {stats?.last_received_at ? new Date(stats.last_received_at).toLocaleString("en-US") : "No completed operations"}
                   </p>
                 </div>
               </div>
 
               <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                <div className="border-b border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300">Saldos da conta</div>
+                <div className="border-b border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300">Account balances</div>
                 {balances.length === 0 ? (
-                  <p className="px-4 py-5 text-sm text-slate-300">Saldo indisponível no momento.</p>
+                  <p className="px-4 py-5 text-sm text-slate-300">Balance unavailable right now.</p>
                 ) : (
                   <ul className="divide-y divide-white/5">
                     {balances.map((item: BalanceItem, index: number) => (
@@ -135,4 +135,3 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
     </main>
   )
 }
-

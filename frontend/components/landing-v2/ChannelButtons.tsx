@@ -9,7 +9,7 @@ type ChannelButtonsProps = {
 export default function ChannelButtons({ compact = false, className = "" }: ChannelButtonsProps) {
   const baseSize = compact ? "px-3 py-2 text-xs" : "px-6 py-4 text-base";
   const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
-  const webLabel = compact ? "Teste no navegador" : "Teste agora no navegador";
+  const webLabel = compact ? "Try in browser" : "Try now in browser";
 
   return (
     <div className={`flex flex-col sm:flex-row min-w-0 gap-3 ${className}`.trim()}>
@@ -29,7 +29,7 @@ export default function ChannelButtons({ compact = false, className = "" }: Chan
         className={`inline-flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 ${baseSize} font-semibold text-white/70 opacity-70`}
       >
         <MessageCircle className={iconSize} />
-        <span>WhatsApp (em breve)</span>
+        <span>WhatsApp (soon)</span>
       </button>
 
       <a

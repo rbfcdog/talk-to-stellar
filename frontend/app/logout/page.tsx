@@ -3,8 +3,8 @@ import { Suspense } from "react"
 import LogoutClient from "./logout-client"
 
 export const metadata: Metadata = {
-  title: "Sair da Conta",
-  description: "Encerre sua sessão com segurança.",
+  title: "Sign Out",
+  description: "End your session securely.",
 }
 
 export default function LogoutPage() {

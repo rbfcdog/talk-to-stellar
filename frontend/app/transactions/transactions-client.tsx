@@ -41,7 +41,7 @@ function formatAmount(amount?: string | null, assetCode?: string | null) {
 function formatWhen(value?: string | null) {
   const ts = value ? Date.parse(value) : NaN
   if (!Number.isFinite(ts)) return "—"
-  return new Date(ts).toLocaleString("pt-BR")
+  return new Date(ts).toLocaleString("en-US")
 }
 
 export default function TransactionsClient() {
@@ -56,7 +56,7 @@ export default function TransactionsClient() {
   const pageTitle = useMemo(() => {
     const monthNum = Math.max(1, Math.min(12, Number(month || "1")))
     const date = new Date(Number(year || now.getFullYear()), monthNum - 1, 1)
-    return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
   }, [month, year, now])
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function TransactionsClient() {
     setSessionId(sid)
     if (!sid) {
       setStatus("error")
-      setMessage("Entre na sua conta para ver o histórico.")
+      setMessage("Sign in to view your history.")
       return
     }
     void loadTransactions(sid, month, year)
@@ -81,14 +81,14 @@ export default function TransactionsClient() {
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.message || "Não foi possível carregar o histórico.")
+        throw new Error(payload?.message || "Could not load history.")
       }
       setTransactions(Array.isArray(payload?.transactions) ? payload.transactions : [])
       setStatus("ready")
     } catch (error) {
       setStatus("error")
       setTransactions([])
-      setMessage(error instanceof Error ? error.message : "Falha ao carregar histórico.")
+      setMessage(error instanceof Error ? error.message : "Failed to load history.")
     }
   }
 
@@ -103,14 +103,14 @@ export default function TransactionsClient() {
           <div className="no-print flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
               <Wallet2 className="h-4 w-4" />
-              Histórico
+              History
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href="/chat"
                 className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
               >
-                Voltar ao chat
+                Back to chat
               </Link>
               <button
                 type="button"
@@ -118,15 +118,15 @@ export default function TransactionsClient() {
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300"
               >
                 <FileDown className="h-4 w-4" />
-                Exportar PDF
+                Export PDF
               </button>
             </div>
           </div>
 
           <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-semibold text-white md:text-5xl">Transações de {pageTitle}</h1>
-              <p className="mt-2 text-sm text-slate-300">Lista completa com pessoa, contexto da transação e link curto para perfil.</p>
+              <h1 className="text-3xl font-semibold text-white md:text-5xl">Transactions for {pageTitle}</h1>
+              <p className="mt-2 text-sm text-slate-300">Full list with person, transaction context, and short profile link.</p>
             </div>
             <div className="no-print flex items-center gap-2">
               <select
@@ -136,7 +136,7 @@ export default function TransactionsClient() {
               >
                 {Array.from({ length: 12 }).map((_, index) => (
                   <option key={index + 1} value={String(index + 1)}>
-                    {new Date(2000, index, 1).toLocaleDateString("pt-BR", { month: "long" })}
+                    {new Date(2000, index, 1).toLocaleDateString("en-US", { month: "long" })}
                   </option>
                 ))}
               </select>
@@ -145,14 +145,14 @@ export default function TransactionsClient() {
                 onChange={(event) => setYear(event.target.value.replace(/\D/g, "").slice(0, 4))}
                 className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
                 inputMode="numeric"
-                placeholder="Ano"
+                placeholder="Year"
               />
               <button
                 type="button"
                 onClick={() => void loadTransactions()}
                 className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10"
               >
-                Atualizar
+                Refresh
               </button>
             </div>
           </div>
@@ -161,16 +161,16 @@ export default function TransactionsClient() {
             {status === "loading" && (
               <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-300">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando transações...
+                Loading transactions...
               </div>
             )}
 
             {status === "error" && (
-              <div className="px-4 py-6 text-sm text-rose-300">{message || "Não foi possível carregar o histórico."}</div>
+              <div className="px-4 py-6 text-sm text-rose-300">{message || "Could not load history."}</div>
             )}
 
             {status === "ready" && transactions.length === 0 && (
-              <div className="px-4 py-6 text-sm text-slate-300">Sem transações neste período.</div>
+              <div className="px-4 py-6 text-sm text-slate-300">No transactions in this period.</div>
             )}
 
             {status === "ready" && transactions.length > 0 && (
@@ -178,12 +178,12 @@ export default function TransactionsClient() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="border-b border-white/10 bg-white/5 text-slate-300">
                     <tr>
-                      <th className="px-4 py-3 font-medium">Pessoa</th>
-                      <th className="px-4 py-3 font-medium">Valor</th>
+                      <th className="px-4 py-3 font-medium">Person</th>
+                      <th className="px-4 py-3 font-medium">Amount</th>
                       <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Mensagem</th>
-                      <th className="px-4 py-3 font-medium">Quando</th>
-                      <th className="px-4 py-3 font-medium no-print">Perfil</th>
+                      <th className="px-4 py-3 font-medium">Message</th>
+                      <th className="px-4 py-3 font-medium">When</th>
+                      <th className="px-4 py-3 font-medium no-print">Profile</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -192,13 +192,13 @@ export default function TransactionsClient() {
                       return (
                         <tr key={String(item.id)} className="border-b border-white/5 text-slate-100">
                           <td className="px-4 py-3 align-top">
-                            <p className="font-medium text-white">{item.counterparty?.name || "Destinatário"}</p>
-                            <p className="text-xs text-slate-400">{item.counterparty?.identifier || "indisponível"}</p>
+                            <p className="font-medium text-white">{item.counterparty?.name || "Recipient"}</p>
+                            <p className="text-xs text-slate-400">{item.counterparty?.identifier || "unavailable"}</p>
                           </td>
                           <td className="px-4 py-3 align-top">
                             <p>{formatAmount(item.destination_amount, item.destination_asset_code)}</p>
                             {item.source_amount && item.source_asset_code && (
-                              <p className="text-xs text-slate-400">Origem: {formatAmount(item.source_amount, item.source_asset_code)}</p>
+                              <p className="text-xs text-slate-400">Source: {formatAmount(item.source_amount, item.source_asset_code)}</p>
                             )}
                           </td>
                           <td className="px-4 py-3 align-top">
@@ -220,10 +220,10 @@ export default function TransactionsClient() {
                                 rel="noreferrer"
                                 className="inline-flex rounded-md border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-xs font-semibold text-cyan-200 hover:bg-cyan-400/20"
                               >
-                                Abrir perfil
+                                Open profile
                               </a>
                             ) : (
-                              <span className="text-xs text-slate-500">indisponível</span>
+                              <span className="text-xs text-slate-500">unavailable</span>
                             )}
                           </td>
                         </tr>
@@ -239,4 +239,3 @@ export default function TransactionsClient() {
     </main>
   )
 }
-

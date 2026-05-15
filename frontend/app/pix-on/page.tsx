@@ -2,7 +2,7 @@ import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
   title: "PIX On-Ramp",
-  description: "Adicionar saldo via PIX e receber BRL ou USDC na conta TalkToStellar.",
+  description: "Add money with PIX and receive BRL or USDC in your TalkToStellar account.",
 };
 
 function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {

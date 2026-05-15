@@ -14,13 +14,13 @@ export default function Pathfinding() {
         className="max-w-3xl mb-12 md:mb-16"
       >
         <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-[#4CA1EF]/10 border border-[#4CA1EF]/20 text-[#4CA1EF] font-semibold text-sm tracking-wide uppercase">
-          O Segredo do Preço Baixo
+          The Low-Fee Advantage
         </div>
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6">
-          A Rota Mais Barata. <br className="block md:hidden" /><span className="text-gradient">Sempre.</span>
+          The Cheapest Route. <br className="block md:hidden" /><span className="text-gradient">Every Time.</span>
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-          Esqueça taxas ocultas. A rede Stellar executa o roteamento de liquidez com liquidação rápida, e o TalkToStellar mostra taxa e valor final antes da confirmação.
+          Forget hidden fees. Stellar handles liquidity routing with fast settlement, and TalkToStellar shows fees and final value before confirmation.
         </p>
       </motion.div>
 
@@ -33,7 +33,7 @@ export default function Pathfinding() {
           viewport={{ once: true }}
           className="bg-[#00D87A] text-[#e9edef] px-4 py-2 md:px-5 md:py-3 rounded-2xl rounded-br-sm shadow-[0_4px_24px_rgba(0,0,0,0.2)] mb-8 relative flex items-end gap-3 z-10"
         >
-          <p className="text-base md:text-lg leading-snug pb-1 text-left">Converta R$ 250 e pague via Pix.</p>
+          <p className="text-base md:text-lg leading-snug pb-1 text-left">Convert R$250 and pay with PIX.</p>
           <div className="flex items-center gap-1 shrink-0 mb-1">
             <span className="text-xs text-[#9BA4B5]">14:42</span>
             <CheckCheck className="text-[#4CA1EF] w-4 h-4" />
@@ -57,7 +57,7 @@ export default function Pathfinding() {
         {/* Route Comparisons */}
         <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* CEX Tradicional */}
+          {/* Traditional providers */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -65,7 +65,7 @@ export default function Pathfinding() {
             className="bg-white/5 backdrop-blur-md border border-red-500/10 rounded-2xl p-6 flex flex-col items-center relative overflow-hidden opacity-60 hover:opacity-100 transition-opacity duration-300 order-2 md:order-1"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-red-500/30" />
-            <h3 className="text-gray-500 font-medium mb-4">Bancos & Corretoras</h3>
+            <h3 className="text-gray-500 font-medium mb-4">Banks & Exchanges</h3>
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-6 font-mono">
               <span>BRL</span> <ArrowRight size={14} /> <span>SWIFT</span> <ArrowRight size={14} /> <span>USD</span>
             </div>
@@ -76,7 +76,7 @@ export default function Pathfinding() {
               </div>
               <div className="flex items-center gap-1 text-gray-600">
                 <Clock size={16} />
-                <span>~2 dias</span>
+                <span>~2 days</span>
               </div>
             </div>
           </motion.div>
@@ -90,7 +90,7 @@ export default function Pathfinding() {
             className="border-gradient-card p-6 flex flex-col items-center relative transform md:-translate-y-4 glow-gradient z-20 shadow-[0_0_50px_rgba(143,0,255,0.15)] order-1 md:order-2"
           >
             <div className="absolute -top-3 bg-gradient-custom text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-              Melhor Rota
+              Best Route
             </div>
             <h3 className="text-white font-bold mb-4 mt-2 text-lg">TalkToStellar</h3>
             

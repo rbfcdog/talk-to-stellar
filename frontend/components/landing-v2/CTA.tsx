@@ -17,10 +17,10 @@ export default function CTA() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gradient-to-b from-[#4CA1EF]/20 to-transparent blur-[80px] rounded-full pointer-events-none" />
         
         <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-6 relative z-10">
-          Pare de perder dinheiro <br className="block md:hidden" /><span className="text-gradient">com taxas abusivas.</span>
+          Stop losing money <br className="block md:hidden" /><span className="text-gradient">to excessive fees.</span>
         </h2>
         <p className="text-lg md:text-xl text-gray-300 mb-10 max-w-2xl relative z-10 leading-relaxed">
-          Faça sua primeira operação agora mesmo. Pague no Pix, receba em Dólar digital (USDC). Sem burocracia, direto no seu app favorito.
+          Make your first operation now. Pay with PIX and receive digital dollars (USDC), without bureaucracy, directly in your favorite app.
         </p>
         
         <ChannelButtons className="w-full max-w-4xl mx-auto relative z-10 pt-2" />

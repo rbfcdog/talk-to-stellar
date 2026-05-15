@@ -70,18 +70,18 @@ function getPasskeyErrorMessage(error: any): string {
   const normalized = message.toLowerCase()
 
   if (name === "NotAllowedError") {
-    return "A biometria foi cancelada ou expirou. Toque em \"Ativar biometria\" e confirme com digital/Face ID."
+    return "Biometric authentication was canceled or expired. Tap \"Enable biometrics\" and confirm with fingerprint or Face ID."
   }
 
   if (name === "SecurityError" || normalized.includes("rp id")) {
-    return "A biometria precisa abrir no domínio correto e com HTTPS. Verifique PASSKEY_RP_ID/PASSKEY_ORIGIN no backend."
+    return "Biometrics must open on the correct domain with HTTPS. Check PASSKEY_RP_ID/PASSKEY_ORIGIN in the backend."
   }
 
   if (normalized.includes("not supported")) {
-    return "Este navegador não liberou Passkey neste contexto. Abra no navegador principal do celular, não em modo anônimo."
+    return "This browser did not allow Passkey in this context. Open it in the main mobile browser, not private mode."
   }
 
-  return message || "Falha ao ativar biometria."
+  return message || "Failed to enable biometrics."
 }
 
 function isPasskeyChallengeExpiredMessage(message?: string) {
@@ -106,7 +106,7 @@ export default function CreateAccountClient({
   initialValidation?: any
 }) {
   const { language } = useLanguage()
-  const L = (pt: string, en: string) => language === "en" ? en : pt
+  const L = (_pt: string, en: string) => en
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const rawNextPath = searchParams.get("next") || "/chat"
@@ -259,13 +259,13 @@ export default function CreateAccountClient({
       sessionId: sessionId || undefined,
       sessionToken: sessionToken || undefined,
       userId: resolvedUserId || undefined,
-      message: "Conta criada com sucesso.",
+      message: "Account created successfully.",
     })
     setStatus("done")
     if (isTelegramContext) {
-      finishTelegramFlow(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`)
+      finishTelegramFlow(`Account created successfully.\nConnected account: ${resolvedUserId || "user"}`)
     } else {
-      finishAndClose(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`)
+      finishAndClose(`Account created successfully.\nConnected account: ${resolvedUserId || "user"}`)
     }
   }
 
@@ -328,7 +328,7 @@ export default function CreateAccountClient({
             success: true,
             valid: true,
             processing: true,
-            message: String(payload?.message || "Este link está em processamento. Aguarde alguns segundos."),
+            message: String(payload?.message || "This link is processing. Wait a few seconds."),
             payload: payload?.payload || validation?.payload || decodeJwtPayload(token),
           })
           return
@@ -341,29 +341,29 @@ export default function CreateAccountClient({
           return
         }
         if (isUsed || isExpired || String(payload?.message || "").toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(String(payload?.message || "").trim() || "Este link já foi utilizado.")
+          redirectToUsed(String(payload?.message || "").trim() || "This link has already been used.")
           return
         }
         if (!response.ok) {
           if (responseMessage.toLowerCase().includes("fetch failed")) {
-            setValidation({ success: true, valid: true, message: "Link recebido. Continue para finalizar sua conta." })
+            setValidation({ success: true, valid: true, message: "Link received. Continue to finish your account." })
             return
           }
-          redirectToUsed(responseMessage || "Este link é inválido ou já foi utilizado.")
+          redirectToUsed(responseMessage || "This link is invalid or has already been used.")
           return
         }
         if (payload?.valid === false) {
-          redirectToUsed(responseMessage || "Este link é inválido ou já foi utilizado.")
+          redirectToUsed(responseMessage || "This link is invalid or has already been used.")
           return
         }
         const msg = String(payload?.message || "")
         if (msg.toLowerCase().includes("fetch failed")) {
-          setValidation({ success: true, valid: true, message: "Link recebido. Continue para finalizar sua conta." })
+          setValidation({ success: true, valid: true, message: "Link received. Continue to finish your account." })
           return
         }
         setValidation(payload)
       } catch (error) {
-        setValidation({ success: true, valid: true, message: "Link recebido. Continue para finalizar sua conta." })
+        setValidation({ success: true, valid: true, message: "Link received. Continue to finish your account." })
       }
     }
 
@@ -387,7 +387,7 @@ export default function CreateAccountClient({
             finishWithCompletedResult(payload.result)
             return
           }
-          redirectToUsed(String(payload?.message || "").trim() || "Este link já foi utilizado.")
+          redirectToUsed(String(payload?.message || "").trim() || "This link has already been used.")
           return
         }
 
@@ -427,7 +427,7 @@ export default function CreateAccountClient({
           setValidation({
             success: true,
             valid: false,
-            message: 'Conta encontrada neste navegador. Você pode entrar com e-mail e PIN ou preencher o formulário para criar uma nova conta.',
+            message: 'Account found in this browser. You can sign in with email and PIN or fill out the form to create a new account.',
           })
           return
         }
@@ -439,8 +439,8 @@ export default function CreateAccountClient({
             success: true,
             valid: true,
             message: isClaimPaymentContext
-              ? "Link de criação pronto. Depois do cadastro, você volta automaticamente para receber."
-              : "Link recuperado automaticamente.",
+              ? "Creation link ready. After signup, you will automatically return to receive."
+              : "Link recovered automatically.",
           })
         }
       } catch {
@@ -457,11 +457,11 @@ export default function CreateAccountClient({
     if (submitLockRef.current) return
 
     if (!/^\d{4,8}$/.test(pin)) {
-      setPinError("PIN deve conter de 4 a 8 dígitos numéricos.")
+      setPinError("PIN must contain 4 to 8 numeric digits.")
       return
     }
     if (pin !== pinConfirm) {
-      setPinError("PIN e confirmação precisam ser iguais.")
+      setPinError("PIN and confirmation must match.")
       return
     }
 
@@ -481,7 +481,7 @@ export default function CreateAccountClient({
           const recovered = await recoverOnboardingContextFromBackend(true)
           if (recovered.mode === "existing") {
             setExistingAccountDetected(true)
-            throw new Error("Não foi possível gerar um novo link de criação agora. Tente novamente ou use a opção \"Já tenho conta\" para entrar.")
+            throw new Error("Could not generate a new creation link right now. Try again or use \"I already have an account\" to sign in.")
           }
           if (recovered.mode === "token") {
             setExistingAccountDetected(false)
@@ -491,7 +491,7 @@ export default function CreateAccountClient({
         }
       }
       if (!finalToken.trim()) {
-        throw new Error("Não foi possível validar seu link agora. Solicite um novo acesso no Telegram e tente novamente.")
+        throw new Error("Could not validate your link right now. Request a new access link in Telegram and try again.")
       }
 
       let browserId = localStorage.getItem("talk-to-stellar.browserId")
@@ -522,14 +522,14 @@ export default function CreateAccountClient({
           success: true,
           valid: true,
           processing: true,
-          message: String(payload?.message || "Este link de criação já está em processamento. Aguarde a conclusão."),
+          message: String(payload?.message || "This creation link is already processing. Wait for it to finish."),
           payload: validation?.payload || decodeJwtPayload(finalToken),
         })
         setStatus("submitting")
         setResult({
           success: false,
           processing: true,
-          message: String(payload?.message || "Este link de criação já está em processamento. Aguarde a conclusão."),
+          message: String(payload?.message || "This creation link is already processing. Wait for it to finish."),
         })
         return
       }
@@ -556,7 +556,7 @@ export default function CreateAccountClient({
         return
       }
       if (!response.ok && (Boolean((payload as any)?.used || (payload as any)?.alreadyCompleted) || finalizeMessage.toLowerCase().includes("já foi utilizado"))) {
-        redirectToUsed(finalizeMessage || "Este link já foi utilizado.")
+        redirectToUsed(finalizeMessage || "This link has already been used.")
         return
       }
 
@@ -573,7 +573,7 @@ export default function CreateAccountClient({
       }
       if (response.ok && payload.success) {
         saveClientSession(payload.sessionId, payload.sessionToken)
-        localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "Usuário")
+        localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "User")
       }
       if (response.ok && payload.sessionId) {
         try {
@@ -592,15 +592,15 @@ export default function CreateAccountClient({
 
       if (response.ok && payload.success) {
         if (isTelegramContext) {
-          finishTelegramFlow(`Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
+          finishTelegramFlow(`Account created successfully.\nConnected account: ${email || name || payload.userId || "user"}`)
         } else {
-          finishAndClose(`Conta criada com sucesso.\nConta conectada: ${email || name || payload.userId || "usuário"}`)
+          finishAndClose(`Account created successfully.\nConnected account: ${email || name || payload.userId || "user"}`)
         }
         return
       }
     } catch (error) {
       submitLockRef.current = false
-      const message = error instanceof Error ? error.message : "Falha ao finalizar conta"
+      const message = error instanceof Error ? error.message : "Failed to finish account"
       setResult({ success: false, error: message })
       setStatus("error")
     }
@@ -610,13 +610,13 @@ export default function CreateAccountClient({
     const currentResult = baseResult || result
     const userId = currentResult?.userId
     if (!userId) {
-      setResult({ success: false, error: 'Não foi possível iniciar o acesso seguro no momento' })
+      setResult({ success: false, error: 'Could not start secure access right now' })
       return
     }
 
     if (!window.PublicKeyCredential) {
       setPasskeyStatus('error')
-      setPasskeyError('Este navegador não suporta Passkey/WebAuthn.')
+      setPasskeyError('This browser does not support Passkey/WebAuthn.')
       return
     }
 
@@ -630,7 +630,7 @@ export default function CreateAccountClient({
         body: JSON.stringify({ user_id: userId }),
       })
       const initPayload = await initRes.json()
-      if (!initRes.ok || !initPayload.success) throw new Error(initPayload.message || 'Falha ao iniciar configuração de acesso seguro')
+      if (!initRes.ok || !initPayload.success) throw new Error(initPayload.message || 'Failed to start secure access setup')
 
       const credential = await startRegistration({ optionsJSON: initPayload.options })
 
@@ -650,11 +650,11 @@ export default function CreateAccountClient({
         if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
           submitLockRef.current = false
           setPasskeyStatus('registering')
-          setPasskeyError('Desafio expirado. Gerando novo desafio...')
+          setPasskeyError('Challenge expired. Generating a new challenge...')
           await registerAndSignInWithPasskey(baseResult, attempt + 1)
           return
         }
-        throw new Error(completePayload.message || 'Falha ao concluir configuração de acesso seguro')
+        throw new Error(completePayload.message || 'Failed to complete secure access setup')
       }
 
       setPasskeyStatus('done')
@@ -664,19 +664,19 @@ export default function CreateAccountClient({
         sessionId: currentResult?.sessionId,
         sessionToken: currentResult?.sessionToken,
         passkeySessionToken: currentResult?.sessionToken,
-        message: 'Biometria ativada com sucesso',
+        message: 'Biometrics enabled successfully',
       })
       if (isTelegramContext) {
-        finishTelegramFlow(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
+        finishTelegramFlow(`Account created successfully.\nBiometrics enabled for ${name || email || userId}.`)
       } else {
-        finishAndClose(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`)
+        finishAndClose(`Account created successfully.\nBiometrics enabled for ${name || email || userId}.`)
       }
     } catch (err: any) {
       const message = getPasskeyErrorMessage(err)
       if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
         submitLockRef.current = false
         setPasskeyStatus('registering')
-        setPasskeyError('Desafio expirado. Gerando novo desafio...')
+        setPasskeyError('Challenge expired. Generating a new challenge...')
         await registerAndSignInWithPasskey(baseResult, attempt + 1)
         return
       }
@@ -723,17 +723,17 @@ export default function CreateAccountClient({
       if (payload?.emailConfirmationRequired) {
         setExistingEmailConfirmationRequired(true)
         setExistingStatus("idle")
-        setExistingError(String(payload?.message || "Informe o código enviado por e-mail para continuar."))
+        setExistingError(String(payload?.message || "Enter the code sent by email to continue."))
         submitLockRef.current = false
         return
       }
       if (!response.ok || !payload?.success) {
         const linkMessage = String(payload?.message || "")
         if (payload?.used || payload?.alreadyCompleted || linkMessage.toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(linkMessage || "Este link já foi utilizado.")
+          redirectToUsed(linkMessage || "This link has already been used.")
           return
         }
-        throw new Error(payload?.message || "Não foi possível entrar com e-mail e PIN.")
+        throw new Error(payload?.message || "Could not sign in with email and PIN.")
       }
 
       if (payload?.sessionId) {
@@ -748,14 +748,14 @@ export default function CreateAccountClient({
       setExistingEmailConfirmationCode("")
       setExistingStatus("done")
       if (isTelegramContext) {
-        finishTelegramFlow(`Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
+        finishTelegramFlow(`Sign-in completed.\nConnected account: ${existingEmail.trim()}`)
       } else {
-        finishAndClose(`Entrada concluída.\nConta conectada: ${existingEmail.trim()}`)
+        finishAndClose(`Sign-in completed.\nConnected account: ${existingEmail.trim()}`)
       }
     } catch (error) {
       submitLockRef.current = false
       setExistingStatus("error")
-      setExistingError(error instanceof Error ? error.message : "Falha ao entrar com e-mail e PIN.")
+      setExistingError(error instanceof Error ? error.message : "Failed to sign in with email and PIN.")
     }
   }
 
@@ -869,7 +869,7 @@ export default function CreateAccountClient({
                     setEmailConfirmationCode("")
                   }}
                   type="email"
-                  placeholder="voce@exemplo.com"
+                  placeholder="you@example.com"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>
@@ -993,7 +993,7 @@ export default function CreateAccountClient({
                       <div className="mt-2 flex justify-center">
                         <img
                           src={passkeyQrImageUrl}
-                          alt="QR Code para login com Passkey no celular"
+                          alt="QR code for Passkey login on mobile"
                           className="h-56 w-56 rounded-xl border border-white/10 bg-white p-2"
                         />
                       </div>

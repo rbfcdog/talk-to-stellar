@@ -11,12 +11,12 @@ export default function Footer() {
             <StellarLogo className="w-6 h-6 text-white" />
             <span className="text-lg font-bold text-white">TalkToStellar</span>
           </div>
-          <span className="text-sm text-gray-500">© 2026 Todos os direitos reservados.</span>
+          <span className="text-sm text-gray-500">© 2026 All rights reserved.</span>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
-          <a href="#" className="hover:text-white transition-colors">Termos de Uso</a>
-          <a href="#" className="hover:text-white transition-colors">Política de Privacidade</a>
+          <a href="#" className="hover:text-white transition-colors">Terms of Use</a>
+          <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
         </div>
 
         <div className="flex items-center gap-2 text-sm font-medium text-gray-300 bg-white/5 px-4 py-2 rounded-full border border-white/[0.03]">

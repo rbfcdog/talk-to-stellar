@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     default: 'TalkToStellar',
     template: '%s | TalkToStellar',
   },
-  description: 'Carteira digital para enviar, receber e converter ativos na Stellar.',
+  description: 'Digital wallet to send, receive, and convert assets on Stellar.',
   generator: 'v0.app',
   icons: {
     icon: '/talktostellar.png',
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <Suspense fallback={null}>
           <LanguageProvider>

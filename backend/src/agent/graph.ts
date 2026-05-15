@@ -912,6 +912,8 @@ export class AgentGraph {
     amount_currency?: 'BRL' | 'USDC';
     asset_code: 'BRL' | 'USDC';
     recipient_query?: string;
+    recipient_key?: string;
+    recipient_public_key?: string;
     pay_amount?: string;
     pay_asset_code?: 'BRL' | 'USDC';
   }): Promise<string> {
@@ -933,6 +935,8 @@ export class AgentGraph {
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('auto_pay_after_ramp', '1');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
+    if (intent.recipient_key) url.searchParams.set('recipient_key', intent.recipient_key);
+    if (intent.recipient_public_key) url.searchParams.set('recipient_public_key', intent.recipient_public_key);
     if (intent.pay_amount) url.searchParams.set('pay_amount', intent.pay_amount);
     if (intent.pay_asset_code) url.searchParams.set('pay_asset', intent.pay_asset_code);
     if (intent.amount) {
@@ -998,7 +1002,23 @@ export class AgentGraph {
         ? this.text(language, 'Qual valor em reais você quer retirar para PIX?', 'How much in reais do you want to withdraw to PIX?')
         : this.text(language, 'Qual valor em reais você quer colocar na sua conta via PIX?', 'How much in reais do you want to add to your account with PIX?');
     } else {
-      const url = await this.buildPixRampUrl(state, intent);
+      let resolvedRecipientLabel = String(intent.recipient_query || '').trim();
+      let resolvedRecipientKey = '';
+      let resolvedRecipientPublicKey = '';
+      if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
+        const userId = String(state.session_data?.user_id || state.session_data?.email || '').trim();
+        const resolvedRecipient = await this.resolvePaymentRecipient(intent.recipient_query, userId);
+        resolvedRecipientLabel = String(resolvedRecipient.destinationName || intent.recipient_query).trim();
+        resolvedRecipientKey = this.getContactDisplayKey(resolvedRecipient.contact);
+        resolvedRecipientPublicKey = String(resolvedRecipient.destination || '').trim();
+      }
+      const pixIntent = {
+        ...intent,
+        recipient_query: resolvedRecipientLabel || intent.recipient_query,
+        recipient_key: resolvedRecipientKey || undefined,
+        recipient_public_key: resolvedRecipientPublicKey || undefined,
+      };
+      const url = await this.buildPixRampUrl(state, pixIntent);
       state.success = true;
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1007,12 +1027,12 @@ export class AgentGraph {
           `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`,
           `To send ${amountText} to your PIX, open:\n\n${url}\n\nThe screen calculates the best conversion at exit and confirms the amount arriving in BRL in your PIX.`
         );
-      } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
+      } else if (intent.flow === 'fund_and_pay' && resolvedRecipientLabel) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`,
-          `To send ${amountText} to ${intent.recipient_query} with PIX, open:\n\n${url}\n\nWe chose the best route. The screen confirms the PIX, converts when needed, and sends it to ${intent.recipient_query}.`
+          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel}.`,
+          `To send ${amountText} to ${resolvedRecipientLabel} with PIX, open:\n\n${url}\n\nWe chose the best route. The screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel}.`
         );
       } else {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1446,6 +1466,20 @@ export class AgentGraph {
     const destinationName = String(contact?.contact_name || contact?.name || query).trim();
 
     return { contact, destination, destinationName };
+  }
+
+  private getContactDisplayKey(contact: any): string {
+    return String(
+      contact?.email ||
+      contact?.contact_profile?.email ||
+      contact?.pix_key ||
+      contact?.contact_profile?.pix_key ||
+      contact?.phone_number ||
+      contact?.contact_profile?.phone_number ||
+      contact?.cpf ||
+      contact?.contact_profile?.cpf ||
+      ''
+    ).trim();
   }
 
   private async getWalletBalanceForAsset(state: AgentState, assetCode: string): Promise<{

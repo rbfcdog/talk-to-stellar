@@ -67,15 +67,15 @@ type ConfirmResponse = {
 
 function shortenValue(value?: string, left = 6, right = 6) {
   const raw = String(value || "").trim()
-  if (!raw) return "Indisponível"
+  if (!raw) return "Unavailable"
   if (raw.length <= left + right + 3) return raw
   return `${raw.slice(0, left)}...${raw.slice(-right)}`
 }
 
 function formatTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : NaN
-  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("pt-BR")
-  return new Date(timestamp).toLocaleString("pt-BR")
+  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("en-US")
+  return new Date(timestamp).toLocaleString("en-US")
 }
 
 function decodeJwtPayload(token: string): any {
@@ -95,14 +95,14 @@ function normalizeAssetCode(value?: string) {
 }
 
 function formatPaymentAmount(amount?: string, assetCode?: string) {
-  if (!String(amount || "").trim()) return "Valor indisponível"
+  if (!String(amount || "").trim()) return "Amount unavailable"
   const code = normalizeAssetCode(assetCode)
   const n = Number(String(amount || "").replace(",", "."))
-  if (!Number.isFinite(n)) return "Valor indisponível"
+  if (!Number.isFinite(n)) return "Amount unavailable"
   const truncated = Math.trunc(n * 100) / 100
   if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
-  if (code === "XLM") return "saldo da carteira TalkToStellar"
+  if (code === "XLM") return "TalkToStellar wallet balance"
   return `${truncated.toFixed(2)} ${code}`
 }
 
@@ -112,7 +112,7 @@ function getAutoConversionMessage(result?: ConfirmResponse | null) {
   const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
   const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
-  return `Conversão automática concluída: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} viraram ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`
+  return `Automatic conversion completed: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
 }
 
 function formatRecipientLabel(payload: any) {
@@ -127,7 +127,7 @@ function formatRecipientLabel(payload: any) {
   ).trim()
 
   if (candidate) return candidate
-  return 'Destinatário'
+  return 'Recipient'
 }
 
 function hasUsableFeeDisplay(value?: string) {
@@ -183,7 +183,7 @@ function formatFeePercent(percent: number) {
 function formatBrl(value?: string) {
   const amount = Number(String(value || "").replace(",", "."))
   if (!Number.isFinite(amount) || amount <= 0) return ""
-  return new Intl.NumberFormat("pt-BR", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
@@ -296,14 +296,14 @@ function buildMobileConfirmedFeedback(payload: any) {
   const savings = formatBrl(String(payload?.savings_estimate?.estimated_savings_brl || ""))
 
   return [
-    "Pagamento confirmado pelo celular.",
-    amount && asset ? `Valor: ${formatPaymentAmount(amount, asset)}` : "",
-    `Destino: ${formatRecipientLabel(payload)}`,
-    isCrossAsset && route ? `Melhor caminho: ${route}` : "",
-    hasUsableFeeDisplay(fee) ? `Taxa estimada: ${fee}` : "",
-    isCrossAsset && savings ? `Economia estimada: ${savings}` : "",
-    `Horário: ${formatTimestamp()}`,
-    "Comprovante registrado no histórico.",
+    "Payment confirmed on mobile.",
+    amount && asset ? `Amount: ${formatPaymentAmount(amount, asset)}` : "",
+    `Destination: ${formatRecipientLabel(payload)}`,
+    isCrossAsset && route ? `Best path: ${route}` : "",
+    hasUsableFeeDisplay(fee) ? `Estimated fee: ${fee}` : "",
+    isCrossAsset && savings ? `Estimated savings: ${savings}` : "",
+    `Time: ${formatTimestamp()}`,
+    "Receipt saved in history.",
   ].filter(Boolean).join("\n")
 }
 
@@ -320,16 +320,16 @@ function getPasskeyErrorMessage(error: any): string {
   const normalized = message.toLowerCase()
 
   if (name === "NotAllowedError") {
-    return "A biometria foi cancelada ou expirou. Tente novamente."
+    return "Biometric authentication was canceled or expired. Try again."
   }
   if (name === "SecurityError" || normalized.includes("rp id")) {
-    return "A Passkey precisa abrir no domínio correto e com HTTPS."
+    return "Passkey must open on the correct domain with HTTPS."
   }
   if (normalized.includes("registrationrequired")) {
-    return "Nenhuma Passkey registrada para esta conta."
+    return "No Passkey is registered for this account."
   }
 
-  return message || "Não foi possível confirmar com biometria."
+  return message || "Could not confirm with biometrics."
 }
 
 function isPasskeyChallengeExpiredMessage(message?: string) {
@@ -398,16 +398,16 @@ export default function ConfirmPaymentClient({
             success: true,
             valid: true,
             payload: payload?.payload || fallbackPayload,
-            message: "Confirmação em andamento no celular...",
+            message: "Confirmation in progress on mobile...",
           })
-          setMobileSyncStatus("Confirmação em andamento no celular...")
+          setMobileSyncStatus("Confirmation in progress on mobile...")
           return
         }
         if (!response.ok || !payload?.valid) {
           if (payload?.used) {
             setResult({
               success: true,
-              message: "Pagamento já confirmado neste link.",
+              message: "Payment already confirmed on this link.",
             })
             setStatus("done")
             submitLockRef.current = true
@@ -417,7 +417,7 @@ export default function ConfirmPaymentClient({
             success: false,
             valid: false,
             payload: fallbackPayload,
-            message: payload?.message || "Link inválido ou expirado. Gere um novo link de confirmação.",
+            message: payload?.message || "Invalid or expired link. Generate a new confirmation link.",
           })
           return
         }
@@ -444,7 +444,7 @@ export default function ConfirmPaymentClient({
         if (cancelled) return
 
         if (response.status === 409 && payload?.processing) {
-          setMobileSyncStatus("Confirmação em andamento no celular...")
+          setMobileSyncStatus("Confirmation in progress on mobile...")
           return
         }
 
@@ -588,17 +588,17 @@ export default function ConfirmPaymentClient({
         const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
         const monthlySavingsForFeedback = formatBrl(String(payload?.monthly_savings?.estimated_savings_brl || ""))
         enqueueWebChatFeedback([
-          "Pagamento enviado com sucesso.",
+          "Payment sent successfully.",
           conversionMessage,
-          `Valor: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
-          `Destino: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
-          feedbackIsCrossAsset && routeForFeedback ? `Melhor caminho: ${routeForFeedback}` : "",
-          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Taxa estimada: ${estimatedFeeForFeedback}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `Economia estimada: ${savingsForFeedback}` : "",
-          monthlySavingsForFeedback ? `Economia acumulada no mês: ${monthlySavingsForFeedback}` : "",
-          hash ? `Transação: ${shortenValue(hash, 8, 8)}` : "",
-          `Horário: ${formatTimestamp(payload.completed_at)}`,
-          receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+          `Amount: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
+          `Destination: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
+          feedbackIsCrossAsset && routeForFeedback ? `Best path: ${routeForFeedback}` : "",
+          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Estimated fee: ${estimatedFeeForFeedback}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
+          monthlySavingsForFeedback ? `Monthly savings so far: ${monthlySavingsForFeedback}` : "",
+          hash ? `Transaction: ${shortenValue(hash, 8, 8)}` : "",
+          `Time: ${formatTimestamp(payload.completed_at)}`,
+          receiptUrl ? `Receipt: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
       }
 
@@ -616,7 +616,7 @@ export default function ConfirmPaymentClient({
       }
     } catch (error) {
       submitLockRef.current = false
-      const message = error instanceof Error ? error.message : "Falha ao confirmar pagamento"
+      const message = error instanceof Error ? error.message : "Failed to confirm payment"
       setResult({ success: false, error: message })
       setStatus("error")
     }
@@ -626,7 +626,7 @@ export default function ConfirmPaymentClient({
     if (!token.trim() || validation?.valid === false || submitLockRef.current || status === "done") return
     if (!window.PublicKeyCredential) {
       setPasskeyStatus("error")
-      setPasskeyError("Este navegador não suporta Passkey/WebAuthn.")
+      setPasskeyError("This browser does not support Passkey/WebAuthn.")
       return
     }
 
@@ -647,7 +647,7 @@ export default function ConfirmPaymentClient({
       })
       const initPayload = await initResponse.json().catch(() => ({}))
       if (!initResponse.ok || !initPayload?.success) {
-        throw new Error(initPayload?.message || "Não foi possível iniciar biometria.")
+        throw new Error(initPayload?.message || "Could not start biometric authentication.")
       }
       if (initPayload?.registrationRequired) {
         throw new Error("registrationRequired")
@@ -679,20 +679,20 @@ export default function ConfirmPaymentClient({
         const serverMessage = String(payload?.message || payload?.error || "")
         if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
           submitLockRef.current = false
-          setMobileSyncStatus("Biometria expirada durante a troca de dispositivo. Gerando novo desafio...")
+          setMobileSyncStatus("Biometric challenge expired while switching devices. Generating a new challenge...")
           setPasskeyStatus("starting")
           await handlePasskeyConfirm(attempt + 1)
           return
         }
         submitLockRef.current = false
         setPasskeyStatus("error")
-        setPasskeyError(serverMessage || "Falha ao confirmar com biometria.")
+        setPasskeyError(serverMessage || "Failed to confirm with biometrics.")
       }
     } catch (error: any) {
       const message = getPasskeyErrorMessage(error)
       if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
         submitLockRef.current = false
-        setMobileSyncStatus("Biometria expirada durante a troca de dispositivo. Gerando novo desafio...")
+        setMobileSyncStatus("Biometric challenge expired while switching devices. Generating a new challenge...")
         setPasskeyStatus("starting")
         await handlePasskeyConfirm(attempt + 1)
         return
@@ -711,7 +711,7 @@ export default function ConfirmPaymentClient({
   const payload = validation?.payload || decodeJwtPayload(token)
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
-  const returnMessage = providerLabel ? `Concluído. Volte ao ${providerLabel} para continuar.` : ""
+  const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
   const assetCode = normalizeAssetCode(payload.asset_code || payload.assetCode || "")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.quote?.sourceAsset?.code || "")
@@ -762,30 +762,30 @@ export default function ConfirmPaymentClient({
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-emerald-200">
-              Confirmação de pagamento
+              Payment Confirmation
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Confirme este pagamento
+                Confirm this payment
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Confira os dados abaixo e digite seu PIN para autorizar a transferência.
+                Review the details below and enter your PIN to authorize the transfer.
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
                   <strong>Status: </strong>
                   {validation.valid ? (
-                    <span className="text-emerald-300">Link válido</span>
+                    <span className="text-emerald-300">Valid link</span>
                   ) : (
                     <span className="text-rose-300">
-                      {isExpiredLink ? `Link expirado. ${validation.message || 'Solicite um novo link.'}` : (validation.message || 'Link inválido ou ausente')}
+                      {isExpiredLink ? `Expired link. ${validation.message || 'Request a new link.'}` : (validation.message || 'Invalid or missing link')}
                     </span>
                   )}
                 </div>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {["Revisar", "Autorizar", "Concluído"].map((step, index) => {
+              {["Review", "Authorize", "Complete"].map((step, index) => {
                 const active = currentStep >= index + 1
                 return (
                   <motion.div
@@ -801,13 +801,13 @@ export default function ConfirmPaymentClient({
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Pagamento</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Payment</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {isCrossCurrency ? sourceAmountLabel : amountLabel}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destinatário</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Recipient</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {destinationLabel}
                 </p>
@@ -823,29 +823,29 @@ export default function ConfirmPaymentClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Resumo</p>
+                <p className="font-medium text-white">Summary</p>
                 <p className="mt-2 text-slate-300">
-                  {isCrossCurrency ? `Você envia: ${sourceAmountLabel}` : `Valor: ${amountLabel}`}
+                  {isCrossCurrency ? `You send: ${sourceAmountLabel}` : `Amount: ${amountLabel}`}
                 </p>
                 {isCrossCurrency && (
-                  <p className="text-slate-300">Destino recebe aproximadamente: {amountLabel}</p>
+                  <p className="text-slate-300">Recipient receives approximately: {amountLabel}</p>
                 )}
-                <p className="text-slate-300">Destino: {destinationLabel}</p>
+                <p className="text-slate-300">Destination: {destinationLabel}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Taxa total estimada: {estimatedFeeSummary}</p>
+                  <p className="text-slate-300">Estimated total fee: {estimatedFeeSummary}</p>
                 )}
                 {shouldShowCrossAssetInsights && routeChain && (
-                  <p className="text-slate-300">Melhor caminho encontrado: {routeChain}</p>
+                  <p className="text-slate-300">Best path found: {routeChain}</p>
                 )}
                 {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300 font-medium">
-                    Rota mais barata encontrada: você economiza {formatBrl(estimatedSavingsBrl)}
-                    {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
-                    {" "}vs métodos tradicionais.
+                    Cheapest route found: you save {formatBrl(estimatedSavingsBrl)}
+                    {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1)}%)` : ""}
+                    {" "}vs traditional methods.
                   </p>
                 )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
-                  <p className="text-emerald-300">Recebimento garantido no destino: {amountLabel}</p>
+                  <p className="text-emerald-300">Guaranteed amount at destination: {amountLabel}</p>
                 )}
               </div>
 
@@ -858,7 +858,7 @@ export default function ConfirmPaymentClient({
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Digite seu PIN"
+                  placeholder="Enter your PIN"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
                 />
               </div>
@@ -868,7 +868,7 @@ export default function ConfirmPaymentClient({
                 disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirmando pagamento...</span> : "Confirmar pagamento"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming payment...</span> : "Confirm payment"}
               </button>
               <button
                 type="button"
@@ -876,7 +876,7 @@ export default function ConfirmPaymentClient({
                 disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {showPasskeyOptions ? "Ocultar opções de Passkey" : "Usar Touch ID (Passkey)"}
+                {showPasskeyOptions ? "Hide Passkey options" : "Use Touch ID (Passkey)"}
               </button>
               {showPasskeyOptions && (
                 <>
@@ -887,8 +887,8 @@ export default function ConfirmPaymentClient({
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
-                      ? "Autenticando com Touch ID..."
-                      : "Confirmar com Touch ID (Passkey)"}
+                      ? "Authenticating with Touch ID..."
+                      : "Confirm with Touch ID (Passkey)"}
                   </button>
                   {passkeyError && (
                     <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
@@ -901,12 +901,12 @@ export default function ConfirmPaymentClient({
 
             {showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Confirmar pelo celular com Touch ID</p>
-                <p className="mt-1 text-slate-300">Escaneie o QR com seu celular para abrir esta confirmação e autorizar com Touch ID.</p>
+                <p className="font-medium text-white">Confirm on mobile with Touch ID</p>
+                <p className="mt-1 text-slate-300">Scan the QR with your phone to open this confirmation and authorize with Touch ID.</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
-                    alt="QR Code para confirmar pagamento no celular"
+                    alt="QR code to confirm payment on mobile"
                     className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
                   />
                 </div>
@@ -917,10 +917,10 @@ export default function ConfirmPaymentClient({
             )}
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">Resultado</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">Aguardando confirmação.</p>}
+              <p className="font-medium text-white">Result</p>
+              {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
               {status === "submitting" && (
-                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Processando na rede...</div>
+                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Processing on the network...</div>
               )}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
@@ -929,24 +929,24 @@ export default function ConfirmPaymentClient({
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-2 space-y-3 text-emerald-100"
                 >
-                  <p className="text-base font-semibold text-emerald-300">Pagamento enviado com sucesso</p>
+                  <p className="text-base font-semibold text-emerald-300">Payment sent successfully</p>
                   <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm">
-                    <p><span className="text-slate-300">Valor: </span>{successAmount} {successAsset}</p>
-                    <p><span className="text-slate-300">Destino: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
-                    <p><span className="text-slate-300">Transação: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
-                    <p><span className="text-slate-300">Horário: </span>{formatTimestamp(result.completed_at)}</p>
+                    <p><span className="text-slate-300">Amount: </span>{successAmount} {successAsset}</p>
+                    <p><span className="text-slate-300">Destination: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
+                    <p><span className="text-slate-300">Transaction: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
+                    <p><span className="text-slate-300">Time: </span>{formatTimestamp(result.completed_at)}</p>
                   </div>
                   {showResultFee && (
-                    <p>Taxa aplicada: {resultFeeSummary || "taxa aplicada indisponível"}</p>
+                    <p>Applied fee: {resultFeeSummary || "applied fee unavailable"}</p>
                   )}
                   {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
-                    <p>Economia estimada nesta operação com a melhor rota: {formatBrl(estimatedSavingsBrl)}</p>
+                    <p>Estimated savings on this operation with the best route: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {successAutoConversionMessage && (
                     <p>{successAutoConversionMessage}</p>
                   )}
                   {successMonthlySavings && (
-                    <p>Você já economizou {successMonthlySavings} neste mês usando o TalkToStellar.</p>
+                    <p>You have already saved {successMonthlySavings} this month using TalkToStellar.</p>
                   )}
                   {successReceiptUrl && (
                     <a
@@ -955,14 +955,14 @@ export default function ConfirmPaymentClient({
                       rel="noopener noreferrer"
                       className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
                     >
-                      Ver comprovante
+                      View receipt
                     </a>
                   )}
                   {result.receiptImageDataUrl && (
                     <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
                       <motion.img
                         src={result.receiptImageDataUrl}
-                        alt="Recibo TalkToStellar"
+                        alt="TalkToStellar receipt"
                         className="h-auto w-full"
                         initial={{ y: 12, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
@@ -973,7 +973,7 @@ export default function ConfirmPaymentClient({
                   <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Something went wrong."}</motion.p>}
               </AnimatePresence>
             </div>
           </section>

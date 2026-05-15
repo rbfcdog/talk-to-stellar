@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import LoginClient from "./login-client"
 
 export const metadata: Metadata = {
-  title: "Entrar",
-  description: "Entre na sua conta TalkToStellar com PIN ou Passkey.",
+  title: "Sign In",
+  description: "Sign in to your TalkToStellar account with PIN or Passkey.",
 }
 
 export default function LoginPage({

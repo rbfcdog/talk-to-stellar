@@ -1,8 +1,8 @@
 import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
-  title: "Mandar para PIX",
-  description: "Mandar saldo para seu PIX pela TalkToStellar.",
+  title: "Send to PIX",
+  description: "Send balance to your PIX through TalkToStellar.",
 };
 
 function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {

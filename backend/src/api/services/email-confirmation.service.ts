@@ -99,11 +99,75 @@ function maskEmail(email: string): string {
 
 function isMissingTableError(error: any): boolean {
   const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
   return (
-    message.includes('email_confirmations') ||
-    message.includes('schema cache') ||
-    message.includes('does not exist')
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    (message.includes('email_confirmations') && (
+      message.includes('schema cache') ||
+      message.includes('does not exist') ||
+      message.includes('could not find the table')
+    ))
   );
+}
+
+function isPermissionError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
+  return (
+    code === '42501' ||
+    message.includes('row-level security') ||
+    message.includes('permission denied') ||
+    message.includes('insufficient privilege') ||
+    message.includes('not authorized')
+  );
+}
+
+function emailConfirmationStorageAccessMessage(): string {
+  const usingServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
+  return usingServiceRole
+    ? 'Email confirmation storage is not accessible. Check the email_confirmations RLS policy and grants for the backend role.'
+    : 'Email confirmation table exists, but the backend is using SUPABASE_ANON_KEY. Set SUPABASE_SERVICE_ROLE_KEY in the backend environment because the email_confirmations RLS policy only allows service_role.';
+}
+
+function handleEmailConfirmationStorageError(error: any): never {
+  logger.warn(`[email-confirmation] storage error: ${String(error?.code || '')} ${String(error?.message || error)}`);
+  if (isMissingTableError(error)) {
+    throw new EmailConfirmationError(
+      'EMAIL_CONFIRMATIONS_TABLE_MISSING',
+      'Email confirmation table was not found. Run the backend migrations in the same Supabase project used by the backend.',
+      500
+    );
+  }
+  if (isPermissionError(error)) {
+    throw new EmailConfirmationError(
+      'EMAIL_CONFIRMATIONS_TABLE_INACCESSIBLE',
+      emailConfirmationStorageAccessMessage(),
+      500
+    );
+  }
+  throw error;
+}
+
+function localizedMessage(language: Language, pt: string, en: string): string {
+  return language === 'en' ? en : pt;
+}
+
+function genericEmailMessage(code: string, language: Language): string {
+  switch (code) {
+    case 'EMAIL_REQUIRED':
+      return localizedMessage(language, 'Informe um e-mail válido para confirmar o acesso.', 'Enter a valid email to confirm access.');
+    case 'EMAIL_CODE_INVALID':
+      return localizedMessage(language, 'Código de confirmação inválido.', 'Invalid confirmation code.');
+    case 'EMAIL_CODE_INVALID_OR_EXPIRED':
+      return localizedMessage(language, 'Código de confirmação inválido ou expirado.', 'Invalid or expired confirmation code.');
+    case 'EMAIL_CODE_LOCKED':
+      return localizedMessage(language, 'Muitas tentativas. Solicite um novo código.', 'Too many attempts. Request a new code.');
+    case 'EMAIL_CODE_EXPIRED':
+      return localizedMessage(language, 'Código de confirmação expirado. Solicite um novo código.', 'Confirmation code expired. Request a new code.');
+    default:
+      return localizedMessage(language, 'Não foi possível confirmar o e-mail.', 'Could not confirm email.');
+  }
 }
 
 function fromAddress(): string {
@@ -256,7 +320,7 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 
   throw new EmailConfirmationError(
     'EMAIL_PROVIDER_MISSING',
-    'Envio de e-mail não configurado no servidor.',
+    'Email sending is not configured on the server.',
     500
   );
 }
@@ -271,7 +335,7 @@ export class EmailConfirmationService {
     const language = normalizeLanguage(input.language);
 
     if (!email || !looksLikeEmail(email)) {
-      throw new EmailConfirmationError('EMAIL_REQUIRED', 'Informe um e-mail válido para confirmar o acesso.', 400);
+      throw new EmailConfirmationError('EMAIL_REQUIRED', genericEmailMessage('EMAIL_REQUIRED', language), 400);
     }
 
     const code = String(input.code || '').replace(/\D+/g, '').trim();
@@ -317,14 +381,7 @@ export class EmailConfirmationService {
 
     const { error } = await supabase.from('email_confirmations').insert(insertPayload);
     if (error) {
-      if (isMissingTableError(error)) {
-        throw new EmailConfirmationError(
-          'EMAIL_CONFIRMATIONS_TABLE_MISSING',
-          'Tabela de confirmação por e-mail não encontrada. Rode as migrations do backend.',
-          500
-        );
-      }
-      throw error;
+      handleEmailConfirmationStorageError(error);
     }
 
     const message = buildMessage({
@@ -353,8 +410,9 @@ export class EmailConfirmationService {
     purpose: EmailConfirmationPurpose;
     code: string;
   }): Promise<void> {
+    const language = 'en';
     if (!/^\d{6}$/.test(input.code)) {
-      throw new EmailConfirmationError('EMAIL_CODE_INVALID', 'Código de confirmação inválido.', 401);
+      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID', language), 401);
     }
 
     const codeHash = hashCode(input.email, input.purpose, input.code);
@@ -370,29 +428,22 @@ export class EmailConfirmationService {
       .maybeSingle();
 
     if (error) {
-      if (isMissingTableError(error)) {
-        throw new EmailConfirmationError(
-          'EMAIL_CONFIRMATIONS_TABLE_MISSING',
-          'Tabela de confirmação por e-mail não encontrada. Rode as migrations do backend.',
-          500
-        );
-      }
-      throw error;
+      handleEmailConfirmationStorageError(error);
     }
 
     if (!data) {
       await this.incrementLatestAttempt(input.email, input.purpose);
-      throw new EmailConfirmationError('EMAIL_CODE_INVALID', 'Código de confirmação inválido ou expirado.', 401);
+      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID_OR_EXPIRED', language), 401);
     }
 
     const attempts = Number((data as any)?.attempts || 0);
     if (attempts >= getMaxAttempts()) {
-      throw new EmailConfirmationError('EMAIL_CODE_LOCKED', 'Muitas tentativas. Solicite um novo código.', 429);
+      throw new EmailConfirmationError('EMAIL_CODE_LOCKED', genericEmailMessage('EMAIL_CODE_LOCKED', language), 429);
     }
 
     const expiresAt = Date.parse(String((data as any)?.expires_at || ''));
     if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) {
-      throw new EmailConfirmationError('EMAIL_CODE_EXPIRED', 'Código de confirmação expirado. Solicite um novo código.', 401);
+      throw new EmailConfirmationError('EMAIL_CODE_EXPIRED', genericEmailMessage('EMAIL_CODE_EXPIRED', language), 401);
     }
 
     const { error: updateError } = await supabase
@@ -403,7 +454,7 @@ export class EmailConfirmationService {
       })
       .eq('id', String((data as any).id));
 
-    if (updateError) throw updateError;
+    if (updateError) handleEmailConfirmationStorageError(updateError);
   }
 
   private static async incrementLatestAttempt(email: string, purpose: EmailConfirmationPurpose): Promise<void> {

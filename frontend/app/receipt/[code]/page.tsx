@@ -16,16 +16,16 @@ function ReceiptFallback() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
       <section className="max-w-lg rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
-        <h1 className="text-2xl font-semibold text-white">Recibo não encontrado</h1>
+        <h1 className="text-2xl font-semibold text-white">Receipt not found</h1>
         <p className="mt-3 text-sm leading-6 text-slate-300">
-          Este link pode ter expirado. Abra o comprovante pela conversa do chat web.
+          This link may have expired. Open the receipt from the web chat conversation.
         </p>
         <Link
           href="/chat"
           className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
         >
           <ExternalLink className="h-4 w-4" />
-          Voltar ao chat
+          Back to chat
         </Link>
       </section>
     </main>
@@ -71,7 +71,7 @@ export default function ReceiptByCodePage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <p className="text-sm text-slate-300">Carregando recibo...</p>
+        <p className="text-sm text-slate-300">Loading receipt...</p>
       </main>
     )
   }
@@ -84,8 +84,8 @@ export default function ReceiptByCodePage() {
         <section className="w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Recibo</p>
-              <h1 className="mt-2 text-3xl font-semibold text-white">Visualizar e baixar comprovante</h1>
+              <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Receipt</p>
+              <h1 className="mt-2 text-3xl font-semibold text-white">View and download receipt</h1>
             </div>
             <div className="flex flex-wrap gap-3">
               <a
@@ -94,14 +94,14 @@ export default function ReceiptByCodePage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
               >
                 <Download className="h-4 w-4" />
-                Baixar imagem
+                Download image
               </a>
               <Link
                 href="/chat"
                 className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <ExternalLink className="h-4 w-4" />
-                Voltar ao chat
+                Back to chat
               </Link>
             </div>
           </div>
@@ -109,7 +109,7 @@ export default function ReceiptByCodePage() {
           <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-xl">
             <img
               src={imageUrl}
-              alt="Comprovante TalkToStellar"
+              alt="TalkToStellar receipt"
               className="h-auto w-full rounded-xl object-contain"
             />
           </div>

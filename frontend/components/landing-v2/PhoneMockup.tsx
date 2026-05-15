@@ -12,9 +12,9 @@ export default function PhoneMockup() {
   useEffect(() => {
     if (!isInView) return;
 
-    const timer1 = setTimeout(() => setStep(1), 1000); // Bot: Olá! Sou o TalkToStellar...
-    const timer2 = setTimeout(() => setStep(2), 3500); // User: Que legal! Envia 50 USDC...
-    const timer3 = setTimeout(() => setStep(3), 5500); // Bot: É pra já! Encontrei a melhor rota...
+    const timer1 = setTimeout(() => setStep(1), 1000);
+    const timer2 = setTimeout(() => setStep(2), 3500);
+    const timer3 = setTimeout(() => setStep(3), 5500);
 
     return () => {
       clearTimeout(timer1);
@@ -62,7 +62,7 @@ export default function PhoneMockup() {
       >
         {/* Date Badge */}
         <div className="flex justify-center my-2">
-          <span className="bg-[#162032] text-[#9BA4B5] text-[11px] px-3 py-1 rounded-lg shadow-sm border border-white/[0.03]">Hoje</span>
+          <span className="bg-[#162032] text-[#9BA4B5] text-[11px] px-3 py-1 rounded-lg shadow-sm border border-white/[0.03]">Today</span>
         </div>
 
         {/* Step 1: Bot Introduction */}
@@ -74,7 +74,7 @@ export default function PhoneMockup() {
               className="self-start bg-[#162032] text-[#e9edef] px-3 py-2 rounded-2xl rounded-bl-sm max-w-[85%] shadow-sm relative flex flex-col"
             >
               <p className="text-[15px] leading-snug">
-                Olá! 👋 Sou o <strong className="text-[#00D2FF]">TalkToStellar</strong>. Me dê um comando simples e eu converto seus Reais em Dólar e envio para qualquer lugar do mundo com a melhor taxa. O que você quer fazer hoje?
+                Hi. I am <strong className="text-[#00D2FF]">TalkToStellar</strong>. Send me a simple command and I can convert your reais into dollars and send them worldwide with a strong route. What do you want to do today?
               </p>
               <div className="text-right mt-1">
                 <span className="text-[10px] text-[#9BA4B5]">14:40</span>
@@ -91,7 +91,7 @@ export default function PhoneMockup() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               className="self-end bg-[#00D87A] text-[#e9edef] px-3 py-2 rounded-2xl rounded-br-sm max-w-[85%] shadow-sm flex flex-col relative"
             >
-              <p className="text-[15px] leading-snug">Vou precisar enviar 50 Dólares pra Maria. Pode fazer a conversão dos meus Reais?</p>
+              <p className="text-[15px] leading-snug">I need to send 50 dollars to Maria. Can you convert my reais?</p>
               <div className="flex items-center gap-1 self-end mt-1">
                 <span className="text-[10px] text-[#9BA4B5]">14:41</span>
                 <CheckCheck className="text-[#4CA1EF] w-3.5 h-3.5" />
@@ -109,12 +109,12 @@ export default function PhoneMockup() {
               className="self-start bg-[#162032] text-[#e9edef] px-3 py-2 rounded-2xl rounded-bl-sm max-w-[85%] shadow-sm relative flex flex-col"
             >
               <p className="text-[15px] leading-snug">
-                É pra já! 🚀 Peguei a melhor taxa de agora. <br/>
-                Para enviar 50 USD, você pagará exatamente <strong className="text-[#00D2FF]">R$ 256,20</strong> via Pix. Não cobraremos taxas ocultas. <br/><br/>
-                Enviando link de confirmação...
+                Done. I found the best current rate. <br/>
+                To send 50 USD, you will pay exactly <strong className="text-[#00D2FF]">R$ 256.20</strong> with PIX. No hidden fees. <br/><br/>
+                Sending confirmation link...
               </p>
               <div className="mt-2 pt-2 border-t border-white/[0.03] flex gap-2">
-                <a href="#simulator" className="flex-1 bg-[#00D2FF] text-slate-950 text-sm py-1.5 rounded-lg font-medium hover:bg-cyan-300 transition-colors text-center shadow-[0_0_10px_rgba(34,211,238,0.2)]">Pagar R$ 256,20</a>
+                <a href="#simulator" className="flex-1 bg-[#00D2FF] text-slate-950 text-sm py-1.5 rounded-lg font-medium hover:bg-cyan-300 transition-colors text-center shadow-[0_0_10px_rgba(34,211,238,0.2)]">Pay R$256.20</a>
               </div>
               <div className="text-right mt-1">
                 <span className="text-[10px] text-[#9BA4B5]">14:41</span>
@@ -129,7 +129,7 @@ export default function PhoneMockup() {
       <div className="absolute bottom-0 left-0 right-0 bg-[#162032] px-2 pt-2 pb-6 flex items-end gap-2 z-10 border-t border-white/[0.03]">
         <Plus className="text-[#00D2FF] w-7 h-7 mb-1.5 flex-shrink-0" />
         <div className="flex-1 bg-[#162032] rounded-2xl min-h-[36px] flex items-center px-3 py-1.5 border border-white/[0.03] shadow-sm">
-          <span className="text-[#9BA4B5] text-[15px] flex-1">Mensagem</span>
+          <span className="text-[#9BA4B5] text-[15px] flex-1">Message</span>
           <Smile className="text-[#9BA4B5] w-5 h-5" />
         </div>
         <Camera className="text-[#00D2FF] w-6 h-6 mb-1.5 flex-shrink-0" />
