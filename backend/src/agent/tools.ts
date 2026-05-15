@@ -3720,6 +3720,30 @@ async function resolveContactPublicKeyByPixKey(contactRef: string): Promise<{ pu
       }
     }
 
+    const { data: userByEmail, error: userEmailError } = await supabase
+      .from('users')
+      .select('id, email, stellar_public_key')
+      .ilike('email', normalizedRef)
+      .limit(1)
+      .maybeSingle();
+
+    if (userEmailError) {
+      const message = String(userEmailError.message || '').toLowerCase();
+      if (!message.includes('users') && !message.includes('does not exist') && !message.includes('schema cache')) {
+        throw new Error(userEmailError.message || 'Failed to lookup user by email');
+      }
+    }
+
+    const userPublicKey = String((userByEmail as any)?.stellar_public_key || '').trim();
+    if (/^G[A-Z2-7]{55}$/i.test(userPublicKey)) {
+      logger.info(`[add_contact] resolved email ${normalizedRef} via users.email`);
+      return {
+        publicKey: userPublicKey,
+        name: String((userByEmail as any)?.email || normalizedRef),
+        pixKey: normalizedRef,
+      };
+    }
+
     const { data: externalByUserId, error: externalUserIdError } = await supabase
       .from('external_accounts')
       .select('session_id, user_id, data')

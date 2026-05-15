@@ -355,6 +355,23 @@ export class AgentGraph {
         }
       }
 
+      const { data: userByEmail } = await supabase
+        .from('users')
+        .select('id, email, stellar_public_key')
+        .eq('email', normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+
+      const userPublicKey = String((userByEmail as any)?.stellar_public_key || '').trim();
+      if (/^G[A-Z2-7]{55}$/i.test(userPublicKey)) {
+        return {
+          contact_name: String((userByEmail as any)?.email || normalizedEmail),
+          stellar_public_key: userPublicKey,
+          email: normalizedEmail,
+          pix_key: normalizedEmail,
+        };
+      }
+
       const { data: mappings } = await supabase
         .from('external_accounts')
         .select('session_id, user_id, data')
