@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 export type AppLanguage = "pt-BR" | "en";
@@ -219,6 +219,11 @@ function persistLanguage(language: AppLanguage) {
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const [language, setLanguageState] = useState<AppLanguage>("en");
+  const appliedQueryLanguageRef = useRef("");
+  const queryLanguage = useMemo(
+    () => searchParams.get("lang") || searchParams.get("language") || "",
+    [searchParams]
+  );
 
   useEffect(() => {
     const next = readStoredLanguage();
@@ -227,12 +232,18 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const queryLanguage = searchParams.get("lang") || searchParams.get("language");
-    if (!queryLanguage) return;
+    const querySignature = String(queryLanguage || "").trim().toLowerCase();
+    if (!querySignature) {
+      appliedQueryLanguageRef.current = "";
+      return;
+    }
+    if (appliedQueryLanguageRef.current === querySignature) return;
+
+    appliedQueryLanguageRef.current = querySignature;
     const next = normalizeLanguage(queryLanguage);
     setLanguageState(next);
     persistLanguage(next);
-  }, [searchParams]);
+  }, [queryLanguage]);
 
   const setLanguage = (next: AppLanguage) => {
     setLanguageState(next);
