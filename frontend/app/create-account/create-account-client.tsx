@@ -528,6 +528,15 @@ export default function CreateAccountClient({
       setStatus(response.ok ? "done" : "error")
 
       const finalizeMessage = String(payload?.message || payload?.error || "")
+      if (!response.ok && (payload as any)?.notAssociated) {
+        const params = new URLSearchParams()
+        if (finalToken) params.set("token", finalToken)
+        if (email.trim()) params.set("email", email.trim())
+        if (rawNextPath && rawNextPath !== "/chat") params.set("next", rawNextPath)
+        params.set("lang", language)
+        window.location.replace(`/login?${params.toString()}`)
+        return
+      }
       if (!response.ok && (Boolean((payload as any)?.used || (payload as any)?.alreadyCompleted) || finalizeMessage.toLowerCase().includes("já foi utilizado"))) {
         redirectToUsed(finalizeMessage || "Este link já foi utilizado.")
         return
