@@ -128,3 +128,45 @@ test('telegram text handler forwards to the agent when account check fails', asy
   assert.equal(replies.length, 1);
   assert.equal(replies[0], 'processed');
 });
+
+test('telegram text handler replaces stale local session with backend-linked account session', async () => {
+  const queries = [];
+  const replies = [];
+  const linkedSessionId = '22222222-2222-4222-8222-222222222222';
+  const staleSessionId = '11111111-1111-4111-8111-111111111111';
+  const { handleTextMessage, sessionStore } = createTelegramBot({
+    botToken: 'test-token',
+    agentClient: {
+      sendQuery: async payload => {
+        queries.push(payload);
+        return { message: 'processed' };
+      },
+    },
+    externalCheck: async () => ({
+      exists: true,
+      sessionId: linkedSessionId,
+    }),
+    logger: {
+      info: () => {},
+      error: () => {},
+      warn: () => {},
+    },
+  });
+
+  sessionStore.setSessionId(77, staleSessionId);
+  const ctx = {
+    message: { text: 'balance' },
+    chat: { id: 77 },
+    from: { username: 'alice', id: 7 },
+    session: { sessionId: staleSessionId },
+    reply: async text => replies.push(text),
+  };
+
+  await handleTextMessage(ctx);
+
+  assert.equal(queries.length, 1);
+  assert.equal(queries[0].sessionId, linkedSessionId);
+  assert.equal(ctx.session.sessionId, linkedSessionId);
+  assert.equal(sessionStore.getSessionId(77), linkedSessionId);
+  assert.equal(replies[0], 'processed');
+});

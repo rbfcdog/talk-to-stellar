@@ -320,7 +320,7 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 
   throw new EmailConfirmationError(
     'EMAIL_PROVIDER_MISSING',
-    'Email sending is not configured on the server.',
+    'Email sending is not configured on the server. Set RESEND_API_KEY, SENDGRID_API_KEY, or EMAIL_CONFIRMATION_WEBHOOK_URL in the backend environment.',
     500
   );
 }
