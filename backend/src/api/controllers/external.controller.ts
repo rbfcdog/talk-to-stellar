@@ -91,6 +91,15 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
   language: 'pt-BR' | 'en';
   metadata?: Record<string, unknown>;
 }): Promise<boolean> {
+  // Email confirmation infrastructure is intentionally kept in place, but the
+  // login/create-account gate is disabled for now. Re-enable by removing this
+  // early return once an email provider is configured and product wants the
+  // extra confirmation step again.
+  void req;
+  void res;
+  void input;
+  return true;
+
   const email = normalizeEmailForCompare(input.email || '');
   if (!email) return true;
 
