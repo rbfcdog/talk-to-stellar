@@ -15,6 +15,7 @@ import { supabase } from '../config/supabase';
 import { getAssetIssuer } from '../config/assets';
 import { WalletRepository } from '../repositories/wallet.repository';
 import { ActivityFeedService } from '../api/services/activity-feed.service';
+import { normalizeHumanAmountText, parseHumanAmountNumber } from '../utils/amount';
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
@@ -362,7 +363,7 @@ export class AgentGraph {
     const normalizedAsset = hinted === 'USD'
       ? 'USDC'
       : (hinted || undefined);
-    const normalizedAmount = amountText.replace(',', '.');
+    const normalizedAmount = normalizeHumanAmountText(amountText);
     const cleanedAmount = Number.isFinite(Number(normalizedAmount)) ? normalizedAmount : amountText;
 
     return {
@@ -471,8 +472,8 @@ export class AgentGraph {
   } {
     const original = String(text || '');
     const normalized = this.normalizeTextForIntent(original);
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const amount = amountMatch?.[1]?.replace(',', '.');
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
 
     let assetCode = 'USDC';
     if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
@@ -514,8 +515,8 @@ export class AgentGraph {
       return {};
     }
 
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const amount = amountMatch?.[1]?.replace(',', '.');
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
     if (!amount) return {};
 
     let assetCode = 'USDC';
@@ -750,7 +751,7 @@ ${onboardingUrl}`;
       return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
     }
 
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
     const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
     const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
     const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
@@ -772,7 +773,7 @@ ${onboardingUrl}`;
       is_pix_ramp: true,
       direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
       flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
-      amount: amountMatch?.[1]?.replace(',', '.'),
+      amount: amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined,
       amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : 'BRL',
       asset_code: wantsOffRamp && !wantsOnRamp
         ? (mentionsUsdc ? 'USDC' : 'BRL')
@@ -914,7 +915,7 @@ ${onboardingUrl}`;
       const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
       const recipientName = String(llmParsed.recipient_query || '').trim();
       const expiresAt = this.parsePaymentLinkExpiryFromText(state.current_input);
-      const numericAmount = Number(amount.replace(',', '.'));
+      const numericAmount = parseHumanAmountNumber(amount);
       const hasValidAmount = amount.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0;
 
       if (!hasValidAmount) {
@@ -1223,7 +1224,7 @@ ${onboardingUrl}`;
   }
 
   private formatMoneyByAsset(amount: string, assetCode: string): string {
-    const n = Number(String(amount || '0').replace(',', '.'));
+    const n = parseHumanAmountNumber(amount);
     if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
@@ -1251,7 +1252,7 @@ ${onboardingUrl}`;
   }
 
   private toAmountNumber(value: unknown): number {
-    const parsed = Number(String(value || '').replace(',', '.'));
+    const parsed = parseHumanAmountNumber(value);
     return Number.isFinite(parsed) ? parsed : 0;
   }
 

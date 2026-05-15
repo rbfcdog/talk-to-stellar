@@ -66,14 +66,31 @@ function getStoredSession() {
 }
 
 function formatMoney(value: unknown, currency = "BRL") {
-  const numeric = Number(String(value || "0").replace(",", "."));
+  const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${currency}`;
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(numeric);
 }
 
 function toPositiveNumber(value: unknown, fallback = 0) {
-  const numeric = Number(String(value || "").replace(",", "."));
+  const numeric = parseHumanAmount(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
+function normalizeHumanAmount(value: unknown) {
+  const raw = String(value || "").trim().replace(/\s+/g, "");
+  const withoutSymbols = raw.replace(/[^\d.,-]/g, "");
+  if (!withoutSymbols || withoutSymbols === "-" || withoutSymbols === "." || withoutSymbols === ",") return "";
+  const negative = withoutSymbols.startsWith("-") ? "-" : "";
+  const unsigned = withoutSymbols.replace(/^-/, "");
+  if (unsigned.includes(",") && unsigned.includes(".")) return `${negative}${unsigned.replace(/\./g, "").replace(",", ".")}`;
+  if (unsigned.includes(",")) return `${negative}${unsigned.replace(/\./g, "").replace(",", ".")}`;
+  if (/^[1-9]\d{0,2}(?:\.\d{3})+$/.test(unsigned)) return `${negative}${unsigned.replace(/\./g, "")}`;
+  return `${negative}${unsigned}`;
+}
+
+function parseHumanAmount(value: unknown) {
+  const numeric = Number(normalizeHumanAmount(value));
+  return Number.isFinite(numeric) ? numeric : NaN;
 }
 
 function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
@@ -84,7 +101,7 @@ function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USD
 }
 
 function formatAsset(value: unknown, code = "BRL") {
-  const numeric = Number(String(value || "0").replace(",", "."));
+  const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${code}`;
   return `${numeric.toLocaleString("pt-BR", { maximumFractionDigits: 7 })} ${code}`;
 }
@@ -172,8 +189,8 @@ function sumVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
   return balances
     .filter((balance) => userFacingAssetCode(balance.asset_code, assetCode) === assetCode)
     .reduce((total, balance) => {
-      const numeric = Number(String(balance.balance || "0").replace(",", "."));
-      return total + (Number.isFinite(numeric) ? numeric : 0);
+      const parsed = parseHumanAmount(balance.balance);
+      return total + (Number.isFinite(parsed) ? parsed : 0);
     }, 0);
 }
 
@@ -186,6 +203,19 @@ function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCo
   const delta = sumVisibleBalance(after, assetCode) - sumVisibleBalance(before, assetCode);
   const sign = delta > 0 ? "+" : "";
   return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
+}
+
+function assertSufficientVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset, requestedValue: unknown) {
+  const requested = parseHumanAmount(requestedValue);
+  if (!Number.isFinite(requested) || requested <= 0) {
+    throw new Error("Informe um valor válido para retirar.");
+  }
+  const available = sumVisibleBalance(balances, assetCode);
+  if (available + 0.0000001 < requested) {
+    throw new Error(
+      `Saldo insuficiente. Você tem ${formatRampAsset(available.toFixed(7), assetCode)} disponível e tentou retirar ${formatRampAsset(requested.toFixed(7), assetCode)}.`
+    );
+  }
 }
 
 function InlineSpinner({ tone = "emerald" }: { tone?: "emerald" | "cyan" | "amber" | "white" }) {
@@ -606,16 +636,16 @@ export default function PixRampClient({
 
     const params = new URLSearchParams(queryString);
     const mode = lockedMode || (params.get("mode") === "offramp" ? "offramp" : "onramp");
-    const amount = String(params.get("source_amount") || params.get("amount") || "").trim().replace(",", ".");
-    const fiatAmount = String(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "").trim().replace(",", ".");
-    const receiveAmount = String(params.get("receive_amount") || params.get("target_amount") || "").trim().replace(",", ".");
+    const amount = normalizeHumanAmount(params.get("source_amount") || params.get("amount") || "");
+    const fiatAmount = normalizeHumanAmount(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "");
+    const receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || "");
     const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || "").trim().toUpperCase();
     const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
     const recipient = String(params.get("recipient") || "").trim();
-    const payAmount = String(params.get("pay_amount") || "").trim().replace(",", ".");
+    const payAmount = normalizeHumanAmount(params.get("pay_amount") || "");
     const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
     const offRampBrlAmount = mode === "offramp" && (fiatAmount || (amount && (!currency || currency === "BRL" || asset === "BRL")))
@@ -1318,7 +1348,9 @@ export default function PixRampClient({
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
       const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
-      const sourceAmount = offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim();
+      const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+      const balancesBefore = await fetchBalances(auth);
+      assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
         addDebugLog({
           label: "PIX off-ramp client validation",
           method: "POST",
@@ -1328,6 +1360,7 @@ export default function PixRampClient({
             pin_digits: pin.length,
             source_amount: sourceAmount,
             source_asset_code: offRampInputAsset,
+            available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
             fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
             destination_currency: "BRL",
             fiat_account_id: bankAccount.id,
@@ -1351,7 +1384,7 @@ export default function PixRampClient({
         }, "POST", auth, buildIdempotencyKey("submit-offramp"));
       setTemporaryOffRampTestResult(payload);
       setWalletPublicKey(String(payload.wallet_public_key || ""));
-      setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
+      setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : balancesBefore);
       setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
       if (payload?.submitted || payload?.success) {
         markOperationCompleted();
