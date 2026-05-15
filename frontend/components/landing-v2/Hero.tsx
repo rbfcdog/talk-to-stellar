@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import PhoneMockup from './PhoneMockup';
 import ChannelButtons from './ChannelButtons';
+import { useLanguage } from '@/lib/i18n';
 
 export default function Hero() {
+  const { t } = useLanguage();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -51,11 +53,11 @@ export default function Hero() {
             
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-bold tracking-tight text-white md:text-[56px] leading-[1.1]">
-                Converta pro mundo todo. <br className="hidden md:block"/>
-                <span className="text-[#00D2FF]">Em uma mensagem.</span>
+                {t("hero_title_1")} <br className="hidden md:block"/>
+                <span className="text-[#00D2FF]">{t("hero_title_2")}</span>
               </h1>
               <p className="max-w-xl text-base leading-relaxed text-[#9BA4B5] md:text-lg">
-                Envie dinheiro, gerencie contatos e use a blockchain com linguagem natural. Direto do Telegram ou WhatsApp, sem burocracia.
+                {t("hero_subtitle")}
               </p>
             </div>
 
@@ -63,12 +65,12 @@ export default function Hero() {
             
             <div className="grid min-w-0 gap-4 sm:grid-cols-2 pt-4">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.03] bg-[#0C1421]/40 p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">Linguagem natural</p>
-                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">Use mensagens simples para simular, transferir e organizar transações.</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">{t("hero_card_1_title")}</p>
+                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">{t("hero_card_1_body")}</p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.03] bg-[#0C1421]/40 p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">Conversão com menor taxa</p>
-                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">A plataforma compara rotas em tempo real para reduzir custo efetivo em BRL e USDC, com transparência de taxa antes da confirmação.</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#00D2FF]/80 font-semibold">{t("hero_card_2_title")}</p>
+                <p className="mt-2 text-sm text-[#9BA4B5] leading-relaxed">{t("hero_card_2_body")}</p>
               </div>
             </div>
           </section>

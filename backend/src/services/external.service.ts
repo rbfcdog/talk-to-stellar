@@ -16,6 +16,13 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev-secret-change-me';
 }
 
+function normalizeLanguage(value: unknown): 'pt-BR' | 'en' | '' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  if (normalized === 'pt' || normalized === 'pt-br' || normalized.includes('portugu')) return 'pt-BR';
+  return '';
+}
+
 function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
@@ -484,6 +491,8 @@ export class ExternalService {
     urlObj.searchParams.set('provider', provider);
     urlObj.searchParams.set('provider_user_id', providerUserId);
     urlObj.searchParams.set('source', provider);
+    const language = normalizeLanguage((extra as any)?.language || (extra as any)?.lang || (extra as any)?.locale);
+    if (language) urlObj.searchParams.set('lang', language);
     const telegramChatId = String((extra as any)?.telegram_chat_id || (extra as any)?.chat_id || '').trim();
     if (telegramChatId) {
       urlObj.searchParams.set('telegram_chat_id', telegramChatId);
@@ -519,6 +528,8 @@ export class ExternalService {
     urlObj.searchParams.set('provider', provider);
     urlObj.searchParams.set('provider_user_id', providerUserId);
     urlObj.searchParams.set('source', String(extra.source || provider).trim().toLowerCase());
+    const language = normalizeLanguage(extra.language || extra.lang || extra.locale);
+    if (language) urlObj.searchParams.set('lang', language);
 
     const nextPath = String(extra.next_path || extra.nextPath || '').trim();
     if (nextPath && nextPath.startsWith('/') && !nextPath.startsWith('//')) {

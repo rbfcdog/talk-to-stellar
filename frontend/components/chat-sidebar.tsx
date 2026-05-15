@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, MoreVertical, MessageCircle, Users, User } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 interface ChatSidebarProps {
   selectedChat: string | null;
@@ -22,6 +23,7 @@ function sanitizeVisiblePreview(content: string): string {
 }
 
 export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
+  const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [agentPreview, setAgentPreview] = useState<{
     content: string;
@@ -45,7 +47,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "agent",
       title: "TalkToStellar",
-      lastMessage: "Olá! Como posso ajudar com sua carteira, saldo e contatos hoje?",
+      lastMessage: t("chat_sidebar_preview"),
       lastMessageTime: new Date().toISOString(),
       avatar: "/talktostellar.png",
       isBot: true,
@@ -173,11 +175,11 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         lastMessageTime: agentPreview.createdAt || chat.lastMessageTime,
       };
     });
-  }, [agentPreview]);
+  }, [agentPreview, t]);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString(language === "en" ? "en-US" : "pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
   
   const filteredConversations = conversations.filter(
@@ -198,7 +200,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         <div className="relative">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8696a0]" />
           <Input
-            placeholder="Pesquisar contatos da carteira..."
+            placeholder={t("chat_search_placeholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-10 rounded-lg border-none bg-[#202c33] pl-12 pr-4 text-sm text-[#e9edef] placeholder:text-[#8696a0]"

@@ -63,6 +63,48 @@ export class AgentGraph {
     logger.info("Agent initialized with Stellar tools available");
   }
 
+  private normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+    return 'pt-BR';
+  }
+
+  private getLanguage(state?: Partial<AgentState> | null): 'pt-BR' | 'en' {
+    return this.normalizeLanguage((state?.action_params as any)?.language || (state as any)?.language);
+  }
+
+  private text(language: 'pt-BR' | 'en', pt: string, en: string): string {
+    return language === 'en' ? en : pt;
+  }
+
+  private languageInstruction(language: 'pt-BR' | 'en'): string {
+    return language === 'en'
+      ? 'IMPORTANT: Reply in English. Keep all user-facing copy in English unless the user explicitly asks for Portuguese.'
+      : 'IMPORTANTE: Responda em portugues do Brasil. Mantenha todo texto ao usuario em portugues, salvo se ele pedir ingles.';
+  }
+
+  private buildSystemPrompt(language: 'pt-BR' | 'en'): string {
+    return `${this.systemPrompt}\n\n## CURRENT LANGUAGE\n${this.languageInstruction(language)}`;
+  }
+
+  private extractLanguagePreference(text: string): 'pt-BR' | 'en' | null {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+    if (!normalized) return null;
+    if (/^(english|en|speak english|talk in english|answer in english|switch to english|use english|in english)$/i.test(normalized)) {
+      return 'en';
+    }
+    if (/^(portugues|portuguese|pt|pt-br|fale portugues|falar portugues|responda em portugues|switch to portuguese|use portuguese)$/i.test(normalized)) {
+      return 'pt-BR';
+    }
+    if (/\b(speak|talk|answer|respond|switch|use)\s+in\s+english\b/.test(normalized)) return 'en';
+    if (/\b(fale|responda|mude|troque|use)\b.*\b(portugues|pt-br)\b/.test(normalized)) return 'pt-BR';
+    return null;
+  }
+
   private extractToolCalls(response: any): Array<{ id?: string; name: string; args?: Record<string, any> }> {
     const calls = response?.tool_calls || response?.additional_kwargs?.tool_calls || [];
     logger.debug(`[extractToolCalls] Raw tool_calls: ${JSON.stringify(calls)}`);
@@ -552,19 +594,22 @@ export class AgentGraph {
   }
 
   private async getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): Promise<string> {
+    const language = this.getLanguage(state);
     const normalizedBase = resolveFrontendBase([
       process.env.FRONTEND_URL,
       process.env.PUBLIC_APP_URL,
       process.env.CREATE_ACCOUNT_BASE,
       process.env.PAYMENT_CONFIRM_BASE,
     ]);
-    let onboardingUrl = `${normalizedBase}/create-account`;
+    const onboardingUrlObj = new URL(`${normalizedBase}/create-account`);
+    onboardingUrlObj.searchParams.set('lang', language);
+    let onboardingUrl = onboardingUrlObj.toString();
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
 
     if (externalProvider && externalProviderUserId) {
       try {
-        const onboard = await this.externalService.createOnboardUrlWithShortLink(externalProvider, externalProviderUserId);
+        const onboard = await this.externalService.createOnboardUrlWithShortLink(externalProvider, externalProviderUserId, { language });
         onboardingUrl = onboard.url;
       } catch (error) {
         logger.warn(`[onboarding-url] failed to create external onboarding URL: ${error instanceof Error ? error.message : String(error)}`);
@@ -584,13 +629,16 @@ export class AgentGraph {
     }
 
     if (preferLogin) {
-      let loginUrl = `${normalizedBase}/login`;
+      const loginUrlObj = new URL(`${normalizedBase}/login`);
+      loginUrlObj.searchParams.set('lang', language);
+      let loginUrl = loginUrlObj.toString();
       try {
         if (externalProvider && externalProviderUserId) {
           const login = await this.externalService.createLoginUrlWithShortLink(externalProvider, externalProviderUserId, {
             source: externalProvider,
             sessionId: String(state?.session_id || '').trim() || undefined,
             userId: String(state?.session_data?.user_id || '').trim() || undefined,
+            language,
           });
           loginUrl = login.url;
         } else {
@@ -605,16 +653,18 @@ export class AgentGraph {
       } catch (error) {
         logger.warn(`[login-url] failed to shorten login URL: ${error instanceof Error ? error.message : String(error)}`);
       }
-      return `Sua sessão não está ativa no momento.
-
-Abra este link para entrar na sua conta:
-${loginUrl}`;
+      return this.text(
+        language,
+        `Sua sessão não está ativa no momento.\n\nAbra este link para entrar na sua conta:\n${loginUrl}`,
+        `Your session is not active right now.\n\nOpen this link to sign in to your account:\n${loginUrl}`
+      );
     }
 
-    return `Você precisa entrar na sua conta para continuar.
-
-Abra este link para criar conta ou entrar em uma conta existente:
-${onboardingUrl}`;
+    return this.text(
+      language,
+      `Você precisa entrar na sua conta para continuar.\n\nAbra este link para criar conta ou entrar em uma conta existente:\n${onboardingUrl}`,
+      `You need to sign in to continue.\n\nOpen this link to create an account or sign in to an existing account:\n${onboardingUrl}`
+    );
   }
 
   private getFrontendBaseUrl(): string {
@@ -803,6 +853,7 @@ ${onboardingUrl}`;
     url.searchParams.set('intent_id', intentId);
     url.searchParams.set('from', 'chat');
     url.searchParams.set('autostart', '1');
+    url.searchParams.set('lang', this.getLanguage(state));
     if (externalProvider) url.searchParams.set('provider', externalProvider);
     if (externalProviderUserId) url.searchParams.set('provider_user_id', externalProviderUserId);
     if (externalSource) url.searchParams.set('source', externalSource);
@@ -840,6 +891,7 @@ ${onboardingUrl}`;
           next_path: `${url.pathname}${url.search}`,
           sessionId: state.session_id,
           userId: String(state.session_data?.user_id || '').trim() || undefined,
+          language: this.getLanguage(state),
         });
         return login.url;
       } catch (error) {
@@ -863,29 +915,42 @@ ${onboardingUrl}`;
 
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
     const intent = this.extractPixRampIntentFromText(state.current_input);
+    const language = this.getLanguage(state);
     if (!intent.is_pix_ramp) {
       state.success = false;
-      state.response_message = 'Você quer colocar dinheiro via PIX na conta ou retirar dinheiro para PIX?';
+      state.response_message = this.text(language, 'Você quer colocar dinheiro via PIX na conta ou retirar dinheiro para PIX?', 'Do you want to add money to your account with PIX or withdraw money to your PIX?');
     } else if (!intent.amount) {
       state.success = false;
       state.response_message = intent.direction === 'offramp'
-        ? 'Qual valor em reais você quer retirar para PIX?'
-        : 'Qual valor em reais você quer colocar na sua conta via PIX?';
+        ? this.text(language, 'Qual valor em reais você quer retirar para PIX?', 'How much in reais do you want to withdraw to PIX?')
+        : this.text(language, 'Qual valor em reais você quer colocar na sua conta via PIX?', 'How much in reais do you want to add to your account with PIX?');
     } else {
       const url = await this.buildPixRampUrl(state, intent);
       state.success = true;
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
-        state.response_message = `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`;
+        state.response_message = this.text(
+          language,
+          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`,
+          `To send ${amountText} to your PIX, open:\n\n${url}\n\nThe screen calculates the best conversion at exit and confirms the amount arriving in BRL in your PIX.`
+        );
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
-        state.response_message = `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`;
+        state.response_message = this.text(
+          language,
+          `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`,
+          `To send ${amountText} to ${intent.recipient_query} with PIX, open:\n\n${url}\n\nWe chose the best route. The screen confirms the PIX, converts when needed, and sends it to ${intent.recipient_query}.`
+        );
       } else {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         const actionText = intent.amount_currency === 'USDC'
-          ? `receber ${amountText}`
-          : `colocar ${amountText} na sua conta`;
-        state.response_message = `Para ${actionText} via PIX, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code)}.`;
+          ? this.text(language, `receber ${amountText}`, `receive ${amountText}`)
+          : this.text(language, `colocar ${amountText} na sua conta`, `add ${amountText} to your account`);
+        state.response_message = this.text(
+          language,
+          `Para ${actionText} via PIX, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
+          `To ${actionText} with PIX, open:\n\n${url}\n\nOn the page, use the QR and then confirm so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
+        );
       }
     }
 
@@ -1233,11 +1298,11 @@ ${onboardingUrl}`;
     return `${n.toFixed(2)} ${upper || 'XLM'}`;
   }
 
-  private formatUserFacingAssetName(assetCode: unknown): string {
+  private formatUserFacingAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const upper = this.toUserFacingAssetCode(assetCode);
-    if (upper === 'USDC' || upper === 'USD') return 'dólar digital';
-    if (upper === 'BRL') return 'real digital';
-    return upper || 'saldo';
+    if (upper === 'USDC' || upper === 'USD') return this.text(language, 'dólar digital', 'digital dollar');
+    if (upper === 'BRL') return this.text(language, 'real digital', 'digital real');
+    return upper || this.text(language, 'saldo', 'balance');
   }
 
   private toUserFacingAssetCode(assetCode: unknown): string {
@@ -1339,14 +1404,14 @@ ${onboardingUrl}`;
     }
   }
 
-  private async formatPixFundingEstimate(amount: string, assetCode: string): Promise<string> {
+  private async formatPixFundingEstimate(amount: string, assetCode: string, language: 'pt-BR' | 'en' = 'pt-BR'): Promise<string> {
     const normalizedAsset = this.toUserFacingAssetCode(assetCode).replace(/^USD$/, 'USDC');
     const numeric = this.toAmountNumber(amount);
     if (normalizedAsset === 'BRL') {
-      return `PIX para completar: ${this.formatMoneyByAsset(amount, 'BRL')}.`;
+      return this.text(language, `PIX para completar: ${this.formatMoneyByAsset(amount, 'BRL')}.`, `PIX needed: ${this.formatMoneyByAsset(amount, 'BRL')}.`);
     }
     if (normalizedAsset !== 'USDC' || numeric <= 0) {
-      return 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.';
+      return this.text(language, 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.', 'The screen calculates the PIX amount and shows the total fee before confirmation.');
     }
 
     try {
@@ -1355,13 +1420,17 @@ ${onboardingUrl}`;
       const brlPerUsdc = this.toAmountNumber(quote?.brl_per_usdc);
       if (quote?.success && brlPerUsdc > 0) {
         const estimatedBrl = numeric * brlPerUsdc;
-        return `PIX estimado pela cotação atual: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`;
+        return this.text(
+          language,
+          `PIX estimado pela cotação atual: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`,
+          `Estimated PIX at the current quote: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and shows the total fee before confirmation.`
+        );
       }
     } catch (error) {
       logger.warn(`[pix-funding-estimate] failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    return 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.';
+    return this.text(language, 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.', 'The screen calculates the PIX amount and shows the total fee before confirmation.');
   }
 
   private async buildPixFundedPaymentMessage(state: AgentState, input: {
@@ -1386,21 +1455,26 @@ ${onboardingUrl}`;
       pay_amount: input.amount,
       pay_asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
     });
-    const fundingEstimate = await this.formatPixFundingEstimate(fundingAmount, input.assetCode);
+    const language = this.getLanguage(state);
+    const fundingEstimate = await this.formatPixFundingEstimate(fundingAmount, input.assetCode, language);
     const balanceLine = input.currentBalance
-      ? `Saldo disponível em ${this.toUserFacingAssetCode(input.assetCode)}: ${input.currentBalance.formatted}.`
+      ? this.text(language, `Saldo disponível em ${this.toUserFacingAssetCode(input.assetCode)}: ${input.currentBalance.formatted}.`, `Available ${this.toUserFacingAssetCode(input.assetCode)} balance: ${input.currentBalance.formatted}.`)
       : input.explicitlyNeedsPix
-        ? 'Você pediu para pagar usando PIX para completar saldo.'
-      : 'Não consegui confirmar saldo suficiente agora.';
+        ? this.text(language, 'Você pediu para pagar usando PIX para completar saldo.', 'You asked to pay using PIX to top up your balance.')
+      : this.text(language, 'Não consegui confirmar saldo suficiente agora.', 'I could not confirm enough balance right now.');
     const missingLine = input.currentBalance
-      ? `Para enviar ${this.formatMoneyByAsset(input.amount, input.assetCode)} para ${input.destinationName}, falta ${this.formatMoneyByAsset(fundingAmount, input.assetCode)}.`
-      : `Vou preparar o PIX para cobrir ${this.formatMoneyByAsset(input.amount, input.assetCode)} e enviar para ${input.destinationName}.`;
+      ? this.text(language, `Para enviar ${this.formatMoneyByAsset(input.amount, input.assetCode)} para ${input.destinationName}, falta ${this.formatMoneyByAsset(fundingAmount, input.assetCode)}.`, `To send ${this.formatMoneyByAsset(input.amount, input.assetCode)} to ${input.destinationName}, you need ${this.formatMoneyByAsset(fundingAmount, input.assetCode)} more.`)
+      : this.text(language, `Vou preparar o PIX para cobrir ${this.formatMoneyByAsset(input.amount, input.assetCode)} e enviar para ${input.destinationName}.`, `I will prepare PIX to cover ${this.formatMoneyByAsset(input.amount, input.assetCode)} and send it to ${input.destinationName}.`);
 
     return [
       `${balanceLine} ${missingLine}`,
       fundingEstimate,
-      `Escolhemos a melhor rota disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
-      `Abra o link:\n\n${url}`,
+      this.text(
+        language,
+        `Escolhemos a melhor rota disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
+        `We chose the best available route: PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after your confirmation, the payment is sent automatically to ${input.destinationName}.`
+      ),
+      this.text(language, `Abra o link:\n\n${url}`, `Open the link:\n\n${url}`),
     ].join('\n\n');
   }
 
@@ -1437,7 +1511,8 @@ ${onboardingUrl}`;
         state.response_message = summary.message;
       } catch (error) {
         state.success = false;
-        state.response_message = `Não consegui consultar seu histórico de PIX agora: ${error instanceof Error ? error.message : String(error)}`;
+        const language = this.getLanguage(state);
+        state.response_message = this.text(language, `Não consegui consultar seu histórico de PIX agora: ${error instanceof Error ? error.message : String(error)}`, `I could not check your PIX history right now: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -1676,7 +1751,7 @@ ${onboardingUrl}`;
       .toLowerCase();
   }
 
-  private async buildRuntimeContext(userId?: string, sessionId?: string): Promise<string> {
+  private async buildRuntimeContext(userId?: string, sessionId?: string, language: 'pt-BR' | 'en' = 'pt-BR'): Promise<string> {
     const normalizedSessionId = String(sessionId || '').trim();
     let sessionData: any = null;
     let walletData: any = null;
@@ -1743,6 +1818,7 @@ ${onboardingUrl}`;
     return [
       '## RUNTIME CONTEXT',
       `current_time=${new Date().toISOString()}`,
+      `preferred_language=${language}`,
       `session_id=${normalizedSessionId || 'indisponivel'}`,
       `user_id=${resolvedUserId || 'indisponivel'}`,
       `session_active=${hasActiveWallet ? 'true' : 'false'}`,
@@ -1757,6 +1833,7 @@ ${onboardingUrl}`;
       pendingConversion ? `pending_conversion=${JSON.stringify(pendingConversion)}` : 'pending_conversion=none',
       '',
       '## CONTEXT RULES',
+      `- ${this.languageInstruction(language)}`,
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent wallet data. Return the login/onboarding link flow.',
@@ -1785,6 +1862,7 @@ ${onboardingUrl}`;
     messages: BaseMessage[],
     userId?: string,
     sessionId?: string,
+    language: 'pt-BR' | 'en' = 'pt-BR',
     maxRounds: number = 3
   ): Promise<string> {
     const isUuid = (value: string) =>
@@ -1807,7 +1885,7 @@ ${onboardingUrl}`;
         : this.llm;
 
     let conversation = [
-      new SystemMessage({ content: await this.buildRuntimeContext(userId, sessionId) }),
+      new SystemMessage({ content: await this.buildRuntimeContext(userId, sessionId, language) }),
       ...messages,
     ];
 
@@ -2199,6 +2277,21 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
     return `Sua chave para receber é:\n${lines[0]}`;
   }
 
+  private formatOwnReceivingKeysForLanguage(language: 'pt-BR' | 'en', publicKey?: string, pixKey?: string): string {
+    if (!pixKey) {
+      return this.text(
+        language,
+        'Não encontrei uma chave de recebimento (e-mail/telefone/CPF) vinculada à sua sessão atual.',
+        'I could not find a receiving key (email/phone/CPF) linked to your current session.'
+      );
+    }
+    return this.text(
+      language,
+      `Sua chave para receber é:\nChave de recebimento: \`${pixKey}\``,
+      `Your receiving key is:\nReceiving key: \`${pixKey}\``
+    );
+  }
+
   /**
    * Handle wallet creation flow
    */
@@ -2533,6 +2626,7 @@ Sua carteira foi criada e já está pronta para usar.
   }
 
   private async handleBalanceCheck(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
     const sessionId = String(state.session_id || '').trim();
     const sessionPublicKey = String(state.session_data?.public_key || '').trim();
 
@@ -2555,7 +2649,7 @@ Sua carteira foi criada e já está pronta para usar.
 
       if (!toolResult.success) {
         state.success = false;
-        state.response_message = `Não consegui consultar seu saldo agora: ${toolResult.error || 'erro desconhecido'}`;
+        state.response_message = this.text(language, `Não consegui consultar seu saldo agora: ${toolResult.error || 'erro desconhecido'}`, `I could not check your balance right now: ${toolResult.error || 'unknown error'}`);
       } else {
         const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
         const byAsset = new Map<string, any>();
@@ -2569,8 +2663,8 @@ Sua carteira foi criada e já está pronta para usar.
 
         state.success = true;
         state.response_message = wantsTechnicalBalance
-          ? `Saldo técnico completo na Stellar:\n${formattedBalances}`
-          : `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega BRL ou USDC conforme você escolher no checkout.`;
+          ? this.text(language, `Saldo técnico completo na Stellar:\n${formattedBalances}`, `Full technical Stellar balance:\n${formattedBalances}`)
+          : this.text(language, `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega BRL ou USDC conforme você escolher no checkout.`, `Your TalkToStellar account balance:\n${formattedBalances}\n\nPIX delivers BRL or USDC depending on what you choose at checkout.`);
       }
     }
 
@@ -3084,6 +3178,7 @@ Sua carteira foi criada e já está pronta para usar.
   }
 
   private async handlePriceQuoteRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
     const toolResultRaw = await executeTool('get_brl_usdc_quote', {});
     let toolResult: any;
     try {
@@ -3094,17 +3189,18 @@ Sua carteira foi criada e já está pronta para usar.
 
     if (!toolResult.success) {
       state.success = false;
-      state.response_message = `Não consegui consultar a cotação agora: ${toolResult.error || 'erro desconhecido'}`;
+      state.response_message = this.text(language, `Não consegui consultar a cotação agora: ${toolResult.error || 'erro desconhecido'}`, `I could not check the quote right now: ${toolResult.error || 'unknown error'}`);
     } else {
       const brlPerUsdc = Number(toolResult.brl_per_usdc);
       const usdcPerBrl = Number(toolResult.usdc_per_brl);
       const brlLabel = Number.isFinite(brlPerUsdc) ? brlPerUsdc.toFixed(4) : String(toolResult.brl_per_usdc);
       const usdcLabel = Number.isFinite(usdcPerBrl) ? usdcPerBrl.toFixed(8) : String(toolResult.usdc_per_brl);
       state.success = true;
-      state.response_message =
-        `Cotação agora: 1 USDC = R$ ${brlLabel}.\n` +
-        `Inverso: 1 BRL = US$ ${usdcLabel}.\n` +
-        `Fonte: BRL da sua conta.`;
+      state.response_message = this.text(
+        language,
+        `Cotação agora: 1 USDC = R$ ${brlLabel}.\nInverso: 1 BRL = US$ ${usdcLabel}.\nFonte: BRL da sua conta.`,
+        `Current quote: 1 USDC = R$ ${brlLabel}.\nInverse: 1 BRL = US$ ${usdcLabel}.\nSource: your account BRL.`
+      );
     }
 
     await this.saveAssistantResponse(state);
@@ -3118,6 +3214,27 @@ Sua carteira foi criada e já está pronta para usar.
   async processInput(state: AgentState, _config?: RunnableConfig): Promise<AgentState> {
     try {
       logger.info(`[Agent] Processing for session: ${state.session_id}`);
+      const explicitLanguage = this.extractLanguagePreference(state.current_input);
+      if (explicitLanguage) {
+        state.action_params = {
+          ...(state.action_params || {}),
+          language: explicitLanguage,
+        };
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
+        state.success = true;
+        state.response_message = this.text(
+          explicitLanguage,
+          'Pronto. Vou responder em português.',
+          'Done. I will answer in English.'
+        );
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
 
       // Resume wallet creation flow when waiting for user contact input (email/phone)
       if (state.waiting_for_wallet_input) {
@@ -3221,7 +3338,7 @@ Sua carteira foi criada e já está pronta para usar.
 
       if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
         const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
-        state.response_message = this.formatOwnReceivingKeys(publicKey, pixKey);
+        state.response_message = this.formatOwnReceivingKeysForLanguage(this.getLanguage(state), publicKey, pixKey);
         state.success = true;
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
@@ -3277,13 +3394,13 @@ Sua carteira foi criada e já está pronta para usar.
           );
 
         const preMessages: BaseMessage[] = [
-          new SystemMessage({ content: this.systemPrompt }),
+          new SystemMessage({ content: this.buildSystemPrompt(this.getLanguage(state)) }),
           ...conversationHistory,
           new HumanMessage({ content: state.current_input }),
         ];
 
         // Invoke LLM with system prompt containing guidelines and mandatory contacts context
-        const responseContent = await this.invokeWithTools(preMessages, state.session_data?.user_id, state.session_id);
+        const responseContent = await this.invokeWithTools(preMessages, state.session_data?.user_id, state.session_id, this.getLanguage(state));
 
         state.response_message = responseContent;
         state.success = true;
@@ -3297,7 +3414,8 @@ Sua carteira foi criada e já está pronta para usar.
         state.response_message = await this.generateSimpleResponse(
           state.current_input,
           state.messages,
-          state.session_data?.user_id
+          state.session_data?.user_id,
+          this.getLanguage(state)
         );
         state.success = true;
       }
@@ -3314,8 +3432,11 @@ Sua carteira foi criada e já está pronta para usar.
       logger.error(`[Agent] Error: ${errorMessage}`);
       state.success = false;
       state.error = errorMessage;
-      state.response_message =
-        "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.";
+      state.response_message = this.text(
+        this.getLanguage(state),
+        "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
+        "Sorry, there was an error processing your message. Try again."
+      );
       return state;
     }
 
@@ -3324,12 +3445,13 @@ Sua carteira foi criada e já está pronta para usar.
   private async generateSimpleResponse(
     input: string,
     previousMessages: Array<{ role: "user" | "assistant"; content: string }>,
-    userId?: string
+    userId?: string,
+    language: 'pt-BR' | 'en' = 'pt-BR'
   ): Promise<string> {
     try {
       const messages = [
         new SystemMessage({
-          content: this.systemPrompt,
+          content: this.buildSystemPrompt(language),
         }),
         ...previousMessages.slice(-3).map((m) =>
           m.role === "user"
@@ -3344,7 +3466,7 @@ Sua carteira foi criada e já está pronta para usar.
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Fallback response generation failed: ${errorMessage}`);
-      return "Desculpe, não consegui processar sua mensagem.";
+      return this.text(language, "Desculpe, não consegui processar sua mensagem.", "Sorry, I could not process your message.");
     }
   }
 

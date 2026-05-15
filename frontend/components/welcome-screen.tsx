@@ -1,8 +1,12 @@
 // src/components/welcome-screen.tsx
 
+"use client";
+
 import { Lock } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 export function WelcomeScreen() {
+  const { t } = useLanguage();
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center border-b-8 border-[#00a884] bg-[#222e35] px-6 py-10 text-center sm:px-8">
       <div className="mb-8 w-full max-w-[320px] sm:max-w-none">
@@ -20,12 +24,12 @@ export function WelcomeScreen() {
       </h1>
 
       <p className="mb-8 max-w-md text-[14px] leading-[1.5] text-[#8696a0]">
-        Selecione WhatsDap na barra lateral. Comece por aqui: 1) "saldo", 2) "depositar 150 reais via PIX", 3) "mandar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".
+        {t("welcome_select")}
       </p>
 
       <div className="mb-8 flex items-center gap-1 text-[14px] text-[#8696a0]">
         <Lock className="h-4 w-4" />
-        <span>Suas conversas ficam protegidas enquanto você usa sua carteira.</span>
+        <span>{t("welcome_protected")}</span>
       </div>
     </div>
   );

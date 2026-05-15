@@ -134,8 +134,10 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - If the user asks what TalkToStellar is, describe it as a digital wallet and banking assistant that helps users hold a wallet, manage contacts, and send money.
 
 ## LANGUAGE AND TONE
-- Always answer in Portuguese from Brazil.
-- Prefer colloquial Brazilian Portuguese and understand gírias/abreviações (e.g., "50 conto", "manda pro Zé", "zap", "chave de transferência", "grana").
+- Use the runtime preferred_language. If preferred_language=en, answer in English. If preferred_language=pt-BR, answer in Brazilian Portuguese.
+- Users can switch language by saying "English", "speak English", "Português", or equivalent. Respect the latest explicit preference.
+- In Portuguese mode, prefer colloquial Brazilian Portuguese and understand gírias/abreviações (e.g., "50 conto", "manda pro Zé", "zap", "chave de transferência", "grana").
+- In English mode, use clear product English for non-crypto users. Keep Brazilian PIX terminology as "PIX" and explain it as money in/out only when useful.
 - Never use emojis, pictograms, checkmark symbols, warning symbols, or decorative Unicode icons in responses. This is absolute: no emoji in any way.
 - Keep responses concise when the request is simple.
 - Be direct, practical, and specific.
@@ -353,6 +355,16 @@ function providerLabel(provider: "telegram" | "whatsapp" | "web" | ""): string {
   return "canal";
 }
 
+function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  return 'pt-BR';
+}
+
+function localized(language: 'pt-BR' | 'en', pt: string, en: string): string {
+  return language === 'en' ? en : pt;
+}
+
 function formatStartupBalanceLine(balance: any, index: number): string {
   const asset = String(balance?.asset || balance?.asset_code || 'UNKNOWN').toUpperCase();
   const amount = String(balance?.balance || '0.0000000');
@@ -430,6 +442,7 @@ export function createAgentRoutes(
   ) => {
     try {
       const { query, session_id, source, metadata } = req.body;
+      const requestLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale);
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
       const rawRequestedSessionData = hasValidRequestedSessionId
@@ -460,7 +473,11 @@ export function createAgentRoutes(
         if (!channelProviderUserId) {
           return res.status(400).json({
             success: false,
-            error: `Não foi possível validar sua identidade no ${channelLabel}. Solicite um novo link de acesso e tente novamente.`,
+            error: localized(
+              requestLanguage,
+              `Não foi possível validar sua identidade no ${channelLabel}. Solicite um novo link de acesso e tente novamente.`,
+              `I could not validate your identity on ${channelLabel}. Request a new access link and try again.`
+            ),
           });
         }
 
@@ -472,16 +489,17 @@ export function createAgentRoutes(
 
         const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
         if (!existing) {
-          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId);
+          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, { language: requestLanguage });
           return res.status(200).json({
             session_id: session_id || null,
             success: true,
             onboardingRequired: true,
             creationUrl: url,
-            message:
-              `Sua sessão não está ativa no momento.\n\n` +
-              `Abra este link para entrar na sua conta:\n${url}\n\n` +
-              `Na página, use a opção "Já tenho conta".`,
+            message: localized(
+              requestLanguage,
+              `Sua sessão não está ativa no momento.\n\nAbra este link para entrar na sua conta:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
+              `Your session is not active right now.\n\nOpen this link to sign in to your account:\n${url}\n\nOn the page, use "I already have an account".`
+            ),
           });
         }
 
@@ -495,6 +513,7 @@ export function createAgentRoutes(
               sessionId: String(existing.session_id || '').trim() || undefined,
               userId: String(existing.user_id || '').trim() || undefined,
               source: normalizedProvider,
+              language: requestLanguage,
             });
             return res.status(200).json({
               session_id: session_id || null,
@@ -502,10 +521,11 @@ export function createAgentRoutes(
               onboardingRequired: true,
               reason: "session_expired",
               creationUrl: url,
-              message:
-                `Sua sessão expirou.\n\n` +
-                `Abra este link para entrar novamente:\n${url}\n\n` +
-                `Na página, use a opção "Já tenho conta".`,
+              message: localized(
+                requestLanguage,
+                `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
+                `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+              ),
             });
           }
           // Never trust an incoming session_id over the channel identity mapping.
@@ -522,16 +542,17 @@ export function createAgentRoutes(
             if (requestedSessionData) {
               req.body.session_id = requestedSessionId;
             } else {
-            const { url } = await externalService.createOnboardUrlWithShortLink("web", providerUserId);
+            const { url } = await externalService.createOnboardUrlWithShortLink("web", providerUserId, { language: requestLanguage });
             return res.status(200).json({
               session_id: session_id || null,
               success: true,
               onboardingRequired: true,
               creationUrl: url,
-              message:
-                `Para continuar, você precisa criar sua conta.\n` +
-                `Abra este link: ${url}\n\n` +
-                `Se você já tem conta, use a opção "Já tenho conta" dentro da página de cadastro.`,
+              message: localized(
+                requestLanguage,
+                `Para continuar, você precisa criar sua conta.\nAbra este link: ${url}\n\nSe você já tem conta, use a opção "Já tenho conta" dentro da página de cadastro.`,
+                `To continue, create your account.\nOpen this link: ${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
+              ),
             });
             }
           }
@@ -589,8 +610,9 @@ export function createAgentRoutes(
               sessionId,
               userId: String(sessionData.user_id || sessionData.email || '').trim() || undefined,
               source: provider,
+              language: requestLanguage,
             })
-          : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId);
+          : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId, { language: requestLanguage });
 
         return res.status(200).json({
           session_id: sessionId,
@@ -598,10 +620,11 @@ export function createAgentRoutes(
           onboardingRequired: true,
           reason: "session_expired",
           creationUrl: url,
-          message:
-            `Sua sessão expirou.\n\n` +
-            `Abra este link para entrar novamente:\n${url}\n\n` +
-            `Na página, use a opção "Já tenho conta".`,
+          message: localized(
+            requestLanguage,
+            `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
+            `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+          ),
         });
       }
 
@@ -619,6 +642,7 @@ export function createAgentRoutes(
 
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
+      const preferredLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale || (previousState?.action_params as any)?.language);
       const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out);
 
       // Hydrate missing public_key from wallet record to avoid false "login required" during active sessions.
@@ -658,6 +682,7 @@ export function createAgentRoutes(
         action_params: {
           ...actionParams,
           ...runtimeExternalContext,
+          language: preferredLanguage,
         },
         pending_payment: previousState?.pending_payment || (previousState?.action_params as any)?.pending_payment,
         pending_conversion: (previousState as any)?.pending_conversion || (previousState?.action_params as any)?.pending_conversion,

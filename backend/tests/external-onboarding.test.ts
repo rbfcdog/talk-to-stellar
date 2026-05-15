@@ -64,4 +64,18 @@ describe('External onboarding service', () => {
     expect(decoded?.user_id).toBe('rodrigo@example.com');
     expect(decoded?.userId).toBe('rodrigo@example.com');
   });
+
+  it('adds language preference to login and onboarding URLs', () => {
+    process.env.PAYMENT_CONFIRM_BASE = 'https://app.example.com';
+    process.env.CREATE_ACCOUNT_BASE = 'https://app.example.com';
+    const service = new ExternalService({} as any);
+
+    const login = service.createLoginUrl('telegram', '6405034913', { language: 'en' });
+    const onboard = service.createOnboardUrl('telegram', '6405034913', { language: 'en' });
+
+    expect(new URL(login.url).searchParams.get('lang')).toBe('en');
+    expect(new URL(onboard.url).searchParams.get('lang')).toBe('en');
+    expect((jwt.decode(login.token) as jwt.JwtPayload | null)?.language).toBe('en');
+    expect((jwt.decode(onboard.token) as jwt.JwtPayload | null)?.language).toBe('en');
+  });
 });

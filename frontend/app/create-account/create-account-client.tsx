@@ -8,6 +8,7 @@ import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { useLanguage } from "@/lib/i18n"
 
 type FinalizeResponse = {
   success: boolean
@@ -100,6 +101,8 @@ export default function CreateAccountClient({
   initialToken?: string
   initialValidation?: any
 }) {
+  const { language } = useLanguage()
+  const L = (pt: string, en: string) => language === "en" ? en : pt
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const rawNextPath = searchParams.get("next") || "/chat"
@@ -145,8 +148,9 @@ export default function CreateAccountClient({
     const url = new URL(`${window.location.origin}/login`)
     url.searchParams.set("auth", "passkey")
     url.searchParams.set("email", passkeyLoginEmail)
+    url.searchParams.set("lang", language)
     return url.toString()
-  }, [passkeyLoginEmail])
+  }, [language, passkeyLoginEmail])
   const passkeyQrImageUrl = useMemo(() => {
     if (!passkeyQrTargetUrl) return ""
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
@@ -159,9 +163,10 @@ export default function CreateAccountClient({
     if (rawNextPath && rawNextPath !== "/chat") {
       params.set("next", rawNextPath)
     }
+    params.set("lang", language)
     const query = params.toString()
     return query ? `/login?${query}` : "/login"
-  }, [rawNextPath, token])
+  }, [language, rawNextPath, token])
 
   useEffect(() => {
     let cancelled = false
@@ -269,6 +274,7 @@ export default function CreateAccountClient({
         provider: "web",
         provider_user_id: browserId,
         force_new_account: forceNewAccount,
+        language,
       }),
     })
     const payload = await response.json().catch(() => ({}))
@@ -497,6 +503,7 @@ export default function CreateAccountClient({
           cpf: cpf || undefined,
           pin,
           browser_id: browserId,
+          language,
         }),
       })
 
@@ -680,6 +687,7 @@ export default function CreateAccountClient({
           token: externalProvider && externalProviderUserId ? token : undefined,
           email: existingEmail,
           pin: existingPin,
+          language,
         }),
       })
 
@@ -718,10 +726,10 @@ export default function CreateAccountClient({
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
         <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
-          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">{isTelegramContext ? "Telegram conectado" : "Conta conectada"}</p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
+          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">{isTelegramContext ? L("Telegram conectado", "Telegram connected") : L("Conta conectada", "Account connected")}</p>
+          <h1 className="mt-3 text-2xl font-semibold text-white">{L("Sua conta foi vinculada.", "Your account is linked.")}</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            {isTelegramContext ? "Volte ao Telegram e envie sua próxima mensagem." : "Processo concluído."}
+            {isTelegramContext ? L("Volte ao Telegram e envie sua próxima mensagem.", "Go back to Telegram and send your next message.") : L("Processo concluído.", "Process complete.")}
           </p>
           <p className="mt-2 text-xs text-slate-400">
             {INTERMEDIATE_PAGE_CLOSE_COPY}
@@ -737,32 +745,32 @@ export default function CreateAccountClient({
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur sm:p-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
-              Criar conta
+              {L("Criar conta", "Create account")}
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {isClaimPaymentContext ? "Crie sua conta para receber" : "Finalize sua conta TalkToStellar"}
+                {isClaimPaymentContext ? L("Crie sua conta para receber", "Create your account to receive") : L("Finalize sua conta TalkToStellar", "Finish your TalkToStellar account")}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 {isClaimPaymentContext
-                  ? "Você está a poucos passos de receber. Cadastre sua conta global e volte automaticamente ao link de pagamento."
-                  : "Preencha os dados abaixo e siga o passo a passo para concluir sua conta com segurança."}
+                  ? L("Você está a poucos passos de receber. Cadastre sua conta global e volte automaticamente ao link de pagamento.", "You are a few steps away from receiving. Create your global account and return automatically to the payment link.")
+                  : L("Preencha os dados abaixo e siga o passo a passo para concluir sua conta com segurança.", "Fill in the details below and follow the steps to finish your account securely.")}
               </p>
               {validation && (
                 <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
-                  <strong>Status do link: </strong>
+                  <strong>{L("Status do link: ", "Link status: ")}</strong>
                   {token && validation.valid ? (
-                    <span className="text-emerald-300">Link válido</span>
+                    <span className="text-emerald-300">{L("Link válido", "Valid link")}</span>
                   ) : validation.message ? (
                     <span className="text-cyan-200">{validation.message}</span>
                   ) : (
-                    <span className="text-rose-300">Link inválido ou ausente</span>
+                    <span className="text-rose-300">{L("Link inválido ou ausente", "Invalid or missing link")}</span>
                   )}
                 </div>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {["Identidade", "Segurança", "Conta pronta"].map((step, index) => (
+              {[L("Identidade", "Identity"), L("Segurança", "Security"), L("Conta pronta", "Account ready")].map((step, index) => (
                 <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-cyan-400/20 text-cyan-100" : "text-slate-400"}`}>
                   {step}
                 </motion.div>
@@ -771,25 +779,25 @@ export default function CreateAccountClient({
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">1. Acesse</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{L("1. Acesse", "1. Access")}</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {isClaimPaymentContext
-                    ? "Você chegou por um link de pagamento. A conta criada aqui será usada para receber."
-                    : "Abra o link recebido para iniciar o processo de criação da conta."}
+                    ? L("Você chegou por um link de pagamento. A conta criada aqui será usada para receber.", "You arrived from a payment link. The account created here will be used to receive.")
+                    : L("Abra o link recebido para iniciar o processo de criação da conta.", "Open the received link to start creating the account.")}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">2. Conclua</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{L("2. Conclua", "2. Finish")}</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  Informe seus dados, crie o PIN e finalize. Tempo médio: cerca de 2 minutos.
+                  {L("Informe seus dados, crie o PIN e finalize. Tempo médio: cerca de 2 minutos.", "Enter your details, create your PIN, and finish. Average time: about 2 minutes.")}
                 </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-              Guia rápido:
+              {L("Guia rápido:", "Quick guide:")}
               <span className="ml-2 break-all font-mono text-cyan-100">
-                1) Nome e contato, 2) PIN, 3) Finalizar conta, 4) voltar para receber.
+                {L("1) Nome e contato, 2) PIN, 3) Finalizar conta, 4) voltar para receber.", "1) Name and contact, 2) PIN, 3) Finish account, 4) return to receive.")}
               </span>
             </div>
           </section>
@@ -797,25 +805,25 @@ export default function CreateAccountClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-                Verificação do link:
+                {L("Verificação do link:", "Link check:")}
                 <span className="ml-2 break-all font-mono text-cyan-100">
-                  {token ? 'pronto' : existingAccountDetected ? 'novo link será gerado ao finalizar' : 'link ausente'}
+                  {token ? L('pronto', 'ready') : existingAccountDetected ? L('novo link será gerado ao finalizar', 'a new link will be generated when finishing') : L('link ausente', 'missing link')}
                 </span>
               </div>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Nome</span>
+                <span className="text-sm font-medium text-slate-200">{L("Nome", "Name")}</span>
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   type="text"
-                  placeholder="Seu nome"
+                  placeholder={L("Seu nome", "Your name")}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">E-mail</span>
+                <span className="text-sm font-medium text-slate-200">{L("E-mail", "Email")}</span>
                 <input
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -826,7 +834,7 @@ export default function CreateAccountClient({
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Telefone</span>
+                <span className="text-sm font-medium text-slate-200">{L("Telefone", "Phone")}</span>
                 <input
                   value={phoneNumber}
                   onChange={(event) => setPhoneNumber(event.target.value)}
@@ -849,27 +857,27 @@ export default function CreateAccountClient({
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">PIN (4 a 8 dígitos)</span>
+                <span className="text-sm font-medium text-slate-200">{L("PIN (4 a 8 dígitos)", "PIN (4 to 8 digits)")}</span>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Crie seu PIN"
+                  placeholder={L("Crie seu PIN", "Create your PIN")}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Confirmar PIN</span>
+                <span className="text-sm font-medium text-slate-200">{L("Confirmar PIN", "Confirm PIN")}</span>
                 <input
                   value={pinConfirm}
                   onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, ""))}
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Confirme seu PIN"
+                  placeholder={L("Confirme seu PIN", "Confirm your PIN")}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>
@@ -881,7 +889,7 @@ export default function CreateAccountClient({
                   onChange={(event) => setRequestPasskey(event.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
                 />
-                <span>Ativar passkey agora (recomendado para login rápido e seguro).</span>
+                <span>{L("Ativar passkey agora (recomendado para login rápido e seguro).", "Enable passkey now (recommended for fast, secure login).")}</span>
               </label>
 
               {pinError && <p className="text-rose-300">{pinError}</p>}
@@ -891,18 +899,18 @@ export default function CreateAccountClient({
                 disabled={submitLocked || !pin.trim() || !pinConfirm.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Finalizando conta...</span> : "3) Finalizar conta"}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : L("3) Finalizar conta", "3) Finish account")}
               </button>
             </form>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Status</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">Aguardando validação do link.</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Criando conta e preparando wallet...</div>}
+              {status === "ready" && <p className="mt-2 text-slate-400">{L("Aguardando validação do link.", "Waiting for link validation.")}</p>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{L("Criando conta e preparando wallet...", "Creating account and preparing wallet...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
-                  <p>Conta criada com sucesso.</p>
+                  <p>{L("Conta criada com sucesso.", "Account created successfully.")}</p>
                 </motion.div>
               )}
               {result?.success && (
@@ -914,16 +922,16 @@ export default function CreateAccountClient({
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === 'registering'
-                      ? 'Abrindo biometria...'
-                      : 'Ativar biometria'}
+                      ? L('Abrindo biometria...', 'Opening biometrics...')
+                      : L('Ativar biometria', 'Enable biometrics')}
                   </button>
                   <p className="text-xs text-slate-400">
-                    Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.
+                    {L("Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.", "Tap the button to confirm with fingerprint, Face ID, or your phone unlock.")}
                   </p>
                   {passkeyQrImageUrl && (
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-slate-300">
-                      <p className="font-medium text-white">Usar Passkey no celular</p>
-                      <p className="mt-1">Escaneie para abrir o login com Passkey no celular e autorizar com Touch ID.</p>
+                      <p className="font-medium text-white">{L("Usar Passkey no celular", "Use Passkey on your phone")}</p>
+                      <p className="mt-1">{L("Escaneie para abrir o login com Passkey no celular e autorizar com Touch ID.", "Scan to open Passkey login on your phone and authorize with Touch ID.")}</p>
                       <div className="mt-2 flex justify-center">
                         <img
                           src={passkeyQrImageUrl}
@@ -936,9 +944,9 @@ export default function CreateAccountClient({
                   {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
                 </div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Algo deu errado."}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || L("Algo deu errado.", "Something went wrong.")}</motion.p>}
               {passkeyStatus === 'done' && result?.passkeySessionToken && (
-                <p className="mt-2 break-all text-emerald-300">Biometria ativada com sucesso.</p>
+                <p className="mt-2 break-all text-emerald-300">{L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}</p>
               )}
               </AnimatePresence>
             </div>
@@ -947,7 +955,7 @@ export default function CreateAccountClient({
               href={loginHref}
               className="mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
-              Já tenho conta
+              {L("Já tenho conta", "I already have an account")}
             </a>
           </section>
         </div>

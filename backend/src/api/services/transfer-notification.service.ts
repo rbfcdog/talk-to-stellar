@@ -26,6 +26,7 @@ export type SessionWelcomeNotification = {
   name?: string | null;
   provider?: string | null;
   providerUserId?: string | null;
+  language?: string | null;
 };
 
 export type OnboardingConversionNotification = {
@@ -69,6 +70,16 @@ export type ExternalChannelImageNotification = {
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
 
+  private static normalizeLanguage(value?: string | null): 'pt-BR' | 'en' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+    return 'pt-BR';
+  }
+
+  private static text(language: 'pt-BR' | 'en', pt: string, en: string): string {
+    return language === 'en' ? en : pt;
+  }
+
   static async notifySessionWelcome(input: SessionWelcomeNotification): Promise<void> {
     const sessionId = String(input.sessionId || '').trim();
     if (!sessionId) return;
@@ -77,26 +88,38 @@ export class TransferNotificationService {
     const userId = String(input.userId || session?.user_id || '').trim();
     const name = String(input.name || session?.email || '').trim();
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
+    const language = this.normalizeLanguage(input.language || (session as any)?.language || (session as any)?.preferred_language);
     const mappings = this.dedupeMappings([
       ...(directMapping ? [directMapping] : []),
       ...(await this.findExternalMappings(sessionId, userId)),
     ]);
     const hasTelegram = mappings.some((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram');
     const greeting = name
-      ? `Bem-vindo, ${name}.`
+      ? this.text(language, `Bem-vindo, ${name}.`, `Welcome, ${name}.`)
       : hasTelegram
-        ? 'Bem-vindo ao TalkToStellar no Telegram.'
-        : 'Bem-vindo ao TalkToStellar.';
-    const text =
+        ? this.text(language, 'Bem-vindo ao TalkToStellar no Telegram.', 'Welcome to TalkToStellar on Telegram.')
+        : this.text(language, 'Bem-vindo ao TalkToStellar.', 'Welcome to TalkToStellar.');
+    const text = this.text(
+      language,
       `${greeting}\n` +
-      `Login concluido. Sua conta esta conectada.\n` +
-      `Para começar sem erro, siga este caminho rápido:\n` +
-      `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
-      `2) Digite "contatos" para ver para quem já pode enviar.\n` +
-      `3) Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.\n` +
-      `4) Digite "quero trazer 100 reais via PIX" para receber PIX na conta.\n` +
-      `5) Digite "quero retirar 100 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
-      `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`;
+        `Login concluido. Sua conta esta conectada.\n` +
+        `Para começar sem erro, siga este caminho rápido:\n` +
+        `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
+        `2) Digite "contatos" para ver para quem já pode enviar.\n` +
+        `3) Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.\n` +
+        `4) Digite "quero trazer 100 reais via PIX" para receber PIX na conta.\n` +
+        `5) Digite "quero retirar 100 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
+        `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`,
+      `${greeting}\n` +
+        `Login complete. Your account is connected.\n` +
+        `Fast path to get started:\n` +
+        `1) Type "balance" to check available money.\n` +
+        `2) Type "contacts" to see who you can pay.\n` +
+        `3) Type "send 10 dollars to [name]" to start a payment with confirmation.\n` +
+        `4) Type "deposit 100 reais with PIX" to add money to your account.\n` +
+        `5) Type "withdraw 100 reais to my PIX" to send money out to your PIX.\n` +
+        `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`
+    );
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);

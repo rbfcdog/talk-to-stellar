@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { StellarLogo } from './StellarLogo';
 import ChannelButtons from './ChannelButtons';
+import { useLanguage } from '@/lib/i18n';
 
 export default function Navbar() {
+  const { t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -34,9 +36,9 @@ export default function Navbar() {
       </div>
 
       <div className="hidden lg:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
-        <button onClick={() => document.getElementById('solution')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">A Solução</button>
-        <button onClick={() => document.getElementById('simulator')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">Simulação de Conversão</button>
-        <button onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">Como Funciona</button>
+        <button onClick={() => document.getElementById('solution')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_solution")}</button>
+        <button onClick={() => document.getElementById('simulator')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_simulator")}</button>
+        <button onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_how")}</button>
         <button onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">FAQ</button>
       </div>
 

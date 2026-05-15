@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
+import { useLanguage } from "@/lib/i18n";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -111,13 +112,14 @@ function formatRampAsset(value: unknown, code = "BRL") {
   return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
 }
 
-function friendlyAssetName(code: unknown) {
+function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
-  return displayCode === "USDC" ? "dólar digital" : "real digital";
+  if (displayCode === "USDC") return language === "en" ? "digital dollar" : "dólar digital";
+  return language === "en" ? "digital real" : "real digital";
 }
 
-function formatCountdown(ms: number) {
-  if (!Number.isFinite(ms) || ms <= 0) return "expirada";
+function formatCountdown(ms: number, language: "pt-BR" | "en" = "pt-BR") {
+  if (!Number.isFinite(ms) || ms <= 0) return language === "en" ? "expired" : "expirada";
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -149,18 +151,18 @@ function isFailureStatus(status: unknown) {
   return ["failed", "expired", "cancelled", "canceled", "refunded"].includes(normalizeStatus(status));
 }
 
-function statusLabel(status: unknown) {
+function statusLabel(status: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const normalized = normalizeStatus(status);
-  if (normalized === "completed") return "Concluído";
-  if (normalized === "processing" || normalized === "funded") return "Processando";
-  if (normalized === "pending") return "Aguardando";
-  if (normalized === "failed") return "Falhou";
-  if (normalized === "expired") return "Expirou";
-  if (normalized === "cancelled" || normalized === "canceled") return "Cancelado";
-  if (normalized === "refunded") return "Estornado";
-  if (normalized === "cotação expirada") return "Cotação expirada";
-  if (normalized === "não iniciado") return "Não iniciado";
-  return normalized || "Aguardando";
+  if (normalized === "completed") return language === "en" ? "Completed" : "Concluído";
+  if (normalized === "processing" || normalized === "funded") return language === "en" ? "Processing" : "Processando";
+  if (normalized === "pending") return language === "en" ? "Waiting" : "Aguardando";
+  if (normalized === "failed") return language === "en" ? "Failed" : "Falhou";
+  if (normalized === "expired") return language === "en" ? "Expired" : "Expirou";
+  if (normalized === "cancelled" || normalized === "canceled") return language === "en" ? "Cancelled" : "Cancelado";
+  if (normalized === "refunded") return language === "en" ? "Refunded" : "Estornado";
+  if (normalized === "cotação expirada") return language === "en" ? "Quote expired" : "Cotação expirada";
+  if (normalized === "não iniciado") return language === "en" ? "Not started" : "Não iniciado";
+  return normalized || (language === "en" ? "Waiting" : "Aguardando");
 }
 
 function balanceKey(balance: BalanceItem) {
@@ -198,8 +200,8 @@ function formatVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
   return formatRampAsset(sumVisibleBalance(balances, assetCode).toFixed(7), assetCode);
 }
 
-function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset) {
-  if (!after.length) return "Aguardando";
+function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset, language: "pt-BR" | "en" = "pt-BR") {
+  if (!after.length) return language === "en" ? "Updating" : "Aguardando";
   const delta = sumVisibleBalance(after, assetCode) - sumVisibleBalance(before, assetCode);
   const sign = delta > 0 ? "+" : "";
   return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
@@ -264,11 +266,15 @@ function WalletPinInput({
   onChange,
   tone = "emerald",
   inputRef,
+  placeholder = "Digite seu PIN",
+  clearLabel = "Limpar",
 }: {
   value: string;
   onChange: (next: string) => void;
   tone?: "emerald" | "cyan" | "amber";
   inputRef?: (node: HTMLInputElement | null) => void;
+  placeholder?: string;
+  clearLabel?: string;
 }) {
   const border = tone === "cyan"
     ? "focus-within:border-cyan-300/70"
@@ -295,7 +301,7 @@ function WalletPinInput({
           data-1p-ignore="true"
           data-form-type="other"
           style={{ WebkitTextSecurity: "disc" } as any}
-          placeholder="Digite seu PIN"
+          placeholder={placeholder}
           onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
         />
         <button
@@ -303,7 +309,7 @@ function WalletPinInput({
           className="mr-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black text-white/75 transition hover:bg-white/15"
           onClick={() => onChange("")}
         >
-          Limpar
+          {clearLabel}
         </button>
       </div>
     </div>
@@ -346,7 +352,9 @@ export default function PixRampClient({
   initialQuery?: string;
   lockedMode?: RampMode;
 }) {
+  const { language, t } = useLanguage();
   const queryString = initialQuery;
+  const L = (pt: string, en: string) => language === "en" ? en : pt;
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
@@ -470,7 +478,7 @@ export default function PixRampClient({
     : 120000;
   const quoteDeadlineAt = quote && quoteReceivedAt ? quoteReceivedAt + quoteTtlMs : 0;
   const quoteTimeRemainingMs = quoteDeadlineAt ? quoteDeadlineAt - now : NaN;
-  const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs) : "not quoted";
+  const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs, language) : L("sem cotação", "not quoted");
   const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "cotação expirada" : "não iniciado";
@@ -503,43 +511,43 @@ export default function PixRampClient({
   ), [atomicIntentKey]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
   const onRampReceiptBefore = formatVisibleBalance(onRampBalancesBefore, targetAsset);
-  const onRampReceiptAfter = onRampBalancesAfter.length > 0 ? formatVisibleBalance(onRampBalancesAfter, targetAsset) : "Atualizando";
-  const onRampReceiptDelta = formatVisibleDelta(onRampBalancesBefore, onRampBalancesAfter, targetAsset);
+  const onRampReceiptAfter = onRampBalancesAfter.length > 0 ? formatVisibleBalance(onRampBalancesAfter, targetAsset) : L("Atualizando", "Updating");
+  const onRampReceiptDelta = formatVisibleDelta(onRampBalancesBefore, onRampBalancesAfter, targetAsset, language);
   const liveSteps = useMemo<LiveStep[]>(() => {
     if (rampMode === "offramp") {
       const hasTarget = Boolean(offRampFiatAmount.trim() || offRampAmount.trim());
       return [
         {
           label: "Conta TalkToStellar",
-          detail: walletPublicKey ? "Conta localizada." : "Digite o email para localizar sua conta.",
+          detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
           state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
         },
         {
-          label: "Valor de saída",
+          label: L("Valor de saída", "Outgoing amount"),
           detail: offRampInputAsset === "BRL"
-            ? `Alvo: ${offRampDisplayAmount} entrando no seu PIX.`
-            : `Saída do saldo: ${offRampDisplayAmount}. Chega em BRL no seu PIX.`,
+            ? L(`Alvo: ${offRampDisplayAmount} entrando no seu PIX.`, `Target: ${offRampDisplayAmount} arriving in your PIX.`)
+            : L(`Saída do saldo: ${offRampDisplayAmount}. Chega em BRL no seu PIX.`, `Leaving your balance: ${offRampDisplayAmount}. Arrives in BRL in your PIX.`),
           state: hasTarget ? "done" : "pending",
         },
         {
-          label: "Conversão para BRL",
+          label: L("Conversão para BRL", "Conversion to BRL"),
           detail: offRampPixTargetAmount
-            ? `Saldo convertido para chegar em ${offRampPixTargetDisplay}.`
-            : "A tela converte automaticamente para BRL quando você confirma.",
+            ? L(`Saldo convertido para chegar em ${offRampPixTargetDisplay}.`, `Balance converted to arrive as ${offRampPixTargetDisplay}.`)
+            : L("A tela converte automaticamente para BRL quando você confirma.", "The screen automatically converts to BRL when you confirm."),
           state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Confirmação e saída",
+          label: L("Confirmação e saída", "Confirmation and withdrawal"),
           detail: temporaryOffRampTestResult?.submitted
-            ? "Saldo enviado para retirada."
-            : "Aguardando seu PIN para mostrar o saldo saindo.",
+            ? L("Saldo enviado para retirada.", "Balance sent for withdrawal.")
+            : L("Aguardando seu PIN para mostrar o saldo saindo.", "Waiting for your PIN to move the balance out."),
           state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Seu PIX",
+          label: L("Seu PIX", "Your PIX"),
           detail: temporaryOffRampTestResult
-            ? `${offRampPixTargetDisplay} chegou em ${externalPixDestination}.`
-            : `Destino final: ${externalPixDestination}.`,
+            ? L(`${offRampPixTargetDisplay} chegou em ${externalPixDestination}.`, `${offRampPixTargetDisplay} arrived in ${externalPixDestination}.`)
+            : L(`Destino final: ${externalPixDestination}.`, `Final destination: ${externalPixDestination}.`),
           state: temporaryOffRampTestResult ? "done" : "pending",
         },
       ];
@@ -548,46 +556,46 @@ export default function PixRampClient({
     return [
       {
         label: "Conta TalkToStellar",
-        detail: walletPublicKey ? "Conta localizada." : "Digite o email para localizar sua conta.",
+        detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
         state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
       },
       {
-        label: "Conta PIX",
+        label: L("Conta PIX", "PIX account"),
         detail: programmaticOnboarding
-          ? "Conta preparada para continuar o PIX."
+          ? L("Conta preparada para continuar o PIX.", "Account ready to continue with PIX.")
           : customerPayload
-            ? "Preparando conta PIX."
-            : "Aguardando preparo do PIX.",
+            ? L("Preparando conta PIX.", "Preparing PIX account.")
+            : L("Aguardando preparo do PIX.", "Waiting to prepare PIX."),
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
-        label: "Cotação",
+        label: L("Cotação", "Quote"),
         detail: quote
-          ? `${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset)}.`
-          : `Alvo: colocar ${formatMoney(amountBrl)} na conta.`,
+          ? L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
+          : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
         state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
       },
       {
-        label: "Checkout PIX",
+        label: L("Checkout PIX", "PIX checkout"),
         detail: orderId
-          ? `QR e referência prontos: ${orderId.slice(0, 18)}...`
-          : "A página cria a ordem e mostra QR, chave e botão de confirmação.",
+          ? L(`QR e referência prontos: ${orderId.slice(0, 18)}...`, `QR and reference ready: ${orderId.slice(0, 18)}...`)
+          : L("A página cria a ordem e mostra QR, chave e botão de confirmação.", "The page creates the order and shows QR, key, and confirmation button."),
         state: orderId ? "done" : loading.includes("PIX") || loading.includes("Preparing") ? "active" : "pending",
       },
       {
-        label: "Confirmação do PIX",
+        label: L("Confirmação do PIX", "PIX confirmation"),
         detail: onRampComplete
-          ? "PIX confirmado."
-          : orderId ? "Clique em confirmar após fazer o PIX." : "Aguardando geração do checkout.",
+          ? L("PIX confirmado.", "PIX confirmed.")
+          : orderId ? L("Clique em confirmar após fazer o PIX.", "Click confirm after making the PIX.") : L("Aguardando geração do checkout.", "Waiting for checkout creation."),
         state: onRampComplete ? "done" : orderId ? "active" : "pending",
       },
       {
-        label: transferFlow ? "Transferência para destinatário" : "Saldo entregue",
+        label: transferFlow ? L("Transferência para destinatário", "Transfer to recipient") : L("Saldo entregue", "Balance delivered"),
         detail: onRampComplete
           ? pixFundedTransferResult?.transaction_hash
-            ? `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`
-            : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na conta.`
-          : polling ? "Atualizando status automaticamente." : `Aguardando confirmação para entregar ${friendlyAssetName(targetAsset)}.`,
+            ? L(`${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`, `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} sent to ${pixFundedTransferResult.recipient_name || transferRecipient}.`)
+            : L(`${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na conta.`, `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} delivered to the account.`)
+          : polling ? L("Atualizando status automaticamente.", "Updating status automatically.") : L(`Aguardando confirmação para entregar ${friendlyAssetName(targetAsset, language)}.`, `Waiting for confirmation to deliver ${friendlyAssetName(targetAsset, language)}.`),
         state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
       },
     ];
@@ -620,6 +628,8 @@ export default function PixRampClient({
     autoPayAsset,
     pixFundedTransferResult,
     walletPublicKey,
+    L,
+    language,
   ]);
 
   useEffect(() => {
@@ -758,7 +768,7 @@ export default function PixRampClient({
       .then((payload) => {
         const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
         if (!brlPerUsdc) {
-          throw new Error(payload?.message || "Cotação BRL/USDC indisponível.");
+        throw new Error(payload?.message || L("Cotação BRL/USDC indisponível.", "BRL/USDC quote unavailable."));
         }
         const feeBuffer = Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.05);
         const estimatedBrl = (receiveUsdc * brlPerUsdc) + feeBuffer;
@@ -778,7 +788,7 @@ export default function PixRampClient({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError("Não consegui calcular o PIX pela cotação do BRL da sua conta. Tente novamente em alguns segundos.");
+          setError(L("Não consegui calcular o PIX pela cotação do BRL da sua conta. Tente novamente em alguns segundos.", "I could not calculate the PIX amount from your BRL quote. Try again in a few seconds."));
           addDebugLog({
             label: "PIX amount estimate failed",
             method: "GET",
@@ -805,7 +815,7 @@ export default function PixRampClient({
 
     const email = rampEmail.trim().toLowerCase();
     if (!email) {
-      throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
+      throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
     }
 
     const startedAt = performance.now();
@@ -826,13 +836,13 @@ export default function PixRampClient({
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || "Nao encontrei uma conta TalkToStellar ativa para este email.");
+      throw new Error(payload?.message || L("Não encontrei uma conta TalkToStellar ativa para este email.", "I could not find an active TalkToStellar account for this email."));
     }
 
     const nextSessionId = String(payload.session_id || "");
     const nextSessionToken = String(payload.session_token || "");
     if (!nextSessionId || !nextSessionToken) {
-      throw new Error("A conta foi encontrada, mas nao retornou sessao valida para cotar.");
+      throw new Error(L("A conta foi encontrada, mas não retornou uma sessão válida para cotar.", "The account was found, but did not return a valid session for quoting."));
     }
 
     setSessionId(nextSessionId);
@@ -867,7 +877,7 @@ export default function PixRampClient({
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || payload?.error || "Não consegui carregar seu PIX vinculado.");
+      throw new Error(payload?.message || payload?.error || L("Não consegui carregar seu PIX vinculado.", "I could not load your linked PIX destination."));
     }
     if (payload?.external_bank_account) {
       setExternalBankAccount(payload.external_bank_account);
@@ -878,8 +888,8 @@ export default function PixRampClient({
 
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth, idempotencyKey?: string) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
-    const requestBody: Record<string, unknown> = { ...auth, ...(body || {}) };
+    if (!auth.session_id || !auth.session_token) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
+    const requestBody: Record<string, unknown> = { ...auth, language, ...(body || {}) };
     const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -908,12 +918,12 @@ export default function PixRampClient({
       throw requestError;
     }
     return payload;
-  }, [addDebugLog, sessionId, sessionToken]);
+  }, [L, addDebugLog, language, sessionId, sessionToken]);
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
-    const search = new URLSearchParams({ ...auth, ...(params || {}) });
+    if (!auth.session_id || !auth.session_token) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
+    const search = new URLSearchParams({ ...auth, language, ...(params || {}) });
     const startedAt = performance.now();
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
@@ -923,7 +933,7 @@ export default function PixRampClient({
       path,
       status: response.status,
       durationMs: Math.round(performance.now() - startedAt),
-      request: { ...auth, ...(params || {}) },
+      request: { ...auth, language, ...(params || {}) },
       response: payload,
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
@@ -933,7 +943,7 @@ export default function PixRampClient({
       throw requestError;
     }
     return payload;
-  }, [addDebugLog, sessionId, sessionToken]);
+  }, [L, addDebugLog, language, sessionId, sessionToken]);
 
   const fetchBalances = useCallback(async (authOverride?: RampAuth) => {
     const payload = await callRampGet("/api/ramp/etherfuse/wallet-balances", undefined, authOverride);
@@ -970,7 +980,7 @@ export default function PixRampClient({
         notifyChatAfterPixCompletion({ kind: "onramp", completedTransaction: payload?.transaction || null });
         setStep("success");
       } else if (isFailureStatus(nextStatus)) {
-        setError("O PIX não foi concluído. Gere uma nova cotação e tente novamente.");
+      setError(L("O PIX não foi concluído. Gere uma nova cotação e tente novamente.", "PIX was not completed. Generate a new quote and try again."));
       }
     }
     return payload;
@@ -1011,10 +1021,10 @@ export default function PixRampClient({
 
   async function runAtomicAction(action: string, fn: () => Promise<void>) {
     if (operationLocked) {
-      throw new Error("Esta operação PIX já foi concluída. O comprovante foi enviado no chat.");
+      throw new Error(L("Esta operação PIX já foi concluída. O comprovante foi enviado no chat.", "This PIX operation is already complete. The receipt was sent in chat."));
     }
     if (atomicActionRef.current) {
-      throw new Error(`Esta operação PIX já está em andamento (${action}).`);
+      throw new Error(L(`Esta operação PIX já está em andamento (${action}).`, `This PIX operation is already in progress (${action}).`));
     }
     atomicActionRef.current = true;
     try {
@@ -1046,9 +1056,9 @@ export default function PixRampClient({
 
     if (input.kind === "offramp") {
       enqueueWebChatFeedback([
-        "PIX enviado.",
-        `${offRampPixTargetDisplay} chegou no seu PIX.`,
-        receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+        L("PIX enviado.", "PIX sent."),
+        L(`${offRampPixTargetDisplay} chegou no seu PIX.`, `${offRampPixTargetDisplay} arrived in your PIX.`),
+        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -1056,11 +1066,11 @@ export default function PixRampClient({
     if (input.kind === "funded-transfer") {
       const transfer = input.transferPayload || {};
       const sentAmount = formatRampAsset(transfer.amount || autoPayAmount || amountBrl, transfer.asset_code || autoPayAsset || targetAsset);
-      const recipient = String(transfer.recipient_name || transferRecipient || "destinatário").trim();
+      const recipient = String(transfer.recipient_name || transferRecipient || L("destinatário", "recipient")).trim();
       enqueueWebChatFeedback([
-        "PIX confirmado e transferência enviada.",
-        `${sentAmount} enviado para ${recipient}.`,
-        receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+        L("PIX confirmado e transferência enviada.", "PIX confirmed and transfer sent."),
+        L(`${sentAmount} enviado para ${recipient}.`, `${sentAmount} sent to ${recipient}.`),
+        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -1068,9 +1078,9 @@ export default function PixRampClient({
     const finalAmount = String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || finalReceivedAmount || order?.toAmount || quote?.toAmount || amountBrl);
     const finalAsset = userFacingAssetCode(input.completedTransaction?.finalAssetCode || input.completedTransaction?.toCurrency || receivedCode || targetAsset, targetAsset);
     enqueueWebChatFeedback([
-      "PIX confirmado.",
-      `${formatRampAsset(finalAmount, finalAsset)} entrou na sua conta.`,
-      receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+      L("PIX confirmado.", "PIX confirmed."),
+      L(`${formatRampAsset(finalAmount, finalAsset)} entrou na sua conta.`, `${formatRampAsset(finalAmount, finalAsset)} arrived in your account.`),
+      receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));
   }
 
@@ -1079,7 +1089,7 @@ export default function PixRampClient({
     const pin = (inputValue || walletPin).replace(/\D/g, "").slice(0, 8);
     if (pin !== walletPin) setWalletPin(pin);
     if (!/^\d{4,8}$/.test(pin)) {
-      throw new Error("Digite o PIN da conta com 4 a 8 dígitos antes de confirmar.");
+      throw new Error(L("Digite o PIN da conta com 4 a 8 dígitos antes de confirmar.", "Enter the 4 to 8 digit account PIN before confirming."));
     }
     return pin;
   }
@@ -1170,7 +1180,7 @@ export default function PixRampClient({
 
   async function confirmQuoteAndCreatePix() {
     await runAtomicAction("preparar-pix", async () => {
-      if (waitingForReceiveEstimate) throw new Error("Calculando o valor do PIX. Tente novamente em alguns segundos.");
+      if (waitingForReceiveEstimate) throw new Error(L("Calculando o valor do PIX. Tente novamente em alguns segundos.", "Calculating the PIX amount. Try again in a few seconds."));
       let quoteForOrder = quote;
       let customerForOrder = customerPayload;
       let authForOrder: RampAuth | undefined;
@@ -1187,7 +1197,7 @@ export default function PixRampClient({
         quoteForOrder = fresh.quoteResult?.quote;
         customerForOrder = fresh.customerResult;
       }
-      if (!quoteForOrder?.id) throw new Error("Request a quote first.");
+      if (!quoteForOrder?.id) throw new Error(L("Peça uma cotação primeiro.", "Request a quote first."));
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
@@ -1274,7 +1284,7 @@ export default function PixRampClient({
 
   async function simulatePixPayment() {
     await runAtomicAction("confirmar-pix", async () => {
-      if (!orderId) throw new Error("Prepare o PIX antes de confirmar o pagamento.");
+      if (!orderId) throw new Error(L("Prepare o PIX antes de confirmar o pagamento.", "Prepare the PIX before confirming payment."));
       const pin = getValidatedWalletPin();
       const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
         intent_id: atomicIntentKey,
@@ -1395,10 +1405,10 @@ export default function PixRampClient({
   }
 
   const timeline = [
-    { label: "PIX gerado", done: Boolean(orderId), active: Boolean(orderId) && status === "pending" },
-    { label: "Aguardando pagamento", done: ["processing", "funded", "completed"].includes(status), active: status === "pending" },
-    { label: "Pagamento detectado", done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
-    { label: transferFlow ? "Transferência enviada" : "Saldo entregue", done: status === "completed", active: status === "completed" },
+    { label: L("PIX gerado", "PIX generated"), done: Boolean(orderId), active: Boolean(orderId) && status === "pending" },
+    { label: L("Aguardando pagamento", "Waiting for payment"), done: ["processing", "funded", "completed"].includes(status), active: status === "pending" },
+    { label: L("Pagamento detectado", "Payment detected"), done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
+    { label: transferFlow ? L("Transferência enviada", "Transfer sent") : L("Saldo entregue", "Balance delivered"), done: status === "completed", active: status === "completed" },
   ];
   const offRampReceiptAmount = temporaryOffRampTestResult
     ? formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)
@@ -1433,26 +1443,26 @@ export default function PixRampClient({
             </div>
             <div className="space-y-4">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                  {rampMode === "onramp" ? "Adicionar saldo com PIX" : "Mandar dinheiro para seu PIX"}
+                  {rampMode === "onramp" ? t("pix_add_title") : t("pix_send_title")}
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                   {rampMode === "onramp"
                     ? transferFlow && transferRecipient
-                      ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
-                      : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta."
-                    : "Confirme com seu PIN para mandar saldo para seu PIX em BRL."}
+                      ? t("pix_transfer_subtitle", { recipient: transferRecipient })
+                      : t("pix_add_subtitle")
+                    : t("pix_off_subtitle")}
                 </p>
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Valor</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
                 </p>
               </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
-                  <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha conta" : "Seu PIX"}</p>
+                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{t("pix_destination")}</p>
+                  <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
                 </div>
             </div>
           </section>
@@ -1460,7 +1470,7 @@ export default function PixRampClient({
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-            Digite o email da conta para localizar sua conta e continuar.
+            {t("pix_need_email")}
           </section>
         )}
 
@@ -1482,7 +1492,7 @@ export default function PixRampClient({
 
         {operationLocked && step !== "success" && (
           <section className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm font-bold text-emerald-100">
-            Esta operação já foi concluída. O comprovante foi enviado no chat.
+            {t("pix_done_sent_chat")}
           </section>
         )}
 
@@ -1490,8 +1500,9 @@ export default function PixRampClient({
           mode={rampMode}
           steps={liveSteps}
           loading={loading}
-          status={statusLabel(status)}
+          status={statusLabel(status, language)}
           launchedFromChat={launchedFromChat}
+          language={language}
         />
 
         {!lockedMode && (
@@ -1503,8 +1514,8 @@ export default function PixRampClient({
               setError("");
             }}
           >
-            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Adicionar saldo</span>
-            <span className="mt-1 block text-lg font-black">PIX para saldo</span>
+            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">{L("Adicionar saldo", "Add money")}</span>
+            <span className="mt-1 block text-lg font-black">{L("PIX para saldo", "PIX to balance")}</span>
           </button>
           <button
             className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-cyan-400 text-slate-950 shadow-lg" : "bg-black/20 text-slate-300 hover:bg-white/10"}`}
@@ -1513,8 +1524,8 @@ export default function PixRampClient({
               setError("");
             }}
           >
-            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">Mandar para PIX</span>
-            <span className="mt-1 block text-lg font-black">Saldo para PIX</span>
+            <span className="block text-xs font-black uppercase tracking-[0.18em] opacity-70">{L("Mandar para PIX", "Send to PIX")}</span>
+            <span className="mt-1 block text-lg font-black">{L("Saldo para PIX", "Balance to PIX")}</span>
           </button>
         </section>
         )}
@@ -1522,14 +1533,14 @@ export default function PixRampClient({
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
-                <h2 className="mt-1 text-3xl font-black text-white">Mandar saldo para seu PIX</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">{L("Retirada via PIX", "PIX withdrawal")}</p>
+                <h2 className="mt-1 text-3xl font-black text-white">{L("Mandar saldo para seu PIX", "Send balance to your PIX")}</h2>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  O saldo sai da sua conta TalkToStellar e chega em BRL no seu PIX.
+                  {L("O saldo sai da sua conta TalkToStellar e chega em BRL no seu PIX.", "The balance leaves your TalkToStellar account and arrives as BRL in your PIX.")}
                 </p>
 
               <label className="mt-6 block text-sm font-bold text-slate-200">
-                {offRampInputAsset === "BRL" ? "Você quer receber" : "Você quer retirar"}
+                {offRampInputAsset === "BRL" ? L("Você quer receber", "You want to receive") : L("Você quer retirar", "You want to withdraw")}
               </label>
               <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-cyan-400/60">
                 <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">{offRampInputPrefix}</span>
@@ -1539,8 +1550,8 @@ export default function PixRampClient({
                   inputMode="decimal"
                   placeholder="100"
                   disabled={offRampAmountLocked}
-                  title={offRampAmountLocked ? "Valor definido pelo chat" : undefined}
-                  aria-label={`Valor em ${offRampInputAsset} para retirar via PIX`}
+                  title={offRampAmountLocked ? L("Valor definido pelo chat", "Amount set by chat") : undefined}
+                  aria-label={L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
                   onChange={(event) => {
                     const next = event.target.value;
                     if (offRampInputAsset === "BRL") {
@@ -1554,29 +1565,31 @@ export default function PixRampClient({
                 <span className="flex items-center px-4 text-sm font-black text-slate-300">{offRampInputAsset}</span>
               </div>
               {offRampAmountLocked && (
-                <p className="mt-2 text-xs font-bold text-cyan-100/65">Valor definido pelo chat.</p>
+                <p className="mt-2 text-xs font-bold text-cyan-100/65">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
               )}
-              <label className="mt-6 block text-sm font-bold text-slate-200">PIX de destino</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">{L("PIX de destino", "Destination PIX")}</label>
               <div className="mt-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-white">Seu PIX</p>
-                    <p className="mt-1 text-xs font-bold text-cyan-100/70">Destino vinculado à sua conta</p>
+                    <p className="text-sm font-black text-white">{L("Seu PIX", "Your PIX")}</p>
+                    <p className="mt-1 text-xs font-bold text-cyan-100/70">{L("Destino vinculado à sua conta", "Destination linked to your account")}</p>
                   </div>
-                  <span className="rounded-full bg-cyan-300/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">vinculada</span>
+                  <span className="rounded-full bg-cyan-300/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">{L("vinculada", "linked")}</span>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm">
                   <div className="rounded-2xl bg-black/20 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Chave PIX</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{L("Chave PIX", "PIX key")}</p>
                     <p className="mt-1 truncate font-black text-white">{displayedExternalBankAccount.pix_key}</p>
                   </div>
                 </div>
               </div>
-              <label className="mt-6 block text-sm font-bold text-slate-200">PIN da conta</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">{L("PIN da conta", "Account PIN")}</label>
               <WalletPinInput
                 value={walletPin}
                 onChange={updateWalletPin}
                 tone="cyan"
+                placeholder={L("Digite seu PIN", "Enter your PIN")}
+                clearLabel={L("Limpar", "Clear")}
                 inputRef={(node) => {
                   walletPinInputRef.current = node;
                 }}
@@ -1587,13 +1600,13 @@ export default function PixRampClient({
                 disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
                 onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {operationLocked ? "PIX concluído" : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />Confirmando...</span> : "Confirmar envio para PIX"}
+                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar envio para PIX", "Confirm send to PIX")}
               </button>
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Seu PIX</p>
-              <h2 className="mt-1 text-2xl font-black">Envio para PIX</h2>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">{L("Seu PIX", "Your PIX")}</p>
+              <h2 className="mt-1 text-2xl font-black">{L("Envio para PIX", "Send to PIX")}</h2>
               {!temporaryOffRampTestResult ? (
                 <div className="mt-8 h-28 rounded-3xl border border-dashed border-white/10 bg-white/[0.03]" />
               ) : (
@@ -1603,24 +1616,24 @@ export default function PixRampClient({
                       <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da conta</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">{L("Saiu da conta", "Left account")}</p>
                       <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Entrou no seu PIX</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">{L("Entrou no seu PIX", "Arrived in your PIX")}</p>
                       <p className="mt-1 text-lg font-black">{offRampPixTargetDisplay}</p>
                       <p className="mt-1 text-sm font-bold text-white/60">{externalPixDestination}</p>
                     </div>
                     {temporaryOffRampTestResult.target_brl && (
                       <div className="rounded-3xl bg-white/10 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Conversão para BRL</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">{L("Conversão para BRL", "Conversion to BRL")}</p>
                         <p className="mt-1 text-sm font-bold text-white/75">
-                          O valor foi convertido na saída para chegar em BRL no PIX.
+                          {L("O valor foi convertido na saída para chegar em BRL no PIX.", "The amount was converted on exit so BRL arrives in PIX.")}
                         </p>
                       </div>
                     )}
                   <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-100">
-                    <p className="text-sm font-black">Envio concluído para seu PIX.</p>
+                    <p className="text-sm font-black">{L("Envio concluído para seu PIX.", "Send to your PIX completed.")}</p>
                   </div>
                 </div>
               )}
@@ -1634,13 +1647,13 @@ export default function PixRampClient({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">PIX</p>
-                <h2 className="mt-1 text-2xl font-black text-white">Quanto você quer colocar?</h2>
+                <h2 className="mt-1 text-2xl font-black text-white">{L("Quanto você quer colocar?", "How much do you want to add?")}</h2>
               </div>
             </div>
 
             {!hasSession && (
             <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-              <label className="block text-sm font-bold text-emerald-50">Email da conta</label>
+              <label className="block text-sm font-bold text-emerald-50">{L("Email da conta", "Account email")}</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <input
                   className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
@@ -1659,32 +1672,32 @@ export default function PixRampClient({
                     await resolveWalletFromEmail();
                   })}
                 >
-                  {loading === "Resolving wallet" ? "Localizando..." : "Usar conta"}
+                  {loading === "Resolving wallet" ? L("Localizando...", "Finding...") : L("Usar conta", "Use account")}
                 </button>
               </div>
               <p className="mt-3 text-xs font-semibold text-emerald-100/75">
                 {walletPublicKey
-                  ? "Conta localizada."
-                  : "Digite o email da conta para localizar sua conta."}
+                  ? L("Conta localizada.", "Account found.")
+                  : L("Digite o email da conta para localizar sua conta.", "Enter the account email to find your account.")}
               </p>
             </div>
             )}
 
             {desiredFinalAmount ? (
               <>
-                <label className="mt-6 block text-sm font-bold text-slate-200">Você quer receber</label>
+                <label className="mt-6 block text-sm font-bold text-slate-200">{L("Você quer receber", "You want to receive")}</label>
                 <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                   <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">{desiredFinalAsset === "USDC" ? "US$" : "R$"}</span>
                   <div className="w-full px-4 py-4 text-3xl font-black text-white">{desiredFinalAmount}</div>
                   <span className="flex items-center px-4 text-sm font-black text-slate-300">{desiredFinalAsset}</span>
                 </div>
                 <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-50">
-                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />Calculando PIX...</span> : `PIX estimado: ${formatMoney(amountBrl)}`}
+                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : L(`PIX estimado: ${formatMoney(amountBrl)}`, `Estimated PIX: ${formatMoney(amountBrl)}`)}
                 </div>
               </>
             ) : (
               <>
-                <label className="mt-6 block text-sm font-bold text-slate-200">Valor</label>
+                <label className="mt-6 block text-sm font-bold text-slate-200">{L("Valor", "Amount")}</label>
                 <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-emerald-400/60">
                   <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
                   <input
@@ -1701,7 +1714,7 @@ export default function PixRampClient({
               </>
             )}
 
-            <label className="mt-5 block text-sm font-bold text-slate-200">{transferFlow ? "Enviar como" : "Receber como"}</label>
+            <label className="mt-5 block text-sm font-bold text-slate-200">{transferFlow ? L("Enviar como", "Send as") : L("Receber como", "Receive as")}</label>
             <div className="mt-2 grid grid-cols-2 gap-2 rounded-3xl border border-white/10 bg-black/20 p-2">
               {(["BRL", "USDC"] as TargetAsset[]).map((asset) => (
                 <button
@@ -1716,25 +1729,25 @@ export default function PixRampClient({
                     }
                     }}
                 >
-                  {friendlyAssetName(asset)}
+                  {friendlyAssetName(asset, language)}
                 </button>
               ))}
             </div>
             {transferFlow && transferRecipient && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                Depois que você confirmar o PIX, enviaremos automaticamente {autoPayDisplayAmount} para {transferRecipient}.
+                {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${autoPayDisplayAmount} para ${transferRecipient}.`, `After you confirm the PIX, we will automatically send ${autoPayDisplayAmount} to ${transferRecipient}.`)}
               </div>
             )}
 
             <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />Preparando PIX...</span> : "Continuar"}
+              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando PIX...", "Preparing PIX...")}</span> : L("Continuar", "Continue")}
             </button>
 
             {quote && (
               <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Pronto</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">{L("Pronto", "Ready")}</p>
                     <h3 className="mt-1 text-2xl font-black text-white">{estimatedReceiveLabel}</h3>
                   </div>
                   <div className={`rounded-full px-3 py-1 text-xs font-black ${quoteExpired ? "bg-rose-400 text-slate-950" : "bg-emerald-400 text-slate-950"}`}>
@@ -1742,26 +1755,26 @@ export default function PixRampClient({
                   </div>
                 </div>
                 <dl className="mt-5 grid gap-3 text-sm">
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Você paga</dt><dd className="font-black text-white">{formatMoney(quote.fromAmount)}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Você recebe</dt><dd className="font-black text-white">{estimatedReceiveLabel}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">Taxa</dt><dd className="font-black text-white">{quote.fee || "0"}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Você paga", "You pay")}</dt><dd className="font-black text-white">{formatMoney(quote.fromAmount)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Você recebe", "You receive")}</dt><dd className="font-black text-white">{estimatedReceiveLabel}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Taxa", "Fee")}</dt><dd className="font-black text-white">{quote.fee || "0"}</dd></div>
                 </dl>
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
-                    A cotação expirou. Toque em continuar para preparar um novo PIX.
+                    {L("A cotação expirou. Toque em continuar para preparar um novo PIX.", "The quote expired. Tap continue to prepare a new PIX.")}
                   </div>
                 )}
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-                    <p className="font-bold">Precisamos concluir o cadastro PIX desta conta.</p>
+                    <p className="font-bold">{L("Precisamos concluir o cadastro PIX desta conta.", "We need to finish this account's PIX setup.")}</p>
                     <a className="mt-3 inline-flex rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950" href={onboardingUrl} target="_blank" rel="noreferrer">
-                      Abrir cadastro PIX Etherfuse
+                      {L("Abrir cadastro PIX Etherfuse", "Open Etherfuse PIX setup")}
                     </a>
                   </div>
                 )}
                 {programmaticOnboarding && !onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-                    <p className="font-bold">Cadastro PIX preparado.</p>
+                    <p className="font-bold">{L("Cadastro PIX preparado.", "PIX setup ready.")}</p>
                   </div>
                 )}
               </div>
@@ -1771,8 +1784,8 @@ export default function PixRampClient({
           <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 text-white shadow-xl sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Pagamento</p>
-                <h2 className="mt-1 text-2xl font-black">Faça o PIX</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">{L("Pagamento", "Payment")}</p>
+                <h2 className="mt-1 text-2xl font-black">{L("Faça o PIX", "Make the PIX")}</h2>
               </div>
             </div>
 
@@ -1780,10 +1793,10 @@ export default function PixRampClient({
               <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
                 <p>
                   {quoteExpired
-                      ? "A cotação expirou. Toque em continuar para preparar um novo PIX."
+                      ? L("A cotação expirou. Toque em continuar para preparar um novo PIX.", "The quote expired. Tap continue to prepare a new PIX.")
                       : quote
-                      ? "Preparando o PIX."
-                      : "Informe o valor e toque em continuar."}
+                      ? L("Preparando o PIX.", "Preparing PIX.")
+                      : L("Informe o valor e toque em continuar.", "Enter the amount and tap continue.")}
                 </p>
               </div>
             ) : (
@@ -1797,20 +1810,20 @@ export default function PixRampClient({
                             className="h-auto w-full"
                           />
                         ) : (
-                          <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">QR indisponível</div>
+                          <div className="grid aspect-square place-items-center rounded-2xl bg-stone-100 text-center text-xs font-bold text-stone-500">{L("QR indisponível", "QR unavailable")}</div>
                         )}
                       </div>
                   <div className="space-y-3">
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Recebedor</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Recebedor", "Receiver")}</p>
                       <p className="mt-1 text-lg font-black">Etherfuse</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Valor</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Valor", "Amount")}</p>
                       <p className="mt-1 text-lg font-black">{formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)}</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Expira em</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Expira em", "Expires in")}</p>
                       <p className="mt-1 text-lg font-black">{quoteCountdown}</p>
                     </div>
                   </div>
@@ -1818,39 +1831,39 @@ export default function PixRampClient({
 
                   {demoPixMode ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">PIX integrado em preparação</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{L("PIX integrado em preparação", "Integrated PIX in progress")}</p>
                       <p className="mt-2">
-                        Este QR ainda não está integrado a uma transação bancária real. Não pague este QR em bancos como Nubank, Itaú ou Mercado Pago.
+                        {L("Este QR ainda não está integrado a uma transação bancária real. Não pague este QR em bancos como Nubank, Itaú ou Mercado Pago.", "This QR is not yet connected to a real bank transaction. Do not pay this QR in banking apps like Nubank, Itaú, or Mercado Pago.")}
                       </p>
                       <p className="mt-2 text-amber-100/80">
-                        Digite seu PIN e confirme nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real.
+                        {L("Digite seu PIN e confirme nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real.", "Enter your PIN and confirm on this screen to continue. When bank PIX is active, this same screen will show the real copy-and-paste PIX code.")}
                       </p>
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
                       <p className="mb-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm font-black text-emerald-100">
-                        PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.
+                        {L("PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.", "Bank PIX integrated. Use the QR or copy the code to pay in your bank app.")}
                       </p>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Código PIX copia e cola</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Código PIX copia e cola", "Copy-and-paste PIX code")}</p>
                         <button className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-[#17251d]" onClick={() => run("Copying PIX code", copyPixCode)}>
-                          {copied ? "Copiado" : "Copiar código PIX"}
+                          {copied ? L("Copiado", "Copied") : L("Copiar código PIX", "Copy PIX code")}
                         </button>
                       </div>
                       <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-white/10 p-3 font-mono text-xs text-white/80">{pixCode || "PIX code not returned yet"}</p>
-                      <p className="mt-3 text-sm text-white/65">Chave PIX: <span className="font-mono text-white">{pixKey || "indisponível"}</span></p>
+                      <p className="mt-3 text-sm text-white/65">{L("Chave PIX", "PIX key")}: <span className="font-mono text-white">{pixKey || L("indisponível", "unavailable")}</span></p>
                     </div>
                   )}
 
                   {orderFailed && (
                     <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-rose-100">
-                      <p className="text-sm font-black">Não foi possível concluir este PIX.</p>
-                      <p className="mt-2 text-sm font-bold text-rose-100/80">Gere um novo checkout para renovar a cotação e tentar novamente.</p>
+                      <p className="text-sm font-black">{L("Não foi possível concluir este PIX.", "This PIX could not be completed.")}</p>
+                      <p className="mt-2 text-sm font-bold text-rose-100/80">{L("Gere um novo checkout para renovar a cotação e tentar novamente.", "Generate a new checkout to refresh the quote and try again.")}</p>
                       <button
                         className="mt-4 rounded-2xl bg-rose-300 px-4 py-3 text-xs font-black text-rose-950"
                         onClick={clearQuoteState}
                       >
-                        Gerar novo checkout
+                        {L("Gerar novo checkout", "Generate new checkout")}
                       </button>
                     </div>
                   )}
@@ -1859,15 +1872,17 @@ export default function PixRampClient({
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-amber-100">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
-                            PIX confirmado. {transferFlow ? "A transferência foi enviada." : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na conta.`}
+                            {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? L("A transferência foi enviada.", "The transfer was sent.") : L(`${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na conta.`, `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} arrived in the account.`)}
                           </p>
                         ) : (
                           <>
-                            <label className="block text-sm font-bold text-amber-50">PIN da conta</label>
+                            <label className="block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
                             <WalletPinInput
                               value={walletPin}
                               onChange={updateWalletPin}
                               tone="amber"
+                              placeholder={L("Digite seu PIN", "Enter your PIN")}
+                              clearLabel={L("Limpar", "Clear")}
                               inputRef={(node) => {
                                 walletPinInputRef.current = node;
                               }}
@@ -1877,7 +1892,7 @@ export default function PixRampClient({
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? "PIX concluído" : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />Confirmando...</span> : "Confirmar aqui após fazer o PIX"}
+                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar aqui após fazer o PIX", "Confirm here after making the PIX")}
                             </button>
                           </>
                         )}
@@ -1956,32 +1971,32 @@ export default function PixRampClient({
 
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200">Comprovante PIX</p>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200">{L("Comprovante PIX", "PIX receipt")}</p>
                   <div className="mt-5 flex items-center gap-4">
                     <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-300 text-3xl font-black text-[#0d1512]">✓</span>
                     <div>
                       <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
-                        {rampMode === "offramp" ? "Retirada confirmada" : transferFlow ? "PIX e transferência confirmados" : "PIX confirmado"}
+                        {rampMode === "offramp" ? L("Retirada confirmada", "Withdrawal confirmed") : transferFlow ? L("PIX e transferência confirmados", "PIX and transfer confirmed") : L("PIX confirmado", "PIX confirmed")}
                       </h2>
                       <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/65">
                         {rampMode === "offramp"
-                          ? "O saldo saiu da sua conta TalkToStellar e entrou no seu PIX."
+                          ? L("O saldo saiu da sua conta TalkToStellar e entrou no seu PIX.", "The balance left your TalkToStellar account and arrived in your PIX.")
                           : transferFlow
-                          ? "O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada."
-                          : "O PIX foi confirmado e o saldo final entrou na sua conta."}
+                          ? L("O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada.", "PIX was confirmed, the balance was automatically converted, and the transfer was sent.")
+                          : L("O PIX foi confirmado e o saldo final entrou na sua conta.", "PIX was confirmed and the final balance arrived in your account.")}
                       </p>
                     </div>
                   </div>
                 </div>
                 <span className="w-fit rounded-full border border-emerald-200/30 bg-emerald-300/15 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
-                  Concluído
+                  {L("Concluído", "Completed")}
                 </span>
               </div>
 
               <div className="relative mt-8 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
                 <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">
-                    {rampMode === "offramp" ? "Valor retirado" : "Valor recebido"}
+                    {rampMode === "offramp" ? L("Valor retirado", "Amount withdrawn") : L("Valor recebido", "Amount received")}
                   </p>
                   <p className="mt-3 text-4xl font-black tracking-tight text-white sm:text-5xl">
                     {rampMode === "offramp"
@@ -1990,47 +2005,47 @@ export default function PixRampClient({
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <ReceiptRow
-                      label={rampMode === "offramp" ? "Recebido no seu PIX" : "Pago via PIX"}
+                      label={rampMode === "offramp" ? L("Recebido no seu PIX", "Received in your PIX") : L("Pago via PIX", "Paid with PIX")}
                       value={rampMode === "offramp" ? offRampReceiptReceived : formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}
                     />
-                    <ReceiptRow label="Status" value="Concluído" />
-                    {rampMode === "onramp" && <ReceiptRow label="Saldo antes" value={onRampReceiptBefore} />}
-                    {rampMode === "onramp" && <ReceiptRow label="Saldo depois" value={onRampReceiptAfter} />}
-                    {rampMode === "onramp" && <ReceiptRow label="Mudança no saldo" value={onRampReceiptDelta} />}
+                    <ReceiptRow label={L("Status", "Status")} value={L("Concluído", "Completed")} />
+                    {rampMode === "onramp" && <ReceiptRow label={L("Saldo antes", "Balance before")} value={onRampReceiptBefore} />}
+                    {rampMode === "onramp" && <ReceiptRow label={L("Saldo depois", "Balance after")} value={onRampReceiptAfter} />}
+                    {rampMode === "onramp" && <ReceiptRow label={L("Mudança no saldo", "Balance change")} value={onRampReceiptDelta} />}
                   </div>
                 </div>
 
                 <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Detalhes do comprovante</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">{L("Detalhes do comprovante", "Receipt details")}</p>
                   <dl className="mt-4 grid gap-3 text-sm">
-                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? "Seu PIX" : "Minha conta TalkToStellar"} />
-                    <ReceiptRow label="Ordem" value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
-                    {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label="Comprovante" value={String(temporaryOffRampTestResult.receipt_url)} />}
-                    {rampMode === "onramp" && onRampReceiptUrl && <ReceiptRow label="Comprovante" value={onRampReceiptUrl} />}
-                    <ReceiptRow label="Data" value={new Date().toLocaleString("pt-BR")} />
+                    <ReceiptRow label={L("Destino", "Destination")} value={rampMode === "offramp" ? L("Seu PIX", "Your PIX") : L("Minha conta TalkToStellar", "My TalkToStellar account")} />
+                    <ReceiptRow label={L("Ordem", "Order")} value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
+                    {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(temporaryOffRampTestResult.receipt_url)} />}
+                    {rampMode === "onramp" && onRampReceiptUrl && <ReceiptRow label={L("Comprovante", "Receipt")} value={onRampReceiptUrl} />}
+                    <ReceiptRow label={L("Data", "Date")} value={new Date().toLocaleString(language === "en" ? "en-US" : "pt-BR")} />
                   </dl>
                 </div>
               </div>
 
               {transferFlow && (
                 <div className={`relative mt-5 rounded-[1.75rem] border p-5 ${pixFundedTransferResult?.transaction_hash ? "border-cyan-300/25 bg-cyan-300/10" : "border-amber-300/30 bg-amber-300/10"}`}>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100">Transferência após PIX</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100">{L("Transferência após PIX", "Transfer after PIX")}</p>
                   {pixFundedTransferResult?.transaction_hash ? (
                     <>
                       <p className="mt-3 rounded-2xl border border-cyan-200/20 bg-cyan-200/10 p-3 text-sm font-black text-cyan-50">
-                        {String(pixFundedTransferResult.route_summary || "Escolhemos a melhor rota para essa conversão.")}
+                        {String(pixFundedTransferResult.route_summary || L("Escolhemos a melhor rota para essa conversão.", "We chose the best route for this conversion."))}
                       </p>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
-                        <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
-                        <ReceiptRow label="Conta destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
-                        <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
-                        {pixFundedTransferResult.receipt_url && <ReceiptRow label="Comprovante" value={String(pixFundedTransferResult.receipt_url)} />}
+                        <ReceiptRow label={L("Enviado para", "Sent to")} value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
+                        <ReceiptRow label={L("Valor transferido", "Transferred amount")} value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
+                        <ReceiptRow label={L("Conta destino", "Destination account")} value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
+                        <ReceiptRow label={L("Transação", "Transaction")} value={String(pixFundedTransferResult.transaction_hash)} />
+                        {pixFundedTransferResult.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(pixFundedTransferResult.receipt_url)} />}
                       </div>
                     </>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
-                      PIX confirmado. Enviando automaticamente {autoPayDisplayAmount} para {transferRecipient || "destinatário"}...
+                      {L(`PIX confirmado. Enviando automaticamente ${autoPayDisplayAmount} para ${transferRecipient || "destinatário"}...`, `PIX confirmed. Automatically sending ${autoPayDisplayAmount} to ${transferRecipient || "recipient"}...`)}
                     </p>
                   )}
                 </div>
@@ -2074,13 +2089,15 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
   );
 }
 
-function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
+function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, language }: {
   mode: RampMode;
   steps: LiveStep[];
   loading: string;
   status: string;
   launchedFromChat: boolean;
+  language: "pt-BR" | "en";
 }) {
+  const L = (pt: string, en: string) => language === "en" ? en : pt;
   const completed = steps.filter((step) => step.state === "done").length;
   const progress = steps.length ? Math.round((completed / steps.length) * 100) : 0;
   const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");
@@ -2089,14 +2106,14 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
     <section className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
       <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
         <div className={`${mode === "onramp" ? "bg-emerald-400/15 text-emerald-50" : "bg-cyan-400/15 text-cyan-50"} p-5 sm:p-6`}>
-          <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Fluxo PIX em tempo real</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">{L("Fluxo PIX em tempo real", "Real-time PIX flow")}</p>
           <h2 className="mt-2 text-3xl font-black">
-            {mode === "onramp" ? "PIX entra e vira saldo na conta" : "Saldo sai e chega no seu PIX"}
+            {mode === "onramp" ? L("PIX entra e vira saldo na conta", "PIX comes in and becomes account balance") : L("Saldo sai e chega no seu PIX", "Balance goes out and arrives in your PIX")}
           </h2>
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat
-              ? "Aberto pelo chat. Acompanhe cada etapa sem precisar entender cripto."
-              : "Acompanhe cotação, confirmação e saldo antes/depois em uma tela só."}
+              ? L("Aberto pelo chat. Acompanhe cada etapa sem precisar entender cripto.", "Opened from chat. Follow each step without needing to understand crypto.")
+              : L("Acompanhe cotação, confirmação e saldo antes/depois em uma tela só.", "Track quote, confirmation, and balance before/after in one screen.")}
           </p>
           <div className="mt-5 rounded-full bg-black/30 p-1">
             <div
@@ -2105,7 +2122,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
             />
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-[0.14em] opacity-70">
-            <span>{completed}/{steps.length} etapas</span>
+            <span>{completed}/{steps.length} {L("etapas", "steps")}</span>
             <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading || status}</span>
           </div>
         </div>
@@ -2116,7 +2133,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
               <div className="flex items-center gap-3">
                 <span className={`h-3 w-3 rounded-full ${activeStep.state === "warning" ? "bg-amber-300" : "animate-pulse bg-emerald-300"}`} />
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-                  Agora
+                  {L("Agora", "Now")}
                 </p>
               </div>
               <p className="mt-2 text-lg font-black text-white">{activeStep.label}</p>

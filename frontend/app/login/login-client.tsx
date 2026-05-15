@@ -7,6 +7,7 @@ import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { KeyRound, LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
+import { useLanguage } from "@/lib/i18n"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -72,6 +73,7 @@ function formatExternalIdentifier(provider: string, value: string): string {
 }
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
+  const { language, t } = useLanguage()
   const searchParams = useSearchParams()
   const requestedAuthMethod = String(searchParams.get("auth") || "").trim().toLowerCase()
   const emailFromQuery = String(searchParams.get("email") || "").trim()
@@ -291,6 +293,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         token: externalToken,
         session_id: sessionId,
         session_token: sessionToken,
+        language,
       }),
     })
 
@@ -333,6 +336,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           token: hasExternalContext ? externalToken : undefined,
           email: useTelegramIdPinLogin ? undefined : email,
           pin,
+          language,
         }),
       })
 
@@ -474,14 +478,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
         <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
           <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">
-            {hasExternalContext ? `${externalProviderLabel} conectado` : "Conta conectada"}
+            {hasExternalContext ? t("login_connected_channel", { provider: externalProviderLabel }) : t("login_connected_account")}
           </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">Sua conta foi vinculada.</h1>
+          <h1 className="mt-3 text-2xl font-semibold text-white">{t("login_linked_title")}</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            {nextPath ? "Continuando para a operação..." : hasExternalContext ? `Volte ao ${externalProviderLabel} e envie sua próxima mensagem.` : "Entrada concluída."}
+            {nextPath ? t("login_continue_operation") : hasExternalContext ? t("login_back_to_channel", { provider: externalProviderLabel }) : t("login_done")}
           </p>
           <p className="mt-2 text-xs text-slate-400">
-            {nextPath ? "Abrindo a operação em instantes." : INTERMEDIATE_PAGE_CLOSE_COPY}
+            {nextPath ? t("login_opening_operation") : INTERMEDIATE_PAGE_CLOSE_COPY}
           </p>
         </section>
       </main>
@@ -499,28 +503,28 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Entrar na sua conta
+                {t("login_title")}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Entre para continuar de onde parou. Próximo passo depois do login: saldo, contatos, PIX para entrar/sair dinheiro e pagamentos.
+                {t("login_subtitle")}
               </p>
               {hasExternalContext && (
                 <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
-                  <p className="font-medium">Canal detectado: {externalProviderLabel}</p>
-                  <p className="mt-1 text-cyan-100/90">Identificador: {externalIdentifierLabel}</p>
+                  <p className="font-medium">{t("login_channel_detected")}: {externalProviderLabel}</p>
+                  <p className="mt-1 text-cyan-100/90">{t("login_identifier")}: {externalIdentifierLabel}</p>
                 </div>
               )}
               {expired && (
                 <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
-                  Sua sessão expirou. Entre novamente para continuar.
+                  {t("login_expired")}
                 </p>
               )}
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">PIN</p>
-                <p className="mt-2 text-sm text-slate-200">Caminho mais rápido para entrar e continuar.</p>
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_pin_card_title")}</p>
+                <p className="mt-2 text-sm text-slate-200">{t("login_pin_card_body")}</p>
               </div>
               {/* Passkey UI temporarily hidden on desktop while mobile handoff is disabled.
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
@@ -535,13 +539,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             {hasExternalContext && (
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
                 {isTelegramContext ? <Send className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
-                Entrando via {externalProviderLabel}
+                {t("login_via")} {externalProviderLabel}
               </div>
             )}
             <form className="space-y-4" onSubmit={handlePinLogin}>
               {useTelegramIdPinLogin ? (
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium text-slate-200">ID do Telegram</span>
+                  <span className="text-sm font-medium text-slate-200">{t("login_telegram_id")}</span>
                   <input
                     value={externalIdentifierLabel}
                     type="text"
@@ -549,11 +553,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                     disabled={externalLinkUsed}
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
                   />
-                  <span className="block text-xs text-slate-400">Digite seu PIN para entrar na conta vinculada a este Telegram.</span>
+                  <span className="block text-xs text-slate-400">{t("login_telegram_help")}</span>
                 </label>
               ) : (
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium text-slate-200">E-mail</span>
+                  <span className="text-sm font-medium text-slate-200">{t("login_email")}</span>
                   <input
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -566,7 +570,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               )}
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">PIN</span>
+                <span className="text-sm font-medium text-slate-200">{t("login_pin")}</span>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
@@ -574,7 +578,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                   inputMode="numeric"
                   maxLength={8}
                   disabled={externalLinkUsed}
-                  placeholder="Digite seu PIN"
+                  placeholder={t("login_pin_placeholder")}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
                 />
               </label>
@@ -587,7 +591,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />
-                {status === "pin" ? "Entrando..." : "1) Entrar com PIN"}
+                {status === "pin" ? t("login_submitting") : t("login_submit")}
               </button>
             </form>
 
@@ -618,7 +622,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             */}
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "mandar 100 reais para meu PIX" para retirar e "enviar 10 dólares para [nome]" para pagar.
+              {t("login_footer_help")}
             </p>
           </section>
         </div>
