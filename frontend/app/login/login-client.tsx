@@ -89,7 +89,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   ).trim()
   const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
-  const useTelegramIdPinLogin = hasExternalContext && isTelegramContext
+  const useTelegramIdPinLogin = false
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
   const externalIdentifierLabel = useMemo(
     () => formatExternalIdentifier(externalProvider, externalProviderUserId),
@@ -334,7 +334,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           provider: hasExternalContext ? externalProvider : "web",
           provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
           token: hasExternalContext ? externalToken : undefined,
-          email: useTelegramIdPinLogin ? undefined : email,
+          email,
           pin,
           language,
         }),

@@ -3047,8 +3047,20 @@ export class AnchorService {
     let amount = requestedSourceAmount;
     let estimatedTargetBrl = requestedSourceAmount;
     if (sourceAsset.code === 'USDC') {
-      const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
-      estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
+      try {
+        const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
+        estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
+      } catch (error) {
+        const fallbackBrl = EconomyEngineService.estimateAmountInBrl({
+          amount: requestedSourceAmount,
+          assetCode: 'USDC',
+        });
+        if (!fallbackBrl) {
+          throw apiError('Não consegui calcular o valor em BRL para enviar ao seu PIX. Tente novamente em alguns segundos.', 409);
+        }
+        estimatedTargetBrl = toStellarAmount(fallbackBrl);
+        console.warn(`[ramp] BRL/USDC on-chain path unavailable for off-ramp; using configured fallback rate: ${debugErrorMessage(error)}`);
+      }
     } else if (sourceAsset.code !== 'BRL') {
       estimatedTargetBrl = toStellarAmount(EconomyEngineService.estimateAmountInBrl({
         amount: requestedSourceAmount,
