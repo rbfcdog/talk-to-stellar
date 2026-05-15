@@ -490,6 +490,44 @@ export class AgentGraph {
     );
   }
 
+  private assetCodeFromTextToken(value?: string): string {
+    const token = String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+    if (!token) return '';
+    if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
+    if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
+    if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
+    return '';
+  }
+
+  private inferPaymentAssetFromText(normalized: string, amountMatch?: RegExpMatchArray | null): string {
+    const amountText = amountMatch?.[1] || '';
+    const amountIndex = amountMatch?.index ?? -1;
+    if (amountIndex >= 0) {
+      const matchedText = amountMatch?.[0] || '';
+      if (/r\$\s*$/i.test(matchedText.replace(amountText, ''))) {
+        return 'BRL';
+      }
+
+      const afterAmount = normalized.slice(amountIndex + matchedText.length);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
+      if (assetAfterAmount) return assetAfterAmount;
+
+      const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
+      if (assetBeforeAmount) return assetBeforeAmount;
+    }
+
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
+  }
+
   private async handleIntentHelpRequest(state: AgentState): Promise<AgentState> {
     const resultRaw = await executeTool('get_intent_help', {});
     let result: any;
@@ -517,17 +555,12 @@ export class AgentGraph {
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
     const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
 
-    let assetCode = 'USDC';
-    if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
-    if (/\b(xlm|lumen|lumens)\b/.test(normalized)) assetCode = 'XLM';
-    if (/\b(usd|usdc|dolar|dolares|dollar|dollars)\b/.test(normalized)) assetCode = 'USDC';
+    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
     let receiveAssetCode = '';
     const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
-      if (receive === 'brl' || receive === 'real' || receive === 'reais') receiveAssetCode = 'BRL';
-      else if (receive === 'xlm' || receive.startsWith('lumen')) receiveAssetCode = 'XLM';
-      else receiveAssetCode = 'USDC';
+      receiveAssetCode = this.assetCodeFromTextToken(receive);
     }
 
     return {
@@ -561,18 +594,13 @@ export class AgentGraph {
     const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
     if (!amount) return {};
 
-    let assetCode = 'USDC';
-    if (/\b(brl|real|reais|r\$)\b/.test(normalized)) assetCode = 'BRL';
-    if (/\b(xlm|lumen|lumens)\b/.test(normalized)) assetCode = 'XLM';
-    if (/\b(usd|usdc|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized)) assetCode = 'USDC';
+    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
 
     let receiveAssetCode = '';
     const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
-      if (receive === 'brl' || receive === 'real' || receive === 'reais') receiveAssetCode = 'BRL';
-      else if (receive === 'xlm' || receive.startsWith('lumen')) receiveAssetCode = 'XLM';
-      else receiveAssetCode = 'USDC';
+      receiveAssetCode = this.assetCodeFromTextToken(receive);
     }
 
     const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+(.+)$/);
@@ -1542,8 +1570,9 @@ export class AgentGraph {
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem chave pública.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
-        '- receive_asset_code deve ser o ativo que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM". Isso também vale para links de pagamento.',
+        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
+        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM". Isso também vale para links de pagamento.',
+        '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
         '- needs_clarification deve ser true somente se o destinatário ou o valor estiverem ambíguos.',
@@ -1553,6 +1582,7 @@ export class AgentGraph {
         'Exemplos:',
         '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "quero transferir 200 brl pra Carlos Souza pra ele receber em usdc" => {"recipient_query":"Carlos Souza","amount":"200","asset_code":"BRL","receive_asset_code":"USDC","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc pra pessoa receber em brl" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "gerar link de pagamento de 15 dólares" => {"recipient_query":"","amount":"15","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
@@ -1941,6 +1971,8 @@ export class AgentGraph {
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
+      '- In payment and conversion tools, source/origin asset is what the sender spends; destination asset is what the recipient receives.',
+      '- Example: "transferir 200 BRL para Carlos receber em USDC" means source_amount=200, source_asset_code=BRL, destination/dest asset=USDC. Do not send 200 USDC.',
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
       '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as BRL or real digital.',
       '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
