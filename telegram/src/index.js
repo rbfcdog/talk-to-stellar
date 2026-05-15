@@ -233,6 +233,116 @@ function saveDebugPng(buffer, filename = 'debug-telegram-image.png') {
   return filepath;
 }
 
+function resolveBotProfilePhotoPath(value = '') {
+  const configured = String(value || '').trim();
+  if (configured) return path.resolve(configured);
+  return path.resolve(__dirname, '..', 'assets', 'talktostellar-avatar.jpg');
+}
+
+function normalizeProfileDescription(value, fallback, maxLength) {
+  const text = String(value || fallback || '').trim();
+  if (text.length <= maxLength) return text;
+  return text.slice(0, Math.max(0, maxLength - 1)).trimEnd();
+}
+
+async function callTelegramJsonApi(botToken, method, payload, fetchImpl = fetch) {
+  const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+  const body = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw new Error(`${method} failed status=${response.status} body=${body}`);
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { ok: true };
+  }
+}
+
+async function setTelegramProfilePhoto(botToken, photoPath, fetchImpl = fetch) {
+  const resolvedPhotoPath = resolveBotProfilePhotoPath(photoPath);
+  if (!fs.existsSync(resolvedPhotoPath)) {
+    throw new Error(`profile photo not found: ${resolvedPhotoPath}`);
+  }
+
+  const photoBuffer = fs.readFileSync(resolvedPhotoPath);
+  const form = new FormData();
+  form.set('photo', JSON.stringify({
+    type: 'static',
+    photo: 'attach://photo_file',
+  }));
+  form.set('photo_file', new Blob([photoBuffer], { type: 'image/jpeg' }), path.basename(resolvedPhotoPath));
+
+  const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/setMyProfilePhoto`, {
+    method: 'POST',
+    body: form,
+  });
+  const body = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw new Error(`setMyProfilePhoto failed status=${response.status} body=${body}`);
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { ok: true };
+  }
+}
+
+async function configureTelegramBotProfile({ botToken, fetchImpl = fetch, logger = console } = {}) {
+  const disabled = String(process.env.TELEGRAM_PROFILE_SETUP || '').trim().toLowerCase();
+  if (disabled === '0' || disabled === 'false' || disabled === 'off') {
+    logger.log?.('[telegram-profile] setup disabled');
+    return { skipped: true };
+  }
+
+  const profilePhotoPath = resolveBotProfilePhotoPath(process.env.TELEGRAM_PROFILE_PHOTO_PATH);
+  const shortDescription = normalizeProfileDescription(
+    process.env.TELEGRAM_SHORT_DESCRIPTION,
+    'TalkToStellar wallet assistant for balance, PIX, contacts, and transfers.',
+    120
+  );
+  const description = normalizeProfileDescription(
+    process.env.TELEGRAM_DESCRIPTION,
+    'TalkToStellar helps you check your balance, manage contacts, add or withdraw with PIX, convert funds, and send payments from Telegram.',
+    512
+  );
+
+  const result = {
+    photo: false,
+    shortDescription: false,
+    description: false,
+  };
+
+  try {
+    await setTelegramProfilePhoto(botToken, profilePhotoPath, fetchImpl);
+    result.photo = true;
+    logger.log?.(`[telegram-profile] profile photo set from ${profilePhotoPath}`);
+  } catch (error) {
+    logger.warn?.(`[telegram-profile] could not set profile photo: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    await callTelegramJsonApi(botToken, 'setMyShortDescription', { short_description: shortDescription }, fetchImpl);
+    result.shortDescription = true;
+    logger.log?.('[telegram-profile] short description set');
+  } catch (error) {
+    logger.warn?.(`[telegram-profile] could not set short description: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    await callTelegramJsonApi(botToken, 'setMyDescription', { description }, fetchImpl);
+    result.description = true;
+    logger.log?.('[telegram-profile] description set');
+  } catch (error) {
+    logger.warn?.(`[telegram-profile] could not set description: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return result;
+}
+
 async function main() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const agentUrl = process.env.TELEGRAM_AGENT_URL || 'http://localhost:3001/api/agent/query';
@@ -251,6 +361,8 @@ async function main() {
   if (!botToken) {
     throw new Error('TELEGRAM_BOT_TOKEN is required');
   }
+
+  await configureTelegramBotProfile({ botToken, logger: console });
 
   const agentClient = createAgentClient({ agentUrl });
   const backendBaseUrl = new URL(agentUrl).origin;
@@ -475,10 +587,12 @@ async function main() {
 
 }
 
-main().catch(error => {
-  console.error('[telegram] failed to start bot:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error('[telegram] failed to start bot:', error);
+    process.exit(1);
+  });
+}
 
 process.on('SIGINT', async () => {
   try {
@@ -488,3 +602,10 @@ process.on('SIGINT', async () => {
     }
   } catch {}
 });
+
+module.exports = {
+  configureTelegramBotProfile,
+  resolveBotProfilePhotoPath,
+  normalizeProfileDescription,
+  setTelegramProfilePhoto,
+};
