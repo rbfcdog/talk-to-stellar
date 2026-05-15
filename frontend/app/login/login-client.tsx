@@ -489,7 +489,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 Entrar na sua conta
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Entre para continuar de onde parou. Próximo passo depois do login: saldo, contatos e envio/recebimento.
+                Entre para continuar de onde parou. Próximo passo depois do login: saldo, contatos, PIX para entrar/sair dinheiro e pagamentos.
               </p>
               {hasExternalContext && (
                 <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
@@ -591,7 +591,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             */}
 
             <p className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-300">
-              Depois de entrar, use: "saldo" para conferir conta, "contatos" para revisar destinatários e "enviar 10 dólares para [nome]" para iniciar pagamento.
+              Depois de entrar, use: "saldo" para conferir conta, "depositar 150 reais via PIX" para adicionar dinheiro, "sacar 100 reais para minha conta" para retirar e "enviar 10 dólares para [nome]" para pagar.
             </p>
           </section>
         </div>

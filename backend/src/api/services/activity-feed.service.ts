@@ -17,6 +17,8 @@ export type FinancialEventItem = {
 };
 
 function normalizeEventVisual(eventType: string): { icon: string; color: string } {
+  if (eventType.includes('pix_onramp')) return { icon: 'arrow-down-left', color: 'emerald' };
+  if (eventType.includes('pix_offramp')) return { icon: 'arrow-up-right', color: 'cyan' };
   if (eventType.includes('conversion')) return { icon: 'refresh-cw', color: 'blue' };
   if (eventType.includes('payment_sent')) return { icon: 'arrow-up-right', color: 'green' };
   if (eventType.includes('payment_received')) return { icon: 'arrow-down-left', color: 'emerald' };
@@ -24,6 +26,35 @@ function normalizeEventVisual(eventType: string): { icon: string; color: string 
   if (eventType.includes('quote_expired')) return { icon: 'clock', color: 'amber' };
   if (eventType.includes('savings')) return { icon: 'piggy-bank', color: 'teal' };
   return { icon: 'dot', color: 'slate' };
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== 'string' || !value.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function userFacingAsset(code: unknown): string {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!normalized || normalized === 'TESOURO') return 'BRL';
+  if (normalized === 'USD') return 'USDC';
+  return normalized;
+}
+
+function formatAmountForFeed(amount: number, currency: string): string {
+  if (!Number.isFinite(amount)) return `0 ${currency}`;
+  if (currency === 'BRL') return `R$ ${amount.toFixed(2).replace('.', ',')}`;
+  if (currency === 'USDC') return `US$ ${amount.toFixed(2)}`;
+  return `${amount.toFixed(2)} ${currency}`;
 }
 
 export class ActivityFeedService {
@@ -163,9 +194,97 @@ export class ActivityFeedService {
     }
   }
 
+  static async syncFromRampOperations(input: { sessionId?: string; userId?: string }): Promise<void> {
+    const ctx = await FinancialContextService.resolve({ sessionId: input.sessionId, userId: input.userId });
+
+    const { data: operations, error } = await supabase
+      .from('operations')
+      .select('id, user_id, type, status, amount, asset_code, context, source_session_id, source_public_key, stellar_transaction_hash, created_at, updated_at')
+      .eq('user_id', ctx.userId)
+      .in('type', ['PIX_ONRAMP', 'PIX_OFFRAMP'])
+      .order('created_at', { ascending: false })
+      .limit(120);
+
+    if (error) {
+      throw new Error(`Falha ao sincronizar feed PIX: ${error.message}`);
+    }
+
+    for (const row of (operations || []) as Array<Record<string, unknown>>) {
+      const context = parseJsonObject(row.context);
+      const type = String(row.type || '').toUpperCase();
+      const status = String(row.status || 'PENDING').toUpperCase();
+      const completed = status === 'COMPLETED' || status === 'SUCCESS';
+      const failed = status === 'FAILED' || status === 'ERROR';
+      const isOnRamp = type === 'PIX_ONRAMP';
+      const visibleCurrency = isOnRamp
+        ? userFacingAsset(context.final_asset_code || context.final_asset || row.asset_code)
+        : 'BRL';
+      const rawAmount = isOnRamp
+        ? toNumber(context.final_amount || context.destination_amount || context.source_amount_brl || row.amount)
+        : toNumber(context.target_brl || context.destination_amount || context.source_amount || row.amount);
+      const amount = rawAmount > 0 ? rawAmount : toNumber(row.amount);
+      const amountText = formatAmountForFeed(amount, visibleCurrency);
+      const eventType = isOnRamp
+        ? completed ? 'pix_onramp_completed' : failed ? 'pix_onramp_failed' : 'pix_onramp_processing'
+        : completed ? 'pix_offramp_completed' : failed ? 'pix_offramp_failed' : 'pix_offramp_processing';
+      const title = isOnRamp
+        ? completed ? 'PIX recebido' : failed ? 'PIX não concluído' : 'PIX em andamento'
+        : completed ? 'Retirada via PIX concluída' : failed ? 'Retirada via PIX não concluída' : 'Retirada via PIX em andamento';
+      const description = isOnRamp
+        ? completed
+          ? `${amountText} entrou como saldo na sua conta TalkToStellar.`
+          : failed
+            ? 'O checkout PIX não foi concluído. Gere um novo PIX para tentar de novo.'
+            : 'Checkout PIX criado. Aguardando confirmação.'
+        : completed
+          ? `${amountText} saiu da conta TalkToStellar e entrou na conta externa vinculada.`
+          : failed
+            ? 'A retirada para PIX não foi concluída. Confira saldo e tente novamente.'
+            : 'Retirada criada. Aguardando confirmação.';
+      const visual = normalizeEventVisual(eventType);
+      const createdAt = String(row.updated_at || row.created_at || new Date().toISOString());
+      const dedupeKey = `${ctx.userId}:${eventType}:${String(row.id || '')}:${status}`;
+      const payload = {
+        user_id: ctx.userId,
+        event_type: eventType,
+        title,
+        description,
+        amount,
+        currency: visibleCurrency,
+        status: completed ? 'success' : failed ? 'failed' : 'pending',
+        related_operation_id: row.id || null,
+        related_contact_id: null,
+        metadata_json: {
+          operation_id: row.id,
+          ramp_type: type,
+          ramp_status: status,
+          source_public_key: row.source_public_key,
+          anchor_order_id: context.anchor_order_id,
+          intent_id: context.intent_id,
+          receipt_url: context.receipt_url,
+          raw_context: context,
+          dedupe_key: dedupeKey,
+        },
+        icon: visual.icon,
+        semantic_color: visual.color,
+        created_at: createdAt,
+        dedupe_key: dedupeKey,
+      };
+
+      const { error: upsertError } = await supabase
+        .from('financial_events')
+        .upsert(payload, { onConflict: 'dedupe_key' });
+
+      if (upsertError) {
+        await supabase.from('financial_events').insert(payload);
+      }
+    }
+  }
+
   static async listFeed(input: { sessionId?: string; userId?: string; limit?: number }): Promise<FinancialEventItem[]> {
     const ctx = await FinancialContextService.resolve({ sessionId: input.sessionId, userId: input.userId });
     await this.syncFromPayments({ sessionId: ctx.sessionId, userId: ctx.userId });
+    await this.syncFromRampOperations({ sessionId: ctx.sessionId, userId: ctx.userId });
 
     const limit = Math.min(Math.max(Number(input.limit || 40), 1), 120);
 

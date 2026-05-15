@@ -838,7 +838,7 @@ export default function ConfirmPaymentClient({
                 <>
                   <button
                     type="button"
-                    onClick={handlePasskeyConfirm}
+                    onClick={() => { void handlePasskeyConfirm(); }}
                     disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >

@@ -89,6 +89,11 @@ function formatRampAsset(value: unknown, code = "BRL") {
   return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
 }
 
+function friendlyAssetName(code: unknown) {
+  const displayCode = userFacingAssetCode(code);
+  return displayCode === "USDC" ? "dólar digital" : "real digital";
+}
+
 function formatCountdown(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) return "expirada";
   const totalSeconds = Math.floor(ms / 1000);
@@ -118,6 +123,24 @@ function isSuccessStatus(status: unknown) {
   return normalizeStatus(status) === "completed";
 }
 
+function isFailureStatus(status: unknown) {
+  return ["failed", "expired", "cancelled", "canceled", "refunded"].includes(normalizeStatus(status));
+}
+
+function statusLabel(status: unknown) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "completed") return "Concluído";
+  if (normalized === "processing" || normalized === "funded") return "Processando";
+  if (normalized === "pending") return "Aguardando";
+  if (normalized === "failed") return "Falhou";
+  if (normalized === "expired") return "Expirou";
+  if (normalized === "cancelled" || normalized === "canceled") return "Cancelado";
+  if (normalized === "refunded") return "Estornado";
+  if (normalized === "cotação expirada") return "Cotação expirada";
+  if (normalized === "não iniciado") return "Não iniciado";
+  return normalized || "Aguardando";
+}
+
 function balanceKey(balance: BalanceItem) {
   return `${balance.asset_code}:${balance.asset_issuer || "native"}`;
 }
@@ -138,6 +161,37 @@ function calculateDeltas(before: BalanceItem[], after: BalanceItem[]): BalanceDe
       delta: Number.isFinite(delta) ? delta.toFixed(7).replace(/\.?0+$/, "") : "0",
     };
   });
+}
+
+function sumVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
+  return balances
+    .filter((balance) => userFacingAssetCode(balance.asset_code, assetCode) === assetCode)
+    .reduce((total, balance) => {
+      const numeric = Number(String(balance.balance || "0").replace(",", "."));
+      return total + (Number.isFinite(numeric) ? numeric : 0);
+    }, 0);
+}
+
+function formatVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
+  return formatRampAsset(sumVisibleBalance(balances, assetCode).toFixed(7), assetCode);
+}
+
+function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset) {
+  if (!after.length) return "Aguardando";
+  const delta = sumVisibleBalance(after, assetCode) - sumVisibleBalance(before, assetCode);
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
+}
+
+function InlineSpinner({ tone = "emerald" }: { tone?: "emerald" | "cyan" | "amber" | "white" }) {
+  const color = tone === "cyan"
+    ? "border-cyan-100 border-t-cyan-500"
+    : tone === "amber"
+      ? "border-amber-100 border-t-amber-600"
+      : tone === "white"
+        ? "border-white/40 border-t-white"
+        : "border-emerald-100 border-t-emerald-600";
+  return <span className={`inline-block h-4 w-4 animate-spin rounded-full border-2 ${color}`} aria-hidden="true" />;
 }
 
 function truncateKey(value?: string) {
@@ -277,8 +331,8 @@ export default function PixRampClient({
   const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
   const [orderPayload, setOrderPayload] = useState<RampResponse | null>(null);
   const [statusPayload, setStatusPayload] = useState<RampResponse | null>(null);
-  const [, setOnRampBalancesBefore] = useState<BalanceItem[]>([]);
-  const [, setOnRampBalancesAfter] = useState<BalanceItem[]>([]);
+  const [onRampBalancesBefore, setOnRampBalancesBefore] = useState<BalanceItem[]>([]);
+  const [onRampBalancesAfter, setOnRampBalancesAfter] = useState<BalanceItem[]>([]);
   const [offRampBalancesBefore, setOffRampBalancesBefore] = useState<BalanceItem[]>([]);
   const [offRampBalancesAfter, setOffRampBalancesAfter] = useState<BalanceItem[]>([]);
   const [offRampAmount, setOffRampAmount] = useState("1");
@@ -360,6 +414,7 @@ export default function PixRampClient({
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "cotação expirada" : "não iniciado";
   const onRampComplete = Boolean(order && isSuccessStatus(status));
+  const orderFailed = Boolean(order && isFailureStatus(status));
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = targetAsset === "BRL"
       ? formatMoney(order?.toAmount || finalReceivedAmount || amountBrl)
@@ -367,6 +422,7 @@ export default function PixRampClient({
         ? formatRampAsset(finalReceivedAmount, targetAsset)
         : "Calculado automaticamente na confirmação";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
+  const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.sandbox && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
     ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
     : "";
@@ -383,13 +439,16 @@ export default function PixRampClient({
     `pix-ramp:${atomicIntentKey}:${action}`
   ), [atomicIntentKey]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
+  const onRampReceiptBefore = formatVisibleBalance(onRampBalancesBefore, targetAsset);
+  const onRampReceiptAfter = onRampBalancesAfter.length > 0 ? formatVisibleBalance(onRampBalancesAfter, targetAsset) : "Atualizando";
+  const onRampReceiptDelta = formatVisibleDelta(onRampBalancesBefore, onRampBalancesAfter, targetAsset);
   const liveSteps = useMemo<LiveStep[]>(() => {
     if (rampMode === "offramp") {
       const hasTarget = Boolean(offRampFiatAmount.trim() || offRampAmount.trim());
       return [
         {
-          label: "Wallet TalkToStellar",
-          detail: walletPublicKey ? `Wallet localizada: ${truncateKey(walletPublicKey)}` : "Digite o email para localizar a wallet.",
+          label: "Conta TalkToStellar",
+          detail: walletPublicKey ? "Conta localizada." : "Digite o email para localizar sua conta.",
           state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
         },
         {
@@ -407,10 +466,10 @@ export default function PixRampClient({
           state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
-          label: "Assinatura e saída",
+          label: "Confirmação e saída",
           detail: temporaryOffRampTestResult?.submitted
-            ? "Transação assinada e submetida."
-            : "Aguardando confirmação para mostrar o saldo saindo da wallet.",
+            ? "Saldo enviado para retirada."
+            : "Aguardando seu PIN para mostrar o saldo saindo.",
           state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
@@ -425,8 +484,8 @@ export default function PixRampClient({
 
     return [
       {
-        label: "Wallet TalkToStellar",
-        detail: walletPublicKey ? `Wallet localizada: ${truncateKey(walletPublicKey)}` : "Digite o email para localizar a wallet.",
+        label: "Conta TalkToStellar",
+        detail: walletPublicKey ? "Conta localizada." : "Digite o email para localizar sua conta.",
         state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
       },
       {
@@ -439,9 +498,9 @@ export default function PixRampClient({
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
-        label: `Cotação BRL -> ${targetAsset}`,
+        label: "Cotação",
         detail: quote
-          ? `${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${targetAsset}.`
+          ? `${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset)}.`
           : `Alvo: colocar ${formatMoney(amountBrl)} na conta.`,
         state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
       },
@@ -464,8 +523,8 @@ export default function PixRampClient({
         detail: onRampComplete
           ? pixFundedTransferResult?.transaction_hash
             ? `${formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} enviado para ${pixFundedTransferResult.recipient_name || transferRecipient}.`
-            : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na wallet.`
-          : polling ? "Polling da ordem em andamento." : `Aguardando confirmação para entregar ${targetAsset}.`,
+            : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entregue na conta.`
+          : polling ? "Atualizando status automaticamente." : `Aguardando confirmação para entregar ${friendlyAssetName(targetAsset)}.`,
         state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
       },
     ];
@@ -537,7 +596,8 @@ export default function PixRampClient({
       setOffRampAmountLocked(true);
     }
     if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
-    if (asset === "TESOURO") setTargetAsset("BRL");
+    else if (asset === "TESOURO") setTargetAsset("BRL");
+    else setTargetAsset(mode === "onramp" ? "USDC" : "BRL");
     if (email.includes("@")) setRampEmail(email);
     if (flow === "fund_and_pay") setTransferFlow(true);
     if (recipient) setTransferRecipient(recipient);
@@ -606,7 +666,7 @@ export default function PixRampClient({
 
     const email = rampEmail.trim().toLowerCase();
     if (!email) {
-      throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
+      throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
     }
 
     const startedAt = performance.now();
@@ -627,7 +687,7 @@ export default function PixRampClient({
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || "Nao encontrei uma wallet TalkToStellar ativa para este email.");
+      throw new Error(payload?.message || "Nao encontrei uma conta TalkToStellar ativa para este email.");
     }
 
     const nextSessionId = String(payload.session_id || "");
@@ -679,7 +739,7 @@ export default function PixRampClient({
 
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth, idempotencyKey?: string) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
+    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
     const requestBody: Record<string, unknown> = { ...auth, ...(body || {}) };
     const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -713,7 +773,7 @@ export default function PixRampClient({
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar a wallet.");
+    if (!auth.session_id || !auth.session_token) throw new Error("Digite o email da conta TalkToStellar para localizar sua conta.");
     const search = new URLSearchParams({ ...auth, ...(params || {}) });
     const startedAt = performance.now();
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
@@ -769,6 +829,8 @@ export default function PixRampClient({
       if (isSuccessStatus(nextStatus) && !transferFlow) {
         markOperationCompleted();
         setStep("success");
+      } else if (isFailureStatus(nextStatus)) {
+        setError("O PIX não foi concluído. Gere uma nova cotação e tente novamente.");
       }
     }
     return payload;
@@ -827,7 +889,7 @@ export default function PixRampClient({
     const pin = (inputValue || walletPin).replace(/\D/g, "").slice(0, 8);
     if (pin !== walletPin) setWalletPin(pin);
     if (!/^\d{4,8}$/.test(pin)) {
-      throw new Error("Digite o PIN da wallet com 4 a 8 dígitos antes de confirmar.");
+      throw new Error("Digite o PIN da conta com 4 a 8 dígitos antes de confirmar.");
     }
     return pin;
   }
@@ -1117,10 +1179,10 @@ export default function PixRampClient({
   }
 
   const timeline = [
-    { label: "PIX generated", done: Boolean(orderId), active: Boolean(orderId) && status === "pending" },
-    { label: "Waiting for payment", done: ["processing", "funded", "completed"].includes(status), active: status === "pending" },
-    { label: "Payment detected", done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
-    { label: transferFlow ? "Transfer sent" : "Balance delivered", done: status === "completed", active: status === "completed" },
+    { label: "PIX gerado", done: Boolean(orderId), active: Boolean(orderId) && status === "pending" },
+    { label: "Aguardando pagamento", done: ["processing", "funded", "completed"].includes(status), active: status === "pending" },
+    { label: "Pagamento detectado", done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
+    { label: transferFlow ? "Transferência enviada" : "Saldo entregue", done: status === "completed", active: status === "completed" },
   ];
   const offRampReceiptAmount = temporaryOffRampTestResult
     ? formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)
@@ -1131,6 +1193,15 @@ export default function PixRampClient({
   const successTransaction = rampMode === "offramp"
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
     : order;
+  const onRampReceiptUrl = String(
+    statusPayload?.receipt_url ||
+    statusPayload?.transaction?.receipt_url ||
+    statusPayload?.transaction?.receiptUrl ||
+    orderPayload?.receipt_url ||
+    orderPayload?.transaction?.receipt_url ||
+    orderPayload?.transaction?.receiptUrl ||
+    ""
+  );
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
@@ -1152,7 +1223,7 @@ export default function PixRampClient({
                 {rampMode === "onramp"
                   ? transferFlow && transferRecipient
                     ? `Faça o PIX integrado, confirme com seu PIN e envie automaticamente para ${transferRecipient}.`
-                    : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua wallet."
+                    : "Faça o PIX integrado, confirme com seu PIN e receba o saldo na sua conta."
                   : "Confirme com seu PIN para retirar saldo via PIX integrado."}
               </p>
             </div>
@@ -1165,7 +1236,7 @@ export default function PixRampClient({
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destino</p>
-                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha wallet" : displayedExternalBankAccount.label}</p>
+                <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipient ? transferRecipient : rampMode === "onramp" ? "Minha conta" : displayedExternalBankAccount.label}</p>
               </div>
             </div>
           </section>
@@ -1173,7 +1244,7 @@ export default function PixRampClient({
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-            Digite o email da conta para localizar sua wallet e continuar.
+            Digite o email da conta para localizar sua conta e continuar.
           </section>
         )}
 
@@ -1198,6 +1269,14 @@ export default function PixRampClient({
             Esta operação já foi concluída. O comprovante foi enviado no chat.
           </section>
         )}
+
+        <LiveRampPanel
+          mode={rampMode}
+          steps={liveSteps}
+          loading={loading}
+          status={statusLabel(status)}
+          launchedFromChat={launchedFromChat}
+        />
 
         {!lockedMode && (
         <section className="mt-5 grid gap-3 rounded-[2rem] border border-white/10 bg-white/5 p-3 shadow-2xl backdrop-blur sm:grid-cols-2">
@@ -1230,7 +1309,7 @@ export default function PixRampClient({
               <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Retirada via PIX</p>
               <h2 className="mt-1 text-3xl font-black text-white">Retirar saldo para PIX</h2>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                O saldo sai da sua wallet e aparece como dinheiro recebido por PIX.
+                O saldo sai da sua conta TalkToStellar e aparece como dinheiro recebido por PIX.
               </p>
 
               <label className="mt-6 block text-sm font-bold text-slate-200">
@@ -1285,7 +1364,7 @@ export default function PixRampClient({
                   </div>
                 </div>
               </div>
-              <label className="mt-6 block text-sm font-bold text-slate-200">PIN da wallet</label>
+              <label className="mt-6 block text-sm font-bold text-slate-200">PIN da conta</label>
               <WalletPinInput
                 value={walletPin}
                 onChange={updateWalletPin}
@@ -1300,7 +1379,7 @@ export default function PixRampClient({
                 disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
                 onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {operationLocked ? "Retirada concluída" : loading === "Confirming PIX off-ramp" ? "Confirmando..." : "Confirmar retirada"}
+                {operationLocked ? "Retirada concluída" : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />Confirmando...</span> : "Confirmar retirada"}
               </button>
             </div>
 
@@ -1316,7 +1395,7 @@ export default function PixRampClient({
                     <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da wallet</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-100">Saiu da conta</p>
                     <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
                   </div>
                   <div className="rounded-3xl bg-white/10 p-4">
@@ -1372,13 +1451,13 @@ export default function PixRampClient({
                     await resolveWalletFromEmail();
                   })}
                 >
-                  {loading === "Resolving wallet" ? "Localizando..." : "Usar wallet"}
+                  {loading === "Resolving wallet" ? "Localizando..." : "Usar conta"}
                 </button>
               </div>
               <p className="mt-3 text-xs font-semibold text-emerald-100/75">
                 {walletPublicKey
-                  ? `Wallet localizada: ${resolvedWallet?.public_key_display || truncateKey(walletPublicKey)}`
-                  : "Digite o email da conta para localizar sua wallet."}
+                  ? "Conta localizada."
+                  : "Digite o email da conta para localizar sua conta."}
               </p>
             </div>
             )}
@@ -1411,18 +1490,18 @@ export default function PixRampClient({
                     }
                   }}
                 >
-                  {asset}
+                  {friendlyAssetName(asset)}
                 </button>
               ))}
             </div>
             {transferFlow && transferRecipient && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                Depois que você confirmar o PIX, enviaremos automaticamente {formatMoney(amountBrl)} em {targetAsset} para {transferRecipient}.
+                Depois que você confirmar o PIX, enviaremos automaticamente {formatMoney(amountBrl)} em {friendlyAssetName(targetAsset)} para {transferRecipient}.
               </div>
             )}
 
             <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" ? "Preparando..." : "Continuar"}
+              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />Preparando PIX...</span> : "Continuar"}
             </button>
 
             {quote && (
@@ -1511,12 +1590,21 @@ export default function PixRampClient({
                   </div>
                 </div>
 
-                  {isSandboxMockOrder ? (
+                  {demoPixMode ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      PIX integrado ao checkout. Use o QR ou código PIX, depois digite seu PIN e confirme para liberar o saldo na wallet.
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">PIX integrado em preparação</p>
+                      <p className="mt-2">
+                        Este QR ainda não está integrado a uma transação bancária real. Não pague este QR em bancos como Nubank, Itaú ou Mercado Pago.
+                      </p>
+                      <p className="mt-2 text-amber-100/80">
+                        Digite seu PIN e confirme nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real.
+                      </p>
                     </div>
                   ) : (
                     <div className="mt-5 rounded-3xl bg-black/20 p-4">
+                      <p className="mb-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm font-black text-emerald-100">
+                        PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.
+                      </p>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">Código PIX copia e cola</p>
                         <button className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-[#17251d]" onClick={() => run("Copying PIX code", copyPixCode)}>
@@ -1528,15 +1616,28 @@ export default function PixRampClient({
                     </div>
                   )}
 
-                  {config?.sandbox && (
+                  {orderFailed && (
+                    <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-rose-100">
+                      <p className="text-sm font-black">Não foi possível concluir este PIX.</p>
+                      <p className="mt-2 text-sm font-bold text-rose-100/80">Gere um novo checkout para renovar a cotação e tentar novamente.</p>
+                      <button
+                        className="mt-4 rounded-2xl bg-rose-300 px-4 py-3 text-xs font-black text-rose-950"
+                        onClick={clearQuoteState}
+                      >
+                        Gerar novo checkout
+                      </button>
+                    </div>
+                  )}
+
+                  {config?.sandbox && !orderFailed && (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-amber-100">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
-                            PIX confirmado. {transferFlow ? "A transferência foi enviada." : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na wallet.`}
+                            PIX confirmado. {transferFlow ? "A transferência foi enviada." : `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na conta.`}
                           </p>
                         ) : (
                           <>
-                            <label className="block text-sm font-bold text-amber-50">PIN da wallet</label>
+                            <label className="block text-sm font-bold text-amber-50">PIN da conta</label>
                             <WalletPinInput
                               value={walletPin}
                               onChange={updateWalletPin}
@@ -1550,7 +1651,7 @@ export default function PixRampClient({
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? "PIX concluído" : loading === "Confirming PIX received" ? "Confirmando..." : "Confirme aqui após fazer o PIX"}
+                              {operationLocked ? "PIX concluído" : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />Confirmando...</span> : "Confirmar aqui após fazer o PIX"}
                             </button>
                           </>
                         )}
@@ -1638,16 +1739,16 @@ export default function PixRampClient({
                       </h2>
                       <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/65">
                         {rampMode === "offramp"
-                          ? "O saldo saiu da sua wallet e foi enviado para a conta externa vinculada."
+                          ? "O saldo saiu da sua conta TalkToStellar e foi enviado para a conta externa vinculada."
                           : transferFlow
                           ? "O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada."
-                          : "O PIX foi confirmado e o saldo final entrou na sua wallet."}
+                          : "O PIX foi confirmado e o saldo final entrou na sua conta."}
                       </p>
                     </div>
                   </div>
                 </div>
                 <span className="w-fit rounded-full border border-emerald-200/30 bg-emerald-300/15 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
-                  completed
+                  Concluído
                 </span>
               </div>
 
@@ -1667,15 +1768,19 @@ export default function PixRampClient({
                       value={rampMode === "offramp" ? offRampReceiptReceived : formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}
                     />
                     <ReceiptRow label="Status" value="Concluído" />
+                    {rampMode === "onramp" && <ReceiptRow label="Saldo antes" value={onRampReceiptBefore} />}
+                    {rampMode === "onramp" && <ReceiptRow label="Saldo depois" value={onRampReceiptAfter} />}
+                    {rampMode === "onramp" && <ReceiptRow label="Mudança no saldo" value={onRampReceiptDelta} />}
                   </div>
                 </div>
 
                 <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Detalhes do comprovante</p>
                   <dl className="mt-4 grid gap-3 text-sm">
-                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? displayedExternalBankAccount.label : truncateKey(walletPublicKey)} />
+                    <ReceiptRow label="Destino" value={rampMode === "offramp" ? displayedExternalBankAccount.label : "Minha conta TalkToStellar"} />
                     <ReceiptRow label="Ordem" value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
                     {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label="Comprovante" value={String(temporaryOffRampTestResult.receipt_url)} />}
+                    {rampMode === "onramp" && onRampReceiptUrl && <ReceiptRow label="Comprovante" value={onRampReceiptUrl} />}
                     <ReceiptRow label="Data" value={new Date().toLocaleString("pt-BR")} />
                   </dl>
                 </div>
@@ -1692,7 +1797,7 @@ export default function PixRampClient({
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <ReceiptRow label="Enviado para" value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
                         <ReceiptRow label="Valor transferido" value={formatRampAsset(pixFundedTransferResult.amount || amountBrl, pixFundedTransferResult.asset_code || targetAsset)} />
-                        <ReceiptRow label="Wallet destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
+                        <ReceiptRow label="Conta destino" value={truncateKey(String(pixFundedTransferResult.recipient_public_key || ""))} />
                         <ReceiptRow label="Transação" value={String(pixFundedTransferResult.transaction_hash)} />
                         {pixFundedTransferResult.receipt_url && <ReceiptRow label="Comprovante" value={String(pixFundedTransferResult.receipt_url)} />}
                       </div>
@@ -1760,12 +1865,12 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
         <div className={`${mode === "onramp" ? "bg-emerald-400/15 text-emerald-50" : "bg-cyan-400/15 text-cyan-50"} p-5 sm:p-6`}>
           <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Fluxo PIX em tempo real</p>
           <h2 className="mt-2 text-3xl font-black">
-            {mode === "onramp" ? "PIX entra, saldo escolhido chega na wallet" : "Saldo sai, BRL aparece na conta PIX"}
+            {mode === "onramp" ? "PIX entra e vira saldo na conta" : "Saldo sai e chega no banco"}
           </h2>
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat
-              ? "Aberto pelo chat. A página mantém o estado da operação e mostra cada request do ramp avançando."
-              : "Use esta tela para acompanhar sessão, cotação, ordem, confirmação e saldo antes/depois."}
+              ? "Aberto pelo chat. Acompanhe cada etapa sem precisar entender cripto."
+              : "Acompanhe cotação, confirmação e saldo antes/depois em uma tela só."}
           </p>
           <div className="mt-5 rounded-full bg-black/30 p-1">
             <div
@@ -1775,7 +1880,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat }: {
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-[0.14em] opacity-70">
             <span>{completed}/{steps.length} etapas</span>
-            <span>{loading || status}</span>
+            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading || status}</span>
           </div>
         </div>
 
