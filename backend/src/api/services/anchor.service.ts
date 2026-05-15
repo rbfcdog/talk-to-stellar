@@ -24,6 +24,7 @@ import { OperationRepository } from '../repository/operation.repository';
 import { EconomyEngineService } from './economy-engine.service';
 import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
+import { BrlReferenceRateService } from './brl-reference-rate.service';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -3017,12 +3018,16 @@ export class AnchorService {
     );
     const requestedSourceAmount = normalizeAmount(coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'), 'amount');
     let amount = requestedSourceAmount;
-    const estimatedTargetBrl = sourceAsset.code === 'BRL'
-      ? requestedSourceAmount
-      : toStellarAmount(EconomyEngineService.estimateAmountInBrl({
-          amount: requestedSourceAmount,
-          assetCode: sourceAsset.code,
-        }));
+    let estimatedTargetBrl = requestedSourceAmount;
+    if (sourceAsset.code === 'USDC') {
+      const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
+      estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
+    } else if (sourceAsset.code !== 'BRL') {
+      estimatedTargetBrl = toStellarAmount(EconomyEngineService.estimateAmountInBrl({
+        amount: requestedSourceAmount,
+        assetCode: sourceAsset.code,
+      }));
+    }
     const targetBrl = normalizeAmount(
       requestedTargetBrl || estimatedTargetBrl,
       sourceAsset.code === 'BRL' ? 'fiat_amount' : 'target_brl',

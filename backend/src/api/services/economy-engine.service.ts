@@ -67,7 +67,7 @@ export class EconomyEngineService {
       return amount * (sourceAmount / destinationAmount);
     }
 
-    const fallback = Number(input.fallbackUsdBrl || process.env.DEFAULT_USD_BRL_RATE || 5.6);
+    const fallback = Number(input.fallbackUsdBrl || process.env.DEFAULT_USD_BRL_RATE || 0);
     if ((assetCode === 'USDC' || assetCode === 'USD') && Number.isFinite(fallback) && fallback > 0) {
       return amount * fallback;
     }

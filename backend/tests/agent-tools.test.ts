@@ -10,6 +10,13 @@ const mockGetWalletConversionRules = jest.fn().mockResolvedValue([
   },
 ]);
 const mockDisableConversionRule = jest.fn().mockResolvedValue(true);
+const mockGetReferenceRate = jest.fn().mockResolvedValue({
+  source: 'configured_brl_asset',
+  symbol: 'USDC/BRL',
+  brlPerUsdc: '5.13000000',
+  usdcPerBrl: '0.19493177',
+  fetchedAt: '2026-05-15T12:00:00.000Z',
+});
 
 jest.mock('../src/api/services/balance-alert.service', () => ({
   BalanceAlertService: {
@@ -21,6 +28,12 @@ jest.mock('../src/api/services/auto-conversion.service', () => ({
   AutoConversionService: {
     getWalletConversionRules: mockGetWalletConversionRules,
     disableConversionRule: mockDisableConversionRule,
+  },
+}));
+
+jest.mock('../src/api/services/brl-reference-rate.service', () => ({
+  BrlReferenceRateService: {
+    getReferenceRate: mockGetReferenceRate,
   },
 }));
 
@@ -79,5 +92,17 @@ describe('Agent tool execution', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.rule_id).toBe('rule-123');
     expect(mockDisableConversionRule).toHaveBeenCalledWith('rule-123');
+  });
+
+  it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
+    const output = await executeTool('get_brl_usdc_quote', {});
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.source).toBe('configured_brl_asset');
+    expect(parsed.brl_per_usdc).toBe('5.13000000');
+    expect(parsed.usdc_per_brl).toBe('0.19493177');
+    expect(parsed.message).toContain('BRL da sua conta');
+    expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
   });
 });
