@@ -846,7 +846,7 @@ ${onboardingUrl}`;
       state.success = true;
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
-        state.response_message = `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua conta TalkToStellar e confirma o dinheiro chegando no seu PIX.`;
+        state.response_message = `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`;
@@ -1739,6 +1739,7 @@ ${onboardingUrl}`;
       '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
       '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
+      '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '',

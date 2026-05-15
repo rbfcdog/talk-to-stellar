@@ -85,6 +85,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const externalProviderUserId = String(externalPayload?.provider_user_id || "").trim()
   const hasExternalContext = Boolean(externalToken && externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
+  const useTelegramIdPinLogin = hasExternalContext && isTelegramContext
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Conta"
   const externalIdentifierLabel = useMemo(
     () => formatExternalIdentifier(externalProvider, externalProviderUserId),
@@ -116,8 +117,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     return browserId
   }
 
-  function finishLogin() {
-    enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${email.trim() || "usuário"}`)
+  function finishLogin(accountLabel?: string) {
+    const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "usuário").trim()
+    enqueueWebChatFeedback(`Entrada concluída.\nConta conectada: ${label}`)
     setLoginDone(true)
     closeIntermediatePage()
   }
@@ -321,7 +323,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           provider: hasExternalContext ? externalProvider : "web",
           provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
           token: hasExternalContext ? externalToken : undefined,
-          email,
+          email: useTelegramIdPinLogin ? undefined : email,
           pin,
         }),
       })
@@ -341,8 +343,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         payload?.sessionToken ? String(payload.sessionToken) : undefined
       )
       markExternalLoginCompleted()
-      localStorage.setItem("talk-to-stellar.userName", email.trim())
-      finishLogin()
+      const resolvedLogin = String(payload?.email || payload?.userId || email.trim() || externalIdentifierLabel).trim()
+      if (resolvedLogin) {
+        localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+      }
+      finishLogin(resolvedLogin)
     } catch (err) {
       actionLockRef.current = false
       setStatus("error")
@@ -526,17 +531,31 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               </div>
             )}
             <form className="space-y-4" onSubmit={handlePinLogin}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">E-mail</span>
-                <input
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  type="email"
-                  disabled={externalLinkUsed}
-                  placeholder="voce@exemplo.com"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
+              {useTelegramIdPinLogin ? (
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-slate-200">ID do Telegram</span>
+                  <input
+                    value={externalIdentifierLabel}
+                    type="text"
+                    readOnly
+                    disabled={externalLinkUsed}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
+                  />
+                  <span className="block text-xs text-slate-400">Conta já vinculada. Digite apenas seu PIN.</span>
+                </label>
+              ) : (
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-slate-200">E-mail</span>
+                  <input
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    type="email"
+                    disabled={externalLinkUsed}
+                    placeholder="voce@exemplo.com"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
+                  />
+                </label>
+              )}
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">PIN</span>
@@ -556,7 +575,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
               <button
                 type="submit"
-                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim() || !pin.trim()}
+                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />

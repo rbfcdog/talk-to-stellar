@@ -199,6 +199,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - Use 'get_brl_usdc_quote' when the user asks for BRL/USDC, dólar, câmbio, cotação, or exchange rate now.
 - When the user asks to pay/deposit/add/bring balance with PIX, including "trazer 100 BRL pra minha conta via PIX", send them to the PIX ramp page. Do not answer with their PIX receiving key for those messages. Do not mention internal environments in chat; the QR page owns the bank-integration disclaimer.
 - When the user asks to sacar/retirar/tirar dinheiro via PIX, including "sacar 100 reais para meu PIX", send them to the PIX off-ramp page so balance leaves the wallet and BRL is shown arriving in their PIX.
+- PIX off-ramp destination is always BRL in the user's PIX. If the source balance is USDC, the withdrawal screen converts at exit; do not present USDC as arriving in PIX.
 - When the user says "mandar para meu PIX", "meu banco", "outro banco", "minha conta bancária", "pra fora da minha conta", "para fora da minha conta", or "retirar", treat it as PIX off-ramp even if the word "mandar" appears and even if "PIX" is omitted.
 - When the user says "mandar/pagar para Ana por PIX" and the recipient is not the user's own bank/PIX account, treat it as PIX on-ramp followed by a transfer.
 - When the user asks "quanto depositei esse mês?", "quanto saquei?", or similar PIX history questions, answer from the ramp history aggregate and include current balance.
