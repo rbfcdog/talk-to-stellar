@@ -662,7 +662,7 @@ ${onboardingUrl}`;
       normalized.includes('cair no banco');
 
     const wantsOnRamp =
-      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|on\s*ramp|onramp)\b/.test(normalized) ||
+      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|receber|on\s*ramp|onramp)\b/.test(normalized) ||
       wantsPixFundedPayment ||
       normalized.includes('pagar com pix') ||
       normalized.includes('trazer dinheiro') ||
@@ -679,14 +679,14 @@ ${onboardingUrl}`;
       return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
     }
 
-    if (!wantsOnRamp && !wantsOffRamp) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
-    }
-
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
     const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
     const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
     const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
+    const impliedPixOnRamp = Boolean(mentionsPix && amountMatch && !wantsOffRamp);
+    if (!wantsOnRamp && !wantsOffRamp && !impliedPixOnRamp) {
+      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
+    }
     const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
     const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
     const onRampTargetAsset = explicitReceiveBrl
@@ -729,8 +729,15 @@ ${onboardingUrl}`;
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
     if (intent.amount) {
-      url.searchParams.set('amount', intent.amount);
-      url.searchParams.set('currency', intent.amount_currency || intent.asset_code);
+      const amountCurrency = intent.amount_currency || intent.asset_code;
+      if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
+        url.searchParams.set('receive_amount', intent.amount);
+        url.searchParams.set('receive_asset', 'USDC');
+        url.searchParams.set('currency', 'USDC');
+      } else {
+        url.searchParams.set('amount', intent.amount);
+        url.searchParams.set('currency', amountCurrency);
+      }
       if (intent.direction === 'offramp') {
         url.searchParams.set('source_asset', intent.asset_code);
         url.searchParams.set('source_amount', intent.amount);
@@ -774,9 +781,14 @@ ${onboardingUrl}`;
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = `Para retirar ${amountText} para uma conta externa, abra:\n\n${url}\n\nA tela calcula a conversão necessária, mostra o saldo saindo da sua conta TalkToStellar e confirma os reais chegando no destino bancário.`;
       } else if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
-        state.response_message = `Para mandar ${this.formatMoneyByAsset(intent.amount, 'BRL')} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota para essa conversão. A tela faz o PIX, converte automaticamente para BRL e dispara a transferência para ${intent.recipient_query}.`;
+        const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
+        state.response_message = `Para mandar ${amountText} para ${intent.recipient_query} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${intent.recipient_query}.`;
       } else {
-        state.response_message = `Para colocar ${this.formatMoneyByAsset(intent.amount, 'BRL')} na sua conta via PIX e receber em ${this.formatUserFacingAssetName(intent.asset_code)}, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar na sua conta.`;
+        const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
+        const actionText = intent.amount_currency === 'USDC'
+          ? `receber ${amountText}`
+          : `colocar ${amountText} na sua conta`;
+        state.response_message = `Para ${actionText} via PIX, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code)}.`;
       }
     }
 

@@ -71,6 +71,11 @@ function formatMoney(value: unknown, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(numeric);
 }
 
+function toPositiveNumber(value: unknown, fallback = 0) {
+  const numeric = Number(String(value || "").replace(",", "."));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
 function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
   const normalized = String(code || "").trim().toUpperCase().split(":")[0];
   if (normalized === "USDC") return "USDC";
@@ -326,6 +331,9 @@ export default function PixRampClient({
   const [step, setStep] = useState<Step>("quote");
   const [amountBrl, setAmountBrl] = useState("100");
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("BRL");
+  const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
+  const [desiredReceiveAsset, setDesiredReceiveAsset] = useState<TargetAsset | "">("");
+  const [receiveEstimateLoading, setReceiveEstimateLoading] = useState(false);
   const [customerPayload, setCustomerPayload] = useState<RampResponse | null>(null);
   const [quotePayload, setQuotePayload] = useState<RampResponse | null>(null);
   const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
@@ -372,6 +380,8 @@ export default function PixRampClient({
     offRampAmount,
     offRampFiatAmount,
     targetAsset,
+    desiredReceiveAmount,
+    desiredReceiveAsset,
     transferRecipient,
   ].join(":"))}`;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
@@ -380,6 +390,11 @@ export default function PixRampClient({
     ? formatMoney(offRampInputValue || "0")
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
   const offRampInputPrefix = offRampInputAsset === "USDC" ? "US$" : "R$";
+  const desiredFinalAmount = rampMode === "onramp" && desiredReceiveAmount && desiredReceiveAsset === targetAsset
+    ? desiredReceiveAmount
+    : "";
+  const desiredFinalAsset = desiredFinalAmount ? desiredReceiveAsset : "";
+  const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
   const hasSession = Boolean(sessionId && sessionToken);
   const canResolveWallet = Boolean(hasSession || rampEmail.trim());
@@ -400,6 +415,7 @@ export default function PixRampClient({
   const finalReceivedAmount = String(
     order?.finalAmount ||
     order?.auto_conversion?.destination_amount ||
+    (desiredFinalAmount && receivedCode === desiredFinalAsset ? desiredFinalAmount : "") ||
     (receivedCode === "BRL" ? (order?.fromAmount || quote?.fromAmount || amountBrl) : "")
   );
   const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
@@ -418,6 +434,8 @@ export default function PixRampClient({
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = targetAsset === "BRL"
       ? formatMoney(order?.toAmount || finalReceivedAmount || amountBrl)
+      : desiredFinalAmount && desiredFinalAsset === targetAsset
+        ? formatRampAsset(desiredFinalAmount, targetAsset)
       : finalReceivedAmount
         ? formatRampAsset(finalReceivedAmount, targetAsset)
         : "Calculado automaticamente na confirmação";
@@ -571,6 +589,8 @@ export default function PixRampClient({
     const mode = lockedMode || (params.get("mode") === "offramp" ? "offramp" : "onramp");
     const amount = String(params.get("source_amount") || params.get("amount") || "").trim().replace(",", ".");
     const fiatAmount = String(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "").trim().replace(",", ".");
+    const receiveAmount = String(params.get("receive_amount") || params.get("target_amount") || "").trim().replace(",", ".");
+    const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || "").trim().toUpperCase();
     const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
@@ -583,6 +603,14 @@ export default function PixRampClient({
 
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
+    if (mode === "onramp" && receiveAmount) {
+      const normalizedReceiveAsset = receiveAsset === "BRL" ? "BRL" : "USDC";
+      setDesiredReceiveAmount(receiveAmount);
+      setDesiredReceiveAsset(normalizedReceiveAsset);
+      setTargetAsset(normalizedReceiveAsset);
+      if (normalizedReceiveAsset === "BRL") setAmountBrl(receiveAmount);
+      if (normalizedReceiveAsset === "USDC") setReceiveEstimateLoading(true);
+    }
     if (amount) {
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
@@ -595,9 +623,11 @@ export default function PixRampClient({
       setOffRampFiatAmount("");
       setOffRampAmountLocked(true);
     }
-    if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
-    else if (asset === "TESOURO") setTargetAsset("BRL");
-    else setTargetAsset(mode === "onramp" ? "USDC" : "BRL");
+    if (!(mode === "onramp" && receiveAmount)) {
+      if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
+      else if (asset === "TESOURO") setTargetAsset("BRL");
+      else setTargetAsset(mode === "onramp" ? "USDC" : "BRL");
+    }
     if (email.includes("@")) setRampEmail(email);
     if (flow === "fund_and_pay") setTransferFlow(true);
     if (recipient) setTransferRecipient(recipient);
@@ -658,6 +688,60 @@ export default function PixRampClient({
       response: sanitizeForDebug(entry.response),
     }, ...current].slice(0, 40));
   }, []);
+
+  useEffect(() => {
+    if (rampMode !== "onramp") return;
+    if (!desiredReceiveAmount || desiredReceiveAsset !== "USDC") return;
+    const receiveUsdc = toPositiveNumber(desiredReceiveAmount, 0);
+    if (!receiveUsdc) {
+      setReceiveEstimateLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setReceiveEstimateLoading(true);
+    fetch("/api/financial/conversion-preview?brl_amount=100", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 5.6);
+        const feeBuffer = Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.05);
+        const estimatedBrl = (receiveUsdc * brlPerUsdc) + feeBuffer;
+        if (cancelled) return;
+        setAmountBrl(estimatedBrl.toFixed(2));
+        setQuotePayload(null);
+        setQuoteReceivedAt(0);
+        setOrderPayload(null);
+        setStatusPayload(null);
+        addDebugLog({
+          label: "PIX amount estimated from requested receive amount",
+          method: "GET",
+          path: "/api/financial/conversion-preview",
+          request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
+          response: { amount_brl: estimatedBrl.toFixed(2), brl_per_usdc: brlPerUsdc },
+        });
+      })
+      .catch((err) => {
+        const fallbackBrl = (receiveUsdc * 5.6) + 0.05;
+        if (!cancelled) {
+          setAmountBrl(fallbackBrl.toFixed(2));
+          addDebugLog({
+            label: "PIX amount estimated with fallback rate",
+            method: "GET",
+            path: "/api/financial/conversion-preview",
+            request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
+            response: { amount_brl: fallbackBrl.toFixed(2), brl_per_usdc: 5.6 },
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReceiveEstimateLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
     if (sessionId && sessionToken) {
@@ -970,6 +1054,8 @@ export default function PixRampClient({
       to_currency: "TESOURO",
       final_asset: targetAsset,
       amount: amountBrl,
+      desired_final_amount: desiredFinalAmount || undefined,
+      desired_final_asset: desiredFinalAsset || undefined,
     }, "POST", auth);
     setQuotePayload(payload);
     setQuoteReceivedAt(Date.now());
@@ -978,6 +1064,7 @@ export default function PixRampClient({
 
   async function confirmQuoteAndCreatePix() {
     await runAtomicAction("preparar-pix", async () => {
+      if (waitingForReceiveEstimate) throw new Error("Calculando o valor do PIX. Tente novamente em alguns segundos.");
       let quoteForOrder = quote;
       let customerForOrder = customerPayload;
       let authForOrder: RampAuth | undefined;
@@ -986,7 +1073,7 @@ export default function PixRampClient({
           label: quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
           method: "POST",
           path: "/api/ramp/etherfuse/quote",
-          request: { amount: amountBrl, targetAsset },
+          request: { amount: amountBrl, targetAsset, desiredFinalAmount, desiredFinalAsset },
           response: { reason: quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
         });
         const fresh = await requestQuote();
@@ -1008,6 +1095,8 @@ export default function PixRampClient({
         from_currency: "BRL",
         to_currency: "TESOURO",
         final_asset: targetAsset,
+        desired_final_amount: desiredFinalAmount || undefined,
+        desired_final_asset: desiredFinalAsset || undefined,
       }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
       if (payload?.quote) {
         setQuotePayload(payload);
@@ -1028,11 +1117,11 @@ export default function PixRampClient({
     if (autoStartedRef.current) return;
     if (rampMode !== "onramp") return;
     if (operationLocked) return;
-    if (!canResolveWallet || loading || order || quote) return;
+    if (!canResolveWallet || loading || order || quote || waitingForReceiveEstimate) return;
 
     autoStartedRef.current = true;
     void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
-  }, [canResolveWallet, loading, operationLocked, order, queryString, quote, rampMode]);
+  }, [canResolveWallet, loading, operationLocked, order, queryString, quote, rampMode, waitingForReceiveEstimate]);
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
@@ -1048,7 +1137,7 @@ export default function PixRampClient({
             label: "Automatic quote refresh failed",
             method: "POST",
             path: "/api/ramp/etherfuse/quote",
-            request: { amount: amountBrl, targetAsset },
+            request: { amount: amountBrl, targetAsset, desiredFinalAmount, desiredFinalAsset },
             response: {},
             error: err instanceof Error ? err.message : String(err),
           });
@@ -1057,7 +1146,7 @@ export default function PixRampClient({
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, loading, order, quote, quoteDeadlineAt, targetAsset]);
+  }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, desiredFinalAmount, desiredFinalAsset, loading, order, quote, quoteDeadlineAt, targetAsset]);
 
   async function copyPixCode() {
     const sandboxReference = [
@@ -1126,6 +1215,8 @@ export default function PixRampClient({
       amount: amountBrl,
       to_currency: "TESOURO",
       final_asset: targetAsset,
+      desired_final_amount: desiredFinalAmount || undefined,
+      desired_final_asset: desiredFinalAsset || undefined,
     }, "POST", auth, buildIdempotencyKey("test-onramp"));
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -1462,33 +1553,51 @@ export default function PixRampClient({
             </div>
             )}
 
-            <label className="mt-6 block text-sm font-bold text-slate-200">Valor</label>
-            <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-emerald-400/60">
-              <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
-              <input
-                className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none"
-                value={amountBrl}
-                inputMode="decimal"
-                onChange={(event) => {
-                  setAmountBrl(event.target.value);
-                  clearQuoteState();
-                }}
-              />
-              <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
-            </div>
+            {desiredFinalAmount ? (
+              <>
+                <label className="mt-6 block text-sm font-bold text-slate-200">Você quer receber</label>
+                <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                  <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">{desiredFinalAsset === "USDC" ? "US$" : "R$"}</span>
+                  <div className="w-full px-4 py-4 text-3xl font-black text-white">{desiredFinalAmount}</div>
+                  <span className="flex items-center px-4 text-sm font-black text-slate-300">{desiredFinalAsset}</span>
+                </div>
+                <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-50">
+                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />Calculando PIX...</span> : `PIX estimado: ${formatMoney(amountBrl)}`}
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="mt-6 block text-sm font-bold text-slate-200">Valor</label>
+                <div className="mt-2 flex overflow-hidden rounded-3xl border border-white/10 bg-white/5 focus-within:border-emerald-400/60">
+                  <span className="flex items-center bg-white/10 px-4 text-sm font-black text-slate-300">R$</span>
+                  <input
+                    className="w-full bg-transparent px-4 py-4 text-3xl font-black text-white outline-none"
+                    value={amountBrl}
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      setAmountBrl(event.target.value);
+                      clearQuoteState();
+                    }}
+                  />
+                  <span className="flex items-center px-4 text-sm font-black text-slate-300">BRL</span>
+                </div>
+              </>
+            )}
 
             <label className="mt-5 block text-sm font-bold text-slate-200">{transferFlow ? "Enviar como" : "Receber como"}</label>
             <div className="mt-2 grid grid-cols-2 gap-2 rounded-3xl border border-white/10 bg-black/20 p-2">
               {(["BRL", "USDC"] as TargetAsset[]).map((asset) => (
                 <button
                   key={asset}
-                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-emerald-400 text-slate-950 shadow-lg" : "text-slate-400 hover:bg-white/10"}`}
-                  onClick={() => {
+	                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-emerald-400 text-slate-950 shadow-lg" : "text-slate-400 hover:bg-white/10"}`}
+	                  onClick={() => {
                     if (asset !== targetAsset) {
                       setTargetAsset(asset);
+                      setDesiredReceiveAmount("");
+                      setDesiredReceiveAsset("");
                       clearQuoteState();
                     }
-                  }}
+	                  }}
                 >
                   {friendlyAssetName(asset)}
                 </button>
@@ -1496,12 +1605,12 @@ export default function PixRampClient({
             </div>
             {transferFlow && transferRecipient && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
-                Depois que você confirmar o PIX, enviaremos automaticamente {formatMoney(amountBrl)} em {friendlyAssetName(targetAsset)} para {transferRecipient}.
+                Depois que você confirmar o PIX, enviaremos automaticamente {desiredFinalAmount ? formatRampAsset(desiredFinalAmount, targetAsset) : formatMoney(amountBrl)} para {transferRecipient}.
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />Preparando PIX...</span> : "Continuar"}
+            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+              {operationLocked ? "PIX concluído" : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />Preparando PIX...</span> : "Continuar"}
             </button>
 
             {quote && (

@@ -196,6 +196,7 @@ export class PaymentReceiptService {
 
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
     const text = await this.buildReceiptText(input);
+    const cumulativeSavingsText = await this.cumulativeSavingsLine(input);
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
@@ -220,6 +221,19 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to save receipt message: ${message}`);
     }
 
+    if (cumulativeSavingsText) {
+      try {
+        await this.saveReceiptMessage({
+          sessionId: input.sessionId,
+          content: cumulativeSavingsText,
+          dedupeKey: `${receiptDedupeKey}:savings`,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[receipt] failed to save cumulative savings message: ${message}`);
+      }
+    }
+
     try {
       await TransferNotificationService.notifyExternalChannelMessage({
         sessionId: input.sessionId,
@@ -233,6 +247,23 @@ export class PaymentReceiptService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
+    }
+
+    if (cumulativeSavingsText) {
+      try {
+        await TransferNotificationService.notifyExternalChannelMessage({
+          sessionId: input.sessionId,
+          userId: input.userId,
+          provider: input.provider,
+          providerUserId: input.providerUserId,
+          text: cumulativeSavingsText,
+          buttonText: null,
+          buttonUrl: null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[receipt] failed to deliver cumulative savings: ${message}`);
+      }
     }
 
     return viewerUrl || '';
@@ -258,7 +289,7 @@ export class PaymentReceiptService {
         hash: input.hash || null,
         quote: input.quote,
         savings: input.savings,
-        contextMessage: input.contextMessage || null,
+        contextMessage: this.sanitizeContextMessage(input.contextMessage) || null,
       })
     );
   }
@@ -287,7 +318,6 @@ export class PaymentReceiptService {
     const traditionalFeeLine = this.traditionalFeeLine(fee);
     const settlementLine = this.settlementLine(input.settlementMs);
     const savingsLine = this.savingsLine(input.savings, fee);
-    const cumulativeSavingsLine = await this.cumulativeSavingsLine(input);
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = this.statusLabel(input.status);
@@ -302,7 +332,6 @@ export class PaymentReceiptService {
       feeLine,
       traditionalFeeLine,
       savingsLine,
-      cumulativeSavingsLine,
       settlementLine,
       timeLine,
       publicOperationId ? `ID da operação: ${publicOperationId}` : 'ID da operação: em processamento',
@@ -313,9 +342,15 @@ export class PaymentReceiptService {
   }
 
   private static contextLine(contextMessage?: string | null): string {
+    const sanitized = this.sanitizeContextMessage(contextMessage);
+    if (!sanitized) return '';
+    return `Resumo: ${sanitized}`;
+  }
+
+  private static sanitizeContextMessage(contextMessage?: string | null): string {
     const raw = String(contextMessage || '').trim();
     if (!raw) return '';
-    const sanitized = raw
+    return raw
       .replace(/\s+/g, ' ')
       .replace(/\bwallet\b/gi, 'conta')
       .replace(/\btestnet\b/gi, '')
@@ -324,8 +359,6 @@ export class PaymentReceiptService {
       .replace(/\.env/gi, '')
       .trim()
       .slice(0, 120);
-    if (!sanitized) return '';
-    return `Resumo: ${sanitized}`;
   }
 
   private static savingsLine(savings: PaymentReceiptInput['savings'] | undefined, fee: FeeBreakdown): string {
