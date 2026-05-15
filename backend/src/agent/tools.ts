@@ -1188,8 +1188,8 @@ function executeGetIntentHelp(): string {
     {
       command: "PIX",
       intent: "pix",
-      description: "Coloca dinheiro na conta via PIX ou retira saldo para chegar em BRL no seu PIX.",
-      examples: ["colocar 100 reais via PIX", "sacar 50 reais por PIX"],
+      description: "Coloca dinheiro via PIX, retira saldo para PIX ou paga um contato direto depois do PIX.",
+      examples: ["colocar 100 reais via PIX", "pagar Ana Silva com 100 reais via PIX"],
     },
     {
       command: "histórico",
@@ -1232,7 +1232,7 @@ function executeGetIntentHelp(): string {
       "2) contatos: listar ou salvar destinatários.",
       "3) enviar: fazer pagamento com confirmação segura.",
       "4) converter: trocar R$, US$ e XLM com cotação atual.",
-      "5) PIX: colocar dinheiro na conta via PIX ou retirar saldo para o seu PIX.",
+      "5) PIX: colocar dinheiro via PIX, retirar para seu PIX ou pagar um contato direto usando PIX.",
       "6) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
       "7) histórico: revisar operações recentes.",
       "8) link de pagamento: gerar link para cobrar/receber.",
@@ -1247,6 +1247,7 @@ function executeGetIntentHelp(): string {
       "- \"enviar 10 dólares para Ana\"",
       "- \"converter 200 reais para dólar\"",
       "- \"colocar 100 reais via PIX\"",
+      "- \"pagar Ana Silva com 100 reais via PIX\"",
       "- \"sacar 50 reais por PIX\"",
       "- \"converter 50 reais para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
