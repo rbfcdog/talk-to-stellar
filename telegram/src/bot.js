@@ -148,6 +148,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         if (checkResult && checkResult.exists && checkResult.sessionId) {
           sessionId = checkResult.sessionId;
           ctx.session.sessionId = sessionId;
+          sessionStore.setSessionId(chatId, sessionId);
         }
       } else if (backendBaseUrl) {
         try {
@@ -180,6 +181,7 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
             if (payload && payload.exists && payload.sessionId) {
               sessionId = payload.sessionId;
               ctx.session.sessionId = sessionId;
+              sessionStore.setSessionId(chatId, sessionId);
             }
           } else {
             warn('[telegram] external check returned non-200, continuing with existing session');

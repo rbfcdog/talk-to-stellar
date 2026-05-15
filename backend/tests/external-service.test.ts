@@ -31,7 +31,31 @@ function createSupabaseMock(input: {
 }
 
 describe('ExternalService.checkExternalAccount', () => {
-  it('recovers a Telegram-linked account from agent state when external_accounts is only a placeholder', async () => {
+  it('returns a linked Telegram account from external_accounts', async () => {
+    const supabase = createSupabaseMock({
+      externalAccounts: [
+        {
+          provider: 'telegram',
+          provider_user_id: '6405034913',
+          session_id: '21804a36-08bf-4abf-8854-039429571e5d',
+          user_id: 'rodrigo@example.com',
+          data: { telegram_chat_id: '6405034913' },
+        },
+      ],
+    });
+
+    const service = new ExternalService(supabase as any);
+    const account = await service.checkExternalAccount('telegram', '6405034913');
+
+    expect(account).toMatchObject({
+      provider: 'telegram',
+      provider_user_id: '6405034913',
+      session_id: '21804a36-08bf-4abf-8854-039429571e5d',
+      user_id: 'rodrigo@example.com',
+    });
+  });
+
+  it('does not treat agent state as a Telegram account link when external_accounts is only a placeholder', async () => {
     const supabase = createSupabaseMock({
       externalAccounts: [
         {
@@ -64,15 +88,10 @@ describe('ExternalService.checkExternalAccount', () => {
     const service = new ExternalService(supabase as any);
     const account = await service.checkExternalAccount('telegram', '6405034913');
 
-    expect(account).toMatchObject({
-      provider: 'telegram',
-      provider_user_id: '6405034913',
-      session_id: '21804a36-08bf-4abf-8854-039429571e5d',
-      user_id: 'rodrigo@example.com',
-    });
+    expect(account).toBeNull();
   });
 
-  it('recovers a Telegram-linked account even when external_accounts has no row yet', async () => {
+  it('does not recover a Telegram account from agent state when external_accounts has no row yet', async () => {
     const supabase = createSupabaseMock({
       externalAccounts: [],
       agentStates: [
@@ -97,8 +116,7 @@ describe('ExternalService.checkExternalAccount', () => {
     const service = new ExternalService(supabase as any);
     const account = await service.checkExternalAccount('telegram', '6405034913');
 
-    expect(account?.session_id).toBe('session-from-chat');
-    expect(account?.user_id).toBe('rodrigo@example.com');
+    expect(account).toBeNull();
   });
 
   it('returns null when there is no linked mapping and no matching chat state', async () => {

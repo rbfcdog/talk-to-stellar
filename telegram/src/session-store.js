@@ -27,12 +27,21 @@ function createSessionStore() {
     return sessions.get(key);
   }
 
+  function setSessionId(chatId, sessionId) {
+    const key = chatId || ANONYMOUS_KEY;
+    const normalized = String(sessionId || '').trim();
+    if (!normalized) return getSessionId(chatId);
+    sessions.set(key, normalized);
+    return normalized;
+  }
+
   function clearSession(chatId) {
     sessions.delete(chatId);
   }
 
   return {
     getSessionId,
+    setSessionId,
     clearSession,
   };
 }

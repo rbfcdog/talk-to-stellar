@@ -197,68 +197,6 @@ function selectCompletedFinalization(rows: any[]): any | null {
   }) || null;
 }
 
-async function resolveExternalIdentityFromAgentState(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
-  const normalizedProvider = normalizeExternalProvider(provider);
-  const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
-  if (!normalizedProvider || !normalizedProviderUserId) return null;
-
-  const { data: states, error: stateError } = await supabase
-    .from('agent_states')
-    .select('session_id, action_params, updated_at')
-    .eq('action_params->>external_provider', normalizedProvider)
-    .eq('action_params->>external_provider_user_id', normalizedProviderUserId)
-    .order('updated_at', { ascending: false })
-    .limit(10);
-
-  if (stateError) {
-    const message = String(stateError.message || '').toLowerCase();
-    if (message.includes('agent_states') || message.includes('schema cache') || message.includes('does not exist')) {
-      return null;
-    }
-    throw stateError;
-  }
-
-  const sessionIds = Array.from(
-    new Set((states || []).map((row: any) => String(row?.session_id || '').trim()).filter(Boolean))
-  );
-  if (sessionIds.length === 0) return null;
-
-  const { data: sessions, error: sessionError } = await supabase
-    .from('agent_sessions')
-    .select('session_id, user_id, email')
-    .in('session_id', sessionIds);
-
-  if (sessionError) {
-    const message = String(sessionError.message || '').toLowerCase();
-    if (message.includes('agent_sessions') || message.includes('schema cache') || message.includes('does not exist')) {
-      return null;
-    }
-    throw sessionError;
-  }
-
-  const sessionsById = new Map<string, any>();
-  for (const session of sessions || []) {
-    const sessionId = String((session as any)?.session_id || '').trim();
-    if (sessionId) sessionsById.set(sessionId, session);
-  }
-
-  for (const state of states || []) {
-    const sessionId = String((state as any)?.session_id || '').trim();
-    const session = sessionsById.get(sessionId);
-    if (!session) continue;
-    const canonicalLogin = resolveCanonicalSessionLogin(session);
-    const userId = normalizeEmailForCompare(String(session?.user_id || canonicalLogin || ''));
-    if (!sessionId && !userId && !canonicalLogin) continue;
-    return {
-      sessionId: sessionId || undefined,
-      userId: userId || undefined,
-      canonicalLogin: canonicalLogin || undefined,
-    };
-  }
-
-  return null;
-}
-
 async function resolveExternalIdentityLock(provider: string, providerUserId: string): Promise<ExternalIdentityLock | null> {
   const normalizedProvider = normalizeExternalProvider(provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
@@ -301,9 +239,7 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
   }
 
   const completedFinalization = selectCompletedFinalization((data || []) as any[]);
-  if (!completedFinalization) {
-    return resolveExternalIdentityFromAgentState(normalizedProvider, normalizedProviderUserId);
-  }
+  if (!completedFinalization) return null;
 
   const fallbackSessionId = getFinalizationSessionId(completedFinalization);
   const fallbackUserId = getFinalizationUserId(completedFinalization);
@@ -347,7 +283,8 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
     ''
   ).trim();
   const username = String(payload?.username || payload?.telegram_username || '').trim();
-  const language = normalizeLanguage(payload?.language || payload?.lang || payload?.locale);
+  const rawLanguage = payload?.language || payload?.lang || payload?.locale;
+  const language = rawLanguage ? normalizeLanguage(rawLanguage) : '';
   const data: Record<string, unknown> = {};
   if (language) {
     data.language = language;

@@ -365,6 +365,18 @@ function localized(language: 'pt-BR' | 'en', pt: string, en: string): string {
   return language === 'en' ? en : pt;
 }
 
+function normalizeAccountOwner(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function sessionMatchesExternalOwner(sessionData: SessionData | null | undefined, externalUserId: unknown): boolean {
+  const owner = normalizeAccountOwner(externalUserId);
+  if (!owner) return true;
+  const sessionUserId = normalizeAccountOwner((sessionData as any)?.user_id);
+  const sessionEmail = normalizeAccountOwner((sessionData as any)?.email);
+  return owner === sessionUserId || owner === sessionEmail;
+}
+
 function formatStartupBalanceLine(balance: any, index: number): string {
   const asset = String(balance?.asset || balance?.asset_code || 'UNKNOWN').toUpperCase();
   const amount = String(balance?.balance || '0.0000000');
@@ -505,8 +517,10 @@ export function createAgentRoutes(
 
         if (existing?.session_id) {
           const externalSession = await repository.getSession(String(existing.session_id));
-          if (!externalSession || isSessionExpired(externalSession)) {
-            if (externalSession) {
+          const expiredExternalSession = Boolean(externalSession && isSessionExpired(externalSession));
+          const ownerMatchesExternalMapping = sessionMatchesExternalOwner(externalSession, existing.user_id);
+          if (!externalSession || expiredExternalSession || !ownerMatchesExternalMapping) {
+            if (externalSession && expiredExternalSession) {
               await repository.clearSession(String(existing.session_id));
             }
             const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
@@ -519,12 +533,16 @@ export function createAgentRoutes(
               session_id: session_id || null,
               success: true,
               onboardingRequired: true,
-              reason: "session_expired",
+              reason: ownerMatchesExternalMapping ? "session_expired" : "external_identity_mismatch",
               creationUrl: url,
               message: localized(
                 requestLanguage,
-                `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
-                `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+                ownerMatchesExternalMapping
+                  ? `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`
+                  : `Não consegui confirmar que este ${channelLabel} ainda está conectado à mesma conta.\n\nAbra este link para entrar novamente:\n${url}`,
+                ownerMatchesExternalMapping
+                  ? `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+                  : `I could not confirm this ${channelLabel} is still connected to the same account.\n\nOpen this link to sign in again:\n${url}`
               ),
             });
           }

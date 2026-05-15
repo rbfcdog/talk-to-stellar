@@ -34,4 +34,6 @@ test('createAgentClient sends a structured agent request', async () => {
   assert.equal(body.source, 'telegram');
   assert.equal(body.metadata.channel, 'telegram');
   assert.equal(body.metadata.from, 'ana');
+  assert.equal(body.metadata.provider, 'telegram');
+  assert.equal(body.metadata.provider_user_id, null);
 });
