@@ -1073,16 +1073,10 @@ ${onboardingUrl}`;
     }
 
     state.success = Boolean(result.success);
-    if (result.success && result.image_data_url) {
-      const confirmation = `Imagem do comprovante gerada${result.operation_id ? ` (${result.operation_id})` : ''}.`;
-      state.response_message = provider.toLowerCase() === 'telegram'
-        ? `${confirmation} Enviei o arquivo do recibo aqui no Telegram.`
-        : [
-            confirmation,
-            `RECEIPT_IMAGE_DATA_URL:${result.image_data_url}`,
-          ].join('\n');
+    if (result.success && result.receipt_url) {
+      state.response_message = `Comprovante disponível${result.operation_id ? ` (${result.operation_id})` : ''}:\n${result.receipt_url}`;
     } else {
-      state.response_message = result.error || 'Ainda não encontrei uma transação concluída para gerar o comprovante em imagem.';
+      state.response_message = result.error || 'Ainda não encontrei uma transação concluída para gerar o comprovante.';
     }
 
     await this.saveAssistantResponse(state);

@@ -308,7 +308,7 @@ export const toolDefinitions = [
   },
   {
     name: "send_receipt_image",
-    description: "Gera a imagem premium do comprovante da última operação concluída do usuário e entrega no canal atual (web chat ou Telegram). Não retorna link de confirmação.",
+    description: "Gera o link do comprovante da última operação concluída do usuário. Não envia imagem/anexo no chat.",
     parameters: {
       type: "object",
       properties: {
@@ -2981,23 +2981,19 @@ async function executeSendReceiptImage(input: any): Promise<string> {
     if (!row) {
       return JSON.stringify({
         success: false,
-        error: 'Ainda não encontrei uma transação concluída para gerar o comprovante em imagem.',
+        error: 'Ainda não encontrei uma transação concluída para gerar o comprovante.',
       });
     }
 
     const receiptInput = paymentLogToReceiptInput(row, { ...input, user_id: userId, session_id: sessionId || row.session_id });
-    const svg = await PaymentReceiptService.buildReceiptImageSvg(receiptInput);
-    const imageDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
     const operationId = PaymentReceiptService.toPublicOperationId(receiptInput.hash);
-    const caption = operationId
-      ? `Comprovante da operação ${operationId}`
-      : 'Comprovante da última operação';
+    const receiptUrl = await PaymentReceiptService.createReceiptLink(receiptInput);
 
     return JSON.stringify({
       success: true,
       operation_id: operationId,
-      image_data_url: imageDataUrl,
-      message: 'Imagem do comprovante gerada para visualização no chat web.',
+      receipt_url: receiptUrl,
+      message: receiptUrl ? `Comprovante disponível: ${receiptUrl}` : 'Comprovante registrado no histórico.',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
