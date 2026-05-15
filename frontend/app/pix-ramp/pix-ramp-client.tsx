@@ -1076,7 +1076,6 @@ export default function PixRampClient({
         L(`PIX pago: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`, `PIX paid: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`),
         L(`Transferência: ${sentAmount}`, `Transfer: ${sentAmount}`),
         L(`Destino: ${recipient}`, `Destination: ${recipient}`),
-        L("Rota: melhor conversão disponível", "Route: best available conversion"),
         L("Status: concluído", "Status: completed"),
         L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
         receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
@@ -1093,7 +1092,6 @@ export default function PixRampClient({
       L(`Valor pago: ${paidAmount}`, `Paid amount: ${paidAmount}`),
       L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
       L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
-      L("Rota: melhor conversão disponível", "Route: best available conversion"),
       L("Status: concluído", "Status: completed"),
       L(`Horário: ${new Date().toLocaleString("pt-BR")}`, `Time: ${new Date().toLocaleString("en-US")}`),
       receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
@@ -2048,9 +2046,6 @@ export default function PixRampClient({
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100">{L("Transferência após PIX", "Transfer after PIX")}</p>
                   {pixFundedTransferResult?.transaction_hash ? (
                     <>
-                      <p className="mt-3 rounded-2xl border border-cyan-200/20 bg-cyan-200/10 p-3 text-sm font-black text-cyan-50">
-                        {String(pixFundedTransferResult.route_summary || L("Escolhemos a melhor rota para essa conversão.", "We chose the best route for this conversion."))}
-                      </p>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <ReceiptRow label={L("Enviado para", "Sent to")} value={String(pixFundedTransferResult.recipient_name || transferRecipient)} />
                         <ReceiptRow label={L("Valor transferido", "Transferred amount")} value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />

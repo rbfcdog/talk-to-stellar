@@ -316,7 +316,6 @@ export class ReceiptImageService {
 
     const lines = [
       ['Destinatário', recipient],
-      ['Descrição', description],
       ['Valor convertido', converted],
       ['Taxa', fee],
       ['Cotação', quote],
