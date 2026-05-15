@@ -111,7 +111,16 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
         return;
       }
 
-      // Check if external account exists (if a check function or backend URL is provided)
+      info('[telegram] identity', JSON.stringify({
+        provider_user_id: providerUserId,
+        chat_id: chatId ? String(chatId) : null,
+        username: ctx.from?.username || null,
+        update_id: updateId,
+      }));
+
+      // Check if external account exists, but never let the pre-flight check
+      // block Telegram usage. The agent/backend owns the account gate and will
+      // return the correct login/create-account link when needed.
       if (typeof externalCheck === 'function') {
         let checkResult;
         try {
@@ -121,22 +130,24 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
             chat_id: chatId ? String(chatId) : null,
             username: ctx.from?.username || null,
           });
+          info('[telegram] external check result', JSON.stringify({
+            provider_user_id: providerUserId,
+            chat_id: chatId ? String(chatId) : null,
+            exists: checkResult?.exists,
+            session_id: checkResult?.sessionId || null,
+            onboarding_required: checkResult?.onboardingRequired || false,
+          }));
         } catch (err) {
           warn(`[telegram] external check failed: ${err?.message || err}`);
-          await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
-          return;
+          checkResult = null;
         }
 
         if (checkResult && checkResult.exists === false) {
-          await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${checkResult.creationUrl}`);
-          return;
+          warn(`[telegram] unregistered user provider_user_id=${providerUserId} chat=${chatId || 'n/a'}; forwarding to agent for onboarding response`);
         }
         if (checkResult && checkResult.exists && checkResult.sessionId) {
           sessionId = checkResult.sessionId;
           ctx.session.sessionId = sessionId;
-        } else {
-          await sendTelegramResponse(ctx, 'Voce ainda nao possui conta cadastrada. Faça seu cadastro para continuar.');
-          return;
         }
       } else if (backendBaseUrl) {
         try {
@@ -156,24 +167,25 @@ function createTelegramBot({ botToken, agentClient, sessionPrefix = 'telegram', 
           });
           if (res.ok) {
             const payload = await res.json();
+            info('[telegram] backend account check result', JSON.stringify({
+              provider_user_id: providerUserId,
+              chat_id: chatId ? String(chatId) : null,
+              exists: payload?.exists,
+              session_id: payload?.sessionId || null,
+              onboarding_required: payload?.onboardingRequired || false,
+            }));
             if (payload && payload.exists === false) {
-              await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
-              return;
+              warn(`[telegram] unregistered user provider_user_id=${providerUserId} chat=${chatId || 'n/a'}; forwarding to agent for onboarding response`);
             }
             if (payload && payload.exists && payload.sessionId) {
               sessionId = payload.sessionId;
               ctx.session.sessionId = sessionId;
-            } else if (payload && payload.exists === false) {
-              await sendTelegramResponse(ctx, `Olá! Para começar, por favor crie sua conta: ${payload.creationUrl}`);
-              return;
             }
           } else {
             warn('[telegram] external check returned non-200, continuing with existing session');
           }
         } catch (err) {
           warn(`[telegram] external check failed: ${err?.message || err}`);
-          await sendTelegramResponse(ctx, 'Nao consegui validar seu cadastro agora. Tente novamente em alguns segundos.');
-          return;
         }
       }
 
