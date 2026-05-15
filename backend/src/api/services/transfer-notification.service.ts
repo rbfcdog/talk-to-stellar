@@ -109,6 +109,8 @@ export class TransferNotificationService {
         `3) Digite "enviar 10 dólares para [nome]" para iniciar um pagamento com confirmação.\n` +
         `4) Digite "quero trazer 100 reais via PIX" para receber PIX na conta.\n` +
         `5) Digite "quero retirar 100 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
+        `Se a página de cadastro abrir e você já tiver conta, use "Já tenho conta".\n` +
+        `Se quiser usar em inglês, peça "change to English".\n` +
         `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`,
       `${greeting}\n` +
         `Login complete. Your account is connected.\n` +
@@ -118,6 +120,8 @@ export class TransferNotificationService {
         `3) Type "send 10 dollars to [name]" to start a payment with confirmation.\n` +
         `4) Type "deposit 100 reais with PIX" to add money to your account.\n` +
         `5) Type "withdraw 100 reais to my PIX" to send money out to your PIX.\n` +
+        `If the sign-up page opens and you already have an account, use "I already have an account".\n` +
+        `You can switch languages anytime by asking for Portuguese or English.\n` +
         `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`
     );
 

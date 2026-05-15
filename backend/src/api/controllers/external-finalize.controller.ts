@@ -567,6 +567,30 @@ function runPostOnboardingTasks(input: {
   });
 }
 
+async function clearAgentLoginState(sessionId: string) {
+  const normalizedSessionId = String(sessionId || '').trim();
+  if (!normalizedSessionId) return;
+
+  const { error } = await supabase
+    .from('agent_states')
+    .update({
+      action_params: {
+        force_logged_out: false,
+        waiting_for_wallet_input: false,
+        pending_payment: null,
+        pending_conversion: null,
+      },
+      pending_payment: null,
+      pending_conversion: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('session_id', normalizedSessionId);
+
+  if (error) {
+    logger.warn(`[external-finalize] failed to clear login state for ${normalizedSessionId}: ${error.message || JSON.stringify(error)}`);
+  }
+}
+
 async function upsertRecentContactFromPayment(input: {
   ownerId: string;
   sourcePublicKey: string;
@@ -2670,6 +2694,8 @@ export default class ExternalFinalizeController {
             });
           }
 
+          await clearAgentLoginState(String(existingAccount.session_id));
+
           void TransferNotificationService.notifySessionWelcome({
             sessionId: String(existingAccount.session_id),
             userId: String(existingAccount.user_id),
@@ -2741,6 +2767,19 @@ export default class ExternalFinalizeController {
               phone_number: normalizedPhoneNumber || null,
               cpf: normalizedCpf || null,
             },
+          });
+
+          await clearAgentLoginState(String(identityLock.sessionId));
+
+          void TransferNotificationService.notifySessionWelcome({
+            sessionId: String(identityLock.sessionId),
+            userId: String((lockedSession as any)?.user_id || identityLock.userId || ''),
+            name: name || email || (lockedSession as any)?.email || null,
+            provider,
+            providerUserId: provider_user_id,
+            language,
+          }).catch((welcomeError) => {
+            logger.warn(`[external-finalize] welcome notification failed for ${identityLock.userId || identityLock.sessionId}: ${welcomeError instanceof Error ? welcomeError.message : String(welcomeError)}`);
           });
 
           return res.status(200).json({
@@ -2870,6 +2909,7 @@ export default class ExternalFinalizeController {
           };
           await completeOnboardingFinalization(tokenHash, responseBody, 200);
           onboardingReservationTokenHash = null;
+          await clearAgentLoginState(existingWallet.session_id);
 
           void TransferNotificationService.notifySessionWelcome({
             sessionId: existingWallet.session_id,
@@ -2959,6 +2999,7 @@ export default class ExternalFinalizeController {
       };
       await completeOnboardingFinalization(tokenHash, responseBody, 201);
       onboardingReservationTokenHash = null;
+      await clearAgentLoginState(sessionId);
 
       runPostOnboardingTasks({
         sessionId,
