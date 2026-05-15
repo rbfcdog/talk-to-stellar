@@ -207,6 +207,11 @@ function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
   return 'pt-BR';
 }
 
+function isBrowserExternalProvider(provider: string): boolean {
+  const normalized = normalizeExternalProvider(provider);
+  return normalized === 'web' || normalized === 'browser';
+}
+
 function resolveCanonicalSessionLogin(session: any): string {
   const sessionEmail = normalizeEmailForCompare(session?.email);
   if (sessionEmail) return sessionEmail;
@@ -300,6 +305,7 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
   const normalizedProvider = normalizeExternalProvider(provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
   if (!normalizedProvider || !normalizedProviderUserId) return null;
+  if (isBrowserExternalProvider(normalizedProvider)) return null;
 
   const mapped = await externalRepo.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
   const mappedSessionId = String(mapped?.session_id || '').trim();
@@ -2450,7 +2456,8 @@ export default class ExternalFinalizeController {
       const userId = email ? String(email) : `external:${provider}:${provider_user_id}`;
       const normalizedEmail = normalizeEmailForCompare(email);
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
-      const identityLock = await resolveExternalIdentityLock(provider, provider_user_id);
+      const isBrowserProvider = isBrowserExternalProvider(provider);
+      const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, provider_user_id);
 
       if (identityLock?.canonicalLogin && normalizedEmail !== identityLock.canonicalLogin) {
         return res.status(409).json({
@@ -2460,7 +2467,7 @@ export default class ExternalFinalizeController {
         });
       }
 
-      const existingAccount = await externalRepo.findByProviderAndId(provider, provider_user_id);
+      const existingAccount = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, provider_user_id);
       if (existingAccount?.session_id && existingAccount?.user_id) {
         const existingSession = await agentRepo.getSession(String(existingAccount.session_id));
         const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));

@@ -61,6 +61,11 @@ function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
   return 'pt-BR';
 }
 
+function isBrowserExternalProvider(provider: string): boolean {
+  const normalized = normalizeExternalProvider(provider);
+  return normalized === 'web' || normalized === 'browser';
+}
+
 function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
@@ -194,6 +199,7 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
   const normalizedProvider = normalizeExternalProvider(provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
   if (!normalizedProvider || !normalizedProviderUserId) return null;
+  if (isBrowserExternalProvider(normalizedProvider)) return null;
 
   const mapped = await externalRepo.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
   const mappedSessionId = String(mapped?.session_id || '').trim();
@@ -279,7 +285,9 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
   const username = String(payload?.username || payload?.telegram_username || '').trim();
   const language = normalizeLanguage(payload?.language || payload?.lang || payload?.locale);
   const data: Record<string, unknown> = {};
-  data.language = language;
+  if (language) {
+    data.language = language;
+  }
   if (provider === 'telegram' && chatId) {
     data.telegram_chat_id = chatId;
     data.chat_id = chatId;
@@ -348,6 +356,10 @@ export class ExternalController {
         if (!isMissingExternalTable) {
           throw error;
         }
+      }
+
+      if (isBrowserExternalProvider(normalizedProvider)) {
+        existing = null;
       }
 
       if (existing && !forceNewAccount) {
@@ -466,7 +478,8 @@ export class ExternalController {
         .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
         .toString('hex');
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
-      const identityLock = await resolveExternalIdentityLock(provider, providerUserId);
+      const isBrowserProvider = isBrowserExternalProvider(provider);
+      const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, providerUserId);
       if (!email && identityLock?.canonicalLogin) {
         email = identityLock.canonicalLogin;
       }
@@ -479,7 +492,7 @@ export class ExternalController {
       }
 
       let matched: any = null;
-      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const existingMapping = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, providerUserId);
       const mappedSessionId = String(existingMapping?.session_id || '').trim();
       const mappedUserId = String(existingMapping?.user_id || '').trim();
 
@@ -729,7 +742,7 @@ export class ExternalController {
           message: `A conta informada não está associada a este ${providerLabel}.`,
         });
       }
-      const confirmedMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const confirmedMapping = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, providerUserId);
       const ownerSessionId = String(confirmedMapping?.session_id || '').trim();
       const ownerUserId = String(confirmedMapping?.user_id || '').trim();
       if ((ownerSessionId && ownerSessionId !== targetSessionId) || (ownerUserId && ownerUserId !== targetUserId)) {
@@ -835,7 +848,8 @@ export class ExternalController {
 
       await agentRepo.saveSession(sessionId, session as any);
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
-      const identityLock = await resolveExternalIdentityLock(provider, providerUserId);
+      const isBrowserProvider = isBrowserExternalProvider(provider);
+      const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, providerUserId);
       const sessionLogin = resolveCanonicalSessionLogin(session);
       const sessionUserId = normalizeEmailForCompare(String(session.user_id || ''));
       if (identityLock?.canonicalLogin && sessionLogin && identityLock.canonicalLogin !== sessionLogin) {
@@ -860,7 +874,7 @@ export class ExternalController {
         });
       }
 
-      const existingMapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+      const existingMapping = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, providerUserId);
       const ownerSessionId = String(existingMapping?.session_id || '').trim();
       const ownerUserId = String(existingMapping?.user_id || '').trim();
       if ((ownerSessionId && ownerSessionId !== sessionId) || (ownerUserId && ownerUserId !== String(session.user_id || ''))) {
