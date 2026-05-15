@@ -22,6 +22,7 @@ const finalizeBuildPathPaymentXdrMock = jest.fn();
 const finalizeQuotePathPaymentMock = jest.fn();
 const finalizeBuildTrustlineXdrMock = jest.fn();
 const finalizeGetAccountBalanceMock = jest.fn();
+const finalizeLoadAccountMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
 const finalizeGetSubmittedPaymentDetailsMock = jest.fn();
 const finalizeCreateDefaultTrustlinesMock = jest.fn();
@@ -50,7 +51,7 @@ jest.mock('../src/api/services/stellar.service', () => ({
     quotePathPayment: finalizeQuotePathPaymentMock,
     buildTrustlineXdr: finalizeBuildTrustlineXdrMock,
     getAccountBalance: finalizeGetAccountBalanceMock,
-    loadAccount: jest.fn(async () => ({ balances: [] })),
+    loadAccount: finalizeLoadAccountMock,
     signAndSubmitXdr: finalizeSignAndSubmitXdrMock,
     getSubmittedPaymentDetails: finalizeGetSubmittedPaymentDetailsMock,
   },
@@ -83,6 +84,10 @@ jest.mock('../src/repositories/wallet.repository', () => ({
 }));
 
 jest.mock('../src/repositories/external.repository', () => ({
+  normalizeExternalProvider: jest.fn((provider: string) => String(provider || '').trim().toLowerCase()),
+  normalizeExternalProviderUserId: jest.fn((_provider: string, providerUserId: string) => String(providerUserId || '').trim()),
+  externalProviderAliases: jest.fn((provider: string) => [String(provider || '').trim().toLowerCase()]),
+  isPhoneProvider: jest.fn((provider: string) => ['whatsapp', 'phone'].includes(String(provider || '').trim().toLowerCase())),
   ExternalRepository: jest.fn().mockImplementation(() => ({
     linkSession: finalizeLinkSessionMock,
     findByProviderAndId: finalizeFindByProviderAndIdMock,
@@ -121,6 +126,7 @@ describe('ExternalFinalizeController', () => {
     finalizeQuotePathPaymentMock.mockReset();
     finalizeBuildTrustlineXdrMock.mockReset();
     finalizeGetAccountBalanceMock.mockReset();
+    finalizeLoadAccountMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
     finalizeGetSubmittedPaymentDetailsMock.mockReset();
     finalizeCreateDefaultTrustlinesMock.mockReset();
@@ -144,6 +150,7 @@ describe('ExternalFinalizeController', () => {
     });
     finalizeBuildTrustlineXdrMock.mockResolvedValue('trustline-xdr');
     finalizeGetAccountBalanceMock.mockResolvedValue([]);
+    finalizeLoadAccountMock.mockResolvedValue({ balances: [] });
     finalizeSignAndSubmitXdrMock.mockResolvedValue({ success: true, hash: 'tx-123' });
     finalizeGetSubmittedPaymentDetailsMock.mockResolvedValue({
       sourceAmount: '11.9234567',
@@ -178,7 +185,7 @@ describe('ExternalFinalizeController', () => {
     await ExternalFinalizeController.finalize(req, res);
 
     expect(finalizeSaveSessionMock).toHaveBeenCalledTimes(1);
-    expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(1);
+    expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(2);
     expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(1);
     expect(finalizeStoreSecretMock).toHaveBeenCalledTimes(1);
     expect(res.status).toHaveBeenCalledWith(201);
@@ -228,6 +235,12 @@ describe('ExternalFinalizeController', () => {
     finalizeGetAccountBalanceMock.mockResolvedValue([
       { asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0' },
     ]);
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0.0000000' },
+      ],
+    });
 
     const req = {
       body: {
@@ -311,6 +324,12 @@ describe('ExternalFinalizeController', () => {
     finalizeGetAccountBalanceMock.mockResolvedValue([
       { asset_code: 'USDC', asset_issuer: testnetUsdcIssuer, balance: '0' },
     ]);
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: testnetUsdcIssuer, balance: '0.0000000' },
+      ],
+    });
 
     const req = {
       body: {

@@ -53,6 +53,74 @@ function balanceMatchesConfiguredAsset(balance: any, assetCode: string): boolean
   return assetMatchesConfiguredIssuer(expectedCode, balance?.asset_issuer);
 }
 
+function numericBalance(value: unknown): number {
+  const parsed = Number(String(value || '0').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function maybeRepairInitialFundingSweep(input: any, publicKey: string, balances: any[]): Promise<{
+  account?: any;
+  attempted: boolean;
+  completed: boolean;
+  error?: string;
+}> {
+  const usdcBalance = balances.find((item: any) => balanceMatchesConfiguredAsset(item, 'USDC'));
+  if (numericBalance(usdcBalance?.balance) > 0.0000001) {
+    return { attempted: false, completed: false };
+  }
+
+  const nativeBalance = balances.find((item: any) => getAssetCode(item) === 'XLM');
+  const xlmBalance = numericBalance(nativeBalance?.balance);
+  if (xlmBalance <= 2) {
+    return { attempted: false, completed: false };
+  }
+
+  try {
+    let wallet = null as Awaited<ReturnType<WalletRepository['getWalletBySession']>> | null;
+    const inputSessionId = String(input.session_id || input.sessionId || '').trim();
+    if (inputSessionId) {
+      wallet = await walletRepo.getWalletBySession(inputSessionId);
+    }
+    if (!wallet) {
+      wallet = await walletRepo.getWalletByPublicKey(publicKey);
+    }
+
+    const sessionId = String(wallet?.session_id || inputSessionId || '').trim();
+    const vaultSecretId = String(wallet?.vault_secret_id || '').trim();
+    if (!sessionId || !vaultSecretId) {
+      return {
+        attempted: true,
+        completed: false,
+        error: 'Wallet sem chave operacional para converter o saldo inicial automaticamente.',
+      };
+    }
+
+    const userId = await resolveToolUserId({ ...input, session_id: sessionId });
+    const secretKey = await vaultService.getSecret(vaultSecretId);
+    await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
+
+    const freshAccount = await stellarService.getAccount(publicKey);
+    await walletRepo.updateBalance(sessionId, freshAccount.balances, freshAccount.sequence);
+
+    const converted = freshAccount.balances.some((item: any) => (
+      balanceMatchesConfiguredAsset(item, 'USDC') && numericBalance(item.balance) > 0.0000001
+    ));
+
+    return {
+      account: freshAccount,
+      attempted: true,
+      completed: converted,
+      error: converted ? undefined : 'Conversão inicial ainda não gerou saldo USDC.',
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      completed: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function formatRouteChain(input: {
   sourceAssetCode?: string;
   destinationAssetCode?: string;
@@ -1349,10 +1417,10 @@ async function executeGetBalance(input: any): Promise<string> {
   try {
     const publicKey = await resolveToolPublicKey(input);
     logger.debug(`Tool: Getting balance for ${publicKey}`);
-    const account = await stellarService.getAccount(publicKey);
+    let account = await stellarService.getAccount(publicKey);
 
     const visibleAssets = ['BRL', 'USDC'];
-    const balances = account.balances.map((balance: any) => {
+    let balances = account.balances.map((balance: any) => {
       const asset = getAssetCode(balance);
       return {
         asset,
@@ -1361,6 +1429,20 @@ async function executeGetBalance(input: any): Promise<string> {
         asset_issuer: balance.asset_issuer,
       };
     });
+
+    const initialFundingRepair = await maybeRepairInitialFundingSweep(input, publicKey, balances);
+    if (initialFundingRepair.account) {
+      account = initialFundingRepair.account;
+      balances = account.balances.map((balance: any) => {
+        const asset = getAssetCode(balance);
+        return {
+          asset,
+          balance: balance.balance,
+          asset_type: balance.asset_type,
+          asset_issuer: balance.asset_issuer,
+        };
+      });
+    }
 
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset)) || {
       asset,
@@ -1374,7 +1456,10 @@ async function executeGetBalance(input: any): Promise<string> {
       balance: filteredBalances[0]?.balance || "0.0000000",
       asset: filteredBalances[0]?.asset || "BRL",
       balances: filteredBalances,
-      message: `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
+      initial_funding_repair: initialFundingRepair,
+      message: initialFundingRepair.attempted && initialFundingRepair.completed
+        ? 'Saldo inicial convertido automaticamente para USDC antes de mostrar o saldo.'
+        : `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
