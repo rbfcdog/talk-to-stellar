@@ -13,14 +13,14 @@ export function WelcomeScreen() {
         <div className="relative mx-auto mb-8 h-56 w-56 sm:h-80 sm:w-80">
           <img
             src="/whatsapp-web-welcome-illustration.jpg"
-            alt="WhatsDap"
+            alt="TalkToStellar"
             className="w-full h-full object-contain opacity-95"
           />
         </div>
       </div>
 
       <h1 className="mb-7 text-[28px] font-light tracking-wide text-[#e9edef] sm:text-[32px]">
-        WhatsDap
+        TalkToStellar
       </h1>
 
       <p className="mb-8 max-w-md text-[14px] leading-[1.5] text-[#8696a0]">
