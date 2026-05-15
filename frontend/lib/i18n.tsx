@@ -9,6 +9,10 @@ const STORAGE_KEY = "talk-to-stellar.language";
 const COOKIE_KEY = "tts_lang";
 
 export function normalizeLanguage(value: unknown): AppLanguage {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "pt" || normalized === "pt-br" || normalized.startsWith("pt-") || normalized.includes("portugu")) {
+    return "pt-BR";
+  }
   return "en";
 }
 
@@ -19,7 +23,7 @@ const englishDictionary: Dictionary = {
     language_label: "Language",
     language_current: "English",
     chat_agent_welcome:
-      "Sign in to get started. After that I can help you check your balance, add money with PIX, send money to your PIX, pay contacts, or convert funds. If you have not signed in yet, tap Sign in/Create account.",
+      "Sign in to get started. After that I can help you check your balance, add money with PIX, send money to your PIX, pay contacts, or convert funds. If you have not signed in yet, type here in the chat to sign in/create account.",
     chat_search_placeholder: "Search wallet contacts...",
     chat_sidebar_preview: "Hi. How can I help with your wallet, balance, and contacts today?",
     chat_input_placeholder: "Type: balance, add money with PIX, withdraw to PIX, or send to someone",
@@ -93,8 +97,87 @@ const englishDictionary: Dictionary = {
     pix_done_sent_chat: "This operation has already been completed. The receipt was sent in chat.",
 };
 
+const portugueseDictionary: Dictionary = {
+    language_button: "Português",
+    language_label: "Idioma",
+    language_current: "Português",
+    chat_agent_welcome:
+      "Entre para começar. Depois disso posso te ajudar a consultar saldo, colocar dinheiro com PIX, enviar dinheiro para seu PIX, pagar contatos ou converter saldo. Se ainda não entrou, digite aqui no chat para entrar/criar conta.",
+    chat_search_placeholder: "Buscar contatos da carteira...",
+    chat_sidebar_preview: "Oi. Como posso ajudar com sua carteira, saldo e contatos hoje?",
+    chat_input_placeholder: "Digite: saldo, colocar dinheiro com PIX, retirar para PIX ou enviar para alguém",
+    chat_wait_session: "Só um momento enquanto inicio a sessão...",
+    chat_api_error: "A resposta da API falhou",
+    chat_no_response: "Nenhuma resposta recebida",
+    chat_error_prefix: "Desculpe, algo deu errado",
+    chat_online: "online",
+    chat_link_payment: "Abrir confirmação de pagamento",
+    chat_link_conversion: "Abrir confirmação de conversão",
+    chat_link_account: "Criar conta ou entrar",
+    chat_link_pin: "Redefinir PIN",
+    chat_link_pay_anyone: "Abrir link de pagamento",
+    chat_link_claim: "Receber pagamento",
+    chat_link_pix: "Abrir PIX",
+    chat_link_whatsapp: "Compartilhar no WhatsApp",
+    chat_link_generic: "Abrir link",
+    welcome_select:
+      'Selecione WhatsDap na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
+    welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua carteira.",
+    login_title: "Entre na sua conta",
+    login_subtitle:
+      "Entre para continuar de onde parou. Depois do login: saldo, contatos, PIX entrando/saindo e pagamentos.",
+    login_channel_detected: "Canal detectado",
+    login_identifier: "Identificador",
+    login_expired: "Sua sessão expirou. Entre novamente para continuar.",
+    login_pin_card_title: "PIN",
+    login_pin_card_body: "O jeito mais rápido de entrar e continuar.",
+    login_via: "Entrando via",
+    login_telegram_id: "ID do Telegram",
+    login_telegram_help: "Digite seu PIN para entrar na conta vinculada a este Telegram.",
+    login_email: "E-mail",
+    login_pin: "PIN",
+    login_pin_placeholder: "Digite seu PIN",
+    login_submit: "1) Entrar com PIN",
+    login_submitting: "Entrando...",
+    login_email_code: "Código enviado por e-mail",
+    login_email_code_help: "Confira seu e-mail e digite o código para continuar.",
+    login_confirm_submit: "Confirmar entrada",
+    login_footer_help:
+      'Depois de entrar, use: "saldo" para consultar sua conta, "colocar 150 reais com PIX" para adicionar dinheiro, "enviar 100 reais para meu PIX" para retirar e "enviar 10 dólares para [nome]" para pagar.',
+    login_connected_channel: "{{provider}} conectado",
+    login_connected_account: "Conta conectada",
+    login_linked_title: "Sua conta foi vinculada.",
+    login_continue_operation: "Continuando a operação...",
+    login_back_to_channel: "Volte ao {{provider}} e envie sua próxima mensagem.",
+    login_done: "Entrada concluída.",
+    login_opening_operation: "Abrindo a operação em instantes.",
+    hero_title_1: "Mova dinheiro pelo mundo.",
+    hero_title_2: "Em uma mensagem.",
+    hero_subtitle:
+      "Envie dinheiro, gerencie contatos e use trilhos blockchain por linguagem natural. Pelo Telegram ou WhatsApp, sem burocracia.",
+    hero_card_1_title: "Linguagem natural",
+    hero_card_1_body: "Use mensagens simples para simular, transferir e organizar transações.",
+    hero_card_2_title: "Conversão com taxas menores",
+    hero_card_2_body:
+      "A plataforma compara rotas em tempo real para reduzir o custo efetivo em BRL e USDC, com transparência de taxa antes da confirmação.",
+    nav_solution: "Solução",
+    nav_simulator: "Simulador de Conversão",
+    nav_how: "Como Funciona",
+    pix_add_title: "Colocar dinheiro com PIX",
+    pix_send_title: "Enviar dinheiro para seu PIX",
+    pix_add_subtitle: "Use PIX integrado, confirme com seu PIN e receba saldo na conta.",
+    pix_transfer_subtitle: "Use PIX integrado, confirme com seu PIN e envie automaticamente para {{recipient}}.",
+    pix_off_subtitle: "Confirme com seu PIN para enviar saldo em BRL para seu PIX.",
+    pix_value: "Valor",
+    pix_destination: "Destino",
+    pix_my_account: "Minha conta",
+    pix_your_pix: "Seu PIX",
+    pix_need_email: "Informe o e-mail da conta para localizar sua conta e continuar.",
+    pix_done_sent_chat: "Esta operação já foi concluída. O comprovante foi enviado no chat.",
+};
+
 const dictionaries: Record<AppLanguage, Dictionary> = {
-  "pt-BR": englishDictionary,
+  "pt-BR": portugueseDictionary,
   en: englishDictionary,
 };
 
@@ -108,14 +191,19 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function readStoredLanguage(): AppLanguage {
+  if (typeof window === "undefined") return "en";
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  if (stored) return normalizeLanguage(stored);
+  const cookieMatch = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_KEY}=([^;]*)`));
+  if (cookieMatch?.[1]) return normalizeLanguage(decodeURIComponent(cookieMatch[1]));
   return "en";
 }
 
 function persistLanguage(language: AppLanguage) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, language);
-  document.cookie = `${COOKIE_KEY}=${language}; path=/; max-age=31536000; SameSite=Lax`;
-  document.documentElement.lang = "en";
+  document.cookie = `${COOKIE_KEY}=${encodeURIComponent(language)}; path=/; max-age=31536000; SameSite=Lax`;
+  document.documentElement.lang = language === "pt-BR" ? "pt-BR" : "en";
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -144,9 +232,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<LanguageContextValue>(() => ({
     language,
     setLanguage,
-    toggleLanguage: () => setLanguage("en"),
+    toggleLanguage: () => setLanguage(language === "en" ? "pt-BR" : "en"),
     t: (key, replacements = {}) => {
-      const template = dictionaries[language][key] || dictionaries["pt-BR"][key] || key;
+      const template = dictionaries[language][key] || dictionaries.en[key] || key;
       return Object.entries(replacements).reduce(
         (text, [name, value]) => text.replaceAll(`{{${name}}}`, value),
         template

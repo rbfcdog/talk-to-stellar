@@ -354,7 +354,7 @@ export default function PixRampClient({
 }) {
   const { language, t } = useLanguage();
   const queryString = initialQuery;
-  const L = (_pt: string, en: string) => en;
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
@@ -2136,7 +2136,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
   launchedFromChat: boolean;
   language: "pt-BR" | "en";
 }) {
-  const L = (_pt: string, en: string) => en;
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const completed = steps.filter((step) => step.state === "done").length;
   const progress = steps.length ? Math.round((completed / steps.length) * 100) : 0;
   const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");

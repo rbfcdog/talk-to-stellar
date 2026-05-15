@@ -91,7 +91,7 @@ function getOrCreateBrowserId(): string {
 
 export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
   const { language, t } = useLanguage();
-  const L = (_pt: string, en: string) => en;
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
     agent: {
       title: "TalkToStellar",
@@ -130,6 +130,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const previousChatIdRef = useRef(chatId);
 
   const generateSessionId = (): string => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -167,8 +168,16 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   }, [chatId, t]);
 
   useEffect(() => {
-    setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
-  }, [chatId]);
+    const starterIds = new Set(Object.values(chatMeta).flatMap((meta) => meta.starter.map((message) => message.id)));
+    const localizedStarter = selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() }));
+    setMessages((prev) => {
+      const chatChanged = previousChatIdRef.current !== chatId;
+      previousChatIdRef.current = chatId;
+      if (chatChanged) return localizedStarter;
+      const hasConversationMessages = prev.some((message) => !starterIds.has(message.id));
+      return hasConversationMessages ? prev : localizedStarter;
+    });
+  }, [chatId, language]);
 
   const appendWebFeedback = (items: WebChatFeedback[]) => {
     if (!Array.isArray(items) || items.length === 0) return;

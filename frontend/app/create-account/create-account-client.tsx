@@ -106,7 +106,7 @@ export default function CreateAccountClient({
   initialValidation?: any
 }) {
   const { language } = useLanguage()
-  const L = (_pt: string, en: string) => en
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const rawNextPath = searchParams.get("next") || "/chat"
