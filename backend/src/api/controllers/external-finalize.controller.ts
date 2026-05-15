@@ -2782,30 +2782,28 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
       } as any);
 
-      void (async () => {
-        await configureWalletAssetsAndContacts({
-          userId,
-          publicKey,
-          vaultSecretId,
-          sessionId,
-        });
+      await configureWalletAssetsAndContacts({
+        userId,
+        publicKey,
+        vaultSecretId,
+        sessionId,
+      });
 
-        try {
-          const freshAccount = await StellarService.loadAccount(publicKey);
-          await walletRepo.saveWallet({
-            session_id: sessionId,
-            public_key: publicKey,
-            vault_secret_id: vaultSecretId,
-            name: name || `Wallet for ${userId}`,
-            pix_key: pixKey,
-            balance: freshAccount.balances,
-            sequence: freshAccount.sequence,
-            account_data: freshAccount,
-          } as any);
-        } catch (walletSyncError) {
-          logger.warn(`[external-finalize] wallet sync after onboarding conversion failed for ${userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
-        }
-      })();
+      try {
+        const freshAccount = await StellarService.loadAccount(publicKey);
+        await walletRepo.saveWallet({
+          session_id: sessionId,
+          public_key: publicKey,
+          vault_secret_id: vaultSecretId,
+          name: name || `Wallet for ${userId}`,
+          pix_key: pixKey,
+          balance: freshAccount.balances,
+          sequence: freshAccount.sequence,
+          account_data: freshAccount,
+        } as any);
+      } catch (walletSyncError) {
+        logger.warn(`[external-finalize] wallet sync after onboarding conversion failed for ${userId}: ${walletSyncError instanceof Error ? walletSyncError.message : String(walletSyncError)}`);
+      }
 
       // link external_accounts mapping
       await createExternalMappingsWithAliases({

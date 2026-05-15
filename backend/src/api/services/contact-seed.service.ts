@@ -102,9 +102,7 @@ export class ContactSeedService {
   }
 
   static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
-    const enabledFlag = String(process.env.ONBOARDING_AUTO_CONVERT_TO_USDC || 'true').trim().toLowerCase();
-    const enabled = enabledFlag !== 'false' && enabledFlag !== '0' && enabledFlag !== 'no';
-    if (!enabled || getStellarNetworkName() !== 'TESTNET') return;
+    if (getStellarNetworkName() !== 'TESTNET') return;
 
     const usdcIssuer = getAssetIssuer('USDC');
     if (!usdcIssuer) return;
@@ -113,8 +111,7 @@ export class ContactSeedService {
       const account = await StellarService.loadAccount(publicKey);
       const nativeBalance = account.balances.find((balance: any) => balance.asset_type === 'native');
       const xlmBalance = Number(nativeBalance?.balance || '0');
-      const keepXlm = Number(String(process.env.ONBOARDING_KEEP_XLM || '1.5').trim());
-      const reserve = Number.isFinite(keepXlm) && keepXlm > 0 ? keepXlm : 1.5;
+      const reserve = 1.5;
       const sourceAmountNumber = Math.floor((xlmBalance - reserve) * 1e7) / 1e7;
 
       if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= 0.01) {

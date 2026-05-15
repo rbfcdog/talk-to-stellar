@@ -14,11 +14,6 @@ function toFixed7Floor(value: number): string {
   return floored.toFixed(7);
 }
 
-function parsePositiveNumber(value: string | undefined, fallback: number): number {
-  const parsed = Number(String(value || '').trim());
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function normalizeEmail(value?: string): string {
   return String(value || '').trim().toLowerCase();
 }
@@ -89,9 +84,6 @@ export class UserService {
     secretKey?: string;
     sessionId: string;
   }): Promise<void> {
-    const enabledFlag = String(process.env.ONBOARDING_AUTO_CONVERT_TO_USDC || 'true').trim().toLowerCase();
-    const enabled = enabledFlag !== 'false' && enabledFlag !== '0' && enabledFlag !== 'no';
-    if (!enabled) return;
     if (!input.secretKey) return;
     if (getStellarNetworkName() !== 'TESTNET') return;
 
@@ -104,7 +96,7 @@ export class UserService {
       const nativeBalance = accountInfoBefore.balances.find((b: any) => b.asset_type === 'native');
       const xlmBalance = Number(nativeBalance?.balance || '0');
 
-      const keepXlm = parsePositiveNumber(process.env.ONBOARDING_KEEP_XLM, 1.5);
+      const keepXlm = 1.5;
       const sendAmount = xlmBalance - keepXlm;
       if (!Number.isFinite(sendAmount) || sendAmount <= 0.01) {
         return;
