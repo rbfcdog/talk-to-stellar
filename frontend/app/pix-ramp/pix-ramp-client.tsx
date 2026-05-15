@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -321,6 +321,7 @@ export default function PixRampClient({
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
   const atomicActionRef = useRef(false);
+  const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [sessionToken, setSessionToken] = useState("");
@@ -934,6 +935,7 @@ export default function PixRampClient({
       setOnRampBalancesAfter(after);
       if (isSuccessStatus(nextStatus) && !transferFlow) {
         markOperationCompleted();
+        notifyChatAfterPixCompletion({ kind: "onramp", completedTransaction: payload?.transaction || null });
         setStep("success");
       } else if (isFailureStatus(nextStatus)) {
         setError("O PIX não foi concluído. Gere uma nova cotação e tente novamente.");
@@ -988,6 +990,56 @@ export default function PixRampClient({
     } finally {
       atomicActionRef.current = false;
     }
+  }
+
+  function notifyChatAfterPixCompletion(input: {
+    kind: "onramp" | "offramp" | "funded-transfer";
+    receiptUrl?: string;
+    transferPayload?: RampResponse | null;
+    completedTransaction?: RampResponse | null;
+    offRampPayload?: RampResponse | null;
+  }) {
+    const receiptUrl = String(
+      input.receiptUrl ||
+      input.transferPayload?.receipt_url ||
+      input.offRampPayload?.receipt_url ||
+      input.completedTransaction?.receipt_url ||
+      input.completedTransaction?.receiptUrl ||
+      onRampReceiptUrl ||
+      ""
+    ).trim();
+    const feedbackKey = `${input.kind}:${operationId || orderId || atomicIntentKey}:${receiptUrl}`;
+    if (pixFeedbackKeysRef.current.has(feedbackKey)) return;
+    pixFeedbackKeysRef.current.add(feedbackKey);
+
+    if (input.kind === "offramp") {
+      enqueueWebChatFeedback([
+        "PIX enviado.",
+        `${offRampPixTargetDisplay} chegou no seu PIX.`,
+        receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+      ].filter(Boolean).join("\n"));
+      return;
+    }
+
+    if (input.kind === "funded-transfer") {
+      const transfer = input.transferPayload || {};
+      const sentAmount = formatRampAsset(transfer.amount || autoPayAmount || amountBrl, transfer.asset_code || autoPayAsset || targetAsset);
+      const recipient = String(transfer.recipient_name || transferRecipient || "destinatário").trim();
+      enqueueWebChatFeedback([
+        "PIX confirmado e transferência enviada.",
+        `${sentAmount} enviado para ${recipient}.`,
+        receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+      ].filter(Boolean).join("\n"));
+      return;
+    }
+
+    const finalAmount = String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || finalReceivedAmount || order?.toAmount || quote?.toAmount || amountBrl);
+    const finalAsset = userFacingAssetCode(input.completedTransaction?.finalAssetCode || input.completedTransaction?.toCurrency || receivedCode || targetAsset, targetAsset);
+    enqueueWebChatFeedback([
+      "PIX confirmado.",
+      `${formatRampAsset(finalAmount, finalAsset)} entrou na sua conta.`,
+      receiptUrl ? `Comprovante: ${receiptUrl}` : "",
+    ].filter(Boolean).join("\n"));
   }
 
   function getValidatedWalletPin() {
@@ -1204,11 +1256,17 @@ export default function PixRampClient({
       setPolling(true);
       const refreshed = await refreshOrder();
       const completedTransaction = refreshed?.transaction || payload?.transaction;
+      let transferPayload: RampResponse | null = null;
       if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
-        await submitPixFundedTransfer(completedTransaction);
+        transferPayload = await submitPixFundedTransfer(completedTransaction);
       }
       if (isSuccessStatus(completedTransaction?.status)) {
         markOperationCompleted();
+        notifyChatAfterPixCompletion({
+          kind: transferPayload ? "funded-transfer" : "onramp",
+          completedTransaction,
+          transferPayload,
+        });
         setStep("success");
       }
     });
@@ -1234,6 +1292,7 @@ export default function PixRampClient({
       walletPin: pin,
     }, "POST", auth, buildIdempotencyKey("pix-funded-transfer"));
     setPixFundedTransferResult(payload);
+    return payload;
   }
 
   async function runTemporaryEndpointTest() {
@@ -1286,14 +1345,15 @@ export default function PixRampClient({
           external_bank_account: bankAccount,
           pin,
           wallet_pin: pin,
-        walletPin: pin,
-      }, "POST", auth, buildIdempotencyKey("submit-offramp"));
+          walletPin: pin,
+        }, "POST", auth, buildIdempotencyKey("submit-offramp"));
       setTemporaryOffRampTestResult(payload);
       setWalletPublicKey(String(payload.wallet_public_key || ""));
       setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
       setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
       if (payload?.submitted || payload?.success) {
         markOperationCompleted();
+        notifyChatAfterPixCompletion({ kind: "offramp", offRampPayload: payload });
         setStep("success");
       }
     });
