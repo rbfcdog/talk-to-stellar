@@ -27,7 +27,17 @@ If the sender does not yet have an account, the bot replies with a dynamic onboa
 
 ## Bot avatar
 
-Use `frontend/public/talktostellar.png` as the Telegram bot profile/avatar image in BotFather. The bot should not send this image as a chat message or welcome attachment.
+The adapter sets the Telegram bot profile on startup without sending the image in chat.
+
+- Source brand image: `frontend/public/talktostellar.png`
+- Telegram upload asset: `telegram/assets/talktostellar-avatar.jpg`
+- Override with `TELEGRAM_PROFILE_PHOTO_PATH=/absolute/path/to/avatar.jpg`
+- Disable startup profile setup with `TELEGRAM_PROFILE_SETUP=false`
+
+It also sets:
+
+- `TELEGRAM_SHORT_DESCRIPTION`
+- `TELEGRAM_DESCRIPTION`
 
 ## Run
 
