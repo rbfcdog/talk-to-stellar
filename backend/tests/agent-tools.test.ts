@@ -39,9 +39,11 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
 
 describe('Agent tool execution', () => {
   let executeTool: (toolName: string, toolInput: Record<string, any>) => Promise<string>;
+  let supabaseMock: any;
 
   beforeAll(() => {
     ({ executeTool } = require('../src/agent/tools'));
+    ({ supabase: supabaseMock } = require('../src/config/supabase'));
   });
 
   beforeEach(() => {
@@ -104,5 +106,82 @@ describe('Agent tool execution', () => {
     expect(parsed.usdc_per_brl).toBe('0.19493177');
     expect(parsed.message).toContain('BRL da sua conta');
     expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds an existing TalkToStellar user by email directly from the database', async () => {
+    const teamPublicKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const tableResults: Record<string, Array<{ data: any; error: any }>> = {
+      wallets: [
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: { session_id: 'team-session', public_key: teamPublicKey, name: 'Team TalkToStellar', pix_key: 'team.talktostellar@gmail.com' }, error: null },
+      ],
+      contacts: [
+        { data: null, error: null },
+        { data: null, error: null },
+      ],
+      agent_sessions: [
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: { user_id: 'team-user', email: 'team.talktostellar@gmail.com', phone_number: null }, error: null },
+      ],
+      users: [
+        { data: { id: 'team-user', email: 'team.talktostellar@gmail.com', stellar_public_key: teamPublicKey }, error: null },
+      ],
+      external_accounts: [
+        { data: [], error: null },
+      ],
+    };
+    const upsertPayloads: any[] = [];
+
+    supabaseMock.from = jest.fn((table: string) => {
+      const query: any = {
+        select: jest.fn(() => query),
+        eq: jest.fn(() => query),
+        ilike: jest.fn(() => query),
+        order: jest.fn(() => query),
+        limit: jest.fn(() => query),
+        maybeSingle: jest.fn(async () => tableResults[table]?.shift() || { data: null, error: null }),
+        single: jest.fn(async () => tableResults[table]?.shift() || { data: null, error: null }),
+        upsert: jest.fn((payload: any) => {
+          upsertPayloads.push(payload);
+          return {
+            select: () => ({
+              single: async () => ({
+                data: {
+                  id: 'contact-team',
+                  owner_id: payload.owner_id,
+                  contact_name: payload.contact_name,
+                  stellar_public_key: payload.stellar_public_key,
+                  pix_key: payload.pix_key,
+                },
+                error: null,
+              }),
+            }),
+          };
+        }),
+        then: (resolve: any, reject: any) => Promise
+          .resolve(tableResults[table]?.shift() || { data: [], error: null })
+          .then(resolve, reject),
+      };
+      return query;
+    });
+
+    const output = await executeTool('add_contact', {
+      user_id: 'owner-user',
+      contact_key: 'team.talktostellar@gmail.com',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(supabaseMock.from).toHaveBeenCalledWith('users');
+    expect(upsertPayloads[0]).toMatchObject({
+      owner_id: 'owner-user',
+      contact_name: 'team.talktostellar@gmail.com',
+      stellar_public_key: teamPublicKey,
+      pix_key: 'team.talktostellar@gmail.com',
+    });
+    expect(parsed.message).toContain('Contato adicionado com sucesso');
+    expect(parsed.message).toContain('team.talktostellar@gmail.com');
   });
 });
