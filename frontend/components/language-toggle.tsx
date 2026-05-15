@@ -20,7 +20,7 @@ export function LanguageToggle() {
       title={`${t("language_label")}: ${t("language_current")}`}
     >
       <Globe2 className="h-3.5 w-3.5" />
-      <span>EN</span>
+      <span>{language === "en" ? "EN" : "PT"}</span>
     </button>
   );
 }
