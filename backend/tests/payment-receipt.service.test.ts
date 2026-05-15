@@ -6,6 +6,7 @@ describe('PaymentReceiptService', () => {
   beforeEach(() => {
     process.env = {
       ...originalEnv,
+      FRONTEND_URL: 'https://talk-to-stellar-owxg.vercel.app',
       PAYMENT_CONFIRM_BASE: 'https://talk-to-stellar-owxg.vercel.app',
       BACKEND_URL: 'http://localhost:8080',
       TRADITIONAL_FEE_PCT: '0.045',
@@ -52,10 +53,10 @@ describe('PaymentReceiptService', () => {
     });
 
     expect(receipt).toContain('Você converteu R$ 500.00 para US$ 89.12 e enviou para João.');
-    expect(receipt).toContain('Status: Confirmado');
+    expect(receipt).toContain('Status: concluído');
     expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.610412');
-    expect(receipt).toContain('Taxa exata (rede): R$ 0.08 / US$ 0.01');
-    expect(receipt).toContain('Taxa tradicional estimada (.env 4.50%)');
+    expect(receipt).toContain('Taxa: R$ 0.08 / US$ 0.01');
+    expect(receipt).toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).toContain('Economia estimada: R$ 18.80 em relação a métodos tradicionais.');
     expect(receipt).toContain('Liquidação: 3.2s');
     expect(receipt).toContain(`ID da operação: ${operationId}`);
@@ -82,7 +83,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Cotação usada:');
   });
 
-  it('adds spread to exact fee when quote carries platform fee and shows traditional comparison from .env', async () => {
+  it('adds spread to exact fee when quote carries platform fee and shows traditional comparison', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
       sessionId: 'session-3',
@@ -107,8 +108,8 @@ describe('PaymentReceiptService', () => {
       },
     });
 
-    expect(receipt).toContain('Taxa exata (rede + spread): R$ 1.50 / US$ 0.30');
-    expect(receipt).toContain('Taxa tradicional estimada (.env 4.50%)');
+    expect(receipt).toContain('Taxa: R$ 1.50 / US$ 0.30');
+    expect(receipt).toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).toContain('Economia estimada: R$ 21.00 em relação a métodos tradicionais.');
   });
 });

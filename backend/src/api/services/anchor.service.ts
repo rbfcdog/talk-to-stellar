@@ -117,6 +117,10 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   finalAssetCode?: string;
   final_currency?: string;
   finalCurrency?: string;
+  desired_final_amount?: string;
+  desiredFinalAmount?: string;
+  desired_final_asset?: string;
+  desiredFinalAsset?: string;
   bank_account_id?: string;
   bankAccountId?: string;
   memo?: string;
@@ -189,6 +193,8 @@ interface SandboxMockOnRampOrder {
   finalAssetCode: string;
   finalAssetIssuer?: string;
   finalAmount?: string;
+  desiredFinalAmount?: string;
+  desiredFinalAssetCode?: string;
   finalConversionHash?: string;
   finalConversionSourceAmount?: string;
   finalConversionError?: string;
@@ -1021,6 +1027,8 @@ export class AnchorService {
     toCurrency: string;
     finalAsset: { code: string; issuer?: string };
     expectedToAmount?: string;
+    desiredFinalAmount?: string;
+    desiredFinalAssetCode?: string;
     upstreamError?: string;
   }): OnRampTransaction {
     const orderId = `sandbox-pix-${crypto.randomUUID()}`;
@@ -1045,6 +1053,8 @@ export class AnchorService {
       anchorAsset: this.getTesouroIdentifier(),
       anchorAmount: destinationAmount,
       finalAsset: input.finalAsset,
+      desired_final_amount: input.desiredFinalAmount,
+      desired_final_asset_code: input.desiredFinalAssetCode,
       auto_conversion: finalIsTesouro ? { required: false } : {
         required: true,
         source_asset_code: 'TESOURO',
@@ -1065,6 +1075,8 @@ export class AnchorService {
       finalAssetCode: input.finalAsset.code,
       finalAssetIssuer: input.finalAsset.issuer,
       finalAmount: finalIsTesouro ? destinationAmount : undefined,
+      desiredFinalAmount: input.desiredFinalAmount,
+      desiredFinalAssetCode: input.desiredFinalAssetCode,
       upstreamError: input.upstreamError,
     });
 
@@ -1116,6 +1128,8 @@ export class AnchorService {
     );
     const finalAsset = resolveRampFinalAsset(context.target_asset, context.final_asset, this.getTesouroIdentifier());
     const finalIsTesouro = sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
+    const desiredFinalAmount = coalesceString(context.desired_final_amount);
+    const desiredFinalAssetCode = normalizeAssetCode(coalesceString(context.desired_final_asset_code, context.desired_final_asset, finalAsset.code));
     const storedInstructions = context.payment_instructions && typeof context.payment_instructions === 'object'
       ? context.payment_instructions
       : {};
@@ -1159,6 +1173,8 @@ export class AnchorService {
       anchorAmount: destinationAmount,
       finalAsset,
       finalAmount: finalAmount || undefined,
+      desired_final_amount: desiredFinalAmount || undefined,
+      desired_final_asset_code: desiredFinalAssetCode || undefined,
       auto_conversion: finalIsTesouro ? { required: false } : {
         required: true,
         status: coalesceString(context.final_conversion_status) || (status === 'completed' ? 'completed' : 'pending'),
@@ -1190,6 +1206,8 @@ export class AnchorService {
       finalAssetCode: finalAsset.code,
       finalAssetIssuer: finalAsset.issuer,
       finalAmount: finalAmount || undefined,
+      desiredFinalAmount: desiredFinalAmount || undefined,
+      desiredFinalAssetCode: desiredFinalAssetCode || undefined,
       finalConversionHash: coalesceString(context.final_conversion_hash) || undefined,
       finalConversionSourceAmount: coalesceString(context.final_conversion_source_amount) || undefined,
       finalConversionError: coalesceString(context.final_conversion_error) || undefined,
@@ -1205,6 +1223,8 @@ export class AnchorService {
         destination_amount_anchor: destinationAmount,
         final_amount: finalAmount || undefined,
         source_amount_brl: amount,
+        desired_final_amount: desiredFinalAmount || undefined,
+        desired_final_asset_code: desiredFinalAssetCode || undefined,
       },
     };
 
@@ -1341,8 +1361,13 @@ export class AnchorService {
       return this.failSandboxOnRamp(record, finalTrustline.error || `Could not create ${finalAsset.code} trustline before final PIX settlement.`);
     }
 
+    const desiredFinalAmount = record.desiredFinalAmount ? toStellarAmount(record.desiredFinalAmount) : '';
+    const desiredFinalAssetCode = normalizeAssetCode(record.desiredFinalAssetCode || record.finalAssetCode);
+
     if (finalAsset.code === 'BRL' && finalAsset.issuer) {
-      const exactBrl = toStellarAmount(record.sourceAmountBrl);
+      const exactBrl = desiredFinalAmount && desiredFinalAssetCode === 'BRL'
+        ? desiredFinalAmount
+        : toStellarAmount(record.sourceAmountBrl);
       const exactBrlConversion = await StellarService.submitStrictReceivePaymentFromSecret({
         sourceSecret,
         destination: record.publicKey,
@@ -1377,6 +1402,54 @@ export class AnchorService {
           final_conversion_source_amount: record.finalConversionSourceAmount,
           final_conversion_mode: 'strict_receive_exact_brl',
         });
+      }
+    }
+
+    if (desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code) && finalAsset.issuer) {
+      const brlIssuer = getAssetIssuer('BRL');
+      if (brlIssuer) {
+        const sourceMax = toStellarAmount(Math.max(
+          Number(record.sourceAmountBrl) * 1.08,
+          Number(record.sourceAmountBrl) + 1,
+        ));
+        const exactFinalConversion = await StellarService.submitStrictReceivePaymentFromSecret({
+          sourceSecret,
+          destination: record.publicKey,
+          sourceAsset: { code: 'BRL', issuer: brlIssuer },
+          destinationAsset: finalAsset,
+          destinationAmount: desiredFinalAmount,
+          sourceMax,
+          memoText: `PIX ONRAMP ${finalAsset.code}`,
+        });
+
+        if (exactFinalConversion.success) {
+          record.finalAmount = desiredFinalAmount;
+          record.finalConversionHash = exactFinalConversion.hash;
+          record.finalConversionSourceAmount = exactFinalConversion.sourceAmount || toStellarAmount(record.sourceAmountBrl);
+          (record.transaction as any).toAmount = desiredFinalAmount;
+          (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+          (record.transaction as any).finalAmount = desiredFinalAmount;
+          (record.transaction as any).auto_conversion = {
+            required: true,
+            status: 'completed',
+            source_asset_code: 'BRL',
+            source_amount: record.finalConversionSourceAmount,
+            destination_asset_code: finalAsset.code,
+            destination_asset_issuer: finalAsset.issuer,
+            destination_amount: desiredFinalAmount,
+            hash: exactFinalConversion.hash,
+            mode: 'strict_receive_exact_final_asset',
+          };
+          return this.completeSandboxOnRamp(record, exactFinalConversion.hash, {
+            final_conversion_status: 'completed',
+            final_conversion_hash: exactFinalConversion.hash,
+            final_conversion_source_amount: record.finalConversionSourceAmount,
+            final_conversion_mode: 'strict_receive_exact_final_asset',
+            final_amount: desiredFinalAmount,
+          });
+        }
+
+        record.finalConversionError = `Exact ${finalAsset.code} delivery failed: ${exactFinalConversion.error || 'unknown error'}`;
       }
     }
 
@@ -2096,6 +2169,12 @@ export class AnchorService {
     const anchorToCurrency = this.getTesouroIdentifier();
     const targetAsset = parseIssuedAssetIdentifier(anchorToCurrency);
     const intentId = normalizeRampIntentId(input);
+    const desiredFinalAmount = coalesceString(input.desired_final_amount, input.desiredFinalAmount)
+      ? normalizeAmount(coalesceString(input.desired_final_amount, input.desiredFinalAmount), 'desired_final_amount')
+      : '';
+    const desiredFinalAssetCode = desiredFinalAmount
+      ? normalizeAssetCode(coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset.code))
+      : '';
 
     if (!customerId) throw apiError('customer_id is required.', 400);
     const existingIntent = await this.findActiveRampOperationByIntent({
@@ -2199,6 +2278,8 @@ export class AnchorService {
       toCurrency: anchorToCurrency,
       finalAsset,
       expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
+      desiredFinalAmount: desiredFinalAmount || undefined,
+      desiredFinalAssetCode: desiredFinalAssetCode || undefined,
       upstreamError: debugErrorMessage(error),
     });
 
@@ -2272,6 +2353,8 @@ export class AnchorService {
       final_amount: sameIssuedAsset(finalAsset, targetAsset) ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount)) : undefined,
       final_asset_code: finalAsset.code,
       final_asset_issuer: finalAsset.issuer,
+      desired_final_amount: desiredFinalAmount || undefined,
+      desired_final_asset_code: desiredFinalAssetCode || undefined,
       payment_instructions: transaction.paymentInstructions,
       sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
       upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
@@ -2734,6 +2817,10 @@ export class AnchorService {
     finalAsset?: string;
     final_asset_code?: string;
     finalAssetCode?: string;
+    desired_final_amount?: string;
+    desiredFinalAmount?: string;
+    desired_final_asset?: string;
+    desiredFinalAsset?: string;
   }): Promise<{
     success: boolean;
     temporary: true;
@@ -2793,6 +2880,8 @@ export class AnchorService {
       expected_to_amount: quoteResult.quote.toAmount,
       to_currency: quoteResult.quote.toCurrency,
       final_asset: assetIdentifier(finalAsset),
+      desired_final_amount: coalesceString(input.desired_final_amount, input.desiredFinalAmount) || undefined,
+      desired_final_asset: coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset.code) || undefined,
       bank_account_id: customerResult.customer.bankAccountId,
     });
 
