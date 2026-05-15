@@ -3166,7 +3166,7 @@ export class AnchorService {
           destinationAssetCode,
           hash: submitResult.hash || orderResult.transaction.id,
           status: 'completed',
-          contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
+          contextMessage: 'PIX enviado ao seu PIX.',
         });
         if (receiptUrl && orderResult.operation_id) {
           const operation = await OperationRepository.findById(orderResult.operation_id).catch(() => null);

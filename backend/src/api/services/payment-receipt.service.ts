@@ -350,15 +350,22 @@ export class PaymentReceiptService {
   private static sanitizeContextMessage(contextMessage?: string | null): string {
     const raw = String(contextMessage || '').trim();
     if (!raw) return '';
-    return raw
+    const normalized = raw
       .replace(/\s+/g, ' ')
       .replace(/\bwallet\b/gi, 'conta')
       .replace(/\btestnet\b/gi, '')
       .replace(/\bsandbox\b/gi, '')
       .replace(/\bdevnet\b/gi, '')
       .replace(/\.env/gi, '')
-      .trim()
-      .slice(0, 120);
+      .trim();
+
+    if (/retirada via pix conclu[ií]da|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
+      return 'PIX enviado ao seu PIX.';
+    }
+    if (/pix.*recebid|depositad/i.test(normalized)) {
+      return 'PIX recebido.';
+    }
+    return normalized.slice(0, 120);
   }
 
   private static savingsLine(savings: PaymentReceiptInput['savings'] | undefined, fee: FeeBreakdown): string {

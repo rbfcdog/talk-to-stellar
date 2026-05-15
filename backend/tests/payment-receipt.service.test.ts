@@ -112,4 +112,22 @@ describe('PaymentReceiptService', () => {
     expect(receipt).toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).toContain('Economia estimada: R$ 21.00 em relação a métodos tradicionais.');
   });
+
+  it('shortens PIX off-ramp context in text receipts', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-pix',
+      userId: 'user-pix',
+      counterpartyLabel: 'Seu PIX',
+      sourceAmount: '10',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '10',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
+    });
+
+    expect(receipt).toContain('Resumo: PIX enviado ao seu PIX.');
+    expect(receipt).not.toContain('Retirada via PIX concluída');
+  });
 });
