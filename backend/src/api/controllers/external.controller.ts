@@ -793,21 +793,17 @@ export class ExternalController {
         data: externalData,
       });
 
-      const shouldAwaitWelcome = provider === 'telegram';
       const displayName = String(targetEmail || targetUserId || providerUserId);
-      const welcomePromise = TransferNotificationService.notifySessionWelcome({
+      void TransferNotificationService.notifySessionWelcome({
         sessionId: String(matched.session_id),
         userId: targetUserId,
         name: displayName,
         provider,
         providerUserId,
         language,
+      }).catch((welcomeError) => {
+        console.warn('[external-link-existing] welcome notification failed:', welcomeError instanceof Error ? welcomeError.message : String(welcomeError));
       });
-      if (shouldAwaitWelcome) {
-        await welcomePromise;
-      } else {
-        void welcomePromise;
-      }
 
       return res.status(200).json({
         success: true,
@@ -939,20 +935,16 @@ export class ExternalController {
         })
         .eq('session_id', sessionId);
 
-      const shouldAwaitWelcome = provider === 'telegram';
-      const welcomePromise = TransferNotificationService.notifySessionWelcome({
+      void TransferNotificationService.notifySessionWelcome({
         sessionId,
         userId: String(session.user_id),
         name: String(session.email || session.user_id),
         provider,
         providerUserId,
         language,
+      }).catch((welcomeError) => {
+        console.warn('[external-link-session] welcome notification failed:', welcomeError instanceof Error ? welcomeError.message : String(welcomeError));
       });
-      if (shouldAwaitWelcome) {
-        await welcomePromise;
-      } else {
-        void welcomePromise;
-      }
 
       return res.status(200).json({
         success: true,
