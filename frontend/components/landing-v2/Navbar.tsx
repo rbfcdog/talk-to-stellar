@@ -42,7 +42,7 @@ export default function Navbar() {
         <button onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">FAQ</button>
       </div>
 
-      <div className="hidden min-h-[36px] md:block md:min-h-[40px] w-full max-w-md">
+      <div className="hidden min-h-[36px] w-full max-w-md md:mr-14 md:block md:min-h-[40px]">
         {!isScrolled ? <ChannelButtons compact /> : null}
       </div>
     </motion.nav>
