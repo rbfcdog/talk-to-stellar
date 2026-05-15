@@ -754,8 +754,6 @@ export default function ConfirmPaymentClient({
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""))
-  const isExpiredLink = Boolean(validation?.valid === false && (validation as any)?.expired)
-
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
@@ -771,18 +769,6 @@ export default function ConfirmPaymentClient({
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 Review the details below and enter your PIN to authorize the transfer.
               </p>
-              {validation && (
-                <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
-                  <strong>Status: </strong>
-                  {validation.valid ? (
-                    <span className="text-emerald-300">Valid link</span>
-                  ) : (
-                    <span className="text-rose-300">
-                      {isExpiredLink ? `Expired link. ${validation.message || 'Request a new link.'}` : (validation.message || 'Invalid or missing link')}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
               {["Review", "Authorize", "Complete"].map((step, index) => {

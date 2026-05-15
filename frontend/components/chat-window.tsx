@@ -595,9 +595,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-[#06261d]">
                   <ExternalLink className="h-4 w-4" />
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{getFriendlyLinkLabel(part, t)}</span>
-                  <span className="block break-all text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
+                <span className="min-w-0 flex-1 overflow-hidden">
+                  <span className="block truncate text-sm font-medium">{getFriendlyLinkLabel(part, t)}</span>
+                  <span className="block truncate text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
                 </span>
               </a>
             );
@@ -611,7 +611,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-[#0b141a]">
        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-l border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             onClick={onBack}
@@ -624,14 +624,14 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             <AvatarImage src={selectedMeta.avatar} />
             <AvatarFallback className="bg-[#00a884] text-white">●</AvatarFallback>
           </Avatar>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
-            <p className="text-xs text-[#8696a0]">
+            <p className="truncate text-xs text-[#8696a0]">
               {isLoading ? <TypingDots className="text-[#8ea4b1]" /> : t("chat_online")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-[#aebac1] sm:gap-5">
+        <div className="flex shrink-0 items-center gap-4 text-[#aebac1] sm:gap-5">
           <Video className="h-5 w-5 cursor-pointer"/>
           <Phone className="h-5 w-5 cursor-pointer"/>
           <Search className="h-5 w-5 cursor-pointer"/>
@@ -687,7 +687,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       </div>
 
       <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3">
+        <form onSubmit={handleSubmit} className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />
           <Paperclip className="hidden h-6 w-6 text-[#8696a0] sm:block" />
           <Input
@@ -695,7 +695,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={t("chat_input_placeholder")}
-            className="h-11 flex-1 rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+            className="h-11 min-w-0 flex-1 truncate rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
             disabled={isLoading}
           />
           {input.trim() ? (
