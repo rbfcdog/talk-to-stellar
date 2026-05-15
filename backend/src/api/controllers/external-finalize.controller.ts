@@ -201,6 +201,12 @@ function looksLikeEmail(value?: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
 }
 
+function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  return 'pt-BR';
+}
+
 function resolveCanonicalSessionLogin(session: any): string {
   const sessionEmail = normalizeEmailForCompare(session?.email);
   if (sessionEmail) return sessionEmail;
@@ -2413,6 +2419,7 @@ export default class ExternalFinalizeController {
 
       const rawProvider = String((payload as any)?.provider || '');
       const rawProviderUserId = String((payload as any)?.provider_user_id || '');
+      const language = normalizeLanguage((payload as any)?.language || (payload as any)?.lang || (payload as any)?.locale);
       const provider = normalizeExternalProvider(rawProvider);
       const provider_user_id = normalizeExternalProviderUserId(provider, rawProviderUserId);
       if (!provider || !provider_user_id) {
@@ -2554,6 +2561,7 @@ export default class ExternalFinalizeController {
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
+            language,
           });
           if (shouldAwaitWelcome) {
             await welcomePromise;
@@ -2730,6 +2738,7 @@ export default class ExternalFinalizeController {
             name: name || email || existingSession.email || null,
             provider,
             providerUserId: provider_user_id,
+            language,
           });
           if (shouldAwaitWelcome) {
             await welcomePromise;
@@ -2847,6 +2856,7 @@ export default class ExternalFinalizeController {
         name: name || email || null,
         provider,
         providerUserId: provider_user_id,
+        language,
       });
       if (shouldAwaitWelcome) {
         await welcomePromise;

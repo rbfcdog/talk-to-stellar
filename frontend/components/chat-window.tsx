@@ -13,6 +13,7 @@ import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, tou
 import { idempotentFetch } from "@/lib/idempotency";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/ui/feedback";
+import { useLanguage } from "@/lib/i18n";
 
 type Message = {
   id: string;
@@ -40,21 +41,21 @@ function getStoredChatSessionId(chatId: string): string {
   );
 }
 
-function getFriendlyLinkLabel(rawUrl: string) {
+function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
   try {
     const url = new URL(rawUrl);
     const path = url.pathname.replace(/\/$/, "");
-    if (path.endsWith("/confirm-payment")) return "Abrir confirmação de pagamento";
-    if (path.endsWith("/confirm-conversion")) return "Abrir confirmação de conversão";
-    if (path.endsWith("/create-account")) return "Criar ou entrar na conta";
-    if (path.endsWith("/change-pin")) return "Redefinir PIN";
-    if (path.endsWith("/pay-anyone")) return "Abrir link de pagamento";
-    if (path.endsWith("/claim-payment")) return "Resgatar pagamento";
-    if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return "Abrir PIX";
-    if (url.hostname.includes("wa.me")) return "Compartilhar no WhatsApp";
-    return "Abrir link";
+    if (path.endsWith("/confirm-payment")) return t("chat_link_payment");
+    if (path.endsWith("/confirm-conversion")) return t("chat_link_conversion");
+    if (path.endsWith("/create-account")) return t("chat_link_account");
+    if (path.endsWith("/change-pin")) return t("chat_link_pin");
+    if (path.endsWith("/pay-anyone")) return t("chat_link_pay_anyone");
+    if (path.endsWith("/claim-payment")) return t("chat_link_claim");
+    if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return t("chat_link_pix");
+    if (url.hostname.includes("wa.me")) return t("chat_link_whatsapp");
+    return t("chat_link_generic");
   } catch {
-    return "Abrir link";
+    return t("chat_link_generic");
   }
 }
 
@@ -89,37 +90,39 @@ function getOrCreateBrowserId(): string {
 }
 
 export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
+  const { language, t } = useLanguage();
+  const L = (pt: string, en: string) => language === "en" ? en : pt;
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
     agent: {
       title: "TalkToStellar",
       avatar: "/talktostellar.png",
       isBot: true,
       starter: [
-        { id: "agent-welcome", role: "assistant", content: "Entre na sua conta para começar. Depois disso eu te guio para ver saldo, receber via PIX, mandar saldo para seu PIX, enviar para contatos ou converter saldo. Se ainda não entrou, toque em Entrar/Criar conta.", createdAt: new Date() },
+        { id: "agent-welcome", role: "assistant", content: t("chat_agent_welcome"), createdAt: new Date() },
       ],
     },
     "contact-1": {
       title: "Ana Silva",
       avatar: "/avatar-ana.svg",
       starter: [
-        { id: "c1-a1", role: "assistant", content: "Oi! Quando quiser, já pode enviar para minha carteira.", createdAt: new Date() },
+        { id: "c1-a1", role: "assistant", content: L("Oi! Quando quiser, já pode enviar para minha carteira.", "Hi. You can send to my wallet whenever you want."), createdAt: new Date() },
       ],
     },
     "contact-2": {
       title: "Carlos Souza",
       avatar: "/avatar-carlos.svg",
       starter: [
-        { id: "c2-a1", role: "assistant", content: "Me manda o valor de hoje por aqui.", createdAt: new Date() },
+        { id: "c2-a1", role: "assistant", content: L("Me manda o valor de hoje por aqui.", "Send me today's amount here."), createdAt: new Date() },
       ],
     },
-    "contact-3": { title: "Marina Costa", avatar: "/avatar-marina.svg", starter: [{ id: "c3-a1", role: "assistant", content: "Deixa esse contato fixo para pagamentos rápidos.", createdAt: new Date() }] },
-    "contact-4": { title: "Fernando Oliveira", avatar: "/avatar-fernando.svg", starter: [{ id: "c4-a1", role: "assistant", content: "Cobrança principal continua por essa carteira.", createdAt: new Date() }] },
-    "contact-5": { title: "Juliana Lima", avatar: "/avatar-juliana.svg", starter: [{ id: "c5-a1", role: "assistant", content: "Pode usar esse contato para pagamentos recorrentes.", createdAt: new Date() }] },
-    "contact-6": { title: "Roberto Dias", avatar: "/avatar-roberto.svg", starter: [{ id: "c6-a1", role: "assistant", content: "Confirma saldo e envia para o meu endereço padrão.", createdAt: new Date() }] },
-    "contact-7": { title: "Patricia Ferreira", avatar: "/avatar-patricia.svg", starter: [{ id: "c7-a1", role: "assistant", content: "Esse contato é para transferências internas.", createdAt: new Date() }] },
-    "contact-8": { title: "Leonardo Santos", avatar: "/avatar-leonardo.svg", starter: [{ id: "c8-a1", role: "assistant", content: "Movimentações em XLM ficam por aqui.", createdAt: new Date() }] },
-    "contact-9": { title: "Isabella Rodrigues", avatar: "/avatar-isabella.svg", starter: [{ id: "c9-a1", role: "assistant", content: "Esse é meu contato preferencial para receber.", createdAt: new Date() }] },
-    "contact-10": { title: "Gustavo Martins", avatar: "/avatar-gustavo.svg", starter: [{ id: "c10-a1", role: "assistant", content: "Prioriza esse canal para transações urgentes.", createdAt: new Date() }] },
+    "contact-3": { title: "Marina Costa", avatar: "/avatar-marina.svg", starter: [{ id: "c3-a1", role: "assistant", content: L("Deixa esse contato fixo para pagamentos rápidos.", "Keep this contact pinned for quick payments."), createdAt: new Date() }] },
+    "contact-4": { title: "Fernando Oliveira", avatar: "/avatar-fernando.svg", starter: [{ id: "c4-a1", role: "assistant", content: L("Cobrança principal continua por essa carteira.", "The main charge still goes through this wallet."), createdAt: new Date() }] },
+    "contact-5": { title: "Juliana Lima", avatar: "/avatar-juliana.svg", starter: [{ id: "c5-a1", role: "assistant", content: L("Pode usar esse contato para pagamentos recorrentes.", "You can use this contact for recurring payments."), createdAt: new Date() }] },
+    "contact-6": { title: "Roberto Dias", avatar: "/avatar-roberto.svg", starter: [{ id: "c6-a1", role: "assistant", content: L("Confirma saldo e envia para o meu endereço padrão.", "Check your balance and send to my default address."), createdAt: new Date() }] },
+    "contact-7": { title: "Patricia Ferreira", avatar: "/avatar-patricia.svg", starter: [{ id: "c7-a1", role: "assistant", content: L("Esse contato é para transferências internas.", "This contact is for internal transfers."), createdAt: new Date() }] },
+    "contact-8": { title: "Leonardo Santos", avatar: "/avatar-leonardo.svg", starter: [{ id: "c8-a1", role: "assistant", content: L("Movimentações em XLM ficam por aqui.", "XLM movements stay here."), createdAt: new Date() }] },
+    "contact-9": { title: "Isabella Rodrigues", avatar: "/avatar-isabella.svg", starter: [{ id: "c9-a1", role: "assistant", content: L("Esse é meu contato preferencial para receber.", "This is my preferred receiving contact."), createdAt: new Date() }] },
+    "contact-10": { title: "Gustavo Martins", avatar: "/avatar-gustavo.svg", starter: [{ id: "c10-a1", role: "assistant", content: L("Prioriza esse canal para transações urgentes.", "Prioritize this channel for urgent transactions."), createdAt: new Date() }] },
   };
 
   const selectedMeta = chatMeta[chatId] || chatMeta.agent;
@@ -161,7 +164,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         touchClientSessionActivity();
       }
     }
-  }, [chatId]);
+  }, [chatId, t]);
 
   useEffect(() => {
     setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
@@ -446,7 +449,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: 'Aguarde um momento enquanto iniciamos a sessão...',
+        content: t("chat_wait_session"),
       };
       setMessages(prev => [...prev, errorMessage]);
       return;
@@ -489,15 +492,17 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           messages: [...messages, userMessage],
           session_id: resolvedSessionId,
           source: "web",
+          language,
           metadata: {
             browser_id: browserId,
+            language,
           },
         }),
       });
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || 'Falha na resposta da API');
+        throw new Error(errorPayload.error || t("chat_api_error"));
       }
 
       const data = await response.json();
@@ -513,7 +518,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         throw new Error(data.error);
       }
       
-      const botResponse = data.content || data.message || 'Sem resposta recebida';
+      const botResponse = data.content || data.message || t("chat_no_response");
       
       const botMessage: Message = {
         id: `bot-${Date.now()}`,
@@ -550,7 +555,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `Desculpe, ocorreu um erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        content: `${t("chat_error_prefix")}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -563,7 +568,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
   const formatTime = (timestamp?: Date) => {
     if (!timestamp) return "";
-    return timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return timestamp.toLocaleTimeString(language === "en" ? "en-US" : "pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
   const renderMessageContent = (content: string) => {
@@ -590,7 +595,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium">{getFriendlyLinkLabel(part)}</span>
+                  <span className="block text-sm font-medium">{getFriendlyLinkLabel(part, t)}</span>
                   <span className="block break-all text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
                 </span>
               </a>
@@ -621,7 +626,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
             <p className="text-xs text-[#8696a0]">
-              {isLoading ? <TypingDots className="text-[#8ea4b1]" /> : "online"}
+              {isLoading ? <TypingDots className="text-[#8ea4b1]" /> : t("chat_online")}
             </p>
           </div>
         </div>
@@ -689,7 +694,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Digite: saldo, depositar via PIX, sacar via PIX ou enviar para alguém"
+            placeholder={t("chat_input_placeholder")}
             className="h-11 flex-1 rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
             disabled={isLoading}
           />

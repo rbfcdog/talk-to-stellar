@@ -55,6 +55,12 @@ function looksLikeEmail(value?: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
 }
 
+function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  return 'pt-BR';
+}
+
 function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
@@ -271,7 +277,9 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
     ''
   ).trim();
   const username = String(payload?.username || payload?.telegram_username || '').trim();
+  const language = normalizeLanguage(payload?.language || payload?.lang || payload?.locale);
   const data: Record<string, unknown> = {};
+  data.language = language;
   if (provider === 'telegram' && chatId) {
     data.telegram_chat_id = chatId;
     data.chat_id = chatId;
@@ -411,6 +419,7 @@ export class ExternalController {
       let provider = String(req.body?.provider || '').trim().toLowerCase();
       let providerUserId = String(req.body?.provider_user_id || '').trim();
       const externalToken = String(req.body?.token || '').trim();
+      let language = normalizeLanguage(req.body?.language || req.body?.lang || req.body?.locale);
       let email = normalizeEmailForCompare(req.body?.email);
       const pin = String(req.body?.pin || '').trim();
       let externalPayload: any = null;
@@ -433,6 +442,7 @@ export class ExternalController {
 
         provider = String(externalPayload?.provider || '').trim().toLowerCase();
         providerUserId = String(externalPayload?.provider_user_id || '').trim();
+        language = normalizeLanguage(req.body?.language || externalPayload?.language || externalPayload?.lang || externalPayload?.locale);
       }
       provider = normalizeExternalProvider(provider);
       providerUserId = normalizeExternalProviderUserId(provider, providerUserId);
@@ -745,6 +755,7 @@ export class ExternalController {
         name: displayName,
         provider,
         providerUserId,
+        language,
       });
       if (shouldAwaitWelcome) {
         await welcomePromise;
@@ -777,6 +788,7 @@ export class ExternalController {
       const token = String(req.body?.token || '').trim();
       const sessionId = String(req.body?.session_id || '').trim();
       const sessionToken = String(req.body?.session_token || '').trim();
+      const language = normalizeLanguage(req.body?.language || req.body?.lang || req.body?.locale);
 
       if (!token || !sessionId || !sessionToken) {
         return res.status(400).json({
@@ -887,6 +899,7 @@ export class ExternalController {
         name: String(session.email || session.user_id),
         provider,
         providerUserId,
+        language,
       });
       if (shouldAwaitWelcome) {
         await welcomePromise;
