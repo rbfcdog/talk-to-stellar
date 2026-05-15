@@ -638,6 +638,84 @@ export class AgentGraph {
     };
   }
 
+  private extractExternalWalletIntentFromText(text: string): {
+    is_external_wallet: boolean;
+    destination?: string;
+    amount?: string;
+    asset_code?: string;
+  } {
+    const original = String(text || '');
+    const normalized = this.normalizeTextForIntent(original);
+    const destination = original.match(/\bG[A-Z2-7]{55}\b/i)?.[0]?.trim();
+    const mentionsExternal =
+      /\b(carteira externa|wallet externa|public key|chave publica|chave pública|stellar address|endereco stellar|endereço stellar)\b/.test(normalized);
+
+    if (!destination && !mentionsExternal) {
+      return { is_external_wallet: false };
+    }
+
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
+    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
+
+    return {
+      is_external_wallet: true,
+      destination,
+      amount,
+      asset_code: assetCode === 'BRL' ? 'USDC' : assetCode,
+    };
+  }
+
+  private async handleExternalWalletRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    if (!state.session_data?.public_key) {
+      state.success = false;
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const intent = this.extractExternalWalletIntentFromText(state.current_input);
+    const base = this.getFrontendBaseUrl();
+    const url = new URL(`${base}/send-external`);
+    url.searchParams.set('lang', language);
+    if (intent.destination) url.searchParams.set('destination', intent.destination);
+    if (intent.amount) url.searchParams.set('amount', intent.amount);
+    if (intent.asset_code) url.searchParams.set('asset', intent.asset_code);
+
+    let finalUrl = url.toString();
+    try {
+      finalUrl = await this.externalService.shortenPublicUrl({
+        url: finalUrl,
+        purpose: 'send_external_wallet',
+        sessionId: state.session_id,
+        userId: String(state.session_data?.user_id || '').trim() || undefined,
+        expiresInHours: 24,
+      });
+    } catch (error) {
+      logger.warn(`[send-external-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    state.success = true;
+    state.response_message = this.text(
+      language,
+      [
+        'Esse envio é para uma carteira Stellar externa, fora do ecossistema TalkToStellar.',
+        'Por segurança, a confirmação acontece em uma tela dedicada com revisão do endereço completo e autenticação.',
+        `Abra o link:\n\n${finalUrl}`,
+      ].join('\n\n'),
+      [
+        'This is an external Stellar wallet transfer outside the TalkToStellar ecosystem.',
+        'For safety, confirmation happens on a dedicated page with full-address review and authentication.',
+        `Open the link:\n\n${finalUrl}`,
+      ].join('\n\n')
+    );
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async getOnboardingOrLoginMessage(state?: AgentState, preferLogin: boolean = false): Promise<string> {
     const language = this.getLanguage(state);
     const normalizedBase = resolveFrontendBase([
@@ -3481,6 +3559,7 @@ Sua carteira foi criada e já está pronta para usar.
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
       const deterministicPixRamp = this.extractPixRampIntentFromText(state.current_input);
+      const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -3497,13 +3576,15 @@ Sua carteira foi criada e já está pronta para usar.
                 ? IntentType.GENERAL
                 : wantsRampHistory
                   ? IntentType.FINANCIAL_MEMORY
-                  : deterministicPixRamp.is_pix_ramp
-                    ? IntentType.PIX
-                    : fixedSavings
-                      ? IntentType.FINANCIAL_MEMORY
-                      : deterministicFinancialMemory
+                  : deterministicExternalWallet.is_external_wallet
+                    ? IntentType.PAYMENT
+                    : deterministicPixRamp.is_pix_ramp
+                      ? IntentType.PIX
+                      : fixedSavings
                         ? IntentType.FINANCIAL_MEMORY
-                      : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                        : deterministicFinancialMemory
+                          ? IntentType.FINANCIAL_MEMORY
+                        : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -3563,6 +3644,10 @@ Sua carteira foi criada e já está pronta para usar.
 
       if (state.action_type === ActionType.INITIATE_PIX) {
         return await this.handlePixRampRequest(state);
+      }
+
+      if (deterministicExternalWallet.is_external_wallet) {
+        return await this.handleExternalWalletRequest(state);
       }
 
       if (fixedSavings) {

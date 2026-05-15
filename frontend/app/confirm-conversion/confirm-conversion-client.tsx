@@ -256,16 +256,6 @@ export default function ConfirmConversionClient({
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                 Review the details and enter your PIN to execute the conversion in your wallet.
               </p>
-              {validation && (
-                <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
-                  <strong>Status: </strong>
-                  {validation.valid ? (
-                    <span className="text-emerald-300">Valid link</span>
-                  ) : (
-                    <span className="text-rose-300">{validation.message || 'Invalid or missing link'}</span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
               {["Review", "Authorize", "Complete"].map((step, index) => (

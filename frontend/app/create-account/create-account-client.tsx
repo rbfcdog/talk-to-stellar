@@ -793,18 +793,6 @@ export default function CreateAccountClient({
                   ? L("Você está a poucos passos de receber. Cadastre sua conta global e volte automaticamente ao link de pagamento.", "You are a few steps away from receiving. Create your global account and return automatically to the payment link.")
                   : L("Preencha os dados abaixo e siga o passo a passo para concluir sua conta com segurança.", "Fill in the details below and follow the steps to finish your account securely.")}
               </p>
-              {validation && (
-                <div className="mt-3 rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
-                  <strong>{L("Status do link: ", "Link status: ")}</strong>
-                  {token && validation.valid ? (
-                    <span className="text-emerald-300">{L("Link válido", "Valid link")}</span>
-                  ) : validation.message ? (
-                    <span className="text-cyan-200">{validation.message}</span>
-                  ) : (
-                    <span className="text-rose-300">{L("Link inválido ou ausente", "Invalid or missing link")}</span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
               {[L("Identidade", "Identity"), L("Segurança", "Security"), L("Conta pronta", "Account ready")].map((step, index) => (
@@ -814,40 +802,10 @@ export default function CreateAccountClient({
               ))}
             </div>
 
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{L("1. Acesse", "1. Access")}</p>
-                <p className="mt-2 text-sm text-slate-200">
-                  {isClaimPaymentContext
-                    ? L("Você chegou por um link de pagamento. A conta criada aqui será usada para receber.", "You arrived from a payment link. The account created here will be used to receive.")
-                    : L("Abra o link recebido para iniciar o processo de criação da conta.", "Open the received link to start creating the account.")}
-                </p>
-              </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{L("2. Conclua", "2. Finish")}</p>
-                <p className="mt-2 text-sm text-slate-200">
-                  {L("Informe seus dados, crie o PIN e finalize. Tempo médio: cerca de 2 minutos.", "Enter your details, create your PIN, and finish. Average time: about 2 minutes.")}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-              {L("Guia rápido:", "Quick guide:")}
-              <span className="ml-2 break-all font-mono text-cyan-100">
-                {L("1) Nome e contato, 2) PIN, 3) Finalizar conta, 4) voltar para receber.", "1) Name and contact, 2) PIN, 3) Finish account, 4) return to receive.")}
-              </span>
-            </div>
           </section>
 
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-                {L("Verificação do link:", "Link check:")}
-                <span className="ml-2 break-all font-mono text-cyan-100">
-                  {token ? L('pronto', 'ready') : existingAccountDetected ? L('novo link será gerado ao finalizar', 'a new link will be generated when finishing') : L('link ausente', 'missing link')}
-                </span>
-              </div>
-
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-200">{L("Nome", "Name")}</span>
                 <input
@@ -957,7 +915,7 @@ export default function CreateAccountClient({
                 disabled={submitLocked || !pin.trim() || !pinConfirm.trim() || (emailConfirmationRequired && emailConfirmationCode.length !== 6)}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("3) Finalizar conta", "3) Finish account")}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("Finalizar conta", "Finish account")}
               </button>
             </form>
 

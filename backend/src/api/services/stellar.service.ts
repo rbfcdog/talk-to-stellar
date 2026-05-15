@@ -17,6 +17,13 @@ interface BuildPaymentInput {
   memoText?: string;
 }
 
+interface BuildCreateAccountInput {
+  sourcePublicKey: string;
+  destination: string;
+  startingBalance: string;
+  memoText?: string;
+}
+
 interface AssetInput {
   code: string;
   issuer?: string;
@@ -469,6 +476,48 @@ export class StellarService {
         } catch (error) {
             console.error('Error building payment XDR:', error);
             throw new Error(`Failed to build payment transaction: ${this.getHorizonErrorMessage(error)}`);
+        }
+    }
+
+    static async buildCreateAccountXdr(input: BuildCreateAccountInput): Promise<string> {
+        try {
+            const { sourcePublicKey, destination, startingBalance, memoText } = input;
+            const amount = Number(String(startingBalance || '').replace(',', '.'));
+            if (!Number.isFinite(amount) || amount < 1) {
+                throw new Error('Para criar uma conta Stellar externa, envie pelo menos 1 XLM.');
+            }
+
+            const sourceAccount = await server.loadAccount(sourcePublicKey);
+            const nativeBalanceLine = sourceAccount.balances.find(b => b.asset_type === 'native');
+            const xlmBalance = nativeBalanceLine ? parseFloat(nativeBalanceLine.balance) : 0;
+            const minimumReserve = 1.5;
+            const feeInXlm = Number(STELLAR_BASE_FEE_STROOPS) / 10000000;
+
+            if (xlmBalance - amount - feeInXlm < minimumReserve) {
+                throw new Error('Saldo de XLM insuficiente para criar a conta externa, pagar taxa e manter a reserva mínima.');
+            }
+
+            let transactionBuilder = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            }).addOperation(
+                Operation.createAccount({
+                    destination,
+                    startingBalance,
+                })
+            );
+
+            if (memoText) {
+                const safeMemo = sanitizeMemoText(memoText);
+                if (safeMemo) {
+                    transactionBuilder = transactionBuilder.addMemo(Memo.text(safeMemo));
+                }
+            }
+
+            return transactionBuilder.setTimeout(300).build().toXDR();
+        } catch (error) {
+            console.error('Error building create account XDR:', error);
+            throw new Error(`Failed to build create account transaction: ${this.getHorizonErrorMessage(error)}`);
         }
     }
 
