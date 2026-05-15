@@ -635,7 +635,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               <KeyRound className="h-4 w-4" />
               {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
             </button>
-            {qrImageUrl && !externalLinkUsed && (
+            {false && qrImageUrl && !externalLinkUsed && (
               <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">{t("login_passkey_qr_title")}</p>
                 <p className="mt-1 text-slate-300">{t("login_passkey_qr_body")}</p>
