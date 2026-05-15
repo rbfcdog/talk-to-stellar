@@ -41,4 +41,27 @@ describe('External onboarding service', () => {
     process.env.CREATE_ACCOUNT_BASE = previousCreateAccountBase;
     process.env.FRONTEND_URL = previousFrontendUrl;
   });
+
+  it('creates Telegram login URL with session context and next path', () => {
+    process.env.PAYMENT_CONFIRM_BASE = 'https://app.example.com';
+    const service = new ExternalService({} as any);
+    const { token, url } = service.createLoginUrl('telegram', '6405034913', {
+      sessionId: 'session-123',
+      userId: 'rodrigo@example.com',
+      next_path: '/pix-on?amount=100&asset=BRL',
+    });
+
+    const parsedUrl = new URL(url);
+    const decoded = jwt.decode(token) as jwt.JwtPayload | null;
+
+    expect(`${parsedUrl.origin}${parsedUrl.pathname}`).toBe('https://app.example.com/login');
+    expect(parsedUrl.searchParams.get('token')).toBe(token);
+    expect(parsedUrl.searchParams.get('provider')).toBe('telegram');
+    expect(parsedUrl.searchParams.get('provider_user_id')).toBe('6405034913');
+    expect(parsedUrl.searchParams.get('next')).toBe('/pix-on?amount=100&asset=BRL');
+    expect(decoded?.session_id).toBe('session-123');
+    expect(decoded?.sessionId).toBe('session-123');
+    expect(decoded?.user_id).toBe('rodrigo@example.com');
+    expect(decoded?.userId).toBe('rodrigo@example.com');
+  });
 });

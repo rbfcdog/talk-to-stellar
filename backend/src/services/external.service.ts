@@ -431,7 +431,14 @@ export class ExternalService {
   }
 
   createLoginUrl(provider: string, providerUserId: string, extra: Record<string, any> = {}) {
-    const { token } = this.createOnboardUrl(provider, providerUserId, extra);
+    const sessionId = String(extra.session_id || extra.sessionId || '').trim();
+    const userId = String(extra.user_id || extra.userId || '').trim();
+    const tokenExtra = {
+      ...extra,
+      ...(sessionId ? { session_id: sessionId, sessionId } : {}),
+      ...(userId ? { user_id: userId, userId } : {}),
+    };
+    const { token } = this.createOnboardUrl(provider, providerUserId, tokenExtra);
     const urlObj = new URL(`${getPaymentConfirmBase()}/login`);
     urlObj.searchParams.set('token', token);
     urlObj.searchParams.set('provider', provider);
