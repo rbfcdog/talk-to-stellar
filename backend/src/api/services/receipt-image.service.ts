@@ -243,7 +243,7 @@ export class ReceiptImageService {
       operationId: PaymentReceiptService.toPublicOperationId(paymentData.tx_hash) || paymentData.tx_hash,
       savingsLabel: Number.isFinite(estimatedSavings) && estimatedSavings > 0
         ? `R$ ${formatDisplayAmount(estimatedSavings, 2)}`
-        : 'R$ 0,00',
+        : 'R$ 0,01',
       savingsPercentLabel: 'estimativa',
     };
   }
@@ -398,6 +398,7 @@ export class ReceiptImageService {
     destinationAmount: string;
     destinationAssetCode: string;
     counterpartyLabel?: string;
+    counterpartyKey?: string;
     sourceAmount?: string;
     sourceAssetCode?: string;
     feeDisplay?: string;
@@ -417,7 +418,8 @@ export class ReceiptImageService {
     const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
     const contextMessage = compactReceiptMessage(String(input.contextMessage || '').replace(/\s+/g, ' ').trim());
-    const description = contextMessage || 'Transferência internacional';
+    const counterpartyKey = String(input.counterpartyKey || '').trim();
+    const description = contextMessage || (counterpartyKey && !/^G[A-Z2-7]{55}$/i.test(counterpartyKey) ? `Chave ${counterpartyKey}` : 'Transferência otimizada');
 
     return {
       amount: formatDisplayAmount(input.destinationAmount, 2),
@@ -442,7 +444,7 @@ export class ReceiptImageService {
       balanceLabel: '-',
       savingsLabel: Number.isFinite(estimatedSavings) && estimatedSavings > 0
         ? `R$ ${formatDisplayAmount(estimatedSavings, 2)}`
-        : 'R$ 0,00',
+        : 'R$ 0,01',
       savingsPercentLabel: Number.isFinite(savingsPercentage) && savingsPercentage > 0
         ? `${savingsPercentage.toFixed(0)}% menor`
         : 'estimativa',

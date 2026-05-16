@@ -1094,8 +1094,8 @@ export class AgentGraph {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX, abra:\n\n${url}\n\nEscolhemos a melhor rota. A tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel}.`,
-          `To send ${amountText} to ${resolvedRecipientLabel} with PIX, open:\n\n${url}\n\nWe chose the best route. The screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel}.`
+          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX da forma mais otimizada, abra:\n\n${url}\n\nA tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel} pela rota mais otimizada disponível.`,
+          `To send ${amountText} to ${resolvedRecipientLabel} with PIX using the most optimized route, open:\n\n${url}\n\nThe screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel} through the most optimized available route.`
         );
       } else {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1317,6 +1317,7 @@ export class AgentGraph {
       destination_asset_code: quote?.destinationAsset?.code,
       destination_asset_issuer: quote?.destinationAsset?.issuer,
       optimization_criteria: bestRouteResult?.optimization_criteria,
+      language: this.getLanguage(state),
       memo: intent.memo,
     });
 
@@ -1334,7 +1335,7 @@ export class AgentGraph {
     if (receiveAssetCode !== assetCode) {
       const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
       const message = [
-        `Cotação antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+        `Estimativa antes de confirmar pela rota mais otimizada: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
         transparencyLine,
         `Para confirmar, abra o link:\n\n${prepare.url}`,
       ].filter(Boolean).join('\n');
@@ -1488,7 +1489,7 @@ export class AgentGraph {
     const ttlSeconds = this.toAmountNumber(quoteResult?.quote_ttl_seconds);
 
     const lines: string[] = [];
-    if (routeChain) lines.push(`Melhor caminho agora: ${routeChain}.`);
+    if (routeChain) lines.push(`Rota mais otimizada agora: ${routeChain}.`);
     if (criteria) lines.push(`Critério: ${criteria}.`);
     if (totalFeeDisplay) lines.push(`Taxa total estimada: ${totalFeeDisplay}.`);
     if (savingsBrl > 0) {
@@ -1498,7 +1499,7 @@ export class AgentGraph {
         lines.push(`Comparativo: cerca de ${pctLabel} mais barato que métodos tradicionais.`);
       }
     }
-    if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
+    if (ttlSeconds > 0) lines.push(`Estimativa válida por ${Math.trunc(ttlSeconds)} segundos.`);
 
     return lines.join(' ');
   }
@@ -1592,8 +1593,8 @@ export class AgentGraph {
         const estimatedBrl = numeric * brlPerUsdc;
         return this.text(
           language,
-          `PIX estimado pela cotação atual: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`,
-          `Estimated PIX at the current quote: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and shows the total fee before confirmation.`
+          `PIX estimado pela rota mais otimizada: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`,
+          `Estimated PIX with the most optimized route: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and shows the total fee before confirmation.`
         );
       }
     } catch (error) {
@@ -1641,8 +1642,8 @@ export class AgentGraph {
       fundingEstimate,
       this.text(
         language,
-        `Escolhemos a melhor rota disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
-        `We chose the best available route: PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after your confirmation, the payment is sent automatically to ${input.destinationName}.`
+        `Escolhemos a rota mais otimizada disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
+        `We chose the most optimized available route: PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after your confirmation, the payment is sent automatically to ${input.destinationName}.`
       ),
       this.text(language, `Abra o link:\n\n${url}`, `Open the link:\n\n${url}`),
     ].join('\n\n');
@@ -2256,8 +2257,8 @@ Respond ONLY with the intent name. Examples:
 - "quero converter 3 usdc pra brl" -> conversion
 - "trocar 10 usdc por brl" -> conversion
 - "convert assets" -> conversion
-- "qual a cotação do dólar" -> price_quote
-- "cotação brl usdc agora" -> price_quote
+- "qual a melhor estimativa entre real e dólar digital" -> price_quote
+- "estimativa brl usdc agora" -> price_quote
 - "Send 100 XLM" -> balance
 - "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
 - "quero criar um link de transacao de 10 usdc" -> payment_link
@@ -2377,7 +2378,7 @@ Prefer 'contacts' when the user asks about contact list, account contacts, favor
     const preferredIdentifier = email || phone || cpf || (transferKey.includes('@talktostellar') ? '' : transferKey);
     const lines = [
       contact.contact_name ? `Nome: ${contact.contact_name}` : null,
-      `Identificador: ${preferredIdentifier || 'indisponível'}`,
+      `Chave: ${preferredIdentifier || 'indisponível'}`,
     ].filter(Boolean);
 
     return `Contato adicionado com sucesso.${lines.length ? `\n${lines.join('\n')}` : ''}`;
@@ -2392,7 +2393,7 @@ Prefer 'contacts' when the user asks about contact list, account contacts, favor
     const preferredIdentifier = email || phone || cpf || (transferKey.includes('@talktostellar') ? '' : transferKey);
     const last = contact?.history?.last_amount_label ? ` | último envio: ${contact.history.last_amount_label}` : '';
     const freq = contact?.history?.tx_count ? ` | histórico: ${contact.history.tx_count} envio(s)` : '';
-    const transferLine = `Identificador: ${preferredIdentifier || 'indisponível'}`;
+    const transferLine = `Chave: ${preferredIdentifier || 'indisponível'}`;
 
     return `${index + 1}. ${label}${last}${freq}\n${transferLine}`;
   }
@@ -3191,6 +3192,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         asset_code: assetCode,
         destination,
         destination_name: last.counterparty,
+        language: this.getLanguage(state),
       });
 
       let prepare: any;
@@ -3462,7 +3464,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     if (!toolResult.success) {
       state.success = false;
-      state.response_message = this.text(language, `Não consegui consultar a cotação agora: ${toolResult.error || 'erro desconhecido'}`, `I could not check the quote right now: ${toolResult.error || 'unknown error'}`);
+      state.response_message = this.text(language, `Não consegui consultar a estimativa agora: ${toolResult.error || 'erro desconhecido'}`, `I could not check the estimate right now: ${toolResult.error || 'unknown error'}`);
     } else {
       const brlPerUsdc = Number(toolResult.brl_per_usdc);
       const usdcPerBrl = Number(toolResult.usdc_per_brl);
@@ -3471,8 +3473,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.success = true;
       state.response_message = this.text(
         language,
-        `Cotação agora: 1 USDC = R$ ${brlLabel}.\nInverso: 1 BRL = US$ ${usdcLabel}.\nFonte: BRL da sua conta.`,
-        `Current quote: 1 USDC = R$ ${brlLabel}.\nInverse: 1 BRL = US$ ${usdcLabel}.\nSource: your account BRL.`
+        `Estimativa agora: 1 US$ = R$ ${brlLabel}.\nInverso: 1 R$ = US$ ${usdcLabel}.\nFonte: saldo em reais da sua conta.`,
+        `Current estimate: 1 US$ = R$ ${brlLabel}.\nInverse: 1 R$ = US$ ${usdcLabel}.\nSource: your account BRL balance.`
       );
     }
 

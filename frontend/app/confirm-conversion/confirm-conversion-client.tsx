@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 
 type ValidationResult = {
   success?: boolean
@@ -53,11 +54,15 @@ function normalizeAssetCode(value?: string) {
   return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
-function formatAmount(amount?: string, assetCode?: string) {
-  if (!String(amount || "").trim()) return "Amount unavailable"
+function T(language: AppLanguage, pt: string, en: string) {
+  return language === "pt-BR" ? pt : en
+}
+
+function formatAmount(amount?: string, assetCode?: string, language: AppLanguage = "en") {
+  if (!String(amount || "").trim()) return T(language, "Valor indisponível", "Amount unavailable")
   const code = normalizeAssetCode(assetCode || "")
   const n = Number(String(amount || "").replace(",", "."))
-  if (!Number.isFinite(n)) return "Amount unavailable"
+  if (!Number.isFinite(n)) return T(language, "Valor indisponível", "Amount unavailable")
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "XLM") return "saldo da conta TalkToStellar"
@@ -76,15 +81,16 @@ function hasUsableFeeDisplay(value?: string) {
   return !looksLikeZeroOnly
 }
 
-function formatBrl(value?: string) {
+function formatBrl(value?: string, language: AppLanguage = "en") {
   const amount = Number(String(value || "").replace(",", "."))
   if (!Number.isFinite(amount) || amount <= 0) return ""
-  return new Intl.NumberFormat("en-US", {
+  const displayAmount = amount > 0 && amount < 0.01 ? 0.01 : amount
+  return new Intl.NumberFormat(language === "pt-BR" ? "pt-BR" : "en-US", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount)
+  }).format(displayAmount)
 }
 
 function formatRouteChainFromPayload(payload: any) {
@@ -118,6 +124,7 @@ export default function ConfirmConversionClient({
   initialValidation?: any
 }) {
   const searchParams = useSearchParams()
+  const { language } = useLanguage()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const router = useRouter()
 
@@ -127,6 +134,10 @@ export default function ConfirmConversionClient({
   const [pin, setPin] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
+  const feedbackLanguage = useMemo(
+    () => normalizeLanguage(searchParams.get("lang") || validation?.payload?.language || validation?.payload?.lang || decodeJwtPayload(token)?.language || language),
+    [searchParams, validation?.payload, token, language]
+  )
 
   useEffect(() => {
     if (tokenFromUrl) {
@@ -193,18 +204,18 @@ export default function ConfirmConversionClient({
         const feedbackDestinationCode = normalizeAssetCode(String(payloadForFeedback?.dest_asset_code || payloadForFeedback?.destination_asset_code || payloadForFeedback?.quote?.destinationAsset?.code || ""))
         const feedbackIsCrossAsset = Boolean(feedbackSourceCode && feedbackDestinationCode && feedbackSourceCode !== feedbackDestinationCode)
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
-        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
+        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""), feedbackLanguage)
         enqueueWebChatFeedback([
-          "Conversion completed.",
+          T(feedbackLanguage, "Conversão concluída da forma mais otimizada.", "Conversion completed with the most optimized route."),
           payload.transferDetails?.sourceAmount
-            ? `Source debited: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode)}`
+            ? `${T(feedbackLanguage, "Origem debitada", "Source debited")}: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode, feedbackLanguage)}`
             : "",
           payload.transferDetails?.destinationAmount
-            ? `Destination received: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
+            ? `${T(feedbackLanguage, "Destino recebido", "Destination received")}: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode, feedbackLanguage)}`
             : "",
-          feedbackIsCrossAsset && routeForFeedback ? "Best route selected." : "",
-          payload.transferDetails?.feeDisplay ? `Fee: ${payload.transferDetails.feeDisplay}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
+          payload.transferDetails?.feeDisplay ? `${T(feedbackLanguage, "Taxa", "Fee")}: ${payload.transferDetails.feeDisplay}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -284,18 +295,18 @@ export default function ConfirmConversionClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Summary</p>
-                <p className="mt-2 text-slate-300">Debit: {formatAmount(sourceAmount, sourceAssetCode)}</p>
-                <p className="text-slate-300">Receive: {formatAmount(destAmount, destAssetCode)}</p>
+                <p className="font-medium text-white">{T(feedbackLanguage, "Resumo", "Summary")}</p>
+                <p className="mt-2 text-slate-300">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
+                <p className="text-slate-300">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Estimated total fee: {estimatedFeeDisplay}</p>
+                  <p className="text-slate-300">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-slate-300">Best route selected.</p>
+                  <p className="text-slate-300">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
                 )}
-                {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
+                {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                   <p className="text-emerald-300">
-                    Estimated savings vs traditional methods: {formatBrl(estimatedSavingsBrl)}
+                    {T(feedbackLanguage, "Economia estimada vs métodos tradicionais", "Estimated savings vs traditional methods")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
                   </p>
                 )}
@@ -327,11 +338,11 @@ export default function ConfirmConversionClient({
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Result</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Executing conversion...</div>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
-                  <p>Conversion confirmed successfully.</p>
+                  <p>{T(feedbackLanguage, "Conversão confirmada com sucesso.", "Conversion confirmed successfully.")}</p>
                   {result.transferDetails?.sourceAmount && (
                     <p>
                       Source debited: {formatAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}

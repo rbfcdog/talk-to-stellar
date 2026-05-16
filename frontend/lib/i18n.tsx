@@ -42,7 +42,7 @@ const englishDictionary: Dictionary = {
     chat_link_whatsapp: "Share on WhatsApp",
     chat_link_generic: "Open link",
     welcome_select:
-      'Select TalkToStellar in the sidebar. Start with: 1) "balance", 2) "deposit 150 reais with PIX", 3) "send 100 reais to my PIX", 4) "send 200 dollars to Maria".',
+      'Select TalkToStellar in the sidebar. Start with: 1) "balance", 2) "deposit 150 reais with PIX", 3) "send 100 reais to my PIX", 4) "send 200 dollars to Maria with the most optimized route".',
     welcome_protected: "Your conversations stay protected while you use your account.",
     login_title: "Sign in to your account",
     login_subtitle:
@@ -83,9 +83,9 @@ const englishDictionary: Dictionary = {
       "Send money, manage contacts, and move between R$ and US$ through natural language. From Telegram or WhatsApp, without bureaucracy.",
     hero_card_1_title: "Natural language",
     hero_card_1_body: "Use simple messages to simulate, transfer, and organize transactions.",
-    hero_card_2_title: "Lower-fee conversion",
+    hero_card_2_title: "Most optimized conversion",
     hero_card_2_body:
-      "The platform compares routes in real time to reduce effective cost in BRL and USDC, with fee transparency before confirmation.",
+      "The platform compares routes in real time to use the most optimized path, reduce effective cost in BRL and USDC, and show fees before confirmation.",
     nav_solution: "Solution",
     nav_simulator: "Conversion Simulator",
     nav_how: "How It Works",
@@ -126,7 +126,7 @@ const portugueseDictionary: Dictionary = {
     chat_link_whatsapp: "Compartilhar no WhatsApp",
     chat_link_generic: "Abrir link",
     welcome_select:
-      'Selecione TalkToStellar na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
+      'Selecione TalkToStellar na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria da forma mais otimizada".',
     welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua conta.",
     login_title: "Entre na sua conta",
     login_subtitle:
@@ -169,7 +169,7 @@ const portugueseDictionary: Dictionary = {
     hero_card_1_body: "Use mensagens simples para simular, transferir e organizar transações.",
     hero_card_2_title: "Conversão com taxas menores",
     hero_card_2_body:
-      "A plataforma compara rotas em tempo real para reduzir o custo efetivo em BRL e USDC, com transparência de taxa antes da confirmação.",
+      "A plataforma compara rotas em tempo real para usar a forma mais otimizada, reduzir o custo efetivo em BRL e USDC e mostrar a taxa antes da confirmação.",
     nav_solution: "Solução",
     nav_simulator: "Simulador de Conversão",
     nav_how: "Como Funciona",

@@ -381,11 +381,9 @@ export class UserService {
       console.warn('Warning: Could not fetch account balance or save wallet info:', walletError);
     }
 
-    try {
-      await ContactSeedService.ensureStarterContactsForUser(userId);
-    } catch (contactSeedError) {
+    void ContactSeedService.ensureStarterContactsForUser(userId).catch((contactSeedError) => {
       console.warn('Warning: Could not seed starter contacts:', contactSeedError);
-    }
+    });
 
     const sessionToken = AuthService.generateTokenForUser(userId);
 

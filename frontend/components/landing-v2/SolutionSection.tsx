@@ -85,7 +85,7 @@ export default function SolutionSection() {
               Everything where you already chat.
             </h3>
             <p className="text-lg text-[#9BA4B5] leading-relaxed">
-              WhatsApp and Telegram are already part of your day. Our AI understands natural-language intent. Say what you need to pay or convert, and it structures the transaction through the best route.
+              WhatsApp and Telegram are already part of your day. Our AI understands natural-language intent. Say what you need to pay or convert, and it structures the transaction through the most optimized available route.
             </p>
           </div>
           <div className="w-full md:w-1/2 relative h-[300px] rounded-2xl overflow-hidden border border-white/[0.03] bg-[#162032] flex items-center justify-center">
@@ -95,7 +95,7 @@ export default function SolutionSection() {
                   Send 50 dollars to Maria Silva via PIX.
                 </div>
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tl-sm p-4 max-w-[85%] text-sm text-slate-200 flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] shadow-[#00D2FF]/5">
-                   <p>Done. I found the best quote.</p>
+                   <p>Done. I found the most optimized route.</p>
                    <div className="bg-[#162032] p-3 rounded-xl border border-white/[0.03]">
                       <p className="text-xs text-[#9BA4B5]">Total to pay</p>
                       <p className="text-lg font-bold text-[#00D2FF]">R$ 256,20</p>

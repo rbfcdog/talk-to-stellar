@@ -18,6 +18,7 @@ export type PaymentReceiptInput = {
   provider?: string | null;
   providerUserId?: string | null;
   counterpartyLabel?: string | null;
+  counterpartyKey?: string | null;
   sourceAmount?: string | null;
   sourceAssetCode?: string | null;
   destinationAmount: string;
@@ -189,6 +190,7 @@ export class PaymentReceiptService {
         sourceAssetCode: input.sourceAssetCode || null,
         feeDisplay: input.feeDisplay || null,
         contextMessage: input.contextMessage || null,
+        counterpartyKey: input.counterpartyKey || null,
         completedAt: input.completedAt || null,
       },
     });
@@ -281,6 +283,7 @@ export class PaymentReceiptService {
         destinationAmount: String(input.destinationAmount || ''),
         destinationAssetCode,
         counterpartyLabel: String(input.counterpartyLabel || 'destinatário'),
+        counterpartyKey: String(input.counterpartyKey || ''),
         sourceAmount,
         sourceAssetCode,
         feeDisplay: feeLabel,
@@ -303,6 +306,7 @@ export class PaymentReceiptService {
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
     const counterparty = String(input.counterpartyLabel || '').trim();
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
+    const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
     const quoteLine = hasConversion
       ? buildUsedQuoteLabel({
@@ -326,6 +330,7 @@ export class PaymentReceiptService {
 
     return [
       operationLine,
+      counterpartyKeyLine,
       `Status: ${status}`,
       contextLine,
       quoteLine,
@@ -339,6 +344,12 @@ export class PaymentReceiptService {
       'Recibo registrado no seu histórico.',
       nicknamePrompt,
     ].filter((line) => line !== '').join('\n');
+  }
+
+  private static counterpartyKeyLine(counterpartyKey?: string | null): string {
+    const key = String(counterpartyKey || '').trim();
+    if (!key || /^G[A-Z2-7]{55}$/i.test(key)) return '';
+    return `Chave: ${key}`;
   }
 
   private static contextLine(contextMessage?: string | null): string {

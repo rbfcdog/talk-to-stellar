@@ -7,7 +7,6 @@ import { ExternalRepository } from '../../repositories/external.repository';
 import VaultService from '../../services/vault.service';
 import { StellarService } from './stellar.service';
 import { TrustlineService } from './trustline.service';
-import { TransferNotificationService } from './transfer-notification.service';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -213,15 +212,6 @@ export class ContactSeedService {
         };
       } else {
         logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
-        if (sessionId) {
-          await TransferNotificationService.notifyOnboardingConversion({
-            sessionId: String(sessionId),
-            userId: String(userId),
-            sourceAmount,
-            destinationAmount: quote.destinationAmount,
-            keepXlm,
-          });
-        }
         return {
           attempted: true,
           completed: true,

@@ -121,9 +121,9 @@ export default function SimulatorSection() {
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#4CA1EF]/10 blur-[50px] pointer-events-none" />
 
         <div className="text-center mb-8 relative z-10">
-          <p className="text-[#9BA4B5] text-sm font-medium">Live exchange rate</p>
+          <p className="text-[#9BA4B5] text-sm font-medium">Optimized live estimate</p>
           <p className="text-[#00D2FF] font-semibold mt-1">
-            {numbers.rate > 0 ? `1 BRL = ${numbers.rate.toFixed(6)} USDC` : "Loading quote..."}
+            {numbers.rate > 0 ? `1 BRL = ${numbers.rate.toFixed(6)} USDC` : "Loading estimate..."}
           </p>
           <p className="text-[11px] text-[#9BA4B5] mt-1">
             Source: BRL from your account
