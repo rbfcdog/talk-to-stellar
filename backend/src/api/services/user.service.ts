@@ -279,7 +279,9 @@ export class UserService {
       }
 
       if (secretKey) {
-        const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
+        const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId, {
+          deferAdditionalTrustlines: true,
+        });
         if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
           console.warn(`[onboarding-usdc] initial funding conversion incomplete for ${publicKey}: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
           throw new Error('O saldo inicial em US$ ainda não ficou pronto. Tente novamente em alguns segundos.');

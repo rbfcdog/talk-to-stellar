@@ -46,6 +46,7 @@ interface StrictSendConversionInput {
   sourceAmount: string;
   destAsset: AssetInput;
   memoText?: string;
+  quote?: StrictSendConversionQuote;
 }
 
 interface PathPaymentQuote {
@@ -914,7 +915,7 @@ export class StellarService {
     static async buildStrictSendConversionXdr(input: StrictSendConversionInput): Promise<string> {
         try {
             const { sourcePublicKey, destination, sourceAmount, destAsset, sourceAsset, memoText } = input;
-            const quote = await this.quoteStrictSendConversion(input);
+            const quote = input.quote || await this.quoteStrictSendConversion(input);
             const sourceAssetObj = createAsset(sourceAsset);
             const destAssetObj = createAsset(destAsset);
             const sourceAccount = await server.loadAccount(sourcePublicKey);
@@ -1068,7 +1069,9 @@ export class StellarService {
         try {
             const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
             await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
-            await this.ensureTestnetAccountFunded(input.destination, 1);
+            if (input.destination !== sourceKeypair.publicKey()) {
+                await this.ensureTestnetAccountFunded(input.destination, 1);
+            }
 
             const sourceAssetObj = createAsset(input.sourceAsset);
             const destinationAssetObj = createAsset(input.destinationAsset);

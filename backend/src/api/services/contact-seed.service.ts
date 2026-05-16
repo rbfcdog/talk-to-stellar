@@ -23,6 +23,11 @@ export type InitialUsdcConversionResult = {
   error?: string;
 };
 
+type DefaultTrustlineSetupOptions = {
+  deferAdditionalTrustlines?: boolean;
+  skipAdditionalTrustlines?: boolean;
+};
+
 export const STARTER_CONTACTS = [
   { contact_name: 'Ana Silva', pix_prefix: 'ana.silva' },
   { contact_name: 'Carlos Souza', pix_prefix: 'carlos.souza' },
@@ -126,26 +131,72 @@ export class ContactSeedService {
     return Number.isFinite(amount) ? amount : 0;
   }
 
-  static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
-    let conversion: InitialUsdcConversionResult = { attempted: false, completed: false };
-    const usdcIssuer = this.getHardcodedUsdcIssuer();
-
-    if (getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
-      const usdcTrustline = await TrustlineService.createTrustline(publicKey, secretKey, userId, {
-        code: 'USDC',
-        issuer: usdcIssuer,
-      });
-      if (!usdcTrustline.success && usdcTrustline.error) {
-        logger.warn(`[contact-seed] USDC trustline failed before initial conversion for ${publicKey}: ${usdcTrustline.error}`);
-      }
-      conversion = await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
-    }
-
+  private static async createAdditionalDefaultTrustlines(publicKey: string, secretKey: string, userId: string) {
     const result = await TrustlineService.createDefaultTrustlines(publicKey, secretKey, userId);
     if (!result.success) {
       logger.warn(`[contact-seed] default trustlines partially failed for ${publicKey}: ${result.errors.join(' | ')}`);
     }
-    return { ...result, conversion };
+    return result;
+  }
+
+  static async createDefaultTrustlines(
+    publicKey: string,
+    secretKey: string,
+    userId: string,
+    sessionId?: string | null,
+    options: DefaultTrustlineSetupOptions = {},
+  ) {
+    let conversion: InitialUsdcConversionResult = { attempted: false, completed: false };
+    const usdcIssuer = this.getHardcodedUsdcIssuer();
+    const assets: string[] = [];
+    const errors: string[] = [];
+
+    if (getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
+      const usdcTrustline = await StellarService.ensureTrustlineFromSecret({
+        sourceSecret: secretKey,
+        assetCode: 'USDC',
+        assetIssuer: usdcIssuer,
+      });
+      if (!usdcTrustline.success && usdcTrustline.error) {
+        logger.warn(`[contact-seed] USDC trustline failed before initial conversion for ${publicKey}: ${usdcTrustline.error}`);
+        errors.push(usdcTrustline.error);
+      } else if (!usdcTrustline.existing) {
+        assets.push(usdcTrustline.hash ? `USDC (hash: ${usdcTrustline.hash})` : 'USDC');
+      }
+      conversion = await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
+    }
+
+    if (options.skipAdditionalTrustlines) {
+      return {
+        success: errors.length === 0,
+        assets,
+        errors,
+        conversion,
+        skippedAdditionalTrustlines: true,
+      };
+    }
+
+    if (options.deferAdditionalTrustlines) {
+      void this.createAdditionalDefaultTrustlines(publicKey, secretKey, userId).catch((error) => {
+        logger.warn(`[contact-seed] deferred default trustlines failed for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      return {
+        success: errors.length === 0,
+        assets,
+        errors,
+        conversion,
+        deferredAdditionalTrustlines: true,
+      };
+    }
+
+    const result = await this.createAdditionalDefaultTrustlines(publicKey, secretKey, userId);
+    return {
+      ...result,
+      assets: [...assets, ...result.assets],
+      errors: [...errors, ...result.errors],
+      success: errors.length === 0 && result.success,
+      conversion,
+    };
   }
 
   static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string | null): Promise<InitialUsdcConversionResult> {
@@ -183,31 +234,13 @@ export class ContactSeedService {
       }
 
       const sourceAmount = sourceAmountNumber.toFixed(7);
-      const quote = await StellarService.quoteStrictSendConversion({
-        sourcePublicKey: publicKey,
+      const result = await StellarService.submitStrictSendPaymentFromSecret({
+        sourceSecret: secretKey,
         destination: publicKey,
-        sourceAmount,
         sourceAsset: { code: 'XLM' },
-        destAsset: { code: 'USDC', issuer: usdcIssuer },
-      });
-      const xdr = await StellarService.buildStrictSendConversionXdr({
-        sourcePublicKey: publicKey,
-        destination: publicKey,
         sourceAmount,
-        sourceAsset: { code: 'XLM' },
-        destAsset: { code: 'USDC', issuer: usdcIssuer },
-      });
-
-      const result = await StellarService.signAndSubmitXdr(userId, secretKey, xdr, {
-        user_id: userId,
-        type: 'PATH_PAYMENT_STRICT_SEND',
-        destination_key: publicKey,
-        asset_code: 'USDC',
-        amount: Number(quote.destinationAmount),
-        context: `Friendbot funding sweep: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`,
-        source_public_key: publicKey,
-        source_session_id: sessionId || undefined,
-        destination_session_id: sessionId || undefined,
+        destinationAsset: { code: 'USDC', issuer: usdcIssuer },
+        memoText: 'INITIAL USDC',
       });
 
       if (!result.success) {
@@ -245,7 +278,7 @@ export class ContactSeedService {
           };
         }
 
-        logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
+        logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${result.destinationAmount || finalUsdcAmount.toFixed(7)} USDC`);
         return {
           attempted: true,
           completed: true,
@@ -308,7 +341,9 @@ export class ContactSeedService {
       user_id: contactUserId,
     });
 
-    await this.createDefaultTrustlines(generated.publicKey, generated.secret, contactUserId);
+    await this.createDefaultTrustlines(generated.publicKey, generated.secret, contactUserId, sessionId, {
+      deferAdditionalTrustlines: true,
+    });
 
     return {
       userId: contactUserId,
