@@ -630,7 +630,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
             <button
               type="button"
-              onClick={handlePasskeyLogin}
+              onClick={() => {
+                void handlePasskeyLogin();
+              }}
               disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
