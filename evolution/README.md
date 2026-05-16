@@ -20,19 +20,19 @@ http://localhost:8080/manager
 Do not open this in Firefox:
 
 ```text
-http://host.docker.internal:3001
+http://127.0.0.1:3001/webhook/evolution
 ```
 
-`host.docker.internal` is only for the Evolution container calling services running on your host machine. In this project it is used for the webhook target:
+The local Evolution API container uses host networking so it can call the backend running on your host machine directly. In this project the webhook target is:
 
 ```text
-http://host.docker.internal:3001/webhook/evolution
+http://127.0.0.1:3001/webhook/evolution
 ```
 
 That means:
 
 - Browser -> Evolution: `localhost:8080`
-- Evolution container -> TalkToStellar backend on host: `host.docker.internal:3001`
+- Evolution container -> TalkToStellar backend on host: `127.0.0.1:3001`
 - If the backend is not running or the webhook route is not implemented yet, QR setup can still work. Only webhook delivery will fail.
 
 ## Start
@@ -190,10 +190,10 @@ curl -X POST http://localhost:8080/message/sendText/main \
 Current local webhook target:
 
 ```text
-http://host.docker.internal:3001/webhook/evolution
+http://127.0.0.1:3001/webhook/evolution
 ```
 
-This is correct for Docker because the Evolution container must call the backend running on your host.
+This is correct for this local Linux setup because the Evolution API container runs with host networking.
 
 If the TalkToStellar backend also runs inside the same Docker Compose network, change the webhook to the service name instead, for example:
 
@@ -237,7 +237,7 @@ docker compose down -v
 
 ## Troubleshooting
 
-If Firefox says it cannot connect to `host.docker.internal:3001`, you opened the webhook URL by mistake. Open `http://localhost:8080/manager` instead.
+If Firefox says it cannot connect to `127.0.0.1:3001`, you opened the webhook URL by mistake. Open `http://localhost:8080/manager` instead.
 
 If QR does not appear:
 
