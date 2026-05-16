@@ -92,10 +92,15 @@ function isHostedEnvironment(): boolean {
   );
 }
 
+let loggedHostedFrontendBase = '';
+
 function resolveBaseUrl(candidates: Array<string | undefined>, fallbackDev: string): string {
   const hostedBase = getHostedPublicFrontendBase();
   if (hostedBase) {
-    logger.info(`[external-url] using hosted frontend base: ${hostedBase}`);
+    if (loggedHostedFrontendBase !== hostedBase) {
+      loggedHostedFrontendBase = hostedBase;
+      logger.debug(`[external-url] using hosted frontend base: ${hostedBase}`);
+    }
     return hostedBase;
   }
 

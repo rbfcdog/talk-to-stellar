@@ -346,6 +346,12 @@ export class ExternalController {
       const { provider } = req.body;
       const externalData = externalDataFromPayload(req.body);
       const forceNewAccount = Boolean(req.body?.force_new_account || req.body?.forceNewAccount);
+      const lookupOnly = Boolean(
+        req.body?.lookup_only ||
+        req.body?.lookupOnly ||
+        req.body?.skip_onboarding_link ||
+        req.body?.skipOnboardingLink
+      );
       const normalizedProvider = normalizeExternalProvider(String(provider || ''));
       const provider_user_id = normalizeExternalProviderUserId(normalizedProvider, String(req.body?.provider_user_id || ''));
 
@@ -368,7 +374,7 @@ export class ExternalController {
         }
       }
 
-      if (isBrowserExternalProvider(normalizedProvider)) {
+      if (isBrowserExternalProvider(normalizedProvider) && !lookupOnly) {
         existing = null;
       }
 
@@ -424,6 +430,15 @@ export class ExternalController {
             data: existing.data || {},
           });
         }
+      }
+
+      if (lookupOnly) {
+        return res.status(200).json({
+          success: true,
+          exists: false,
+          onboardingRequired: false,
+          reason: 'not_linked',
+        });
       }
 
       const { token, url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, externalData);
