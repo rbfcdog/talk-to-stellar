@@ -32,6 +32,56 @@ function sanitizeVisibleChatText(content: string): string {
     .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]");
 }
 
+function normalizeMessageContentForDedupe(content: string): string {
+  return String(content || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[-.,;:!?()[\]{}'"`´]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function extractMessageUrls(content: string): string[] {
+  return Array.from(String(content || "").matchAll(/https?:\/\/[^\s)]+/gi))
+    .map((match) => match[0].replace(/[.,;]+$/, ""));
+}
+
+function isLoginStatusDuplicate(a: string, b: string): boolean {
+  const left = normalizeMessageContentForDedupe(a);
+  const right = normalizeMessageContentForDedupe(b);
+  const hasLoginStatus = (value: string) => (
+    value.includes("login concluido") ||
+    value.includes("entrada concluida") ||
+    value.includes("sign in completed") ||
+    value.includes("signin completed") ||
+    value.includes("login complete")
+  );
+  const hasConnectedStatus = (value: string) => (
+    value.includes("conta conectada") ||
+    value.includes("sua conta esta conectada") ||
+    value.includes("connected account") ||
+    value.includes("account is connected") ||
+    value.includes("your account is connected")
+  );
+  return hasLoginStatus(left) && hasLoginStatus(right) && hasConnectedStatus(left) && hasConnectedStatus(right);
+}
+
+function isDuplicateChatMessage(a: Pick<Message, "role" | "content">, b: Pick<Message, "role" | "content">): boolean {
+  if (a.role !== b.role) return false;
+
+  const left = normalizeMessageContentForDedupe(a.content);
+  const right = normalizeMessageContentForDedupe(b.content);
+  if (!left || !right) return false;
+  if (left === right) return true;
+
+  const leftUrls = extractMessageUrls(a.content);
+  const rightUrls = new Set(extractMessageUrls(b.content));
+  if (leftUrls.some((url) => rightUrls.has(url))) return true;
+
+  return isLoginStatusDuplicate(a.content, b.content);
+}
+
 function getStoredChatSessionId(chatId: string): string {
   if (typeof window === "undefined") return "";
   return (
@@ -183,6 +233,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     if (!Array.isArray(items) || items.length === 0) return;
     setMessages((prev) => {
       const existingIds = new Set(prev.map((message) => message.id));
+      const merged = [...prev];
       const next = items
         .map((item) => ({
           id: `web-feedback-${item.id}`,
@@ -193,11 +244,13 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         .filter((message) => {
           if (!message.content.trim()) return false;
           if (existingIds.has(message.id)) return false;
+          if (merged.some((existing) => isDuplicateChatMessage(existing, message))) return false;
           existingIds.add(message.id);
+          merged.push(message);
           return true;
         });
 
-      return next.length ? [...prev, ...next] : prev;
+      return next.length ? merged : prev;
     });
   };
 
@@ -265,7 +318,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
     setMessages((prev) => {
       const backendIds = new Set(prev.map((message) => message.backendId).filter(Boolean));
-      const nextMessages = serverMessages
+      const merged = [...prev.filter((message) => message.id !== "agent-welcome")];
+      let changed = false;
+      const incomingMessages = serverMessages
         .map((message) => ({
           id: `server-${message.id}`,
           backendId: String(message.id),
@@ -273,15 +328,31 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           content: String(message.content || ""),
           createdAt: message.created_at ? new Date(message.created_at) : new Date(),
         } as Message))
-        .filter((message) => {
-          if (!message.content) return false;
-          if (backendIds.has(message.backendId)) return false;
-          return true;
-        });
+        .filter((message) => message.content && !backendIds.has(message.backendId));
 
-      if (nextMessages.length === 0) return prev;
+      for (const message of incomingMessages) {
+        const localIndex = merged.findIndex((existing) => !existing.backendId && isDuplicateChatMessage(existing, message));
+        if (localIndex >= 0) {
+          merged[localIndex] = {
+            ...message,
+            createdAt: message.createdAt || merged[localIndex].createdAt,
+          };
+          backendIds.add(message.backendId);
+          changed = true;
+          continue;
+        }
 
-      const merged = [...prev.filter((message) => message.id !== "agent-welcome"), ...nextMessages];
+        if (merged.some((existing) => isDuplicateChatMessage(existing, message))) {
+          backendIds.add(message.backendId);
+          continue;
+        }
+
+        merged.push(message);
+        backendIds.add(message.backendId);
+        changed = true;
+      }
+
+      if (!changed) return prev;
 
       return merged.sort((a, b) => {
         const aTime = a.createdAt?.getTime() || 0;
