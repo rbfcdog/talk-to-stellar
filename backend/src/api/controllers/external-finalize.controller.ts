@@ -3001,7 +3001,9 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
       } as any);
 
-      const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
+      const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId, {
+        skipAdditionalTrustlines: true,
+      });
       if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
         logger.warn(`[external-finalize] initial funding conversion incomplete for ${publicKey}: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
         throw new Error('O saldo inicial em US$ ainda não ficou pronto. Tente novamente em alguns segundos.');
