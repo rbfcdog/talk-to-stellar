@@ -7,12 +7,7 @@ import VaultService from '../../services/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { ContactSeedService } from './contact-seed.service';
-import { getAssetIssuer, getStellarNetworkName } from '../../config/assets';
-
-function toFixed7Floor(value: number): string {
-  const floored = Math.floor(value * 1e7) / 1e7;
-  return floored.toFixed(7);
-}
+import { getStellarNetworkName } from '../../config/assets';
 
 function normalizeEmail(value?: string): string {
   return String(value || '').trim().toLowerCase();
@@ -75,75 +70,6 @@ export class UserService {
       if (data?.session_id) {
         throw new Error('Já existe uma conta com este telefone.');
       }
-    }
-  }
-
-  private static async autoConvertInitialFundingToUsdc(input: {
-    userId: string;
-    publicKey: string;
-    secretKey?: string;
-    sessionId: string;
-  }): Promise<void> {
-    if (!input.secretKey) return;
-    if (getStellarNetworkName() !== 'TESTNET') return;
-
-    const usdcIssuer = getAssetIssuer('USDC');
-    if (!usdcIssuer) return;
-
-    try {
-      const stellarReadService = new StellarBlockchainService();
-      const accountInfoBefore = await stellarReadService.getAccount(input.publicKey);
-      const nativeBalance = accountInfoBefore.balances.find((b: any) => b.asset_type === 'native');
-      const xlmBalance = Number(nativeBalance?.balance || '0');
-
-      const keepXlm = 1.5;
-      const sendAmount = xlmBalance - keepXlm;
-      if (!Number.isFinite(sendAmount) || sendAmount <= 0.01) {
-        return;
-      }
-
-      const sourceAmount = toFixed7Floor(sendAmount);
-      const quote = await StellarService.quoteStrictSendConversion({
-        sourcePublicKey: input.publicKey,
-        destination: input.publicKey,
-        sourceAmount,
-        sourceAsset: { code: 'XLM' },
-        destAsset: { code: 'USDC', issuer: usdcIssuer },
-      });
-
-      const conversionXdr = await StellarService.buildStrictSendConversionXdr({
-        sourcePublicKey: input.publicKey,
-        destination: input.publicKey,
-        sourceAmount,
-        sourceAsset: { code: 'XLM' },
-        destAsset: { code: 'USDC', issuer: usdcIssuer },
-      });
-
-      const result = await StellarService.signAndSubmitXdr(
-        input.userId,
-        input.secretKey,
-        conversionXdr,
-        {
-          user_id: input.userId,
-          type: 'PATH_PAYMENT_STRICT_SEND',
-          destination_key: input.publicKey,
-          asset_code: 'USDC',
-          amount: Number(quote.destinationAmount),
-          context: `Onboarding auto-funding conversion: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`,
-          source_public_key: input.publicKey,
-          source_session_id: input.sessionId,
-          destination_session_id: input.sessionId,
-        }
-      );
-
-      if (!result.success) {
-        console.warn(`[onboarding-usdc] auto-conversion failed for ${input.publicKey}: ${result.error || 'unknown error'}`);
-      } else {
-        console.info(`[onboarding-usdc] auto-conversion succeeded for ${input.publicKey}: ${sourceAmount} XLM -> ~${quote.destinationAmount} USDC`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[onboarding-usdc] auto-conversion skipped for ${input.publicKey}: ${message}`);
     }
   }
 
@@ -353,13 +279,11 @@ export class UserService {
       }
 
       if (secretKey) {
-        await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
-        await this.autoConvertInitialFundingToUsdc({
-          userId,
-          publicKey,
-          secretKey,
-          sessionId,
-        });
+        const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
+        if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
+          console.warn(`[onboarding-usdc] initial funding conversion incomplete for ${publicKey}: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
+          throw new Error('O saldo inicial em US$ ainda não ficou pronto. Tente novamente em alguns segundos.');
+        }
       }
 
       const stellarService = new StellarBlockchainService();
@@ -378,6 +302,10 @@ export class UserService {
         account_data: accountInfo,
       });
     } catch (walletError) {
+      const message = walletError instanceof Error ? walletError.message : String(walletError);
+      if (message.includes('O saldo inicial em US$ ainda não ficou pronto')) {
+        throw walletError;
+      }
       console.warn('Warning: Could not fetch account balance or save wallet info:', walletError);
     }
 

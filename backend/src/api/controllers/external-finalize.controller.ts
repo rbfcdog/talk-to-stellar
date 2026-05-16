@@ -3003,7 +3003,8 @@ export default class ExternalFinalizeController {
 
       const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
       if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
-        throw new Error(`Conversão inicial XLM -> USDC não foi concluída: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
+        logger.warn(`[external-finalize] initial funding conversion incomplete for ${publicKey}: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
+        throw new Error('O saldo inicial em US$ ainda não ficou pronto. Tente novamente em alguns segundos.');
       }
 
       // link external_accounts mapping
