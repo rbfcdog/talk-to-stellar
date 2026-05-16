@@ -41,6 +41,17 @@ function getAssetCode(value: any): string {
   return String(value?.asset_code || value?.asset || 'UNKNOWN').toUpperCase();
 }
 
+function normalizeBalanceLine(value: any) {
+  const asset = getAssetCode(value);
+  return {
+    asset,
+    asset_code: asset,
+    asset_type: value?.asset_type || (asset === 'XLM' ? 'native' : 'credit_alphanum4'),
+    asset_issuer: value?.asset_issuer || value?.issuer,
+    balance: String(value?.balance || '0.0000000'),
+  };
+}
+
 function normalizeAssetInput(code: any, issuer: any) {
   return resolveConfiguredAsset(code || 'XLM', issuer);
 }
@@ -1480,24 +1491,12 @@ async function executeGetBalance(input: any): Promise<string> {
     let account = accountLookup.account;
 
     const visibleAssets = ['BRL', 'USDC'];
-    let balances = account.balances.map((balance: any) => {
-      const asset = getAssetCode(balance);
-      return {
-        asset,
-        balance: balance.balance,
-      };
-    });
+    let balances = account.balances.map(normalizeBalanceLine);
 
     const initialFundingRepair = await maybeRepairInitialFundingSweep(input, publicKey, balances);
     if (initialFundingRepair.account) {
       account = initialFundingRepair.account;
-      balances = account.balances.map((balance: any) => {
-        const asset = getAssetCode(balance);
-        return {
-          asset,
-          balance: balance.balance,
-        };
-      });
+      balances = account.balances.map(normalizeBalanceLine);
     }
 
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset)) || {
@@ -1512,9 +1511,9 @@ async function executeGetBalance(input: any): Promise<string> {
       account_ready: true,
       initial_balance_prepared: Boolean(initialFundingRepair.attempted && initialFundingRepair.completed),
       message: initialFundingRepair.attempted && initialFundingRepair.completed
-        ? 'Saldo inicial convertido automaticamente para USDC antes de mostrar o saldo.'
+        ? 'Saldo pronto.'
         : accountLookup.account_repair.attempted && accountLookup.account_repair.completed
-          ? 'Conta preparada automaticamente antes de mostrar o saldo.'
+          ? 'Conta pronta.'
         : `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
