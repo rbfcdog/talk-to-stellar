@@ -2,6 +2,8 @@ import { StellarService } from './stellar.service';
 import { logger } from '../../utils/logger';
 import { getDefaultTrustedAssets } from '../../config/assets';
 
+type TrustlineAsset = { code: string; issuer: string };
+
 export class TrustlineService {
   private static issuerReachabilityCache = new Map<string, boolean>();
 
@@ -27,6 +29,75 @@ export class TrustlineService {
     }
   }
 
+  static async createTrustline(
+    publicKey: string,
+    secretKey: string,
+    userId: string,
+    asset: TrustlineAsset,
+    existingTrustlines?: Set<string>
+  ): Promise<{ success: boolean; asset?: string; error?: string; existing: boolean }> {
+    const trustlineKey = `${asset.code}:${asset.issuer}`;
+    const knownTrustlines = existingTrustlines || new Set(
+      ((await StellarService.loadAccount(publicKey)).balances || [])
+        .filter((balance: any) => balance.asset_type !== 'native')
+        .map((balance: any) => `${String(balance.asset_code || '').toUpperCase()}:${String(balance.asset_issuer || '')}`)
+    );
+    if (knownTrustlines.has(trustlineKey)) {
+      logger.info(`Skipping ${asset.code} trustline for ${publicKey}: already exists`);
+      return { success: true, asset: asset.code, existing: true };
+    }
+
+    if (!asset.issuer) {
+      const error = `${asset.code} issuer not configured`;
+      logger.warn(`Skipping ${asset.code} trustline: issuer not configured in env`);
+      return { success: false, error, existing: false };
+    }
+
+    const issuerReachable = await this.isIssuerReachable(asset.issuer);
+    if (!issuerReachable) {
+      const error = `${asset.code} issuer ${asset.issuer} not found on current Stellar network`;
+      logger.warn(`Skipping ${asset.code} trustline for ${publicKey}: ${error}`);
+      return { success: false, error, existing: false };
+    }
+
+    try {
+      logger.info(`Creating ${asset.code} trustline for ${publicKey}`);
+
+      const trustlineXdr = await StellarService.buildTrustlineXdr({
+        sourcePublicKey: publicKey,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer,
+      });
+
+      const result = await StellarService.signAndSubmitXdr(
+        userId,
+        secretKey,
+        trustlineXdr,
+        {
+          user_id: userId,
+          type: 'trustline',
+          asset_code: asset.code,
+          source_public_key: publicKey,
+          context: `Auto-setup trustline during onboarding for ${asset.code}`,
+        }
+      );
+
+      if (result.success && result.hash) {
+        logger.info(`${asset.code} trustline created successfully: ${result.hash}`);
+        knownTrustlines.add(trustlineKey);
+        return { success: true, asset: `${asset.code} (hash: ${result.hash})`, existing: false };
+      }
+
+      const error = `Failed to create ${asset.code} trustline`;
+      logger.error(error);
+      return { success: false, error, existing: false };
+    } catch (error: any) {
+      const errorMsg = `${asset.code} trustline error: ${error?.message || String(error)}`;
+      logger.error(errorMsg);
+      return { success: false, error: errorMsg, existing: false };
+    }
+  }
+
   static async createDefaultTrustlines(
     publicKey: string,
     secretKey: string,
@@ -41,63 +112,11 @@ export class TrustlineService {
     );
 
     for (const asset of this.getDefaultTrustlineAssets()) {
-      if (!asset.issuer) {
-        logger.warn(`Skipping ${asset.code} trustline: issuer not configured in env`);
-        results.errors.push(`${asset.code} issuer not configured`);
-        continue;
-      }
-
-      const issuerReachable = await this.isIssuerReachable(asset.issuer);
-      if (!issuerReachable) {
-        const errorMsg = `${asset.code} issuer ${asset.issuer} not found on current Stellar network`;
-        logger.warn(`Skipping ${asset.code} trustline for ${publicKey}: ${errorMsg}`);
-        results.errors.push(errorMsg);
-        results.success = false;
-        continue;
-      }
-
-      const trustlineKey = `${asset.code}:${asset.issuer}`;
-      if (existingTrustlines.has(trustlineKey)) {
-        logger.info(`Skipping ${asset.code} trustline for ${publicKey}: already exists`);
-        continue;
-      }
-
-      try {
-        logger.info(`Creating ${asset.code} trustline for ${publicKey}`);
-
-        const trustlineXdr = await StellarService.buildTrustlineXdr({
-          sourcePublicKey: publicKey,
-          assetCode: asset.code,
-          assetIssuer: asset.issuer,
-        });
-
-        const result = await StellarService.signAndSubmitXdr(
-          userId,
-          secretKey,
-          trustlineXdr,
-          {
-            user_id: userId,
-            type: 'trustline',
-            asset_code: asset.code,
-            source_public_key: publicKey,
-            context: `Auto-setup trustline during onboarding for ${asset.code}`,
-          }
-        );
-
-        if (result.success && result.hash) {
-          logger.info(`${asset.code} trustline created successfully: ${result.hash}`);
-          results.assets.push(`${asset.code} (hash: ${result.hash})`);
-          existingTrustlines.add(trustlineKey);
-        } else {
-          const errorMsg = `Failed to create ${asset.code} trustline`;
-          logger.error(errorMsg);
-          results.errors.push(errorMsg);
-          results.success = false;
-        }
-      } catch (error: any) {
-        const errorMsg = `${asset.code} trustline error: ${error?.message || String(error)}`;
-        logger.error(errorMsg);
-        results.errors.push(errorMsg);
+      const result = await this.createTrustline(publicKey, secretKey, userId, asset, existingTrustlines);
+      if (result.success) {
+        if (result.asset && !result.existing) results.assets.push(result.asset);
+      } else if (result.error) {
+        results.errors.push(result.error);
         results.success = false;
       }
     }

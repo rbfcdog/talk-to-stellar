@@ -23,7 +23,7 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { GlobalProfileService } from '../services/global-profile.service';
 import { logger } from '../../utils/logger';
-import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
@@ -2958,6 +2958,11 @@ export default class ExternalFinalizeController {
         name: name || `Wallet for ${userId}`,
         pix_key: pixKey,
       } as any);
+
+      const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
+      if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
+        throw new Error(`Conversão inicial XLM -> USDC não foi concluída: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
+      }
 
       // link external_accounts mapping
       await createExternalMappingsWithAliases({
