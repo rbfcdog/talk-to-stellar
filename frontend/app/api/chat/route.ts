@@ -35,8 +35,16 @@ const getExternalCheckAccountUrl = () => {
   return `${getBackendBaseUrl()}/api/external/check-account`;
 };
 
+const WEB_SESSION_LOOKUP_TTL_MS = 5000;
+const webSessionLookupCache = new Map<string, { sessionId: string | null; expiresAt: number }>();
+
 async function resolveWebSessionId(browserId: string): Promise<string | null> {
   if (!browserId) return null;
+
+  const cached = webSessionLookupCache.get(browserId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.sessionId;
+  }
 
   const response = await fetch(getExternalCheckAccountUrl(), {
     method: "POST",
@@ -44,13 +52,19 @@ async function resolveWebSessionId(browserId: string): Promise<string | null> {
     body: JSON.stringify({
       provider: "web",
       provider_user_id: browserId,
+      lookup_only: true,
     }),
     cache: "no-store",
   });
 
   if (!response.ok) return null;
   const payload = await response.json().catch(() => ({}));
-  return payload?.exists && payload?.sessionId ? String(payload.sessionId) : null;
+  const sessionId = payload?.exists && payload?.sessionId ? String(payload.sessionId) : null;
+  webSessionLookupCache.set(browserId, {
+    sessionId,
+    expiresAt: Date.now() + WEB_SESSION_LOOKUP_TTL_MS,
+  });
+  return sessionId;
 }
 
 /**
