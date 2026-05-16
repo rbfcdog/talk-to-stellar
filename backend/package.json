@@ -27,6 +27,7 @@
     "stellar:backfill-all-wallets-trustlines": "ts-node scripts/backfill-trustlines-all-existing-wallets.ts",
     "financial:backfill-global-profiles": "ts-node scripts/backfill-global-profiles.ts",
     "financial:send-daily-summaries-once": "ts-node scripts/send-daily-summaries-once.ts",
+    "evolution:configure-webhook": "ts-node scripts/configure-evolution-webhook.ts",
     "migrate:financial-assistant": "ts-node scripts/run-financial-assistant-migration.ts",
     "migrate:required": "ts-node scripts/run-required-migrations.ts"
   },
