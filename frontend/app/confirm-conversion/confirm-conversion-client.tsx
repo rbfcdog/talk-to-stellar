@@ -60,7 +60,7 @@ function formatAmount(amount?: string, assetCode?: string) {
   if (!Number.isFinite(n)) return "Amount unavailable"
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
-  if (code === "XLM") return "TalkToStellar wallet balance"
+  if (code === "XLM") return "saldo da conta TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }
 
@@ -202,7 +202,7 @@ export default function ConfirmConversionClient({
           payload.transferDetails?.destinationAmount
             ? `Destination received: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode)}`
             : "",
-          feedbackIsCrossAsset && routeForFeedback ? `Best path: ${routeForFeedback}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? "Best route selected." : "",
           payload.transferDetails?.feeDisplay ? `Fee: ${payload.transferDetails.feeDisplay}` : "",
           feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
         ].filter(Boolean).join("\n"))
@@ -227,8 +227,8 @@ export default function ConfirmConversionClient({
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
-  const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "XLM")
-  const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "XLM")
+  const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "")
+  const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "")
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
@@ -254,7 +254,7 @@ export default function ConfirmConversionClient({
                 Confirm this conversion
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Review the details and enter your PIN to execute the conversion in your wallet.
+                Review the details and enter your PIN to execute the conversion in your account.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
@@ -291,7 +291,7 @@ export default function ConfirmConversionClient({
                   <p className="text-slate-300">Estimated total fee: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-slate-300">Best path now: {routeChain}</p>
+                  <p className="text-slate-300">Best route selected.</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300">

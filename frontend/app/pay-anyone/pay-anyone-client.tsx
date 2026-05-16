@@ -300,7 +300,6 @@ export default function PayAnyoneClient() {
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
                 >
                   <option value="USDC">US$</option>
-                  <option value="XLM">XLM</option>
                   <option value="BRL">R$</option>
                 </select>
               </label>
@@ -313,7 +312,6 @@ export default function PayAnyoneClient() {
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
-                  <option value="XLM">XLM</option>
                 </select>
               </label>
               <label className="block space-y-2 sm:col-span-3">

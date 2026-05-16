@@ -39,6 +39,7 @@ function formatAmount(amount?: string, assetCode?: string) {
   if (!Number.isFinite(n)) return `${amount || ""} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
+  if (code === "XLM") return "saldo da conta TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }
 
@@ -49,13 +50,6 @@ function getAutoConversionMessage(result?: any) {
   const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
   return `Automatic conversion completed: ${formatAmount(details?.sourceAmount, sourceAsset)} became ${formatAmount(details?.destinationAmount, destinationAsset)} before sending.`
-}
-
-function shortenValue(value?: string, left = 6, right = 6) {
-  const raw = String(value || "").trim()
-  if (!raw) return "Unavailable"
-  if (raw.length <= left + right + 3) return raw
-  return `${raw.slice(0, left)}...${raw.slice(-right)}`
 }
 
 function formatTimestamp(value?: string) {
@@ -191,14 +185,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
       if (response.ok && payload?.success) {
-        const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
         const conversionMessage = getAutoConversionMessage(payload)
         enqueueWebChatFeedback([
           "Payment received successfully.",
           conversionMessage,
-          `Amount: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
-          hash ? `Transaction: ${shortenValue(hash, 8, 8)}` : "",
+          `Amount: ${formatAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.transferDetails?.destinationAssetCode || ""))}`,
           `Time: ${formatTimestamp(payload.completed_at)}`,
           receiptUrl ? `Receipt: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
@@ -232,8 +224,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.transferDetails?.destinationAssetCode || destinationAssetCode || "")
-  const successDestination = String(result?.destination || "")
-  const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const isExpiredLink = Boolean(validation.valid === false && (validation as any)?.expired)
@@ -351,9 +341,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
               <p className="text-base font-semibold text-emerald-300">Payment received successfully</p>
               <div className="space-y-2 rounded-lg border border-emerald-400/20 bg-slate-950/50 p-4">
-                <p><span className="text-slate-300">Amount: </span>{successAmount} {successAsset}</p>
-                <p><span className="text-slate-300">Destination: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
-                <p><span className="text-slate-300">Transaction: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
+                <p><span className="text-slate-300">Amount: </span>{formatAmount(successAmount, successAsset)}</p>
+                <p><span className="text-slate-300">Destination: </span>Your account</p>
                 <p><span className="text-slate-300">Time: </span>{formatTimestamp(result?.completed_at)}</p>
               </div>
               {successReceiptUrl && (

@@ -105,7 +105,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       title: "Ana Silva",
       avatar: "/avatar-ana.svg",
       starter: [
-        { id: "c1-a1", role: "assistant", content: L("Oi! Quando quiser, já pode enviar para minha carteira.", "Hi. You can send to my wallet whenever you want."), createdAt: new Date() },
+        { id: "c1-a1", role: "assistant", content: L("Oi! Quando quiser, já pode enviar para minha conta.", "Hi. You can send to my account whenever you want."), createdAt: new Date() },
       ],
     },
     "contact-2": {
@@ -116,11 +116,11 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       ],
     },
     "contact-3": { title: "Marina Costa", avatar: "/avatar-marina.svg", starter: [{ id: "c3-a1", role: "assistant", content: L("Deixa esse contato fixo para pagamentos rápidos.", "Keep this contact pinned for quick payments."), createdAt: new Date() }] },
-    "contact-4": { title: "Fernando Oliveira", avatar: "/avatar-fernando.svg", starter: [{ id: "c4-a1", role: "assistant", content: L("Cobrança principal continua por essa carteira.", "The main charge still goes through this wallet."), createdAt: new Date() }] },
+    "contact-4": { title: "Fernando Oliveira", avatar: "/avatar-fernando.svg", starter: [{ id: "c4-a1", role: "assistant", content: L("Cobrança principal continua por essa conta.", "The main charge still goes through this account."), createdAt: new Date() }] },
     "contact-5": { title: "Juliana Lima", avatar: "/avatar-juliana.svg", starter: [{ id: "c5-a1", role: "assistant", content: L("Pode usar esse contato para pagamentos recorrentes.", "You can use this contact for recurring payments."), createdAt: new Date() }] },
     "contact-6": { title: "Roberto Dias", avatar: "/avatar-roberto.svg", starter: [{ id: "c6-a1", role: "assistant", content: L("Confirma saldo e envia para o meu endereço padrão.", "Check your balance and send to my default address."), createdAt: new Date() }] },
     "contact-7": { title: "Patricia Ferreira", avatar: "/avatar-patricia.svg", starter: [{ id: "c7-a1", role: "assistant", content: L("Esse contato é para transferências internas.", "This contact is for internal transfers."), createdAt: new Date() }] },
-    "contact-8": { title: "Leonardo Santos", avatar: "/avatar-leonardo.svg", starter: [{ id: "c8-a1", role: "assistant", content: L("Movimentações em XLM ficam por aqui.", "XLM movements stay here."), createdAt: new Date() }] },
+    "contact-8": { title: "Leonardo Santos", avatar: "/avatar-leonardo.svg", starter: [{ id: "c8-a1", role: "assistant", content: L("Movimentações em US$ ficam por aqui.", "US$ movements stay here."), createdAt: new Date() }] },
     "contact-9": { title: "Isabella Rodrigues", avatar: "/avatar-isabella.svg", starter: [{ id: "c9-a1", role: "assistant", content: L("Esse é meu contato preferencial para receber.", "This is my preferred receiving contact."), createdAt: new Date() }] },
     "contact-10": { title: "Gustavo Martins", avatar: "/avatar-gustavo.svg", starter: [{ id: "c10-a1", role: "assistant", content: L("Prioriza esse canal para transações urgentes.", "Prioritize this channel for urgent transactions."), createdAt: new Date() }] },
   };

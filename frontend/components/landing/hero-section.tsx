@@ -54,7 +54,7 @@ export function HeroSection() {
           </h1>
 
           <p className="mb-12 text-balance text-xl lg:text-2xl font-light leading-relaxed max-w-3xl mx-auto text-gray-600">
-            The conversational layer for Stellar payments. Send money, manage contacts, and use blockchain with natural language.
+            The conversational layer for global payments. Send money, manage contacts, and move between R$ and US$ with natural language.
           </p>
 
           <div className="mb-16 flex flex-wrap justify-center gap-6">

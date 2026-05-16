@@ -3,7 +3,7 @@ import ConfirmConversionClient from "./confirm-conversion-client"
 
 export const metadata: Metadata = {
   title: "Confirm Conversion",
-  description: "Confirm your wallet asset conversion with your PIN.",
+  description: "Confirm your account conversion with your PIN.",
 }
 
 export default async function ConfirmConversionPage({

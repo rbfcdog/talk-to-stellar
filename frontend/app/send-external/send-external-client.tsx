@@ -7,7 +7,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { CheckCircle2, Copy, Loader2, ShieldAlert, XCircle } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
 
-type AssetCode = "USDC" | "XLM"
+type AssetCode = "USDC"
 
 type Preview = {
   success?: boolean
@@ -34,7 +34,7 @@ type SendResult = {
 const PUBLIC_KEY_REGEX = /^G[A-Z2-7]{55}$/
 
 function normalizeAsset(value: string | null): AssetCode {
-  return String(value || "").trim().toUpperCase() === "XLM" ? "XLM" : "USDC"
+  return "USDC"
 }
 
 function shortKey(value: string) {
@@ -74,8 +74,7 @@ export default function SendExternalClient() {
   const available = Number(String(preview?.available_balance || "0").replace(",", "."))
   const enoughBalance = amountValid && amountNumber <= available + 0.0000001
   const destinationAcceptsAsset = preview?.destination_accepts_asset !== false
-  const missingAccountNeedsOneXlm = asset === "XLM" && preview?.destination_exists === false && amountValid && amountNumber < 1
-  const canReview = Boolean(destinationValid && amountValid && preview?.success && enoughBalance && destinationAcceptsAsset && !missingAccountNeedsOneXlm)
+  const canReview = Boolean(destinationValid && amountValid && preview?.success && enoughBalance && destinationAcceptsAsset)
 
   useEffect(() => {
     if (!sessionId || !destinationValid) {
@@ -193,9 +192,9 @@ export default function SendExternalClient() {
           <div className="inline-flex rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-1 text-xs font-bold uppercase tracking-[0.22em] text-cyan-100">
             Envio externo
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-white md:text-6xl">Enviar para carteira Stellar</h1>
+          <h1 className="text-4xl font-semibold tracking-tight text-white md:text-6xl">Enviar para conta externa</h1>
           <p className="max-w-2xl text-base leading-7 text-slate-300">
-            Use este fluxo para mandar USDC ou XLM para uma chave pública fora do ecossistema TalkToStellar.
+            Use este fluxo para mandar dólar digital para uma conta fora do ecossistema TalkToStellar.
           </p>
         </section>
 
@@ -211,7 +210,7 @@ export default function SendExternalClient() {
           {step === "form" && (
             <div className="space-y-5">
               <label className="block space-y-2">
-                <span className="text-sm font-semibold text-slate-200">Chave pública de destino</span>
+                <span className="text-sm font-semibold text-slate-200">Chave da conta externa</span>
                 <div className="relative">
                   <input
                     value={destination}
@@ -244,21 +243,19 @@ export default function SendExternalClient() {
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-semibold text-slate-200">Ativo</span>
+                      <span className="text-sm font-semibold text-slate-200">Moeda</span>
                       <select
                         value={asset}
                         onChange={(event) => setAsset(normalizeAsset(event.target.value))}
                         className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60"
                       >
-                        <option value="USDC">USDC</option>
-                        <option value="XLM">XLM</option>
+                        <option value="USDC">US$</option>
                       </select>
                     </label>
                   </div>
                   <p className="text-sm text-slate-300">Taxa estimada: {preview?.estimated_fee_display || "carregando..."}</p>
                   {preview?.destination_warning && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{preview.destination_warning}</p>}
-                  {!destinationAcceptsAsset && <p className="text-sm font-semibold text-rose-300">A carteira de destino não aceita USDC. Tente enviar XLM ou peça ao destinatário para configurar a conta.</p>}
-                  {missingAccountNeedsOneXlm && <p className="text-sm font-semibold text-rose-300">Esta conta ainda não existe na rede. O envio criará a conta mas requer mínimo de 1 XLM.</p>}
+                  {!destinationAcceptsAsset && <p className="text-sm font-semibold text-rose-300">A conta de destino não aceita dólar digital. Peça ao destinatário para preparar a conta antes de continuar.</p>}
                   {amountValid && !enoughBalance && <p className="text-sm font-semibold text-rose-300">Saldo insuficiente para esse envio.</p>}
                   {previewStatus === "error" && <p className="text-sm font-semibold text-rose-300">{preview?.error || "Falha ao validar envio."}</p>}
                   <button
@@ -278,7 +275,7 @@ export default function SendExternalClient() {
             <div className="space-y-4">
               <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-semibold text-amber-100">
                 <ShieldAlert className="mb-2 h-5 w-5" />
-                Este endereço está fora do ecossistema TalkToStellar. Verifique antes de continuar.
+                Esta conta está fora do ecossistema TalkToStellar. Verifique antes de continuar.
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Destino</p>
@@ -331,7 +328,6 @@ export default function SendExternalClient() {
               <p className="text-xl font-bold text-emerald-200">Envio concluído</p>
               <p>Valor: {result.amount} {result.asset}</p>
               <p className="font-mono text-sm">Destino: {shortKey(result.destination || "")}</p>
-              <p className="font-mono text-sm">Transação: {shortKey(result.tx_hash || "")}</p>
               {result.receipt_url && <a className="inline-flex rounded-xl bg-emerald-300 px-4 py-3 font-bold text-slate-950" href={result.receipt_url} target="_blank" rel="noreferrer">Abrir comprovante</a>}
               <Link className="block rounded-xl border border-white/10 px-4 py-3 text-center font-bold text-white" href="/chat">Voltar ao chat</Link>
             </div>

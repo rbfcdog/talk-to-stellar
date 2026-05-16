@@ -151,13 +151,10 @@ export class TransferNotificationService {
       ...(await this.findExternalMappings(sessionId, userId)),
     ]);
 
-    const sourceAmount = String(input.sourceAmount || '').trim();
     const destinationAmount = String(input.destinationAmount || '').trim();
-    const keepXlm = String(input.keepXlm || '1.5').trim();
     const text =
-      `Conversão automática concluída com sucesso.\n` +
-      `Foram convertidos ${sourceAmount || '0'} XLM para aproximadamente ${formatCustomerAssetAmount(destinationAmount || '0', 'USDC')}.\n` +
-      `A conta manteve cerca de ${keepXlm} XLM de reserva.`;
+      `Saldo inicial preparado com sucesso.\n` +
+      `Seu saldo disponível agora inclui aproximadamente ${formatCustomerAssetAmount(destinationAmount || '0', 'USDC')}.`;
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);

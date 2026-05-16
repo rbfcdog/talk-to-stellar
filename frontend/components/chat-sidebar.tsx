@@ -58,14 +58,14 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "contact-1",
       title: "Ana Silva",
-      lastMessage: L("Recebido. Você já pode me pagar pela carteira.", "Received. You can pay me through the wallet now."),
+      lastMessage: L("Recebido. Você já pode me pagar pela conta.", "Received. You can pay me through the account now."),
       lastMessageTime: new Date(Date.now() - 3600000).toISOString(),
       avatar: "/avatar-ana.svg",
     },
     {
       id: "contact-2",
       title: "Carlos Souza",
-      lastMessage: L("Envie o valor de hoje para a carteira.", "Send me today's amount to the wallet."),
+      lastMessage: L("Envie o valor de hoje para a conta.", "Send me today's amount to the account."),
       lastMessageTime: new Date(Date.now() - 7200000).toISOString(),
       avatar: "/avatar-carlos.svg",
     },
@@ -79,7 +79,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "contact-4",
       title: "Fernando Oliveira",
-      lastMessage: L("Pagamento agendado para a carteira principal.", "Payment scheduled for the main wallet."),
+      lastMessage: L("Pagamento agendado para a conta principal.", "Payment scheduled for the main account."),
       lastMessageTime: new Date(Date.now() - 14400000).toISOString(),
       avatar: "/avatar-fernando.svg",
     },
@@ -93,7 +93,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "contact-6",
       title: "Roberto Dias",
-      lastMessage: L("Confirmo saldo e endereço antes do envio.", "I confirm balance and wallet address before sending."),
+      lastMessage: L("Confirmo saldo e dados do destinatário antes do envio.", "I confirm balance and recipient details before sending."),
       lastMessageTime: new Date(Date.now() - 21600000).toISOString(),
       avatar: "/avatar-roberto.svg",
     },
@@ -107,7 +107,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     {
       id: "contact-8",
       title: "Leonardo Santos",
-      lastMessage: L("Contato de suporte para movimentos em XLM.", "Support contact for XLM movements."),
+      lastMessage: L("Contato de suporte para pagamentos em US$.", "Support contact for US$ payments."),
       lastMessageTime: new Date(Date.now() - 28800000).toISOString(),
       avatar: "/avatar-leonardo.svg",
     },

@@ -72,15 +72,15 @@ export default function ScrollFeatures() {
       ]
     },
     {
-      title: "4. Transaction Confirmed",
-      description: "Once you confirm the transaction, digital dollars settle on the other side almost in real time, with a receipt.",
+      title: "4. Payment Confirmed",
+      description: "Once you confirm the payment, digital dollars arrive on the other side almost in real time, with a receipt.",
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={Zap} color="#4CA1EF" delay={1.5} />,
       messages: [
-        { type: 'bot', text: 'R$5,000.00 transaction confirmed successfully.', time: '09:52' },
+        { type: 'bot', text: 'R$5,000.00 payment confirmed successfully.', time: '09:52' },
         { type: 'bot', text: (
           <div className="flex flex-col gap-2">
-            <span>Transaction complete. Here is your receipt:</span>
+            <span>Payment complete. Here is your receipt:</span>
             <div className="bg-[#0C1421] border border-white/[0.03] rounded-xl p-3 flex items-center gap-3 w-[200px] mt-1 relative overflow-hidden group hover:bg-[#162032] transition-colors cursor-pointer shadow-sm">
               <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5 text-red-500" />

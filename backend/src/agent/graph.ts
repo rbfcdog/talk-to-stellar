@@ -515,7 +515,7 @@ export class AgentGraph {
       .trim();
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
-    if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
+    if (token === 'xlm' || token === 'lumen' || token === 'lumens') return '';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
   }
@@ -701,13 +701,13 @@ export class AgentGraph {
     state.response_message = this.text(
       language,
       [
-        'Esse envio é para uma carteira Stellar externa, fora do ecossistema TalkToStellar.',
-        'Por segurança, a confirmação acontece em uma tela dedicada com revisão do endereço completo e autenticação.',
+        'Esse envio é para uma conta externa, fora do ecossistema TalkToStellar.',
+        'Por segurança, a confirmação acontece em uma tela dedicada com revisão da chave completa e autenticação.',
         `Abra o link:\n\n${finalUrl}`,
       ].join('\n\n'),
       [
-        'This is an external Stellar wallet transfer outside the TalkToStellar ecosystem.',
-        'For safety, confirmation happens on a dedicated page with full-address review and authentication.',
+        'This is an external account transfer outside the TalkToStellar ecosystem.',
+        'For safety, confirmation happens on a dedicated page with full key review and authentication.',
         `Open the link:\n\n${finalUrl}`,
       ].join('\n\n')
     );
@@ -1450,8 +1450,8 @@ export class AgentGraph {
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
-    if (upper === 'XLM') return 'saldo da carteira TalkToStellar';
-    return `${n.toFixed(2)} ${upper || 'XLM'}`;
+    if (upper === 'XLM') return 'saldo da conta TalkToStellar';
+    return `${n.toFixed(2)} ${upper || 'saldo'}`;
   }
 
   private formatUserFacingAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
@@ -1707,13 +1707,13 @@ export class AgentGraph {
         'Extraia apenas o intento de pagamento em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- is_payment_link deve ser true quando o usuário pedir para criar/gerar/fazer/montar link de pagamento, link de transação, link de transferência ou link para alguém receber dinheiro.',
-        '- Quando is_payment_link=true, não exija destinatário, contato ou chave pública.',
-        '- recipient_query deve ser o nome, telefone, chave de transferência ou chave pública mais útil para identificar o destinatário.',
+        '- Quando is_payment_link=true, não exija destinatário, contato ou identificador técnico.',
+        '- recipient_query deve ser o nome, telefone, email, CPF ou chave de transferência mais útil para identificar o destinatário.',
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
-        '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem chave pública.',
+        '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem identificador técnico.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou XLM) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
-        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/XLM". Isso também vale para links de pagamento.',
+        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC ou BRL) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
+        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC". Isso também vale para links de pagamento.',
         '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
@@ -1864,7 +1864,7 @@ export class AgentGraph {
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
-        '- sourceAssetCode deve ser o ativo de origem (XLM, USDC, BRL ou outro ativo explícito).',
+        '- sourceAssetCode deve ser o ativo de origem (USDC ou BRL). Não use XLM em respostas ou JSON de usuário.',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
@@ -1877,7 +1877,7 @@ export class AgentGraph {
         `Mensagem do usuário: ${userMessage}`,
         '',
         'Formato esperado:',
-        '{"sourceAmount":"10","sourceAssetCode":"USDC","destAssetCode":"XLM","needs_clarification":false,"clarification_question":""}',
+        '{"sourceAmount":"10","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
       ].join('\n'),
     });
 
@@ -1923,10 +1923,10 @@ export class AgentGraph {
       .replace(/\bdolares?\b/g, 'usdc')
       .replace(/\breais?\b/g, 'brl');
 
-    const assets = ['XLM', 'USDC', 'BRL'];
+    const assets = ['USDC', 'BRL'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
-    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(xlm|usdc|brl)\b/);
-    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(xlm|usdc|brl)\b/);
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl)\b/);
 
     const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
     const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
@@ -1946,7 +1946,7 @@ export class AgentGraph {
   }> {
     const normalizedAsset = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     if (!normalizedAsset || !state.session_data?.public_key) {
-      return { success: false, error: 'Não consegui identificar o ativo de origem.' };
+      return { success: false, error: 'Não consegui identificar a moeda de origem.' };
     }
 
     const raw = await executeTool('get_saldo_tecnico', {
@@ -1958,7 +1958,7 @@ export class AgentGraph {
     try {
       result = JSON.parse(raw);
     } catch {
-      return { success: false, error: 'Não consegui ler seu saldo técnico agora.' };
+      return { success: false, error: 'Não consegui ler seu saldo disponível agora.' };
     }
 
     if (!result.success) {
@@ -1989,7 +1989,7 @@ export class AgentGraph {
         availableBalance: total.toFixed(7),
         keptReserve: keptReserve ? keptReserve.toFixed(7) : undefined,
         error: normalizedAsset === 'XLM'
-          ? 'Seu XLM está reservado para manter a conta ativa e pagar taxas da rede.'
+          ? 'Esse saldo fica reservado para manter sua conta operacional.'
           : `Você não tem saldo disponível em ${normalizedAsset}.`,
       };
     }
@@ -2095,7 +2095,7 @@ export class AgentGraph {
       `user_id=${resolvedUserId || 'indisponivel'}`,
       `session_active=${hasActiveWallet ? 'true' : 'false'}`,
       `force_logged_out=${forceLoggedOut ? 'true' : 'false'}`,
-      `wallet_public_key_display=${this.maskPublicKey(publicKey)}`,
+      `account_identifier_available=${publicKey ? 'true' : 'false'}`,
       `transfer_key=${transferKey || 'indisponivel'}`,
       `email=${email || 'indisponivel'}`,
       `phone_number=${phoneNumber || 'indisponivel'}`,
@@ -2108,7 +2108,7 @@ export class AgentGraph {
       `- ${this.languageInstruction(language)}`,
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
-      '- If session_active=false, do not invent wallet data. Return the login/onboarding link flow.',
+      '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
       '- For balances, contacts, history, payments, conversions, reset PIN, and logout, prefer tools over free text.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
@@ -2123,10 +2123,12 @@ export class AgentGraph {
       '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
+      '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
+      '- If the user asks for XLM or technical balances, show only the app balance in R$ and US$ and say TalkToStellar displays the available app balance.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
-      '- When a quote or payment result has a fee, say it before confirmation in R$ and US$, never in XLM.',
+      '- When a quote or payment result has a fee, say it before confirmation in R$ and US$ only.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
     ].join('\n');
@@ -2225,7 +2227,7 @@ export class AgentGraph {
    */
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
     try {
-      const systemPrompt = `You are an intent classifier for a TalkToStellar digital wallet assistant.
+      const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 Analyze the user message and classify it into ONE of these intents:
 login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, or general
 
@@ -2239,7 +2241,7 @@ Respond ONLY with the intent name. Examples:
 - "show transaction history" -> history
 - "see transactions list" -> history
 - "manda pro João de novo" -> financial_memory
-- "usa a mesma carteira de ontem" -> financial_memory
+- "usa o mesmo pagamento de ontem" -> financial_memory
 - "quanto eu já converti esse mês?" -> financial_memory
 - "qual foi minha média de cotação?" -> financial_memory
 - "quanto recebi esse mês?" -> financial_memory
@@ -2256,7 +2258,7 @@ Respond ONLY with the intent name. Examples:
 - "convert assets" -> conversion
 - "qual a cotação do dólar" -> price_quote
 - "cotação brl usdc agora" -> price_quote
-- "Send 100 XLM" -> payment
+- "Send 100 XLM" -> balance
 - "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
 - "quero criar um link de transacao de 10 usdc" -> payment_link
 - "gerar link de pagamento de 15 dólares" -> payment_link
@@ -2273,16 +2275,16 @@ Respond ONLY with the intent name. Examples:
 - "quero mandar 10 usdc pra fora da minha conta" -> pix
 - "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
 - "Create account" -> onboard
-- "Create wallet" -> wallet
-- "I need a wallet" -> wallet
-- "Entrar na wallet" -> wallet
-- "Importar carteira existente" -> wallet
-- "Sair da wallet" -> wallet_logout
-- "Desconectar carteira" -> wallet_logout
+- "Connect account" -> wallet
+- "I need an account" -> wallet
+- "Entrar na conta" -> wallet
+- "Importar conta existente" -> wallet
+- "Sair da conta" -> wallet_logout
+- "Desconectar conta" -> wallet_logout
 
-Prioritize 'payment_link' when the user asks to create/generate a payment/transaction link, especially when no recipient public key or saved contact is provided.
-Prioritize 'wallet' for messages about creating/generating wallets, accounts, or getting started.
-Prefer 'contacts' when the user asks about contact list, wallet contacts, favorites, or saved beneficiaries.`;
+Prioritize 'payment_link' when the user asks to create/generate a payment/transaction link, especially when no recipient or saved contact is provided.
+Prioritize 'wallet' for messages about creating/generating accounts or getting started.
+Prefer 'contacts' when the user asks about contact list, account contacts, favorites, or saved beneficiaries.`;
 
       const response = await this.llm.invoke(await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
@@ -2332,7 +2334,7 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         'Regras:',
         '- action deve ser "add" quando o usuário quer salvar/adicionar/incluir algo nos contatos.',
         '- action deve ser "list" quando o usuário quer ver/listar contatos.',
-        '- contact_key deve ser a chave pública, chave de transferência, e-mail, telefone, CPF ou identificador informado para salvar.',
+        '- contact_key deve ser a chave de transferência, e-mail, telefone, CPF ou identificador informado para salvar.',
         '- contact_name deve ser o nome do contato quando explicitamente informado; se não houver nome, use string vazia.',
         '- needs_clarification deve ser true somente se faltar o dado necessário para a ação.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
@@ -2515,10 +2517,6 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
         }
       }
 
-      if (publicKey && !pixKey) {
-        pixKey = publicKey;
-      }
-
       if (state.session_data && (publicKey || pixKey)) {
         const shouldPersist =
           (publicKey && state.session_data.public_key !== publicKey) ||
@@ -2590,12 +2588,9 @@ Prefer 'contacts' when the user asks about contact list, wallet contacts, favori
 
       // If wallet already exists, inform user
       if (state.wallet_info) {
-        state.response_message = `Você já possui uma carteira.
+        state.response_message = `Você já possui uma conta TalkToStellar.
 
-**Chave Pública (Public Key):**
-\`${state.wallet_info.publicKey}\`
-
-Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave pública para receber valores na sua carteira.`;
+Sua conta está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.success = true;
         await this.saveAssistantResponse(state);
         return state;
@@ -2637,12 +2632,9 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
           await this.repository.saveSession(state.session_id, state.session_data);
         }
 
-        state.response_message = `Carteira importada com sucesso.
+        state.response_message = `Conta conectada com sucesso.
 
-      **Chave Pública:**
-      \`${walletResult.publicKey}\`
-
-      Use sua chave pública para receber valores na sua carteira.`;
+Você já pode consultar saldo, salvar contatos e enviar dinheiro.`;
         state.success = true;
 
         await this.saveAssistantResponse(state);
@@ -2694,14 +2686,9 @@ Sua carteira foi criada em ${state.wallet_info.createdAt}. Use sua chave públic
       }
 
       // Prepare response with wallet info
-      state.response_message = `Sua carteira foi criada com sucesso.
+      state.response_message = `Sua conta TalkToStellar foi criada com sucesso.
 
-    **Chave Pública (pode compartilhar):**
-\`${walletResult.publicKey}\`
-
-Sua carteira foi criada e já está pronta para usar.
-
-    Use sua chave pública para receber valores na sua carteira.`;
+Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       state.success = true;
       state.action_params = {
@@ -2721,7 +2708,7 @@ Sua carteira foi criada e já está pronta para usar.
       logger.error(`[Agent] Wallet creation failed: ${errorMessage}`);
       state.success = false;
       state.error = errorMessage;
-      state.response_message = `Desculpe, houve um erro ao criar sua carteira: ${errorMessage}`;
+      state.response_message = `Desculpe, houve um erro ao criar sua conta: ${errorMessage}`;
       await this.saveAssistantResponse(state);
       return state;
     }
@@ -2827,7 +2814,7 @@ Sua carteira foi criada e já está pronta para usar.
         : '';
     state.response_message = providerLabel
       ? `Logout concluido. Sua conta foi desconectada. Volte ao ${providerLabel} para continuar.`
-      : 'Logout concluido. Você saiu da wallet atual com sucesso. Agora você pode criar ou importar outra carteira quando quiser.';
+      : 'Logout concluido. Sua conta foi desconectada com sucesso. Agora você pode entrar ou criar outra conta quando quiser.';
 
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
@@ -2878,7 +2865,7 @@ Sua carteira foi criada e já está pronta para usar.
 
     state.pending_payment = undefined;
     state.success = true;
-    state.response_message = `${this.formatMoneyByAsset(sentAmount, 'XLM')} enviados para ${destinationLabel} em poucos segundos.\nTaxa total: R$ 0,00\nRecibo disponível no seu histórico.`;
+    state.response_message = `Pagamento enviado para ${destinationLabel} em poucos segundos.\nTaxa total: R$ 0,00\nRecibo disponível no seu histórico.`;
     return state;
   }
 
@@ -2894,7 +2881,7 @@ Sua carteira foi criada e já está pronta para usar.
       transaction.direction === 'received' ? 'Recebido' :
       'Relacionado';
     const asset = transaction.asset ? this.toUserFacingAssetCode(transaction.asset) : '';
-    const amount = transaction.amount ? `${transaction.amount} ${asset}`.trim() : transaction.type;
+    const amount = transaction.amount && asset !== 'XLM' ? `${transaction.amount} ${asset}`.trim() : 'Pagamento';
     const date = transaction.date ? new Date(transaction.date).toLocaleString('pt-BR') : 'data indisponível';
     const counterparty = String(transaction.counterparty || '').trim();
     const counterpartyLine = counterparty ? `\nCom: ${counterparty}` : '';
@@ -2910,8 +2897,7 @@ Sua carteira foi criada e já está pronta para usar.
       state.success = false;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
-      const wantsTechnicalBalance = this.wantsTechnicalBalance(state.current_input);
-      const toolResultRaw = await executeTool(wantsTechnicalBalance ? 'get_saldo_tecnico' : 'get_balance', {
+      const toolResultRaw = await executeTool('get_balance', {
         session_id: sessionId || undefined,
         public_key: sessionPublicKey || undefined,
       });
@@ -2932,15 +2918,15 @@ Sua carteira foi criada e já está pronta para usar.
         for (const balance of balances) {
           byAsset.set(String(balance.asset || balance.asset_code || '').toUpperCase(), balance);
         }
-        const exactBalances = wantsTechnicalBalance
-          ? balances
-          : ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+        const exactBalances = ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
 
         state.success = true;
-        state.response_message = wantsTechnicalBalance
-          ? this.text(language, `Saldo técnico completo na Stellar:\n${formattedBalances}`, `Full technical Stellar balance:\n${formattedBalances}`)
-          : this.text(language, `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega BRL ou USDC conforme você escolher no checkout.`, `Your TalkToStellar account balance:\n${formattedBalances}\n\nPIX delivers BRL or USDC depending on what you choose at checkout.`);
+        state.response_message = this.text(
+          language,
+          `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega R$ ou US$ conforme você escolher no checkout.`,
+          `Your TalkToStellar account balance:\n${formattedBalances}\n\nPIX delivers R$ or US$ depending on what you choose at checkout.`
+        );
       }
     }
 
@@ -2977,7 +2963,7 @@ Sua carteira foi criada e já está pronta para usar.
           : 'Nenhuma transação encontrada.';
 
         state.success = true;
-        state.response_message = `Últimas transações da sua wallet:\n${formattedTransactions}`;
+        state.response_message = `Últimas transações da sua conta:\n${formattedTransactions}`;
       }
     }
 
@@ -3315,19 +3301,8 @@ Sua carteira foi criada e já está pronta para usar.
     return state;
   }
 
-  private wantsTechnicalBalance(message: string): boolean {
-    const normalized = String(message || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-
-    return (
-      normalized.includes('saldo tecnico') ||
-      normalized.includes('saldo completo') ||
-      normalized.includes('detalhe da conta') ||
-      normalized.includes('balanco tecnico') ||
-      normalized.includes('balance technical')
-    );
+  private wantsTechnicalBalance(_message: string): boolean {
+    return false;
   }
 
   private async handleAssetConversion(state: AgentState): Promise<AgentState> {
@@ -3369,7 +3344,7 @@ Sua carteira foi criada e já está pronta para usar.
 
         if (finalSourceAssetCode !== 'XLM' && !sourceIssuer) {
           state.success = false;
-          state.response_message = `Não encontrei ${finalSourceAssetCode} na sua wallet para usar como ativo de origem.`;
+          state.response_message = `Não encontrei ${finalSourceAssetCode} na sua conta para usar como moeda de origem.`;
         } else {
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             const trustlineResultRaw = await executeTool('ensure_trustline', {
@@ -3401,7 +3376,7 @@ Sua carteira foi criada e já está pronta para usar.
 
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             state.success = false;
-            state.response_message = `Não encontrei recebimento em ${finalDestAssetCode} ativo na sua carteira. Ative esse recebimento antes de converter.`;
+            state.response_message = `Não encontrei recebimento em ${finalDestAssetCode} ativo na sua conta. Ative esse recebimento antes de converter.`;
           } else {
           const toolResultRaw = await executeTool('get_best_route', {
             source_public_key: state.session_data.public_key,
@@ -3455,9 +3430,7 @@ Sua carteira foi criada e já está pronta para usar.
               const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
               const transparencyLine = this.formatBestRouteTransparency(toolResult);
               const fullBalanceLine = fullBalanceConversion
-                ? finalSourceAssetCode === 'XLM'
-                  ? `Usei seu XLM disponível: ${sourceLabel}. Mantive ${fullBalanceConversion.keptReserve || '1.6000000'} XLM de reserva para a conta continuar ativa.`
-                  : `Usei seu saldo disponível em ${finalSourceAssetCode}: ${sourceLabel}.`
+                ? `Usei seu saldo disponível em ${this.toUserFacingAssetCode(finalSourceAssetCode)}: ${sourceLabel}.`
                 : '';
               state.response_message = [
                 fullBalanceLine,

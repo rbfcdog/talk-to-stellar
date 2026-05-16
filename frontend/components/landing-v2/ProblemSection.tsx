@@ -163,7 +163,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Fast settlement.</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              Traditional international transfers often depend on business hours and can take days. With Stellar infrastructure, funds can move globally and settle in the destination account in seconds, 24/7.
+              Traditional international transfers often depend on business hours and can take days. With TalkToStellar, funds can move globally and settle in the destination account in seconds, 24/7.
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">

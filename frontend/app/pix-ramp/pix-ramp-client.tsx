@@ -231,11 +231,6 @@ function InlineSpinner({ tone = "emerald" }: { tone?: "emerald" | "cyan" | "ambe
   return <span className={`inline-block h-4 w-4 animate-spin rounded-full border-2 ${color}`} aria-hidden="true" />;
 }
 
-function truncateKey(value?: string) {
-  if (!value) return "not available";
-  return `${value.slice(0, 7)}...${value.slice(-7)}`;
-}
-
 function stableHash(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -459,7 +454,6 @@ export default function PixRampClient({
     transferRecipientKey ||
     ""
   ).trim();
-  const transferRecipientPublicKeyDisplay = String(pixFundedTransferResult?.recipient_public_key || transferRecipientPublicKey || "").trim();
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
   const hasSession = Boolean(sessionId && sessionToken);
@@ -533,7 +527,7 @@ export default function PixRampClient({
         {
           label: "Conta TalkToStellar",
           detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
-          state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
+          state: walletPublicKey ? "done" : loading === "Resolving account" ? "active" : "pending",
         },
         {
           label: L("Valor de saída", "Outgoing amount"),
@@ -570,7 +564,7 @@ export default function PixRampClient({
       {
         label: "TalkToStellar account",
         detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
-        state: walletPublicKey ? "done" : loading === "Resolving wallet" ? "active" : "pending",
+        state: walletPublicKey ? "done" : loading === "Resolving account" ? "active" : "pending",
       },
       {
         label: L("Conta PIX", "PIX account"),
@@ -754,7 +748,7 @@ export default function PixRampClient({
     if (hasSession || !rampEmail.trim() || loading) return;
 
     offRampAutoResolvedRef.current = true;
-    void run("Resolving wallet", async () => {
+    void run("Resolving account", async () => {
       const auth = await resolveWalletFromEmail();
       await loadExternalBankAccount(auth);
     });
@@ -844,7 +838,7 @@ export default function PixRampClient({
     });
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: "Resolve TalkToStellar wallet by email",
+      label: "Resolve TalkToStellar account by email",
       method: "POST",
       path: "/api/ramp/etherfuse/resolve-wallet",
       status: response.status,
@@ -946,7 +940,7 @@ export default function PixRampClient({
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: path.includes("wallet-balances") ? "Stellar wallet balances" : path.includes("/onramp/") ? "Etherfuse order status poll" : "Ramp API GET request",
+      label: path.includes("wallet-balances") ? "Account balances" : path.includes("/onramp/") ? "Etherfuse order status poll" : "Ramp API GET request",
       method: "GET",
       path,
       status: response.status,
@@ -1706,11 +1700,11 @@ export default function PixRampClient({
                 <button
                   className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50"
                   disabled={!rampEmail.trim() || Boolean(loading)}
-                  onClick={() => run("Resolving wallet", async () => {
+                  onClick={() => run("Resolving account", async () => {
                     await resolveWalletFromEmail();
                   })}
                 >
-                  {loading === "Resolving wallet" ? L("Localizando...", "Finding...") : L("Usar conta", "Use account")}
+                  {loading === "Resolving account" ? L("Localizando...", "Finding...") : L("Usar conta", "Use account")}
                 </button>
               </div>
               <p className="mt-3 text-xs font-semibold text-emerald-100/75">
@@ -1947,7 +1941,7 @@ export default function PixRampClient({
 
         {debugEnabled && rampMode === "offramp" && (
           <section className="mt-5">
-            <AssetMovement title="Off-ramp wallet assets" before={offRampBalancesBefore} after={offRampBalancesAfter} deltas={offRampAssetDeltas} walletPublicKey={walletPublicKey} />
+            <AssetMovement title="Off-ramp account balances" before={offRampBalancesBefore} after={offRampBalancesAfter} deltas={offRampAssetDeltas} walletPublicKey={walletPublicKey} />
           </section>
         )}
 
@@ -2077,8 +2071,6 @@ export default function PixRampClient({
                         <ReceiptRow label={L("Enviado para", "Sent to")} value={transferRecipientLabel || "recipient"} />
                         {transferRecipientDisplayKey && <ReceiptRow label="Key" value={transferRecipientDisplayKey} />}
                         <ReceiptRow label={L("Valor transferido", "Transferred amount")} value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
-                        <ReceiptRow label={L("Conta destino", "Destination account")} value={truncateKey(transferRecipientPublicKeyDisplay)} />
-                        <ReceiptRow label={L("Transação", "Transaction")} value={String(pixFundedTransferResult.transaction_hash)} />
                         {pixFundedTransferResult.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(pixFundedTransferResult.receipt_url)} />}
                       </div>
                     </>
@@ -2266,18 +2258,19 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
   );
 }
 
-function AssetMovement({ title, before, after, deltas, walletPublicKey }: {
+function AssetMovement({ title, before, after, deltas }: {
   title: string;
   before: BalanceItem[];
   after: BalanceItem[];
   deltas: BalanceDelta[];
   walletPublicKey: string;
 }) {
+  const displayAsset = (code?: string) => String(code || "").toUpperCase() === "XLM" ? "Account balance" : String(code || "");
+
   return (
     <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl sm:p-6">
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Wallet assets changing</p>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Account balances changing</p>
       <h2 className="mt-1 text-2xl font-black text-white">{title}</h2>
-      <p className="mt-2 text-xs text-slate-400">Wallet: {truncateKey(walletPublicKey)}</p>
       <div className="mt-5 grid gap-3">
         {before.length > 0 && after.length === 0 ? (
           <>
@@ -2288,8 +2281,7 @@ function AssetMovement({ title, before, after, deltas, walletPublicKey }: {
               <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-white">{item.asset_code}</p>
-                    <p className="mt-1 break-all text-[11px] text-slate-500">{item.asset_issuer || "native"}</p>
+                    <p className="text-sm font-black text-white">{displayAsset(item.asset_code)}</p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-slate-300">pending</span>
                 </div>
@@ -2308,8 +2300,7 @@ function AssetMovement({ title, before, after, deltas, walletPublicKey }: {
             <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-black text-white">{item.asset_code}</p>
-                  <p className="mt-1 break-all text-[11px] text-slate-500">{item.asset_issuer || "native"}</p>
+                  <p className="text-sm font-black text-white">{displayAsset(item.asset_code)}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-black ${deltaNumber > 0 ? "bg-emerald-400 text-slate-950" : deltaNumber < 0 ? "bg-rose-400 text-slate-950" : "bg-white/10 text-slate-300"}`}>
                   {deltaNumber > 0 ? "+" : ""}{item.delta}

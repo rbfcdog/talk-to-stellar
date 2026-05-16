@@ -20,7 +20,7 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-2 text-sm font-medium text-gray-300 bg-white/5 px-4 py-2 rounded-full border border-white/[0.03]">
-          Built for <span className="text-gradient font-bold flex items-center gap-1"><StellarLogo className="w-4 h-4" /> Stellar</span>
+          Built for global payments
         </div>
 
       </div>

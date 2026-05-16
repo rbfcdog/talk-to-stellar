@@ -141,7 +141,6 @@ export default function PublicReceivePage() {
               >
                 <option value="USDC">US$</option>
                 <option value="BRL">R$</option>
-                <option value="XLM">XLM</option>
               </select>
             </label>
           </div>

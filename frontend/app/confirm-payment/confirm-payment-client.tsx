@@ -65,13 +65,6 @@ type ConfirmResponse = {
   error?: string
 }
 
-function shortenValue(value?: string, left = 6, right = 6) {
-  const raw = String(value || "").trim()
-  if (!raw) return "Unavailable"
-  if (raw.length <= left + right + 3) return raw
-  return `${raw.slice(0, left)}...${raw.slice(-right)}`
-}
-
 function formatTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : NaN
   if (!Number.isFinite(timestamp)) return new Date().toLocaleString("en-US")
@@ -102,7 +95,7 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   const truncated = Math.trunc(n * 100) / 100
   if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
-  if (code === "XLM") return "TalkToStellar wallet balance"
+  if (code === "XLM") return "saldo da conta TalkToStellar"
   return `${truncated.toFixed(2)} ${code}`
 }
 
@@ -118,6 +111,9 @@ function getAutoConversionMessage(result?: ConfirmResponse | null) {
 function formatRecipientLabel(payload: any) {
   const candidate = String(
     payload?.destination_name ||
+    payload?.destinationName ||
+    payload?.recipient_name ||
+    payload?.recipientName ||
     payload?.destination_contact?.contact_name ||
     payload?.destination_contact?.name ||
     payload?.destination_contact?.email ||
@@ -126,6 +122,7 @@ function formatRecipientLabel(payload: any) {
     ''
   ).trim()
 
+  if (/^G[A-Z2-7]{55}$/i.test(candidate)) return 'Recipient'
   if (candidate) return candidate
   return 'Recipient'
 }
@@ -164,10 +161,7 @@ function formatFeeAmount(value: number, assetCode: string) {
   if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
   if (code === "XLM") {
-    const xlmDecimals = 7
-    const xlmThreshold = Math.pow(10, -xlmDecimals)
-    const xlmPrefix = value > 0 && value < xlmThreshold ? "<" : ""
-    return `${xlmPrefix}${trimFixed(xlmPrefix ? xlmThreshold : truncateNumber(value, xlmDecimals), xlmDecimals)} XLM`
+    return "processing fee included"
   }
   return `${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)} ${code}`
 }
@@ -299,7 +293,7 @@ function buildMobileConfirmedFeedback(payload: any) {
     "Payment confirmed on mobile.",
     amount && asset ? `Amount: ${formatPaymentAmount(amount, asset)}` : "",
     `Destination: ${formatRecipientLabel(payload)}`,
-    isCrossAsset && route ? `Best path: ${route}` : "",
+    isCrossAsset && route ? "Best route selected." : "",
     hasUsableFeeDisplay(fee) ? `Estimated fee: ${fee}` : "",
     isCrossAsset && savings ? `Estimated savings: ${savings}` : "",
     `Time: ${formatTimestamp()}`,
@@ -372,7 +366,7 @@ export default function ConfirmPaymentClient({
   useEffect(() => {
     if (tokenFromUrl) {
       setToken(tokenFromUrl)
-      // Preserve public key from URL before we strip query params for privacy
+      // Preserve account identifier from URL before we strip query params for privacy
       if (publicKeyFromUrl) setPublicKey(publicKeyFromUrl)
       // remove token/query from URL to avoid leaking it in history/referrers
       if (typeof window !== "undefined" && !urlScrubbedRef.current) {
@@ -570,7 +564,6 @@ export default function ConfirmPaymentClient({
       setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (response.ok && payload?.success) {
-        const hash = String(payload.tx_hash || payload.hash || "")
         const receiptUrl = String(payload.receipt_url || "")
         const conversionMessage = getAutoConversionMessage(payload)
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
@@ -590,13 +583,12 @@ export default function ConfirmPaymentClient({
         enqueueWebChatFeedback([
           "Payment sent successfully.",
           conversionMessage,
-          `Amount: ${String(payload.amount || payload.transferDetails?.destinationAmount || "").trim()} ${String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || "").trim()}`.trim(),
-          `Destination: ${shortenValue(String(payload.destination || payload.destinationName || ""))}`,
-          feedbackIsCrossAsset && routeForFeedback ? `Best path: ${routeForFeedback}` : "",
+          `Amount: ${formatPaymentAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || ""))}`,
+          `Destination: ${formatRecipientLabel(payload)}`,
+          feedbackIsCrossAsset && routeForFeedback ? "Best route selected." : "",
           hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Estimated fee: ${estimatedFeeForFeedback}` : "",
           feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
           monthlySavingsForFeedback ? `Monthly savings so far: ${monthlySavingsForFeedback}` : "",
-          hash ? `Transaction: ${shortenValue(hash, 8, 8)}` : "",
           `Time: ${formatTimestamp(payload.completed_at)}`,
           receiptUrl ? `Receipt: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
@@ -749,8 +741,6 @@ export default function ConfirmPaymentClient({
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
-  const successDestination = String(result?.destination || result?.destinationName || "")
-  const successHash = String(result?.tx_hash || result?.hash || "")
   const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result)
   const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""))
@@ -821,7 +811,7 @@ export default function ConfirmPaymentClient({
                   <p className="text-slate-300">Estimated total fee: {estimatedFeeSummary}</p>
                 )}
                 {shouldShowCrossAssetInsights && routeChain && (
-                  <p className="text-slate-300">Best path found: {routeChain}</p>
+                  <p className="text-slate-300">Best route selected.</p>
                 )}
                 {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
                   <p className="text-emerald-300 font-medium">
@@ -917,9 +907,8 @@ export default function ConfirmPaymentClient({
                 >
                   <p className="text-base font-semibold text-emerald-300">Payment sent successfully</p>
                   <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm">
-                    <p><span className="text-slate-300">Amount: </span>{successAmount} {successAsset}</p>
-                    <p><span className="text-slate-300">Destination: </span><span className="font-mono">{shortenValue(successDestination)}</span></p>
-                    <p><span className="text-slate-300">Transaction: </span><span className="font-mono">{shortenValue(successHash, 8, 8)}</span></p>
+                    <p><span className="text-slate-300">Amount: </span>{formatPaymentAmount(successAmount, successAsset)}</p>
+                    <p><span className="text-slate-300">Destination: </span>{formatRecipientLabel(result)}</p>
                     <p><span className="text-slate-300">Time: </span>{formatTimestamp(result.completed_at)}</p>
                   </div>
                   {showResultFee && (
