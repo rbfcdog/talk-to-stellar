@@ -15,7 +15,7 @@ export default function SolutionSection() {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl lg:text-5xl font-bold text-white leading-tight tracking-tight max-w-4xl mx-auto"
           >
-            Your local account with the power of a <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00D2FF] to-[#4CA1EF]">global wallet.</span>
+            Your local account with the power of a <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00D2FF] to-[#4CA1EF]">global account.</span>
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 30 }}
@@ -24,7 +24,7 @@ export default function SolutionSection() {
             transition={{ delay: 0.1 }}
             className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light mt-6 max-w-2xl mx-auto"
           >
-            All the speed and security of blockchain technology, hidden behind the experience you already know.
+            Global payments with the speed, security, and simplicity of the experience you already know.
           </motion.p>
         </div>
 
@@ -43,7 +43,7 @@ export default function SolutionSection() {
               Your money, free from financial borders.
             </h3>
             <p className="text-lg text-[#9BA4B5] leading-relaxed mb-8">
-              Send and receive payments worldwide. We turn your local bank account into a global financial passport running on Stellar, with fewer intermediaries and less delay.
+              Send and receive payments worldwide. We turn your local bank account into a global financial passport, with fewer intermediaries and less delay.
             </p>
           </div>
           <div className="w-full md:w-1/2 relative h-[300px] rounded-2xl overflow-hidden border border-white/[0.03] bg-[#162032]">
@@ -95,7 +95,7 @@ export default function SolutionSection() {
                   Send 50 dollars to Maria Silva via PIX.
                 </div>
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tl-sm p-4 max-w-[85%] text-sm text-slate-200 flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] shadow-[#00D2FF]/5">
-                   <p>Done. I found the best Stellar quote.</p>
+                   <p>Done. I found the best quote.</p>
                    <div className="bg-[#162032] p-3 rounded-xl border border-white/[0.03]">
                       <p className="text-xs text-[#9BA4B5]">Total to pay</p>
                       <p className="text-lg font-bold text-[#00D2FF]">R$ 256,20</p>

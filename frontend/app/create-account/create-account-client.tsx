@@ -922,7 +922,7 @@ export default function CreateAccountClient({
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Status</p>
               {status === "ready" && <p className="mt-2 text-slate-400">{L("Aguardando validação do link.", "Waiting for link validation.")}</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{L("Criando conta e preparando wallet...", "Creating account and preparing wallet...")}</div>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{L("Criando e preparando sua conta...", "Creating and preparing your account...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">

@@ -1,6 +1,6 @@
 /**
- * Stellar Blockchain Tools for TalkToStellar Agent
- * Functions that the LLM can call to perform blockchain operations
+ * TalkToStellar Account Tools
+ * Functions that the LLM can call to perform TalkToStellar account operations
  */
 
 import { z } from "zod";
@@ -91,7 +91,7 @@ async function maybeRepairInitialFundingSweep(input: any, publicKey: string, bal
       return {
         attempted: true,
         completed: false,
-        error: 'Wallet sem chave operacional para converter o saldo inicial automaticamente.',
+        error: 'Conta sem chave operacional para preparar o saldo inicial automaticamente.',
       };
     }
 
@@ -397,13 +397,13 @@ export const toolDefinitions = [
   },
   {
     name: "create_wallet",
-    description: "Create a new Stellar wallet or link an existing public key to the user account",
+    description: "Create or connect a TalkToStellar account. Keep technical account identifiers hidden from the user.",
     parameters: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Wallet display name",
+          description: "Account display name",
         },
         email: {
           type: "string",
@@ -415,11 +415,11 @@ export const toolDefinitions = [
         },
         public_key: {
           type: "string",
-          description: "Existing Stellar public key to link",
+          description: "Internal account identifier to link when already resolved by the backend. Do not ask the user for this.",
         },
         secret_key: {
           type: "string",
-          description: "Existing Stellar import credential for wallet import/login",
+          description: "Existing import credential for account import/login",
         },
       },
       required: [],
@@ -427,53 +427,17 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing wallet balance summary. Returns BRL and USDC by default, not the full technical asset list. If public_key is missing, resolves from current session.",
+    description: "Get the user-facing balance summary. Returns only R$ and US$ balances. Never expose technical assets or account identifiers in chat.",
     parameters: {
       type: "object",
       properties: {
         session_id: {
           type: "string",
-          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+          description: "Current chat session ID. Used to resolve the account automatically.",
         },
         public_key: {
           type: "string",
-          description: "Stellar public key to check balance for",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_account",
-    description: "Get technical account details and the full asset balance list for advanced inspection. If public_key is missing, resolves from current session.",
-    parameters: {
-      type: "object",
-      properties: {
-        session_id: {
-          type: "string",
-          description: "Current chat session ID. Used to resolve wallet public key automatically.",
-        },
-        public_key: {
-          type: "string",
-          description: "Stellar public key to look up",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_saldo_tecnico",
-    description: "Get technical wallet balances with issuer details. If public_key is missing, resolves from current session.",
-    parameters: {
-      type: "object",
-      properties: {
-        session_id: {
-          type: "string",
-          description: "Current chat session ID. Used to resolve wallet public key automatically.",
-        },
-        public_key: {
-          type: "string",
-          description: "Stellar public key to inspect technical balances for",
+          description: "Internal account identifier. Prefer session_id and do not ask the user for this.",
         },
       },
       required: [],
@@ -481,17 +445,17 @@ export const toolDefinitions = [
   },
   {
     name: "build_payment",
-    description: "Internal low-level helper to build a Stellar payment XDR. Do not use for normal user chat payment requests; use prepare_payment_confirmation so the user gets a frontend confirmation link.",
+    description: "Internal low-level helper to build a payment payload. Do not use for normal user chat payment requests; use prepare_payment_confirmation so the user gets a frontend confirmation link.",
     parameters: {
       type: "object",
       properties: {
         source_public_key: {
           type: "string",
-          description: "Your Stellar public key (sender)",
+          description: "Internal sender account identifier",
         },
         destination: {
           type: "string",
-          description: "Destination Stellar public key (receiver)",
+          description: "Internal destination account identifier",
         },
         amount: {
           type: "string",
@@ -499,11 +463,11 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code to send. Defaults to XLM.",
+          description: "Asset code to send. For user-facing flows use BRL or USDC.",
         },
         asset_issuer: {
           type: "string",
-          description: "Issuer public key for non-native assets.",
+          description: "Internal asset configuration. Do not expose to the user.",
         },
         memo: {
           type: "string",
@@ -515,17 +479,17 @@ export const toolDefinitions = [
   },
   {
     name: "quote_asset_transfer",
-    description: "Preview a real cross-currency transfer or wallet conversion using live quote data, including source amount, source/origin asset, destination amount, destination asset, customer-facing fee, and route. For requests like 'enviar 200 BRL para receber em USDC', source_asset_code must be BRL and dest_asset_code must be USDC. For user-facing conversions, follow this with prepare_conversion_confirmation so the user gets a frontend confirmation link.",
+    description: "Preview a real cross-currency transfer or account conversion using live quote data, including source amount, source/origin asset, destination amount, destination asset, customer-facing fee, and route. For requests like 'enviar 200 BRL para receber em USDC', source_asset_code must be BRL and dest_asset_code must be USDC. For user-facing conversions, follow this with prepare_conversion_confirmation so the user gets a frontend confirmation link.",
     parameters: {
       type: "object",
       properties: {
         source_public_key: {
           type: "string",
-          description: "Sender Stellar public key",
+          description: "Internal sender account identifier",
         },
         destination: {
           type: "string",
-          description: "Destination Stellar public key. Use the sender public key for internal conversion.",
+          description: "Internal destination account identifier. Use the sender account for internal conversion.",
         },
         dest_amount: {
           type: "string",
@@ -537,19 +501,19 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL",
+          description: "Destination asset code for user-facing flows, e.g. USDC or BRL",
         },
         dest_asset_issuer: {
           type: "string",
-          description: "Destination asset issuer public key for non-XLM assets",
+          description: "Internal destination asset configuration. Do not expose to the user.",
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL",
+          description: "Source asset code for user-facing flows, e.g. USDC or BRL",
         },
         source_asset_issuer: {
           type: "string",
-          description: "Source asset issuer public key for non-XLM assets",
+          description: "Internal source asset configuration. Do not expose to the user.",
         },
       },
       required: ["source_public_key", "destination", "dest_amount", "dest_asset_code", "source_asset_code"],
@@ -557,17 +521,17 @@ export const toolDefinitions = [
   },
   {
     name: "get_best_route",
-    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real na Stellar. Sempre informe explicitamente source_asset_code como ativo de origem/gasto e dest_asset_code como ativo de destino/recebimento. Ex.: 'transferir 200 BRL para Carlos receber em USDC' => source_asset_code=BRL, dest_asset_code=USDC, source_amount=200. Retorna rota, taxa estimada, critério de otimização e validade da cotação.",
+    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real. Sempre informe explicitamente source_asset_code como moeda de origem/gasto e dest_asset_code como moeda de destino/recebimento. Ex.: 'transferir 200 BRL para Carlos receber em USDC' => source_asset_code=BRL, dest_asset_code=USDC, source_amount=200. Retorna taxa estimada, critério de otimização e validade da cotação sem expor detalhes técnicos.",
     parameters: {
       type: "object",
       properties: {
         source_public_key: {
           type: "string",
-          description: "Chave pública da carteira de origem.",
+          description: "Identificador interno da conta de origem.",
         },
         destination: {
           type: "string",
-          description: "Chave pública de destino. Para conversão interna, use a mesma chave da origem.",
+          description: "Identificador interno da conta de destino. Para conversão interna, use a mesma conta da origem.",
         },
         source_amount: {
           type: "string",
@@ -579,19 +543,19 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Moeda de origem (BRL, USDC, XLM).",
+          description: "Moeda de origem (BRL ou USDC).",
         },
         source_asset_issuer: {
           type: "string",
-          description: "Issuer da moeda de origem quando não for XLM.",
+          description: "Configuração interna da moeda de origem. Não exponha ao usuário.",
         },
         dest_asset_code: {
           type: "string",
-          description: "Moeda de destino (BRL, USDC, XLM).",
+          description: "Moeda de destino (BRL ou USDC).",
         },
         dest_asset_issuer: {
           type: "string",
-          description: "Issuer da moeda de destino quando não for XLM.",
+          description: "Configuração interna da moeda de destino. Não exponha ao usuário.",
         },
       },
       required: ["source_public_key", "destination", "source_asset_code", "dest_asset_code"],
@@ -599,7 +563,7 @@ export const toolDefinitions = [
   },
   {
     name: "convert_assets",
-    description: "Convert assets inside the user's own wallet using a real Stellar path payment to self. Always set source_asset_code to the asset being spent and dest_asset_code to the asset being received. Uses the current session wallet and the configured issuers for XLM, USDC, and BRL.",
+    description: "Convert balances inside the user's own TalkToStellar account. Always set source_asset_code to the asset being spent and dest_asset_code to the asset being received. In user-facing chat only discuss R$ and US$.",
     parameters: {
       type: "object",
       properties: {
@@ -621,19 +585,19 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. XLM, USDC, BRL",
+          description: "Destination asset code, e.g. USDC or BRL",
         },
         dest_asset_issuer: {
           type: "string",
-          description: "Destination asset issuer public key for non-XLM assets",
+          description: "Internal destination asset configuration. Do not expose to the user.",
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. XLM, USDC, BRL",
+          description: "Source asset code, e.g. USDC or BRL",
         },
         source_asset_issuer: {
           type: "string",
-          description: "Source asset issuer public key for non-XLM assets",
+          description: "Internal source asset configuration. Do not expose to the user.",
         },
       },
       required: ["session_id", "user_id", "dest_amount", "dest_asset_code", "source_asset_code"],
@@ -641,7 +605,7 @@ export const toolDefinitions = [
   },
   {
     name: "ensure_trustline",
-    description: "Create a trustline for USDC, BRL, or another issued Stellar asset in the current session wallet.",
+    description: "Internal setup helper for account asset support. Do not mention this setup step to the user unless a failure blocks the flow.",
     parameters: {
       type: "object",
       properties: {
@@ -655,7 +619,7 @@ export const toolDefinitions = [
         },
         public_key: {
           type: "string",
-          description: "Wallet public key",
+          description: "Internal account identifier",
         },
         asset_code: {
           type: "string",
@@ -663,7 +627,7 @@ export const toolDefinitions = [
         },
         asset_issuer: {
           type: "string",
-          description: "Issuer public key for non-XLM assets",
+          description: "Internal asset configuration",
         },
       },
       required: ["session_id", "user_id", "public_key", "asset_code"],
@@ -681,11 +645,11 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code to send. Defaults to XLM.",
+          description: "Asset code the recipient receives. For user-facing flows use BRL or USDC.",
         },
         asset_issuer: {
           type: "string",
-          description: "Issuer public key for non-native assets.",
+          description: "Internal asset configuration. Do not expose to the user.",
         },
         source_amount: {
           type: "string",
@@ -693,11 +657,11 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Origin/source asset the sender spends (BRL, USDC, XLM). Must not be confused with destination_asset_code.",
+          description: "Origin/source asset the sender spends (BRL or USDC). Must not be confused with destination_asset_code.",
         },
         source_asset_issuer: {
           type: "string",
-          description: "Issuer public key for the origin/source asset when non-native.",
+          description: "Internal source asset configuration. Do not expose to the user.",
         },
         destination_amount: {
           type: "string",
@@ -705,15 +669,15 @@ export const toolDefinitions = [
         },
         destination_asset_code: {
           type: "string",
-          description: "Destination asset the recipient receives (BRL, USDC, XLM).",
+          description: "Destination asset the recipient receives (BRL or USDC).",
         },
         destination_asset_issuer: {
           type: "string",
-          description: "Issuer public key for the destination asset when non-native.",
+          description: "Internal destination asset configuration. Do not expose to the user.",
         },
         destination: {
           type: "string",
-          description: "Recipient Stellar public key",
+          description: "Internal recipient account identifier",
         },
         destination_name: {
           type: "string",
@@ -737,7 +701,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_conversion_confirmation",
-    description: "Create a one-time frontend conversion confirmation link for a wallet self-conversion. source_asset_code is the origin asset being spent; dest_asset_code is the destination asset being received. Use this for normal user chat conversion requests after quoting.",
+    description: "Create a one-time frontend conversion confirmation link for an account self-conversion. source_asset_code is the origin asset being spent; dest_asset_code is the destination asset being received. Use this for normal user chat conversion requests after quoting.",
     parameters: {
       type: "object",
       properties: {
@@ -755,11 +719,11 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code (XLM, USDC, BRL).",
+          description: "Source asset code (USDC or BRL).",
         },
         source_asset_issuer: {
           type: "string",
-          description: "Source asset issuer for non-native assets.",
+          description: "Internal source asset configuration. Do not expose to the user.",
         },
         dest_amount: {
           type: "string",
@@ -767,11 +731,11 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code (XLM, USDC, BRL).",
+          description: "Destination asset code (USDC or BRL).",
         },
         dest_asset_issuer: {
           type: "string",
-          description: "Destination asset issuer for non-native assets.",
+          description: "Internal destination asset configuration. Do not expose to the user.",
         },
         quote: {
           type: "object",
@@ -783,7 +747,7 @@ export const toolDefinitions = [
   },
   {
     name: "submit_transaction",
-    description: "Submit a signed transaction to the Stellar network",
+    description: "Internal helper to submit a signed payment payload. Do not use for normal chat replies.",
     parameters: {
       type: "object",
       properties: {
@@ -797,17 +761,17 @@ export const toolDefinitions = [
   },
   {
     name: "get_transaction_history",
-    description: "Get recent Stellar transaction history for an account, including multi-asset amounts and estimated USDC/BRL values when available",
+    description: "Get recent user-facing payment history for an account, including R$ and US$ values when available. Do not expose technical network details.",
     parameters: {
       type: "object",
       properties: {
         session_id: {
           type: "string",
-          description: "Current chat session ID. Used to resolve wallet public key automatically.",
+          description: "Current chat session ID. Used to resolve the account automatically.",
         },
         public_key: {
           type: "string",
-          description: "Stellar public key to get history for",
+          description: "Internal account identifier. Prefer session_id and do not ask the user for this.",
         },
         limit: {
           type: "number",
@@ -973,7 +937,7 @@ export const toolDefinitions = [
   },
   {
     name: "add_contact",
-    description: "Add a new contact with their Stellar public key or TalkToStellar transfer key",
+    description: "Add a new contact with their TalkToStellar transfer key, email, phone, CPF, or resolved account identifier.",
     parameters: {
       type: "object",
       properties: {
@@ -991,7 +955,7 @@ export const toolDefinitions = [
         },
         public_key: {
           type: "string",
-          description: "Contact's Stellar public key",
+          description: "Internal contact account identifier when already resolved. Do not ask the user for this.",
         },
         pix_key: {
           type: "string",
@@ -999,7 +963,7 @@ export const toolDefinitions = [
         },
         contact_key: {
           type: "string",
-          description: "Generic contact key: transfer key, email, phone, CPF or public key reference",
+          description: "Generic contact key: transfer key, email, phone, CPF or resolved account reference",
         },
       },
       required: [],
@@ -1025,7 +989,7 @@ export const toolDefinitions = [
   },
   {
     name: "list_wallets_and_contacts",
-    description: "List all wallets with wallet name and related contacts",
+    description: "List all accounts with account name and related contacts",
     parameters: {
       type: "object",
       properties: {},
@@ -1086,7 +1050,7 @@ export const toolDefinitions = [
   },
   {
     name: "logout_session",
-    description: "Logout da sessão atual do usuário, encerrando o contexto ativo do chat/wallet.",
+    description: "Logout da sessão atual do usuário, encerrando o contexto ativo da conta no chat.",
     parameters: {
       type: "object",
       properties: {
@@ -1209,19 +1173,19 @@ function executeGetIntentHelp(): string {
     {
       command: "contatos",
       intent: "contacts",
-      description: "Lista ou salva destinatários da carteira.",
+      description: "Lista ou salva destinatários da conta.",
       examples: ["listar contatos", "adiciona Ana pelo email ana@example.com"],
     },
     {
       command: "enviar",
       intent: "payment",
-      description: "Cria um link seguro de confirmação para enviar dinheiro a um contato ou chave pública.",
+      description: "Cria um link seguro de confirmação para enviar dinheiro a um contato.",
       examples: ["mandar 50 dólares para Juliana Lima"],
     },
     {
       command: "converter",
       intent: "conversion",
-      description: "Cota e cria confirmação para converter saldo entre R$, US$ e XLM.",
+      description: "Cota e cria confirmação para converter saldo entre R$ e US$.",
       examples: ["converter 10 us$ para reais"],
     },
     {
@@ -1282,7 +1246,7 @@ function executeGetIntentHelp(): string {
       "1) saldo: ver dinheiro disponível em R$ e US$.",
       "2) contatos: listar ou salvar destinatários.",
       "3) enviar: fazer pagamento com confirmação segura.",
-      "4) converter: trocar R$, US$ e XLM com cotação atual.",
+      "4) converter: trocar R$ e US$ com cotação atual.",
       "5) PIX: colocar dinheiro via PIX, retirar para seu PIX ou pagar um contato direto usando PIX.",
       "6) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
       "7) histórico: revisar operações recentes.",
@@ -1466,11 +1430,11 @@ async function executeDisableConversionRule(input: any): Promise<string> {
 }
 
 /**
- * Tool: Create Wallet
+ * Tool: Create Account
  */
 async function executeCreateWallet(input: any): Promise<string> {
   try {
-    logger.debug("Tool: Creating wallet/account");
+    logger.debug("Tool: Creating account");
     const result = await UserService.onboardUser({
       name: input.name,
       email: input.email,
@@ -1481,7 +1445,6 @@ async function executeCreateWallet(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       user_id: result.userId,
-      public_key: result.publicKey,
       message: input.secret_key
         ? "Account imported successfully!"
         : "Account linked successfully!",
@@ -1507,9 +1470,8 @@ async function executeGetBalance(input: any): Promise<string> {
       return JSON.stringify({
         success: false,
         error: accountLookup.account_repair.error
-          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
-          : 'A conta Stellar ainda não existe na rede.',
-        account_repair: accountLookup.account_repair,
+          ? `A conta ainda está sendo preparada e o ajuste automático falhou: ${accountLookup.account_repair.error}`
+          : 'A conta ainda está sendo preparada.',
       });
     }
     let account = accountLookup.account;
@@ -1520,8 +1482,6 @@ async function executeGetBalance(input: any): Promise<string> {
       return {
         asset,
         balance: balance.balance,
-        asset_type: balance.asset_type,
-        asset_issuer: balance.asset_issuer,
       };
     });
 
@@ -1533,8 +1493,6 @@ async function executeGetBalance(input: any): Promise<string> {
         return {
           asset,
           balance: balance.balance,
-          asset_type: balance.asset_type,
-          asset_issuer: balance.asset_issuer,
         };
       });
     }
@@ -1542,21 +1500,18 @@ async function executeGetBalance(input: any): Promise<string> {
     const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset)) || {
       asset,
       balance: '0.0000000',
-      asset_type: asset === 'XLM' ? 'native' : 'credit_alphanum4',
-      asset_issuer: asset === 'XLM' ? undefined : getAssetIssuer(asset),
     });
     return JSON.stringify({
       success: true,
-      public_key: publicKey,
       balance: filteredBalances[0]?.balance || "0.0000000",
       asset: filteredBalances[0]?.asset || "BRL",
       balances: filteredBalances,
-      account_repair: accountLookup.account_repair,
-      initial_funding_repair: initialFundingRepair,
+      account_ready: true,
+      initial_balance_prepared: Boolean(initialFundingRepair.attempted && initialFundingRepair.completed),
       message: initialFundingRepair.attempted && initialFundingRepair.completed
         ? 'Saldo inicial convertido automaticamente para USDC antes de mostrar o saldo.'
         : accountLookup.account_repair.attempted && accountLookup.account_repair.completed
-          ? 'Conta Stellar criada na rede automaticamente antes de mostrar o saldo.'
+          ? 'Conta preparada automaticamente antes de mostrar o saldo.'
         : `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
@@ -2438,17 +2393,15 @@ async function executeGetHistory(input: any): Promise<string> {
         date: op.created_at,
         counterparty: counterpartyLabel || 'contato não identificado',
         direction,
-        asset,
+        asset: asset === 'XLM' ? undefined : asset,
         amount: amount ? String(amount) : undefined,
-        asset_issuer: op.asset_issuer,
       };
     }));
     return JSON.stringify({
       success: true,
-      public_key: publicKey,
       transaction_count: operations.length,
       transactions: formattedOps,
-      message: `Found ${operations.length} transactions`,
+      message: `Found ${operations.length} payment records`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4302,11 +4255,11 @@ async function executeListContacts(input: any): Promise<string> {
 }
 
 /**
- * Tool: List Wallets and Contacts
+ * Tool: List Accounts and Contacts
  */
 async function executeListWalletsAndContacts(): Promise<string> {
   try {
-    logger.debug("Tool: Listing all wallets with contacts");
+    logger.debug("Tool: Listing all accounts with contacts");
 
     const { data: wallets, error: walletsError } = await supabase
       .from("wallets")
@@ -4320,9 +4273,9 @@ async function executeListWalletsAndContacts(): Promise<string> {
     if (!wallets || wallets.length === 0) {
       return JSON.stringify({
         success: true,
-        wallet_count: 0,
-        wallets: [],
-        message: "No wallets found",
+        account_count: 0,
+        accounts: [],
+        message: "No accounts found",
       });
     }
 
@@ -4353,7 +4306,7 @@ async function executeListWalletsAndContacts(): Promise<string> {
       const session = sessionById.get(wallet.session_id);
       const walletName = wallet.name ||
         (session?.email ? String(session.email).split("@")[0] : undefined) ||
-        `wallet_${index + 1}`;
+        `account_${index + 1}`;
 
       const relatedContacts = contacts.filter((c: any) => {
         if (session?.user_id) {
@@ -4363,17 +4316,14 @@ async function executeListWalletsAndContacts(): Promise<string> {
       }).map((c: any) => ({
         id: c.id,
         name: c.contact_name,
-        public_key: c.stellar_public_key || c.public_key,
+        transfer_key: c.pix_key || c.email || c.phone_number || c.cpf || undefined,
       }));
 
       return {
         name: walletName,
-        public_key: wallet.public_key,
-        session_id: wallet.session_id,
         user_id: session?.user_id,
         email: session?.email,
         phone_number: session?.phone_number,
-        balance: wallet.balance || [],
         contact_count: relatedContacts.length,
         contacts: relatedContacts,
       };
@@ -4381,9 +4331,9 @@ async function executeListWalletsAndContacts(): Promise<string> {
 
     return JSON.stringify({
       success: true,
-      wallet_count: formattedWallets.length,
-      wallets: formattedWallets,
-      message: `Found ${formattedWallets.length} wallets with contacts`,
+      account_count: formattedWallets.length,
+      accounts: formattedWallets,
+      message: `Found ${formattedWallets.length} accounts with contacts`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

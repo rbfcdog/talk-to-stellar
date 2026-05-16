@@ -4,10 +4,10 @@ export function AboutSection() {
   const features = [
     {
       title: "AI Agent",
-      description: "Understands intent and orchestrates real Stellar operations from natural language.",
+      description: "Understands intent and orchestrates real payments from natural language.",
     },
     {
-      title: "Wallet & Contact Flows",
+      title: "Account & Contact Flows",
       description: "Login, onboard, manage contacts, and query balances in a chat-first interface.",
     },
     {
@@ -22,7 +22,7 @@ export function AboutSection() {
         <div className="mx-auto max-w-3xl text-center mb-14">
           <h2 className="mb-6 text-4xl font-light tracking-tight lg:text-5xl text-gray-900">How it works</h2>
           <p className="text-balance text-xl text-gray-600 leading-relaxed font-light">
-            We combine a modern frontend, a Python AI orchestration layer, and a Stellar backend into one unified product.
+            We combine a modern frontend, an AI orchestration layer, and secure payment infrastructure into one unified product.
           </p>
         </div>
 

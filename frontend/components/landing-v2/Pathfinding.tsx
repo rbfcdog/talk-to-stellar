@@ -20,7 +20,7 @@ export default function Pathfinding() {
           The Cheapest Route. <br className="block md:hidden" /><span className="text-gradient">Every Time.</span>
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-          Forget hidden fees. Stellar handles liquidity routing with fast settlement, and TalkToStellar shows fees and final value before confirmation.
+          Forget hidden fees. TalkToStellar finds a fast, low-cost route and shows fees and final value before confirmation.
         </p>
       </motion.div>
 
@@ -100,8 +100,6 @@ export default function Pathfinding() {
               className="flex items-center gap-2 text-base text-white mb-6 font-mono bg-white/5 px-4 py-2 rounded-lg border border-white/[0.03]"
             >
               <span className="text-[#00D2FF]">BRL</span> 
-              <ArrowRight size={16} className="text-gray-400" /> 
-              <span className="text-[#4CA1EF]">XLM</span> 
               <ArrowRight size={16} className="text-gray-400" /> 
               <span className="text-[#00D2FF]">USDC</span>
             </motion.div>

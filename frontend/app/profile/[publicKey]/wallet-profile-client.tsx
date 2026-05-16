@@ -12,7 +12,7 @@ type BalanceItem = {
 }
 
 function normalizeAssetCode(value?: string, type?: string) {
-  if (String(type || "").toLowerCase() === "native") return "XLM"
+  if (String(type || "").toLowerCase() === "native") return ""
   return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
 }
 
@@ -22,7 +22,7 @@ function formatAssetBalance(item: BalanceItem) {
   if (!Number.isFinite(raw)) return `${item.balance || "0"} ${code}`
   if (code === "USDC") return `US$ ${raw.toFixed(2)}`
   if (code === "BRL") return `R$ ${raw.toFixed(2)}`
-  return `${raw.toFixed(7)} ${code}`
+  return code ? `${raw.toFixed(2)} ${code}` : ""
 }
 
 function shorten(value?: string, left = 6, right = 6) {
@@ -48,7 +48,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
         })
         const body = await response.json().catch(() => ({}))
         if (!response.ok || !body?.success) {
-          throw new Error(body?.message || "Could not load wallet profile.")
+          throw new Error(body?.message || "Could not load account profile.")
         }
         setPayload(body)
         setStatus("ready")
@@ -62,6 +62,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
 
   const profile = payload?.profile || {}
   const balances = Array.isArray(payload?.balances) ? payload.balances : []
+  const visibleBalances = balances.filter((item: BalanceItem) => Boolean(normalizeAssetCode(item.asset_code, item.asset_type)))
   const stats = payload?.stats || {}
 
   return (
@@ -71,7 +72,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-300/35 bg-indigo-300/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-indigo-100">
               <UserCircle2 className="h-4 w-4" />
-              Wallet profile
+              Account profile
             </div>
             <Link
               href="/transactions"
@@ -98,7 +99,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                 {profile?.name || "Contact"}
               </h1>
               <p className="mt-2 text-sm text-slate-300">Identifier: {profile?.identifier || "unavailable"}</p>
-              <p className="mt-1 text-xs text-slate-400">Wallet: {shorten(profile?.public_key || publicKey, 10, 10)}</p>
+              <p className="mt-1 text-xs text-slate-400">Account: {profile?.identifier || "TalkToStellar"}</p>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
@@ -115,11 +116,11 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
 
               <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                 <div className="border-b border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300">Account balances</div>
-                {balances.length === 0 ? (
+                {visibleBalances.length === 0 ? (
                   <p className="px-4 py-5 text-sm text-slate-300">Balance unavailable right now.</p>
                 ) : (
                   <ul className="divide-y divide-white/5">
-                    {balances.map((item: BalanceItem, index: number) => (
+                    {visibleBalances.map((item: BalanceItem, index: number) => (
                       <li key={`${item.asset_code || item.asset_type || "asset"}-${index}`} className="flex items-center justify-between gap-3 px-4 py-3">
                         <span className="text-sm text-slate-300">{normalizeAssetCode(item.asset_code, item.asset_type)}</span>
                         <span className="text-sm font-semibold text-white">{formatAssetBalance(item)}</span>

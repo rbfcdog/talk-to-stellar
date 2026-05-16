@@ -24,8 +24,8 @@ const englishDictionary: Dictionary = {
     language_current: "English",
     chat_agent_welcome:
       "Sign in to get started. After that I can help you check your balance, add money with PIX, send money to your PIX, pay contacts, or convert funds. If you have not signed in yet, type here in the chat to sign in/create account.",
-    chat_search_placeholder: "Search wallet contacts...",
-    chat_sidebar_preview: "Hi. How can I help with your wallet, balance, and contacts today?",
+    chat_search_placeholder: "Search account contacts...",
+    chat_sidebar_preview: "Hi. How can I help with your account, balance, and contacts today?",
     chat_input_placeholder: "Type: balance, add money with PIX, withdraw to PIX, or send to someone",
     chat_wait_session: "Give me a moment while I start the session...",
     chat_api_error: "API response failed",
@@ -43,7 +43,7 @@ const englishDictionary: Dictionary = {
     chat_link_generic: "Open link",
     welcome_select:
       'Select TalkToStellar in the sidebar. Start with: 1) "balance", 2) "deposit 150 reais with PIX", 3) "send 100 reais to my PIX", 4) "send 200 dollars to Maria".',
-    welcome_protected: "Your conversations stay protected while you use your wallet.",
+    welcome_protected: "Your conversations stay protected while you use your account.",
     login_title: "Sign in to your account",
     login_subtitle:
       "Sign in to continue where you left off. Next after login: balance, contacts, PIX money in/out, and payments.",
@@ -80,7 +80,7 @@ const englishDictionary: Dictionary = {
     hero_title_1: "Move money worldwide.",
     hero_title_2: "In one message.",
     hero_subtitle:
-      "Send money, manage contacts, and use blockchain rails through natural language. From Telegram or WhatsApp, without bureaucracy.",
+      "Send money, manage contacts, and move between R$ and US$ through natural language. From Telegram or WhatsApp, without bureaucracy.",
     hero_card_1_title: "Natural language",
     hero_card_1_body: "Use simple messages to simulate, transfer, and organize transactions.",
     hero_card_2_title: "Lower-fee conversion",
@@ -108,8 +108,8 @@ const portugueseDictionary: Dictionary = {
     language_current: "Português",
     chat_agent_welcome:
       "Entre para começar. Depois disso posso te ajudar a consultar saldo, colocar dinheiro com PIX, enviar dinheiro para seu PIX, pagar contatos ou converter saldo. Se ainda não entrou, digite aqui no chat para entrar/criar conta.",
-    chat_search_placeholder: "Buscar contatos da carteira...",
-    chat_sidebar_preview: "Oi. Como posso ajudar com sua carteira, saldo e contatos hoje?",
+    chat_search_placeholder: "Buscar contatos da conta...",
+    chat_sidebar_preview: "Oi. Como posso ajudar com sua conta, saldo e contatos hoje?",
     chat_input_placeholder: "Digite: saldo, colocar dinheiro com PIX, retirar para PIX ou enviar para alguém",
     chat_wait_session: "Só um momento enquanto inicio a sessão...",
     chat_api_error: "A resposta da API falhou",
@@ -127,7 +127,7 @@ const portugueseDictionary: Dictionary = {
     chat_link_generic: "Abrir link",
     welcome_select:
       'Selecione TalkToStellar na lateral. Comece com: 1) "saldo", 2) "colocar 150 reais com PIX", 3) "enviar 100 reais para meu PIX", 4) "enviar 200 dólares para Maria".',
-    welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua carteira.",
+    welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua conta.",
     login_title: "Entre na sua conta",
     login_subtitle:
       "Entre para continuar de onde parou. Depois do login: saldo, contatos, PIX entrando/saindo e pagamentos.",
@@ -164,7 +164,7 @@ const portugueseDictionary: Dictionary = {
     hero_title_1: "Mova dinheiro pelo mundo.",
     hero_title_2: "Em uma mensagem.",
     hero_subtitle:
-      "Envie dinheiro, gerencie contatos e use trilhos blockchain por linguagem natural. Pelo Telegram ou WhatsApp, sem burocracia.",
+      "Envie dinheiro, gerencie contatos e mova saldo entre R$ e US$ por linguagem natural. Pelo Telegram ou WhatsApp, sem burocracia.",
     hero_card_1_title: "Linguagem natural",
     hero_card_1_body: "Use mensagens simples para simular, transferir e organizar transações.",
     hero_card_2_title: "Conversão com taxas menores",

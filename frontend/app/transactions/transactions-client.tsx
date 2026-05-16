@@ -35,6 +35,7 @@ function formatAmount(amount?: string | null, assetCode?: string | null) {
   if (!Number.isFinite(n)) return `${amount || "0"} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
+  if (code === "XLM") return "Account balance"
   return `${n.toFixed(2)} ${code}`
 }
 

@@ -175,13 +175,12 @@ export default function PhoneMockupStatic() {
                className="self-start bg-[#162032] text-[#e9edef] px-3 py-2 rounded-2xl rounded-bl-sm max-w-[85%] shadow-sm relative flex flex-col"
              >
                <p className="text-[15px] leading-snug">
-                 <strong className="text-white">Transaction settled on Stellar.</strong>
+                 <strong className="text-white">Payment completed.</strong>
                  <br/><br/>
                  Maria already received <strong className="text-[#00D2FF]">50 USD</strong> in her account.
                </p>
                <div className="mt-2 pt-2 border-t border-white/[0.03] flex flex-col gap-2">
                  <span className="text-[14px] text-[#00D2FF] font-medium cursor-pointer flex items-center gap-1"><BadgeCheck className="w-4 h-4"/> View receipt</span>
-                 <span className="text-[14px] text-[#9BA4B5] font-medium cursor-pointer flex items-center gap-1">View on Stellar Expert</span>
                </div>
                <div className="text-right mt-1">
                  <span className="text-[10px] text-[#9BA4B5]">14:43</span>

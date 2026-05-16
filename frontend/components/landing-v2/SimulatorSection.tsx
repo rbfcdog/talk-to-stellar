@@ -107,7 +107,7 @@ export default function SimulatorSection() {
           Simulate your <span className="text-[#00D2FF]">savings</span>
         </h2>
         <p className="text-lg text-[#9BA4B5] max-w-2xl mx-auto">
-          Compare traditional fees with the real BRL to USDC route on Stellar.
+          Compare traditional fees with the real BRL to USDC route in TalkToStellar.
         </p>
       </div>
 
@@ -180,7 +180,7 @@ export default function SimulatorSection() {
 
         <div className="mt-6 rounded-2xl border border-white/[0.03] bg-white/5 p-4 text-sm text-[#cbd5e1]">
           <p>TalkToStellar fee (spread): {formatBrl(numbers.spreadBrl)}</p>
-          <p>Estimated network fee: {formatBrl(numbers.networkBrl)}</p>
+          <p>Estimated processing fee: {formatBrl(numbers.networkBrl)}</p>
           <p className="font-semibold text-white mt-1">
             Total fee: {formatBrl(numbers.totalFeeBrl)} ({numbers.totalFeePct.toFixed(4)}%)
           </p>
@@ -235,7 +235,7 @@ export default function SimulatorSection() {
             <div className="mt-auto pt-4 border-t border-white/[0.03] w-full">
               <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">You keep</p>
               <p className="font-bold text-emerald-400 text-xl">{formatBrl(numbers.savingsBrl)}</p>
-              <p className="text-xs text-emerald-500/70 mt-1">With BRL to USDC routing on Stellar</p>
+              <p className="text-xs text-emerald-500/70 mt-1">With BRL to USDC routing in TalkToStellar</p>
             </div>
           </div>
         </div>

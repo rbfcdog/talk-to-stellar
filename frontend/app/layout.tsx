@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     default: 'TalkToStellar',
     template: '%s | TalkToStellar',
   },
-  description: 'Digital wallet to send, receive, and convert assets on Stellar.',
+  description: 'Global account to send, receive, and convert money with TalkToStellar.',
   generator: 'v0.app',
   icons: {
     icon: '/talktostellar.png',

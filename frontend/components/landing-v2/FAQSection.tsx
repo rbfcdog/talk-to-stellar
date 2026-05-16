@@ -5,19 +5,19 @@ import { Plus, Minus } from 'lucide-react';
 const faqs = [
   {
     question: "What is TalkToStellar?",
-    answer: "TalkToStellar is an intelligent assistant for WhatsApp and Telegram that lets you convert Brazilian reais (BRL) into digital dollars (USDC) and send money worldwide by sending messages, powered by Stellar."
+    answer: "TalkToStellar is an intelligent assistant for WhatsApp and Telegram that lets you convert Brazilian reais (BRL) into digital dollars (USDC) and send money worldwide by sending messages."
   },
   {
     question: "How does BRL to USDC conversion work?",
-    answer: "You tell us how much you want to convert and we find a low-cost route. You pay with PIX and the corresponding USDC is credited to your wallet."
+    answer: "You tell us how much you want to convert and we find a low-cost route. You pay with PIX and the corresponding USDC is credited to your account."
   },
   {
     question: "Is TalkToStellar secure?",
-    answer: "Yes. Transactions settle on Stellar, providing transparent settlement and cryptographic security. We do not keep access to your wallet funds after the transaction is settled."
+    answer: "Yes. Every operation uses secure confirmation, clear receipts, and visible amounts before you approve."
   },
   {
     question: "What fees do you charge?",
-    answer: "We avoid hidden spread and excessive traditional-bank fees. TalkToStellar uses Stellar liquidity and shows the final amount before you confirm."
+    answer: "We avoid hidden spread and excessive traditional-bank fees. TalkToStellar shows the final amount before you confirm."
   },
   {
     question: "Do I need to download a new app?",
