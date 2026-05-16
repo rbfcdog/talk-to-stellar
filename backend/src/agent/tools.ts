@@ -315,12 +315,13 @@ function formatNoPathFallbackMessage(errorMessage: string): string {
 }
 
 function formatBrl(value: number): string {
+  const displayValue = Number.isFinite(value) && value > 0 && value < 0.01 ? 0.01 : value;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(Number.isFinite(displayValue) ? displayValue : 0);
 }
 
 async function fetchBrlUsdcQuote(): Promise<{
@@ -1179,20 +1180,20 @@ function executeGetIntentHelp(): string {
     {
       command: "enviar",
       intent: "payment",
-      description: "Cria um link seguro de confirmação para enviar dinheiro a um contato.",
-      examples: ["mandar 50 dólares para Juliana Lima"],
+      description: "Cria um link seguro para enviar dinheiro a um contato da forma mais otimizada.",
+      examples: ["mandar 50 dólares para Juliana Lima da forma mais otimizada"],
     },
     {
       command: "converter",
       intent: "conversion",
-      description: "Cota e cria confirmação para converter saldo entre R$ e US$.",
+      description: "Cria confirmação para converter saldo entre R$ e US$ pela rota mais otimizada.",
       examples: ["converter 10 us$ para reais"],
     },
     {
-      command: "cotação",
+      command: "rota",
       intent: "price_quote",
-      description: "Consulta a cotação atual de dólar/real usada pela experiência.",
-      examples: ["cotação do dólar agora"],
+      description: "Mostra a melhor estimativa antes de confirmar uma conversão.",
+      examples: ["melhor estimativa para converter reais"],
     },
     {
       command: "melhor rota",
@@ -1245,10 +1246,10 @@ function executeGetIntentHelp(): string {
       "Guia rápido TalkToStellar (o que você pode fazer agora):",
       "1) saldo: ver dinheiro disponível em R$ e US$.",
       "2) contatos: listar ou salvar destinatários.",
-      "3) enviar: fazer pagamento com confirmação segura.",
-      "4) converter: trocar R$ e US$ com cotação atual.",
+      "3) enviar: fazer pagamento com confirmação segura da forma mais otimizada.",
+      "4) converter: trocar R$ e US$ pela rota mais otimizada.",
       "5) PIX: colocar dinheiro via PIX, retirar para seu PIX ou pagar um contato direto usando PIX.",
-      "6) melhor rota: descobrir o caminho mais eficiente para enviar/converter.",
+      "6) melhor rota: descobrir o caminho mais otimizado para enviar/converter.",
       "7) histórico: revisar operações recentes.",
       "8) link de pagamento: gerar link para cobrar/receber.",
       "9) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
@@ -1259,7 +1260,7 @@ function executeGetIntentHelp(): string {
       ),
       "",
       "Exemplos prontos:",
-      "- \"enviar 10 dólares para Ana\"",
+      "- \"enviar 10 dólares para Ana da forma mais otimizada\"",
       "- \"converter 200 reais para dólar\"",
       "- \"colocar 100 reais via PIX\"",
       "- \"pagar Ana Silva com 100 reais via PIX\"",
@@ -1724,14 +1725,12 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
       quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
         (sourceAmount
-          ? `Cotação antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
-          : `Cotação antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
-        `Rota usada: ${formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
-        `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
-        `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
+          ? `Estimativa antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
+          : `Estimativa antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
+        `Rota mais otimizada: ${formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
         `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Estimativa válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1858,13 +1857,11 @@ async function executeGetBestRoute(input: any): Promise<string> {
       quote_expires_at: expiringQuote.quote_expires_at,
       quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
-        `Melhor rota agora: ${routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
+        `Rota mais otimizada agora: ${routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
         `Critério: ${criteria}. ` +
-        `Taxa de rede: ${feeBreakdown.network_fee_display}. ` +
-        `Taxa de plataforma: ${feeBreakdown.platform_fee_display}. ` +
         `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
         `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Estimativa válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -2192,7 +2189,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
         })
       : null;
     const quoteValidityLine = quote?.quote_expires_at
-      ? `Cotação válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
+      ? `Estimativa válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
       : '';
 
     const { url } = await externalService.createPaymentConfirmUrl({
@@ -2227,6 +2224,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || quote?.destinationAsset?.issuer || asset.issuer || null,
       transaction_context_message: contextMessage || null,
       memo: contextMessage || null,
+      language: input.language || input.lang || input.locale || null,
     });
 
     return JSON.stringify({
@@ -2238,9 +2236,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
       message:
-        `Antes de confirmar: taxa estimada total ${totalFeeDisplay}. ` +
+        `Antes de confirmar: estamos preparando da forma mais otimizada, com taxa estimada total ${totalFeeDisplay}. ` +
         `${savingsEstimate ? `Encontrei uma rota mais barata: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `${crossAsset && routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
+        `${crossAsset && routeChain ? `Rota mais otimizada: ${routeChain}. ` : ''}` +
         quoteValidityLine +
         `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
         `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
@@ -2328,10 +2326,10 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
       message:
-        `Antes de confirmar: taxa estimada total ${unifiedFee.display || 'indisponível'}. ` +
+        `Antes de confirmar: conversão preparada da forma mais otimizada, com taxa estimada total ${unifiedFee.display || 'indisponível'}. ` +
         `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
-        `${crossAsset && routeChain ? `Melhor caminho: ${routeChain}. ` : ''}` +
-        `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
+        `${crossAsset && routeChain ? `Rota mais otimizada: ${routeChain}. ` : ''}` +
+        `Estimativa válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
         `Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {
@@ -4076,7 +4074,7 @@ async function executeAddContact(input: any): Promise<string> {
       || (String(profile.pix_key || '').includes('@talktostellar') ? '' : String(profile.pix_key || '').trim());
     const profileLines = [
       `Nome: ${contactName}`,
-      `Identificador: ${preferredIdentifier || 'indisponível'}`,
+      `Chave: ${preferredIdentifier || 'indisponível'}`,
       profile.email ? `E-mail: ${profile.email}` : null,
       profile.phone_number ? `Telefone: ${profile.phone_number}` : null,
       profile.cpf ? `CPF: ${profile.cpf}` : null,
@@ -4115,13 +4113,13 @@ async function executeListContacts(input: any): Promise<string> {
     const ownerId = await resolveToolUserId(input);
     logger.debug(`Tool: Listing contacts from database for user ${ownerId}`);
 
-    let query = supabase
+    const loadContacts = () => supabase
       .from("contacts")
       .select("id, owner_id, contact_name, stellar_public_key, phone_number, pix_key, created_at")
       .order("contact_name", { ascending: true })
       .eq("owner_id", ownerId);
 
-    const { data: contacts, error } = await query;
+    let { data: contacts, error } = await loadContacts();
 
     if (error) {
       const errorCode = String((error as any)?.code || '');
@@ -4141,6 +4139,20 @@ async function executeListContacts(input: any): Promise<string> {
       }
 
       throw new Error(error.message || "Failed to fetch contacts");
+    }
+
+    if ((contacts || []).length < 5) {
+      try {
+        await ContactSeedService.ensureStarterContactsForUser(ownerId);
+        const refreshed = await loadContacts();
+        if (!refreshed.error) {
+          contacts = refreshed.data;
+        } else {
+          logger.warn(`[executeListContacts] starter contact refresh failed: ${refreshed.error.message || JSON.stringify(refreshed.error)}`);
+        }
+      } catch (seedError) {
+        logger.warn(`[executeListContacts] starter contact seed failed: ${seedError instanceof Error ? seedError.message : String(seedError)}`);
+      }
     }
     const publicKeys = (contacts || [])
       .map((contact: any) => String(contact?.stellar_public_key || '').trim())

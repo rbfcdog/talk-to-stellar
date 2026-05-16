@@ -472,6 +472,16 @@ function isValidStellarPublicKey(value?: string) {
   }
 }
 
+function pickContactTransferKey(contact?: any): string {
+  if (!contact || typeof contact !== 'object') return '';
+  const email = String(contact.email || contact.contact_profile?.email || '').trim().toLowerCase();
+  const phone = String(contact.phone_number || contact.phone || contact.contact_profile?.phone_number || contact.contact_profile?.phone || '').replace(/\D+/g, '');
+  const cpf = String(contact.cpf || contact.contact_profile?.cpf || '').replace(/\D+/g, '');
+  const pixKey = String(contact.pix_key || contact.contact_profile?.pix_key || '').trim();
+  const candidate = email || phone || cpf || pixKey;
+  return isValidStellarPublicKey(candidate) ? '' : candidate;
+}
+
 function resolveAssetIssuer(assetCode: string, provided?: string): string | undefined {
   const normalized = normalizeAssetCode(assetCode);
   if (normalized === 'XLM') return undefined;
@@ -673,6 +683,7 @@ async function sendTelegramPaymentNotification(input: {
   sourceAssetCode?: string;
   feeXlm?: string;
   destinationName?: string;
+  destinationKey?: string;
   destination: string;
   hash?: string;
   quote?: any;
@@ -694,6 +705,7 @@ async function sendTelegramPaymentNotification(input: {
       provider: input.provider,
       providerUserId: input.providerUserId,
       counterpartyLabel: readableDestination || 'destinatário',
+      counterpartyKey: input.destinationKey || null,
       sourceAmount: input.sourceAmount || input.amount,
       sourceAssetCode: input.sourceAssetCode || input.assetCode,
       destinationAmount: input.amount,
@@ -1863,6 +1875,27 @@ export default class ExternalFinalizeController {
           });
         }
 
+        let destinationDisplayContact: any = contactFromToken || null;
+        try {
+          const { data: displayContact } = await supabase
+            .from('contacts')
+            .select('contact_name, pix_key, phone_number, stellar_public_key')
+            .in('owner_id', candidateOwnerIds)
+            .eq('stellar_public_key', resolvedDestination)
+            .limit(1)
+            .maybeSingle();
+          if (displayContact) {
+            destinationDisplayContact = {
+              ...(destinationDisplayContact || {}),
+              ...displayContact,
+            };
+          }
+        } catch (displayContactError) {
+          logger.debug(`[external-finalize] could not load destination display contact: ${displayContactError instanceof Error ? displayContactError.message : String(displayContactError)}`);
+        }
+        const destinationDisplayName = String(destinationDisplayContact?.contact_name || destination_name || '').trim();
+        const destinationDisplayKey = pickContactTransferKey(destinationDisplayContact);
+
         const passkeyChallengeId = String(req.body?.passkey_challenge_id || '').trim();
         const passkeyCredential = req.body?.passkey_credential;
         const hasPasskeyPayload = Boolean(passkeyChallengeId || passkeyCredential);
@@ -2122,8 +2155,9 @@ export default class ExternalFinalizeController {
           String(amount),
           assetCode,
           {
-            destinationName: destination_contact?.contact_name || destination_name,
-            destinationContact: destination_contact || null,
+            destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name,
+            destinationContact: destinationDisplayContact || destination_contact || null,
+            destinationKey: destinationDisplayKey || null,
             sourcePublicKey: wallet.public_key,
             sourceAsset: isStrictSendPayment ? actualSourceAsset.code : senderHasDestinationAsset ? assetCode : actualSourceAsset.code,
             sourceAssetIssuer: isStrictSendPayment ? actualSourceAsset.issuer : senderHasDestinationAsset ? assetIssuer : undefined,
@@ -2318,8 +2352,10 @@ export default class ExternalFinalizeController {
               destinationAmount: String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount),
               destinationAssetCode: destinationAssetForNotice,
               message:
-                `Conversão automática concluída: ${formatCustomerAssetAmount(String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''), sourceAssetForNotice)} ` +
-                `viraram ${formatCustomerAssetAmount(String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount), destinationAssetForNotice)} antes do envio.`,
+                sourceAssetForNotice === 'XLM' || destinationAssetForNotice === 'XLM'
+                  ? 'Conversão automática concluída pela forma mais otimizada antes do envio.'
+                  : `Conversão automática concluída pela forma mais otimizada: ${formatCustomerAssetAmount(String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''), sourceAssetForNotice)} ` +
+                    `viraram ${formatCustomerAssetAmount(String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount), destinationAssetForNotice)} antes do envio.`,
             }
           : null;
         const sourceIssuerForLog = sourceAssetForNotice === 'XLM'
@@ -2345,7 +2381,8 @@ export default class ExternalFinalizeController {
           sourceAmount: publicTransferDetails.sourceAmount,
           sourceAssetCode: publicTransferDetails.sourceAssetCode,
           feeXlm: publicTransferDetails.feeXlm,
-          destinationName: destination_contact?.contact_name || destination_name,
+          destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name,
+          destinationKey: destinationDisplayKey || undefined,
           destination: resolvedDestination,
           hash: result.hash,
           quote,
@@ -2363,7 +2400,8 @@ export default class ExternalFinalizeController {
           type: 'payment_sent',
           sessionId: String(session_id),
           userId: String(session.user_id),
-          counterpartyLabel: destination_contact?.contact_name || destination_name || 'destinatário',
+          counterpartyLabel: destinationDisplayName || destination_contact?.contact_name || destination_name || 'destinatário',
+          counterpartyKey: destinationDisplayKey || null,
           sourceAmount: publicTransferDetails.sourceAmount,
           sourceAssetCode: publicTransferDetails.sourceAssetCode,
           destinationAmount: publicTransferDetails.destinationAmount,
@@ -2403,8 +2441,9 @@ export default class ExternalFinalizeController {
           quote?.path,
           {
             token_hash: tokenHash,
-            destination_name: destination_contact?.contact_name || destination_name,
-            destination_contact,
+            destination_name: destinationDisplayName || destination_contact?.contact_name || destination_name,
+            destination_contact: destinationDisplayContact || destination_contact,
+            destination_key: destinationDisplayKey || null,
             source_public_key: wallet.public_key,
             destination_public_key: resolvedDestination,
             isDirectPayment,
@@ -2431,8 +2470,9 @@ export default class ExternalFinalizeController {
           result.hash,
           'completed',
           {
-            destination_name: destination_contact?.contact_name || destination_name,
-            destination_contact,
+            destination_name: destinationDisplayName || destination_contact?.contact_name || destination_name,
+            destination_contact: destinationDisplayContact || destination_contact,
+            destination_key: destinationDisplayKey || null,
             source_public_key: wallet.public_key,
             destination_public_key: resolvedDestination,
             isDirectPayment,
@@ -2457,8 +2497,8 @@ export default class ExternalFinalizeController {
           ownerId: String(session.user_id),
           sourcePublicKey: wallet.public_key,
           destinationPublicKey: resolvedDestination,
-          destinationName: destination_contact?.contact_name || destination_name || destination,
-          destinationContact: destination_contact,
+          destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name || destination,
+          destinationContact: destinationDisplayContact || destination_contact,
         });
 
         if (destinationWallet?.session_id && destinationWallet.session_id !== String(session_id)) {
@@ -2523,7 +2563,9 @@ export default class ExternalFinalizeController {
           sessionId: String(session_id),
           userId: String(session.user_id),
           destination: resolvedDestination,
-          destinationName: destination_contact?.contact_name || destination_name || 'Destinatário',
+          destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name || 'Destinatário',
+          destinationKey: destinationDisplayKey || undefined,
+          destination_key: destinationDisplayKey || undefined,
           assetCode,
           hash: result.hash,
           transferDetails: publicTransferDetails,

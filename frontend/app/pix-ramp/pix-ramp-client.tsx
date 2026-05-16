@@ -153,16 +153,17 @@ function isFailureStatus(status: unknown) {
 
 function statusLabel(status: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const normalized = normalizeStatus(status);
-  if (normalized === "completed") return "Completed";
-  if (normalized === "processing" || normalized === "funded") return "Processing";
-  if (normalized === "pending") return "Waiting";
-  if (normalized === "failed") return "Failed";
-  if (normalized === "expired") return "Expired";
-  if (normalized === "cancelled" || normalized === "canceled") return "Cancelled";
-  if (normalized === "refunded") return "Refunded";
-  if (normalized === "cotação expirada" || normalized === "quote expired") return "Quote expired";
-  if (normalized === "não iniciado" || normalized === "not started") return "Not started";
-  return normalized || "Waiting";
+  const Ls = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  if (normalized === "completed") return Ls("Concluído", "Completed");
+  if (normalized === "processing" || normalized === "funded") return Ls("Processando", "Processing");
+  if (normalized === "pending") return Ls("Aguardando", "Waiting");
+  if (normalized === "failed") return Ls("Falhou", "Failed");
+  if (normalized === "expired") return Ls("Expirado", "Expired");
+  if (normalized === "cancelled" || normalized === "canceled") return Ls("Cancelado", "Cancelled");
+  if (normalized === "refunded") return Ls("Reembolsado", "Refunded");
+  if (normalized === "cotação expirada" || normalized === "quote expired") return Ls("Estimativa expirada", "Estimate expired");
+  if (normalized === "não iniciado" || normalized === "not started") return Ls("Não iniciado", "Not started");
+  return normalized || Ls("Aguardando", "Waiting");
 }
 
 function balanceKey(balance: BalanceItem) {
@@ -576,7 +577,7 @@ export default function PixRampClient({
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
-        label: L("Cotação", "Quote"),
+        label: L("Estimativa", "Estimate"),
         detail: quote
           ? L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
           : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
@@ -780,7 +781,7 @@ export default function PixRampClient({
       .then((payload) => {
         const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
         if (!brlPerUsdc) {
-        throw new Error(payload?.message || L("Cotação BRL/USDC indisponível.", "BRL/USDC quote unavailable."));
+        throw new Error(payload?.message || L("Estimativa BRL/USDC indisponível.", "BRL/USDC estimate unavailable."));
         }
         const feeBuffer = Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.05);
         const estimatedBrl = (receiveUsdc * brlPerUsdc) + feeBuffer;
@@ -800,7 +801,7 @@ export default function PixRampClient({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(L("Não consegui calcular o PIX pela cotação do BRL da sua conta. Tente novamente em alguns segundos.", "I could not calculate the PIX amount from your BRL quote. Try again in a few seconds."));
+          setError(L("Não consegui calcular o PIX pela estimativa da sua conta. Tente novamente em alguns segundos.", "I could not calculate the PIX amount from your account estimate. Try again in a few seconds."));
           addDebugLog({
             label: "PIX amount estimate failed",
             method: "GET",
@@ -992,7 +993,7 @@ export default function PixRampClient({
         notifyChatAfterPixCompletion({ kind: "onramp", completedTransaction: payload?.transaction || null });
         setStep("success");
       } else if (isFailureStatus(nextStatus)) {
-      setError(L("O PIX não foi concluído. Gere uma nova cotação e tente novamente.", "PIX was not completed. Generate a new quote and try again."));
+      setError(L("O PIX não foi concluído. Gere uma nova estimativa e tente novamente.", "PIX was not completed. Generate a new estimate and try again."));
       }
     }
     return payload;
@@ -1223,7 +1224,7 @@ export default function PixRampClient({
         quoteForOrder = fresh.quoteResult?.quote;
         customerForOrder = fresh.customerResult;
       }
-      if (!quoteForOrder?.id) throw new Error(L("Peça uma cotação primeiro.", "Request a quote first."));
+      if (!quoteForOrder?.id) throw new Error(L("Peça uma estimativa primeiro.", "Request an estimate first."));
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
@@ -1300,8 +1301,8 @@ export default function PixRampClient({
       `Order: ${orderId}`,
       `Operation: ${operationId || "not persisted"}`,
       `PIX key: ${displayPixKey}`,
-      `Amount: ${formatMoney(order?.fromAmount || amountBrl)}`,
-      `Delivery: ${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)}`,
+      `${L("Valor", "Amount")}: ${formatMoney(order?.fromAmount || amountBrl)}`,
+      `${L("Entrega", "Delivery")}: ${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)}`,
     ].join("\n");
     await navigator.clipboard.writeText(isSandboxMockOrder ? sandboxReference : pixCode || pixKey || orderId);
     setCopied(true);
@@ -1796,7 +1797,7 @@ export default function PixRampClient({
                 </dl>
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
-                    {L("A cotação expirou. Toque em continuar para preparar um novo PIX.", "The quote expired. Tap continue to prepare a new PIX.")}
+                    {L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")}
                   </div>
                 )}
                 {onboardingUrl && (
@@ -1828,7 +1829,7 @@ export default function PixRampClient({
               <div className="mt-8 rounded-3xl border border-dashed border-white/20 p-8 text-center text-sm text-white/60">
                 <p>
                   {quoteExpired
-                      ? L("A cotação expirou. Toque em continuar para preparar um novo PIX.", "The quote expired. Tap continue to prepare a new PIX.")
+                      ? L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")
                       : quote
                       ? L("Preparando o PIX.", "Preparing PIX.")
                       : L("Informe o valor e toque em continuar.", "Enter the amount and tap continue.")}
@@ -1893,7 +1894,7 @@ export default function PixRampClient({
                   {orderFailed && (
                     <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-rose-100">
                       <p className="text-sm font-black">{L("Não foi possível concluir este PIX.", "This PIX could not be completed.")}</p>
-                      <p className="mt-2 text-sm font-bold text-rose-100/80">{L("Gere um novo checkout para renovar a cotação e tentar novamente.", "Generate a new checkout to refresh the quote and try again.")}</p>
+                      <p className="mt-2 text-sm font-bold text-rose-100/80">{L("Gere um novo checkout para renovar a estimativa e tentar novamente.", "Generate a new checkout to refresh the estimate and try again.")}</p>
                       <button
                         className="mt-4 rounded-2xl bg-rose-300 px-4 py-3 text-xs font-black text-rose-950"
                         onClick={clearQuoteState}
@@ -2143,8 +2144,8 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
           </h2>
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat
-              ? L("Aberto pelo chat. Acompanhe cada etapa sem precisar entender cripto.", "Opened from chat. Follow each step without needing to understand crypto.")
-              : L("Acompanhe cotação, confirmação e saldo antes/depois em uma tela só.", "Track quote, confirmation, and balance before/after in one screen.")}
+              ? L("Aberto pelo chat. Acompanhe cada etapa sem detalhes técnicos.", "Opened from chat. Follow each step without technical details.")
+              : L("Acompanhe estimativa, confirmação e saldo antes/depois em uma tela só.", "Track estimate, confirmation, and balance before/after in one screen.")}
           </p>
           <div className="mt-5 rounded-full bg-black/30 p-1">
             <div
@@ -2154,7 +2155,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-[0.14em] opacity-70">
             <span>{completed}/{steps.length} {L("etapas", "steps")}</span>
-            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading || status}</span>
+            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading || statusLabel(status, language)}</span>
           </div>
         </div>
 

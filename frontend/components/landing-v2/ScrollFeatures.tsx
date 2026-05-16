@@ -61,12 +61,12 @@ export default function ScrollFeatures() {
     },
     {
       title: "3. Send to the Contact",
-      description: "Ask for a quote and approve the payment to the saved account. The AI structures the operation and shows the conversion amount.",
+      description: "Ask for the most optimized route and approve the payment to the saved account. The AI structures the operation and shows the conversion amount.",
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={Send} color="#00D2FF" delay={1} />,
       messages: [
         { type: 'user', text: 'Convert R$5,000 to dollars and send it to my Nomad account', time: '09:50' },
-        { type: 'bot', text: 'You are sending R$5,000.00 to "My Nomad Account".\n\nCurrent quote: 1 USDC = R$5.02.\nYou will receive: 994.50 USDC.', time: '09:50' },
+        { type: 'bot', text: 'You are sending R$5,000.00 to "My Nomad Account" through the most optimized route.\n\nEstimated result: 994.50 USDC.', time: '09:50' },
         { type: 'bot', text: 'To continue, scan the code below or copy the PIX payment code:', time: '09:50' },
         { type: 'bot', text: <div className="bg-[#0C1421] text-[#9BA4B5] p-2.5 rounded-lg border border-white/[0.03] break-all text-[11px] font-mono text-center shadow-inner">00020101021126580014br.gov.bcb.pix.gui<br/>...</div>, time: '09:50' },
       ]

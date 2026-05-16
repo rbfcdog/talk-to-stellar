@@ -7,6 +7,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 
 type ValidationResult = {
   success?: boolean
@@ -65,10 +66,19 @@ type ConfirmResponse = {
   error?: string
 }
 
-function formatTimestamp(value?: string) {
+function T(language: AppLanguage, pt: string, en: string) {
+  return language === "pt-BR" ? pt : en
+}
+
+function isPublicAccountKey(value?: string) {
+  return /^G[A-Z2-7]{55}$/i.test(String(value || "").trim())
+}
+
+function formatTimestamp(value?: string, language: AppLanguage = "en") {
   const timestamp = value ? Date.parse(value) : NaN
-  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("en-US")
-  return new Date(timestamp).toLocaleString("en-US")
+  const locale = language === "pt-BR" ? "pt-BR" : "en-US"
+  if (!Number.isFinite(timestamp)) return new Date().toLocaleString(locale)
+  return new Date(timestamp).toLocaleString(locale)
 }
 
 function decodeJwtPayload(token: string): any {
@@ -99,16 +109,20 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   return `${truncated.toFixed(2)} ${code}`
 }
 
-function getAutoConversionMessage(result?: ConfirmResponse | null) {
+function getAutoConversionMessage(result?: ConfirmResponse | null, language: AppLanguage = "en") {
   if (result?.autoConversion?.message) return result.autoConversion.message
   const details = result?.transferDetails
   const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
   const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
-  return `Automatic conversion completed: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
+  return T(
+    language,
+    `Conversão automática concluída pela forma mais otimizada: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} virou ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`,
+    `Automatic conversion completed with the most optimized route: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
+  )
 }
 
-function formatRecipientLabel(payload: any) {
+function formatRecipientLabel(payload: any, language: AppLanguage = "en") {
   const candidate = String(
     payload?.destination_name ||
     payload?.destinationName ||
@@ -122,9 +136,27 @@ function formatRecipientLabel(payload: any) {
     ''
   ).trim()
 
-  if (/^G[A-Z2-7]{55}$/i.test(candidate)) return 'Recipient'
+  if (isPublicAccountKey(candidate)) return T(language, 'Destinatário', 'Recipient')
   if (candidate) return candidate
-  return 'Recipient'
+  return T(language, 'Destinatário', 'Recipient')
+}
+
+function formatRecipientKey(payload: any) {
+  const candidate = String(
+    payload?.destination_key ||
+    payload?.destinationKey ||
+    payload?.destination_display_key ||
+    payload?.recipient_key ||
+    payload?.recipientKey ||
+    payload?.destination_contact?.email ||
+    payload?.destination_contact?.pix_key ||
+    payload?.destination_contact?.phone_number ||
+    payload?.destination_contact?.phone ||
+    payload?.destination_contact?.cpf ||
+    ""
+  ).trim()
+
+  return candidate && !isPublicAccountKey(candidate) ? candidate : ""
 }
 
 function hasUsableFeeDisplay(value?: string) {
@@ -174,15 +206,16 @@ function formatFeePercent(percent: number) {
   return `${trimFixed(percent, decimals)}%`
 }
 
-function formatBrl(value?: string) {
+function formatBrl(value?: string, language: AppLanguage = "en") {
   const amount = Number(String(value || "").replace(",", "."))
   if (!Number.isFinite(amount) || amount <= 0) return ""
-  return new Intl.NumberFormat("en-US", {
+  const displayAmount = amount > 0 && amount < 0.01 ? 0.01 : amount
+  return new Intl.NumberFormat(language === "pt-BR" ? "pt-BR" : "en-US", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount)
+  }).format(displayAmount)
 }
 
 function formatRouteChainFromPayload(payload: any) {
@@ -259,7 +292,7 @@ function buildFeeSummary(input: {
   return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
-function buildMobileConfirmedFeedback(payload: any) {
+function buildMobileConfirmedFeedback(payload: any, language: AppLanguage) {
   const amount = String(
     payload?.destination_amount ||
     payload?.amount ||
@@ -287,17 +320,19 @@ function buildMobileConfirmedFeedback(payload: any) {
     sourceAmount: String(payload?.source_amount || payload?.quote?.sourceAmount || payload?.amount || ""),
     sourceAssetCode: String(payload?.source_asset_code || payload?.quote?.sourceAsset?.code || payload?.asset_code || ""),
   })
-  const savings = formatBrl(String(payload?.savings_estimate?.estimated_savings_brl || ""))
+  const savings = formatBrl(String(payload?.savings_estimate?.estimated_savings_brl || ""), language)
+  const recipientKey = formatRecipientKey(payload)
 
   return [
-    "Payment confirmed on mobile.",
-    amount && asset ? `Amount: ${formatPaymentAmount(amount, asset)}` : "",
-    `Destination: ${formatRecipientLabel(payload)}`,
-    isCrossAsset && route ? "Best route selected." : "",
-    hasUsableFeeDisplay(fee) ? `Estimated fee: ${fee}` : "",
-    isCrossAsset && savings ? `Estimated savings: ${savings}` : "",
-    `Time: ${formatTimestamp()}`,
-    "Receipt saved in history.",
+    T(language, "Pagamento confirmado pelo celular.", "Payment confirmed on mobile."),
+    amount && asset ? `${T(language, "Valor", "Amount")}: ${formatPaymentAmount(amount, asset)}` : "",
+    `${T(language, "Destino", "Destination")}: ${formatRecipientLabel(payload, language)}`,
+    recipientKey ? `${T(language, "Chave", "Key")}: ${recipientKey}` : "",
+    isCrossAsset && route ? T(language, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
+    hasUsableFeeDisplay(fee) ? `${T(language, "Taxa estimada", "Estimated fee")}: ${fee}` : "",
+    isCrossAsset && savings ? `${T(language, "Economia estimada", "Estimated savings")}: ${savings}` : "",
+    `${T(language, "Horário", "Time")}: ${formatTimestamp(undefined, language)}`,
+    T(language, "Comprovante registrado no histórico.", "Receipt saved in history."),
   ].filter(Boolean).join("\n")
 }
 
@@ -344,6 +379,7 @@ export default function ConfirmPaymentClient({
   initialValidation?: any
 }) {
   const searchParams = useSearchParams()
+  const { language } = useLanguage()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
   const requestedAuthMethod = useMemo(() => String(searchParams.get("auth") || "").trim().toLowerCase(), [searchParams])
   const publicKeyFromUrl = useMemo(() => searchParams.get("public_key") || searchParams.get("destination_public_key") || '', [searchParams])
@@ -362,6 +398,17 @@ export default function ConfirmPaymentClient({
   const submitLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
   const urlScrubbedRef = useRef(false)
+  const feedbackLanguage = useMemo(
+    () => normalizeLanguage(
+      searchParams.get("lang") ||
+      searchParams.get("language") ||
+      validation?.payload?.language ||
+      validation?.payload?.lang ||
+      decodeJwtPayload(token)?.language ||
+      language
+    ),
+    [searchParams, validation?.payload, token, language]
+  )
 
   useEffect(() => {
     if (tokenFromUrl) {
@@ -392,9 +439,9 @@ export default function ConfirmPaymentClient({
             success: true,
             valid: true,
             payload: payload?.payload || fallbackPayload,
-            message: "Confirmation in progress on mobile...",
+            message: T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."),
           })
-          setMobileSyncStatus("Confirmation in progress on mobile...")
+          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."))
           return
         }
         if (!response.ok || !payload?.valid) {
@@ -423,7 +470,7 @@ export default function ConfirmPaymentClient({
     }
 
     validateToken()
-  }, [token])
+  }, [token, feedbackLanguage])
 
   useEffect(() => {
     if (!token || status === "done") return
@@ -438,13 +485,13 @@ export default function ConfirmPaymentClient({
         if (cancelled) return
 
         if (response.status === 409 && payload?.processing) {
-          setMobileSyncStatus("Confirmation in progress on mobile...")
+          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."))
           return
         }
 
         if (response.status === 409 && payload?.used) {
           const payloadForFeedback = payload?.payload || validation?.payload || decodeJwtPayload(token)
-          const feedback = buildMobileConfirmedFeedback(payloadForFeedback)
+          const feedback = buildMobileConfirmedFeedback(payloadForFeedback, feedbackLanguage)
           submitLockRef.current = true
           setResult((prev) => prev || {
             success: true,
@@ -470,7 +517,7 @@ export default function ConfirmPaymentClient({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [token, status])
+  }, [token, status, feedbackLanguage, validation?.payload])
 
   useEffect(() => {
     if (status !== "done") return
@@ -565,7 +612,7 @@ export default function ConfirmPaymentClient({
 
       if (response.ok && payload?.success) {
         const receiptUrl = String(payload.receipt_url || "")
-        const conversionMessage = getAutoConversionMessage(payload)
+        const conversionMessage = getAutoConversionMessage(payload, feedbackLanguage)
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
         const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
@@ -578,19 +625,21 @@ export default function ConfirmPaymentClient({
           sourceAmount: String(payloadForFeedback?.source_amount || payloadForFeedback?.quote?.sourceAmount || payloadForFeedback?.amount || ""),
           sourceAssetCode: String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || payloadForFeedback?.asset_code || ""),
         })
-        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""))
-        const monthlySavingsForFeedback = formatBrl(String(payload?.monthly_savings?.estimated_savings_brl || ""))
+        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""), feedbackLanguage)
+        const monthlySavingsForFeedback = formatBrl(String(payload?.monthly_savings?.estimated_savings_brl || ""), feedbackLanguage)
+        const recipientKey = formatRecipientKey(payload) || formatRecipientKey(payloadForFeedback)
         enqueueWebChatFeedback([
-          "Payment sent successfully.",
+          T(feedbackLanguage, "Pagamento enviado com sucesso.", "Payment sent successfully."),
           conversionMessage,
-          `Amount: ${formatPaymentAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || ""))}`,
-          `Destination: ${formatRecipientLabel(payload)}`,
-          feedbackIsCrossAsset && routeForFeedback ? "Best route selected." : "",
-          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `Estimated fee: ${estimatedFeeForFeedback}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `Estimated savings: ${savingsForFeedback}` : "",
-          monthlySavingsForFeedback ? `Monthly savings so far: ${monthlySavingsForFeedback}` : "",
-          `Time: ${formatTimestamp(payload.completed_at)}`,
-          receiptUrl ? `Receipt: ${receiptUrl}` : "",
+          `${T(feedbackLanguage, "Valor", "Amount")}: ${formatPaymentAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || ""))}`,
+          `${T(feedbackLanguage, "Destino", "Destination")}: ${formatRecipientLabel(payload, feedbackLanguage)}`,
+          recipientKey ? `${T(feedbackLanguage, "Chave", "Key")}: ${recipientKey}` : "",
+          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
+          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `${T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: ${estimatedFeeForFeedback}` : "",
+          feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
+          monthlySavingsForFeedback ? `${T(feedbackLanguage, "Economia no mês até agora", "Monthly savings so far")}: ${monthlySavingsForFeedback}` : "",
+          `${T(feedbackLanguage, "Horário", "Time")}: ${formatTimestamp(payload.completed_at, feedbackLanguage)}`,
+          receiptUrl ? `${T(feedbackLanguage, "Comprovante", "Receipt")}: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
       }
 
@@ -711,7 +760,8 @@ export default function ConfirmPaymentClient({
   const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
   const shouldShowCrossAssetInsights = isCrossCurrency
-  const destinationLabel = formatRecipientLabel(payload)
+  const destinationLabel = formatRecipientLabel(payload, feedbackLanguage)
+  const destinationKeyLabel = formatRecipientKey(payload)
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const estimatedSavingsBrl = String(payload?.savings_estimate?.estimated_savings_brl || "")
   const estimatedSavingsPct = Number(String(payload?.savings_estimate?.savings_percentage_over_traditional_fee || "").replace(",", "."))
@@ -742,8 +792,9 @@ export default function ConfirmPaymentClient({
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
   const successReceiptUrl = String(result?.receipt_url || "")
-  const successAutoConversionMessage = getAutoConversionMessage(result)
-  const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""))
+  const successAutoConversionMessage = getAutoConversionMessage(result, feedbackLanguage)
+  const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""), feedbackLanguage)
+  const successDestinationKey = formatRecipientKey(result) || destinationKeyLabel
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
@@ -799,25 +850,26 @@ export default function ConfirmPaymentClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Summary</p>
+                <p className="font-medium text-white">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-slate-300">
-                  {isCrossCurrency ? `You send: ${sourceAmountLabel}` : `Amount: ${amountLabel}`}
+                  {isCrossCurrency ? `${T(feedbackLanguage, "Você envia", "You send")}: ${sourceAmountLabel}` : `${T(feedbackLanguage, "Valor", "Amount")}: ${amountLabel}`}
                 </p>
                 {isCrossCurrency && (
-                  <p className="text-slate-300">Recipient receives approximately: {amountLabel}</p>
+                  <p className="text-slate-300">{T(feedbackLanguage, "Destinatário recebe aproximadamente", "Recipient receives approximately")}: {amountLabel}</p>
                 )}
-                <p className="text-slate-300">Destination: {destinationLabel}</p>
+                <p className="text-slate-300">{T(feedbackLanguage, "Destino", "Destination")}: {destinationLabel}</p>
+                {destinationKeyLabel && <p className="text-slate-300">{T(feedbackLanguage, "Chave", "Key")}: {destinationKeyLabel}</p>}
                 {showEstimatedFee && (
-                  <p className="text-slate-300">Estimated total fee: {estimatedFeeSummary}</p>
+                  <p className="text-slate-300">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeSummary}</p>
                 )}
                 {shouldShowCrossAssetInsights && routeChain && (
-                  <p className="text-slate-300">Best route selected.</p>
+                  <p className="text-slate-300">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
                 )}
-                {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
+                {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                   <p className="text-emerald-300 font-medium">
-                    Cheapest route found: you save {formatBrl(estimatedSavingsBrl)}
+                    {T(feedbackLanguage, "Rota mais otimizada encontrada: economia de", "Most optimized route found: you save")} {formatBrl(estimatedSavingsBrl, feedbackLanguage)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1)}%)` : ""}
-                    {" "}vs traditional methods.
+                    {" "}{T(feedbackLanguage, "vs métodos tradicionais.", "vs traditional methods.")}
                   </p>
                 )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
@@ -886,9 +938,6 @@ export default function ConfirmPaymentClient({
                     className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
                   />
                 </div>
-                {qrTargetUrl && (
-                  <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>
-                )}
               </div>
             )}
 
@@ -905,17 +954,18 @@ export default function ConfirmPaymentClient({
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-2 space-y-3 text-emerald-100"
                 >
-                  <p className="text-base font-semibold text-emerald-300">Payment sent successfully</p>
+                  <p className="text-base font-semibold text-emerald-300">{T(feedbackLanguage, "Pagamento enviado com sucesso", "Payment sent successfully")}</p>
                   <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm">
-                    <p><span className="text-slate-300">Amount: </span>{formatPaymentAmount(successAmount, successAsset)}</p>
-                    <p><span className="text-slate-300">Destination: </span>{formatRecipientLabel(result)}</p>
-                    <p><span className="text-slate-300">Time: </span>{formatTimestamp(result.completed_at)}</p>
+                    <p><span className="text-slate-300">{T(feedbackLanguage, "Valor", "Amount")}: </span>{formatPaymentAmount(successAmount, successAsset)}</p>
+                    <p><span className="text-slate-300">{T(feedbackLanguage, "Destino", "Destination")}: </span>{formatRecipientLabel(result, feedbackLanguage)}</p>
+                    {successDestinationKey && <p><span className="text-slate-300">{T(feedbackLanguage, "Chave", "Key")}: </span>{successDestinationKey}</p>}
+                    <p><span className="text-slate-300">{T(feedbackLanguage, "Horário", "Time")}: </span>{formatTimestamp(result.completed_at, feedbackLanguage)}</p>
                   </div>
                   {showResultFee && (
                     <p>Applied fee: {resultFeeSummary || "applied fee unavailable"}</p>
                   )}
-                  {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl) && (
-                    <p>Estimated savings on this operation with the best route: {formatBrl(estimatedSavingsBrl)}</p>
+                  {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
+                    <p>{T(feedbackLanguage, "Economia estimada nesta operação com a rota mais otimizada", "Estimated savings on this operation with the most optimized route")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
                   {successAutoConversionMessage && (
                     <p>{successAutoConversionMessage}</p>

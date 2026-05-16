@@ -139,7 +139,25 @@ export default function CreateAccountClient({
   const [validation, setValidation] = useState<any>(initialValidation)
   const [existingAccountDetected, setExistingAccountDetected] = useState(false)
   const [telegramDone, setTelegramDone] = useState(false)
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0)
   const submitLockRef = useRef(false)
+  const loadingPhrases = useMemo(() => [
+    L("Preparando sua conta da forma mais otimizada.", "Preparing your account with the most optimized setup."),
+    L("Organizando saldo, contatos e chaves de recebimento.", "Organizing balance, contacts, and receiving keys."),
+    L("Criando contatos iniciais para você testar pagamentos.", "Creating starter contacts so you can test payments."),
+    L("Ativando a rota mais otimizada para PIX e pagamentos.", "Enabling the most optimized route for PIX and payments."),
+    L("Quase pronto: validando tudo antes de conectar.", "Almost ready: validating everything before connecting."),
+  ], [language])
+  useEffect(() => {
+    if (status !== "submitting") {
+      setLoadingPhraseIndex(0)
+      return
+    }
+    const timer = window.setInterval(() => {
+      setLoadingPhraseIndex((current) => (current + 1) % loadingPhrases.length)
+    }, 2200)
+    return () => window.clearInterval(timer)
+  }, [loadingPhrases.length, status])
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
@@ -259,13 +277,13 @@ export default function CreateAccountClient({
       sessionId: sessionId || undefined,
       sessionToken: sessionToken || undefined,
       userId: resolvedUserId || undefined,
-      message: "Account created successfully.",
+      message: L("Conta criada com sucesso.", "Account created successfully."),
     })
     setStatus("done")
     if (isTelegramContext) {
-      finishTelegramFlow(`Account created successfully.\nConnected account: ${resolvedUserId || "user"}`)
+      finishTelegramFlow(L(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`, `Account created successfully.\nConnected account: ${resolvedUserId || "user"}`))
     } else {
-      finishAndClose(`Account created successfully.\nConnected account: ${resolvedUserId || "user"}`)
+      finishAndClose(L(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`, `Account created successfully.\nConnected account: ${resolvedUserId || "user"}`))
     }
   }
 
@@ -591,10 +609,11 @@ export default function CreateAccountClient({
       }
 
       if (response.ok && payload.success) {
+        const connectedLabel = email || name || payload.userId || L("usuário", "user")
         if (isTelegramContext) {
-          finishTelegramFlow(`Account created successfully.\nConnected account: ${email || name || payload.userId || "user"}`)
+          finishTelegramFlow(L(`Conta criada com sucesso.\nConta conectada: ${connectedLabel}`, `Account created successfully.\nConnected account: ${connectedLabel}`))
         } else {
-          finishAndClose(`Account created successfully.\nConnected account: ${email || name || payload.userId || "user"}`)
+          finishAndClose(L(`Conta criada com sucesso.\nConta conectada: ${connectedLabel}`, `Account created successfully.\nConnected account: ${connectedLabel}`))
         }
         return
       }
@@ -667,9 +686,9 @@ export default function CreateAccountClient({
         message: 'Biometrics enabled successfully',
       })
       if (isTelegramContext) {
-        finishTelegramFlow(`Account created successfully.\nBiometrics enabled for ${name || email || userId}.`)
+        finishTelegramFlow(L(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`, `Account created successfully.\nBiometrics enabled for ${name || email || userId}.`))
       } else {
-        finishAndClose(`Account created successfully.\nBiometrics enabled for ${name || email || userId}.`)
+        finishAndClose(L(`Conta criada com sucesso.\nBiometria ativada para ${name || email || userId}.`, `Account created successfully.\nBiometrics enabled for ${name || email || userId}.`))
       }
     } catch (err: any) {
       const message = getPasskeyErrorMessage(err)
@@ -748,9 +767,9 @@ export default function CreateAccountClient({
       setExistingEmailConfirmationCode("")
       setExistingStatus("done")
       if (isTelegramContext) {
-        finishTelegramFlow(`Sign-in completed.\nConnected account: ${existingEmail.trim()}`)
+        finishTelegramFlow(L(`Login concluído.\nConta conectada: ${existingEmail.trim()}`, `Sign-in completed.\nConnected account: ${existingEmail.trim()}`))
       } else {
-        finishAndClose(`Sign-in completed.\nConnected account: ${existingEmail.trim()}`)
+        finishAndClose(L(`Login concluído.\nConta conectada: ${existingEmail.trim()}`, `Sign-in completed.\nConnected account: ${existingEmail.trim()}`))
       }
     } catch (error) {
       submitLockRef.current = false
@@ -922,7 +941,22 @@ export default function CreateAccountClient({
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Status</p>
               {status === "ready" && <p className="mt-2 text-slate-400">{L("Aguardando validação do link.", "Waiting for link validation.")}</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{L("Criando e preparando sua conta...", "Creating and preparing your account...")}</div>}
+              {status === "submitting" && (
+                <div className="mt-3 space-y-3 text-slate-300">
+                  <div className="inline-flex items-center gap-2">
+                    <TypingDots />
+                    {L("Criando sua conta da forma mais otimizada...", "Creating your account with the most optimized setup...")}
+                  </div>
+                  <motion.p
+                    key={loadingPhraseIndex}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-50"
+                  >
+                    {loadingPhrases[loadingPhraseIndex]}
+                  </motion.p>
+                </div>
+              )}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">

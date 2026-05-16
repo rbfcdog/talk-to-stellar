@@ -160,6 +160,10 @@ function compactContact(contact?: Record<string, any>) {
   return {
     contact_name: contact.contact_name || contact.name || undefined,
     stellar_public_key: contact.stellar_public_key || contact.public_key || undefined,
+    pix_key: contact.pix_key || contact.contact_profile?.pix_key || undefined,
+    email: contact.email || contact.contact_profile?.email || undefined,
+    phone_number: contact.phone_number || contact.phone || contact.contact_profile?.phone_number || contact.contact_profile?.phone || undefined,
+    cpf: contact.cpf || contact.contact_profile?.cpf || undefined,
   };
 }
 
@@ -574,6 +578,7 @@ export class ExternalService {
     const assetCode = normalizeAssetCode(payload.asset_code || 'XLM');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
     const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
+    const language = normalizeLanguage((extra as any)?.language || (extra as any)?.lang || (extra as any)?.locale);
 
     const tokenPayload = {
       sub: 'external_payment_confirm',
@@ -619,6 +624,7 @@ export class ExternalService {
 
     const buildUrl = (pk: string) => this.buildFrontendUrl('/confirm-payment', token, externalContext, {
       public_key: pk,
+      lang: language || undefined,
     });
 
     // If publicKeyForUrl already set, return synchronously

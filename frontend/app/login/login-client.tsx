@@ -125,7 +125,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function finishLogin(accountLabel?: string) {
     const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "user").trim()
-    enqueueWebChatFeedback(`Sign-in completed.\nConnected account: ${label}`)
+    enqueueWebChatFeedback(language === "pt-BR"
+      ? `Login concluído.\nConta conectada: ${label}`
+      : `Sign-in completed.\nConnected account: ${label}`)
     setLoginDone(true)
     if (nextPath) {
       window.setTimeout(() => {

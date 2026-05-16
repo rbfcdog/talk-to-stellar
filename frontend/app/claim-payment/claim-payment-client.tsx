@@ -8,6 +8,7 @@ import { clearClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { TypingDots } from "@/components/ui/feedback"
+import { useLanguage, type AppLanguage } from "@/lib/i18n"
 
 type ValidationResult = {
   valid?: boolean
@@ -43,22 +44,32 @@ function formatAmount(amount?: string, assetCode?: string) {
   return `${n.toFixed(2)} ${code}`
 }
 
-function getAutoConversionMessage(result?: any) {
+function getAutoConversionMessage(result?: any, language: AppLanguage = "en") {
   if (result?.autoConversion?.message) return String(result.autoConversion.message)
   const details = result?.transferDetails
   const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
   const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
-  return `Automatic conversion completed: ${formatAmount(details?.sourceAmount, sourceAsset)} became ${formatAmount(details?.destinationAmount, destinationAsset)} before sending.`
+  return T(
+    language,
+    `Conversão automática concluída pela forma mais otimizada: ${formatAmount(details?.sourceAmount, sourceAsset)} virou ${formatAmount(details?.destinationAmount, destinationAsset)} antes de receber.`,
+    `Automatic conversion completed with the most optimized route: ${formatAmount(details?.sourceAmount, sourceAsset)} became ${formatAmount(details?.destinationAmount, destinationAsset)} before receiving.`
+  )
 }
 
-function formatTimestamp(value?: string) {
+function T(language: AppLanguage, pt: string, en: string) {
+  return language === "pt-BR" ? pt : en
+}
+
+function formatTimestamp(value?: string, language: AppLanguage = "en") {
   const timestamp = value ? Date.parse(value) : NaN
-  if (!Number.isFinite(timestamp)) return new Date().toLocaleString("en-US")
-  return new Date(timestamp).toLocaleString("en-US")
+  const locale = language === "pt-BR" ? "pt-BR" : "en-US"
+  if (!Number.isFinite(timestamp)) return new Date().toLocaleString(locale)
+  return new Date(timestamp).toLocaleString(locale)
 }
 
 export default function ClaimPaymentClient({ initialToken }: { initialToken?: string }) {
+  const { language } = useLanguage()
   const [token, setToken] = useState(initialToken || "")
   const [sessionId, setSessionId] = useState("")
   const [sessionToken, setSessionToken] = useState("")
@@ -186,13 +197,13 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       setStatus(response.ok && payload?.success ? "done" : "error")
       if (response.ok && payload?.success) {
         const receiptUrl = String(payload.receipt_url || "")
-        const conversionMessage = getAutoConversionMessage(payload)
+        const conversionMessage = getAutoConversionMessage(payload, language)
         enqueueWebChatFeedback([
-          "Payment received successfully.",
+          T(language, "Pagamento recebido com sucesso.", "Payment received successfully."),
           conversionMessage,
-          `Amount: ${formatAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.transferDetails?.destinationAssetCode || ""))}`,
-          `Time: ${formatTimestamp(payload.completed_at)}`,
-          receiptUrl ? `Receipt: ${receiptUrl}` : "",
+          `${T(language, "Valor", "Amount")}: ${formatAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.transferDetails?.destinationAssetCode || ""))}`,
+          `${T(language, "Horário", "Time")}: ${formatTimestamp(payload.completed_at, language)}`,
+          receiptUrl ? `${T(language, "Comprovante", "Receipt")}: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -225,7 +236,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.transferDetails?.destinationAssetCode || destinationAssetCode || "")
   const successReceiptUrl = String(result?.receipt_url || "")
-  const successAutoConversionMessage = getAutoConversionMessage(result)
+  const successAutoConversionMessage = getAutoConversionMessage(result, language)
   const isExpiredLink = Boolean(validation.valid === false && (validation as any)?.expired)
 
   useEffect(() => {
@@ -339,11 +350,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           <AnimatePresence mode="wait">
           {status === "done" && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-              <p className="text-base font-semibold text-emerald-300">Payment received successfully</p>
+              <p className="text-base font-semibold text-emerald-300">{T(language, "Pagamento recebido com sucesso", "Payment received successfully")}</p>
               <div className="space-y-2 rounded-lg border border-emerald-400/20 bg-slate-950/50 p-4">
-                <p><span className="text-slate-300">Amount: </span>{formatAmount(successAmount, successAsset)}</p>
-                <p><span className="text-slate-300">Destination: </span>Your account</p>
-                <p><span className="text-slate-300">Time: </span>{formatTimestamp(result?.completed_at)}</p>
+                <p><span className="text-slate-300">{T(language, "Valor", "Amount")}: </span>{formatAmount(successAmount, successAsset)}</p>
+                <p><span className="text-slate-300">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
+                <p><span className="text-slate-300">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>
               </div>
               {successReceiptUrl && (
                 <a
