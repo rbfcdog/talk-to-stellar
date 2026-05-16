@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
-import { getAssetIssuer, getStellarNetworkName } from '../../config/assets';
+import { getAssetIssuer, getDefaultTrustedAssets, getStellarNetworkName, TESTNET_USDC_ISSUER } from '../../config/assets';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { WalletRepository } from '../../repositories/wallet.repository';
 import { ExternalRepository } from '../../repositories/external.repository';
@@ -10,6 +10,19 @@ import { TrustlineService } from './trustline.service';
 import { TransferNotificationService } from './transfer-notification.service';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+
+const INITIAL_USDC_MIN_SOURCE_XLM = 0.01;
+const INITIAL_USDC_FEE_BUFFER_XLM = 0.05;
+const STELLAR_BASE_RESERVE_XLM = 0.5;
+
+export type InitialUsdcConversionResult = {
+  attempted: boolean;
+  completed: boolean;
+  sourceAmount?: string;
+  destinationAmount?: string;
+  keepXlm?: number;
+  error?: string;
+};
 
 export const STARTER_CONTACTS = [
   { contact_name: 'Ana Silva', pix_prefix: 'ana.silva' },
@@ -92,30 +105,73 @@ export class ContactSeedService {
     return `55${stableNumericHash(seed, 11)}`;
   }
 
+  private static getHardcodedUsdcIssuer(): string {
+    return getStellarNetworkName() === 'TESTNET'
+      ? TESTNET_USDC_ISSUER
+      : (getAssetIssuer('USDC') || '');
+  }
+
+  private static plannedDefaultSubentryCount(): number {
+    return getDefaultTrustedAssets().filter((asset) => Boolean(asset.issuer)).length;
+  }
+
+  private static minimumXlmToKeep(account: any): number {
+    const currentSubentries = Number((account as any)?.subentry_count || 0);
+    const plannedSubentries = Math.max(currentSubentries, this.plannedDefaultSubentryCount());
+    return ((2 + plannedSubentries) * STELLAR_BASE_RESERVE_XLM) + INITIAL_USDC_FEE_BUFFER_XLM;
+  }
+
   static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
+    let conversion: InitialUsdcConversionResult = { attempted: false, completed: false };
+    const usdcIssuer = this.getHardcodedUsdcIssuer();
+
+    if (getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
+      const usdcTrustline = await TrustlineService.createTrustline(publicKey, secretKey, userId, {
+        code: 'USDC',
+        issuer: usdcIssuer,
+      });
+      if (!usdcTrustline.success && usdcTrustline.error) {
+        logger.warn(`[contact-seed] USDC trustline failed before initial conversion for ${publicKey}: ${usdcTrustline.error}`);
+      }
+      conversion = await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
+    }
+
     const result = await TrustlineService.createDefaultTrustlines(publicKey, secretKey, userId);
     if (!result.success) {
       logger.warn(`[contact-seed] default trustlines partially failed for ${publicKey}: ${result.errors.join(' | ')}`);
     }
-    await this.convertSpendableFundingToUsdc(publicKey, secretKey, userId, sessionId);
-    return result;
+    return { ...result, conversion };
   }
 
-  static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
-    if (getStellarNetworkName() !== 'TESTNET') return;
+  static async convertSpendableFundingToUsdc(publicKey: string, secretKey: string, userId: string, sessionId?: string | null): Promise<InitialUsdcConversionResult> {
+    if (getStellarNetworkName() !== 'TESTNET') return { attempted: false, completed: false };
 
-    const usdcIssuer = getAssetIssuer('USDC');
-    if (!usdcIssuer) return;
+    const usdcIssuer = this.getHardcodedUsdcIssuer();
+    if (!usdcIssuer) return { attempted: false, completed: false, error: 'USDC issuer unavailable' };
 
     try {
       const account = await StellarService.loadAccount(publicKey);
+      const existingUsdc = account.balances.find((balance: any) => (
+        balance.asset_type !== 'native' &&
+        String(balance.asset_code || '').toUpperCase() === 'USDC' &&
+        String(balance.asset_issuer || '') === usdcIssuer
+      ));
+      if (Number(existingUsdc?.balance || '0') > 0.0000001) {
+        return { attempted: false, completed: true, destinationAmount: String(existingUsdc?.balance || '0') };
+      }
+
       const nativeBalance = account.balances.find((balance: any) => balance.asset_type === 'native');
       const xlmBalance = Number(nativeBalance?.balance || '0');
-      const reserve = 1.5;
-      const sourceAmountNumber = Math.floor((xlmBalance - reserve) * 1e7) / 1e7;
+      const keepXlm = this.minimumXlmToKeep(account);
+      const sourceAmountNumber = Math.floor((xlmBalance - keepXlm) * 1e7) / 1e7;
 
-      if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= 0.01) {
-        return;
+      if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= INITIAL_USDC_MIN_SOURCE_XLM) {
+        return {
+          attempted: false,
+          completed: false,
+          keepXlm,
+          error: `Saldo XLM insuficiente para conversão inicial. Disponível: ${xlmBalance}, reserva necessária: ${keepXlm}.`,
+        };
       }
 
       const sourceAmount = sourceAmountNumber.toFixed(7);
@@ -148,6 +204,13 @@ export class ContactSeedService {
 
       if (!result.success) {
         logger.warn(`[contact-seed] funding XLM->USDC sweep failed for ${publicKey}: ${result.error || 'unknown error'}`);
+        return {
+          attempted: true,
+          completed: false,
+          sourceAmount,
+          keepXlm,
+          error: result.error || 'unknown conversion failure',
+        };
       } else {
         logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
         if (sessionId) {
@@ -156,12 +219,24 @@ export class ContactSeedService {
             userId: String(userId),
             sourceAmount,
             destinationAmount: quote.destinationAmount,
-            keepXlm: reserve,
+            keepXlm,
           });
         }
+        return {
+          attempted: true,
+          completed: true,
+          sourceAmount,
+          destinationAmount: quote.destinationAmount,
+          keepXlm,
+        };
       }
     } catch (error) {
       logger.warn(`[contact-seed] funding XLM->USDC sweep skipped for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        attempted: true,
+        completed: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
