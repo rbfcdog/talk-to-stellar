@@ -1504,6 +1504,122 @@ export class AgentGraph {
     return lines.join(' ');
   }
 
+  private isOptimizedRouteRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    return /\b(melhor rota|rota mais otimizada|rota otimizada|rota mais barata|melhor caminho)\b/.test(normalized);
+  }
+
+  private isGenericRecipientReference(value: unknown): boolean {
+    const normalized = this.normalizeTextForIntent(String(value || ''));
+    if (!normalized) return true;
+    return /\b(outra pessoa|alguem|alguém|uma pessoa|pessoa|destinatario|destinatário|beneficiario|beneficiário)\b/.test(normalized);
+  }
+
+  private extractGenericBestRouteEstimateIntent(text: string, parsed?: {
+    amount?: string;
+    asset_code?: string;
+    receive_asset_code?: string;
+    recipient_query?: string;
+  }): {
+    amount: string;
+    destAssetCode: string;
+    sourceAssetCode: string;
+  } | null {
+    const normalized = this.normalizeTextForIntent(text);
+    if (!this.isOptimizedRouteRequest(text)) return null;
+    if (!/\b(enviar|mandar|transferir|pagar|chegar|receber)\b/.test(normalized)) return null;
+
+    const amountPattern = '((?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,8})?|\\d+(?:[.,]\\d{1,8})?))';
+    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|usd|usdc|dolar|dolares)?\\b`));
+    const genericRecipient = this.isGenericRecipientReference(parsed?.recipient_query || text);
+    if (!receiveMatch && !genericRecipient) return null;
+
+    const amount = normalizeHumanAmountText(receiveMatch?.[1] || parsed?.amount || '');
+    if (!amount) return null;
+
+    const destAssetCode = (
+      this.assetCodeFromTextToken(receiveMatch?.[2]) ||
+      String(parsed?.receive_asset_code || parsed?.asset_code || 'BRL')
+    ).toUpperCase().replace(/^USD$/, 'USDC');
+    const safeDestAssetCode = destAssetCode === 'BRL' || destAssetCode === 'USDC' ? destAssetCode : 'BRL';
+    const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
+
+    return {
+      amount,
+      destAssetCode: safeDestAssetCode,
+      sourceAssetCode,
+    };
+  }
+
+  private async handleGenericBestRouteEstimate(state: AgentState, estimate: {
+    amount: string;
+    destAssetCode: string;
+    sourceAssetCode: string;
+  }): Promise<AgentState> {
+    const sourceIssuer = getAssetIssuer(estimate.sourceAssetCode) ||
+      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), estimate.sourceAssetCode);
+    const destIssuer = getAssetIssuer(estimate.destAssetCode) ||
+      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), estimate.destAssetCode);
+    let sourceAmount = '';
+    let destinationAmount = estimate.amount;
+    let feeDisplay = 'R$ 0,01';
+    let validityLine = 'A tela final recalcula antes de confirmar.';
+
+    try {
+      const raw = await executeTool('get_best_route', {
+        source_public_key: state.session_data?.public_key,
+        destination: state.session_data?.public_key,
+        dest_amount: estimate.amount,
+        source_asset_code: estimate.sourceAssetCode,
+        source_asset_issuer: sourceIssuer,
+        dest_asset_code: estimate.destAssetCode,
+        dest_asset_issuer: destIssuer,
+      });
+      const result = JSON.parse(raw);
+      if (!result?.success) throw new Error(result?.error || 'route_quote_failed');
+      sourceAmount = String(result.source?.amount || result.quote?.sourceAmount || '').trim();
+      destinationAmount = String(result.destination?.amount || result.quote?.destinationAmount || estimate.amount).trim();
+      feeDisplay = String(result.fee_breakdown?.total_fee_display || result.quote?.fee_display || feeDisplay).trim() || feeDisplay;
+      const ttlSeconds = this.toAmountNumber(result.quote_ttl_seconds);
+      if (ttlSeconds > 0) {
+        validityLine = `Estimativa válida por ${Math.trunc(ttlSeconds)} segundos.`;
+      }
+    } catch (error) {
+      logger.warn(`[generic-route-estimate] route quote failed, using product fallback: ${error instanceof Error ? error.message : String(error)}`);
+      try {
+        const raw = await executeTool('get_brl_usdc_quote', {});
+        const quote = JSON.parse(raw);
+        const brlPerUsdc = this.toAmountNumber(quote?.brl_per_usdc);
+        const amount = this.toAmountNumber(estimate.amount);
+        if (quote?.success && brlPerUsdc > 0 && amount > 0) {
+          const estimatedSource = estimate.destAssetCode === 'BRL'
+            ? amount / brlPerUsdc
+            : amount * brlPerUsdc;
+          sourceAmount = estimatedSource.toFixed(estimate.sourceAssetCode === 'BRL' ? 2 : 7);
+        }
+      } catch (fallbackError) {
+        logger.warn(`[generic-route-estimate] quote fallback failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+      }
+    }
+
+    const sourceLine = sourceAmount
+      ? `Envio estimado: ${this.formatMoneyByAsset(sourceAmount, estimate.sourceAssetCode)}.`
+      : `Envio estimado: calculado na tela de confirmação.`;
+
+    state.success = true;
+    state.response_message = [
+      `Estimativa da rota mais otimizada para alguém receber ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}:`,
+      sourceLine,
+      `Recebimento: ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}.`,
+      `Taxa total estimada: ${feeDisplay}.`,
+      validityLine,
+      'Para finalizar, me envie o nome salvo, e-mail, CPF, telefone ou chave PIX do destinatário.',
+    ].join('\n');
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private hasInsufficientBalanceLanguage(text: string): boolean {
     const normalized = this.normalizeTextForIntent(text);
     return (
@@ -1781,6 +1897,16 @@ export class AgentGraph {
 
     if (llmParsed.is_payment_link) {
       return await this.handlePayAnyoneLinkRequest(state);
+    }
+
+    const genericBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input, {
+      recipient_query: recipientQuery,
+      amount,
+      asset_code: assetCode,
+      receive_asset_code: llmParsed.receive_asset_code,
+    });
+    if (genericBestRouteEstimate && (!recipientQuery || this.isGenericRecipientReference(recipientQuery))) {
+      return await this.handleGenericBestRouteEstimate(state, genericBestRouteEstimate);
     }
 
     if (llmParsed.needs_clarification || !recipientQuery || !amount || !assetCode) {
@@ -3535,6 +3661,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
       const deterministicPixRamp = this.extractPixRampIntentFromText(state.current_input);
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
+      const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -3553,6 +3680,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                   ? IntentType.FINANCIAL_MEMORY
                   : deterministicExternalWallet.is_external_wallet
                     ? IntentType.PAYMENT
+                    : deterministicBestRouteEstimate
+                      ? IntentType.PAYMENT
                     : deterministicPixRamp.is_pix_ramp
                       ? IntentType.PIX
                       : fixedSavings

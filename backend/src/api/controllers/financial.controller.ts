@@ -194,6 +194,66 @@ export class FinancialController {
     }
   }
 
+  static async getUsdcToBrlPreview(req: Request, res: Response) {
+    try {
+      const rawAmount = String(req.query?.usdc_amount || req.body?.usdc_amount || req.query?.amount || req.body?.amount || '1')
+        .replace(',', '.')
+        .trim();
+      const usdcAmount = Math.max(0, toPositiveNumber(rawAmount, 1));
+      const grossQuote = await BrlReferenceRateService.quoteUsdcToBrl(usdcAmount.toFixed(7));
+      const rawBrlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
+      const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
+      const brlPerUsdc = rate.brlPerUsdc;
+      const estimatedBrl = rate.fallbackApplied
+        ? usdcAmount * brlPerUsdc
+        : toPositiveNumber(grossQuote.destinationAmount, usdcAmount * brlPerUsdc);
+
+      const spread = PlatformFeeService.calculateSpread({
+        sourceAmount: estimatedBrl.toFixed(7),
+        sourceAssetCode: 'BRL',
+        destinationAssetCode: 'USDC',
+        mode: 'deduct_from_source',
+      });
+      const spreadBrl = spread.enabled ? toPositiveNumber(spread.feeAmount, 0) : 0;
+      const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
+      const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
+      const totalFeeBrl = spreadBrl + networkFeeBrl;
+      const requiredBrl = estimatedBrl + totalFeeBrl;
+
+      return res.status(200).json({
+        success: true,
+        input: {
+          usdc_amount: Number(usdcAmount.toFixed(7)),
+        },
+        quote: {
+          brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
+          usdc_per_brl: Number((brlPerUsdc > 0 ? 1 / brlPerUsdc : 0).toFixed(8)),
+          source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
+          symbol: grossQuote.symbol,
+          path: grossQuote.path,
+          source_asset: grossQuote.sourceAsset,
+          destination_asset: grossQuote.destinationAsset,
+          ...(rate.fallbackApplied ? {
+            fallback_reason: rate.fallbackReason,
+            raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+          } : {}),
+        },
+        output: {
+          estimated_brl: Number(estimatedBrl.toFixed(2)),
+          required_brl: Number(requiredBrl.toFixed(2)),
+        },
+        fees: {
+          talktostellar_spread_brl: Number(spreadBrl.toFixed(6)),
+          network_fee_brl: Number(networkFeeBrl.toFixed(8)),
+          total_fee_brl: Number(totalFeeBrl.toFixed(8)),
+          network_fee_display: networkFee.display,
+        },
+      });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
   static async getActivityFeed(req: Request, res: Response) {
     try {
       const data = await ActivityFeedService.listFeed({

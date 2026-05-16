@@ -776,15 +776,16 @@ export default function PixRampClient({
 
     let cancelled = false;
     setReceiveEstimateLoading(true);
-    fetch("/api/financial/conversion-preview?brl_amount=100", { cache: "no-store" })
+    fetch(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}`, { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => {
         const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
         if (!brlPerUsdc) {
-        throw new Error(payload?.message || L("Estimativa BRL/USDC indisponível.", "BRL/USDC estimate unavailable."));
+          throw new Error(payload?.message || L("Estimativa BRL/USDC indisponível.", "BRL/USDC estimate unavailable."));
         }
-        const feeBuffer = Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.05);
-        const estimatedBrl = (receiveUsdc * brlPerUsdc) + feeBuffer;
+        const estimatedBrl = toPositiveNumber(payload?.output?.required_brl, 0) ||
+          (toPositiveNumber(payload?.output?.estimated_brl, 0) + Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.01)) ||
+          (receiveUsdc * brlPerUsdc);
         if (cancelled) return;
         setAmountBrl(estimatedBrl.toFixed(2));
         setQuotePayload(null);
@@ -794,7 +795,7 @@ export default function PixRampClient({
         addDebugLog({
           label: "PIX amount estimated from requested receive amount",
           method: "GET",
-          path: "/api/financial/conversion-preview",
+          path: "/api/financial/usdc-to-brl-preview",
           request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
           response: { amount_brl: estimatedBrl.toFixed(2), brl_per_usdc: brlPerUsdc },
         });
@@ -805,7 +806,7 @@ export default function PixRampClient({
           addDebugLog({
             label: "PIX amount estimate failed",
             method: "GET",
-            path: "/api/financial/conversion-preview",
+            path: "/api/financial/usdc-to-brl-preview",
             request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
             response: {},
             error: err instanceof Error ? err.message : String(err),
@@ -1627,13 +1628,19 @@ export default function PixRampClient({
                   walletPinInputRef.current = node;
                 }}
               />
+              <div className="mt-5 rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">{L("Confirmação final", "Final confirmation")}</p>
+                <p className="mt-2 text-sm font-bold leading-6 text-cyan-50">
+                  {L("Este botão confirma a retirada pela rota mais otimizada e envia o valor para sua chave PIX.", "This button confirms the withdrawal through the most optimized route and sends the amount to your PIX key.")}
+                </p>
+              </div>
 
               <button
-                className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
+                className="mt-4 w-full rounded-3xl bg-cyan-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200 disabled:opacity-50"
                 disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
                 onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
               >
-                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar envio para PIX", "Confirm send to PIX")}
+                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
               </button>
             </div>
 
@@ -1725,7 +1732,7 @@ export default function PixRampClient({
                   <span className="flex items-center px-4 text-sm font-black text-slate-300">{desiredFinalAsset}</span>
                 </div>
                 <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-50">
-                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : L(`PIX estimado: ${formatMoney(amountBrl)}`, `Estimated PIX: ${formatMoney(amountBrl)}`)}
+                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : L(`PIX estimado pela rota da sua conta: ${formatMoney(amountBrl)}`, `Estimated PIX from your account route: ${formatMoney(amountBrl)}`)}
                 </div>
               </>
             ) : (
@@ -1775,8 +1782,8 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-emerald-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando PIX...", "Preparing PIX...")}</span> : L("Continuar", "Continue")}
+            <button className="mt-6 w-full rounded-3xl bg-emerald-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando PIX...", "Preparing PIX...")}</span> : L("Gerar PIX pela rota mais otimizada", "Generate PIX with the most optimized route")}
             </button>
 
             {quote && (
@@ -1905,14 +1912,18 @@ export default function PixRampClient({
                   )}
 
                   {config?.sandbox && !orderFailed && (
-                    <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-amber-100">
+                    <div className="mt-5 rounded-3xl border-2 border-amber-200/70 bg-amber-300/15 p-4 text-amber-100 shadow-lg shadow-amber-950/20">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
                             {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? L("A transferência foi enviada.", "The transfer was sent.") : L(`${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} entrou na conta.`, `${formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)} arrived in the account.`)}
                           </p>
                         ) : (
                           <>
-                            <label className="block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
+                            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-50">{L("Depois de pagar o PIX", "After paying PIX")}</p>
+                            <p className="mt-2 text-sm font-bold leading-6 text-amber-50/90">
+                              {L("Digite o PIN e toque no botão grande abaixo. É esse botão que confirma o PIX de fato e libera a entrega pela rota mais otimizada.", "Enter the PIN and tap the large button below. This is the button that actually confirms PIX and releases delivery through the most optimized route.")}
+                            </p>
+                            <label className="mt-4 block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
                             <WalletPinInput
                               value={walletPin}
                               onChange={updateWalletPin}
@@ -1924,11 +1935,11 @@ export default function PixRampClient({
                               }}
                             />
                             <button
-                              className="mt-3 w-full rounded-2xl bg-amber-300 px-5 py-4 text-sm font-black text-amber-950 transition hover:bg-amber-200 disabled:opacity-50"
+                              className="mt-4 w-full rounded-3xl bg-amber-200 px-5 py-5 text-base font-black text-amber-950 shadow-lg shadow-amber-950/30 transition hover:bg-amber-100 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar aqui após fazer o PIX", "Confirm here after making the PIX")}
+                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Já fiz o PIX. Confirmar agora", "I paid PIX. Confirm now")}
                             </button>
                           </>
                         )}
