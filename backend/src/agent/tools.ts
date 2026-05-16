@@ -121,6 +121,57 @@ async function maybeRepairInitialFundingSweep(input: any, publicKey: string, bal
   }
 }
 
+function isHorizonNotFound(error: any): boolean {
+  const status = error?.response?.status;
+  const message = String(error?.message || error || '').toLowerCase();
+  return status === 404 || message === 'not found' || message.includes('not found');
+}
+
+async function getAccountWithTestnetRepair(input: any, publicKey: string): Promise<{
+  account: any;
+  account_repair: {
+    attempted: boolean;
+    completed: boolean;
+    error?: string;
+  };
+}> {
+  try {
+    return {
+      account: await stellarService.getAccount(publicKey),
+      account_repair: { attempted: false, completed: false },
+    };
+  } catch (error) {
+    if (!isHorizonNotFound(error)) throw error;
+
+    try {
+      logger.warn(`[stellar-account-repair] account ${publicKey} not found; attempting testnet funding repair`);
+      await ApiStellarService.ensureTestnetAccountFunded(publicKey);
+      const account = await stellarService.getAccount(publicKey);
+
+      const sessionId = String(input?.session_id || input?.sessionId || '').trim();
+      if (sessionId) {
+        await walletRepo.updateBalance(sessionId, account.balances, account.sequence).catch((updateError) => {
+          logger.warn(`[stellar-account-repair] failed to sync repaired wallet ${sessionId}: ${updateError instanceof Error ? updateError.message : String(updateError)}`);
+        });
+      }
+
+      return {
+        account,
+        account_repair: { attempted: true, completed: true },
+      };
+    } catch (repairError) {
+      return {
+        account: null,
+        account_repair: {
+          attempted: true,
+          completed: false,
+          error: repairError instanceof Error ? repairError.message : String(repairError),
+        },
+      };
+    }
+  }
+}
+
 function formatRouteChain(input: {
   sourceAssetCode?: string;
   destinationAssetCode?: string;
@@ -1451,7 +1502,17 @@ async function executeGetBalance(input: any): Promise<string> {
   try {
     const publicKey = await resolveToolPublicKey(input);
     logger.debug(`Tool: Getting balance for ${publicKey}`);
-    let account = await stellarService.getAccount(publicKey);
+    const accountLookup = await getAccountWithTestnetRepair(input, publicKey);
+    if (!accountLookup.account) {
+      return JSON.stringify({
+        success: false,
+        error: accountLookup.account_repair.error
+          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
+          : 'A conta Stellar ainda não existe na rede.',
+        account_repair: accountLookup.account_repair,
+      });
+    }
+    let account = accountLookup.account;
 
     const visibleAssets = ['BRL', 'USDC'];
     let balances = account.balances.map((balance: any) => {
@@ -1490,9 +1551,12 @@ async function executeGetBalance(input: any): Promise<string> {
       balance: filteredBalances[0]?.balance || "0.0000000",
       asset: filteredBalances[0]?.asset || "BRL",
       balances: filteredBalances,
+      account_repair: accountLookup.account_repair,
       initial_funding_repair: initialFundingRepair,
       message: initialFundingRepair.attempted && initialFundingRepair.completed
         ? 'Saldo inicial convertido automaticamente para USDC antes de mostrar o saldo.'
+        : accountLookup.account_repair.attempted && accountLookup.account_repair.completed
+          ? 'Conta Stellar criada na rede automaticamente antes de mostrar o saldo.'
         : `User-facing balances retrieved: ${filteredBalances.length} asset(s)`,
     });
   } catch (error) {
@@ -1511,7 +1575,17 @@ async function executeGetAccount(input: any): Promise<string> {
   try {
     const publicKey = await resolveToolPublicKey(input);
     logger.debug(`Tool: Getting account details for ${publicKey}`);
-    const account = await stellarService.getAccount(publicKey);
+    const accountLookup = await getAccountWithTestnetRepair(input, publicKey);
+    if (!accountLookup.account) {
+      return JSON.stringify({
+        success: false,
+        error: accountLookup.account_repair.error
+          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
+          : 'A conta Stellar ainda não existe na rede.',
+        account_repair: accountLookup.account_repair,
+      });
+    }
+    const account = accountLookup.account;
     const balances = account.balances.map((b: any) => ({
       asset: getAssetCode(b),
       balance: b.balance,
@@ -1524,6 +1598,7 @@ async function executeGetAccount(input: any): Promise<string> {
       sequence: account.sequence,
       balances,
       technical_balances: balances,
+      account_repair: accountLookup.account_repair,
       message: "Account details retrieved",
     });
   } catch (error) {
@@ -1539,7 +1614,17 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
   try {
     const publicKey = await resolveToolPublicKey(input);
     logger.debug(`Tool: Getting technical balances for ${publicKey}`);
-    const account = await stellarService.getAccount(publicKey);
+    const accountLookup = await getAccountWithTestnetRepair(input, publicKey);
+    if (!accountLookup.account) {
+      return JSON.stringify({
+        success: false,
+        error: accountLookup.account_repair.error
+          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
+          : 'A conta Stellar ainda não existe na rede.',
+        account_repair: accountLookup.account_repair,
+      });
+    }
+    const account = accountLookup.account;
 
     const mappedBalances = account.balances.map((balance: any) => ({
       asset: getAssetCode(balance),
@@ -1565,6 +1650,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       account_id: account.id,
       sequence: account.sequence,
       balances: technicalAssets,
+      account_repair: accountLookup.account_repair,
       message: "Technical balances retrieved",
     });
   } catch (error) {
