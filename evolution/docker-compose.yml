@@ -10,14 +10,9 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    ports:
-      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - evolution_instances:/evolution/instances
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - evolution-network
+    network_mode: host
 
   postgres:
     image: postgres:16-alpine

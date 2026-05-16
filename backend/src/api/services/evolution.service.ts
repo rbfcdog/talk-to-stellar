@@ -191,19 +191,27 @@ export class EvolutionService {
 
   static async sendText(instance: string, number: string, text: string): Promise<any> {
     const { baseUrl, apiKey } = assertEvolutionConfig(instance);
-    const response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: apiKey,
-      },
-      body: JSON.stringify({
-        number,
-        text,
-        delay: 300,
-        linkPreview: false,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify({
+          number,
+          text,
+          delay: 300,
+          linkPreview: false,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const body = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
     if (!response.ok) {
@@ -234,8 +242,14 @@ export class EvolutionService {
     }
 
     const instance = message.instance || configuredInstance();
-    await this.sendText(instance, recipient, helloText());
-    logger.info(`[evolution-webhook] replied hello to ***${recipient.slice(-4)} on instance ${instance}`);
+    void this.sendText(instance, recipient, helloText())
+      .then(() => {
+        logger.info(`[evolution-webhook] replied hello to ***${recipient.slice(-4)} on instance ${instance}`);
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`[evolution-webhook] failed to reply hello to ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+      });
 
     return {
       received: true,
