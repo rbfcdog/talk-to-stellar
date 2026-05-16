@@ -57,6 +57,7 @@ app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
 app.use('/api/ramp', rampRouter);
 app.use('/api/evolution', evolutionRouter);
+app.use('/webhook/evolution', evolutionRouter);
 
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
