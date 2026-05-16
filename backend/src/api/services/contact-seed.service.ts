@@ -120,6 +120,12 @@ export class ContactSeedService {
     return ((2 + plannedSubentries) * STELLAR_BASE_RESERVE_XLM) + INITIAL_USDC_FEE_BUFFER_XLM;
   }
 
+  private static balanceAmount(account: any, predicate: (balance: any) => boolean): number {
+    const balance = account.balances.find(predicate);
+    const amount = Number(balance?.balance || '0');
+    return Number.isFinite(amount) ? amount : 0;
+  }
+
   static async createDefaultTrustlines(publicKey: string, secretKey: string, userId: string, sessionId?: string | null) {
     let conversion: InitialUsdcConversionResult = { attempted: false, completed: false };
     const usdcIssuer = this.getHardcodedUsdcIssuer();
@@ -150,21 +156,24 @@ export class ContactSeedService {
 
     try {
       const account = await StellarService.loadAccount(publicKey);
-      const existingUsdc = account.balances.find((balance: any) => (
+      const existingUsdcAmount = this.balanceAmount(account, (balance: any) => (
         balance.asset_type !== 'native' &&
         String(balance.asset_code || '').toUpperCase() === 'USDC' &&
         String(balance.asset_issuer || '') === usdcIssuer
       ));
-      if (Number(existingUsdc?.balance || '0') > 0.0000001) {
-        return { attempted: false, completed: true, destinationAmount: String(existingUsdc?.balance || '0') };
-      }
-
-      const nativeBalance = account.balances.find((balance: any) => balance.asset_type === 'native');
-      const xlmBalance = Number(nativeBalance?.balance || '0');
+      const xlmBalance = this.balanceAmount(account, (balance: any) => balance.asset_type === 'native');
       const keepXlm = this.minimumXlmToKeep(account);
       const sourceAmountNumber = Math.floor((xlmBalance - keepXlm) * 1e7) / 1e7;
 
       if (!Number.isFinite(sourceAmountNumber) || sourceAmountNumber <= INITIAL_USDC_MIN_SOURCE_XLM) {
+        if (existingUsdcAmount > 0.0000001) {
+          return {
+            attempted: false,
+            completed: true,
+            destinationAmount: existingUsdcAmount.toFixed(7),
+            keepXlm,
+          };
+        }
         return {
           attempted: false,
           completed: false,
@@ -211,13 +220,38 @@ export class ContactSeedService {
           error: result.error || 'unknown conversion failure',
         };
       } else {
+        const freshAccount = await StellarService.loadAccount(publicKey);
+        const finalUsdcAmount = this.balanceAmount(freshAccount, (balance: any) => (
+          balance.asset_type !== 'native' &&
+          String(balance.asset_code || '').toUpperCase() === 'USDC' &&
+          String(balance.asset_issuer || '') === usdcIssuer
+        ));
+        const finalXlmBalance = this.balanceAmount(freshAccount, (balance: any) => balance.asset_type === 'native');
+        const finalKeepXlm = this.minimumXlmToKeep(freshAccount);
+        const remainingSpendableXlm = Math.floor((finalXlmBalance - finalKeepXlm) * 1e7) / 1e7;
+        const completed = finalUsdcAmount > existingUsdcAmount + 0.0000001 &&
+          remainingSpendableXlm <= INITIAL_USDC_MIN_SOURCE_XLM;
+
+        if (!completed) {
+          const error = `Conversão submetida, mas ainda restam ${remainingSpendableXlm.toFixed(7)} XLM disponíveis para varrer.`;
+          logger.warn(`[contact-seed] funding XLM->USDC sweep incomplete for ${publicKey}: ${error}`);
+          return {
+            attempted: true,
+            completed: false,
+            sourceAmount,
+            destinationAmount: finalUsdcAmount.toFixed(7),
+            keepXlm: finalKeepXlm,
+            error,
+          };
+        }
+
         logger.info(`[contact-seed] funding XLM->USDC sweep succeeded for ${publicKey}: ${sourceAmount} XLM -> ${quote.destinationAmount} USDC`);
         return {
           attempted: true,
           completed: true,
           sourceAmount,
-          destinationAmount: quote.destinationAmount,
-          keepXlm,
+          destinationAmount: finalUsdcAmount.toFixed(7),
+          keepXlm: finalKeepXlm,
         };
       }
     } catch (error) {
