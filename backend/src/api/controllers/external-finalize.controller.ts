@@ -2852,8 +2852,9 @@ export default class ExternalFinalizeController {
         secretKey = generated.secret;
       } catch (error: any) {
         const fallback = StellarService.generateStellarKeypair();
+        await StellarService.ensureTestnetAccountFunded(fallback.publicKey);
         secretKey = fallback.secret;
-        console.warn('[external-finalize] friendbot unavailable, using unfunded generated keypair:', error?.message || error);
+        console.warn('[external-finalize] friendbot first attempt failed; funded retry account:', error?.message || error);
       }
 
       publicKey = Keypair.fromSecret(secretKey).publicKey();

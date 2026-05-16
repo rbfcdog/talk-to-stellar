@@ -121,6 +121,16 @@ function isValidStellarPublicKey(key: string): boolean {
     return /^G[A-Z2-7]{55}$/.test(key);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isHorizonNotFound(error: any): boolean {
+  const status = error?.response?.status;
+  const message = String(error?.message || error || '').toLowerCase();
+  return status === 404 || message === 'not found' || message.includes('not found');
+}
+
 function addAssetAmounts(...values: Array<string | number | undefined>): string {
     const total = values.reduce<number>((sum, value) => {
         const parsed = Number(String(value || '0').replace(',', '.'));
@@ -327,6 +337,7 @@ export class StellarService {
     const { publicKey, secret } = this.generateStellarKeypair();
 
     await this.fundWithFriendbot(publicKey);
+    await this.waitForAccount(publicKey);
 
     return { publicKey, secret };
   }
@@ -341,6 +352,23 @@ export class StellarService {
     }
     await response.json().catch(() => undefined);
     this.fundedAccounts.add(publicKey);
+  }
+
+  static async waitForAccount(publicKey: string, attempts = 6): Promise<void> {
+    let lastError: any;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        await server.loadAccount(publicKey);
+        return;
+      } catch (error: any) {
+        lastError = error;
+        if (!isHorizonNotFound(error) || attempt === attempts - 1) {
+          throw error;
+        }
+        await sleep(300 * (attempt + 1));
+      }
+    }
+    if (lastError) throw lastError;
   }
 
   static async ensureTestnetAccountFunded(publicKey: string, minimumXlm = 0): Promise<void> {
@@ -372,6 +400,7 @@ export class StellarService {
     }
 
     await this.fundWithFriendbot(publicKey);
+    await this.waitForAccount(publicKey);
   }
 
   private static getHorizonErrorMessage(error: any): string {
