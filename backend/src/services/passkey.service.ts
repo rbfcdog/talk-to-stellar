@@ -94,6 +94,12 @@ function getPasskeyChallengeTtlMs() {
   return Math.trunc(parsedSeconds * 1000);
 }
 
+function getPasskeyOperationTimeoutMs() {
+  const parsedMs = Number(String(process.env.PASSKEY_OPERATION_TIMEOUT_MS || '180000').trim());
+  if (!Number.isFinite(parsedMs) || parsedMs < 30_000) return 180_000;
+  return Math.trunc(parsedMs);
+}
+
 type StoredPasskey = {
   id: string;
   user_id: string;
@@ -260,11 +266,11 @@ export class PasskeyService {
       userID: new Uint8Array(Buffer.from(userId)),
       userDisplayName: userId,
       challenge,
+      timeout: getPasskeyOperationTimeoutMs(),
       attestationType: 'none',
       authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        residentKey: 'required',
-        requireResidentKey: true,
+        residentKey: 'preferred',
+        requireResidentKey: false,
         userVerification: 'required',
       },
       excludeCredentials: passkeys.map((passkey) => ({
@@ -296,6 +302,7 @@ export class PasskeyService {
     const options = await generateAuthenticationOptions({
       rpID: getRpID(),
       challenge: fromBase64Url(challenge),
+      timeout: getPasskeyOperationTimeoutMs(),
       allowCredentials: passkeys.map((passkey) => ({
         id: passkey.credential_id,
         transports: passkey.transports,
@@ -486,6 +493,7 @@ export class PasskeyService {
     const options = await generateAuthenticationOptions({
       rpID: getRpID(),
       challenge: fromBase64Url(challenge),
+      timeout: getPasskeyOperationTimeoutMs(),
       allowCredentials: passkeys.map((passkey) => ({
         id: passkey.credential_id,
         transports: passkey.transports,

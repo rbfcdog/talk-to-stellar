@@ -64,17 +64,27 @@ type RecoveryResult =
   | { mode: "existing"; sessionId?: string; sessionToken?: string }
   | { mode: "none" }
 
+type PreparedPasskeyRegistration = {
+  userId: string
+  challengeId: string
+  options: any
+}
+
 function getPasskeyErrorMessage(error: any): string {
   const name = String(error?.name || "")
   const message = String(error?.message || error || "")
   const normalized = message.toLowerCase()
 
   if (name === "NotAllowedError") {
-    return "Biometric authentication was canceled or expired. Tap \"Enable biometrics\" and confirm with fingerprint or Face ID."
+    return "Biometric confirmation expired or was canceled. Tap the button again and confirm on your phone."
   }
 
   if (name === "SecurityError" || normalized.includes("rp id")) {
     return "Biometrics must open on the correct domain with HTTPS. Check PASSKEY_RP_ID/PASSKEY_ORIGIN in the backend."
+  }
+
+  if (name === "AbortError" || name === "TimeoutError" || normalized.includes("timeout") || normalized.includes("timed out")) {
+    return "Biometric confirmation expired. Tap the button again and confirm on your phone."
   }
 
   if (normalized.includes("not supported")) {
@@ -126,8 +136,10 @@ export default function CreateAccountClient({
   const [pinError, setPinError] = useState("")
   const [requestPasskey, setRequestPasskey] = useState(false)
   const [status, setStatus] = useState("ready")
-  const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "registering" | "authenticating" | "done" | "error">("idle")
+  const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "preparing" | "registering" | "authenticating" | "done" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
+  const [passkeyHint, setPasskeyHint] = useState("")
+  const [preparedPasskeyRegistration, setPreparedPasskeyRegistration] = useState<PreparedPasskeyRegistration | null>(null)
   const [passkeyQrTargetUrl, setPasskeyQrTargetUrl] = useState("")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
   const [existingEmail, setExistingEmail] = useState("")
@@ -161,6 +173,7 @@ export default function CreateAccountClient({
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
+  const passkeyButtonDisabled = passkeyStatus === "preparing" || passkeyStatus === "registering" || passkeyStatus === "done"
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
   const passkeyLoginEmail = useMemo(() => {
     const candidates = [email, result?.userId]
@@ -602,9 +615,8 @@ export default function CreateAccountClient({
       }
 
       if (response.ok && payload.success && requestPasskey) {
-        setPasskeyStatus("registering")
-        setPasskeyError("")
-        void registerAndSignInWithPasskey(payload)
+        setPasskeyHint(L("Conta criada. Preparando biometria para este aparelho.", "Account created. Preparing biometrics for this device."))
+        void preparePasskeyRegistration(payload.userId || "")
         return
       }
 
@@ -625,7 +637,45 @@ export default function CreateAccountClient({
     }
   }
 
-  async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse, attempt = 0) {
+  async function preparePasskeyRegistration(userId: string) {
+    if (!userId) {
+      setPasskeyStatus('error')
+      setPasskeyError('Could not prepare biometrics right now.')
+      return false
+    }
+
+    setPasskeyStatus('preparing')
+    setPasskeyError("")
+    setPasskeyHint(L("Preparando biometria para este aparelho.", "Preparing biometrics for this device."))
+    setPreparedPasskeyRegistration(null)
+
+    try {
+      const initRes = await fetch(`/api/passkeys/register-init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      })
+      const initPayload = await initRes.json().catch(() => ({}))
+      if (!initRes.ok || !initPayload.success || !initPayload.options || !initPayload.challengeId) {
+        throw new Error(initPayload.message || 'Failed to start secure access setup')
+      }
+
+      setPreparedPasskeyRegistration({
+        userId,
+        challengeId: String(initPayload.challengeId),
+        options: initPayload.options,
+      })
+      setPasskeyStatus('idle')
+      setPasskeyHint(L("Biometria pronta. Toque no botão para confirmar no celular.", "Biometrics ready. Tap the button to confirm on your phone."))
+      return true
+    } catch (err: any) {
+      setPasskeyStatus('error')
+      setPasskeyError(getPasskeyErrorMessage(err))
+      return false
+    }
+  }
+
+  async function registerAndSignInWithPasskey(baseResult?: FinalizeResponse) {
     const currentResult = baseResult || result
     const userId = currentResult?.userId
     if (!userId) {
@@ -639,44 +689,45 @@ export default function CreateAccountClient({
       return
     }
 
+    const prepared = preparedPasskeyRegistration?.userId === userId ? preparedPasskeyRegistration : null
+    if (!prepared) {
+      const preparedNow = await preparePasskeyRegistration(userId)
+      if (preparedNow) {
+        setPasskeyHint(L("Biometria pronta. Toque no botão novamente para abrir a confirmação.", "Biometrics ready. Tap the button again to open confirmation."))
+      }
+      return
+    }
+
     setPasskeyStatus('registering')
     setPasskeyError("")
+    setPasskeyHint(L("Confirme com digital, Face ID ou desbloqueio do celular.", "Confirm with fingerprint, Face ID, or phone unlock."))
 
     try {
-      const initRes = await fetch(`/api/passkeys/register-init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
-      })
-      const initPayload = await initRes.json()
-      if (!initRes.ok || !initPayload.success) throw new Error(initPayload.message || 'Failed to start secure access setup')
-
-      const credential = await startRegistration({ optionsJSON: initPayload.options })
-
+      const credential = await startRegistration({ optionsJSON: prepared.options })
       setPasskeyStatus('registering')
       const completeRes = await fetch(`/api/passkeys/register-complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          challenge_id: initPayload.challengeId,
+          challenge_id: prepared.challengeId,
           credential,
         }),
       })
       const completePayload = await completeRes.json()
       if (!completeRes.ok || !completePayload.success) {
         const serverMessage = String(completePayload?.message || "")
-        if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
-          submitLockRef.current = false
-          setPasskeyStatus('registering')
-          setPasskeyError('Challenge expired. Generating a new challenge...')
-          await registerAndSignInWithPasskey(baseResult, attempt + 1)
+        if (isPasskeyChallengeExpiredMessage(serverMessage)) {
+          await preparePasskeyRegistration(userId)
+          setPasskeyHint(L("A confirmação expirou. Toque no botão novamente.", "Confirmation expired. Tap the button again."))
           return
         }
         throw new Error(completePayload.message || 'Failed to complete secure access setup')
       }
 
       setPasskeyStatus('done')
+      setPreparedPasskeyRegistration(null)
+      setPasskeyHint("")
       setResult({
         success: true,
         userId,
@@ -692,11 +743,9 @@ export default function CreateAccountClient({
       }
     } catch (err: any) {
       const message = getPasskeyErrorMessage(err)
-      if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
-        submitLockRef.current = false
-        setPasskeyStatus('registering')
-        setPasskeyError('Challenge expired. Generating a new challenge...')
-        await registerAndSignInWithPasskey(baseResult, attempt + 1)
+      if (isPasskeyChallengeExpiredMessage(message) || message.toLowerCase().includes("expired")) {
+        await preparePasskeyRegistration(userId)
+        setPasskeyHint(L("A confirmação expirou. Toque no botão novamente.", "Confirmation expired. Tap the button again."))
         return
       }
       submitLockRef.current = false
@@ -968,16 +1017,19 @@ export default function CreateAccountClient({
                   <button
                     type="button"
                     onClick={() => registerAndSignInWithPasskey()}
-                    disabled={submitLocked || passkeyStatus === 'registering'}
+                    disabled={passkeyButtonDisabled}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {passkeyStatus === 'registering'
-                      ? L('Abrindo biometria...', 'Opening biometrics...')
-                      : L('Ativar biometria', 'Enable biometrics')}
+                    {passkeyStatus === 'preparing'
+                      ? L('Preparando biometria...', 'Preparing biometrics...')
+                      : passkeyStatus === 'registering'
+                        ? L('Abrindo biometria...', 'Opening biometrics...')
+                        : L('Ativar biometria', 'Enable biometrics')}
                   </button>
                   <p className="text-xs text-slate-400">
                     {L("Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.", "Tap the button to confirm with fingerprint, Face ID, or your phone unlock.")}
                   </p>
+                  {passkeyHint && <p className="text-xs text-cyan-200">{passkeyHint}</p>}
                   {passkeyQrImageUrl && (
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-slate-300">
                       <p className="font-medium text-white">{L("Usar Passkey no celular", "Use Passkey on your phone")}</p>
