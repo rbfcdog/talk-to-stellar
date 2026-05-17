@@ -1,20 +1,108 @@
-# VP com Ancora no Testnet - Roteiro Corrigido com Timestamps
+# VP com Ancora no Testnet - Roteiro Detalhado com Timestamps
 
-Use este roteiro para regravar a submissao rejeitada.
+Este roteiro e para regravar a submissao rejeitada.
 
 Motivo da rejeicao:
 
 > O video que voces subiram e a demo do produto (entregavel do desafio 4), so que o que queremos avaliar nesse momento e o video mostrando o fluxo da integracao (chamadas de contrato, ancoras, no backend mesmo).
 
-Portanto, este video deve mostrar **backend, chamadas para a anchor, XDR/trustline, transacao na Stellar Testnet e hash no explorer**. A UI so pode aparecer no final, como evidencia complementar.
+O avaliador quer ver **integracao tecnica**, nao a experiencia final do usuario. Mostre codigo, terminal, logs, chamadas para a anchor, XDR, trustline, submissao no Horizon Testnet e hash no explorer.
+
+## Resumo do Que Voce Precisa Provar
+
+Voce precisa provar cinco coisas:
+
+1. O backend esta configurado para Stellar Testnet e Etherfuse sandbox.
+2. O backend chama a anchor Etherfuse de verdade.
+3. O backend cria customer, quote, ordem PIX e consulta status da ordem.
+4. O backend executa a parte on-chain: trustline, XDR, assinatura e submissao no Horizon Testnet.
+5. O resultado gera um hash verificavel no Stellar Expert Testnet.
+
+Nao tente vender o produto. Explique o pipeline.
+
+## Glossario Para Falar no Video
+
+Use estas definicoes quando aparecerem os termos tecnicos.
+
+**Anchor**
+
+Uma anchor e uma empresa ou servico que conecta dinheiro tradicional com Stellar. Neste fluxo, a Etherfuse atua como anchor: ela recebe/simula o lado fiat/PIX e coordena a emissao ou liquidacao do ativo na Stellar.
+
+**Etherfuse sandbox**
+
+Sandbox e o ambiente de testes da Etherfuse. Ele permite testar onboarding, quote, ordem e simulacao de fiat recebido sem dinheiro real. E por isso que o video deve dizer "PIX sandbox/testnet", nao "PIX real".
+
+**Testnet**
+
+Testnet e a rede de testes da Stellar. As transacoes usam ledger real de teste, mas nao representam dinheiro real. A prova tecnica vem do hash na Testnet.
+
+**Horizon**
+
+Horizon e a API da Stellar usada pelo backend para ler contas, construir contexto de transacao e submeter transacoes assinadas. Neste projeto, o endpoint e `https://horizon-testnet.stellar.org`.
+
+**Asset**
+
+Asset e um token emitido na Stellar. Aqui aparecem `TESOURO`, `BRL` e `USDC`. Cada asset emitido tem um `code` e um `issuer`.
+
+**Issuer**
+
+Issuer e a conta Stellar que emite um asset. Um asset emitido na Stellar e identificado por `CODE:ISSUER`, por exemplo `TESOURO:GC3...`.
+
+**TESOURO**
+
+TESOURO e o asset usado pela Etherfuse como ativo de liquidacao no sandbox. O usuario pode ver BRL/USDC na experiencia final, mas internamente a anchor pode liquidar com TESOURO e o backend converter depois.
+
+**Customer**
+
+Customer e o registro do usuario na anchor. Antes de criar uma ordem de ramp, a Etherfuse precisa conhecer o usuario/customer, wallet e dados de onboarding/KYC.
+
+**KYC**
+
+KYC significa "Know Your Customer". E o processo de identificacao do usuario exigido por provedores financeiros. No sandbox, o backend usa dados programaticos/teste para destravar o fluxo.
+
+**Quote**
+
+Quote e uma cotacao. Ela define quanto entra e quanto sai no fluxo, por exemplo BRL para TESOURO. Quotes costumam expirar rapido, entao o backend pode renovar antes de criar a ordem.
+
+**Order / Ordem**
+
+Order e a ordem criada na anchor. No on-ramp, ela representa a intencao de colocar dinheiro via PIX e receber asset na Stellar.
+
+**On-ramp**
+
+On-ramp e entrada de dinheiro tradicional para cripto/asset na Stellar. Neste video: PIX/BRL sandbox entrando e asset chegando na wallet Stellar Testnet.
+
+**Off-ramp**
+
+Off-ramp e saida de cripto/asset para dinheiro tradicional. Exemplo: TESOURO saindo da wallet e BRL/PIX sendo pago fora da blockchain.
+
+**Trustline**
+
+Trustline e a autorizacao que uma conta Stellar precisa criar para receber um asset emitido. Sem trustline, a wallet nao consegue receber TESOURO/BRL/USDC emitido.
+
+**XDR**
+
+XDR e o formato serializado da transacao Stellar. O backend constroi o XDR, assina com a chave correta e submete ao Horizon.
+
+**Assinatura**
+
+Assinatura e a prova criptografica de que a conta autorizou a transacao. Neste projeto, a private key nao vai para a anchor nem para o frontend; a assinatura acontece no backend.
+
+**Hash**
+
+Hash e o identificador da transacao depois que ela e aceita no ledger. O hash e a prova externa: voce abre no Stellar Expert Testnet e verifica a transacao.
+
+**Soroban**
+
+Soroban e a plataforma de smart contracts da Stellar. Este repo nao demonstra chamada Soroban neste fluxo. Nao diga que ha Soroban se voce nao mostrar uma chamada Soroban. Diga "operacoes Stellar via XDR/Horizon".
 
 ## Duracao Alvo
 
-Grave um video de **7:45**. Se precisar cortar, nao corte as secoes 2, 3, 4, 5 e 6. Elas sao o que responde diretamente a rejeicao.
+Grave entre **8 e 10 minutos**. Se precisar ficar mais curto, preserve as secoes de codigo e terminal.
 
 ## Setup Antes de Gravar
 
-Abra estas janelas antes de apertar Rec:
+Abra antes de apertar Rec:
 
 1. VS Code na raiz do repo.
 2. Terminal 1 com backend:
@@ -24,8 +112,8 @@ cd backend
 npm run dev
 ```
 
-3. Terminal 2 para `curl`.
-4. Browser com Stellar Expert Testnet pronto:
+3. Terminal 2 para os comandos `curl`.
+4. Browser no Stellar Expert Testnet:
 
 ```text
 https://stellar.expert/explorer/testnet
@@ -44,36 +132,39 @@ Nunca mostre:
 
 Se abrir `.env`, use `.env.example` ou borre os secrets.
 
-## Mensagem Central
+## Timeline Detalhada
 
-Fale esta ideia no comeco e no fim:
-
-> Este video nao e a demo do produto. Aqui eu estou mostrando a integracao de backend com a anchor Etherfuse sandbox e a liquidacao on-chain na Stellar Testnet. O fluxo passa por customer, KYC/proxy, quote, ordem PIX, trustline, XDR assinado, submissao no Horizon e hash verificavel no explorer.
-
-Importante:
-
-- Este repo nao tem chamada Soroban.
-- Quando falar "contrato" ou "chamada on-chain", explique como operacoes Stellar Testnet via XDR/Horizon.
-- As operacoes demonstraveis sao `changeTrust`, `payment`, `pathPaymentStrictReceive` e `pathPaymentStrictSend`.
-
-## Timeline Exata do Video
-
-### 00:00 - 00:20 | Abertura: corrigindo a submissao
+### 00:00 - 00:35 | Abertura: deixar claro que nao e demo de produto
 
 **Mostrar na tela**
 
 - Este arquivo: `docs/ANCHOR_TESTNET_VIDEO_WALKTHROUGH.md`
 - A frase da rejeicao no topo.
 
-**Falar**
+**Falar exatamente**
 
-> Este video substitui a submissao rejeitada. Eu nao vou fazer uma demo de produto. Vou mostrar o fluxo tecnico da integracao: backend, chamadas para a anchor Etherfuse, criacao de ordem, trustline, XDR, submissao na Stellar Testnet e hash no explorer.
+> Este video substitui a submissao rejeitada. A rejeicao dizia que o video anterior era uma demo do produto, mas o que precisa ser avaliado agora e o fluxo de integracao. Entao eu vou mostrar o backend: configuracao de Testnet, client da anchor Etherfuse, rotas de ramp, criacao de customer, quote e ordem, trustline, XDR assinado, submissao no Horizon Testnet e hash no Stellar Expert.
 
-**O que esta secao prova**
+**Explicacao detalhada**
 
-Deixa claro para o avaliador que voce entendeu o problema: eles nao querem ver so a tela final, querem ver a integracao no backend.
+Aqui voce esta alinhando expectativa. A banca quer saber se existe integracao real por tras da interface. Por isso, comece dizendo que a UI nao e o foco e que o video vai mostrar o caminho tecnico ponta a ponta.
 
-### 00:20 - 00:55 | Configuracao: Testnet, anchor e asset
+**Termos para explicar**
+
+- "Backend" e o servidor que guarda secrets e executa integracoes.
+- "Anchor" e o provedor financeiro que conecta fiat/PIX com Stellar.
+- "Hash" e a prova final no explorer.
+
+**Evite dizer**
+
+- "Vou mostrar o app funcionando."
+- "Vou fazer uma demo rapida."
+
+Prefira:
+
+- "Vou mostrar o fluxo tecnico de integracao."
+
+### 00:35 - 01:25 | Configuracao: Testnet, Etherfuse sandbox e asset TESOURO
 
 **Mostrar na tela**
 
@@ -83,7 +174,7 @@ Abra:
 - `backend/src/config/stellar.ts`
 - `backend/src/config/assets.ts`
 
-Procure e mostre:
+Mostre:
 
 ```text
 STELLAR_NETWORK=TESTNET
@@ -93,18 +184,34 @@ ETHERFUSE_BLOCKCHAIN=stellar
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ```
 
-**Falar**
+**Falar exatamente**
 
-> Primeiro, esta e a configuracao da integracao. O projeto roda contra Stellar Testnet, usando Horizon Testnet. A anchor usada no desafio e a Etherfuse sandbox. O ativo interno de liquidacao da anchor e TESOURO, com issuer configurado no backend. A API key da Etherfuse fica somente no servidor, nao no frontend.
+> Aqui esta a configuracao da integracao. `STELLAR_NETWORK=TESTNET` garante que as transacoes vao para a rede de testes da Stellar. `STELLAR_HORIZON_URL` aponta para o Horizon da Testnet, que e a API usada para submeter e consultar transacoes. A anchor e a Etherfuse sandbox, configurada em `ETHERFUSE_BASE_URL`. O blockchain configurado para a anchor e `stellar`. O asset de liquidacao da Etherfuse neste fluxo e `TESOURO`, identificado pelo issuer configurado no backend.
 
-**O que esta secao faz**
+Continue:
 
-- Prova que o ambiente e Testnet.
-- Prova que a anchor e Etherfuse sandbox.
-- Prova que a integracao nao depende de segredo no browser.
-- Prova qual asset/issuer sera usado no fluxo.
+> A API key da Etherfuse nao aparece no frontend. Ela fica no backend porque e uma credencial sensivel. Isso e importante: a integracao com a anchor e server-side.
 
-### 00:55 - 01:35 | Superficie do backend: rotas da integracao
+**Explicacao detalhada**
+
+Esta secao prova o ambiente. Sem ela, o avaliador pode achar que a tela esta mockada ou que o fluxo nao e Testnet. Mostre que o backend sabe qual rede usar, qual Horizon chamar, qual anchor chamar e qual asset receber.
+
+**Significado dos termos**
+
+- `STELLAR_NETWORK=TESTNET`: seleciona a rede de testes.
+- `Horizon`: API oficial para interagir com Stellar classic operations.
+- `ETHERFUSE_BASE_URL`: endpoint HTTP da anchor.
+- `TESOURO_ISSUER`: conta emissora do asset TESOURO.
+- `Issuer`: conta que define a identidade do asset junto com o code.
+
+**O que esta secao prova**
+
+- A integracao esta em ambiente de teste correto.
+- A anchor e Etherfuse sandbox, nao mock local.
+- O ativo e issuer estao configurados no servidor.
+- Secrets ficam no backend.
+
+### 01:25 - 02:15 | Rotas do backend: superficie da integracao
 
 **Mostrar na tela**
 
@@ -114,9 +221,10 @@ Abra:
 backend/src/api/routes/ramp.router.ts
 ```
 
-Mostre estas rotas:
+Mostre:
 
 ```ts
+router.get('/etherfuse/config', ...)
 router.post('/etherfuse/customer', ...)
 router.post('/etherfuse/quote', ...)
 router.post('/etherfuse/trustline', ...)
@@ -128,17 +236,36 @@ router.post('/etherfuse/sandbox/simulate-fiat', ...)
 router.post('/etherfuse/sandbox/test-onramp', ...)
 ```
 
-**Falar**
+**Falar exatamente**
 
-> Esta e a superficie publica do backend para a integracao da anchor. O frontend chama `/api/ramp/etherfuse/...`, mas a logica fica no servidor. Aqui temos customer, quote, trustline, on-ramp, status da ordem, off-ramp, submissao de XDR e simulacao de fiat recebido no sandbox.
+> Esta e a superficie HTTP da integracao no backend. Cada rota representa uma etapa do fluxo. `customer` cria ou recupera o usuario na anchor. `quote` pede uma cotacao. `trustline` prepara a wallet para receber o asset. `onramp` cria a ordem PIX na Etherfuse. `onramp/:orderId` consulta o status. `sandbox/simulate-fiat` simula que o PIX foi recebido no ambiente sandbox. E `sandbox/test-onramp` executa o fluxo inteiro em uma chamada para demonstracao tecnica.
 
-**O que esta secao faz**
+**Explicacao detalhada**
 
-- Mostra que existe uma API dedicada para a anchor.
-- Mostra que o fluxo nao e uma tela mockada.
-- Mostra os pontos onde o avaliador deve enxergar customer, quote, ordem, status e simulacao sandbox.
+Esta secao mostra que existe uma API propria para a integracao. O frontend nao conversa direto com a Etherfuse; ele chama o backend. Isso protege API keys e centraliza regras de negocio.
 
-### 01:35 - 02:30 | Client Etherfuse: chamadas reais para a anchor
+**Significado dos termos**
+
+- `router`: mapeia URLs HTTP para controllers.
+- `POST`: usado quando a chamada cria ou executa algo.
+- `GET`: usado para consultar status/configuracao.
+- `onramp/:orderId`: `:orderId` e um parametro dinamico na URL.
+
+**O que esta secao prova**
+
+- A integracao e acionada por endpoints reais.
+- O backend tem etapas separadas para customer, quote, trustline e ordem.
+- Existe endpoint de demonstracao para provar o fluxo end-to-end sem UI.
+
+**Evite dizer**
+
+- "Essas rotas sao da tela."
+
+Prefira:
+
+- "A tela apenas consome essas rotas; a integracao esta aqui."
+
+### 02:15 - 03:25 | Client Etherfuse: chamadas externas para a anchor
 
 **Mostrar na tela**
 
@@ -148,14 +275,14 @@ Abra:
 backend/src/integrations/regional-starter-pack/anchors/etherfuse/client.ts
 ```
 
-Mostre estes trechos:
+Mostre:
 
 ```ts
 private async request<T>(...)
 Authorization: this.config.apiKey
 ```
 
-Depois mostre os metodos:
+Depois mostre:
 
 ```ts
 createCustomer(...)
@@ -172,7 +299,7 @@ submitKycDocuments(...)
 simulateFiatReceived(...)
 ```
 
-E mostre os endpoints Etherfuse:
+E os endpoints:
 
 ```text
 POST /ramp/onboarding-url
@@ -182,21 +309,47 @@ GET /ramp/order/{id}
 GET /ramp/assets
 POST /ramp/customer/{customerId}/wallet
 POST /ramp/wallet
+POST /ramp/customer/{customerId}/kyc
+POST /ramp/customer/{customerId}/kyc/documents
 POST /ramp/order/fiat_received
 ```
 
-**Falar**
+**Falar exatamente**
 
-> Este arquivo e o client da anchor. Ele e a camada que fala diretamente com a Etherfuse. O metodo `request` injeta `Authorization` com a API key no backend. Depois, os metodos traduzem o fluxo da anchor para tipos internos: customer, KYC, assets, quote, ordem on-ramp, ordem off-ramp e simulacao de fiat recebido.
+> Este arquivo e o client da Etherfuse. Ele encapsula as chamadas HTTP para a anchor. O metodo `request` monta a URL da Etherfuse, envia JSON e injeta o header `Authorization` com a API key que fica no backend. Aqui aparecem os endpoints reais da anchor: onboarding, quote, order, consulta de order, assets, registro de wallet, KYC e simulacao de fiat recebido.
 
-**O que esta secao faz**
+Continue:
 
-- Prova que o backend chama a anchor de verdade.
-- Prova que a API key nao fica no frontend.
-- Mostra quais endpoints externos da Etherfuse sao usados.
-- Mostra onde customer, KYC, wallet registration, quote e ordem sao criados.
+> `createCustomer` cria o relacionamento do usuario com a anchor. `getQuote` pede a cotacao. `createOnRamp` cria a ordem de entrada. `getOnRampTransaction` consulta o status. `registerCustomerWallet` registra a wallet Stellar do usuario na anchor. `simulateFiatReceived` chama o endpoint sandbox que representa o PIX recebido.
 
-### 02:30 - 03:45 | Orquestrador: sessao, wallet, KYC, quote, trustline e ordem
+**Explicacao detalhada**
+
+Esta e uma das partes mais importantes do video. Ela prova que o backend nao esta inventando uma resposta. Existe um client que chama endpoints da Etherfuse e transforma as respostas em objetos internos do produto.
+
+**Significado dos termos**
+
+- `Authorization`: header HTTP usado para autenticar a API key.
+- `client`: classe que concentra chamadas para um servico externo.
+- `onboarding-url`: URL/fluxo de cadastro/KYC na anchor.
+- `wallet registration`: registro da conta Stellar que vai receber ou enviar assets.
+- `fiat_received`: endpoint sandbox para simular que o dinheiro fiat chegou.
+
+**O que esta secao prova**
+
+- Ha chamadas externas reais para a anchor.
+- A API key fica protegida no backend.
+- O fluxo inclui KYC, assets, wallet, quote e order.
+- O sandbox simula o evento financeiro sem dinheiro real.
+
+**Evite dizer**
+
+- "A gente gera PIX aqui."
+
+Prefira:
+
+- "O backend cria uma ordem na anchor e, no sandbox, simula o fiat recebido."
+
+### 03:25 - 04:50 | AnchorService: orquestracao do fluxo
 
 **Mostrar na tela**
 
@@ -206,7 +359,7 @@ Abra:
 backend/src/api/services/anchor.service.ts
 ```
 
-Use a busca do VS Code e mostre nesta ordem:
+Mostre nesta ordem:
 
 ```ts
 createCustomerForSession(...)
@@ -219,33 +372,45 @@ runTemporarySandboxOnRampTest(...)
 maybeAutoConvertCompletedOnRamp(...)
 ```
 
-**Falar**
+**Falar exatamente**
 
-> Este e o orquestrador da integracao. Ele junta a sessao TalkToStellar, a wallet Stellar do usuario, a anchor Etherfuse e as chamadas on-chain. Primeiro ele resolve a sessao e a wallet. Depois cria ou recupera o customer na Etherfuse, registra wallet, prepara KYC/proxy PIX, pede uma quote BRL para TESOURO, garante trustline do asset e cria a ordem de on-ramp.
+> O `AnchorService` e o orquestrador. Ele junta tres mundos: a sessao TalkToStellar, a anchor Etherfuse e a Stellar Testnet. Primeiro ele valida `session_id` e `session_token`, porque o backend precisa ter certeza de qual usuario esta operando. Depois ele resolve a wallet Stellar desse usuario. Com a wallet resolvida, ele cria ou recupera o customer na Etherfuse, registra a wallet, prepara onboarding/KYC, pede uma quote, garante a trustline e cria a ordem de on-ramp.
 
 Continue:
 
-> A anchor nunca recebe a private key do usuario. Quando precisa assinar transacao, o backend busca o segredo pelo fluxo de servidor e assina o XDR no backend. No sandbox, `simulateFiatReceivedForSession` simula o PIX recebido e depois acompanha a liquidacao/entrega do asset na wallet Testnet.
+> A anchor nunca recebe a private key do usuario. A private key tambem nao vai para o frontend. Quando o fluxo precisa de uma transacao on-chain, o backend constroi e assina o XDR no servidor. Isso separa a parte off-chain da anchor da parte on-chain da Stellar.
 
-**O que cada metodo faz**
+**Explicacao detalhada**
 
-- `createCustomerForSession`: recebe `session_id` e `session_token`, valida a sessao, resolve a wallet Stellar, cria/recupera customer Etherfuse e prepara dados de onboarding.
-- `getQuoteForSession`: cria uma quote da anchor, normalmente `BRL -> TESOURO:<issuer>` para on-ramp.
-- `ensureTesouroTrustlineForSession`: garante que a wallet aceite o asset TESOURO antes da liquidacao.
-- `ensureIssuedAssetTrustline`: cria trustline para qualquer asset emitido que precise ser recebido.
-- `createOnRampForSession`: combina quote, KYC/proxy, trustline e cria a ordem PIX na Etherfuse.
-- `simulateFiatReceivedForSession`: chama o endpoint sandbox da Etherfuse para marcar o fiat como recebido.
-- `runTemporarySandboxOnRampTest`: executa o fluxo inteiro em uma chamada de demonstracao.
-- `maybeAutoConvertCompletedOnRamp`: se a anchor entrega TESOURO e o usuario pediu BRL/USDC, o backend converte automaticamente para o asset final.
+O client Etherfuse sabe chamar a anchor, mas ele nao sabe toda a regra do produto. O `AnchorService` e onde o fluxo vira uma sequencia coerente: validar sessao, preparar usuario, garantir que a wallet consegue receber asset, criar ordem e acompanhar liquidacao.
 
-**O que esta secao faz**
+**Significado dos metodos**
 
-- Prova que existe orquestracao real no backend.
-- Mostra que a wallet do usuario entra no fluxo.
-- Mostra que a ordem PIX nao e criada isoladamente: ela depende de customer, KYC/proxy, quote e trustline.
-- Mostra onde a liquidacao sandbox e acompanhada.
+- `createCustomerForSession`: valida a sessao e cria/recupera customer na anchor.
+- `getQuoteForSession`: cria quote de ramp. No on-ramp, normalmente BRL entra e TESOURO sai.
+- `ensureTesouroTrustlineForSession`: garante que a wallet aceita TESOURO.
+- `ensureIssuedAssetTrustline`: funcao generica para trustline de assets emitidos.
+- `createOnRampForSession`: cria a ordem PIX depois de preparar customer, quote e trustline.
+- `simulateFiatReceivedForSession`: dispara a simulacao sandbox de fiat recebido.
+- `runTemporarySandboxOnRampTest`: executa customer -> quote -> trustline -> order -> simulate -> status -> balances.
+- `maybeAutoConvertCompletedOnRamp`: converte TESOURO para BRL/USDC se o usuario pediu outro asset final.
 
-### 03:45 - 04:45 | On-chain: XDR, assinatura e Horizon Testnet
+**Significado dos termos**
+
+- `session_id`: identificador da sessao do usuario no TalkToStellar.
+- `session_token`: prova de posse da sessao.
+- `orquestrador`: camada que coordena varias dependencias em uma ordem correta.
+- `off-chain`: chamadas HTTP/API fora da blockchain, como Etherfuse.
+- `on-chain`: transacao gravada na rede Stellar.
+
+**O que esta secao prova**
+
+- O backend controla o fluxo inteiro.
+- A wallet real do usuario entra na integracao.
+- A ordem da anchor depende de preparacao on-chain.
+- Private key nao e exposta para anchor ou frontend.
+
+### 04:50 - 06:10 | StellarService: XDR, trustline, assinatura e Horizon
 
 **Mostrar na tela**
 
@@ -255,7 +420,7 @@ Abra:
 backend/src/api/services/stellar.service.ts
 ```
 
-Mostre nesta ordem:
+Mostre:
 
 ```ts
 buildTrustlineXdr(...)
@@ -272,29 +437,48 @@ submitAssetPaymentFromSecret(...)
 Operation.payment(...)
 ```
 
-**Falar**
+**Falar exatamente**
 
-> Agora esta e a parte on-chain. O backend constroi transacoes Stellar em XDR. Para aceitar TESOURO, ele usa `Operation.changeTrust`. Para entrega ou conversao de asset, usa `payment`, `pathPaymentStrictReceive` ou `pathPaymentStrictSend`. O XDR e assinado no backend e submetido ao Horizon Testnet. A resposta retorna um hash verificavel.
+> Agora estou mostrando a parte on-chain. O `StellarService` constroi transacoes Stellar. Para receber um asset emitido, a wallet primeiro precisa de uma trustline. Isso aparece em `buildTrustlineXdr`, que usa `Operation.changeTrust`. Depois, para entregar ou converter asset, o backend usa `payment`, `pathPaymentStrictReceive` ou `pathPaymentStrictSend`.
 
-Se quiser ser bem claro sobre "contrato":
+Continue:
 
-> Neste repo nao existe Soroban contract call. A evidencia on-chain aqui e Stellar classic operation via XDR e Horizon Testnet. Entao, quando falo em chamada on-chain, estou mostrando a construcao, assinatura e submissao da transacao de ledger.
+> O formato da transacao e XDR. O backend transforma o XDR em transacao, assina com a chave correta e chama `server.submitTransaction`, que envia para o Horizon Testnet. Quando o Horizon aceita a transacao, ele retorna um hash. Esse hash e o que eu vou abrir no explorer.
 
-**O que esta secao faz**
+**Explicacao detalhada**
 
-- Prova que ha acao on-chain, nao apenas API off-chain.
-- Mostra onde o XDR nasce.
-- Mostra onde a assinatura acontece.
-- Mostra onde a transacao e submetida no Horizon Testnet.
-- Prepara o avaliador para reconhecer o hash no final.
+Esta secao responde diretamente a parte "chamadas de contrato" da rejeicao. Como este fluxo nao usa Soroban, voce precisa ser preciso: diga que a evidencia on-chain aqui sao operacoes Stellar classic via XDR e Horizon. Isso ainda e uma chamada real ao ledger, so nao e smart contract Soroban.
 
-### 04:45 - 06:10 | Executar o fluxo no terminal
+**Significado dos termos**
+
+- `Operation.changeTrust`: operacao Stellar que cria permissao para receber asset emitido.
+- `Operation.payment`: pagamento direto de um asset.
+- `pathPaymentStrictReceive`: envia o necessario para o destino receber um valor exato.
+- `pathPaymentStrictSend`: envia um valor exato e calcula quanto o destino recebe.
+- `TransactionBuilder`: construtor de transacoes Stellar.
+- `fromXDR`: transforma XDR serializado em objeto de transacao.
+- `transaction.sign`: assina a transacao.
+- `submitTransaction`: envia a transacao assinada ao Horizon.
+
+**Falar sobre Soroban**
+
+> Neste repo nao existe chamada Soroban neste fluxo. Entao eu nao vou chamar isso de smart contract Soroban. A prova on-chain aqui e Stellar classic operation: trustline, payment e path payment, serializadas como XDR e submetidas ao Horizon Testnet.
+
+**O que esta secao prova**
+
+- Existe transacao on-chain real.
+- O backend cria XDR.
+- O backend assina transacao.
+- O backend submete para Horizon Testnet.
+- O hash retornado pode ser auditado fora do app.
+
+### 06:10 - 07:40 | Executar o fluxo end-to-end no terminal
 
 **Mostrar na tela**
 
-No terminal do backend, deixe logs visiveis.
+Terminal do backend com logs visiveis.
 
-No terminal de `curl`, rode:
+Terminal de `curl`:
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
@@ -307,7 +491,7 @@ curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
   }' | jq
 ```
 
-Se `jq` nao estiver instalado:
+Sem `jq`:
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
@@ -320,13 +504,13 @@ curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
   }'
 ```
 
-**Falar enquanto roda**
+**Falar exatamente antes de rodar**
 
-> Agora eu vou executar pelo terminal, sem passar pela UI. Este endpoint temporario existe para demonstrar o fluxo inteiro: criar ou recuperar customer, pedir quote, garantir trustline, criar ordem, simular fiat recebido no sandbox, consultar status e comparar saldo antes/depois.
+> Agora vou executar o fluxo pelo terminal, sem usar a UI. Este endpoint temporario e para demonstracao tecnica: ele roda customer, quote, trustline, ordem, simulacao de fiat recebido, polling de status e comparacao de saldo antes/depois.
 
 **Mostrar no JSON**
 
-Procure e destaque:
+Destaque:
 
 ```text
 customer.id
@@ -342,9 +526,22 @@ balances_after
 balance_delta
 ```
 
-**Mostrar nos logs do backend**
+**Explicar cada campo**
 
-Procure linhas parecidas com:
+- `customer.id`: identificador do usuario na anchor Etherfuse.
+- `quote.id`: identificador da cotacao usada para criar a ordem.
+- `transaction.id`: identificador da ordem de ramp na Etherfuse.
+- `paymentInstructions.type = "pix"`: mostra que a ordem e de trilho PIX no sandbox.
+- `simulation.success`: mostra que o evento de fiat recebido foi simulado com sucesso.
+- `final_transaction.status = "completed"`: mostra que a ordem chegou ao estado final.
+- `delivery_hash` ou `stellarTxHash`: hash da transacao Stellar resultante.
+- `balances_before`: saldo antes da liquidacao.
+- `balances_after`: saldo depois da liquidacao.
+- `balance_delta`: diferenca que prova alteracao no saldo.
+
+**Mostrar nos logs**
+
+Procure:
 
 ```text
 [Etherfuse] POST https://api.sand.etherfuse.com/ramp/onboarding-url
@@ -355,20 +552,21 @@ Procure linhas parecidas com:
 
 **Falar depois da resposta**
 
-> Aqui esta a prova do fluxo de integracao: customer da anchor, quote, ordem PIX, simulacao do fiat recebido, status final e hash de transacao Stellar. O campo de saldo antes/depois mostra que a wallet foi alterada depois da liquidacao.
+> Esta resposta junta a prova off-chain e on-chain. Off-chain: customer, quote, order e fiat_received vieram da integracao com a Etherfuse. On-chain: o backend garantiu trustline, assinou/submeteu transacao e retornou hash na Stellar Testnet. O saldo antes/depois mostra o efeito final na wallet.
 
-**O que esta secao faz**
+**O que esta secao prova**
 
-- Prova que a integracao executa end-to-end sem depender da UI.
-- Mostra chamadas reais de backend.
-- Mostra resposta da anchor.
-- Mostra hash de transacao para validacao externa.
+- A integracao executa sem UI.
+- A anchor foi chamada.
+- A ordem foi criada.
+- A simulacao sandbox foi acionada.
+- A transacao gerou hash verificavel.
 
-### 06:10 - 06:55 | Abrir hash no Stellar Expert Testnet
+### 07:40 - 08:30 | Abrir o hash no Stellar Expert Testnet
 
 **Mostrar na tela**
 
-Copie o hash do JSON:
+Copie:
 
 ```text
 simulation.delivery_hash
@@ -391,22 +589,29 @@ Mostre:
 - Network: Testnet.
 - Transaction hash.
 - Operations.
-- Asset envolvido (`TESOURO`, `BRL` ou `USDC`, dependendo do fluxo).
-- Source/destination accounts.
+- Asset (`TESOURO`, `BRL` ou `USDC`).
+- Source account.
+- Destination account.
 
-**Falar**
+**Falar exatamente**
 
-> Este e o hash retornado pelo backend depois da submissao no Horizon Testnet. Aqui no Stellar Expert da Testnet da para verificar a transacao no ledger. Isso fecha a evidencia: a anchor gerou o fluxo off-chain e o backend executou a parte on-chain com XDR assinado.
+> Este e o hash retornado pelo backend. Eu abri no Stellar Expert Testnet, fora da aplicacao. Aqui da para ver que a transacao existe na rede de testes da Stellar. Esta e a evidencia externa de que o fluxo nao parou na API da anchor: ele chegou no ledger Testnet.
 
-**O que esta secao faz**
+**Explicacao detalhada**
 
-- Prova externa, fora do seu app.
-- Mostra que o hash e real e verificavel.
-- Mostra que a movimentacao foi na Stellar Testnet.
+Essa e a prova mais objetiva do video. Se o avaliador so viu tela, pode desconfiar. Se ele ve hash no explorer, source/destination e operations, consegue auditar a parte on-chain.
 
-### 06:55 - 07:25 | Mostrar fluxo passo a passo opcional
+**O que esta secao prova**
 
-Se o avaliador quiser ver chamadas separadas, mostre rapidamente estes comandos no terminal ou em um arquivo scratch:
+- O hash e verificavel fora do app.
+- A transacao foi submetida na Testnet.
+- A integracao backend/anchor resultou em efeito on-chain.
+
+### 08:30 - 09:10 | Mostrar as chamadas separadas
+
+**Mostrar na tela**
+
+Mostre estes comandos em um arquivo ou terminal. Nao precisa rodar todos se o tempo estiver curto; explique que o endpoint anterior compacta este pipeline.
 
 ```bash
 curl -s http://localhost:3001/api/ramp/etherfuse/config | jq
@@ -446,17 +651,15 @@ curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/simulate-fiat \
 curl -s "http://localhost:3001/api/ramp/etherfuse/onramp/ORDER_ID?operation_id=OPERATION_ID" | jq
 ```
 
-**Falar**
+**Falar exatamente**
 
-> O endpoint temporario compacta o fluxo para a gravacao, mas estas sao as chamadas separadas. Elas correspondem exatamente ao pipeline: config, customer, quote, trustline, ordem, simulacao de fiat e polling de status.
+> O endpoint `sandbox/test-onramp` compacta o fluxo para facilitar a gravacao. Estas sao as chamadas separadas: config, customer, quote, trustline, onramp, simulate-fiat e polling de status. Isso mostra que o fluxo nao e uma caixa preta.
 
-**O que esta secao faz**
+**Explicacao detalhada**
 
-- Mostra granularidade.
-- Ajuda o avaliador a ver que o endpoint de demo nao esconde a integracao.
-- Mapeia cada etapa para uma rota backend.
+Essa secao ajuda se o avaliador quiser ver granularidade. O endpoint temporario nao substitui o fluxo real; ele encadeia as mesmas operacoes para demonstracao.
 
-### 07:25 - 07:45 | UI apenas como evidencia complementar
+### 09:10 - 09:35 | UI apenas como evidencia complementar
 
 **Mostrar na tela**
 
@@ -467,51 +670,58 @@ frontend/app/api/ramp/[...path]/route.ts
 frontend/app/pix-ramp/pix-ramp-client.tsx
 ```
 
-Opcionalmente abra a pagina:
+Opcional:
 
 ```text
 /pix-ramp
 ```
 
-**Falar**
+**Falar exatamente**
 
-> A UI so consome as rotas que eu mostrei. Ela exibe QR PIX, status e saldo, mas a integracao avaliada esta no backend: Etherfuse client, AnchorService, StellarService, XDR, Horizon e hash no explorer.
+> A UI e apenas a camada visual. Ela chama as rotas que eu mostrei no backend para exibir QR PIX, status e saldo. A integracao avaliada esta no backend: Etherfuse client, AnchorService, StellarService, XDR, Horizon e hash no explorer.
 
-**O que esta secao faz**
+**Evite**
 
-- Mostra que a tela nao e o centro da entrega.
-- Conecta a experiencia visual com as rotas backend ja demonstradas.
-- Evita repetir o erro da submissao anterior.
+- Passar mais de 20 segundos na UI.
+- Clicar como se fosse uma demo de produto.
 
-## Versao Curta da Narracao Completa
+## Narracao Completa Para Ler
 
-Use este texto se quiser ler durante o video:
+Se quiser usar como teleprompter, leia este texto:
 
 ```text
-Este video substitui a submissao rejeitada. Nao e demo de produto; e a demonstracao do fluxo tecnico da integracao.
+Este video substitui a submissao rejeitada. O video anterior parecia uma demo do produto, mas agora eu vou mostrar o fluxo tecnico de integracao no backend.
 
-Primeiro, a configuracao: o backend esta em Stellar Testnet, usando Horizon Testnet, Etherfuse sandbox e asset TESOURO com issuer configurado no servidor. A API key da anchor fica apenas no backend.
+Primeiro, a configuracao. O backend esta em Stellar Testnet, usando Horizon Testnet. Horizon e a API usada para consultar e submeter transacoes Stellar. A anchor configurada e a Etherfuse sandbox, e sandbox significa ambiente de teste sem dinheiro real. O asset de liquidacao da anchor e TESOURO, identificado por code e issuer. A API key da Etherfuse fica somente no backend.
 
-Agora as rotas: a integracao esta exposta em /api/ramp/etherfuse. Temos customer, quote, trustline, on-ramp, status, off-ramp, submissao e simulacao sandbox.
+Agora as rotas. A integracao esta em /api/ramp/etherfuse. Customer cria ou recupera o usuario na anchor. Quote pede cotacao. Trustline prepara a wallet para receber o asset. Onramp cria a ordem PIX na anchor. O status consulta a ordem. Simulate-fiat representa o PIX recebido no sandbox.
 
-Este client fala diretamente com a Etherfuse. Ele injeta Authorization com a API key e chama endpoints como /ramp/onboarding-url, /ramp/quote, /ramp/order, /ramp/assets, wallet registration, KYC e fiat_received.
+Este e o client Etherfuse. Ele faz chamadas HTTP para a anchor e injeta Authorization com a API key no servidor. Aqui aparecem os endpoints reais: onboarding-url, quote, order, assets, wallet registration, KYC e fiat_received.
 
-O AnchorService orquestra o fluxo. Ele valida a sessao, resolve a wallet, cria customer, prepara KYC/proxy PIX, pede quote, garante trustline e cria a ordem de on-ramp. No sandbox, ele simula fiat recebido e acompanha a liquidacao.
+Agora o AnchorService. Ele e o orquestrador: valida a sessao, resolve a wallet Stellar, cria customer, registra wallet, prepara KYC/proxy PIX, pede quote, garante trustline e cria a ordem. A anchor nao recebe private key. A assinatura de transacao fica no backend.
 
-Na parte on-chain, o StellarService constroi XDRs. Para aceitar TESOURO usa changeTrust. Para entrega e conversao usa payment ou pathPayment. O backend assina o XDR e submete no Horizon Testnet, retornando um hash.
+Agora a parte on-chain. O StellarService constroi XDRs. XDR e o formato serializado da transacao Stellar. Para receber TESOURO, a wallet precisa de trustline, criada por changeTrust. Para entrega ou conversao, o backend usa payment ou pathPayment. O backend assina e submete ao Horizon Testnet. Este fluxo nao usa Soroban; a evidencia on-chain e Stellar classic operation via XDR/Horizon.
 
-Agora vou rodar pelo terminal o fluxo end-to-end, sem UI: customer, quote, trustline, order, simulate fiat, status e saldo antes/depois.
+Agora vou rodar o fluxo no terminal, sem UI. O endpoint temporario executa customer, quote, trustline, order, simulate fiat, polling de status e saldo antes/depois.
 
-Aqui esta o JSON com customer, quote, order, instrucoes PIX, status completed, delta de saldo e hash. Agora abrindo o hash no Stellar Expert Testnet, da para verificar a transacao no ledger.
+Aqui no JSON aparecem customer id, quote id, transaction id, instrucoes PIX, simulation success, status completed, saldo antes/depois e hash. Nos logs aparecem as chamadas POST para a Etherfuse sandbox.
 
-A UI so consome essas rotas. A integracao avaliada esta no backend e nas chamadas para anchor e Stellar Testnet.
+Agora abro o hash no Stellar Expert Testnet. Esta e a prova externa de que a transacao chegou ao ledger de testes da Stellar.
+
+Por fim, a UI apenas consome essas rotas. O que foi avaliado aqui e a integracao backend-anchor-on-chain.
 ```
 
 ## Checklist Final Antes de Enviar
 
-Marque todos:
-
 - [ ] Mostrei a frase da rejeicao e expliquei que este video e tecnico.
+- [ ] Expliquei o que e anchor.
+- [ ] Expliquei o que e sandbox.
+- [ ] Expliquei o que e Testnet.
+- [ ] Expliquei o que e Horizon.
+- [ ] Expliquei o que e asset e issuer.
+- [ ] Expliquei o que e trustline.
+- [ ] Expliquei o que e XDR.
+- [ ] Expliquei que nao e Soroban neste fluxo.
 - [ ] Mostrei `STELLAR_NETWORK=TESTNET`.
 - [ ] Mostrei `STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org`.
 - [ ] Mostrei `ETHERFUSE_BASE_URL=https://api.sand.etherfuse.com`.
