@@ -1,10 +1,12 @@
 import { logger } from '../../utils/logger';
+import crypto from 'crypto';
 
 type EvolutionMessage = {
   instance: string;
   remoteJid: string;
   messageId: string;
   fromMe: boolean;
+  text: string;
 };
 
 type EvolutionWebhookResult = {
@@ -15,13 +17,21 @@ type EvolutionWebhookResult = {
   instance?: string;
 };
 
+type AgentResponse = {
+  message: string;
+  raw: any;
+};
+
 const processedMessages = new Map<string, number>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
 
 function normalizeBaseUrl(value: unknown): string {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const isLocalHost =
+    /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::|\/|$)/i.test(raw) ||
+    /^[a-z0-9_-]+:\d+(?:\/|$)/i.test(raw);
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `${isLocalHost ? 'http' : 'https'}://${raw}`;
   return withProtocol.replace(/\/$/, '');
 }
 
@@ -34,6 +44,28 @@ function publicBackendBaseUrl(): string {
     process.env.RENDER_EXTERNAL_URL ||
     '';
   return normalizeBaseUrl(raw);
+}
+
+function normalizeBackendBaseUrl(value: unknown): string {
+  return normalizeBaseUrl(value)
+    .replace(/\/api\/agent\/query\/?$/i, '')
+    .replace(/\/api\/agent\/?$/i, '')
+    .replace(/\/api\/?$/i, '');
+}
+
+function internalBackendBaseUrl(): string {
+  const raw =
+    process.env.INTERNAL_BACKEND_URL ||
+    process.env.BACKEND_URL ||
+    process.env.AGENT_API_URL ||
+    `http://127.0.0.1:${process.env.PORT || 3001}`;
+  return normalizeBackendBaseUrl(raw);
+}
+
+function agentQueryUrl(): string {
+  const raw = String(process.env.EVOLUTION_AGENT_URL || process.env.AGENT_API_URL || '').trim();
+  if (raw) return normalizeBaseUrl(raw);
+  return `${internalBackendBaseUrl()}/api/agent/query`;
 }
 
 function evolutionBaseUrl(): string {
@@ -58,8 +90,14 @@ function configuredInstance(): string {
   return String(process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
 }
 
-function helloText(): string {
-  return String(process.env.EVOLUTION_HELLO_TEXT || 'hello').trim() || 'hello';
+function normalizeAgentResponse(payload: any): string {
+  return String(
+    payload?.message ||
+    payload?.result?.message ||
+    payload?.content ||
+    payload?.reply ||
+    ''
+  ).trim() || 'Nao consegui gerar uma resposta agora. Tente novamente em alguns segundos.';
 }
 
 function cleanupProcessedMessages() {
@@ -93,6 +131,47 @@ function messageCandidates(payload: any): any[] {
   return [data || payload].filter(Boolean);
 }
 
+function unwrapMessageContainer(message: any): any {
+  let current = message || {};
+  for (let index = 0; index < 4; index += 1) {
+    const nested =
+      current?.ephemeralMessage?.message ||
+      current?.viewOnceMessage?.message ||
+      current?.viewOnceMessageV2?.message ||
+      current?.documentWithCaptionMessage?.message ||
+      current?.editedMessage?.message ||
+      null;
+    if (!nested) break;
+    current = nested;
+  }
+  return current || {};
+}
+
+function extractTextFromCandidate(candidate: any): string {
+  const message = unwrapMessageContainer(candidate?.message || candidate?.data?.message || candidate || {});
+  const possible = [
+    candidate?.text,
+    candidate?.body,
+    candidate?.message?.text,
+    message?.conversation,
+    message?.extendedTextMessage?.text,
+    message?.imageMessage?.caption,
+    message?.videoMessage?.caption,
+    message?.documentMessage?.caption,
+    message?.buttonsResponseMessage?.selectedDisplayText,
+    message?.buttonsResponseMessage?.selectedButtonId,
+    message?.listResponseMessage?.title,
+    message?.listResponseMessage?.description,
+    message?.listResponseMessage?.singleSelectReply?.selectedRowId,
+    message?.templateButtonReplyMessage?.selectedDisplayText,
+    message?.templateButtonReplyMessage?.selectedId,
+    message?.interactiveResponseMessage?.body?.text,
+    message?.interactiveResponseMessage?.nativeFlowResponseMessage?.name,
+  ];
+
+  return String(possible.find((value) => String(value || '').trim()) || '').trim();
+}
+
 function extractMessage(payload: any): EvolutionMessage | null {
   if (!isMessagesUpsertEvent(payload?.event || payload?.type)) return null;
 
@@ -117,12 +196,14 @@ function extractMessage(payload: any): EvolutionMessage | null {
     ).trim();
     const fromMe = Boolean(key.fromMe || candidate?.fromMe);
     const instance = String(candidate?.instance || candidate?.instanceName || fallbackInstance).trim();
+    const text = extractTextFromCandidate(candidate);
 
     return {
       instance,
       remoteJid,
       messageId: messageId || `${remoteJid}:${candidate?.messageTimestamp || Date.now()}`,
       fromMe,
+      text,
     };
   }
 
@@ -142,6 +223,94 @@ function assertEvolutionConfig(instance: string) {
   if (!apiKey) throw new Error('EVOLUTION_API_KEY is required.');
   if (!instance) throw new Error('EVOLUTION_INSTANCE is required.');
   return { baseUrl, apiKey, instance };
+}
+
+async function resolveExistingSession(input: {
+  phoneNumber: string;
+  remoteJid: string;
+  instance: string;
+  messageId: string;
+}): Promise<string> {
+  try {
+    const response = await fetch(`${internalBackendBaseUrl()}/api/external/check-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': `evolution_check_${input.instance}_${input.messageId}`,
+      },
+      body: JSON.stringify({
+        provider: 'whatsapp',
+        provider_user_id: input.phoneNumber,
+        phone_number: input.phoneNumber,
+        remote_jid: input.remoteJid,
+        instance: input.instance,
+        lookup_only: true,
+      }),
+    });
+    if (!response.ok) return '';
+    const payload = await response.json().catch(() => ({})) as any;
+    return payload?.exists && payload?.sessionId ? String(payload.sessionId) : '';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[evolution-webhook] external account preflight failed for ***${input.phoneNumber.slice(-4)}: ${message}`);
+    return '';
+  }
+}
+
+async function sendAgentQuery(input: {
+  text: string;
+  sessionId?: string;
+  phoneNumber: string;
+  remoteJid: string;
+  instance: string;
+  messageId: string;
+}): Promise<AgentResponse> {
+  const payload = {
+    query: input.text,
+    ...(input.sessionId ? { session_id: input.sessionId } : {}),
+    source: 'whatsapp',
+    metadata: {
+      channel: 'whatsapp',
+      provider: 'whatsapp',
+      provider_user_id: input.phoneNumber,
+      phone_number: input.phoneNumber,
+      whatsapp_number: input.phoneNumber,
+      remote_jid: input.remoteJid,
+      instance: input.instance,
+      message_id: input.messageId,
+    },
+  };
+  const idempotencyKey = `evolution_query_${crypto
+    .createHash('sha256')
+    .update(`${input.instance}:${input.remoteJid}:${input.messageId}:${input.text}`)
+    .digest('hex')}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 45000));
+  try {
+    const response = await fetch(agentQueryUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Agent API Error: ${response.status} ${errorText}`);
+    }
+
+    const body = await response.json().catch(() => ({}));
+    return {
+      message: normalizeAgentResponse(body),
+      raw: body,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export class EvolutionService {
@@ -242,13 +411,29 @@ export class EvolutionService {
     }
 
     const instance = message.instance || configuredInstance();
-    void this.sendText(instance, recipient, helloText())
+    const text = String(message.text || '').trim();
+    if (!text) {
+      return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
+    }
+
+    void this.replyWithAgent({
+      instance,
+      recipient,
+      remoteJid: message.remoteJid,
+      messageId: message.messageId,
+      text,
+    })
       .then(() => {
-        logger.info(`[evolution-webhook] replied hello to ***${recipient.slice(-4)} on instance ${instance}`);
+        logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
       })
       .catch((error) => {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.warn(`[evolution-webhook] failed to reply hello to ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+        logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+        void this.sendText(instance, recipient, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.')
+          .catch((sendError) => {
+            const sendMessage = sendError instanceof Error ? sendError.message : String(sendError);
+            logger.warn(`[evolution-webhook] failed to send fallback reply to ***${recipient.slice(-4)}: ${sendMessage}`);
+          });
       });
 
     return {
@@ -257,5 +442,29 @@ export class EvolutionService {
       recipient,
       instance,
     };
+  }
+
+  private static async replyWithAgent(input: {
+    instance: string;
+    recipient: string;
+    remoteJid: string;
+    messageId: string;
+    text: string;
+  }): Promise<void> {
+    const sessionId = await resolveExistingSession({
+      phoneNumber: input.recipient,
+      remoteJid: input.remoteJid,
+      instance: input.instance,
+      messageId: input.messageId,
+    });
+    const response = await sendAgentQuery({
+      text: input.text,
+      sessionId: sessionId || undefined,
+      phoneNumber: input.recipient,
+      remoteJid: input.remoteJid,
+      instance: input.instance,
+      messageId: input.messageId,
+    });
+    await this.sendText(input.instance, input.recipient, response.message);
   }
 }

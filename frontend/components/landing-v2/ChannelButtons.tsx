@@ -6,6 +6,10 @@ type ChannelButtonsProps = {
   className?: string;
 };
 
+const WHATSAPP_NUMBER = "5519981808102";
+const WHATSAPP_MESSAGE = "Oi, quero usar o TalkToStellar.";
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
+
 export default function ChannelButtons({ compact = false, className = "" }: ChannelButtonsProps) {
   const baseSize = compact ? "px-3 py-2 text-xs" : "px-6 py-4 text-base";
   const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
@@ -23,14 +27,15 @@ export default function ChannelButtons({ compact = false, className = "" }: Chan
         <span>Telegram</span>
       </a>
 
-      <button
-        type="button"
-        disabled
-        className={`inline-flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 ${baseSize} font-semibold text-white/70 opacity-70`}
+      <a
+        href={WHATSAPP_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[#25D366]/30 bg-[#25D366]/10 ${baseSize} font-semibold text-white transition hover:bg-[#25D366]/20`}
       >
-        <MessageCircle className={iconSize} />
-        <span>WhatsApp (soon)</span>
-      </button>
+        <MessageCircle className={`${iconSize} text-[#25D366]`} />
+        <span>WhatsApp</span>
+      </a>
 
       <a
         href="/chat"

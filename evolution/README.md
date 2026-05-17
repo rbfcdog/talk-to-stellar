@@ -33,7 +33,8 @@ That means:
 
 - Browser -> Evolution: `localhost:8080`
 - Evolution container -> TalkToStellar backend on host: `127.0.0.1:3001`
-- If the backend is not running or the webhook route is not implemented yet, QR setup can still work. Only webhook delivery will fail.
+- Incoming WhatsApp messages -> TalkToStellar backend webhook -> `/api/agent/query` -> Evolution `sendText`
+- If the backend is not running, QR setup can still work. Only webhook delivery and AI replies will fail.
 
 ## Start
 
@@ -64,6 +65,17 @@ change-me-talktostellar-evolution-local
 ```
 
 Change `AUTHENTICATION_API_KEY` and `EVOLUTION_API_KEY` before exposing this server.
+
+In the backend `.env`, set the Evolution values so the webhook can answer through the same instance:
+
+```text
+EVOLUTION_API_URL=http://localhost:8080
+EVOLUTION_API_KEY=change-me-talktostellar-evolution-local
+EVOLUTION_INSTANCE=main
+PUBLIC_BACKEND_URL=http://127.0.0.1:3001
+EVOLUTION_AGENT_URL=http://127.0.0.1:3001/api/agent/query
+EVOLUTION_AGENT_TIMEOUT_MS=45000
+```
 
 ## QR Setup
 
@@ -194,6 +206,16 @@ http://127.0.0.1:3001/webhook/evolution
 ```
 
 This is correct for this local Linux setup because the Evolution API container runs with host networking.
+
+When this webhook receives a `MESSAGES_UPSERT` event, the backend:
+
+1. Ignores outgoing messages, duplicate events, groups, and non-text payloads.
+2. Extracts the WhatsApp number from the remote JID.
+3. Checks `/api/external/check-account` with provider `whatsapp`.
+4. Sends the message text to `/api/agent/query` with `source: "whatsapp"` and WhatsApp metadata.
+5. Sends the agent response back through Evolution `POST /message/sendText/{instance}`.
+
+This is the same inference flow used by Telegram, but the channel metadata is WhatsApp/phone based.
 
 If the TalkToStellar backend also runs inside the same Docker Compose network, change the webhook to the service name instead, for example:
 
