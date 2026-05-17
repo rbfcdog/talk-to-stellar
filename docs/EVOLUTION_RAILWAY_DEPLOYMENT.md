@@ -68,18 +68,44 @@ Observacoes:
 
 ## 3. Criar Volume
 
-No servico `Evolution API`:
+Se o campo de volume nao aparecer dentro do servico, isso e normal na UI atual do Railway. O volume costuma ser criado pelo **canvas do projeto**, nao necessariamente dentro de `Settings` do servico.
 
-1. Va em `Settings`.
-2. Abra `Volumes`.
-3. Crie/anexe um volume.
+Opcao A, pela UI:
+
+1. Volte para o canvas principal do projeto Railway.
+2. Clique com botao direito em uma area vazia do canvas.
+3. Escolha `New` / `Create` / `Volume`.
+4. Selecione o servico `Evolution API` quando o Railway pedir o servico conectado.
+5. Configure o mount path:
+
+```text
+/evolution/instances
+```
+
+Opcao B, pela Command Palette:
+
+1. No projeto Railway, pressione `Cmd+K` ou `Ctrl+K`.
+2. Procure por `Create Volume` ou `Add Volume`.
+3. Selecione o servico `Evolution API`.
 4. Use mount path:
 
 ```text
 /evolution/instances
 ```
 
+Opcao C, pela Railway CLI:
+
+```bash
+railway login
+railway link
+railway volume add --service "Evolution API" --mount-path /evolution/instances
+```
+
+Se seu servico tiver outro nome, troque `"Evolution API"` pelo nome real do servico.
+
 Sem esse volume, a sessao escaneada por QR pode ser perdida em restart/redeploy.
+
+Depois de criar o volume, o Railway injeta automaticamente variaveis como `RAILWAY_VOLUME_MOUNT_PATH` em runtime. Voce nao precisa configurar essa variavel manualmente.
 
 ## 4. Gerar Dominios Publicos
 
