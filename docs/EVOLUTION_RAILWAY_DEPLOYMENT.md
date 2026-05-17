@@ -1,62 +1,124 @@
-# Evolution API Railway Deployment
+# Deploy da Evolution API no Railway
 
-This document is only for the Railway **Evolution API** service. Backend and frontend deployment settings are intentionally not covered here.
+Este guia e somente para o servico **Evolution API** no Railway. Ele assume que o backend TalkToStellar ja existe em outro servico Railway e que voce quer conectar o WhatsApp real ao webhook do backend.
 
-## Required Railway Services
+## Resultado Esperado
 
-Create these services in the same Railway project:
+No final, o fluxo fica assim:
 
-1. `Evolution API`: GitHub service using the `evolution/` root directory.
-2. `Postgres`: Railway managed Postgres.
-3. `Redis`: Railway managed Redis.
-4. `Volume`: mounted on the Evolution API service.
+```text
+WhatsApp -> Evolution API Railway -> Backend /api/evolution/webhook -> Backend /api/agent/query -> Evolution sendText -> WhatsApp
+```
 
-## Evolution API Service Settings
+O servico Evolution sera deployado a partir desta pasta do repo:
 
-Use these settings for the Evolution API service:
+```text
+evolution/
+```
 
-| Setting | Value |
-|---|---|
-| Source | GitHub repo |
-| Root Directory | `evolution` |
-| Builder | Dockerfile |
-| Dockerfile | `evolution/Dockerfile` |
-| Build Command | blank |
-| Start Command | blank |
-| Public Networking | enabled |
-| Volume Mount Path | `/evolution/instances` |
+Arquivos usados no deploy:
 
-The `evolution/Dockerfile` wraps the official image:
+```text
+evolution/Dockerfile
+evolution/railway.json
+evolution/railway.env.example
+evolution/.dockerignore
+```
+
+O `Dockerfile` usa a imagem oficial:
 
 ```text
 evoapicloud/evolution-api:latest
 ```
 
-The `evolution/railway.json` file tells Railway to use Dockerfile mode and a `/` healthcheck. Do not deploy the local `evolution/docker-compose.yml` directly on Railway. Use Railway services instead: one GitHub/Dockerfile service, one Postgres service, one Redis service, and one persistent volume.
+## 1. Criar Servicos Necessarios no Railway
 
-Alternative manual setup: if you do not want to deploy from this repo, create a Railway service directly from Docker image `evoapicloud/evolution-api:latest` and use the same variables below.
+No mesmo projeto Railway, crie:
 
-## Values You Need Before Setting Env
+1. `Evolution API`: servico a partir do GitHub repo.
+2. `Postgres`: plugin/servico managed do Railway.
+3. `Redis`: plugin/servico managed do Railway.
+4. `Volume`: anexado ao servico `Evolution API`.
 
-Prepare these values:
+Nao use `evolution/docker-compose.yml` no Railway. O Compose e so para local. No Railway, Postgres e Redis devem ser servicos separados.
+
+## 2. Configurar o Servico Evolution API
+
+Crie um novo servico a partir do GitHub repo `talk-to-stellar`.
+
+Use exatamente:
+
+| Setting | Valor |
+|---|---|
+| Source | GitHub repo |
+| Root Directory | `evolution` |
+| Builder | Dockerfile |
+| Dockerfile Path | `Dockerfile` |
+| Build Command | vazio |
+| Start Command | vazio |
+| Public Networking | enabled |
+| Healthcheck Path | `/` |
+| Volume Mount Path | `/evolution/instances` |
+
+Observacoes:
+
+- O `railway.json` dentro de `evolution/` ja configura Dockerfile mode, healthcheck e restart policy.
+- Se a UI do Railway pedir Start Command, deixe vazio. A imagem oficial ja tem entrypoint.
+- O volume em `/evolution/instances` e obrigatorio para preservar a sessao do WhatsApp depois de redeploy.
+
+## 3. Criar Volume
+
+No servico `Evolution API`:
+
+1. Va em `Settings`.
+2. Abra `Volumes`.
+3. Crie/anexe um volume.
+4. Use mount path:
+
+```text
+/evolution/instances
+```
+
+Sem esse volume, a sessao escaneada por QR pode ser perdida em restart/redeploy.
+
+## 4. Gerar Dominios Publicos
+
+Voce precisa de dois dominios:
 
 ```text
 EVOLUTION_PUBLIC_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
 BACKEND_PUBLIC_URL=https://YOUR-BACKEND-SERVICE.up.railway.app
-EVOLUTION_GLOBAL_API_KEY=make-a-long-random-api-key
-EVOLUTION_WEBHOOK_SECRET=make-a-long-random-webhook-secret
 ```
 
-Important:
+No Railway:
 
-- `EVOLUTION_GLOBAL_API_KEY` is the API key you will paste into Evolution Manager.
-- The backend variable `EVOLUTION_API_KEY` must use the same value as `EVOLUTION_GLOBAL_API_KEY`.
-- The backend variable `EVOLUTION_INSTANCE` must match the Evolution instance name, recommended: `main`.
-- The backend variable `EVOLUTION_WEBHOOK_SECRET` must match `EVOLUTION_WEBHOOK_SECRET` below.
+1. Abra o servico `Evolution API`.
+2. Va em `Settings` -> `Networking`.
+3. Clique em `Generate Domain`.
+4. Copie a URL gerada.
 
-## Evolution API Environment Variables
+Faca o mesmo no servico do backend, se ainda nao tiver dominio publico.
 
-Paste `evolution/railway.env.example` into the Railway Evolution API service variables, then replace the placeholder URLs/secrets. The same contents are reproduced below.
+Nao use `localhost` ou `127.0.0.1` em producao.
+
+## 5. Variaveis do Servico Evolution API
+
+No servico `Evolution API`, abra `Variables` e cole o conteudo de:
+
+```text
+evolution/railway.env.example
+```
+
+Depois substitua:
+
+```text
+YOUR-EVOLUTION-SERVICE.up.railway.app
+YOUR-BACKEND-SERVICE.up.railway.app
+change-me-long-random-evolution-global-api-key
+change-me-long-random-evolution-webhook-secret
+```
+
+Template completo:
 
 ```env
 SERVER_TYPE=http
@@ -64,7 +126,7 @@ SERVER_PORT=${{PORT}}
 SERVER_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
 
 AUTHENTICATION_TYPE=apikey
-AUTHENTICATION_API_KEY=make-a-long-random-api-key
+AUTHENTICATION_API_KEY=change-me-long-random-evolution-global-api-key
 AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
 
 DATABASE_ENABLED=true
@@ -92,7 +154,7 @@ STORE_CONTACTS=true
 STORE_CHATS=true
 
 WEBHOOK_GLOBAL_ENABLED=true
-WEBHOOK_GLOBAL_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/evolution/webhook?secret=make-a-long-random-webhook-secret
+WEBHOOK_GLOBAL_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/evolution/webhook?secret=change-me-long-random-evolution-webhook-secret
 WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
 WEBHOOK_GLOBAL_WEBHOOK_BASE64=false
 WEBHOOK_EVENTS_APPLICATION_STARTUP=false
@@ -138,39 +200,68 @@ LOG_BAILEYS=error
 TELEMETRY=false
 ```
 
-If your Railway services are not named exactly `Postgres` and `Redis`, update these references:
+Se seus servicos Railway nao se chamarem exatamente `Postgres` e `Redis`, altere:
 
 ```env
-DATABASE_CONNECTION_URI=${{YourPostgresService.DATABASE_URL}}
-CACHE_REDIS_URI=${{YourRedisService.REDIS_URL}}
+DATABASE_CONNECTION_URI=${{NomeDoSeuPostgres.DATABASE_URL}}
+CACHE_REDIS_URI=${{NomeDoSeuRedis.REDIS_URL}}
 ```
 
-## Backend Values That Must Match Evolution
+## 6. Variaveis Correspondentes no Backend
 
-These are not set on the Evolution service, but they must match it on the backend service:
+No servico backend, estas variaveis precisam apontar para a Evolution:
 
 ```env
 EVOLUTION_API_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
-EVOLUTION_API_KEY=make-a-long-random-api-key
+EVOLUTION_API_KEY=change-me-long-random-evolution-global-api-key
 EVOLUTION_INSTANCE=main
-EVOLUTION_WEBHOOK_SECRET=make-a-long-random-webhook-secret
+EVOLUTION_WEBHOOK_SECRET=change-me-long-random-evolution-webhook-secret
+EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
+EVOLUTION_AGENT_TIMEOUT_MS=45000
+PUBLIC_BACKEND_URL=https://YOUR-BACKEND-SERVICE.up.railway.app
 ```
 
-## Create the WhatsApp Instance
+Regras importantes:
 
-After the Evolution service deploys, open:
+- `EVOLUTION_API_KEY` no backend deve ser igual a `AUTHENTICATION_API_KEY` na Evolution.
+- `EVOLUTION_WEBHOOK_SECRET` no backend deve ser igual ao `secret` usado em `WEBHOOK_GLOBAL_URL`.
+- `EVOLUTION_INSTANCE` deve ser igual ao nome da instancia criada na Evolution. Use `main`.
+
+## 7. Deploy
+
+Depois de configurar variaveis, faca deploy do servico `Evolution API`.
+
+Sinais de sucesso nos logs:
+
+```text
+Database connected
+Redis connected
+Evolution API
+```
+
+Abra:
+
+```text
+https://YOUR-EVOLUTION-SERVICE.up.railway.app/
+```
+
+Esperado: pagina/resposta de boas-vindas da Evolution API.
+
+## 8. Abrir Manager e Criar Instancia
+
+Abra:
 
 ```text
 https://YOUR-EVOLUTION-SERVICE.up.railway.app/manager
 ```
 
-Use this API key:
+Use como API key:
 
 ```text
 AUTHENTICATION_API_KEY
 ```
 
-Create an instance with:
+Crie a instancia:
 
 ```text
 Instance name: main
@@ -182,68 +273,160 @@ Read messages: true
 Read status: true
 ```
 
-Then connect the instance and scan the QR code from WhatsApp:
+Depois clique para conectar e escaneie o QR:
 
 ```text
 WhatsApp Business -> Linked Devices -> Link Device
 ```
 
-## Webhook Target
+## 9. Webhook
 
-Evolution must send incoming messages to the backend:
-
-```text
-https://YOUR-BACKEND-SERVICE.up.railway.app/api/evolution/webhook?secret=make-a-long-random-webhook-secret
-```
-
-The webhook flow is:
+O webhook precisa apontar para o backend:
 
 ```text
-WhatsApp -> Evolution API -> Backend Evolution webhook -> /api/agent/query -> Evolution sendText
+https://YOUR-BACKEND-SERVICE.up.railway.app/api/evolution/webhook?secret=change-me-long-random-evolution-webhook-secret
 ```
 
-## Quick Production Test
+Como `WEBHOOK_GLOBAL_URL` ja esta nas variaveis, normalmente a Evolution usa esse webhook automaticamente.
 
-1. Open Evolution root:
+Se quiser configurar pelo backend, rode no servico backend:
+
+```bash
+npm run evolution:configure-webhook
+```
+
+Esse script usa:
+
+```env
+EVOLUTION_API_URL
+EVOLUTION_API_KEY
+EVOLUTION_INSTANCE
+PUBLIC_BACKEND_URL
+EVOLUTION_WEBHOOK_SECRET
+```
+
+## 10. Testes de Producao
+
+### Teste 1: Evolution online
+
+Abra:
 
 ```text
 https://YOUR-EVOLUTION-SERVICE.up.railway.app/
 ```
 
-Expected: Evolution API welcome or health response.
+Esperado: Evolution responde.
 
-2. Open Evolution Manager:
+### Teste 2: Manager abre
+
+Abra:
 
 ```text
 https://YOUR-EVOLUTION-SERVICE.up.railway.app/manager
 ```
 
-Expected: Manager UI asks for the API key.
+Esperado: Manager pede API key.
 
-3. Check backend webhook ping:
+### Teste 3: Backend webhook responde
+
+Abra:
 
 ```text
 https://YOUR-BACKEND-SERVICE.up.railway.app/api/evolution/webhook
 ```
 
-Expected:
+Esperado:
 
 ```json
 {"success":true,"webhook":"evolution"}
 ```
 
-4. Send a WhatsApp message to the connected number.
+### Teste 4: WhatsApp responde com IA
 
-Expected:
+Envie uma mensagem para o numero conectado no WhatsApp.
 
-- Evolution logs show `MESSAGES_UPSERT`.
-- Backend logs show `evolution-webhook`.
-- WhatsApp receives the AI response from `/api/agent/query`.
+Esperado:
 
-## Common Mistakes
+1. Logs da Evolution mostram `MESSAGES_UPSERT`.
+2. Logs do backend mostram `evolution-webhook`.
+3. Backend chama `/api/agent/query` com `source: "whatsapp"`.
+4. WhatsApp recebe a resposta do agente.
 
-- Do not put `localhost` or `127.0.0.1` in Railway URLs.
-- Do not use different API keys between Evolution `AUTHENTICATION_API_KEY` and backend `EVOLUTION_API_KEY`.
-- Do not forget the persistent volume at `/evolution/instances`; otherwise QR sessions can be lost on redeploy.
-- Do not set the webhook to the Evolution URL. The webhook must point to the backend URL.
-- Do not name the instance differently unless backend `EVOLUTION_INSTANCE` uses the same name.
+## 11. Troubleshooting
+
+### Manager nao abre
+
+Verifique:
+
+- Public Networking habilitado.
+- `SERVER_PORT=${{PORT}}`.
+- Deploy sem crash nos logs.
+- Healthcheck `/`.
+
+### API key nao funciona no Manager
+
+Use exatamente:
+
+```text
+AUTHENTICATION_API_KEY
+```
+
+Nao use `EVOLUTION_API_KEY` aqui, a menos que voce tenha criado essa variavel manualmente com o mesmo valor.
+
+### WhatsApp desconecta apos redeploy
+
+Verifique se o volume esta montado em:
+
+```text
+/evolution/instances
+```
+
+### Backend nao recebe webhook
+
+Verifique:
+
+- `WEBHOOK_GLOBAL_ENABLED=true`
+- `WEBHOOK_EVENTS_MESSAGES_UPSERT=true`
+- `WEBHOOK_GLOBAL_URL` aponta para o backend, nao para a Evolution.
+- O `secret` da URL bate com `EVOLUTION_WEBHOOK_SECRET` no backend.
+
+### Backend recebe webhook mas nao responde no WhatsApp
+
+Verifique no backend:
+
+```env
+EVOLUTION_API_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
+EVOLUTION_API_KEY=mesmo-valor-do-AUTHENTICATION_API_KEY
+EVOLUTION_INSTANCE=main
+EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
+```
+
+### Erro de Postgres ou Redis
+
+Verifique se as referencias batem com os nomes reais dos servicos:
+
+```env
+DATABASE_CONNECTION_URI=${{Postgres.DATABASE_URL}}
+CACHE_REDIS_URI=${{Redis.REDIS_URL}}
+```
+
+Se os servicos tiverem outro nome, troque `Postgres` e `Redis`.
+
+## 12. Checklist Final
+
+- [ ] Servico Railway criado a partir do GitHub repo.
+- [ ] Root Directory = `evolution`.
+- [ ] Builder = Dockerfile.
+- [ ] Start Command vazio.
+- [ ] Public domain gerado para Evolution.
+- [ ] Postgres criado.
+- [ ] Redis criado.
+- [ ] Volume montado em `/evolution/instances`.
+- [ ] Variaveis coladas de `evolution/railway.env.example`.
+- [ ] `SERVER_URL` aponta para a Evolution.
+- [ ] `WEBHOOK_GLOBAL_URL` aponta para o backend.
+- [ ] Backend tem `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE` e `EVOLUTION_WEBHOOK_SECRET`.
+- [ ] Manager abriu.
+- [ ] Instancia `main` criada.
+- [ ] QR escaneado.
+- [ ] WhatsApp recebeu resposta do agente.
