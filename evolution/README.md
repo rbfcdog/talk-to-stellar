@@ -28,6 +28,7 @@ Files used by Railway:
 ```text
 Dockerfile
 railway.json
+railway-entrypoint.sh
 railway.env.example
 ```
 
