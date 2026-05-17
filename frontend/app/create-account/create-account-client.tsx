@@ -103,6 +103,10 @@ function isPasskeyChallengeExpiredMessage(message?: string) {
   )
 }
 
+function readableErrorMessage(error: any) {
+  return error instanceof Error ? error.message : String(error || "")
+}
+
 function looksLikeEmail(value?: string): boolean {
   const normalized = String(value || "").trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
@@ -306,9 +310,10 @@ export default function CreateAccountClient({
       browserId = generateBrowserId()
       localStorage.setItem("talk-to-stellar.browserId", browserId)
     }
-    const response = await idempotentFetch(`/api/external/check-account`, {
+    const response = await fetch(`/api/external/check-account`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      cache: "no-store",
       body: JSON.stringify({
         provider: "web",
         provider_user_id: browserId,
@@ -317,12 +322,19 @@ export default function CreateAccountClient({
       }),
     })
     const payload = await response.json().catch(() => ({}))
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || payload?.error || "Could not create an account link right now.")
+    }
     if (payload?.exists === true) {
       return {
         mode: "existing",
         sessionId: payload?.sessionId ? String(payload.sessionId) : undefined,
         sessionToken: payload?.sessionToken ? String(payload.sessionToken) : undefined,
       }
+    }
+    const directToken = String(payload?.token || "")
+    if (directToken) {
+      return { mode: "token", token: directToken }
     }
     const creationUrl = String(payload?.creationUrl || "")
     const recoveredToken = extractTokenFromUrl(creationUrl)
@@ -502,14 +514,25 @@ export default function CreateAccountClient({
 
     try {
       let finalToken = token
+      let tokenRecoveryError = ""
       if (!finalToken.trim()) {
-        const fresh = await recoverFreshOnboardingToken()
+        let fresh: { token?: string; browserId?: string } = {}
+        try {
+          fresh = await recoverFreshOnboardingToken()
+        } catch (error) {
+          tokenRecoveryError = readableErrorMessage(error)
+        }
         if (fresh.token) {
           setExistingAccountDetected(false)
           finalToken = fresh.token
           setToken(finalToken)
         } else {
-          const recovered = await recoverOnboardingContextFromBackend(true)
+          let recovered: RecoveryResult = { mode: "none" }
+          try {
+            recovered = await recoverOnboardingContextFromBackend(true)
+          } catch (error) {
+            tokenRecoveryError = readableErrorMessage(error) || tokenRecoveryError
+          }
           if (recovered.mode === "existing") {
             setExistingAccountDetected(true)
             throw new Error("Could not generate a new creation link right now. Try again or use \"I already have an account\" to sign in.")
@@ -522,7 +545,7 @@ export default function CreateAccountClient({
         }
       }
       if (!finalToken.trim()) {
-        throw new Error("Could not validate your link right now. Request a new access link in Telegram and try again.")
+        throw new Error(tokenRecoveryError || "Could not create a secure account link right now. Open a fresh signup link and try again.")
       }
 
       let browserId = localStorage.getItem("talk-to-stellar.browserId")
