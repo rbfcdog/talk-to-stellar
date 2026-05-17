@@ -2,6 +2,54 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { PinResetService } from '../../services/pin-reset.service';
 import { logger } from '../../utils/logger';
+import { supabase } from '../../config/supabase';
+import { isSessionExpired } from '../../utils/session-expiry';
+
+function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function readBearerToken(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  return auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+}
+
+function isInternalRequest(req: Request): boolean {
+  const expected = String(process.env.INTERNAL_API_SECRET || '').trim();
+  if (!expected) return false;
+  const provided = String(req.headers['x-internal-api-secret'] || '').trim() || readBearerToken(req);
+  return Boolean(provided) && timingSafeEqualString(provided, expected);
+}
+
+function readSessionToken(req: Request): string {
+  return String(
+    req.body?.session_token ||
+    req.body?.sessionToken ||
+    req.headers['x-session-token'] ||
+    req.headers['x-talktostellar-session-token'] ||
+    ''
+  ).trim();
+}
+
+function normalizeIdentity(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function loadSession(sessionId: string): Promise<any | null> {
+  const { data, error } = await supabase
+    .from('agent_sessions')
+    .select('session_id, user_id, email, session_token, last_activity, created_at')
+    .eq('session_id', sessionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load session: ${error.message}`);
+  }
+  return data || null;
+}
 
 export class PinResetController {
   /**
@@ -12,26 +60,71 @@ export class PinResetController {
     try {
       const { user_id, session_id } = req.body;
 
-      if (!user_id || !session_id) {
+      if (!session_id) {
         return res.status(400).json({
           success: false,
-          message: 'user_id and session_id are required',
+          message: 'session_id is required',
+        });
+      }
+
+      const session = await loadSession(String(session_id));
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          message: 'Session not found',
+        });
+      }
+      if (isSessionExpired(session)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session expired. Sign in again before resetting your PIN.',
+        });
+      }
+
+      const providedSessionToken = readSessionToken(req);
+      const storedSessionToken = String(session.session_token || '').trim();
+      const authorizedBySession =
+        Boolean(providedSessionToken && storedSessionToken) &&
+        timingSafeEqualString(providedSessionToken, storedSessionToken);
+
+      if (!authorizedBySession && !isInternalRequest(req)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Valid session_token or internal authorization is required to initiate PIN reset.',
+        });
+      }
+
+      const requestedUserId = normalizeIdentity(user_id);
+      const sessionUserId = normalizeIdentity(session.user_id);
+      const sessionEmail = normalizeIdentity(session.email);
+      const resolvedUserId = String(user_id || session.user_id || session.email || '').trim();
+
+      if (!resolvedUserId) {
+        return res.status(409).json({
+          success: false,
+          message: 'Session does not have a recoverable user identity.',
+        });
+      }
+
+      if (requestedUserId && requestedUserId !== sessionUserId && requestedUserId !== sessionEmail) {
+        return res.status(403).json({
+          success: false,
+          message: 'Requested user_id does not match the authenticated session.',
         });
       }
 
       const resetData = await PinResetService.generateResetToken(
-        String(user_id),
+        resolvedUserId,
         String(session_id)
       );
 
-      logger.info(`PIN reset initiated for user ${user_id}`);
+      logger.info(`PIN reset initiated for session ${session_id}`);
 
       return res.status(200).json({
         success: true,
         message: `Reset link generated. Valid for ${resetData.expires_in_minutes} minutes.`,
         reset_url: resetData.reset_url,
         expires_in_minutes: resetData.expires_in_minutes,
-        token: resetData.token, // For debugging or direct use
       });
     } catch (error: any) {
       logger.error(`PIN reset initiation error: ${error?.message || String(error)}`);

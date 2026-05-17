@@ -59,7 +59,9 @@ export class PinResetService {
         .insert({
           user_id: userId,
           session_id: sessionId,
-          reset_token: resetToken,
+          // Keep legacy NOT NULL/UNIQUE column populated without storing the
+          // bearer reset token in plaintext.
+          reset_token: tokenHash,
           token_hash: tokenHash,
           created_at: new Date().toISOString(),
           expires_at: expiresAt.toISOString(),
@@ -74,7 +76,7 @@ export class PinResetService {
         }
 
         logger.warn('pin_reset_tokens table not available; using JWT fallback reset token');
-        const fallbackToken = this.generatePinChangeJWT(userId, resetToken);
+        const fallbackToken = this.generatePinChangeJWT(userId, resetToken, sessionId);
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const fallbackResetUrl = `${frontendUrl}/change-pin?token=${encodeURIComponent(fallbackToken)}&user_id=${encodeURIComponent(userId)}`;
 
@@ -189,10 +191,16 @@ export class PinResetService {
       if (!tokenData) {
         // JWT fallback mode (stateless token): valid token but no DB token row.
         if (this.isJwtLikeToken(resetToken)) {
+          const verification = this.verifyPinChangeJWT(resetToken);
+          const sessionId = String(verification.data?.session_id || '').trim();
+          if (!sessionId) {
+            return { success: false, message: 'Token antigo inválido. Solicite um novo link de redefinição de PIN.' };
+          }
+
           const { error: updateError } = await supabase
             .from('agent_sessions')
             .update({ session_password_hash: newPinHash })
-            .eq('user_id', userId);
+            .eq('session_id', sessionId);
 
           if (updateError) {
             throw new Error(`Failed to update PIN: ${updateError.message}`);
@@ -209,7 +217,7 @@ export class PinResetService {
       const { error: updateError } = await supabase
         .from('agent_sessions')
         .update({ session_password_hash: newPinHash })
-        .eq('user_id', userId);
+        .eq('session_id', tokenData.session_id);
 
       if (updateError) {
         throw new Error(`Failed to update PIN: ${updateError.message}`);
@@ -241,12 +249,13 @@ export class PinResetService {
   /**
    * Generate JWT token for PIN change page
    */
-  static generatePinChangeJWT(userId: string, resetToken: string): string {
+  static generatePinChangeJWT(userId: string, resetToken: string, sessionId?: string): string {
     const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
     
     return jwt.sign(
       {
         user_id: userId,
+        session_id: sessionId,
         reset_token: resetToken,
         type: 'pin_reset',
       },
@@ -260,7 +269,7 @@ export class PinResetService {
    */
   static verifyPinChangeJWT(token: string): {
     valid: boolean;
-    data?: { user_id: string; reset_token: string; type: string };
+    data?: { user_id: string; session_id?: string; reset_token: string; type: string };
     error?: string;
   } {
     try {
