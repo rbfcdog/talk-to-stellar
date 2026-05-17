@@ -21,6 +21,7 @@ Arquivos usados no deploy:
 ```text
 evolution/Dockerfile
 evolution/railway.json
+evolution/railway-entrypoint.sh
 evolution/railway.env.example
 evolution/.dockerignore
 ```
@@ -30,6 +31,11 @@ O `Dockerfile` usa a imagem oficial:
 ```text
 evoapicloud/evolution-api:latest
 ```
+
+O wrapper `railway-entrypoint.sh` faz dois ajustes para Railway:
+
+1. Se `SERVER_PORT` nao estiver definido, usa o `PORT` injetado pela Railway.
+2. Preenche `DATABASE_URL` e `DATABASE_CONNECTION_URI` com o mesmo Postgres URL, porque a Evolution usa `DATABASE_CONNECTION_URI`, mas o script de migracao Prisma da imagem oficial espera `DATABASE_URL`.
 
 ## 1. Criar Servicos Necessarios no Railway
 
@@ -157,6 +163,7 @@ AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
 
 DATABASE_ENABLED=true
 DATABASE_PROVIDER=postgresql
+DATABASE_URL=${{Postgres.DATABASE_URL}}
 DATABASE_CONNECTION_URI=${{Postgres.DATABASE_URL}}
 DATABASE_CONNECTION_CLIENT_NAME=evolution
 DATABASE_SAVE_DATA_INSTANCE=true
@@ -229,6 +236,7 @@ TELEMETRY=false
 Se seus servicos Railway nao se chamarem exatamente `Postgres` e `Redis`, altere:
 
 ```env
+DATABASE_URL=${{NomeDoSeuPostgres.DATABASE_URL}}
 DATABASE_CONNECTION_URI=${{NomeDoSeuPostgres.DATABASE_URL}}
 CACHE_REDIS_URI=${{NomeDoSeuRedis.REDIS_URL}}
 ```
@@ -386,6 +394,8 @@ Verifique:
 
 - Public Networking habilitado.
 - `SERVER_PORT=${{PORT}}`.
+- `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+- `DATABASE_CONNECTION_URI=${{Postgres.DATABASE_URL}}`.
 - Deploy sem crash nos logs.
 - Healthcheck `/`.
 
@@ -432,6 +442,7 @@ EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
 Verifique se as referencias batem com os nomes reais dos servicos:
 
 ```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
 DATABASE_CONNECTION_URI=${{Postgres.DATABASE_URL}}
 CACHE_REDIS_URI=${{Redis.REDIS_URL}}
 ```
@@ -450,6 +461,7 @@ Se os servicos tiverem outro nome, troque `Postgres` e `Redis`.
 - [ ] Volume montado em `/evolution/instances`.
 - [ ] Variaveis coladas de `evolution/railway.env.example`.
 - [ ] `SERVER_URL` aponta para a Evolution.
+- [ ] `DATABASE_URL` e `DATABASE_CONNECTION_URI` apontam para o Postgres.
 - [ ] `WEBHOOK_GLOBAL_URL` aponta para o backend.
 - [ ] Backend tem `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE` e `EVOLUTION_WEBHOOK_SECRET`.
 - [ ] Manager abriu.

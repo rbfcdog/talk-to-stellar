@@ -9,6 +9,11 @@ FROM evoapicloud/evolution-api:latest
 ENV NODE_ENV=production
 ENV DOCKER_ENV=true
 
+COPY railway-entrypoint.sh /usr/local/bin/talktostellar-evolution-entrypoint
+RUN chmod +x /usr/local/bin/talktostellar-evolution-entrypoint
+
 # Railway injects PORT at runtime. Set SERVER_PORT=${{PORT}} in Railway
 # variables so Evolution listens on Railway's assigned port.
 EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/talktostellar-evolution-entrypoint"]
