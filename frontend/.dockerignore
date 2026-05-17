@@ -4,8 +4,10 @@ out
 coverage
 npm-debug.log
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 .git
 .DS_Store
 tsconfig.tsbuildinfo
