@@ -8,6 +8,41 @@ Local WhatsApp automation stack for TalkToStellar:
 - Redis on host port `6380`
 - Persistent WhatsApp session volume mounted at `/evolution/instances`
 
+## Railway Deploy
+
+This folder is deployable directly on Railway.
+
+Railway service settings:
+
+```text
+Source: GitHub repo
+Root Directory: evolution
+Builder: Dockerfile
+Build Command: blank
+Start Command: blank
+Volume Mount Path: /evolution/instances
+```
+
+Files used by Railway:
+
+```text
+Dockerfile
+railway.json
+railway.env.example
+```
+
+The Dockerfile wraps the official image:
+
+```text
+evoapicloud/evolution-api:latest
+```
+
+Create Railway Postgres and Redis services in the same project, then paste `railway.env.example` into the Evolution service variables and replace the placeholder URLs/secrets. Full instructions are in:
+
+```text
+../docs/EVOLUTION_RAILWAY_DEPLOYMENT.md
+```
+
 ## Important URL Rule
 
 Use this in your browser:

@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.production
+.env.*.local
+qr.html
+*.log
+data/
+instances/
+node_modules/
+.git/
+README.local.md
