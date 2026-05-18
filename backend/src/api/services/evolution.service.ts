@@ -23,7 +23,9 @@ type AgentResponse = {
 };
 
 const processedMessages = new Map<string, number>();
+const processedMessageContent = new Map<string, number>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
+const CONTENT_DEDUPE_TTL_MS = 90 * 1000;
 
 function normalizeBaseUrl(value: unknown): string {
   const raw = String(value || '').trim();
@@ -105,6 +107,9 @@ function cleanupProcessedMessages() {
   for (const [key, expiresAt] of processedMessages.entries()) {
     if (expiresAt <= now) processedMessages.delete(key);
   }
+  for (const [key, expiresAt] of processedMessageContent.entries()) {
+    if (expiresAt <= now) processedMessageContent.delete(key);
+  }
 }
 
 function hasProcessed(messageKey: string): boolean {
@@ -112,6 +117,18 @@ function hasProcessed(messageKey: string): boolean {
   if (processedMessages.has(messageKey)) return true;
   processedMessages.set(messageKey, Date.now() + PROCESSED_TTL_MS);
   return false;
+}
+
+function hasRecentlyProcessedContent(messageKey: string): boolean {
+  cleanupProcessedMessages();
+  if (processedMessageContent.has(messageKey)) return true;
+  processedMessageContent.set(messageKey, Date.now() + CONTENT_DEDUPE_TTL_MS);
+  return false;
+}
+
+function shouldSendFailureFallback(): boolean {
+  const value = String(process.env.EVOLUTION_SEND_FAILURE_FALLBACK || '').trim().toLowerCase();
+  return value === 'true' || value === '1';
 }
 
 function normalizeEvent(value: unknown): string {
@@ -286,7 +303,7 @@ async function sendAgentQuery(input: {
     .digest('hex')}`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 45000));
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 120000));
   try {
     const response = await fetch(agentQueryUrl(), {
       method: 'POST',
@@ -416,6 +433,11 @@ export class EvolutionService {
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
     }
 
+    const contentKey = `${instance}:${message.remoteJid}:${text.toLowerCase().replace(/\s+/g, ' ')}`;
+    if (hasRecentlyProcessedContent(contentKey)) {
+      return { received: true, replied: false, skipped: 'duplicate_content', recipient, instance };
+    }
+
     void this.replyWithAgent({
       instance,
       recipient,
@@ -429,6 +451,7 @@ export class EvolutionService {
       .catch((error) => {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+        if (!shouldSendFailureFallback()) return;
         void this.sendText(instance, recipient, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.')
           .catch((sendError) => {
             const sendMessage = sendError instanceof Error ? sendError.message : String(sendError);
