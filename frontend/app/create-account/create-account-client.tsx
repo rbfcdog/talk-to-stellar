@@ -66,6 +66,8 @@ type RecoveryResult =
 
 type PreparedPasskeyRegistration = {
   userId: string
+  sessionId: string
+  sessionToken: string
   challengeId: string
   options: any
 }
@@ -682,7 +684,7 @@ export default function CreateAccountClient({
 
       if (response.ok && payload.success && requestPasskey) {
         setPasskeyHint(L("Conta criada. Preparando biometria para este aparelho.", "Account created. Preparing biometrics for this device."))
-        void preparePasskeyRegistration(payload.userId || "")
+        void preparePasskeyRegistration(payload.userId || "", payload)
         return
       }
 
@@ -703,10 +705,17 @@ export default function CreateAccountClient({
     }
   }
 
-  async function preparePasskeyRegistration(userId: string) {
+  async function preparePasskeyRegistration(userId: string, authResult?: FinalizeResponse | null) {
     if (!userId) {
       setPasskeyStatus('error')
       setPasskeyError('Could not prepare biometrics right now.')
+      return false
+    }
+    const sessionId = String(authResult?.sessionId || result?.sessionId || "").trim()
+    const sessionToken = String(authResult?.sessionToken || result?.sessionToken || "").trim()
+    if (!sessionId || !sessionToken) {
+      setPasskeyStatus('error')
+      setPasskeyError('Sign in again before enabling biometrics.')
       return false
     }
 
@@ -728,7 +737,11 @@ export default function CreateAccountClient({
       const initRes = await fetch(`/api/passkeys/register-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({
+          user_id: userId,
+          session_id: sessionId,
+          session_token: sessionToken,
+        }),
       })
       const initPayload = await initRes.json().catch(() => ({}))
       if (!initRes.ok || !initPayload.success || !initPayload.options || !initPayload.challengeId) {
@@ -737,6 +750,8 @@ export default function CreateAccountClient({
 
       setPreparedPasskeyRegistration({
         userId,
+        sessionId,
+        sessionToken,
         challengeId: String(initPayload.challengeId),
         options: initPayload.options,
       })
@@ -770,7 +785,7 @@ export default function CreateAccountClient({
 
     const prepared = preparedPasskeyRegistration?.userId === userId ? preparedPasskeyRegistration : null
     if (!prepared) {
-      const preparedNow = await preparePasskeyRegistration(userId)
+      const preparedNow = await preparePasskeyRegistration(userId, currentResult)
       if (preparedNow) {
         setPasskeyHint(L("Biometria pronta. Toque no botão novamente para abrir a confirmação.", "Biometrics ready. Tap the button again to open confirmation."))
       }
@@ -789,6 +804,8 @@ export default function CreateAccountClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
+          session_id: prepared.sessionId,
+          session_token: prepared.sessionToken,
           challenge_id: prepared.challengeId,
           credential,
         }),
@@ -797,7 +814,7 @@ export default function CreateAccountClient({
       if (!completeRes.ok || !completePayload.success) {
         const serverMessage = String(completePayload?.message || "")
         if (isPasskeyChallengeExpiredMessage(serverMessage)) {
-          await preparePasskeyRegistration(userId)
+          await preparePasskeyRegistration(userId, currentResult)
           setPasskeyHint(L("A confirmação expirou. Toque no botão novamente.", "Confirmation expired. Tap the button again."))
           return
         }
@@ -823,7 +840,7 @@ export default function CreateAccountClient({
     } catch (err: any) {
       const message = getPasskeyErrorMessage(err)
       if (isPasskeyChallengeExpiredMessage(message) || message.toLowerCase().includes("expired")) {
-        await preparePasskeyRegistration(userId)
+        await preparePasskeyRegistration(userId, currentResult)
         setPasskeyHint(L("A confirmação expirou. Toque no botão novamente.", "Confirmation expired. Tap the button again."))
         return
       }
