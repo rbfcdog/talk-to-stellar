@@ -110,11 +110,11 @@ POST /api/security/reset-pin-finalize
 
 ```
 POST /api/passkeys/register-init
-  Body: { user_id } ou { token }
+  Body: { user_id, session_id, session_token }
   Response: { success, userId, options, challenge_id }
 
 POST /api/passkeys/register-complete
-  Body: { user_id, challenge_id, credential }
+  Body: { user_id, session_id, session_token, challenge_id, credential }
   Response: { success, message }
 
 POST /api/passkeys/auth-init

@@ -19,6 +19,7 @@ import { AgentRepository } from '../repositories/agent.repository';
 import { WalletRepository } from '../repositories/wallet.repository';
 import { StellarService } from '../api/services/stellar.service';
 import { AuthService } from '../api/services/auth.service';
+import { isSessionExpired } from '../utils/session-expiry';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -89,6 +90,27 @@ function hashBase64Url(value: string) {
   return crypto.createHash('sha256').update(value).digest('base64url');
 }
 
+function hashSecret(value: string) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function normalizeIdentity(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function passkeyAuthorizationError(message: string, statusCode = 401): Error {
+  const error = new Error(message) as Error & { statusCode?: number };
+  error.statusCode = statusCode;
+  return error;
+}
+
 function getPasskeyChallengeTtlMs() {
   const parsedSeconds = Number(String(process.env.PASSKEY_CHALLENGE_TTL_SECONDS || '900').trim());
   if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) return 15 * 60_000;
@@ -126,6 +148,12 @@ type ChallengeRow = {
   payload: any;
   expires_at: string;
   used_at?: string | null;
+};
+
+export type PasskeyRegistrationAuthorization = {
+  userId: string;
+  sessionId: string;
+  sessionTokenHash: string;
 };
 
 function toWebAuthnCredential(passkey: StoredPasskey): WebAuthnCredential {
@@ -263,7 +291,51 @@ export class PasskeyService {
     return String(session.user_id);
   }
 
-  static async generateRegistration(userId: string) {
+  static async authorizeRegistration(input: {
+    userId?: string;
+    email?: string;
+    sessionId?: string;
+    sessionToken?: string;
+  }): Promise<PasskeyRegistrationAuthorization> {
+    const sessionId = String(input.sessionId || '').trim();
+    const sessionToken = String(input.sessionToken || '').trim();
+    if (!sessionId || !sessionToken) {
+      throw passkeyAuthorizationError('Valid session_id and session_token are required to register a passkey.');
+    }
+
+    const session = await agentRepo.getSession(sessionId);
+    if (!session || isSessionExpired(session)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in again before registering a passkey.');
+    }
+
+    const storedSessionToken = String((session as any).session_token || '').trim();
+    if (!storedSessionToken || !timingSafeEqualString(storedSessionToken, sessionToken)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in again before registering a passkey.');
+    }
+
+    const sessionUserId = normalizeIdentity((session as any).user_id);
+    const sessionEmail = normalizeIdentity((session as any).email);
+    const requestedUserId = normalizeIdentity(input.userId);
+    const requestedEmail = normalizeIdentity(input.email);
+    const requestedIdentity = requestedUserId || requestedEmail;
+    if (requestedIdentity && requestedIdentity !== sessionUserId && requestedIdentity !== sessionEmail) {
+      throw passkeyAuthorizationError('Passkey registration is not authorized for this account.', 403);
+    }
+
+    const resolvedUserId = String((session as any).user_id || (session as any).email || '').trim();
+    if (!resolvedUserId) {
+      throw passkeyAuthorizationError('Session does not have a user identity for passkey registration.', 409);
+    }
+
+    return {
+      userId: resolvedUserId,
+      sessionId,
+      sessionTokenHash: hashSecret(sessionToken),
+    };
+  }
+
+  static async generateRegistration(authorization: PasskeyRegistrationAuthorization) {
+    const userId = authorization.userId;
     const passkeys = await this.getUserPasskeys(userId);
     const challenge = generateChallengeBytes();
     const options = await generateRegistrationOptions({
@@ -285,7 +357,14 @@ export class PasskeyService {
         transports: passkey.transports,
       })),
     });
-    const challengeRow = await this.storeChallenge(userId, 'registration', options.challenge, { userId });
+    const challengeRow = await this.storeChallenge(userId, 'registration', options.challenge, {
+      userId,
+      authorization: {
+        method: 'session',
+        sessionId: authorization.sessionId,
+        sessionTokenHash: authorization.sessionTokenHash,
+      },
+    });
 
     return { options, challengeId: challengeRow.id };
   }
@@ -326,10 +405,19 @@ export class PasskeyService {
     };
   }
 
-  static async verifyRegistration(userId: string, challengeId: string, response: RegistrationResponseJSON) {
+  static async verifyRegistration(authorization: PasskeyRegistrationAuthorization, challengeId: string, response: RegistrationResponseJSON) {
+    const userId = authorization.userId;
     const challenge = await this.getChallenge(challengeId, 'registration');
     if (challenge.user_id !== userId) {
       throw new Error('Passkey challenge user mismatch');
+    }
+    const challengeAuthorization = challenge.payload?.authorization || {};
+    if (
+      challengeAuthorization.method !== 'session' ||
+      String(challengeAuthorization.sessionId || '') !== authorization.sessionId ||
+      String(challengeAuthorization.sessionTokenHash || '') !== authorization.sessionTokenHash
+    ) {
+      throw passkeyAuthorizationError('Passkey registration challenge is not authorized for this session.', 403);
     }
 
     const verification = await verifyRegistrationResponse({

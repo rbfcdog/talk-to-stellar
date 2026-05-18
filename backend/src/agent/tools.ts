@@ -8,7 +8,6 @@ import { getStellarService } from "../services/stellar.service";
 import { StellarService as ApiStellarService } from "../api/services/stellar.service";
 import { UserService } from "../api/services/user.service";
 import { PinResetService } from "../services/pin-reset.service";
-import PasskeyService from "../services/passkey.service";
 import { logger } from "../utils/logger";
 import { supabase } from "../config/supabase";
 import { WalletRepository } from "../repositories/wallet.repository";
@@ -1012,7 +1011,7 @@ export const toolDefinitions = [
   },
   {
     name: "restart_onboarding",
-    description: "Restart the onboarding process. Allows user to set/reset PIN and passkey. Use when user explicitly wants to register or needs to set up security credentials.",
+    description: "Restart the onboarding process and set/reset the PIN. Passkey setup must be completed through an authenticated frontend session.",
     parameters: {
       type: "object",
       properties: {
@@ -1038,7 +1037,7 @@ export const toolDefinitions = [
         },
         request_passkey: {
           type: "boolean",
-          description: "Whether user wants to set up a passkey (true/false)",
+          description: "Whether user asked about passkey setup. The tool must not enroll passkeys directly.",
         },
       },
       required: ["session_id", "pin"],
@@ -4570,22 +4569,10 @@ async function executeRestartOnboarding(input: any): Promise<string> {
       });
     }
 
-    // Generate passkey registration URL if requested
-    let passkeyUrl: string | undefined;
-    if (requestPasskey) {
-      try {
-        const result = await PasskeyService.generateRegistration(finalUserId);
-
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        passkeyUrl = `${frontendUrl}/passkey-register?challenge_id=${result.challengeId}&user_id=${finalUserId}`;
-
-        logger.info(`Passkey registration URL generated for user ${finalUserId}`);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.warn(`Could not generate passkey registration: ${errorMessage}`);
-        // Don't fail the onboarding if passkey setup fails, just log it
-      }
-    }
+    // Passkey enrollment is intentionally not performed from the agent/tool layer.
+    // It requires an authenticated frontend session so the WebAuthn credential is
+    // bound to the account owner, not merely to a user_id supplied in chat.
+    const passkeyUrl: string | undefined = undefined;
 
     // Build response message
     const messages = [
@@ -4597,7 +4584,7 @@ async function executeRestartOnboarding(input: any): Promise<string> {
       messages.push(`Próximo passo: Configure sua Passkey (biometria/face) para maior segurança`);
       messages.push(`Abra este link: ${passkeyUrl}`);
     } else if (requestPasskey && !passkeyUrl) {
-      messages.push(`A Passkey não pôde ser configurada neste dispositivo. Tente novamente depois.`);
+      messages.push(`Por segurança, a Passkey deve ser ativada pela página autenticada da sua conta depois do login.`);
     } else {
       messages.push(`Você pode configurar uma Passkey depois se quiser.`);
     }
