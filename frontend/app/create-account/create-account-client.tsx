@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { startRegistration } from '@simplewebauthn/browser'
+import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable, startRegistration } from '@simplewebauthn/browser'
 import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
@@ -107,6 +107,12 @@ function readableErrorMessage(error: any) {
   return error instanceof Error ? error.message : String(error || "")
 }
 
+function isLikelyEmbeddedBrowser() {
+  if (typeof navigator === "undefined") return false
+  const userAgent = navigator.userAgent || ""
+  return /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|LinkedInApp|Twitter|; wv\)/i.test(userAgent)
+}
+
 function looksLikeEmail(value?: string): boolean {
   const normalized = String(value || "").trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
@@ -143,6 +149,7 @@ export default function CreateAccountClient({
   const [passkeyStatus, setPasskeyStatus] = useState<"idle" | "preparing" | "registering" | "authenticating" | "done" | "error">("idle")
   const [passkeyError, setPasskeyError] = useState("")
   const [passkeyHint, setPasskeyHint] = useState("")
+  const [passkeyUnavailableReason, setPasskeyUnavailableReason] = useState("")
   const [preparedPasskeyRegistration, setPreparedPasskeyRegistration] = useState<PreparedPasskeyRegistration | null>(null)
   const [passkeyQrTargetUrl, setPasskeyQrTargetUrl] = useState("")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
@@ -177,7 +184,7 @@ export default function CreateAccountClient({
   const tokenPayload = useMemo(() => validation?.payload || decodeJwtPayload(token), [validation, token])
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
-  const passkeyButtonDisabled = passkeyStatus === "preparing" || passkeyStatus === "registering" || passkeyStatus === "done"
+  const passkeyButtonDisabled = Boolean(passkeyUnavailableReason) || passkeyStatus === "preparing" || passkeyStatus === "registering" || passkeyStatus === "done"
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
   const passkeyLoginEmail = useMemo(() => {
     const candidates = [email, result?.userId]
@@ -352,6 +359,42 @@ export default function CreateAccountClient({
       return { token: recovered.token, browserId: freshBrowserId }
     }
     return {}
+  }
+
+  async function getPasskeyUnavailableReason(): Promise<string> {
+    if (typeof window === "undefined") return ""
+
+    if (!browserSupportsWebAuthn()) {
+      return L(
+        "Este navegador nao suporta Passkey. A conta ja funciona com PIN.",
+        "This browser does not support Passkey. The account already works with PIN.",
+      )
+    }
+
+    const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    if (!window.isSecureContext && !isLocalhost) {
+      return L(
+        "Passkey precisa abrir em HTTPS. A conta ja funciona com PIN.",
+        "Passkey must open on HTTPS. The account already works with PIN.",
+      )
+    }
+
+    if (isLikelyEmbeddedBrowser()) {
+      return L(
+        "Conta criada. Para ativar biometria, abra este link no Chrome ou Safari, fora do navegador do WhatsApp.",
+        "Account created. To enable biometrics, open this link in Chrome or Safari, outside WhatsApp's in-app browser.",
+      )
+    }
+
+    const platformAvailable = await platformAuthenticatorIsAvailable().catch(() => false)
+    if (!platformAvailable) {
+      return L(
+        "Este aparelho/navegador nao liberou biometria agora. A conta ja funciona com PIN.",
+        "This device/browser did not make biometrics available now. The account already works with PIN.",
+      )
+    }
+
+    return ""
   }
 
   useEffect(() => {
@@ -671,8 +714,17 @@ export default function CreateAccountClient({
     setPasskeyError("")
     setPasskeyHint(L("Preparando biometria para este aparelho.", "Preparing biometrics for this device."))
     setPreparedPasskeyRegistration(null)
+    setPasskeyUnavailableReason("")
 
     try {
+      const unavailableReason = await getPasskeyUnavailableReason()
+      if (unavailableReason) {
+        setPasskeyStatus('idle')
+        setPasskeyHint(unavailableReason)
+        setPasskeyUnavailableReason(unavailableReason)
+        return false
+      }
+
       const initRes = await fetch(`/api/passkeys/register-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -689,6 +741,7 @@ export default function CreateAccountClient({
         options: initPayload.options,
       })
       setPasskeyStatus('idle')
+      setPasskeyUnavailableReason("")
       setPasskeyHint(L("Biometria pronta. Toque no botão para confirmar no celular.", "Biometrics ready. Tap the button to confirm on your phone."))
       return true
     } catch (err: any) {
@@ -706,11 +759,14 @@ export default function CreateAccountClient({
       return
     }
 
-    if (!window.PublicKeyCredential) {
-      setPasskeyStatus('error')
-      setPasskeyError('This browser does not support Passkey/WebAuthn.')
+    const unavailableReason = await getPasskeyUnavailableReason()
+    if (unavailableReason) {
+      setPasskeyStatus('idle')
+      setPasskeyHint(unavailableReason)
+      setPasskeyUnavailableReason(unavailableReason)
       return
     }
+    setPasskeyUnavailableReason("")
 
     const prepared = preparedPasskeyRegistration?.userId === userId ? preparedPasskeyRegistration : null
     if (!prepared) {

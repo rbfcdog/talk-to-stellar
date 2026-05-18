@@ -10,6 +10,7 @@ import type {
   AuthenticationResponseJSON,
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
+  UserVerificationRequirement,
   WebAuthnCredential,
 } from '@simplewebauthn/server';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -98,6 +99,12 @@ function getPasskeyOperationTimeoutMs() {
   const parsedMs = Number(String(process.env.PASSKEY_OPERATION_TIMEOUT_MS || '180000').trim());
   if (!Number.isFinite(parsedMs) || parsedMs < 30_000) return 180_000;
   return Math.trunc(parsedMs);
+}
+
+function getPasskeyUserVerification(): UserVerificationRequirement {
+  return String(process.env.PASSKEY_USER_VERIFICATION || 'preferred').trim().toLowerCase() === 'required'
+    ? 'required'
+    : 'preferred';
 }
 
 type StoredPasskey = {
@@ -271,7 +278,7 @@ export class PasskeyService {
       authenticatorSelection: {
         residentKey: 'preferred',
         requireResidentKey: false,
-        userVerification: 'required',
+        userVerification: getPasskeyUserVerification(),
       },
       excludeCredentials: passkeys.map((passkey) => ({
         id: passkey.credential_id,
@@ -307,7 +314,7 @@ export class PasskeyService {
         id: passkey.credential_id,
         transports: passkey.transports,
       })),
-      userVerification: 'required',
+      userVerification: getPasskeyUserVerification(),
     });
     const challengeRow = await this.storeChallenge(userId, 'authentication', options.challenge, challengePayload);
 
@@ -330,7 +337,7 @@ export class PasskeyService {
       expectedChallenge: expectedChallengeMatches(challenge.challenge),
       expectedOrigin: getExpectedOrigin(),
       expectedRPID: getRpID(),
-      requireUserVerification: true,
+      requireUserVerification: getPasskeyUserVerification() === 'required',
     });
 
     if (!verification.verified || !verification.registrationInfo) {
@@ -378,7 +385,7 @@ export class PasskeyService {
       expectedOrigin: getExpectedOrigin(),
       expectedRPID: getRpID(),
       credential: toWebAuthnCredential(passkey),
-      requireUserVerification: true,
+      requireUserVerification: getPasskeyUserVerification() === 'required',
     });
 
     if (!verification.verified) {
