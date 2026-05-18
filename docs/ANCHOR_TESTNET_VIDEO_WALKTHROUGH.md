@@ -119,7 +119,7 @@ npm run dev
 https://stellar.expert/explorer/testnet
 ```
 
-5. Tenha `SESSION_ID_AQUI` e `SESSION_TOKEN_AQUI` de uma sessao com wallet criada.
+5. Tenha `SESSION_ID_MOCKADO` e `SESSION_TOKEN_MOCKADO` de uma sessao com wallet criada. Na gravacao, use valores reais apenas no terminal local e nunca deixe esses valores salvos no documento.
 
 Nunca mostre:
 
@@ -484,8 +484,8 @@ Terminal de `curl`:
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "SESSION_ID_AQUI",
-    "session_token": "SESSION_TOKEN_AQUI",
+    "session_id": "SESSION_ID_MOCKADO",
+    "session_token": "SESSION_TOKEN_MOCKADO",
     "amount": "10",
     "final_asset": "BRL"
   }' | jq
@@ -497,8 +497,8 @@ Sem `jq`:
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/test-onramp \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "SESSION_ID_AQUI",
-    "session_token": "SESSION_TOKEN_AQUI",
+    "session_id": "SESSION_ID_MOCKADO",
+    "session_token": "SESSION_TOKEN_MOCKADO",
     "amount": "10",
     "final_asset": "BRL"
   }'
@@ -620,31 +620,31 @@ curl -s http://localhost:3001/api/ramp/etherfuse/config | jq
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/customer \
   -H "Content-Type: application/json" \
-  -d '{"session_id":"SESSION_ID_AQUI","session_token":"SESSION_TOKEN_AQUI","country":"BR"}' | jq
+  -d '{"session_id":"SESSION_ID_MOCKADO","session_token":"SESSION_TOKEN_MOCKADO","country":"BR"}' | jq
 ```
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/quote \
   -H "Content-Type: application/json" \
-  -d '{"session_id":"SESSION_ID_AQUI","session_token":"SESSION_TOKEN_AQUI","customer_id":"CUSTOMER_ID","direction":"onramp","amount":"10","final_asset":"BRL"}' | jq
+  -d '{"session_id":"SESSION_ID_MOCKADO","session_token":"SESSION_TOKEN_MOCKADO","customer_id":"CUSTOMER_ID","direction":"onramp","amount":"10","final_asset":"BRL"}' | jq
 ```
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/trustline \
   -H "Content-Type: application/json" \
-  -d '{"session_id":"SESSION_ID_AQUI","session_token":"SESSION_TOKEN_AQUI"}' | jq
+  -d '{"session_id":"SESSION_ID_MOCKADO","session_token":"SESSION_TOKEN_MOCKADO"}' | jq
 ```
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/onramp \
   -H "Content-Type: application/json" \
-  -d '{"session_id":"SESSION_ID_AQUI","session_token":"SESSION_TOKEN_AQUI","customer_id":"CUSTOMER_ID","quote_id":"QUOTE_ID","amount":"10","final_asset":"BRL"}' | jq
+  -d '{"session_id":"SESSION_ID_MOCKADO","session_token":"SESSION_TOKEN_MOCKADO","customer_id":"CUSTOMER_ID","quote_id":"QUOTE_ID","amount":"10","final_asset":"BRL"}' | jq
 ```
 
 ```bash
 curl -s -X POST http://localhost:3001/api/ramp/etherfuse/sandbox/simulate-fiat \
   -H "Content-Type: application/json" \
-  -d '{"session_id":"SESSION_ID_AQUI","session_token":"SESSION_TOKEN_AQUI","order_id":"ORDER_ID","operation_id":"OPERATION_ID"}' | jq
+  -d '{"session_id":"SESSION_ID_MOCKADO","session_token":"SESSION_TOKEN_MOCKADO","order_id":"ORDER_ID","operation_id":"OPERATION_ID"}' | jq
 ```
 
 ```bash
