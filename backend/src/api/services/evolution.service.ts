@@ -1,4 +1,5 @@
 import { logger } from '../../utils/logger';
+import { supabase } from '../../config/supabase';
 import crypto from 'crypto';
 
 type EvolutionMessage = {
@@ -25,7 +26,9 @@ type AgentResponse = {
 const processedMessages = new Map<string, number>();
 const processedMessageContent = new Map<string, number>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
-const CONTENT_DEDUPE_TTL_MS = 90 * 1000;
+const DEFAULT_CONTENT_DEDUPE_TTL_MS = 90 * 1000;
+
+type PersistentDedupeStatus = 'reserved' | 'duplicate' | 'unavailable';
 
 function normalizeBaseUrl(value: unknown): string {
   const raw = String(value || '').trim();
@@ -112,6 +115,12 @@ function cleanupProcessedMessages() {
   }
 }
 
+function contentDedupeTtlMs(): number {
+  const configured = Number(process.env.EVOLUTION_CONTENT_DEDUPE_TTL_MS || DEFAULT_CONTENT_DEDUPE_TTL_MS);
+  if (!Number.isFinite(configured) || configured < 10_000) return DEFAULT_CONTENT_DEDUPE_TTL_MS;
+  return Math.min(configured, 10 * 60 * 1000);
+}
+
 function hasProcessed(messageKey: string): boolean {
   cleanupProcessedMessages();
   if (processedMessages.has(messageKey)) return true;
@@ -122,8 +131,101 @@ function hasProcessed(messageKey: string): boolean {
 function hasRecentlyProcessedContent(messageKey: string): boolean {
   cleanupProcessedMessages();
   if (processedMessageContent.has(messageKey)) return true;
-  processedMessageContent.set(messageKey, Date.now() + CONTENT_DEDUPE_TTL_MS);
+  processedMessageContent.set(messageKey, Date.now() + contentDedupeTtlMs());
   return false;
+}
+
+function normalizeDedupeText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function dedupeHash(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function evolutionDedupeKey(kind: string, value: string): string {
+  return `evolution_${kind}_${dedupeHash(value)}`;
+}
+
+function isUniqueViolation(error: any): boolean {
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || '').toLowerCase();
+  return code === '23505' || message.includes('duplicate key');
+}
+
+async function reservePersistentDedupeKey(
+  idempotencyKey: string,
+  requestPayload: Record<string, unknown>
+): Promise<PersistentDedupeStatus> {
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('idempotency_keys').insert({
+    idempotency_key: idempotencyKey,
+    request_hash: dedupeHash(JSON.stringify(requestPayload)),
+    method: 'POST',
+    route: '/api/evolution/webhook',
+    status: 'completed',
+    response_status: 200,
+    response_body: {
+      success: true,
+      dedupe: 'evolution_webhook',
+    },
+    locked_at: now,
+    completed_at: now,
+    created_at: now,
+    updated_at: now,
+  });
+
+  if (!error) return 'reserved';
+  if (isUniqueViolation(error)) return 'duplicate';
+
+  const message = String((error as any)?.message || error);
+  logger.warn(`[evolution-webhook] persistent dedupe unavailable: ${message}`);
+  return 'unavailable';
+}
+
+async function reserveEvolutionWebhookDedupe(input: {
+  instance: string;
+  remoteJid: string;
+  messageId: string;
+  text: string;
+}): Promise<string> {
+  const normalizedText = normalizeDedupeText(input.text);
+  const ttl = contentDedupeTtlMs();
+  const bucket = Math.floor(Date.now() / ttl);
+  const commonPayload = {
+    instance: input.instance,
+    remote_jid: input.remoteJid,
+    message_id: input.messageId,
+    text_hash: dedupeHash(normalizedText),
+  };
+
+  const reservations = [
+    {
+      reason: 'duplicate_persistent_message',
+      key: evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}`),
+      payload: {
+        ...commonPayload,
+        dedupe_kind: 'message_id',
+      },
+    },
+    {
+      reason: 'duplicate_persistent_content',
+      key: evolutionDedupeKey('incoming_content', `${input.instance}:${input.remoteJid}:${normalizedText}:${bucket}`),
+      payload: {
+        ...commonPayload,
+        dedupe_kind: 'content',
+        bucket,
+        ttl_ms: ttl,
+      },
+    },
+  ];
+
+  for (const reservation of reservations) {
+    const status = await reservePersistentDedupeKey(reservation.key, reservation.payload);
+    if (status === 'duplicate') return reservation.reason;
+  }
+
+  return '';
 }
 
 function shouldSendFailureFallback(): boolean {
@@ -433,9 +535,19 @@ export class EvolutionService {
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
     }
 
-    const contentKey = `${instance}:${message.remoteJid}:${text.toLowerCase().replace(/\s+/g, ' ')}`;
+    const contentKey = `${instance}:${message.remoteJid}:${normalizeDedupeText(text)}`;
     if (hasRecentlyProcessedContent(contentKey)) {
       return { received: true, replied: false, skipped: 'duplicate_content', recipient, instance };
+    }
+
+    const persistentDuplicate = await reserveEvolutionWebhookDedupe({
+      instance,
+      remoteJid: message.remoteJid,
+      messageId: message.messageId,
+      text,
+    });
+    if (persistentDuplicate) {
+      return { received: true, replied: false, skipped: persistentDuplicate, recipient, instance };
     }
 
     void this.replyWithAgent({
