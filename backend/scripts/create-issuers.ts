@@ -1,17 +1,27 @@
 import { Keypair } from '@stellar/stellar-sdk';
 import { StellarService } from '../src/api/services/stellar.service';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
+
+function readBoolean(value: unknown): boolean {
+  return ['1', 'true', 'yes', 'y', 'on'].includes(String(value || '').trim().toLowerCase());
+}
 
 async function createTestIssuers() {
+  assertTestnetOnlyScript('create-issuers', process.env.STELLAR_HORIZON_URL);
+
   console.log('\n' + '='.repeat(60));
   console.log('Creating Test Issuer Accounts');
   console.log('='.repeat(60));
 
   try {
+    const revealSecrets = readBoolean(process.env.REVEAL_TESTNET_SECRET_KEYS);
+
     // Create USDC issuer account
     const usdcKeypair = Keypair.random();
-    console.log(`\nUSDP Issuer Account:`);
+    const usdcSecret = usdcKeypair.secret();
+    console.log(`\nUSDC Issuer Account:`);
     console.log(`  Public Key:  ${usdcKeypair.publicKey()}`);
-    console.log(`  Secret Key:  ${usdcKeypair.secret()}`);
+    console.log(`  Secret material: ${revealSecrets ? usdcSecret : 'hidden; set REVEAL_TESTNET_SECRET_KEYS=true only for disposable Testnet keys'}`);
     console.log(`  Status: Funding with Friendbot...`);
     
     await StellarService.fundWithFriendbot(usdcKeypair.publicKey());
@@ -19,9 +29,10 @@ async function createTestIssuers() {
 
     // Create BRL issuer account
     const brlKeypair = Keypair.random();
+    const brlSecret = brlKeypair.secret();
     console.log(`\nBRL Issuer Account:`);
     console.log(`  Public Key:  ${brlKeypair.publicKey()}`);
-    console.log(`  Secret Key:  ${brlKeypair.secret()}`);
+    console.log(`  Secret material: ${revealSecrets ? brlSecret : 'hidden; set REVEAL_TESTNET_SECRET_KEYS=true only for disposable Testnet keys'}`);
     console.log(`  Status: Funding with Friendbot...`);
     
     await StellarService.fundWithFriendbot(brlKeypair.publicKey());

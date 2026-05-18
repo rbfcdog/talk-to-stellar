@@ -16,6 +16,7 @@ O que foi criado:
 - Perfis isolados de rede em `backend/src/infrastructure/stellar/network-profiles.ts`.
 - Config/readiness Mainnet em `backend/src/infrastructure/stellar/mainnet-infrastructure.ts`.
 - Script de validacao em `backend/scripts/stellar-mainnet-readiness.ts`.
+- Script de auditoria estatica em `backend/scripts/stellar-mainnet-audit.ts`.
 - Exemplo de env em `backend/.env.mainnet.example`.
 - Migration preparatoria em `backend/migrations/20260518_00_prepare_stellar_mainnet_infrastructure.sql`.
 - Testes em `backend/tests/stellar-mainnet-infrastructure.test.ts`.
@@ -72,6 +73,7 @@ As variaveis novas sao isoladas e usam prefixo `STELLAR_MAINNET_*`:
 | `STELLAR_MAINNET_VAULT_SECRET_ID` | Referencia Vault se o signer for Vault. |
 | `STELLAR_MAINNET_REQUIRE_MANUAL_APPROVAL` | Deve ficar `true` no inicio. |
 | `STELLAR_MAINNET_MAX_PAYMENT_USDC` | Limite por pagamento no cutover. |
+| `STELLAR_MAINNET_ALLOW_BULK_MUTATION` | Libera scripts em massa depois de Mainnet ativa. Deve ficar `false` fora de janela aprovada. |
 | `STELLAR_MAINNET_SEP10_HOME_DOMAIN` | Dominio SEP-10 para autenticacao anchor/SEP. |
 | `STELLAR_MAINNET_STELLAR_TOML_URL` | URL publica do `stellar.toml`. |
 
@@ -117,6 +119,24 @@ O modo `strict` so deve passar quando:
 Enquanto o produto estiver em Testnet, o esperado e o readiness mostrar que o
 runtime atual esta seguro para Testnet, mas que a ativacao Mainnet ainda esta
 bloqueada por design.
+
+## Auditoria estatica
+
+Rode:
+
+```bash
+cd backend
+npm run stellar:mainnet:audit
+```
+
+O auditor procura passphrases erradas, scripts de Testnet sem guard, bulk
+mutations perigosas, SQL legado hostil a producao e nomes de env publicas que
+parecem conter segredo. Para CI:
+
+```bash
+cd backend
+npm run stellar:mainnet:audit:strict
+```
 
 ## Migration preparatoria
 

@@ -30,6 +30,7 @@ export interface MainnetSignerConfig {
 
 export interface MainnetOperationalControls {
   requireManualApproval: boolean;
+  allowBulkMutation: boolean;
   maxPaymentUsdc?: string;
 }
 
@@ -102,6 +103,7 @@ export function loadStellarMainnetInfrastructureConfig(
     },
     controls: {
       requireManualApproval: readBoolean(env.STELLAR_MAINNET_REQUIRE_MANUAL_APPROVAL, true),
+      allowBulkMutation: readBoolean(env.STELLAR_MAINNET_ALLOW_BULK_MUTATION, false),
       maxPaymentUsdc: readString(env.STELLAR_MAINNET_MAX_PAYMENT_USDC),
     },
     compliance: {
@@ -216,6 +218,15 @@ export function getStellarMainnetReadinessReport(
     config.controls.requireManualApproval
       ? 'Aprovacao manual esta obrigatoria para operacoes Mainnet.'
       : 'Aprovacao manual Mainnet desativada; mantenha true antes do cutover.'
+  );
+
+  addCheck(
+    checks,
+    'bulk-mutation-guard',
+    config.controls.allowBulkMutation ? 'warn' : 'pass',
+    config.controls.allowBulkMutation
+      ? 'Bulk mutation Mainnet esta liberada; use apenas em janela operacional aprovada.'
+      : 'Bulk mutation Mainnet esta bloqueada por padrao.'
   );
 
   addCheck(

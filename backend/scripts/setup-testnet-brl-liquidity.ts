@@ -8,11 +8,13 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 dotenv.config();
 
 const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const friendbotUrl = process.env.STELLAR_FRIENDBOT_URL || 'https://friendbot.stellar.org';
+assertTestnetOnlyScript('setup-testnet-brl-liquidity', horizonUrl);
 const server = new Horizon.Server(horizonUrl);
 const USDC_ISSUER = process.env.USDC_ISSUER || 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 const useDynamicRates = String(process.env.TESTNET_SETUP_USE_DYNAMIC_RATES || 'true').trim().toLowerCase() !== 'false';
@@ -226,10 +228,6 @@ async function topUpUsdcWithPathPayment(owner: Keypair, usdc: Asset, targetAmoun
 }
 
 async function main(): Promise<void> {
-  if (process.env.STELLAR_NETWORK === 'PUBLIC') {
-    throw new Error('This script is only for Stellar testnet.');
-  }
-
   if (useDynamicRates) {
     const dynamicRates = await resolveDynamicRates();
     brlPerUsdc = dynamicRates.brlPerUsdc;

@@ -1,8 +1,11 @@
 import { supabase } from '../src/config/supabase';
 import { VaultService } from '../src/services/vault.service';
 import { TrustlineService } from '../src/api/services/trustline.service';
+import { assertMainnetBulkMutationAllowed } from './stellar-script-safety';
 
 async function addTrustlinesToAllAccounts() {
+  assertMainnetBulkMutationAllowed('add-trustlines-all');
+
   console.log('\n' + '='.repeat(80));
   console.log('Adding USDC and BRL Trustlines to All Existing Accounts');
   console.log('='.repeat(80));

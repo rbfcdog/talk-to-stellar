@@ -4,6 +4,7 @@
 
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { logger } from '../utils/logger';
+import { stellarConfig } from '../config/stellar';
 
 // Server is under Horizon namespace in v14.1.1
 const { Server } = StellarSDK.Horizon;
@@ -29,8 +30,7 @@ let stellarServer: any = null;
 
 function getStellarServer(): any {
   if (!stellarServer) {
-    const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
-    stellarServer = new Server(horizonUrl);
+    stellarServer = new Server(stellarConfig.horizonUrl);
   }
   return stellarServer;
 }
@@ -99,9 +99,7 @@ export class StellarService {
 
       let builder = new StellarSDK.TransactionBuilder(sourceAccount, {
         fee: '100',
-        networkPassphrase: process.env.STELLAR_NETWORK === 'PUBLIC'
-          ? 'Public Global Stellar Network ; May 2015'
-          : 'Test StellarNetwork ; September 2015',
+        networkPassphrase: stellarConfig.network,
       });
 
       if (memo) {
@@ -143,9 +141,7 @@ export class StellarService {
       const server = getStellarServer();
       const transaction = StellarSDK.TransactionBuilder.fromXDR(
         xdr,
-        process.env.STELLAR_NETWORK === 'PUBLIC'
-          ? 'Public Global Stellar Network ; May 2015'
-          : 'Test StellarNetwork ; September 2015'
+        stellarConfig.network
       );
 
       const result = await server.submitTransaction(transaction);

@@ -14,8 +14,11 @@
 
 import { UserService } from '../src/api/services/user.service';
 import { supabase } from '../src/config/supabase';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 async function seedUsers() {
+  assertTestnetOnlyScript('seed-users', process.env.STELLAR_HORIZON_URL);
+
   const args = process.argv.slice(2);
   const countIndex = args.indexOf('--count');
   
