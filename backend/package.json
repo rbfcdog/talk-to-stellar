@@ -23,6 +23,8 @@
     "stellar:rebalance-brl-market:watch": "ts-node scripts/rebalance-testnet-brl-market.ts --watch",
     "stellar:setup-xlm-usdc-liquidity": "ts-node scripts/setup-xlm-usdc-liquidity.ts",
     "stellar:debug-path-quotes": "ts-node scripts/debug-path-quotes.ts",
+    "stellar:mainnet:readiness": "ts-node scripts/stellar-mainnet-readiness.ts",
+    "stellar:mainnet:readiness:strict": "ts-node scripts/stellar-mainnet-readiness.ts --strict",
     "stellar:backfill-default-trustlines": "ts-node scripts/backfill-default-trustlines.ts",
     "stellar:backfill-all-wallets-trustlines": "ts-node scripts/backfill-trustlines-all-existing-wallets.ts",
     "financial:backfill-global-profiles": "ts-node scripts/backfill-global-profiles.ts",
