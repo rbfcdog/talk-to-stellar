@@ -3,10 +3,6 @@ import { SupabaseClient } from '@supabase/supabase-js';
 export class VaultService {
   constructor(private supabase: SupabaseClient) {}
 
-  private escapeSqlLiteral(value: string): string {
-    return value.replace(/'/g, "''");
-  }
-
   private isDuplicateSecretNameError(error: any): boolean {
     const message = String(error?.message || '').toLowerCase();
     const code = String(error?.code || '');
@@ -20,16 +16,18 @@ export class VaultService {
   }
 
   private async getSecretIdByUniqueName(uniqueName: string): Promise<string | null> {
-    const sql = `select id::text as result from vault.secrets where name = '${this.escapeSqlLiteral(uniqueName)}' limit 1;`;
-    const { data, error } = await this.supabase.rpc('exec_sql', { sql });
+    const { data, error } = await this.supabase
+      .schema('vault')
+      .from('secrets')
+      .select('id')
+      .eq('name', uniqueName)
+      .maybeSingle();
 
     if (error || !data) {
       return null;
     }
 
-    const firstRow = Array.isArray(data) ? data[0] : data;
-    const id = (firstRow as any)?.result || (firstRow as any)?.id || (firstRow as any)?.secret_id || firstRow;
-    return id ? String(id) : null;
+    return (data as any)?.id ? String((data as any).id) : null;
   }
 
   async storeSecret(secretValue: string, uniqueName?: string, description?: string): Promise<string> {
@@ -53,39 +51,9 @@ export class VaultService {
       }
     }
 
-    // If primary RPC fails, try fallback via exec_sql
-    const errorMessage = String(error?.message || '').toLowerCase();
-    if (errorMessage.includes('could not find the function') || errorMessage.includes('schema cache')) {
-      try {
-        const secretDescription = description || '';
-        const secretName = uniqueName || '';
-        const sql = `select vault.create_secret('${this.escapeSqlLiteral(secretValue)}', ${secretName ? `'${this.escapeSqlLiteral(secretName)}'` : 'null'}, ${secretDescription ? `'${this.escapeSqlLiteral(secretDescription)}'` : 'null'}) as id;`;
-        const { data: execData, error: execError } = await this.supabase.rpc('exec_sql', { sql });
-
-        if (!execError && execData) {
-          const firstRow = Array.isArray(execData) ? execData[0] : execData;
-          const maybeId = (firstRow as any)?.result || (firstRow as any)?.id || (firstRow as any)?.secret_id || firstRow;
-          if (maybeId) {
-            return String(maybeId);
-          }
-        }
-
-        if (uniqueName && execError && this.isDuplicateSecretNameError(execError)) {
-          const existingSecretId = await this.getSecretIdByUniqueName(uniqueName);
-          if (existingSecretId) {
-            return existingSecretId;
-          }
-        }
-
-        throw execError || error;
-      } catch (execError) {
-        throw execError;
-      }
-    }
-
     throw new Error(
       `Failed to store secret in Vault: ${error?.message || JSON.stringify(error)}. ` +
-      `Ensure migrations have run. See backend/src/migrations/agent.migration.ts for setup.`
+      `Ensure the Vault RPC migrations have run and the backend is using SUPABASE_SERVICE_ROLE_KEY.`
     );
   }
 

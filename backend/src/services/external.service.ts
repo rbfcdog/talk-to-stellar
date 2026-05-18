@@ -7,9 +7,10 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { logger } from '../utils/logger';
 import { getAssetIssuer, normalizeAssetCode } from '../config/assets';
 import crypto from 'crypto';
+import { getRequiredJwtSecret } from '../config/secrets';
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'dev-secret-change-me';
+  return getRequiredJwtSecret();
 }
 
 function normalizeLanguage(value: unknown): 'pt-BR' | 'en' | '' {

@@ -1,4 +1,6 @@
 import { logger } from '../../utils/logger';
+import { isProductionLikeEnvironment } from '../../config/runtime';
+import { timingSafeEqualString } from '../../utils/password';
 import { supabase } from '../../config/supabase';
 import crypto from 'crypto';
 
@@ -510,8 +512,10 @@ export class EvolutionService {
 
   static verifyWebhookSecret(value: unknown): boolean {
     const expected = String(process.env.EVOLUTION_WEBHOOK_SECRET || '').trim();
-    if (!expected) return true;
-    return String(value || '').trim() === expected;
+    if (!expected) {
+      return !isProductionLikeEnvironment();
+    }
+    return timingSafeEqualString(String(value || '').trim(), expected);
   }
 
   static async handleWebhook(payload: any): Promise<EvolutionWebhookResult> {

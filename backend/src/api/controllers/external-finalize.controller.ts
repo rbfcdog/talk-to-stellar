@@ -35,6 +35,7 @@ import {
   EmailConfirmationPurpose,
   EmailConfirmationService,
 } from '../services/email-confirmation.service';
+import { getRequiredJwtSecret } from '../../config/secrets';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -150,7 +151,7 @@ function getTrustedSpendableAssets(account: any, destinationAsset: { code: strin
 }
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'dev-secret-change-me';
+  return getRequiredJwtSecret();
 }
 
 const agentRepo = new AgentRepository(supabase);
@@ -233,15 +234,6 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
   language: 'pt-BR' | 'en';
   metadata?: Record<string, unknown>;
 }): Promise<boolean> {
-  // Email confirmation infrastructure is intentionally kept in place, but the
-  // login/create-account gate is disabled for now. Re-enable by removing this
-  // early return once an email provider is configured and product wants the
-  // extra confirmation step again.
-  void req;
-  void res;
-  void input;
-  return true;
-
   const email = normalizeEmailForCompare(input.email || '');
   if (!email) return true;
 

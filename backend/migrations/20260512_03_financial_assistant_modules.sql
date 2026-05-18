@@ -65,7 +65,7 @@ CREATE TRIGGER update_global_profiles_updated_at
   BEFORE UPDATE ON public.global_profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-ALTER TABLE IF EXISTS public.invoices DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.global_profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.global_profiles ENABLE ROW LEVEL SECURITY;
 
 COMMIT;

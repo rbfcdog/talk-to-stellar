@@ -40,4 +40,4 @@ CREATE INDEX IF NOT EXISTS idx_receipt_images_user_created
 CREATE INDEX IF NOT EXISTS idx_receipt_images_expires_at
   ON public.receipt_images (expires_at);
 
-ALTER TABLE IF EXISTS public.receipt_images DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.receipt_images ENABLE ROW LEVEL SECURITY;

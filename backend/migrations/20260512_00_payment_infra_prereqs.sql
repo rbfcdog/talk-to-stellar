@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_confirmations_used ON public.payment_conf
 CREATE INDEX IF NOT EXISTS idx_payment_confirmations_used_at ON public.payment_confirmations (used_at);
 CREATE INDEX IF NOT EXISTS idx_payment_confirmations_completed_at ON public.payment_confirmations (completed_at DESC);
 
-ALTER TABLE IF EXISTS public.payment_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.payment_confirmations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.payment_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.payment_confirmations ENABLE ROW LEVEL SECURITY;
 
 COMMIT;

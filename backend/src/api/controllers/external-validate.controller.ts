@@ -3,9 +3,10 @@ import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { supabase } from '../../config/supabase'
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service'
+import { getRequiredJwtSecret } from '../../config/secrets'
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'dev-secret-change-me'
+  return getRequiredJwtSecret()
 }
 
 function tokenHash(token: string) {

@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_keys_route_status
   ON public.idempotency_keys (route, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_session
   ON public.idempotency_keys (session_id, created_at DESC);
-ALTER TABLE IF EXISTS public.idempotency_keys DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.idempotency_keys ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.telegram_update_dedupes (
   update_id TEXT PRIMARY KEY,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.telegram_update_dedupes (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-ALTER TABLE IF EXISTS public.telegram_update_dedupes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.telegram_update_dedupes ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.short_links (
   code TEXT PRIMARY KEY,
@@ -49,7 +49,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_short_links_token_purpose
   ON public.short_links (token_hash, purpose)
   WHERE token_hash IS NOT NULL AND purpose IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_short_links_expires_at ON public.short_links (expires_at);
-ALTER TABLE IF EXISTS public.short_links DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.short_links ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN

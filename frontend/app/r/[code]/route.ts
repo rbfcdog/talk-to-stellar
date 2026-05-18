@@ -16,7 +16,8 @@ function getBackendBaseUrl() {
   return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
 }
 
-export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ code: string }> }) {
+  const params = await context.params;
   const rawCode = String(params.code || "").trim();
   const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
   const encodedCode = encodeURIComponent(code);

@@ -14,19 +14,37 @@ import rampRouter from './api/routes/ramp.router';
 import evolutionRouter from './api/routes/evolution.router';
 import { idempotencyMiddleware } from './services/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
+import {
+  buildCorsOptions,
+  globalRateLimit,
+  securityHeaders,
+  sensitiveRateLimit,
+} from './api/middlewares/security.middleware';
+import { isProductionLikeEnvironment, readBooleanEnv } from './config/runtime';
 
 const app = express();
 
-// Run migrations on startup
-runMigrations(supabase).catch((error) => {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  logger.error(`Failed to run migrations: ${errorMessage}`);
-});
+app.set('trust proxy', 1);
 
-app.use(cors());
-app.options('*', cors());
+// Legacy startup migrations used exec_sql and disabled RLS. Keep them opt-in only.
+if (readBooleanEnv(process.env.RUN_LEGACY_STARTUP_MIGRATIONS)) {
+  runMigrations(supabase).catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to run migrations: ${errorMessage}`);
+  });
+} else {
+  logger.info('Legacy startup migrations disabled. Run database migrations explicitly from a trusted admin context.');
+}
+
+const corsOptions = buildCorsOptions();
+
+app.use(securityHeaders);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(globalRateLimit);
+app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing'], sensitiveRateLimit);
 app.use(idempotencyMiddleware);
 
 app.get('/health', (req, res) => {
@@ -70,11 +88,12 @@ app.use((req, res) => {
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
   const statusCode = err.statusCode || err.status || 500;
+  const productionLike = isProductionLikeEnvironment();
   
   logger.error(`Unhandled error: ${errorMessage}`);
   
   res.status(statusCode).json({
-    error: errorMessage || 'Internal Server Error',
+    error: productionLike && statusCode >= 500 ? 'Internal Server Error' : errorMessage || 'Internal Server Error',
     status: statusCode,
   });
 });

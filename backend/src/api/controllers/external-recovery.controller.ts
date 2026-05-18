@@ -1,19 +1,20 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
-import { hashPassword } from '../../utils/password';
+import { hashPassword, timingSafeEqualString } from '../../utils/password';
+import { getRequiredJwtSecret } from '../../config/secrets';
 
 function normalizePhone(value: string): string {
   return String(value || '').replace(/\D+/g, '');
 }
 
 function otpHash(phone: string, otp: string): string {
-  const secret = process.env.OTP_SECRET || process.env.JWT_SECRET || 'dev-otp-secret';
-  return crypto.createHash('sha256').update(`${phone}:${otp}:${secret}`).digest('hex');
+  const secret = process.env.OTP_SECRET || process.env.INTERNAL_API_SECRET || getRequiredJwtSecret();
+  return crypto.createHmac('sha256', secret).update(`${phone}:${otp}`).digest('hex');
 }
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 async function sendOtpViaWhatsApp(phone: string, otp: string): Promise<void> {
@@ -131,8 +132,8 @@ export default class ExternalRecoveryController {
         return res.status(400).json({ success: false, message: 'phone, otp and new_password are required' });
       }
 
-      if (newPassword.length < 4) {
-        return res.status(400).json({ success: false, message: 'new_password must have at least 4 characters' });
+      if (newPassword.length < 8) {
+        return res.status(400).json({ success: false, message: 'new_password must have at least 8 characters' });
       }
 
       const { data: otpRow, error: otpError } = await supabase
@@ -150,12 +151,16 @@ export default class ExternalRecoveryController {
         return res.status(400).json({ success: false, message: 'OTP already used' });
       }
 
+      if (Number(otpRow.attempts || 0) >= 5) {
+        return res.status(429).json({ success: false, message: 'Too many OTP attempts. Request a new code.' });
+      }
+
       if (new Date(otpRow.expires_at).getTime() < Date.now()) {
         return res.status(400).json({ success: false, message: 'OTP expired' });
       }
 
       const expected = otpHash(phone, otp);
-      if (expected !== String(otpRow.otp_hash || '')) {
+      if (!timingSafeEqualString(expected, String(otpRow.otp_hash || ''))) {
         const attempts = Number(otpRow.attempts || 0) + 1;
         await supabase
           .from('recovery_otps')

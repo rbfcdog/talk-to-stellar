@@ -84,11 +84,11 @@ export default function PayAnyoneClient() {
   }, [router, searchParams])
 
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId || !sessionToken) return
     let active = true
     async function loadProfileName() {
       try {
-        const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, { cache: "no-store" })
+        const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}?session_token=${encodeURIComponent(sessionToken)}`, { cache: "no-store" })
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}
         const nextName = friendlyName(String(profile.display_name || profile.username || ""))
@@ -103,7 +103,7 @@ export default function PayAnyoneClient() {
     return () => {
       active = false
     }
-  }, [sessionId])
+  }, [sessionId, sessionToken])
 
   useEffect(() => {
     if (status !== "done") return
@@ -120,7 +120,7 @@ export default function PayAnyoneClient() {
 
     try {
       if (mode === "receive") {
-        const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
+        const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}?session_token=${encodeURIComponent(sessionToken)}`, {
           method: "GET",
         })
         const payload = await response.json().catch(() => ({}))

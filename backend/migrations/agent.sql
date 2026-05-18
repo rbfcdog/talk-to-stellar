@@ -176,9 +176,31 @@ SELECT decrypted_secret
 FROM vault.decrypted_secrets
 WHERE id = secret_id;
 $$;
--- Set up RLS policies (disable for local development/testing, enable for production)
--- For local development with RLS disabled, you can insert/update/delete without restrictions
--- For production, uncomment the policies below:
+DO $$
+DECLARE
+  proc regprocedure;
+  role_name text;
+BEGIN
+  FOR proc IN
+    SELECT p.oid::regprocedure
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('store_private_key', 'get_private_key')
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', proc);
+    FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated']
+    LOOP
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', proc, role_name);
+      END IF;
+    END LOOP;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', proc);
+    END IF;
+  END LOOP;
+END $$;
+-- RLS stays enabled. The backend must use the Supabase service role.
 -- CREATE POLICY "Users can read their own sessions"
 --   ON agent_sessions FOR SELECT
 --   USING (auth.uid()::text = user_id);

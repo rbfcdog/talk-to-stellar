@@ -13,9 +13,10 @@ import {
   createVaultFunctions,
   ensureRequiredColumns,
   createFeaturesTables,
-  disableRLSOnAgentTables
+  enableRLSOnAgentTables
 } from '../migrations/agent.migration';
 import { logger } from './logger';
+import { isProductionLikeEnvironment, readBooleanEnv } from '../config/runtime';
 
 function isMissingTableError(error: any): boolean {
   const code = String(error?.code || '');
@@ -72,6 +73,14 @@ async function executeMigrationPhase(
 
 export async function runMigrations(supabase: SupabaseClient): Promise<void> {
   try {
+    if (!readBooleanEnv(process.env.ALLOW_LEGACY_SUPABASE_MIGRATIONS)) {
+      logger.warn('Legacy Supabase migration runner skipped. Set ALLOW_LEGACY_SUPABASE_MIGRATIONS=true only for trusted local/dev repair.');
+      return;
+    }
+    if (isProductionLikeEnvironment()) {
+      throw new Error('Refusing to run legacy Supabase migrations in hosted/production environments.');
+    }
+
     logger.info('Starting database migrations...');
 
     // Phase 1: Create exec_sql function (always run, idempotent with CREATE OR REPLACE)
@@ -150,15 +159,15 @@ export async function runMigrations(supabase: SupabaseClient): Promise<void> {
       logger.warn('Feature Tables phase had errors, but continuing...');
     }
 
-    // Phase 7: Disable RLS on agent tables (DEV environment - no RLS for agent tables)
+    // Phase 7 keeps RLS enabled on application tables.
     const phase7Success = await executeMigrationPhase(
       supabase,
-      'Disable RLS on Agent Tables',
-      disableRLSOnAgentTables
+      'Enable RLS on Application Tables',
+      enableRLSOnAgentTables
     );
 
     if (!phase7Success) {
-      logger.warn('Disable RLS phase had errors, but continuing...');
+      logger.warn('Enable RLS phase had errors, but continuing...');
     }
 
     const idempotencyMigrations = [

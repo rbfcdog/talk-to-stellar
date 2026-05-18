@@ -18,13 +18,51 @@ import { supabase } from "../config/supabase";
 import { isSessionExpired } from "../utils/session-expiry";
 import { TransferNotificationService } from "../api/services/transfer-notification.service";
 import { normalizeExternalProviderUserId } from "../repositories/external.repository";
+import { getRequiredJwtSecret } from "../config/secrets";
+import { timingSafeEqualString } from "../utils/password";
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "dev-secret-change-me";
+  return getRequiredJwtSecret();
 }
 
 function hashToken(value: string): string {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function readSessionToken(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+  return String(
+    req.body?.session_token ||
+      req.body?.sessionToken ||
+      req.query?.session_token ||
+      req.query?.sessionToken ||
+      req.headers['x-session-token'] ||
+      bearer ||
+      ''
+  ).trim();
+}
+
+async function requireAgentSessionAuth(
+  repository: AgentRepository,
+  sessionId: string,
+  req: Request,
+  res: Response
+): Promise<SessionData | null> {
+  const sessionToken = readSessionToken(req);
+  if (!sessionId || !sessionToken) {
+    res.status(401).json({ success: false, error: 'Session token required' });
+    return null;
+  }
+
+  const sessionData = await repository.getSession(sessionId);
+  const storedToken = String((sessionData as any)?.session_token || '').trim();
+  if (!sessionData || isSessionExpired(sessionData) || !storedToken || !timingSafeEqualString(storedToken, sessionToken)) {
+    res.status(401).json({ success: false, error: 'Invalid or expired session' });
+    return null;
+  }
+
+  return sessionData;
 }
 
 type LogoutReservation =
@@ -455,6 +493,7 @@ export function createAgentRoutes(
   ) => {
     try {
       const { query, session_id, source, metadata } = req.body;
+      const requestSessionToken = String(req.body?.session_token || req.body?.sessionToken || metadata?.session_token || '').trim();
       const requestLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale);
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
@@ -685,6 +724,9 @@ export function createAgentRoutes(
       const previousMessages = await repository.getMessages(sessionId, 10);
 
       const actionParams = { ...(previousState?.action_params || {}) };
+      if (requestSessionToken) {
+        (actionParams as any).session_token = requestSessionToken;
+      }
       if (Object.keys(runtimeExternalContext).length === 0) {
         delete (actionParams as any).external_provider;
         delete (actionParams as any).external_provider_user_id;
@@ -749,10 +791,8 @@ export function createAgentRoutes(
         });
       }
 
-      const sessionData = await repository.getSession(session_id);
-      if (!sessionData) {
-        return res.status(404).json({ error: "Session not found" });
-      }
+      const sessionData = await requireAgentSessionAuth(repository, session_id, req, res);
+      if (!sessionData) return;
 
       let resolvedPublicKey = String((sessionData as any).public_key || '').trim();
       if (!resolvedPublicKey) {
@@ -804,10 +844,8 @@ export function createAgentRoutes(
         });
       }
 
-      const sessionData = await repository.getSession(session_id);
-      if (!sessionData) {
-        return res.status(404).json({ error: "Session not found" });
-      }
+      const sessionData = await requireAgentSessionAuth(repository, session_id, req, res);
+      if (!sessionData) return;
 
       const messages = await repository.getMessages(session_id, limit);
       let responseMessages = messages;
@@ -904,6 +942,10 @@ export function createAgentRoutes(
       }
 
       const sessionData = await repository.getSession(sessionId);
+      if (!rawToken) {
+        const authorizedSession = await requireAgentSessionAuth(repository, sessionId, req, res);
+        if (!authorizedSession) return;
+      }
       await repository.clearSession(sessionId);
       const { error: unlinkError } = await supabase
         .from('external_accounts')
@@ -1011,7 +1053,8 @@ export function createAgentRoutes(
         });
       }
 
-      const sessionData = await repository.getSession(session_id);
+      const sessionData = await requireAgentSessionAuth(repository, session_id, req, res);
+      if (!sessionData) return;
 
       if (!sessionData || !sessionData.public_key) {
         return res.status(401).json({ error: "Not authenticated" });

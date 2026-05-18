@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const sessionId = String(body?.session_id || "").trim();
+    const sessionToken = String(body?.session_token || body?.sessionToken || "").trim();
     const token = String(body?.token || "").trim();
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         session_id: sessionId || undefined,
+        session_token: sessionToken || undefined,
         token: token || undefined,
         provider: provider || undefined,
         provider_user_id: providerUserId || undefined,

@@ -7,6 +7,10 @@
  * Optional:
  *   MIGRATION_FROM=20260512_03_financial_assistant_modules.sql npm run migrate:required
  *   MIGRATION_DRY_RUN=1 npm run migrate:required
+ *   ALLOW_LEGACY_EXEC_SQL_MIGRATIONS=true npm run migrate:required
+ *
+ * This is a legacy bootstrap runner. It depends on public.exec_sql and must
+ * not be used in hosted/production projects.
  */
 
 import dotenv from 'dotenv';
@@ -17,15 +21,30 @@ import { createClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_KEY ||
-  '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing SUPABASE_URL and service key env vars.');
+  console.error('Missing SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.');
+  process.exit(1);
+}
+
+function isProductionLikeEnvironment(): boolean {
+  return Boolean(
+    process.env.NODE_ENV === 'production' ||
+      process.env.RAILWAY_PUBLIC_DOMAIN ||
+      process.env.RENDER_EXTERNAL_URL ||
+      process.env.FLY_APP_NAME ||
+      process.env.VERCEL_URL
+  );
+}
+
+if (isProductionLikeEnvironment()) {
+  console.error('Refusing to run legacy exec_sql migrations in a hosted/production environment.');
+  process.exit(1);
+}
+
+if (String(process.env.ALLOW_LEGACY_EXEC_SQL_MIGRATIONS || '').trim() !== 'true') {
+  console.error('Refusing to run legacy exec_sql migrations without ALLOW_LEGACY_EXEC_SQL_MIGRATIONS=true.');
   process.exit(1);
 }
 

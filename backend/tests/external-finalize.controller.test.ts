@@ -27,7 +27,40 @@ const finalizeSignAndSubmitXdrMock = jest.fn();
 const finalizeGetSubmittedPaymentDetailsMock = jest.fn();
 const finalizeCreateDefaultTrustlinesMock = jest.fn();
 const finalizeEnsureStarterContactsForUserMock = jest.fn();
+const finalizeSupabaseFromMock = jest.fn();
 const testnetUsdcIssuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+jest.mock('../src/config/supabase', () => ({
+  supabase: {
+    from: (...args: any[]) => finalizeSupabaseFromMock(...args),
+  },
+}));
+
+jest.mock('../src/api/services/email-confirmation.service', () => {
+  class EmailConfirmationError extends Error {
+    code: string;
+    statusCode: number;
+
+    constructor(code: string, message: string, statusCode = 400) {
+      super(message);
+      this.code = code;
+      this.statusCode = statusCode;
+    }
+  }
+
+  return {
+    EmailConfirmationError,
+    EmailConfirmationService: {
+      requireVerified: jest.fn(async ({ email }: { email?: string }) => ({
+        verified: true,
+        email: email || '',
+        maskedEmail: email || '',
+        message: 'verified',
+      })),
+      maskEmail: jest.fn((email: string) => email),
+    },
+  };
+});
 
 jest.mock('../src/services/vault.service', () => ({
   VaultService: jest.fn().mockImplementation(() => ({
@@ -65,6 +98,65 @@ jest.mock('../src/api/services/contact-seed.service', () => ({
   },
   repairLegacyStarterContactKey: jest.fn((publicKey: string) => publicKey),
   STARTER_CONTACTS: [],
+}));
+
+jest.mock('../src/api/services/activity-feed.service', () => ({
+  ActivityFeedService: {
+    syncFromPayments: jest.fn(async () => undefined),
+  },
+}));
+
+jest.mock('../src/api/services/economy-engine.service', () => ({
+  EconomyEngineService: {
+    estimateAmountInBrl: jest.fn(() => '10.00000000'),
+    effectiveCostFromQuote: jest.fn(() => '0.01000000'),
+    calculateForSettledOperation: jest.fn(() => ({
+      estimated_savings: '0.01000000',
+      savings_percentage: '1.0000',
+      comparison_method: 'test',
+    })),
+    calculateMonthly: jest.fn(async () => ({
+      savings: {
+        estimatedSavings: 0.01,
+        estimatedTraditionalFee: 0.02,
+        actualFee: 0.01,
+        savingsPercentage: 50,
+        comparisonMethod: 'test',
+      },
+      message: 'test',
+    })),
+    comparisonMethod: jest.fn(() => 'test'),
+  },
+}));
+
+jest.mock('../src/api/services/global-profile.service', () => ({
+  GlobalProfileService: {
+    ensureForUser: jest.fn(async () => undefined),
+  },
+}));
+
+jest.mock('../src/api/services/payment-receipt.service', () => ({
+  PaymentReceiptService: {
+    buildHostedReceiptUrl: jest.fn((hash: string) => `https://app.example.com/receipt/${hash}`),
+    buildReceiptImageSvg: jest.fn(async () => '<svg></svg>'),
+    sendReceipt: jest.fn(async () => ({ delivered: false })),
+  },
+}));
+
+jest.mock('../src/api/services/platform-fee.service', () => ({
+  PlatformFeeService: {
+    calculateSpread: jest.fn(() => ({
+      feeAmount: '0',
+      feeAssetCode: 'XLM',
+      comparisonMethod: 'test',
+    })),
+  },
+}));
+
+jest.mock('../src/api/services/transfer-notification.service', () => ({
+  TransferNotificationService: {
+    notifySessionWelcome: jest.fn(async () => undefined),
+  },
 }));
 
 jest.mock('../src/repositories/agent.repository', () => ({
@@ -131,6 +223,7 @@ describe('ExternalFinalizeController', () => {
     finalizeGetSubmittedPaymentDetailsMock.mockReset();
     finalizeCreateDefaultTrustlinesMock.mockReset();
     finalizeEnsureStarterContactsForUserMock.mockReset();
+    finalizeSupabaseFromMock.mockReset();
     finalizeSaveSessionMock.mockResolvedValue(undefined);
     finalizeSaveMessageMock.mockResolvedValue(undefined);
     finalizeSaveWalletMock.mockResolvedValue(undefined);
@@ -164,6 +257,7 @@ describe('ExternalFinalizeController', () => {
     finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
     finalizeFindByProviderAndIdMock.mockResolvedValue(null);
     finalizeCreateMappingMock.mockResolvedValue(undefined);
+    finalizeSupabaseFromMock.mockImplementation((table: string) => createSupabaseChain(table));
   });
 
   it('creates session, wallet and links the external account', async () => {
@@ -185,7 +279,7 @@ describe('ExternalFinalizeController', () => {
     await ExternalFinalizeController.finalize(req, res);
 
     expect(finalizeSaveSessionMock).toHaveBeenCalledTimes(1);
-    expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(2);
+    expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(1);
     expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(1);
     expect(finalizeStoreSecretMock).toHaveBeenCalledTimes(1);
     expect(res.status).toHaveBeenCalledWith(201);
@@ -356,4 +450,46 @@ function createResponse() {
   res.status = jest.fn().mockReturnValue(res);
   res.json = jest.fn().mockReturnValue(res);
   return res;
+}
+
+function createSupabaseChain(table: string) {
+  const chain: any = {};
+  let updated = false;
+
+  chain.select = jest.fn().mockReturnValue(chain);
+  chain.eq = jest.fn().mockReturnValue(chain);
+  chain.in = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockReturnValue(chain);
+  chain.order = jest.fn().mockReturnValue(chain);
+  chain.update = jest.fn(() => {
+    updated = true;
+    return chain;
+  });
+  chain.insert = jest.fn().mockReturnValue(chain);
+  chain.upsert = jest.fn().mockReturnValue(chain);
+  chain.single = jest.fn(async () => ({
+    data: table === 'onboarding_finalizations' ? { id: 'onboarding-finalization-1' } : null,
+    error: null,
+  }));
+  chain.maybeSingle = jest.fn(async () => {
+    if (table === 'payment_confirmations') {
+      return {
+        data: {
+          id: 'payment-confirmation-1',
+          used: false,
+          used_at: null,
+          status: updated ? 'processing' : 'pending',
+        },
+        error: null,
+      };
+    }
+    return { data: null, error: null };
+  });
+  chain.then = (resolve: any, reject: any) =>
+    Promise.resolve({
+      data: table === 'payment_confirmations' ? [{ id: 'payment-confirmation-1' }] : null,
+      error: null,
+    }).then(resolve, reject);
+
+  return chain;
 }

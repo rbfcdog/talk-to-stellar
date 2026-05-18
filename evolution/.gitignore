@@ -4,7 +4,8 @@ instances/
 qr.html
 *.log
 
-# Keep the committed local dev env, but ignore real deployment overrides.
-.env.local
-.env.production
-.env.*.local
+# Environment files must stay local. Commit examples only.
+.env
+.env.*
+!.env.example
+!railway.env.example
