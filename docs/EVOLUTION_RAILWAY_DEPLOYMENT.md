@@ -252,6 +252,7 @@ EVOLUTION_INSTANCE=main
 EVOLUTION_WEBHOOK_SECRET=change-me-long-random-evolution-webhook-secret
 EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
 EVOLUTION_AGENT_TIMEOUT_MS=120000
+EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000
 EVOLUTION_SEND_FAILURE_FALLBACK=false
 PUBLIC_BACKEND_URL=https://YOUR-BACKEND-SERVICE.up.railway.app
 ```
@@ -261,6 +262,7 @@ Regras importantes:
 - `EVOLUTION_API_KEY` no backend deve ser igual a `AUTHENTICATION_API_KEY` na Evolution.
 - `EVOLUTION_WEBHOOK_SECRET` no backend deve ser igual ao `secret` usado em `WEBHOOK_GLOBAL_URL`.
 - `EVOLUTION_INSTANCE` deve ser igual ao nome da instancia criada na Evolution. Use `main`.
+- `EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000` evita respostas duplicadas quando a Evolution reenvia o mesmo webhook em ate 90 segundos. A deduplicacao tambem usa a tabela `idempotency_keys` do Supabase, entao ela funciona mesmo com restart ou mais de uma instancia do backend.
 
 ## 7. Deploy
 
@@ -339,6 +341,8 @@ EVOLUTION_INSTANCE
 PUBLIC_BACKEND_URL
 EVOLUTION_WEBHOOK_SECRET
 ```
+
+Use apenas um caminho de webhook ativo. Se `WEBHOOK_GLOBAL_URL` estiver ligado nas variaveis da Evolution, nao mantenha tambem um webhook configurado manualmente na instancia para a mesma URL. Dois caminhos ativos podem fazer a Evolution entregar o mesmo `MESSAGES_UPSERT` duas vezes.
 
 ## 10. Testes de Producao
 
@@ -426,6 +430,7 @@ Verifique:
 - `WEBHOOK_EVENTS_MESSAGES_UPSERT=true`
 - `WEBHOOK_GLOBAL_URL` aponta para o backend, nao para a Evolution.
 - O `secret` da URL bate com `EVOLUTION_WEBHOOK_SECRET` no backend.
+- Nao existe webhook duplicado na instancia apontando para a mesma URL se voce ja usa `WEBHOOK_GLOBAL_URL`.
 
 ### Backend recebe webhook mas nao responde no WhatsApp
 
@@ -436,7 +441,17 @@ EVOLUTION_API_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
 EVOLUTION_API_KEY=mesmo-valor-do-AUTHENTICATION_API_KEY
 EVOLUTION_INSTANCE=main
 EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
+EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000
 ```
+
+### WhatsApp recebe duas respostas iguais
+
+Verifique:
+
+- O backend esta com a versao atual, que grava dedupe persistente em `idempotency_keys`.
+- `EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000` esta no backend. Pode subir para `120000` se a Evolution estiver reentregando com atraso.
+- A Evolution nao esta com webhook global e webhook da instancia ativos ao mesmo tempo para a mesma URL.
+- O backend no Railway nao esta rodando dois servicos diferentes apontados pelo mesmo webhook.
 
 ### Erro de Postgres ou Redis
 

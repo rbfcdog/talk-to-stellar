@@ -1,3 +1,12 @@
+const mockSupabaseInsert = jest.fn();
+const mockSupabaseFrom = jest.fn();
+
+jest.mock('../src/config/supabase', () => ({
+  supabase: {
+    from: (...args: any[]) => mockSupabaseFrom(...args),
+  },
+}));
+
 import { EvolutionService } from '../src/api/services/evolution.service';
 
 async function flushBackgroundWork() {
@@ -11,6 +20,23 @@ describe('EvolutionService', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    const reservedDedupeKeys = new Set<string>();
+    mockSupabaseInsert.mockReset();
+    mockSupabaseFrom.mockReset();
+    mockSupabaseFrom.mockReturnValue({ insert: mockSupabaseInsert });
+    mockSupabaseInsert.mockImplementation(async (row: any) => {
+      const key = String(row?.idempotency_key || '');
+      if (reservedDedupeKeys.has(key)) {
+        return {
+          error: {
+            code: '23505',
+            message: 'duplicate key value violates unique constraint',
+          },
+        };
+      }
+      reservedDedupeKeys.add(key);
+      return { error: null };
+    });
     process.env = {
       ...originalEnv,
       EVOLUTION_API_URL: 'http://evolution.local',
@@ -285,5 +311,48 @@ describe('EvolutionService', () => {
     const agentCalls = fetchMock.mock.calls.filter(([url]) => String(url) === 'http://backend.local/api/agent/query');
     expect(agentCalls).toHaveLength(1);
     expect(sendTextSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the agent call when persistent dedupe already reserved the incoming content', async () => {
+    mockSupabaseInsert.mockImplementation(async (row: any) => {
+      const key = String(row?.idempotency_key || '');
+      if (key.startsWith('evolution_incoming_content_')) {
+        return {
+          error: {
+            code: '23505',
+            message: 'duplicate key value violates unique constraint',
+          },
+        };
+      }
+      return { error: null };
+    });
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-persistent-duplicate-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'ola persistente duplicado',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: false,
+      skipped: 'duplicate_persistent_content',
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sendTextSpy).not.toHaveBeenCalled();
   });
 });
