@@ -9,11 +9,13 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 dotenv.config();
 
 const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const friendbotUrl = process.env.STELLAR_FRIENDBOT_URL || 'https://friendbot.stellar.org';
+assertTestnetOnlyScript('first-testnet-transaction', horizonUrl);
 const networkPassphrase = Networks.TESTNET;
 const server = new Horizon.Server(horizonUrl);
 

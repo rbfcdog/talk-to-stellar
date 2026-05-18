@@ -2,10 +2,13 @@ import dotenv from 'dotenv';
 import { supabase } from '../src/config/supabase';
 import { TrustlineService } from '../src/api/services/trustline.service';
 import VaultService from '../src/services/vault.service';
+import { assertMainnetBulkMutationAllowed } from './stellar-script-safety';
 
 dotenv.config();
 
 async function main(): Promise<void> {
+  assertMainnetBulkMutationAllowed('backfill-default-trustlines');
+
   const vaultService = new VaultService(supabase);
 
   const { data: wallets, error: walletsError } = await supabase

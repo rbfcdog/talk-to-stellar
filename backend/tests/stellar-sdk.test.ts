@@ -91,7 +91,7 @@ describe('Stellar SDK Integration Tests', () => {
 
         const transaction = new StellarSDK.TransactionBuilder(account, {
           fee: StellarSDK.BASE_FEE,
-          networkPassphrase: 'Test StellarNetwork ; September 2015',
+          networkPassphrase: StellarSDK.Networks.TESTNET,
         })
           .addOperation(
             StellarSDK.Operation.payment({
@@ -123,7 +123,7 @@ describe('Stellar SDK Integration Tests', () => {
         const account = new StellarSDK.Account(testPublicKey, '0');
         const transaction = new StellarSDK.TransactionBuilder(account, {
           fee: StellarSDK.BASE_FEE,
-          networkPassphrase: 'Test StellarNetwork ; September 2015',
+          networkPassphrase: StellarSDK.Networks.TESTNET,
         })
           .addOperation(
             StellarSDK.Operation.payment({
@@ -155,7 +155,7 @@ describe('Stellar SDK Integration Tests', () => {
         const account = new StellarSDK.Account(testPublicKey, '0');
         const transaction = new StellarSDK.TransactionBuilder(account, {
           fee: StellarSDK.BASE_FEE,
-          networkPassphrase: 'Test StellarNetwork ; September 2015',
+          networkPassphrase: StellarSDK.Networks.TESTNET,
         })
           .addOperation(
             StellarSDK.Operation.payment({
@@ -221,7 +221,7 @@ describe('Stellar SDK Integration Tests', () => {
 
         const transaction = new StellarSDK.TransactionBuilder(account, {
           fee: StellarSDK.BASE_FEE,
-          networkPassphrase: 'Test StellarNetwork ; September 2015',
+          networkPassphrase: StellarSDK.Networks.TESTNET,
         })
           .addOperation(
             StellarSDK.Operation.pathPaymentStrictReceive({

@@ -1,10 +1,12 @@
 import { Asset, Horizon } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import { getAssetIssuer, normalizeAssetCode } from '../src/config/assets';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 dotenv.config();
 
 const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+assertTestnetOnlyScript('debug-path-quotes', horizonUrl);
 const server = new Horizon.Server(horizonUrl);
 
 function createAsset(codeValue: string): Asset {

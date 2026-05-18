@@ -344,8 +344,8 @@ Cada repository expõe métodos:
 
 #### USDC (USD Coin — Stellar)
 - **Código**: `USDC`
-- **Issuer**: `GBBD47UZQ2JTIKI3HP3OZFZWMJBFNMK32K4EX4VUP5DGNMVJ6DZWBSA6` (Circle — Mainnet)
-- **Issuer** (Testnet): `GBBD47UZQ2JTIKI3HP3OZFZWMJBFNMK32K4EX4VUP5DGNMVJ6DZWBSA6` (Circle testnet alias)
+- **Issuer** (Mainnet/Public): `GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`
+- **Issuer** (Testnet): `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`
 - **Tipo**: Stablecoin
 - **Use Case**: Transferências em USD / operações comerciais
 

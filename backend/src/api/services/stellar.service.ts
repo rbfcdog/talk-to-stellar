@@ -344,6 +344,10 @@ export class StellarService {
   }
 
   static async fundWithFriendbot(publicKey: string): Promise<void> {
+    if (stellarConfig.network !== Networks.TESTNET || !stellarConfig.friendbotUrl) {
+      throw new Error('Friendbot funding is only available on Stellar Testnet.');
+    }
+
     const response = await fetch(`${stellarConfig.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`, {
       signal: AbortSignal.timeout(Number(process.env.STELLAR_FRIENDBOT_TIMEOUT_MS || 5000)),
     });

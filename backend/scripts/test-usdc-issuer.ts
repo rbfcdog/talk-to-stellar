@@ -1,10 +1,12 @@
-import { Horizon, Networks, Asset } from '@stellar/stellar-sdk';
+import { Horizon, Asset } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import { getAssetIssuer } from '../src/config/assets';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 dotenv.config();
 
 const server = new Horizon.Server('https://horizon-testnet.stellar.org');
+assertTestnetOnlyScript('test-usdc-issuer', 'https://horizon-testnet.stellar.org');
 const USDC_ISSUER = String(getAssetIssuer('USDC') || '').trim();
 const BRL_ISSUER = String(getAssetIssuer('BRL') || '').trim();
 

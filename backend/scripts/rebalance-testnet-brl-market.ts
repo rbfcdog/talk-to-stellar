@@ -8,10 +8,12 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
+import { assertTestnetOnlyScript } from './stellar-script-safety';
 
 dotenv.config();
 
 const horizonUrl = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+assertTestnetOnlyScript('rebalance-testnet-brl-market', horizonUrl);
 const server = new Horizon.Server(horizonUrl);
 const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
 const watchMode = process.argv.includes('--watch');
@@ -182,10 +184,6 @@ async function buildOfferOperation(input: {
 }
 
 async function rebalanceOnce() {
-  if (String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC') {
-    throw new Error('Refusing to run testnet market maker on PUBLIC network.');
-  }
-
   const brlIssuer = requirePublicKey('BRL_ISSUER_TESTNET');
   const usdcIssuer = requirePublicKey('USDC_ISSUER');
   const marketMaker = Keypair.fromSecret(requireSecret('BRL_MARKET_MAKER_SECRET'));
