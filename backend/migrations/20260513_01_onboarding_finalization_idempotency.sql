@@ -54,4 +54,4 @@ CREATE INDEX IF NOT EXISTS idx_onboarding_finalizations_used
 CREATE INDEX IF NOT EXISTS idx_onboarding_finalizations_completed_at
   ON public.onboarding_finalizations (completed_at DESC);
 
-ALTER TABLE IF EXISTS public.onboarding_finalizations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.onboarding_finalizations ENABLE ROW LEVEL SECURITY;

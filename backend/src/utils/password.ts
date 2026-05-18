@@ -31,3 +31,10 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 
   return crypto.timingSafeEqual(expected, derivedKey);
 }
+
+export function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}

@@ -100,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_pin_reset_tokens_token_hash
 
 -- 3) In this project we use backend service role; keep table unrestricted
 -- to avoid reset flow failures in environments with RLS defaults.
-ALTER TABLE public.pin_reset_tokens DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pin_reset_tokens ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 

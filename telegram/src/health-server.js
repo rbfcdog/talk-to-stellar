@@ -1,4 +1,5 @@
 const http = require('http');
+const crypto = require('crypto');
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -25,11 +26,28 @@ function readJsonBody(req) {
   });
 }
 
+function isProductionLike() {
+  return Boolean(
+    process.env.NODE_ENV === 'production' ||
+      process.env.RAILWAY_PUBLIC_DOMAIN ||
+      process.env.RENDER_EXTERNAL_URL ||
+      process.env.FLY_APP_NAME ||
+      process.env.VERCEL_URL
+  );
+}
+
+function timingSafeEqualString(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function isAuthorized(req, secret) {
-  if (!secret) return true;
+  if (!secret) return !isProductionLike();
   const auth = String(req.headers.authorization || '').trim();
   const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-  return token === secret;
+  return timingSafeEqualString(token, secret);
 }
 
 function sendJson(res, status, payload) {
@@ -102,4 +120,5 @@ module.exports = {
   createHealthServer,
   readJsonBody,
   isAuthorized,
+  isProductionLike,
 };

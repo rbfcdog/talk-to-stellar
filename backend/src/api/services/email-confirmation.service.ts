@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { logger } from '../../utils/logger';
+import { getRequiredJwtSecret } from '../../config/secrets';
+import { isProductionLikeEnvironment } from '../../config/runtime';
 
 export type EmailConfirmationPurpose = 'create_account' | 'login';
 
@@ -72,9 +74,8 @@ function getMaxAttempts(): number {
 function getHashSecret(): string {
   return (
     process.env.EMAIL_CONFIRMATION_SECRET ||
-    process.env.JWT_SECRET ||
     process.env.INTERNAL_API_SECRET ||
-    'dev-email-confirmation-secret'
+    getRequiredJwtSecret()
   );
 }
 
@@ -187,7 +188,7 @@ function parseFromAddress(value: string): { email: string; name?: string } {
 }
 
 function allowDevCodeResponse(): boolean {
-  return process.env.NODE_ENV !== 'production' || process.env.EMAIL_CONFIRMATION_ALLOW_DEV_CODE === 'true';
+  return !isProductionLikeEnvironment() || process.env.EMAIL_CONFIRMATION_ALLOW_DEV_CODE === 'true';
 }
 
 function buildMessage(input: {

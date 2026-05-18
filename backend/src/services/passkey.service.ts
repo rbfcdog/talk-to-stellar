@@ -20,12 +20,13 @@ import { WalletRepository } from '../repositories/wallet.repository';
 import { StellarService } from '../api/services/stellar.service';
 import { AuthService } from '../api/services/auth.service';
 import { isSessionExpired } from '../utils/session-expiry';
+import { getRequiredJwtSecret } from '../config/secrets';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'dev-secret-change-me';
+  return getRequiredJwtSecret();
 }
 
 function getRpID() {

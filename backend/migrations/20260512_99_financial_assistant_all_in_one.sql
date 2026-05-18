@@ -304,14 +304,14 @@
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
   -- Dev/service-role mode used by the current backend.
-  ALTER TABLE IF EXISTS public.payment_logs DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.payment_confirmations DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.currency_rate_history DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.treasury_profiles DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.treasury_recommendations DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.financial_insights DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.financial_events DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.invoices DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE IF EXISTS public.global_profiles DISABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.payment_logs ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.payment_confirmations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.currency_rate_history ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.treasury_profiles ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.treasury_recommendations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.financial_insights ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.financial_events ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.invoices ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE IF EXISTS public.global_profiles ENABLE ROW LEVEL SECURITY;
 
   COMMIT;

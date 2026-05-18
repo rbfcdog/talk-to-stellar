@@ -47,5 +47,5 @@ CREATE INDEX IF NOT EXISTS idx_external_bank_accounts_session
 CREATE INDEX IF NOT EXISTS idx_external_bank_accounts_user
   ON public.external_bank_accounts (user_id);
 
-ALTER TABLE IF EXISTS public.external_bank_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.external_bank_accounts ENABLE ROW LEVEL SECURITY;
 

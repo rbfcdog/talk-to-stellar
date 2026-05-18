@@ -81,7 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_logs_estimated_savings
   ON public.payment_logs (user_id, estimated_savings DESC)
   WHERE estimated_savings IS NOT NULL;
 
-ALTER TABLE IF EXISTS public.financial_insights DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.financial_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.financial_insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.financial_events ENABLE ROW LEVEL SECURITY;
 
 COMMIT;

@@ -346,6 +346,30 @@ SELECT decrypted_secret
 FROM vault.decrypted_secrets
 WHERE id = secret_id;
 $$;
+DO $$
+DECLARE
+  proc regprocedure;
+  role_name text;
+BEGIN
+  FOR proc IN
+    SELECT p.oid::regprocedure
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('store_private_key', 'get_private_key')
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', proc);
+    FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated']
+    LOOP
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', proc, role_name);
+      END IF;
+    END LOOP;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', proc);
+    END IF;
+  END LOOP;
+END $$;
 -- Create summary views only if required columns exist (safe for partial schemas)
 DO $$ BEGIN IF EXISTS(
     SELECT 1
@@ -393,20 +417,20 @@ $$ LANGUAGE plpgsql;
 -- --------------------------------------------------------------------------
 -- Development RLS cleanup
 -- --------------------------------------------------------------------------
-ALTER TABLE IF EXISTS agent_sessions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS wallets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS operations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS user_passkeys DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS passkey_challenges DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS agent_states DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS agent_messages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS external_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS contacts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS recovery_otps DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS conversion_rules DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS audit_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS scheduled_payments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS whitelisted_assets DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS wallets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS operations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS user_passkeys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS passkey_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS external_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS recovery_otps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS conversion_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS scheduled_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS whitelisted_assets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can read their own sessions" ON agent_sessions;
 DROP POLICY IF EXISTS "Users can insert their own sessions" ON agent_sessions;
 DROP POLICY IF EXISTS "Users can update their own sessions" ON agent_sessions;
@@ -491,7 +515,7 @@ CREATE INDEX IF NOT EXISTS idx_pin_reset_tokens_used_at
   ON public.pin_reset_tokens (used_at);
 CREATE INDEX IF NOT EXISTS idx_pin_reset_tokens_token_hash
   ON public.pin_reset_tokens (token_hash);
-ALTER TABLE IF EXISTS public.pin_reset_tokens DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.pin_reset_tokens ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
@@ -643,8 +667,8 @@ CREATE INDEX IF NOT EXISTS idx_payment_confirmations_used_at ON public.payment_c
 CREATE INDEX IF NOT EXISTS idx_payment_confirmations_expires_at ON public.payment_confirmations (expires_at);
 CREATE INDEX IF NOT EXISTS idx_payment_confirmations_completed_at ON public.payment_confirmations (completed_at DESC);
 
-ALTER TABLE IF EXISTS public.payment_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.payment_confirmations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.payment_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.payment_confirmations ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
@@ -763,11 +787,11 @@ ALTER TABLE IF EXISTS public.operations ADD COLUMN IF NOT EXISTS estimated_savin
 ALTER TABLE IF EXISTS public.operations ADD COLUMN IF NOT EXISTS savings_percentage NUMERIC;
 ALTER TABLE IF EXISTS public.operations ADD COLUMN IF NOT EXISTS comparison_method TEXT;
 
-ALTER TABLE IF EXISTS public.financial_insights DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.financial_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.currency_rate_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.treasury_profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.treasury_recommendations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.financial_insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.financial_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.currency_rate_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.treasury_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.treasury_recommendations ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
@@ -815,8 +839,8 @@ DROP TABLE IF EXISTS public.financial_reminders;
 DROP TABLE IF EXISTS public.automation_rules;
 DROP TABLE IF EXISTS public.travel_plans;
 
-ALTER TABLE IF EXISTS public.invoices DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.global_profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.global_profiles ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
@@ -843,7 +867,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_idempotency_keys_key
   ON public.idempotency_keys (idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_route_status
   ON public.idempotency_keys (route, status, created_at DESC);
-ALTER TABLE IF EXISTS public.idempotency_keys DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.idempotency_keys ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.telegram_update_dedupes (
   update_id TEXT PRIMARY KEY,
@@ -853,7 +877,7 @@ CREATE TABLE IF NOT EXISTS public.telegram_update_dedupes (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-ALTER TABLE IF EXISTS public.telegram_update_dedupes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.telegram_update_dedupes ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.short_links (
   code TEXT PRIMARY KEY,
@@ -869,7 +893,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_short_links_token_purpose
   ON public.short_links (token_hash, purpose)
   WHERE token_hash IS NOT NULL AND purpose IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_short_links_expires_at ON public.short_links (expires_at);
-ALTER TABLE IF EXISTS public.short_links DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.short_links ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE IF EXISTS public.agent_messages ADD COLUMN IF NOT EXISTS dedupe_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_agent_messages_dedupe_key
@@ -921,7 +945,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_onboarding_finalizations_token_hash
 CREATE UNIQUE INDEX IF NOT EXISTS ux_onboarding_finalizations_provider_user
   ON public.onboarding_finalizations (provider, provider_user_id)
   WHERE provider IS NOT NULL AND provider_user_id IS NOT NULL;
-ALTER TABLE IF EXISTS public.onboarding_finalizations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.onboarding_finalizations ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.logout_confirmations (
   id BIGSERIAL PRIMARY KEY,
@@ -948,7 +972,7 @@ CREATE INDEX IF NOT EXISTS idx_logout_confirmations_used
   ON public.logout_confirmations (used);
 CREATE INDEX IF NOT EXISTS idx_logout_confirmations_expires_at
   ON public.logout_confirmations (expires_at);
-ALTER TABLE IF EXISTS public.logout_confirmations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.logout_confirmations ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.receipt_images (
   code TEXT PRIMARY KEY,
@@ -971,6 +995,6 @@ CREATE INDEX IF NOT EXISTS idx_receipt_images_user_created
   ON public.receipt_images (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_receipt_images_expires_at
   ON public.receipt_images (expires_at);
-ALTER TABLE IF EXISTS public.receipt_images DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.receipt_images ENABLE ROW LEVEL SECURITY;
 
 COMMIT;

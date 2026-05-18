@@ -15,6 +15,7 @@ import { isSessionExpired } from '../../utils/session-expiry';
 import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
+import { timingSafeEqualString } from '../../utils/password';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -80,6 +81,41 @@ function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
     sessionId: String(req.body?.session_id || req.query?.session_id || req.params?.session_id || '').trim() || undefined,
     userId: String(req.body?.user_id || req.query?.user_id || '').trim() || undefined,
   };
+}
+
+function sessionTokenFromRequest(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+  return String(
+    req.body?.session_token ||
+      req.body?.sessionToken ||
+      req.query?.session_token ||
+      req.query?.sessionToken ||
+      req.headers['x-session-token'] ||
+      bearer ||
+      ''
+  ).trim();
+}
+
+async function requireSessionAuth(req: Request, res: Response): Promise<{ sessionId: string; userId: string; session: any } | null> {
+  const { sessionId } = sessionAndUser(req);
+  const sessionToken = sessionTokenFromRequest(req);
+
+  if (!sessionId || !sessionToken) {
+    res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+    return null;
+  }
+
+  const session = await agentRepo.getSession(sessionId);
+  const userId = String((session as any)?.user_id || '').trim();
+  const storedToken = String((session as any)?.session_token || '').trim();
+
+  if (!session || !userId || isSessionExpired(session) || !storedToken || !timingSafeEqualString(storedToken, sessionToken)) {
+    res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+    return null;
+  }
+
+  return { sessionId, userId, session };
 }
 
 export class FinancialController {
@@ -256,8 +292,11 @@ export class FinancialController {
 
   static async getActivityFeed(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const data = await ActivityFeedService.listFeed({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         limit: Number(req.query.limit || req.body?.limit || 40),
       });
       return res.status(200).json({ success: true, feed: data });
@@ -268,8 +307,11 @@ export class FinancialController {
 
   static async getInsights(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const insights = await FinancialInsightsService.listLatestInsights({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         limit: Number(req.query.limit || req.body?.limit || 8),
       });
       return res.status(200).json({ success: true, insights });
@@ -280,8 +322,11 @@ export class FinancialController {
 
   static async getSmartContacts(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const contacts = await SmartContactsService.listSmartContacts({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         limit: Number(req.query.limit || req.body?.limit || 30),
       });
       return res.status(200).json({ success: true, contacts });
@@ -292,8 +337,11 @@ export class FinancialController {
 
   static async getReplayCandidate(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const replay = await PaymentReplayService.findReplayCandidate({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         queryContext: String(req.body?.query_context || req.query?.query_context || ''),
       });
       return res.status(200).json({ success: true, replay });
@@ -304,7 +352,9 @@ export class FinancialController {
 
   static async getSavings(req: Request, res: Response) {
     try {
-      const savings = await EconomyEngineService.calculateMonthly(sessionAndUser(req));
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const savings = await EconomyEngineService.calculateMonthly({ sessionId: auth.sessionId, userId: auth.userId });
       return res.status(200).json({ success: true, ...savings });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error?.message || String(error) });
@@ -313,8 +363,11 @@ export class FinancialController {
 
   static async createInvoice(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const invoice = await InvoiceService.create({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         recipientName: String(req.body?.recipient_name || req.body?.recipient || ''),
         title: req.body?.title,
         description: req.body?.description,
@@ -330,8 +383,11 @@ export class FinancialController {
 
   static async listInvoices(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const invoices = await InvoiceService.list({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         limit: Number(req.query.limit || req.body?.limit || 30),
       });
       return res.status(200).json({ success: true, invoices });
@@ -342,8 +398,11 @@ export class FinancialController {
 
   static async getOrCreateGlobalProfile(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const profile = await GlobalProfileService.getOrCreate({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         usernameHint: req.body?.username || req.query?.username,
         displayName: req.body?.display_name,
         bio: req.body?.bio,
@@ -398,7 +457,7 @@ export class FinancialController {
       }
 
       const storedToken = String((session as any)?.session_token || '').trim();
-      if (!storedToken || storedToken !== sessionToken) {
+      if (!storedToken || !timingSafeEqualString(storedToken, sessionToken)) {
         return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
       }
 
@@ -453,8 +512,11 @@ export class FinancialController {
 
   static async getTransactions(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const payload = await TransactionHistoryService.listTransactions({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         month: Number(req.query.month || req.body?.month || 0),
         year: Number(req.query.year || req.body?.year || 0),
         limit: Number(req.query.limit || req.body?.limit || 60),

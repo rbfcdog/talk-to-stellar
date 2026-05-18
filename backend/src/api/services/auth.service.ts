@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repository/user.repository';
-
-const JWT_SECRET = process.env.JWT_SECRET || ''
+import { getRequiredJwtSecret } from '../../config/secrets';
 
 export class AuthService {
   static async login(email: string): Promise<{ sessionToken: string; userId: string; publicKey: string }> {
@@ -11,13 +10,13 @@ export class AuthService {
     }
 
     const payload = { userId: user.id };
-    const sessionToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+    const sessionToken = jwt.sign(payload, getRequiredJwtSecret(), { expiresIn: '1h' });
 
     return { sessionToken, userId: user.id, publicKey: user.stellar_public_key };
   }
 
   static generateTokenForUser(userId: string): string {
     const payload = { userId };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+    return jwt.sign(payload, getRequiredJwtSecret(), { expiresIn: '1h' });
   }
 }

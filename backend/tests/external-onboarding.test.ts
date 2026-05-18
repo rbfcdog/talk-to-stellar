@@ -3,7 +3,7 @@ import { ExternalService } from '../src/services/external.service';
 
 describe('External onboarding service', () => {
   beforeEach(() => {
-    process.env.JWT_SECRET = 'test-secret';
+    process.env.JWT_SECRET = 'test-only-jwt-secret-with-enough-entropy';
     process.env.CREATE_ACCOUNT_BASE = 'https://app.example.com';
   });
 

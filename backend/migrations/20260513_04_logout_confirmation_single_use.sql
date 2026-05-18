@@ -30,4 +30,4 @@ CREATE INDEX IF NOT EXISTS idx_logout_confirmations_used
 CREATE INDEX IF NOT EXISTS idx_logout_confirmations_expires_at
   ON public.logout_confirmations (expires_at);
 
-ALTER TABLE IF EXISTS public.logout_confirmations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.logout_confirmations ENABLE ROW LEVEL SECURITY;

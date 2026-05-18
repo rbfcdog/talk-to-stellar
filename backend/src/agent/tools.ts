@@ -30,6 +30,7 @@ import { PlatformFeeService } from "../api/services/platform-fee.service";
 import { InvoiceService } from "../api/services/invoice.service";
 import { GlobalProfileService } from "../api/services/global-profile.service";
 import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
+import { timingSafeEqualString } from "../utils/password";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -4365,12 +4366,13 @@ async function executeResetPin(input: any): Promise<string> {
     logger.debug(`Tool: Resetting PIN for user ${input.user_id}`);
 
     const sessionId = String(input.session_id || '').trim();
+    const sessionToken = String(input.session_token || input.sessionToken || '').trim();
     const requestedUserId = String(input.user_id || '').trim();
 
-    if (!sessionId) {
+    if (!sessionId || !sessionToken) {
       return JSON.stringify({
         success: false,
-        error: 'session_id é obrigatório',
+        error: 'session_id e session_token são obrigatórios para redefinir PIN',
       });
     }
 
@@ -4379,7 +4381,7 @@ async function executeResetPin(input: any): Promise<string> {
 
     const { data: sessionRow, error: sessionError } = await supabase
       .from('agent_sessions')
-      .select('user_id, email')
+      .select('user_id, email, session_token')
       .eq('session_id', sessionId)
       .maybeSingle();
 
@@ -4389,6 +4391,14 @@ async function executeResetPin(input: any): Promise<string> {
 
     const sessionUserId = String(sessionRow?.user_id || '').trim();
     const sessionEmail = String(sessionRow?.email || '').trim();
+    const storedSessionToken = String((sessionRow as any)?.session_token || '').trim();
+
+    if (!storedSessionToken || !timingSafeEqualString(storedSessionToken, sessionToken)) {
+      return JSON.stringify({
+        success: false,
+        error: 'Sessão inválida. Faça login novamente para redefinir PIN.',
+      });
+    }
 
     if (!resolvedUserId && sessionUserId) {
       resolvedUserId = sessionUserId;

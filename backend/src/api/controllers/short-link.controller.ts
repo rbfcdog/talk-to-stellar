@@ -1,8 +1,104 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import ExternalService from '../../services/external.service';
+import { isProductionLikeEnvironment } from '../../config/runtime';
+import { timingSafeEqualString } from '../../utils/password';
 
 const externalService = new ExternalService(supabase as any);
+
+const PUBLIC_SHORT_LINK_PURPOSES = new Set([
+  'create_account_passkey_qr',
+  'login_passkey_qr',
+  'confirm_payment_passkey_qr',
+]);
+
+const PUBLIC_SHORT_LINK_PATHS = [
+  '/create-account',
+  '/login',
+  '/confirm-payment',
+];
+
+function splitCsv(value: unknown): string[] {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+}
+
+function normalizeBaseUrl(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(withProtocol).origin;
+  } catch {
+    return '';
+  }
+}
+
+function configuredFrontendOrigins(): Set<string> {
+  const values = [
+    process.env.PUBLIC_APP_URL,
+    process.env.FRONTEND_URL,
+    process.env.CREATE_ACCOUNT_BASE,
+    process.env.PAYMENT_CONFIRM_BASE,
+    process.env.NEXT_PUBLIC_FRONTEND_URL,
+    process.env.RAILWAY_PUBLIC_DOMAIN,
+    process.env.RENDER_EXTERNAL_URL,
+    process.env.VERCEL_URL,
+    ...splitCsv(process.env.CORS_ORIGINS),
+  ];
+
+  return new Set(values.map(normalizeBaseUrl).filter(Boolean));
+}
+
+function isLocalFrontendOrigin(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+}
+
+function isAllowedShortLinkPath(pathname: string): boolean {
+  return PUBLIC_SHORT_LINK_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function hasTrustedProxySecret(req: Request): boolean {
+  const expected = String(process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  const provided = String(req.get('x-internal-api-secret') || req.get('x-short-link-proxy-secret') || '').trim();
+  return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+}
+
+function validatePublicShortLinkTarget(req: Request, rawUrl: string, purpose: string): string | null {
+  if (!PUBLIC_SHORT_LINK_PURPOSES.has(purpose)) {
+    return 'purpose de short link não permitido para criação pública.';
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return 'url inválida.';
+  }
+
+  const productionLike = isProductionLikeEnvironment();
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && !productionLike && isLocalFrontendOrigin(parsed.origin))) {
+    return 'short links públicos exigem HTTPS.';
+  }
+
+  if (!isAllowedShortLinkPath(parsed.pathname)) {
+    return 'destino de short link não permitido.';
+  }
+
+  const allowedOrigins = configuredFrontendOrigins();
+  if (allowedOrigins.has(parsed.origin) || (!productionLike && isLocalFrontendOrigin(parsed.origin))) {
+    return null;
+  }
+
+  const forwardedFrontendOrigin = normalizeBaseUrl(req.get('x-frontend-origin') || '');
+  if (hasTrustedProxySecret(req) && forwardedFrontendOrigin && parsed.origin === forwardedFrontendOrigin) {
+    return null;
+  }
+
+  return 'origem de short link não permitida.';
+}
 
 export class ShortLinkController {
   static async create(req: Request, res: Response) {
@@ -18,6 +114,10 @@ export class ShortLinkController {
       }
       if (!/^https?:\/\//i.test(url)) {
         return res.status(400).json({ success: false, message: 'url inválida. Use http:// ou https://.' });
+      }
+      const validationError = validatePublicShortLinkTarget(req, url, purpose);
+      if (validationError) {
+        return res.status(400).json({ success: false, message: validationError });
       }
 
       const shortUrl = await externalService.shortenPublicUrl({

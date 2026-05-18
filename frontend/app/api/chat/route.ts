@@ -88,7 +88,7 @@ export async function POST(req: Request) {
   let sessionId: string | null = null;
 
   try {
-    const { messages, session_id, source, metadata, language } = await req.json();
+    const { messages, session_id, session_token, source, metadata, language } = await req.json();
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -105,6 +105,7 @@ export async function POST(req: Request) {
     const dataToSend = {
       query: userMessage.content,
       session_id: sessionId,
+      session_token: session_token || metadata?.session_token || undefined,
       source: source || "web",
       language: language || metadata?.language || "pt-BR",
       metadata: {
@@ -160,6 +161,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
+    const sessionToken = url.searchParams.get("session_token") || "";
     const browserId = url.searchParams.get("browser_id") || "";
     const limit = url.searchParams.get("limit") || "50";
 
@@ -170,7 +172,10 @@ export async function GET(req: Request) {
     const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
     const resolvedSessionId = linkedSessionId || sessionId;
 
-    const agentApiResponse = await fetch(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50), {
+    const messagesUrl = new URL(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50));
+    if (sessionToken) messagesUrl.searchParams.set("session_token", sessionToken);
+
+    const agentApiResponse = await fetch(messagesUrl.toString(), {
       method: "GET",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",

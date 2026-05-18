@@ -138,7 +138,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
       setSessionReady("checking")
       try {
-        const response = await fetch(`/api/agent/session/${encodeURIComponent(sessionId)}`, { cache: "no-store" })
+        const response = await fetch(`/api/agent/session/${encodeURIComponent(sessionId)}?session_token=${encodeURIComponent(sessionToken)}`, { cache: "no-store" })
         const payload = await response.json().catch(() => ({}))
         if (cancelled) return
 

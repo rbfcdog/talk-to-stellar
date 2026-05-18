@@ -87,8 +87,8 @@ CREATE TRIGGER update_treasury_profiles_updated_at
   BEFORE UPDATE ON public.treasury_profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-ALTER TABLE IF EXISTS public.currency_rate_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.treasury_profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.treasury_recommendations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.currency_rate_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.treasury_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.treasury_recommendations ENABLE ROW LEVEL SECURITY;
 
 COMMIT;

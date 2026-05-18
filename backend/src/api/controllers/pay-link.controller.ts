@@ -13,6 +13,7 @@ import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { buildOperationFingerprint } from '../../services/idempotency.service';
+import { getRequiredJwtSecret } from '../../config/secrets';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -20,7 +21,7 @@ const vaultService = new VaultService(supabase);
 const externalService = new ExternalService(supabase);
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'dev-secret-change-me';
+  return getRequiredJwtSecret();
 }
 
 function hashToken(token: string) {

@@ -52,6 +52,17 @@ describe('EvolutionService', () => {
     process.env = originalEnv;
   });
 
+  it('requires a webhook secret in production-like environments', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.EVOLUTION_WEBHOOK_SECRET = '';
+
+    expect(EvolutionService.verifyWebhookSecret('anything')).toBe(false);
+
+    process.env.EVOLUTION_WEBHOOK_SECRET = 'expected-secret';
+    expect(EvolutionService.verifyWebhookSecret('wrong-secret')).toBe(false);
+    expect(EvolutionService.verifyWebhookSecret('expected-secret')).toBe(true);
+  });
+
   it('forwards incoming WhatsApp text to the agent query endpoint and sends the agent reply', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;

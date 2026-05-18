@@ -346,6 +346,30 @@ SELECT decrypted_secret
 FROM vault.decrypted_secrets
 WHERE id = secret_id;
 $$;
+DO $$
+DECLARE
+  proc regprocedure;
+  role_name text;
+BEGIN
+  FOR proc IN
+    SELECT p.oid::regprocedure
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('store_private_key', 'get_private_key')
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', proc);
+    FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated']
+    LOOP
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', proc, role_name);
+      END IF;
+    END LOOP;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', proc);
+    END IF;
+  END LOOP;
+END $$;
 -- Create summary views only if required columns exist (safe for partial schemas)
 DO $$ BEGIN IF EXISTS(
     SELECT 1
@@ -393,20 +417,20 @@ $$ LANGUAGE plpgsql;
 -- --------------------------------------------------------------------------
 -- Development RLS cleanup
 -- --------------------------------------------------------------------------
-ALTER TABLE IF EXISTS agent_sessions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS wallets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS operations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS user_passkeys DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS passkey_challenges DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS agent_states DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS agent_messages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS external_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS contacts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS recovery_otps DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS conversion_rules DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS audit_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS scheduled_payments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS whitelisted_assets DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS wallets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS operations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS user_passkeys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS passkey_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS external_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS recovery_otps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS conversion_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS scheduled_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS whitelisted_assets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can read their own sessions" ON agent_sessions;
 DROP POLICY IF EXISTS "Users can insert their own sessions" ON agent_sessions;
 DROP POLICY IF EXISTS "Users can update their own sessions" ON agent_sessions;

@@ -386,6 +386,12 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       session_id: resolvedSessionId,
       limit: "50",
     });
+    const sessionToken = typeof window !== "undefined"
+      ? localStorage.getItem("talk-to-stellar.sessionToken") || ""
+      : "";
+    if (sessionToken) {
+      params.set("session_token", sessionToken);
+    }
     if (browserId) {
       params.set("browser_id", browserId);
     }
@@ -557,6 +563,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         : null;
       const resolvedSessionId = storedSessionId || sessionId;
       const browserId = getOrCreateBrowserId();
+      const sessionToken = typeof window !== "undefined"
+        ? localStorage.getItem("talk-to-stellar.sessionToken") || ""
+        : "";
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await idempotentFetch('/api/chat', {
@@ -565,6 +574,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         body: JSON.stringify({
           messages: [...messages, userMessage],
           session_id: resolvedSessionId,
+          session_token: sessionToken || undefined,
           source: "web",
           language,
           metadata: {
@@ -611,11 +621,13 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
+          const sessionToken = localStorage.getItem('talk-to-stellar.sessionToken') || '';
           await idempotentFetch('/api/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               session_id: resolvedSessionId,
+              session_token: sessionToken || undefined,
             }),
           });
         } catch {

@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { getRequiredJwtSecret } from '../config/secrets';
 
 interface PinResetToken {
   id: string;
@@ -250,7 +251,7 @@ export class PinResetService {
    * Generate JWT token for PIN change page
    */
   static generatePinChangeJWT(userId: string, resetToken: string, sessionId?: string): string {
-    const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
+    const jwtSecret = getRequiredJwtSecret();
     
     return jwt.sign(
       {
@@ -273,7 +274,7 @@ export class PinResetService {
     error?: string;
   } {
     try {
-      const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
+      const jwtSecret = getRequiredJwtSecret();
       const decoded = jwt.verify(token, jwtSecret) as any;
 
       if (decoded.type !== 'pin_reset') {
