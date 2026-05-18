@@ -465,6 +465,11 @@ export class EvolutionService {
       instance: input.instance,
       messageId: input.messageId,
     });
-    await this.sendText(input.instance, input.recipient, response.message);
+    try {
+      await this.sendText(input.instance, input.recipient, response.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[evolution-webhook] generated agent reply but Evolution sendText failed for ***${input.recipient.slice(-4)}: ${message}`);
+    }
   }
 }

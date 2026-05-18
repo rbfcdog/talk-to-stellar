@@ -123,4 +123,56 @@ describe('EvolutionService', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sendTextSpy).not.toHaveBeenCalled();
   });
+
+  it('does not send the failure fallback when the generated agent reply send times out', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Estou aqui e funcionando.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest
+      .spyOn(EvolutionService, 'sendText')
+      .mockRejectedValueOnce(new Error('This operation was aborted'));
+
+    const result = await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-send-timeout-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'teste',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
+
+    await flushBackgroundWork();
+
+    expect(sendTextSpy).toHaveBeenCalledTimes(1);
+    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.');
+  });
 });
