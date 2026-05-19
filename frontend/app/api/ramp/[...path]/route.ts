@@ -24,12 +24,18 @@ async function proxy(req: NextRequest, path: string[]) {
   const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
+  const internalSecret = process.env.RAMP_SANDBOX_INTERNAL_SECRET || process.env.INTERNAL_API_SECRET || "";
+  const sessionToken = req.headers.get("x-session-token") || "";
+  const authorization = req.headers.get("authorization") || "";
 
   const init: RequestInit = {
     method: req.method,
     headers: {
       "content-type": req.headers.get("content-type") || "application/json",
       "Idempotency-Key": idempotencyKey,
+      ...(internalSecret ? { "X-Internal-Api-Secret": internalSecret } : {}),
+      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+      ...(authorization ? { Authorization: authorization } : {}),
       ...(req.headers.get("x-wallet-pin") ? { "X-Wallet-Pin": req.headers.get("x-wallet-pin") || "" } : {}),
       ...(req.headers.get("x-talktostellar-wallet-pin") ? { "X-TalkToStellar-Wallet-Pin": req.headers.get("x-talktostellar-wallet-pin") || "" } : {}),
     },
@@ -49,7 +55,6 @@ async function proxy(req: NextRequest, path: string[]) {
       {
         success: false,
         message: `Ramp proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or NEXT_PUBLIC_BACKEND_URL.`,
-        target,
       },
       { status: 502 }
     );

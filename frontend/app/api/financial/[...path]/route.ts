@@ -24,12 +24,16 @@ async function proxy(req: NextRequest, path: string[]) {
   const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
+  const sessionToken = req.headers.get("x-session-token") || "";
+  const authorization = req.headers.get("authorization") || "";
 
   const init: RequestInit = {
     method: req.method,
     headers: {
       "content-type": req.headers.get("content-type") || "application/json",
       "Idempotency-Key": idempotencyKey,
+      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+      ...(authorization ? { Authorization: authorization } : {}),
     },
   };
 
@@ -47,7 +51,6 @@ async function proxy(req: NextRequest, path: string[]) {
       {
         success: false,
         message: `Proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL on frontend deployment.`,
-        target,
       },
       { status: 502 }
     );

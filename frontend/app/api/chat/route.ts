@@ -161,7 +161,9 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
-    const sessionToken = url.searchParams.get("session_token") || "";
+    const auth = String(req.headers.get("authorization") || "").trim();
+    const sessionToken = req.headers.get("x-session-token") ||
+      (auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "");
     const browserId = url.searchParams.get("browser_id") || "";
     const limit = url.searchParams.get("limit") || "50";
 
@@ -173,11 +175,13 @@ export async function GET(req: Request) {
     const resolvedSessionId = linkedSessionId || sessionId;
 
     const messagesUrl = new URL(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50));
-    if (sessionToken) messagesUrl.searchParams.set("session_token", sessionToken);
 
     const agentApiResponse = await fetch(messagesUrl.toString(), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+      },
       cache: "no-store",
     });
 

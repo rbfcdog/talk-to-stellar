@@ -39,6 +39,7 @@ import type {
 import { AnchorError } from '../types';
 import crypto from 'crypto';
 import { StrKey } from '@stellar/stellar-sdk';
+import { safeRedactedJson } from '../../../../utils/redaction';
 import type {
     EtherfuseConfig,
     EtherfuseOnboardingResponse,
@@ -160,7 +161,7 @@ export class EtherfuseClient implements Anchor {
     ): Promise<T> {
         const url = `${this.config.baseUrl}${endpoint}`;
 
-        console.log(`[Etherfuse] ${method} ${url}`, body ? JSON.stringify(body) : '');
+        console.log(`[Etherfuse] ${method} ${url}`, body ? safeRedactedJson(body) : '');
 
         const response = await fetch(url, {
             method,
@@ -173,7 +174,7 @@ export class EtherfuseClient implements Anchor {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`[Etherfuse] Error ${response.status}:`, errorText);
+            console.error(`[Etherfuse] Error ${response.status}:`, safeRedactedJson(errorText));
 
             let errorData: EtherfuseErrorResponse = {
                 error: { code: 'UNKNOWN_ERROR', message: '' },
@@ -192,7 +193,7 @@ export class EtherfuseClient implements Anchor {
         }
 
         const text = await response.text();
-        console.log(`[Etherfuse] Response:`, text || '(empty)');
+        console.log(`[Etherfuse] Response:`, text ? safeRedactedJson(text) : '(empty)');
 
         if (!text) {
             return undefined as T;
@@ -998,7 +999,7 @@ export class EtherfuseClient implements Anchor {
      */
     async simulateFiatReceived(orderId: string): Promise<number> {
         const url = `${this.config.baseUrl}/ramp/order/fiat_received`;
-        console.log(`[Etherfuse] POST ${url}`, JSON.stringify({ orderId }));
+        console.log(`[Etherfuse] POST ${url}`, safeRedactedJson({ orderId }));
 
         const response = await fetch(url, {
             method: 'POST',
@@ -1010,7 +1011,7 @@ export class EtherfuseClient implements Anchor {
         });
 
         const text = await response.text();
-        console.log(`[Etherfuse] Response (${response.status}):`, text || '(empty)');
+        console.log(`[Etherfuse] Response (${response.status}):`, text ? safeRedactedJson(text) : '(empty)');
 
         return response.status;
     }

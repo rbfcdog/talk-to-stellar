@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { normalizeHumanAmountText } from '../utils/amount';
+import { redactSensitive } from '../utils/redaction';
 
 type IdempotencyStatus = 'processing' | 'completed' | 'failed';
 
@@ -95,6 +96,55 @@ function responsePayloadFromSend(body: any): any {
   } catch {
     return body;
   }
+}
+
+function idempotencyRoute(req: Request): string {
+  return String(req.originalUrl || req.url || '').split('?')[0];
+}
+
+function scopedStorageKey(req: Request, rawKey: string): string {
+  return stableHash({
+    key: rawKey,
+    method: req.method.toUpperCase(),
+    route: idempotencyRoute(req),
+    sessionId: extractSessionId(req) || '',
+    userId: extractUserId(req) || '',
+  });
+}
+
+function shouldMinimizeStoredResponse(req: Request): boolean {
+  const route = idempotencyRoute(req);
+  return (
+    route.startsWith('/api/passkeys') ||
+    route.startsWith('/api/security') ||
+    route.startsWith('/api/ramp') ||
+    route === '/api/agent/login' ||
+    route === '/api/agent/logout' ||
+    route === '/api/external/finalize' ||
+    route === '/api/external/link-existing' ||
+    route === '/api/external/link-session' ||
+    route === '/api/external/recovery-init' ||
+    route === '/api/external/recovery-complete'
+  );
+}
+
+function storedResponseBody(req: Request, statusCode: number, body: any): any {
+  const redacted = redactSensitive(body);
+  if (!shouldMinimizeStoredResponse(req)) return redacted;
+
+  const message = typeof redacted === 'object' && redacted && 'message' in (redacted as any)
+    ? String((redacted as any).message || '')
+    : undefined;
+  const error = typeof redacted === 'object' && redacted && 'error' in (redacted as any)
+    ? String((redacted as any).error || '')
+    : undefined;
+
+  return {
+    success: statusCode < 400 && !(typeof redacted === 'object' && redacted && (redacted as any).success === false),
+    idempotency_response_redacted: true,
+    ...(message ? { message } : {}),
+    ...(error ? { error } : {}),
+  };
 }
 
 export class IdempotencyService {
@@ -230,10 +280,11 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     return next();
   }
 
-  const key = String(req.header('Idempotency-Key') || '').trim();
-  if (!key) {
+  const rawKey = String(req.header('Idempotency-Key') || '').trim();
+  if (!rawKey) {
     return next();
   }
+  const key = scopedStorageKey(req, rawKey);
 
   try {
     const begin = await IdempotencyService.begin(req, key);
@@ -252,7 +303,7 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     res.json = ((body: any) => {
       if (!captured) {
         captured = true;
-        void IdempotencyService.complete(key, res.statusCode, body);
+        void IdempotencyService.complete(key, res.statusCode, storedResponseBody(req, res.statusCode, body));
       }
       return originalJson(body);
     }) as any;
@@ -260,7 +311,8 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     res.send = ((body: any) => {
       if (!captured) {
         captured = true;
-        void IdempotencyService.complete(key, res.statusCode, responsePayloadFromSend(body));
+        const payload = responsePayloadFromSend(body);
+        void IdempotencyService.complete(key, res.statusCode, storedResponseBody(req, res.statusCode, payload));
       }
       return originalSend(body);
     }) as any;

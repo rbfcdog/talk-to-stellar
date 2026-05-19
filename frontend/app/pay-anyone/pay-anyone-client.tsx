@@ -88,7 +88,10 @@ export default function PayAnyoneClient() {
     let active = true
     async function loadProfileName() {
       try {
-        const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}?session_token=${encodeURIComponent(sessionToken)}`, { cache: "no-store" })
+        const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
+          cache: "no-store",
+          headers: { "X-Session-Token": sessionToken },
+        })
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}
         const nextName = friendlyName(String(profile.display_name || profile.username || ""))
@@ -120,8 +123,9 @@ export default function PayAnyoneClient() {
 
     try {
       if (mode === "receive") {
-        const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}?session_token=${encodeURIComponent(sessionToken)}`, {
+        const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
           method: "GET",
+          headers: { "X-Session-Token": sessionToken },
         })
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}

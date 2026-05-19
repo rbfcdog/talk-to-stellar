@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AnchorService } from '../services/anchor.service';
+import { timingSafeEqualString } from '../../utils/password';
 
 function statusFromError(error: any): number {
   const status = Number(error?.statusCode || error?.status || 500);
@@ -29,6 +30,31 @@ function requestInput(req: Request): Record<string, unknown> {
   };
 }
 
+function readBearerToken(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  return auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+}
+
+function hasInternalSandboxAuthorization(req: Request): boolean {
+  const expected = String(process.env.RAMP_SANDBOX_INTERNAL_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  const provided = String(
+    req.headers['x-ramp-sandbox-secret'] ||
+      req.headers['x-internal-api-secret'] ||
+      readBearerToken(req) ||
+      ''
+  ).trim();
+  return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+}
+
+function requireInternalSandboxAuthorization(req: Request, res: Response): boolean {
+  if (hasInternalSandboxAuthorization(req)) return true;
+  res.status(403).json({
+    success: false,
+    message: 'Internal authorization is required for Etherfuse sandbox helper endpoints.',
+  });
+  return false;
+}
+
 export class RampController {
   static async getEtherfuseConfig(_req: Request, res: Response) {
     try {
@@ -40,6 +66,7 @@ export class RampController {
 
   static async resolveEtherfuseWalletByEmail(req: Request, res: Response) {
     try {
+      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.resolveWalletByEmail(requestInput(req));
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
@@ -170,6 +197,7 @@ export class RampController {
 
   static async simulateEtherfuseFiatReceived(req: Request, res: Response) {
     try {
+      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.simulateFiatReceivedForSession(requestInput(req));
       res.status(result.success ? 200 : 400).json(result);
     } catch (error: any) {
@@ -179,6 +207,7 @@ export class RampController {
 
   static async submitPixFundedTransfer(req: Request, res: Response) {
     try {
+      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.submitPixFundedTransferForSession(requestInput(req));
       res.status(result.success ? 200 : 400).json(result);
     } catch (error: any) {
@@ -188,6 +217,7 @@ export class RampController {
 
   static async runTemporaryEtherfuseOnRampTest(req: Request, res: Response) {
     try {
+      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.runTemporarySandboxOnRampTest(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {
@@ -197,6 +227,7 @@ export class RampController {
 
   static async runTemporaryEtherfuseOffRampTest(req: Request, res: Response) {
     try {
+      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.runTemporarySandboxOffRampTest(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {

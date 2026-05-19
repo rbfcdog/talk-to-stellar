@@ -389,9 +389,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     const sessionToken = typeof window !== "undefined"
       ? localStorage.getItem("talk-to-stellar.sessionToken") || ""
       : "";
-    if (sessionToken) {
-      params.set("session_token", sessionToken);
-    }
     if (browserId) {
       params.set("browser_id", browserId);
     }
@@ -401,6 +398,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       const response = await fetch(`/api/chat?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
+        headers: {
+          ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+        },
       });
       if (!response.ok) return;
       const data = await response.json();
