@@ -30,6 +30,8 @@ The hard part is not Stellar settlement. The hard part is the regulated bridge f
 - Stellar Anchor Platform supports SEP-1, SEP-6, SEP-10, SEP-12, SEP-24, SEP-31 and SEP-38 for anchor on/off-ramp services: https://developers.stellar.org/platforms/anchor-platform/admin-guide/overview
 - Circle Mint documentation describes minting/redeeming USDC and EURC, with USDC redeemed 1:1 for USD for institutional customers: https://developers.circle.com/circle-mint
 - Wise USD account details documentation says recipients can receive USD using account and routing details, with domestic US bank payments or SWIFT depending on the route: https://wise.com/help/articles/2827506/how-do-i-use-my-usd-account-details
+- Wise pricing lists domestic non-wire receiving as free and USD wire/SWIFT receiving with a fixed fee in the current pricing table: https://wise.com/us/pricing/
+- Stellar fee documentation explains that classic transaction fees are based on operation count and effective base fee, with a 100 stroop per-operation minimum: https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering
 
 ## System Components
 
@@ -222,6 +224,7 @@ The first production-like pilot should be closed B2B:
 | USDC to USD off-ramp | 0.10% to 0.50% |
 | ACH | low fixed fee |
 | Wire | higher fixed fee |
+| Wise receive fee | free for domestic non-wire USD in the current pricing table; fixed for USD wire/SWIFT |
 | Platform fee | 0.20% to 0.80% |
 
 Target total: 0.90% to 1.50% plus applicable taxes/IOF and fixed rail fees.

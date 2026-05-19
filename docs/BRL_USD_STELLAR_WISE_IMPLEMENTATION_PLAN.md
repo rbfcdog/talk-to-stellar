@@ -26,8 +26,13 @@ Create backend endpoints while still using mocked providers:
 ```text
 POST /api/global-transfers/quotes
 POST /api/global-transfers
+POST /api/global-transfers/pix-anchor-orders
+POST /api/global-transfers/pix-anchor-orders/:id/simulate-paid
+POST /api/global-transfers/:id/external-payout
 GET  /api/global-transfers/:id
 POST /api/global-transfers/:id/simulate-event
+POST /webhooks/pix-provider
+POST /webhooks/offramp-provider
 ```
 
 Minimum database tables:
@@ -37,6 +42,9 @@ global_transfer_quotes
 global_transfer_transfers
 global_transfer_events
 global_transfer_provider_refs
+global_transfer_fee_lines
+pix_anchor_orders
+external_payout_instructions
 recipient_bank_accounts
 compliance_reviews
 ```
@@ -49,7 +57,9 @@ Required backend guarantees:
 - quote expiry;
 - no transfer creation after quote expiry;
 - no bank details stored without encryption or tokenization;
-- no status transition without a valid previous state.
+- no status transition without a valid previous state;
+- no PIX order creation unless KYC/KYB state is valid for the selected pilot segment;
+- no external payout submission until PIX is settled, USDC is allocated and screening passes.
 
 ## Phase 2 - Ledger and reconciliation
 
