@@ -42,9 +42,13 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
       setStatus("loading")
       try {
         const sessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
+        const sessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
         const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""
         const response = await fetch(`/api/financial/wallet-profile/${encodeURIComponent(publicKey)}${query}`, {
           cache: "no-store",
+          headers: {
+            ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+          },
         })
         const body = await response.json().catch(() => ({}))
         if (!response.ok || !body?.success) {

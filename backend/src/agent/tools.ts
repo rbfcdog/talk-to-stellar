@@ -31,6 +31,7 @@ import { InvoiceService } from "../api/services/invoice.service";
 import { GlobalProfileService } from "../api/services/global-profile.service";
 import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
 import { timingSafeEqualString } from "../utils/password";
+import { safeRedactedJson } from "../utils/redaction";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -1086,7 +1087,7 @@ export async function executeTool(
   toolInput: Record<string, any>
 ): Promise<string> {
   try {
-    logger.info(`Tool call: ${toolName} ${JSON.stringify(toolInput || {})}`);
+    logger.info(`Tool call: ${toolName} ${safeRedactedJson(toolInput || {})}`);
     switch (toolName) {
       case "set_language":
         return await executeSetLanguage(toolInput);

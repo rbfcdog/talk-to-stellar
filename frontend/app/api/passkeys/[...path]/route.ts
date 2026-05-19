@@ -51,7 +51,6 @@ async function proxy(req: NextRequest, path: string[]) {
       {
         success: false,
         message: `Proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL on frontend deployment.`,
-        target,
       },
       { status: 502 }
     );

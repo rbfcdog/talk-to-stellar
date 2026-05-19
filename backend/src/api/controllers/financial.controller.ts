@@ -529,9 +529,12 @@ export class FinancialController {
 
   static async getWalletProfile(req: Request, res: Response) {
     try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
       const publicKey = String(req.params.public_key || req.query.public_key || req.body?.public_key || '').trim();
       const payload = await TransactionHistoryService.getWalletProfile({
-        ...sessionAndUser(req),
+        sessionId: auth.sessionId,
+        userId: auth.userId,
         publicKey,
       });
       return res.status(200).json({ success: true, ...payload });

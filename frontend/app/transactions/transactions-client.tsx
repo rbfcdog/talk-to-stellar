@@ -80,8 +80,11 @@ export default function TransactionsClient() {
     setMessage("")
     try {
       const response = await fetch(
-        `/api/financial/transactions/${encodeURIComponent(currentSessionId)}?month=${encodeURIComponent(currentMonth)}&year=${encodeURIComponent(currentYear)}&limit=200&session_token=${encodeURIComponent(currentSessionToken)}`,
-        { cache: "no-store" }
+        `/api/financial/transactions/${encodeURIComponent(currentSessionId)}?month=${encodeURIComponent(currentMonth)}&year=${encodeURIComponent(currentYear)}&limit=200`,
+        {
+          cache: "no-store",
+          headers: { "X-Session-Token": currentSessionToken },
+        }
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success) {
