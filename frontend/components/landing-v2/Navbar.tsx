@@ -38,6 +38,7 @@ export default function Navbar() {
       <div className="hidden lg:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
         <button onClick={() => document.getElementById('solution')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_solution")}</button>
         <button onClick={() => document.getElementById('simulator')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_simulator")}</button>
+        <a href="/global-transfer" className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">USD Lab</a>
         <button onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">{t("nav_how")}</button>
         <button onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">FAQ</button>
       </div>

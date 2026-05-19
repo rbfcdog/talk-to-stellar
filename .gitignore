@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 
 .docs/
 .deprecated/
+
+# Local archived sandbox copies can contain .env, node_modules and nested Git repos.
+deprecated/sandbox/
