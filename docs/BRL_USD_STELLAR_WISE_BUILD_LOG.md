@@ -38,7 +38,19 @@ Date: 2026-05-18
 5. Added a landing navigation link to the new lab.
    - The main landing navbar now links to `/global-transfer` as `USD Lab`.
 
-6. Handled local sandbox artifacts safely.
+6. Extended the lab into a full PIX anchor and external payout surface.
+   - Added anchor provider selection.
+   - Added payer/KYC inputs.
+   - Added PIX PSP and anchor fee controls.
+   - Added recipient bank detail inputs.
+   - Added actions for creating the PIX anchor order, marking PIX paid and sending USD externally.
+   - Added anchor order, release gate, external payout and fee-by-stage panels.
+
+7. Added fee and anchor-flow documentation.
+   - New file: `docs/BRL_USD_STELLAR_WISE_FEES_AND_ANCHOR_FLOW.md`.
+   - It describes what is needed to make the mock real and which fees are paid at each stage.
+
+8. Handled local sandbox artifacts safely.
    - `debug-telegram-image.png` was already deleted locally and is staged as a tracked deletion.
    - `sandbox/regional-starter-pack` was already deleted locally and is staged as a tracked deletion.
    - `deprecated/sandbox/` is not committed because it contains a nested Git repo, `node_modules` and `.env`.
