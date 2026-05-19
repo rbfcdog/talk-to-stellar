@@ -26,6 +26,7 @@ import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
+import { verifyWalletPin } from '../../utils/pin-hash';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -281,12 +282,6 @@ function formatDisplayAmount(value: unknown, assetCode: string): string {
 
 function truncatePublicKey(value: string): string {
   return value ? `${value.slice(0, 7)}...${value.slice(-7)}` : 'wallet';
-}
-
-function hashWalletPin(pin: string): string {
-  return crypto
-    .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-    .toString('hex');
 }
 
 function stableHex(value: string): string {
@@ -718,7 +713,7 @@ export class AnchorService {
     if (!/^\d{4,8}$/.test(pin)) {
       throw apiError('PIN da wallet é obrigatório para confirmar esta operação.', 400);
     }
-    if (!context.sessionPinHash || hashWalletPin(pin) !== context.sessionPinHash) {
+    if (!context.sessionPinHash || !verifyWalletPin(pin, context.sessionPinHash).valid) {
       throw apiError('PIN inválido. Tente novamente.', 401);
     }
     return pin;

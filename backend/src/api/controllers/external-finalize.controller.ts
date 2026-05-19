@@ -36,6 +36,7 @@ import {
   EmailConfirmationService,
 } from '../services/email-confirmation.service';
 import { getRequiredJwtSecret } from '../../config/secrets';
+import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -158,6 +159,27 @@ const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
 const vaultService = new VaultService(supabase);
+
+function verifyPinAgainstSession(pin: string, session: any) {
+  return verifyWalletPinAgainstAny(pin, [
+    session?.session_password_hash,
+    session?.password_hash,
+  ]);
+}
+
+async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session: any): Promise<void> {
+  const verification = verifyPinAgainstSession(pin, session);
+  if (!verification.valid || !verification.needsRehash) return;
+  const migratedHash = hashWalletPin(pin);
+  await supabase
+    .from('agent_sessions')
+    .update({
+      password_hash: migratedHash,
+      session_password_hash: migratedHash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('session_id', sessionId);
+}
 
 async function createExternalMappingsWithAliases(payload: {
   provider: string;
@@ -1375,17 +1397,15 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const pinHash = crypto
-          .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-          .toString('hex');
-
-        const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
-        if (!sessionPinHash || pinHash !== sessionPinHash) {
+        if (!verifyPinAgainstSession(providedPin, session).valid) {
           return res.status(401).json({
             success: false,
             message: 'PIN inválido. Tente novamente.',
           });
         }
+        await rehashSessionPinIfNeeded(String(session_id), providedPin, session).catch((error) => {
+          logger.warn(`[external-finalize] could not migrate PIN hash for ${session_id}: ${error instanceof Error ? error.message : String(error)}`);
+        });
 
         await ensureDestinationCanReceiveAsset({
           destination: wallet.public_key,
@@ -1922,17 +1942,15 @@ export default class ExternalFinalizeController {
             });
           }
 
-          const pinHash = crypto
-            .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-            .toString('hex');
-
-          const sessionPinHash = String((session as any)?.session_password_hash || (session as any)?.password_hash || '').trim();
-          if (!sessionPinHash || pinHash !== sessionPinHash) {
+          if (!verifyPinAgainstSession(providedPin, session).valid) {
             return res.status(401).json({
               success: false,
               message: 'PIN inválido. Tente novamente.',
             });
           }
+          await rehashSessionPinIfNeeded(String(session_id), providedPin, session).catch((error) => {
+            logger.warn(`[external-finalize] could not migrate PIN hash for ${session_id}: ${error instanceof Error ? error.message : String(error)}`);
+          });
         }
 
         const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
@@ -2597,9 +2615,7 @@ export default class ExternalFinalizeController {
       if (normalizedCpf && normalizedCpf.length !== 11) {
         return res.status(400).json({ success: false, message: 'CPF inválido. Informe 11 dígitos.' });
       }
-      const pinHash = crypto
-        .pbkdf2Sync(providedPin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-        .toString('hex');
+      const pinHash = hashWalletPin(providedPin);
 
       const normalizedEmail = normalizeEmailForCompare(email);
       if (email && !looksLikeEmail(normalizedEmail)) {
@@ -2641,13 +2657,15 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const sessionPinHash = String((existingSession as any)?.session_password_hash || (existingSession as any)?.password_hash || '').trim();
-        if (sessionPinHash && pinHash !== sessionPinHash) {
+        if (!verifyPinAgainstSession(providedPin, existingSession).valid) {
           return res.status(401).json({
             success: false,
             message: 'PIN inválido para a conta já vinculada a este canal.',
           });
         }
+        await rehashSessionPinIfNeeded(String(existingAccount.session_id), providedPin, existingSession).catch((error) => {
+          logger.warn(`[external-finalize] could not migrate PIN hash for ${existingAccount.session_id}: ${error instanceof Error ? error.message : String(error)}`);
+        });
 
         const collision = await detectIdentityCollision({
           email: normalizedEmail || undefined,
@@ -2767,13 +2785,15 @@ export default class ExternalFinalizeController {
             });
           }
 
-          const sessionPinHash = String((lockedSession as any)?.session_password_hash || (lockedSession as any)?.password_hash || '').trim();
-          if (sessionPinHash && pinHash !== sessionPinHash) {
+          if (!verifyPinAgainstSession(providedPin, lockedSession).valid) {
             return res.status(401).json({
               success: false,
               message: 'PIN inválido para a conta já vinculada a este canal.',
             });
           }
+          await rehashSessionPinIfNeeded(identityLock.sessionId, providedPin, lockedSession).catch((error) => {
+            logger.warn(`[external-finalize] could not migrate PIN hash for ${identityLock.sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+          });
 
           const emailConfirmed = await ensureEmailConfirmation(req, res, {
             email: normalizedEmail || lockedLogin,

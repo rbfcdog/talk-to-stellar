@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import { Keypair } from '@stellar/stellar-sdk';
 import { supabase } from '../../config/supabase';
 import { AgentRepository } from '../../repositories/agent.repository';
@@ -12,6 +11,7 @@ import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { buildOperationFingerprint } from '../../services/idempotency.service';
+import { verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -25,12 +25,6 @@ function isValidStellarPublicKey(value?: string) {
   } catch {
     return false;
   }
-}
-
-function hashPin(pin: string) {
-  return crypto
-    .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-    .toString('hex');
 }
 
 function toAmount(value: unknown): number {
@@ -242,8 +236,7 @@ export default class SendWalletController {
         );
       } else {
         const pin = String(req.body?.pin || '').trim();
-        const expected = String((session as any).session_password_hash || (session as any).password_hash || '').trim();
-        if (!pin || !expected || hashPin(pin) !== expected) {
+        if (!pin || !verifyWalletPinAgainstAny(pin, [(session as any).session_password_hash, (session as any).password_hash]).valid) {
           return res.status(401).json({ success: false, error: 'Autenticação obrigatória. Confirme com Passkey ou PIN.' });
         }
       }

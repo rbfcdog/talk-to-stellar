@@ -32,6 +32,7 @@ import { GlobalProfileService } from "../api/services/global-profile.service";
 import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
 import { timingSafeEqualString } from "../utils/password";
 import { safeRedactedJson } from "../utils/redaction";
+import { hashWalletPin } from "../utils/pin-hash";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -4496,11 +4497,7 @@ async function executeRestartOnboarding(input: any): Promise<string> {
       });
     }
 
-    // Hash the PIN
-    const crypto = require('crypto');
-    const pinHash = crypto
-      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-      .toString('hex');
+    const pinHash = hashWalletPin(pin);
 
     // If no user_id provided, create a new user/wallet
     let finalUserId = userId;

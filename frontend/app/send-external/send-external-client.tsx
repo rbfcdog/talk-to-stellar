@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { CheckCircle2, Copy, Loader2, ShieldAlert, XCircle } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
+import { getClientSession } from "@/lib/session"
 
 type AssetCode = "USDC"
 
@@ -61,7 +62,7 @@ export default function SendExternalClient() {
   const executionIdRef = useRef("")
 
   useEffect(() => {
-    setSessionId(localStorage.getItem("talk-to-stellar.sessionId") || "")
+    getClientSession().then(({ sessionId }) => setSessionId(sessionId))
     setDestination(String(searchParams.get("destination") || "").trim())
     setAmount(String(searchParams.get("amount") || "").replace(",", ".").trim())
     setAsset(normalizeAsset(searchParams.get("asset")))

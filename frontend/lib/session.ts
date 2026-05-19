@@ -2,6 +2,7 @@ export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const SESSION_CREATED_AT_KEY = "talk-to-stellar.sessionCreatedAt";
 const SESSION_LAST_SEEN_AT_KEY = "talk-to-stellar.sessionLastSeenAt";
 const SESSION_ID_KEY = "talk-to-stellar.sessionId";
+const SESSION_TOKEN_KEY = "talk-to-stellar.sessionToken";
 
 function normalizeTimestamp(raw: string | null): number {
   const parsed = Number(raw || "0");
@@ -10,15 +11,25 @@ function normalizeTimestamp(raw: string | null): number {
   return parsed < 1_000_000_000_000 ? parsed * 1000 : parsed;
 }
 
-export function saveClientSession(sessionId?: string, sessionToken?: string) {
+export async function getClientSession(): Promise<{ sessionId: string; authenticated: boolean }> {
+  if (typeof window === "undefined") return { sessionId: "", authenticated: false };
+  try {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    return {
+      sessionId: String(payload?.session_id || payload?.sessionId || "").trim(),
+      authenticated: Boolean(payload?.authenticated),
+    };
+  } catch {
+    return { sessionId: "", authenticated: false };
+  }
+}
+
+export function saveClientSession(_sessionId?: string, _sessionToken?: string) {
   if (typeof window === "undefined") return;
 
-  if (sessionId) {
-    localStorage.setItem("talk-to-stellar.sessionId", sessionId);
-  }
-  if (sessionToken) {
-    localStorage.setItem("talk-to-stellar.sessionToken", sessionToken);
-  }
+  localStorage.removeItem(SESSION_ID_KEY);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
   const now = String(Date.now());
   localStorage.setItem(SESSION_CREATED_AT_KEY, now);
   localStorage.setItem(SESSION_LAST_SEEN_AT_KEY, now);
@@ -28,23 +39,25 @@ export function clearClientSession() {
   if (typeof window === "undefined") return;
 
   localStorage.removeItem(SESSION_ID_KEY);
-  localStorage.removeItem("talk-to-stellar.sessionToken");
+  localStorage.removeItem(SESSION_TOKEN_KEY);
   localStorage.removeItem(SESSION_CREATED_AT_KEY);
   localStorage.removeItem(SESSION_LAST_SEEN_AT_KEY);
+  fetch("/api/session", { method: "DELETE", cache: "no-store" }).catch(() => {});
 }
 
 export function touchClientSessionActivity() {
   if (typeof window === "undefined") return;
-  const sessionId = localStorage.getItem(SESSION_ID_KEY);
-  if (!sessionId) return;
   localStorage.setItem(SESSION_LAST_SEEN_AT_KEY, String(Date.now()));
 }
 
 export function isClientSessionExpired() {
   if (typeof window === "undefined") return false;
 
-  const sessionId = localStorage.getItem(SESSION_ID_KEY);
-  if (!sessionId) return false;
+  if (localStorage.getItem(SESSION_ID_KEY) || localStorage.getItem(SESSION_TOKEN_KEY)) {
+    localStorage.removeItem(SESSION_ID_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    return false;
+  }
 
   let createdAt = normalizeTimestamp(localStorage.getItem(SESSION_CREATED_AT_KEY));
   if (!createdAt) {

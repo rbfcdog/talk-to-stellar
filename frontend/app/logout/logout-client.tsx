@@ -53,8 +53,7 @@ export default function LogoutClient() {
 
   const currentSessionId = useMemo(() => {
     if (sessionIdFromUrl) return sessionIdFromUrl
-    if (typeof window === "undefined") return ""
-    return String(localStorage.getItem("talk-to-stellar.sessionId") || "").trim()
+    return ""
   }, [sessionIdFromUrl])
 
   useEffect(() => {

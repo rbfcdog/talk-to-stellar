@@ -4,6 +4,7 @@ import { PinResetService } from '../../services/pin-reset.service';
 import { logger } from '../../utils/logger';
 import { supabase } from '../../config/supabase';
 import { isSessionExpired } from '../../utils/session-expiry';
+import { hashWalletPin } from '../../utils/pin-hash';
 
 function timingSafeEqualString(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(String(left || ''));
@@ -202,10 +203,7 @@ export class PinResetController {
         });
       }
 
-      // Hash the new PIN using same method as password hashing
-      const newPinHash = crypto
-        .pbkdf2Sync(pinStr, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-        .toString('hex');
+      const newPinHash = hashWalletPin(pinStr);
 
       const result = await PinResetService.applyNewPin(
         String(token),

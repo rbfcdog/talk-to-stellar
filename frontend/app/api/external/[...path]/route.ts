@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  augmentJsonBodyWithSession,
+  buildSessionHeaders,
+  passthroughResponseWithSession,
+} from "@/lib/server-session";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -70,7 +75,8 @@ async function proxy(req: NextRequest, path: string[]) {
   const backendBase = getBackendBaseUrl();
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/external/${path.join("/")}${qs ? `?${qs}` : ""}`;
-  const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const body = augmentJsonBodyWithSession(rawBody, req);
   const inboundIdempotencyKey = req.headers.get("Idempotency-Key");
   const isShortLinkCreate = req.method === "POST" && path.join("/") === "short-links";
 
@@ -84,6 +90,7 @@ async function proxy(req: NextRequest, path: string[]) {
   const headers: Record<string, string> = {
     "content-type": req.headers.get("content-type") || "application/json",
     "x-frontend-origin": req.nextUrl.origin,
+    ...buildSessionHeaders(req),
   };
   if (inboundIdempotencyKey) {
     headers["Idempotency-Key"] = inboundIdempotencyKey;
@@ -104,10 +111,7 @@ async function proxy(req: NextRequest, path: string[]) {
   try {
     const res = await fetch(target, init);
     const text = await res.text();
-    return new NextResponse(text, {
-      status: res.status,
-      headers: { "content-type": res.headers.get("content-type") || "application/json" },
-    });
+    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
     return NextResponse.json(
       {

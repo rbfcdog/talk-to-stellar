@@ -22,10 +22,14 @@ function errorPayload(error: any): Record<string, unknown> {
 
 function requestInput(req: Request): Record<string, unknown> {
   const headerPin = String(req.headers['x-wallet-pin'] || req.headers['x-talktostellar-wallet-pin'] || '').trim();
+  const headerSessionId = String(req.headers['x-session-id'] || req.headers['x-talktostellar-session-id'] || '').trim();
+  const headerSessionToken = String(req.headers['x-session-token'] || req.headers['x-talktostellar-session-token'] || '').trim();
   return {
     ...req.query,
     ...req.body,
     ...req.params,
+    ...(headerSessionId ? { session_id: headerSessionId } : {}),
+    ...(headerSessionToken ? { session_token: headerSessionToken } : {}),
     ...(headerPin ? { pin: headerPin, wallet_pin: headerPin } : {}),
   };
 }

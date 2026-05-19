@@ -7,50 +7,47 @@ import {
 } from "@/lib/server-session";
 
 function getBackendBaseUrl() {
-  const fromBackend = process.env.BACKEND_URL;
-  if (fromBackend) return fromBackend.replace(/\/$/, "");
-
-  const fromAgent = process.env.AGENT_API_URL;
-  if (fromAgent) return fromAgent.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
-
-  const fromPublic =
+  const raw =
+    process.env.BACKEND_URL ||
+    process.env.AGENT_API_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_AGENT_API_URL ||
-    "";
+    "http://localhost:3001";
 
-  if (!fromPublic) return "http://localhost:3001";
-  return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
+  return raw
+    .replace(/\/api\/agent\/query\/?$/, "")
+    .replace(/\/api\/agent\/?$/, "")
+    .replace(/\/api\/?$/, "")
+    .replace(/\/$/, "");
 }
 
 async function proxy(req: NextRequest, path: string[]) {
   const backendBase = getBackendBaseUrl();
   const qs = req.nextUrl.searchParams.toString();
-  const target = `${backendBase}/api/financial/${path.join("/")}${qs ? `?${qs}` : ""}`;
+  const target = `${backendBase}/api/agent/${path.join("/")}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
   const body = augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
 
-  const init: RequestInit = {
-    method: req.method,
-    headers: {
-      "content-type": req.headers.get("content-type") || "application/json",
-      "Idempotency-Key": idempotencyKey,
-      ...buildSessionHeaders(req),
-    },
-  };
-
-  if (body !== undefined) init.body = body;
-
   try {
-    const res = await fetch(target, init);
+    const res = await fetch(target, {
+      method: req.method,
+      headers: {
+        "content-type": req.headers.get("content-type") || "application/json",
+        "Idempotency-Key": idempotencyKey,
+        ...buildSessionHeaders(req),
+      },
+      body,
+      cache: "no-store",
+    });
     const text = await res.text();
     return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
     return NextResponse.json(
       {
         success: false,
-        message: `Proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL on frontend deployment.`,
+        message: `Agent proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL.`,
       },
       { status: 502 }
     );

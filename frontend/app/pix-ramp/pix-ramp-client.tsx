@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
+import { getClientSession } from "@/lib/session";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -30,7 +31,7 @@ type BalanceDelta = {
 };
 
 type RampResponse = Record<string, any>;
-type RampAuth = { session_id: string; session_token: string };
+type RampAuth = { session_id: string };
 type ExternalBankAccount = {
   id: string;
   label: string;
@@ -59,10 +60,9 @@ type DebugLogEntry = {
 };
 
 function getStoredSession() {
-  if (typeof window === "undefined") return { sessionId: "", sessionToken: "" };
+  if (typeof window === "undefined") return { sessionId: "" };
   return {
-    sessionId: window.localStorage.getItem("talk-to-stellar.sessionId") || "",
-    sessionToken: window.localStorage.getItem("talk-to-stellar.sessionToken") || "",
+    sessionId: "",
   };
 }
 
@@ -358,7 +358,6 @@ export default function PixRampClient({
   const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const [sessionId, setSessionId] = useState("");
-  const [sessionToken, setSessionToken] = useState("");
   const [rampEmail, setRampEmail] = useState("");
   const [resolvedWallet, setResolvedWallet] = useState<RampResponse | null>(null);
   const [config, setConfig] = useState<RampConfig | null>(null);
@@ -457,7 +456,7 @@ export default function PixRampClient({
   ).trim();
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
-  const hasSession = Boolean(sessionId && sessionToken);
+  const hasSession = Boolean(sessionId);
   const canResolveWallet = Boolean(hasSession || rampEmail.trim());
   const customer = customerPayload?.customer;
   const customerId = String(customer?.id || "");
@@ -644,7 +643,9 @@ export default function PixRampClient({
   useEffect(() => {
     const stored = getStoredSession();
     setSessionId(stored.sessionId);
-    setSessionToken(stored.sessionToken);
+    getClientSession().then(({ sessionId: cookieSessionId }) => {
+      if (cookieSessionId) setSessionId(cookieSessionId);
+    });
     const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
     if (storedName.includes("@")) setRampEmail(storedName);
   }, []);
@@ -737,11 +738,11 @@ export default function PixRampClient({
 
   useEffect(() => {
     if (rampMode !== "offramp") return;
-    if (!sessionId || !sessionToken) return;
-    loadExternalBankAccount({ session_id: sessionId, session_token: sessionToken }).catch((err) => {
+    if (!sessionId) return;
+    loadExternalBankAccount({ session_id: sessionId }).catch((err) => {
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [rampMode, sessionId, sessionToken]);
+  }, [rampMode, sessionId]);
 
   useEffect(() => {
     if (rampMode !== "offramp") return;
@@ -823,8 +824,8 @@ export default function PixRampClient({
   }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
-    if (sessionId && sessionToken) {
-      return { session_id: sessionId, session_token: sessionToken };
+    if (sessionId) {
+      return { session_id: sessionId };
     }
 
     const email = rampEmail.trim().toLowerCase();
@@ -854,25 +855,21 @@ export default function PixRampClient({
     }
 
     const nextSessionId = String(payload.session_id || "");
-    const nextSessionToken = String(payload.session_token || "");
-    if (!nextSessionId || !nextSessionToken) {
+    if (!nextSessionId) {
       throw new Error(L("A conta foi encontrada, mas não retornou uma sessão válida para cotar.", "The account was found, but did not return a valid session for quoting."));
     }
 
     setSessionId(nextSessionId);
-    setSessionToken(nextSessionToken);
     setResolvedWallet(payload);
     setWalletPublicKey(String(payload.public_key || ""));
-    window.localStorage.setItem("talk-to-stellar.sessionId", nextSessionId);
-    window.localStorage.setItem("talk-to-stellar.sessionToken", nextSessionToken);
     window.localStorage.setItem("talk-to-stellar.userName", email);
 
-    return { session_id: nextSessionId, session_token: nextSessionToken };
+    return { session_id: nextSessionId };
   }
 
   async function loadExternalBankAccount(authOverride?: RampAuth) {
-    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) return null;
+    const auth = authOverride || { session_id: sessionId };
+    if (!auth.session_id) return null;
     const startedAt = performance.now();
     const response = await fetch("/api/ramp/etherfuse/external-bank-account", {
       method: "POST",
@@ -901,8 +898,8 @@ export default function PixRampClient({
   }
 
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth, idempotencyKey?: string) => {
-    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
+    const auth = authOverride || { session_id: sessionId };
+    if (!auth.session_id) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
     const requestBody: Record<string, unknown> = { ...auth, language, ...(body || {}) };
     const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -932,11 +929,11 @@ export default function PixRampClient({
       throw requestError;
     }
     return payload;
-  }, [L, addDebugLog, language, sessionId, sessionToken]);
+  }, [L, addDebugLog, language, sessionId]);
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
-    const auth = authOverride || { session_id: sessionId, session_token: sessionToken };
-    if (!auth.session_id || !auth.session_token) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
+    const auth = authOverride || { session_id: sessionId };
+    if (!auth.session_id) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
     const search = new URLSearchParams({ ...auth, language, ...(params || {}) });
     const startedAt = performance.now();
     const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
@@ -957,7 +954,7 @@ export default function PixRampClient({
       throw requestError;
     }
     return payload;
-  }, [L, addDebugLog, language, sessionId, sessionToken]);
+  }, [L, addDebugLog, language, sessionId]);
 
   const fetchBalances = useCallback(async (authOverride?: RampAuth) => {
     const payload = await callRampGet("/api/ramp/etherfuse/wallet-balances", undefined, authOverride);
@@ -1130,7 +1127,6 @@ export default function PixRampClient({
 
   function clearResolvedRampWallet(nextEmail = rampEmail) {
     setSessionId("");
-    setSessionToken("");
     setResolvedWallet(null);
     setWalletPublicKey("");
     setCustomerPayload(null);
@@ -1153,10 +1149,6 @@ export default function PixRampClient({
     setPolling(false);
     setStep("quote");
     setRampEmail(nextEmail);
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("talk-to-stellar.sessionId");
-      window.localStorage.removeItem("talk-to-stellar.sessionToken");
-    }
   }
 
   function clearQuoteState() {
