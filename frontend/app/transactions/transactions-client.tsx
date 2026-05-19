@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { FileDown, Loader2, Wallet2 } from "lucide-react"
+import { getClientSession } from "@/lib/session"
 
 type TransactionItem = {
   id: string | number
@@ -48,7 +49,6 @@ function formatWhen(value?: string | null) {
 export default function TransactionsClient() {
   const now = new Date()
   const [sessionId, setSessionId] = useState("")
-  const [sessionToken, setSessionToken] = useState("")
   const [month, setMonth] = useState(String(now.getMonth() + 1))
   const [year, setYear] = useState(String(now.getFullYear()))
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
@@ -62,29 +62,25 @@ export default function TransactionsClient() {
   }, [month, year, now])
 
   useEffect(() => {
-    const sid = localStorage.getItem("talk-to-stellar.sessionId") || ""
-    const token = localStorage.getItem("talk-to-stellar.sessionToken") || ""
-    setSessionId(sid)
-    setSessionToken(token)
-    if (!sid || !token) {
-      setStatus("error")
-      setMessage("Sign in to view your history.")
-      return
-    }
-    void loadTransactions(sid, month, year, token)
+    getClientSession().then(({ sessionId: sid, authenticated }) => {
+      setSessionId(sid)
+      if (!sid || !authenticated) {
+        setStatus("error")
+        setMessage("Sign in to view your history.")
+        return
+      }
+      void loadTransactions(sid, month, year)
+    })
   }, [])
 
-  async function loadTransactions(currentSessionId = sessionId, currentMonth = month, currentYear = year, currentSessionToken = sessionToken) {
-    if (!currentSessionId || !currentSessionToken) return
+  async function loadTransactions(currentSessionId = sessionId, currentMonth = month, currentYear = year) {
+    if (!currentSessionId) return
     setStatus("loading")
     setMessage("")
     try {
       const response = await fetch(
         `/api/financial/transactions/${encodeURIComponent(currentSessionId)}?month=${encodeURIComponent(currentMonth)}&year=${encodeURIComponent(currentYear)}&limit=200`,
-        {
-          cache: "no-store",
-          headers: { "X-Session-Token": currentSessionToken },
-        }
+        { cache: "no-store" }
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.success) {

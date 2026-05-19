@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowRight, Loader2, WalletCards } from "lucide-react"
+import { getClientSession } from "@/lib/session"
 
 function displayName(profile: any, username: string) {
   return String(profile?.display_name || profile?.username || username || "TalkToStellar").trim()
@@ -52,14 +53,13 @@ export default function PublicReceivePage() {
     setSubmitMessage("")
 
     try {
-      const sessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
-      const sessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+      const { sessionId, authenticated } = await getClientSession()
       const normalizedAmount = amount.trim().replace(",", ".")
       if (!normalizedAmount || !Number.isFinite(Number(normalizedAmount)) || Number(normalizedAmount) <= 0) {
         throw new Error("Enter an amount greater than zero.")
       }
 
-      if (!sessionId || !sessionToken) {
+      if (!sessionId || !authenticated) {
         const next = `/u/${encodeURIComponent(username)}`
         router.push(`/login?next=${encodeURIComponent(next)}`)
         return
@@ -70,7 +70,6 @@ export default function PublicReceivePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: sessionId,
-          session_token: sessionToken,
           amount: normalizedAmount,
           asset_code: asset,
         }),

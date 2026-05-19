@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { buildOperationFingerprint } from '../../services/idempotency.service';
 import { getRequiredJwtSecret } from '../../config/secrets';
+import { verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -26,12 +27,6 @@ function getJwtSecret() {
 
 function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function hashPin(pin: string) {
-  return crypto
-    .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-    .toString('hex');
 }
 
 function verifySessionToken(session: any, providedToken: string) {
@@ -285,8 +280,7 @@ export default class PayLinkController {
         return res.status(401).json({ success: false, message: 'Sessão inválida. Entre novamente.' });
       }
 
-      const expectedPinHash = String((session as any).session_password_hash || (session as any).password_hash || '').trim();
-      if (!expectedPinHash || expectedPinHash !== hashPin(pin)) {
+      if (!verifyWalletPinAgainstAny(pin, [(session as any).session_password_hash, (session as any).password_hash]).valid) {
         return res.status(401).json({ success: false, message: 'PIN inválido.' });
       }
 

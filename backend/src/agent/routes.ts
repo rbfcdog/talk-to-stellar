@@ -35,8 +35,6 @@ function readSessionToken(req: Request): string {
   return String(
     req.body?.session_token ||
       req.body?.sessionToken ||
-      req.query?.session_token ||
-      req.query?.sessionToken ||
       req.headers['x-session-token'] ||
       bearer ||
       ''

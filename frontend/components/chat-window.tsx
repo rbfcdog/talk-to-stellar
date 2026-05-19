@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
-import { clearClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
+import { clearClientSession, getClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/ui/feedback";
@@ -84,11 +84,7 @@ function isDuplicateChatMessage(a: Pick<Message, "role" | "content">, b: Pick<Me
 
 function getStoredChatSessionId(chatId: string): string {
   if (typeof window === "undefined") return "";
-  return (
-    localStorage.getItem("talk-to-stellar.sessionId") ||
-    sessionStorage.getItem(`chat-session-${chatId}`) ||
-    ""
-  );
+  return sessionStorage.getItem(`chat-session-${chatId}`) || "";
 }
 
 function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
@@ -200,9 +196,8 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       return;
     }
 
-    // Try to get from sessionStorage, or generate new
-    const storedSessionId = typeof window !== 'undefined' 
-      ? localStorage.getItem("talk-to-stellar.sessionId") || sessionStorage.getItem(`chat-session-${chatId}`)
+    const storedSessionId = typeof window !== 'undefined'
+      ? sessionStorage.getItem(`chat-session-${chatId}`)
       : null;
     
     const newSessionId = storedSessionId || generateSessionId();
@@ -213,6 +208,12 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
       if (chatId === "agent") {
         touchClientSessionActivity();
+        getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
+          if (authenticated && cookieSessionId) {
+            sessionStorage.setItem(`chat-session-${chatId}`, cookieSessionId);
+            setSessionId(cookieSessionId);
+          }
+        });
       }
     }
   }, [chatId, t]);
@@ -386,9 +387,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       session_id: resolvedSessionId,
       limit: "50",
     });
-    const sessionToken = typeof window !== "undefined"
-      ? localStorage.getItem("talk-to-stellar.sessionToken") || ""
-      : "";
     if (browserId) {
       params.set("browser_id", browserId);
     }
@@ -398,14 +396,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       const response = await fetch(`/api/chat?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
-        headers: {
-          ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
-        },
       });
       if (!response.ok) return;
       const data = await response.json();
       if (data.session_id && data.session_id !== resolvedSessionId && typeof window !== "undefined") {
-        localStorage.setItem("talk-to-stellar.sessionId", data.session_id);
         sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
         setSessionId(data.session_id);
         touchClientSessionActivity();
@@ -434,7 +428,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
     };
     const syncOnSessionChange = (event: StorageEvent) => {
-      if (!event.key || event.key === "talk-to-stellar.sessionId") {
+      if (!event.key || event.key === "talk-to-stellar.logoutRefreshAt") {
         fetchServerMessages();
       }
     };
@@ -558,14 +552,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         return;
       }
 
-      const storedSessionId = typeof window !== "undefined"
-        ? localStorage.getItem("talk-to-stellar.sessionId")
-        : null;
+      const storedSessionId = getStoredChatSessionId(chatId);
       const resolvedSessionId = storedSessionId || sessionId;
       const browserId = getOrCreateBrowserId();
-      const sessionToken = typeof window !== "undefined"
-        ? localStorage.getItem("talk-to-stellar.sessionToken") || ""
-        : "";
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await idempotentFetch('/api/chat', {
@@ -574,7 +563,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         body: JSON.stringify({
           messages: [...messages, userMessage],
           session_id: resolvedSessionId,
-          session_token: sessionToken || undefined,
           source: "web",
           language,
           metadata: {
@@ -591,7 +579,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
       const data = await response.json();
       if (data.session_id && typeof window !== "undefined") {
-        localStorage.setItem("talk-to-stellar.sessionId", data.session_id);
         sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
         setSessionId(data.session_id);
         touchClientSessionActivity();
@@ -621,13 +608,11 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
-          const sessionToken = localStorage.getItem('talk-to-stellar.sessionToken') || '';
           await idempotentFetch('/api/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               session_id: resolvedSessionId,
-              session_token: sessionToken || undefined,
             }),
           });
         } catch {

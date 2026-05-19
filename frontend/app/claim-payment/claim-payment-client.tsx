@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { LogIn, ShieldCheck, UserPlus } from "lucide-react"
-import { clearClientSession, isClientSessionExpired } from "@/lib/session"
+import { clearClientSession, getClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { TypingDots } from "@/components/ui/feedback"
@@ -72,7 +72,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const { language } = useLanguage()
   const [token, setToken] = useState(initialToken || "")
   const [sessionId, setSessionId] = useState("")
-  const [sessionToken, setSessionToken] = useState("")
   const [sessionReady, setSessionReady] = useState<"unknown" | "checking" | "ready" | "missing_wallet" | "invalid">("unknown")
   const [validation, setValidation] = useState<ValidationResult>({})
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">("idle")
@@ -88,15 +87,13 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       clearClientSession()
       setLoginNotice("Your session expired. Sign in again to receive this payment.")
       setSessionId("")
-      setSessionToken("")
       setSessionReady("invalid")
     } else {
       setLoginNotice("")
-      const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
-      const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
-      setSessionId(storedSessionId)
-      setSessionToken(storedSessionToken)
-      setSessionReady(storedSessionId && storedSessionToken ? "checking" : "unknown")
+      getClientSession().then(({ sessionId: storedSessionId, authenticated }) => {
+        setSessionId(storedSessionId)
+        setSessionReady(storedSessionId && authenticated ? "checking" : "unknown")
+      })
     }
     if (current) {
       window.history.replaceState(null, "", window.location.pathname)
@@ -131,7 +128,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     let cancelled = false
 
     async function validateCurrentSessionForClaim() {
-      if (!sessionId || !sessionToken) {
+      if (!sessionId) {
         setSessionReady("unknown")
         return
       }
@@ -140,7 +137,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       try {
         const response = await fetch(`/api/agent/session/${encodeURIComponent(sessionId)}`, {
           cache: "no-store",
-          headers: { "X-Session-Token": sessionToken },
         })
         const payload = await response.json().catch(() => ({}))
         if (cancelled) return
@@ -149,7 +145,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         if (!response.ok || !sessionPublicKey) {
           clearClientSession()
           setSessionId("")
-          setSessionToken("")
           setSessionReady(response.ok ? "missing_wallet" : "invalid")
           setLoginNotice("Your current session does not have an active global account. Sign in or create your account to receive this payment.")
           return
@@ -161,7 +156,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         if (cancelled) return
         clearClientSession()
         setSessionId("")
-        setSessionToken("")
         setSessionReady("invalid")
         setLoginNotice("Could not validate your current session. Sign in again to receive this payment.")
       }
@@ -171,10 +165,10 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     return () => {
       cancelled = true
     }
-  }, [sessionId, sessionToken])
+  }, [sessionId])
 
   async function claim() {
-    if (!token || validation.valid === false || !sessionId || !sessionToken) return
+    if (!token || validation.valid === false || !sessionId) return
     if (claimLockRef.current) return
     claimLockRef.current = true
     setStatus("claiming")
@@ -186,14 +180,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         body: JSON.stringify({
           token,
           session_id: sessionId,
-          session_token: sessionToken,
         }),
       })
       const payload = await response.json().catch(() => ({}))
       if (response.status === 401 && payload?.loginRequired) {
         clearClientSession()
         setSessionId("")
-        setSessionToken("")
         setLoginNotice(payload?.message || "Sign in again to receive this payment.")
       }
       setResult(payload)
@@ -230,7 +222,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const receiveLabel = isCrossAsset ? destinationAssetCode : sourceAmountLabel
   const recipientName = String(payload.recipient_name || "you")
   const senderName = String(payload.sender_name || "Someone")
-  const hasSessionCredentials = Boolean(sessionId && sessionToken)
+  const hasSessionCredentials = Boolean(sessionId)
   const loggedIn = Boolean(hasSessionCredentials && sessionReady === "ready")
   const nextPath = `/claim-payment?token=${encodeURIComponent(token)}`
   const createAccountPath = `/create-account?next=${encodeURIComponent(nextPath)}&force_new=1&context=claim-payment`
@@ -253,7 +245,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   function leaveSenderSession() {
     clearClientSession()
     setSessionId("")
-    setSessionToken("")
     setStatus("idle")
     setResult(null)
     setAutoClaimAttempted(false)

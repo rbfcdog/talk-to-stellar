@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { buildSessionHeaders, readSessionCookies } from "@/lib/server-session";
 
 const getBackendBaseUrl = () => {
   const raw =
@@ -88,7 +89,8 @@ export async function POST(req: Request) {
   let sessionId: string | null = null;
 
   try {
-    const { messages, session_id, session_token, source, metadata, language } = await req.json();
+    const session = readSessionCookies(req);
+    const { messages, session_id, source, metadata, language } = await req.json();
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
     const dataToSend = {
       query: userMessage.content,
       session_id: sessionId,
-      session_token: session_token || metadata?.session_token || undefined,
+      session_token: session.sessionToken || undefined,
       source: source || "web",
       language: language || metadata?.language || "pt-BR",
       metadata: {
@@ -122,7 +124,11 @@ export async function POST(req: Request) {
 
     const agentApiResponse = await fetch(AGENT_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+        ...buildSessionHeaders(req),
+      },
       body: JSON.stringify(dataToSend),
       signal: controller.signal,
     });
@@ -161,9 +167,8 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
-    const auth = String(req.headers.get("authorization") || "").trim();
-    const sessionToken = req.headers.get("x-session-token") ||
-      (auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "");
+    const cookieSession = readSessionCookies(req);
+    const sessionToken = cookieSession.sessionToken || "";
     const browserId = url.searchParams.get("browser_id") || "";
     const limit = url.searchParams.get("limit") || "50";
 

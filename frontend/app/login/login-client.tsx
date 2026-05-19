@@ -284,9 +284,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }, [hasExternalContext, externalToken, loginDone, externalLinkUsed])
 
-  async function linkExternalSession(sessionId?: string, sessionToken?: string) {
+  async function linkExternalSession(sessionId?: string) {
     if (!hasExternalContext) return
-    if (!sessionId || !sessionToken) {
+    if (!sessionId) {
       throw new Error("Could not link Telegram to this session.")
     }
 
@@ -296,7 +296,6 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       body: JSON.stringify({
         token: externalToken,
         session_id: sessionId,
-        session_token: sessionToken,
         language,
       }),
     })
@@ -363,8 +362,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       }
 
       saveClientSession(
-        payload?.sessionId ? String(payload.sessionId) : undefined,
-        payload?.sessionToken ? String(payload.sessionToken) : undefined
+        payload?.sessionId ? String(payload.sessionId) : undefined
       )
       markExternalLoginCompleted()
       setEmailConfirmationRequired(false)
@@ -448,15 +446,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       }
 
       saveClientSession(
-        completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
-        completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
+        completePayload?.sessionId ? String(completePayload.sessionId) : undefined
       )
       markExternalLoginCompleted()
       localStorage.setItem("talk-to-stellar.userName", email.trim())
       getBrowserId()
       await linkExternalSession(
-        completePayload?.sessionId ? String(completePayload.sessionId) : undefined,
-        completePayload?.sessionToken ? String(completePayload.sessionToken) : undefined
+        completePayload?.sessionId ? String(completePayload.sessionId) : undefined
       )
       finishLogin()
     } catch (err: any) {

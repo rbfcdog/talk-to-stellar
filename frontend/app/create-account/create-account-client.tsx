@@ -13,9 +13,7 @@ import { useLanguage } from "@/lib/i18n"
 type FinalizeResponse = {
   success: boolean
   sessionId?: string
-  sessionToken?: string
   userId?: string
-  passkeySessionToken?: string
   message?: string
   error?: string
   processing?: boolean
@@ -61,13 +59,12 @@ function decodeJwtPayload(token: string): any {
 
 type RecoveryResult =
   | { mode: "token"; token: string }
-  | { mode: "existing"; sessionId?: string; sessionToken?: string }
+  | { mode: "existing"; sessionId?: string }
   | { mode: "none" }
 
 type PreparedPasskeyRegistration = {
   userId: string
   sessionId: string
-  sessionToken: string
   challengeId: string
   options: any
 }
@@ -277,17 +274,10 @@ export default function CreateAccountClient({
 
   function finishWithCompletedResult(payload: any) {
     const sessionId = String(payload?.sessionId || payload?.session_id || "").trim()
-    const sessionToken = String(payload?.sessionToken || payload?.session_token || "").trim()
     const resolvedUserId = String(payload?.userId || payload?.user_id || "").trim()
 
-    if (sessionId && sessionToken) {
-      saveClientSession(sessionId, sessionToken)
-      try {
-        localStorage.setItem("talk-to-stellar.sessionId", sessionId)
-        localStorage.setItem("talk-to-stellar.sessionToken", sessionToken)
-      } catch {
-        // ignore storage failures
-      }
+    if (sessionId) {
+      saveClientSession(sessionId)
     }
 
     if (resolvedUserId) {
@@ -301,7 +291,6 @@ export default function CreateAccountClient({
     setResult({
       success: true,
       sessionId: sessionId || undefined,
-      sessionToken: sessionToken || undefined,
       userId: resolvedUserId || undefined,
       message: L("Conta criada com sucesso.", "Account created successfully."),
     })
@@ -338,7 +327,6 @@ export default function CreateAccountClient({
       return {
         mode: "existing",
         sessionId: payload?.sessionId ? String(payload.sessionId) : undefined,
-        sessionToken: payload?.sessionToken ? String(payload.sessionToken) : undefined,
       }
     }
     const directToken = String(payload?.token || "")
@@ -663,23 +651,9 @@ export default function CreateAccountClient({
         submitLockRef.current = false
       }
 
-      if (response.ok && payload.sessionToken) {
-        try {
-          localStorage.setItem('talk-to-stellar.sessionToken', payload.sessionToken)
-        } catch (storageError) {
-          // ignore storage failures
-        }
-      }
       if (response.ok && payload.success) {
-        saveClientSession(payload.sessionId, payload.sessionToken)
+        saveClientSession(payload.sessionId)
         localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "User")
-      }
-      if (response.ok && payload.sessionId) {
-        try {
-          localStorage.setItem('talk-to-stellar.sessionId', payload.sessionId)
-        } catch (storageError) {
-          // ignore storage failures
-        }
       }
 
       if (response.ok && payload.success && requestPasskey) {
@@ -712,8 +686,7 @@ export default function CreateAccountClient({
       return false
     }
     const sessionId = String(authResult?.sessionId || result?.sessionId || "").trim()
-    const sessionToken = String(authResult?.sessionToken || result?.sessionToken || "").trim()
-    if (!sessionId || !sessionToken) {
+    if (!sessionId) {
       setPasskeyStatus('error')
       setPasskeyError('Sign in again before enabling biometrics.')
       return false
@@ -740,7 +713,6 @@ export default function CreateAccountClient({
         body: JSON.stringify({
           user_id: userId,
           session_id: sessionId,
-          session_token: sessionToken,
         }),
       })
       const initPayload = await initRes.json().catch(() => ({}))
@@ -751,7 +723,6 @@ export default function CreateAccountClient({
       setPreparedPasskeyRegistration({
         userId,
         sessionId,
-        sessionToken,
         challengeId: String(initPayload.challengeId),
         options: initPayload.options,
       })
@@ -805,7 +776,6 @@ export default function CreateAccountClient({
         body: JSON.stringify({
           user_id: userId,
           session_id: prepared.sessionId,
-          session_token: prepared.sessionToken,
           challenge_id: prepared.challengeId,
           credential,
         }),
@@ -828,8 +798,6 @@ export default function CreateAccountClient({
         success: true,
         userId,
         sessionId: currentResult?.sessionId,
-        sessionToken: currentResult?.sessionToken,
-        passkeySessionToken: currentResult?.sessionToken,
         message: 'Biometrics enabled successfully',
       })
       if (isTelegramContext) {
@@ -900,12 +868,6 @@ export default function CreateAccountClient({
         throw new Error(payload?.message || "Could not sign in with email and PIN.")
       }
 
-      if (payload?.sessionId) {
-        localStorage.setItem("talk-to-stellar.sessionId", String(payload.sessionId))
-      }
-      if (payload?.sessionToken) {
-        localStorage.setItem("talk-to-stellar.sessionToken", String(payload.sessionToken))
-      }
       localStorage.setItem("talk-to-stellar.userName", existingEmail.trim())
 
       setExistingEmailConfirmationRequired(false)
@@ -1143,7 +1105,7 @@ export default function CreateAccountClient({
                 </div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || L("Algo deu errado.", "Something went wrong.")}</motion.p>}
-              {passkeyStatus === 'done' && result?.passkeySessionToken && (
+              {passkeyStatus === 'done' && (
                 <p className="mt-2 break-all text-emerald-300">{L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}</p>
               )}
               </AnimatePresence>

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
+import { getClientSession } from "@/lib/session"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
 
@@ -39,7 +40,6 @@ export default function PayAnyoneClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [sessionId, setSessionId] = useState("")
-  const [sessionToken, setSessionToken] = useState("")
   const [mode, setMode] = useState<LinkMode>("send")
   const [userName, setUserName] = useState("user")
   const [recipientName, setRecipientName] = useState("")
@@ -55,42 +55,40 @@ export default function PayAnyoneClient() {
   const submitLockRef = useRef(false)
 
   useEffect(() => {
-    const storedSessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
-    const storedSessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
-    const storedUserName = localStorage.getItem("talk-to-stellar.userName") || ""
-    setSessionId(storedSessionId)
-    setSessionToken(storedSessionToken)
-    setUserName(friendlyName(storedUserName || storedSessionId))
-    setMode(searchParams.get("mode") === "receive" ? "receive" : "send")
-    setRecipientName(searchParams.get("recipient") || "")
-    setAmount(searchParams.get("amount") || "15")
-    const sourceAsset = normalizeAssetCode(searchParams.get("asset") || "USDC")
-    setAssetCode(sourceAsset)
-    setDestinationAssetCode(normalizeAssetCode(searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset))
-    const expiresAtFromQuery = String(searchParams.get("expires_at") || "").trim()
-    if (expiresAtFromQuery) {
-      const parsed = new Date(expiresAtFromQuery)
-      if (Number.isFinite(parsed.getTime())) {
-        const localValue = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-        setExpiresAtLocal(localValue)
+    getClientSession().then(({ sessionId: storedSessionId, authenticated }) => {
+      const storedUserName = localStorage.getItem("talk-to-stellar.userName") || ""
+      setSessionId(storedSessionId)
+      setUserName(friendlyName(storedUserName || storedSessionId))
+      setMode(searchParams.get("mode") === "receive" ? "receive" : "send")
+      setRecipientName(searchParams.get("recipient") || "")
+      setAmount(searchParams.get("amount") || "15")
+      const sourceAsset = normalizeAssetCode(searchParams.get("asset") || "USDC")
+      setAssetCode(sourceAsset)
+      setDestinationAssetCode(normalizeAssetCode(searchParams.get("receive_asset") || searchParams.get("destination_asset") || sourceAsset))
+      const expiresAtFromQuery = String(searchParams.get("expires_at") || "").trim()
+      if (expiresAtFromQuery) {
+        const parsed = new Date(expiresAtFromQuery)
+        if (Number.isFinite(parsed.getTime())) {
+          const localValue = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+          setExpiresAtLocal(localValue)
+        }
       }
-    }
 
-    if (!storedSessionId || !storedSessionToken) {
-      const next = `/pay-anyone${window.location.search || ""}`
-      router.replace(`/login?next=${encodeURIComponent(next)}`)
-    }
-    setBooting(false)
+      if (!storedSessionId || !authenticated) {
+        const next = `/pay-anyone${window.location.search || ""}`
+        router.replace(`/login?next=${encodeURIComponent(next)}`)
+      }
+      setBooting(false)
+    })
   }, [router, searchParams])
 
   useEffect(() => {
-    if (!sessionId || !sessionToken) return
+    if (!sessionId) return
     let active = true
     async function loadProfileName() {
       try {
         const response = await fetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
           cache: "no-store",
-          headers: { "X-Session-Token": sessionToken },
         })
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}
@@ -106,7 +104,7 @@ export default function PayAnyoneClient() {
     return () => {
       active = false
     }
-  }, [sessionId, sessionToken])
+  }, [sessionId])
 
   useEffect(() => {
     if (status !== "done") return
@@ -125,7 +123,6 @@ export default function PayAnyoneClient() {
       if (mode === "receive") {
         const response = await idempotentFetch(`/api/financial/global-profile/${encodeURIComponent(sessionId)}`, {
           method: "GET",
-          headers: { "X-Session-Token": sessionToken },
         })
         const payload = await response.json().catch(() => ({}))
         const profile = payload?.profile || {}
@@ -151,7 +148,6 @@ export default function PayAnyoneClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: sessionId,
-          session_token: sessionToken,
           recipient_name: recipientName || undefined,
           amount,
           asset_code: assetCode,
@@ -187,7 +183,7 @@ export default function PayAnyoneClient() {
     setCopied(true)
   }
 
-  const loggedIn = Boolean(sessionId && sessionToken)
+  const loggedIn = Boolean(sessionId)
   const shareText = result?.message && result?.url ? `${result.message}\n${result.url}` : result?.url || ""
   const whatsappUrl = shareText ? `https://wa.me/?text=${encodeURIComponent(shareText)}` : "#"
   const isReceiveMode = mode === "receive"

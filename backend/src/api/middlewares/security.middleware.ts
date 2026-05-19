@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import type { CorsOptions } from 'cors';
-import { isProductionLikeEnvironment } from '../../config/runtime';
+import { isProductionLikeEnvironment, readBooleanEnv } from '../../config/runtime';
 
 type RateLimitBucket = {
   count: number;
@@ -9,6 +9,12 @@ type RateLimitBucket = {
 
 const globalBuckets = new Map<string, RateLimitBucket>();
 const sensitiveBuckets = new Map<string, RateLimitBucket>();
+
+type RateLimitDecision = {
+  allowed: boolean;
+  retryAfterSeconds: number;
+  count: number;
+};
 
 function splitCsv(value: unknown): string[] {
   return String(value || '')
@@ -25,6 +31,71 @@ function positiveNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.trunc(parsed);
+}
+
+function readRedisRestConfig(env: NodeJS.ProcessEnv = process.env): { url: string; token: string } | null {
+  if (readBooleanEnv(env.RATE_LIMIT_REDIS_DISABLED)) return null;
+  const url = String(env.UPSTASH_REDIS_REST_URL || env.REDIS_REST_URL || '').trim().replace(/\/$/, '');
+  const token = String(env.UPSTASH_REDIS_REST_TOKEN || env.REDIS_REST_TOKEN || '').trim();
+  return url && token ? { url, token } : null;
+}
+
+async function redisRateLimitHit(key: string, windowMs: number, max: number): Promise<RateLimitDecision | null> {
+  const config = readRedisRestConfig();
+  if (!config) return null;
+
+  const response = await fetch(`${config.url}/pipeline`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify([
+      ['INCR', key],
+      ['PEXPIRE', key, windowMs, 'NX'],
+      ['PTTL', key],
+    ]),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Redis REST rate limit failed with HTTP ${response.status}`);
+  }
+
+  const payload = await response.json() as Array<{ result?: unknown; error?: string }>;
+  if (!Array.isArray(payload) || payload[0]?.error || payload[2]?.error) {
+    throw new Error(payload?.find((item) => item?.error)?.error || 'Redis REST rate limit returned an invalid response');
+  }
+
+  const count = Number(payload[0]?.result || 0);
+  const ttlMs = Number(payload[2]?.result || windowMs);
+  const retryAfterSeconds = Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : windowMs) / 1000));
+  return {
+    allowed: count <= max,
+    retryAfterSeconds,
+    count,
+  };
+}
+
+function memoryRateLimitHit(
+  bucket: Map<string, RateLimitBucket>,
+  key: string,
+  windowMs: number,
+  max: number
+): RateLimitDecision {
+  const now = Date.now();
+  const current = bucket.get(key);
+
+  if (!current || current.resetAt <= now) {
+    bucket.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfterSeconds: Math.max(1, Math.ceil(windowMs / 1000)), count: 1 };
+  }
+
+  current.count += 1;
+  return {
+    allowed: current.count <= max,
+    retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+    count: current.count,
+  };
 }
 
 export function buildCorsOptions(env: NodeJS.ProcessEnv = process.env): CorsOptions {
@@ -77,28 +148,32 @@ export function createRateLimitMiddleware(options: {
 }) {
   const bucket = options.bucket || globalBuckets;
   return (req: Request, res: Response, next: NextFunction): void => {
-    const now = Date.now();
-    const rawIp = String(req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || 'unknown')
-      .split(',')[0]
-      .trim();
-    const key = `${options.keyPrefix || 'global'}:${rawIp}:${req.method}:${req.path}`;
-    const current = bucket.get(key);
+    void (async () => {
+      const rawIp = String(req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || 'unknown')
+        .split(',')[0]
+        .trim();
+      const key = `tts:rate-limit:${options.keyPrefix || 'global'}:${rawIp}:${req.method}:${req.path}`;
+      let decision: RateLimitDecision | null = null;
 
-    if (!current || current.resetAt <= now) {
-      bucket.set(key, { count: 1, resetAt: now + options.windowMs });
+      try {
+        decision = await redisRateLimitHit(key, options.windowMs, options.max);
+      } catch {
+        decision = null;
+      }
+
+      decision = decision || memoryRateLimitHit(bucket, key, options.windowMs, options.max);
+      res.setHeader('X-RateLimit-Limit', String(options.max));
+      res.setHeader('X-RateLimit-Remaining', String(Math.max(0, options.max - decision.count)));
+
+      if (!decision.allowed) {
+        const retryAfterSeconds = decision.retryAfterSeconds;
+        res.setHeader('Retry-After', String(retryAfterSeconds));
+        res.status(429).json({ success: false, message: 'Too many requests. Try again later.' });
+        return;
+      }
+
       next();
-      return;
-    }
-
-    current.count += 1;
-    if (current.count > options.max) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-      res.setHeader('Retry-After', String(retryAfterSeconds));
-      res.status(429).json({ success: false, message: 'Too many requests. Try again later.' });
-      return;
-    }
-
-    next();
+    })().catch(next);
   };
 }
 

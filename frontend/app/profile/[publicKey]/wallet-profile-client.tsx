@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Loader2, UserCircle2 } from "lucide-react"
+import { getClientSession } from "@/lib/session"
 
 type BalanceItem = {
   asset_code?: string
@@ -41,14 +42,11 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
     async function loadProfile() {
       setStatus("loading")
       try {
-        const sessionId = localStorage.getItem("talk-to-stellar.sessionId") || ""
-        const sessionToken = localStorage.getItem("talk-to-stellar.sessionToken") || ""
+        const { sessionId, authenticated } = await getClientSession()
+        if (!sessionId || !authenticated) throw new Error("Sign in to view this account profile.")
         const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""
         const response = await fetch(`/api/financial/wallet-profile/${encodeURIComponent(publicKey)}${query}`, {
           cache: "no-store",
-          headers: {
-            ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
-          },
         })
         const body = await response.json().catch(() => ({}))
         if (!response.ok || !body?.success) {

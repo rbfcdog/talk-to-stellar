@@ -21,6 +21,7 @@ import {
 } from '../services/email-confirmation.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getRequiredJwtSecret } from '../../config/secrets';
+import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
@@ -50,6 +51,28 @@ async function createExternalMappingWithAliases(payload: {
 
 function getJwtSecret() {
   return getRequiredJwtSecret();
+}
+
+function verifyPinAgainstSession(pin: string, session: any) {
+  return verifyWalletPinAgainstAny(pin, [
+    session?.session_password_hash,
+    session?.password_hash,
+  ]);
+}
+
+async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session: any): Promise<void> {
+  const verification = verifyPinAgainstSession(pin, session);
+  if (!verification.valid || !verification.needsRehash) return;
+
+  const migratedHash = hashWalletPin(pin);
+  await supabase
+    .from('agent_sessions')
+    .update({
+      password_hash: migratedHash,
+      session_password_hash: migratedHash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('session_id', sessionId);
 }
 
 function normalizeEmailForCompare(value?: string): string {
@@ -499,9 +522,6 @@ export class ExternalController {
         });
       }
 
-      const pinHash = crypto
-        .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
-        .toString('hex');
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
       const isBrowserProvider = isBrowserExternalProvider(provider);
       const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, providerUserId);
@@ -538,9 +558,7 @@ export class ExternalController {
           const emailMatchesMappedAccount = canonicalExternalLogin
             ? !email || email === canonicalExternalLogin
             : !email || email === linkedEmail || email === linkedUserId;
-          const linkedHash1 = String((linkedSession as any)?.session_password_hash || '').trim();
-          const linkedHash2 = String((linkedSession as any)?.password_hash || '').trim();
-          const pinMatchesMappedAccount = (linkedHash1 && linkedHash1 === pinHash) || (linkedHash2 && linkedHash2 === pinHash);
+          const pinMatchesMappedAccount = verifyPinAgainstSession(pin, linkedSession).valid;
 
           if (!emailMatchesMappedAccount || !pinMatchesMappedAccount) {
             return res.status(409).json({
@@ -567,9 +585,7 @@ export class ExternalController {
         const lockedSession = await agentRepo.getSession(identityLock.sessionId);
         if (lockedSession) {
           const lockedLogin = resolveCanonicalSessionLogin(lockedSession);
-          const lockedHash1 = String((lockedSession as any)?.session_password_hash || '').trim();
-          const lockedHash2 = String((lockedSession as any)?.password_hash || '').trim();
-          const lockedPinMatches = (lockedHash1 && lockedHash1 === pinHash) || (lockedHash2 && lockedHash2 === pinHash);
+          const lockedPinMatches = verifyPinAgainstSession(pin, lockedSession).valid;
           if (lockedLogin && email && email !== lockedLogin) {
             return res.status(409).json({
               success: false,
@@ -613,9 +629,7 @@ export class ExternalController {
               });
             }
 
-            const tokenHash1 = String((tokenSession as any)?.session_password_hash || '').trim();
-            const tokenHash2 = String((tokenSession as any)?.password_hash || '').trim();
-            const tokenPinMatches = (tokenHash1 && tokenHash1 === pinHash) || (tokenHash2 && tokenHash2 === pinHash);
+            const tokenPinMatches = verifyPinAgainstSession(pin, tokenSession).valid;
             if (!tokenPinMatches) {
               return res.status(401).json({
                 success: false,
@@ -713,9 +727,7 @@ export class ExternalController {
         console.info(`${reqTag} candidates resolved: email=${(sessionsByEmailResp.data || []).length}, user_id=${(sessionsByUserIdResp.data || []).length}, mapped=${mappedSessionIds.length}, merged=${sessions.length}`);
 
         matched = sessions.find((session: any) => {
-          const s1 = String(session?.session_password_hash || '').trim();
-          const s2 = String(session?.password_hash || '').trim();
-          return (s1 && s1 === pinHash) || (s2 && s2 === pinHash);
+          return verifyPinAgainstSession(pin, session).valid;
         });
       }
 
@@ -727,6 +739,9 @@ export class ExternalController {
         });
       }
       console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
+      await rehashSessionPinIfNeeded(String(matched.session_id), pin, matched).catch((error) => {
+        console.warn(`${reqTag} could not migrate PIN hash: ${error instanceof Error ? error.message : String(error)}`);
+      });
 
       const targetSessionId = String(matched.session_id);
       const targetUserId = String(matched.user_id || email || providerUserId);

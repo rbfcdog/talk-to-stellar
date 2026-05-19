@@ -131,9 +131,10 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     let cancelled = false;
 
     const loadLastAgentMessage = async () => {
-      const sessionId = typeof window !== "undefined"
-        ? localStorage.getItem("talk-to-stellar.sessionId")
-        : null;
+      const sessionPayload = await fetch("/api/session", { cache: "no-store" })
+        .then((response) => response.json())
+        .catch(() => ({}));
+      const sessionId = String(sessionPayload?.session_id || "").trim();
       if (!sessionId) return;
 
       try {

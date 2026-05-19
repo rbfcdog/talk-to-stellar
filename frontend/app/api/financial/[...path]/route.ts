@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import {
+  augmentJsonBodyWithSession,
+  buildSessionHeaders,
+  passthroughResponseWithSession,
+} from "@/lib/server-session";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -21,19 +26,17 @@ async function proxy(req: NextRequest, path: string[]) {
   const backendBase = getBackendBaseUrl();
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/financial/${path.join("/")}${qs ? `?${qs}` : ""}`;
-  const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const body = augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
-  const sessionToken = req.headers.get("x-session-token") || "";
-  const authorization = req.headers.get("authorization") || "";
 
   const init: RequestInit = {
     method: req.method,
     headers: {
       "content-type": req.headers.get("content-type") || "application/json",
       "Idempotency-Key": idempotencyKey,
-      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
-      ...(authorization ? { Authorization: authorization } : {}),
+      ...buildSessionHeaders(req),
     },
   };
 
@@ -42,10 +45,7 @@ async function proxy(req: NextRequest, path: string[]) {
   try {
     const res = await fetch(target, init);
     const text = await res.text();
-    return new NextResponse(text, {
-      status: res.status,
-      headers: { "content-type": res.headers.get("content-type") || "application/json" },
-    });
+    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
     return NextResponse.json(
       {

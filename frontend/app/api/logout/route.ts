@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { clearSessionCookies, readSessionCookies } from "@/lib/server-session";
 
 const getAgentLogoutUrl = () => {
   if (process.env.BACKEND_URL) {
@@ -18,8 +19,9 @@ const AGENT_LOGOUT_URL = getAgentLogoutUrl();
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const sessionId = String(body?.session_id || "").trim();
-    const sessionToken = String(body?.session_token || body?.sessionToken || "").trim();
+    const session = readSessionCookies(req);
+    const sessionId = String(body?.session_id || session.sessionId || "").trim();
+    const sessionToken = String(session.sessionToken || "").trim();
     const token = String(body?.token || "").trim();
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         {
           success: false,
           error: payload?.error || payload?.message || "Logout failed",
@@ -54,9 +56,13 @@ export async function POST(req: Request) {
         },
         { status: response.status }
       );
+      if (response.status === 401 || response.status === 410) clearSessionCookies(errorResponse);
+      return errorResponse;
     }
 
-    return NextResponse.json({ success: true });
+    const successResponse = NextResponse.json({ success: true });
+    clearSessionCookies(successResponse);
+    return successResponse;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
