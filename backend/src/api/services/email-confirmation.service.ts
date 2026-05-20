@@ -226,32 +226,6 @@ function buildMessage(input: {
   };
 }
 
-async function sendViaResend(message: EmailMessage): Promise<boolean> {
-  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
-  if (!apiKey) return false;
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromAddress(),
-      to: [message.to],
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Resend email failed: ${response.status} ${body}`);
-  }
-  return true;
-}
-
 async function sendViaSendGrid(message: EmailMessage): Promise<boolean> {
   const apiKey = String(process.env.SENDGRID_API_KEY || '').trim();
   if (!apiKey) return false;
@@ -310,7 +284,6 @@ async function sendViaWebhook(message: EmailMessage): Promise<boolean> {
 }
 
 async function sendEmail(message: EmailMessage): Promise<void> {
-  if (await sendViaResend(message)) return;
   if (await sendViaSendGrid(message)) return;
   if (await sendViaWebhook(message)) return;
 
@@ -321,7 +294,7 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 
   throw new EmailConfirmationError(
     'EMAIL_PROVIDER_MISSING',
-    'Email sending is not configured on the server. Set RESEND_API_KEY, SENDGRID_API_KEY, or EMAIL_CONFIRMATION_WEBHOOK_URL in the backend environment.',
+    'Email sending is not configured on the server. Set SENDGRID_API_KEY or EMAIL_CONFIRMATION_WEBHOOK_URL in the backend environment.',
     500
   );
 }
