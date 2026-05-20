@@ -51,6 +51,7 @@ interface RampSessionInput {
   wallet_code?: string;
   walletCode?: string;
   passcode?: string;
+  trusted_internal?: boolean;
 }
 
 interface SessionWalletContext {
@@ -2824,7 +2825,15 @@ export class AnchorService {
     upstream_status: number;
     success: boolean;
   }> {
+    if (!this.getRuntimeInfo().sandbox) {
+      throw apiError('PIX sandbox confirmation is available only in Etherfuse sandbox/devnet.', 403);
+    }
+
     const context = await this.resolveSessionWallet(input);
+    if (input.trusted_internal !== true) {
+      this.requireWalletPin(input, context);
+    }
+
     const orderId = coalesceString(input.order_id, input.orderId);
     const operationId = coalesceString(input.operation_id, input.operationId);
     if (!orderId) throw apiError('order_id is required.', 400);
@@ -2943,6 +2952,7 @@ export class AnchorService {
       session_id: context.sessionId,
       session_token: context.sessionToken,
       order_id: orderResult.transaction.id,
+      trusted_internal: true,
     });
 
     let finalTransaction: OnRampTransaction | undefined = orderResult.transaction;
