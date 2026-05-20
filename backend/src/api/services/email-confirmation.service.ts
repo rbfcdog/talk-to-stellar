@@ -32,6 +32,13 @@ type RequireVerifiedResult = {
   message: string;
 };
 
+function emailConfirmationEnabled(): boolean {
+  // Email confirmation delivery is intentionally disconnected from the app.
+  // Keep the implementation below for future reference, but do not call
+  // provider/storage logic from login or account creation in the current build.
+  return false;
+}
+
 export class EmailConfirmationError extends Error {
   code: string;
   statusCode: number;
@@ -300,6 +307,10 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 }
 
 export class EmailConfirmationService {
+  static isEnabled(): boolean {
+    return emailConfirmationEnabled();
+  }
+
   static maskEmail(email: string): string {
     return maskEmail(normalizeEmail(email));
   }
@@ -307,6 +318,17 @@ export class EmailConfirmationService {
   static async requireVerified(input: RequireVerifiedInput): Promise<RequireVerifiedResult> {
     const email = normalizeEmail(input.email);
     const language = normalizeLanguage(input.language);
+
+    if (!emailConfirmationEnabled()) {
+      return {
+        verified: true,
+        email,
+        maskedEmail: email ? maskEmail(email) : '',
+        message: language === 'en'
+          ? 'Email confirmation is disabled.'
+          : 'Confirmação por e-mail desativada.',
+      };
+    }
 
     if (!email || !looksLikeEmail(email)) {
       throw new EmailConfirmationError('EMAIL_REQUIRED', genericEmailMessage('EMAIL_REQUIRED', language), 400);

@@ -9,7 +9,7 @@
 - Endpoints financeiros, chat e logout que aceitavam apenas `session_id` agora exigem também `session_token`.
 - Reset de PIN via agente exige `session_token` antes de gerar link sensível.
 - `JWT_SECRET` fraco, ausente ou placeholder agora falha no runtime.
-- Confirmação de e-mail deixou de ter bypass silencioso em fluxos de criação/login.
+- Confirmação por e-mail ficou desacoplada dos fluxos de criação/login na versão atual.
 - Short links públicos passaram a aceitar apenas URLs first-party de passkey/login/criação, bloqueando open redirect.
 - Webhook da Evolution exige segredo em ambiente production-like.
 - `/notify` do adapter Telegram exige segredo em ambiente production-like.
