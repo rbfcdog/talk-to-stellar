@@ -201,8 +201,10 @@ export class RampController {
 
   static async simulateEtherfuseFiatReceived(req: Request, res: Response) {
     try {
-      if (!requireInternalSandboxAuthorization(req, res)) return;
-      const result = await AnchorService.simulateFiatReceivedForSession(requestInput(req));
+      const result = await AnchorService.simulateFiatReceivedForSession({
+        ...requestInput(req),
+        trusted_internal: hasInternalSandboxAuthorization(req),
+      });
       res.status(result.success ? 200 : 400).json(result);
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
@@ -211,7 +213,6 @@ export class RampController {
 
   static async submitPixFundedTransfer(req: Request, res: Response) {
     try {
-      if (!requireInternalSandboxAuthorization(req, res)) return;
       const result = await AnchorService.submitPixFundedTransferForSession(requestInput(req));
       res.status(result.success ? 200 : 400).json(result);
     } catch (error: any) {
