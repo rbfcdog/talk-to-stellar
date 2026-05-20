@@ -7,7 +7,7 @@
 - Backend session-token compatibility through query string was removed from agent and financial auth paths.
 - Wallet PIN hashing now uses a versioned PBKDF2-SHA256 format with random per-PIN salt and a server-side `PIN_PEPPER`.
 - Legacy global-salt PIN hashes still verify, and successful legacy PIN checks in external linking/onboarding flows are opportunistically migrated to the new format.
-- Rate limits now use Upstash/Redis REST when configured, with an in-process fallback for local development.
+- Rate limits now run in-process and require no external Redis configuration.
 - Added `backend/scripts/verify-rls-hardening.sql` to prove the Supabase RLS hardening migration is applied.
 
 ## Required env
@@ -16,8 +16,6 @@ Backend:
 
 ```bash
 PIN_PEPPER="long-random-server-side-secret"
-UPSTASH_REDIS_REST_URL="https://..."
-UPSTASH_REDIS_REST_TOKEN="..."
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=300
 SENSITIVE_RATE_LIMIT_WINDOW_MS=60000

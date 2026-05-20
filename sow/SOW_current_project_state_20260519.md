@@ -39,7 +39,7 @@ Already implemented or substantially built:
 - WhatsApp integration through Evolution API, including webhook handling and connection to the backend agent query flow.
 - Etherfuse sandbox PIX ramp integration work for test flows.
 - Stellar testnet infrastructure, BRL/USDC quote support, trustline/liquidity scripts, and mainnet preparation docs.
-- Security upgrades including HttpOnly session cookies, removal of frontend session-token localStorage usage, passkey enrollment hardening, versioned PIN hashing with per-PIN salt, Redis-backed rate limiting, and Supabase RLS hardening SQL.
+- Security upgrades including HttpOnly session cookies, removal of frontend session-token localStorage usage, passkey enrollment hardening, versioned PIN hashing with per-PIN salt, backend rate limiting, and Supabase RLS hardening SQL.
 
 The remaining work for this SOW is focused on stabilization, deploy configuration, evidence, and evaluator-facing documentation.
 
@@ -52,7 +52,7 @@ The remaining work for this SOW is focused on stabilization, deploy configuratio
 | Testnet WhatsApp to Stellar Pilot | Stabilize the deployed flow where a WhatsApp/Evolution message reaches the backend agent, maps to a valid session, and triggers quote/payment/ramp actions on Stellar testnet or sandbox infrastructure. | Proves the product's core thesis in the user channel Brazilians already use, without requiring a separate crypto interface. |
 | PIX Sandbox Anchor Flow Evidence | Provide a reproducible sandbox flow for PIX ramp behavior, including backend endpoint calls, webhook/state transitions, simulated payment confirmation, and user-facing status screens. | Shows how the project connects Brazilian fiat rails to Stellar-style settlement while staying safely in sandbox/testnet. |
 | Stellar Testnet Transaction Evidence | Produce clear testnet evidence for wallet creation, asset balance changes, payment/conversion operations, and relevant transaction hashes or explorer links. | Makes the work verifiable by the Ambassador Chapter without relying only on a product demo video. |
-| Security and Deployment Hardening | Finalize environment guidance, Redis rate-limit setup, HttpOnly cookie deployment checks, PIN migration notes, and Supabase RLS apply/verify instructions. | Reduces operational risk and shows the pilot is built with realistic production concerns in mind. |
+| Security and Deployment Hardening | Finalize environment guidance, backend rate-limit setup, HttpOnly cookie deployment checks, PIN migration notes, and Supabase RLS apply/verify instructions. | Reduces operational risk and shows the pilot is built with realistic production concerns in mind. |
 | Technical Demo Package | Create a short evaluator-facing package: script, timestamps, backend calls to show, expected logs, architecture diagram, setup guide, and known limitations. | Prevents the demo from looking like only a UI prototype and makes the integration flow easy to review. |
 
 ### 5.2 Out of Scope
@@ -77,9 +77,9 @@ The remaining work for this SOW is focused on stabilization, deploy configuratio
 
 | Week | Planned Work | Expected Output |
 |---|---|---|
-| Week 1 | Lock deployment configuration for backend, frontend, Evolution API, Redis, Supabase, and Stellar testnet. Verify that frontend session flows use HttpOnly cookies and that WhatsApp requests reach `/api/agent/query` reliably. | Deployed staging/testnet environment with documented env values, health checks, and working WhatsApp-to-agent message flow. |
+| Week 1 | Lock deployment configuration for backend, frontend, Evolution API, Supabase, and Stellar testnet. Verify that frontend session flows use HttpOnly cookies and that WhatsApp requests reach `/api/agent/query` reliably. | Deployed staging/testnet environment with documented env values, health checks, and working WhatsApp-to-agent message flow. |
 | Week 2 | Stabilize PIX sandbox anchor flow and frontend PIX ramp screens. Confirm quote creation, sandbox payment status, webhook simulation, and Stellar testnet balance/transaction evidence. | Reproducible PIX sandbox flow with API examples, screenshots, logs, and testnet transaction references. |
-| Week 3 | Run security/deployment hardening checklist: Redis rate limits, PIN hash migration behavior, passkey registration check, Supabase RLS migration instructions, and verification SQL. | Security checklist completed with evidence, commands, and remaining production-only requirements clearly separated. |
+| Week 3 | Run security/deployment hardening checklist: rate limits, PIN hash migration behavior, passkey registration check, Supabase RLS migration instructions, and verification SQL. | Security checklist completed with evidence, commands, and remaining production-only requirements clearly separated. |
 | Week 4 | Package evaluator demo: final walkthrough script, timestamps, backend calls, anchor explanations, deployment guide, architecture diagram, and repository cleanup. | Complete submission package including demo video plan, docs, endpoint list, testnet hashes, and clear known limitations. |
 
 ## 8. Evidence of Completion
@@ -89,7 +89,7 @@ The remaining work for this SOW is focused on stabilization, deploy configuratio
 | WhatsApp to Agent Flow | Demo video, WhatsApp screenshots, backend logs | Show a real WhatsApp/Evolution message reaching the backend agent and returning a response based on session/wallet context. |
 | PIX Sandbox Anchor Flow | API call examples, screenshots, logs, docs | Show quote/order creation, sandbox payment confirmation, state transition, and frontend status. |
 | Stellar Testnet Settlement | Testnet transaction hashes, Stellar explorer links, backend logs | Show wallet creation and at least one payment/conversion/ramp-related testnet transaction or balance change. |
-| Security Hardening | Commit links, env guide, verification SQL output | Show HttpOnly cookies, Redis rate-limit config, PIN hash migration behavior, and Supabase RLS verification procedure. |
+| Security Hardening | Commit links, env guide, verification SQL output | Show HttpOnly cookies, backend rate-limit config, PIN hash migration behavior, and Supabase RLS verification procedure. |
 | Technical Documentation | GitHub docs, architecture diagram, demo script | Provide enough detail for a reviewer to reproduce the backend integration flow and understand each system component. |
 
 ## 9. Evidence Verification Checklist

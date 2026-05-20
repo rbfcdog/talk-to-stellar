@@ -77,8 +77,5 @@ If `RAMP_SANDBOX_INTERNAL_SECRET` is set, use it on both backend and frontend. I
 
 ## Still pending
 
-- Move browser sessions from `localStorage` to HttpOnly Secure SameSite cookies.
-- Remove backend support for `session_token` query parameters after all clients are migrated.
-- Centralize PIN hashing and migrate to per-user salt plus server pepper.
 - Apply and verify the Supabase RLS hardening migration.
-- Add Redis/Upstash-backed rate limits for multi-instance deployments.
+- Consider distributed rate limits only if the backend is scaled to multiple replicas.

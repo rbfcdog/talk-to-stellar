@@ -1,6 +1,6 @@
 # Env and migrations guide - security hardening
 
-This guide is for deploying the hardening commit that moved session secrets to HttpOnly cookies, added the new PIN hash format, added Redis-backed rate limits, and prepared the Supabase RLS hardening SQL.
+This guide is for deploying the hardening commit that moved session secrets to HttpOnly cookies, added the new PIN hash format, added backend rate limits, and prepared the Supabase RLS hardening SQL.
 
 Commit to deploy:
 
@@ -14,8 +14,6 @@ Set these in the backend service on Railway.
 
 ```bash
 PIN_PEPPER="generate-a-long-random-secret-and-never-commit-it"
-UPSTASH_REDIS_REST_URL="https://your-upstash-url"
-UPSTASH_REDIS_REST_TOKEN="your-upstash-token"
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=300
 SENSITIVE_RATE_LIMIT_WINDOW_MS=60000
@@ -27,9 +25,8 @@ Important:
 - `PIN_PEPPER` must stay stable forever. If you change it later, PIN hashes created with the old pepper will stop validating.
 - If the old deployment used a custom `PIN_SALT`, keep `PIN_SALT` in Railway too. Old PIN hashes still need it during migration.
 - If there was no custom `PIN_SALT`, legacy hashes still verify with the old default fallback.
-- Do not expose `PIN_PEPPER`, `PIN_SALT`, Redis tokens, Supabase service role keys, or internal API secrets in frontend env.
-
-Redis is recommended in production because memory rate limits only protect one backend process. In Railway, create an Upstash Redis service, copy the REST URL/token, and put them in the backend service env.
+- Do not expose `PIN_PEPPER`, `PIN_SALT`, Supabase service role keys, or internal API secrets in frontend env.
+- Rate limits are in-process and do not require an external Redis service.
 
 ## 2. Frontend env
 
@@ -105,7 +102,7 @@ What this SQL does:
 
 Use this order to avoid partial rollout issues:
 
-1. Add backend env: `PIN_PEPPER`, Redis REST URL/token, and keep old `PIN_SALT` if it existed.
+1. Add backend env: `PIN_PEPPER`, rate-limit values, and keep old `PIN_SALT` if it existed.
 2. Add frontend/backend URL env if missing.
 3. Deploy backend from commit `4bf6d5a`.
 4. Deploy frontend from commit `4bf6d5a`.
@@ -152,7 +149,7 @@ Rollback app code only if necessary, but avoid rolling back the Supabase RLS SQL
 
 Do not rotate `PIN_PEPPER` during rollback. Keep it stable so new hashes remain usable.
 
-If Redis has an outage, the app falls back to local in-memory rate limits. That keeps the app online, but distributed rate-limit protection is weaker until Redis is back.
+Rate limits are local to the backend process. If you later run multiple backend replicas, each replica will have its own counter.
 
 ## 7. Env checklist
 
@@ -165,8 +162,10 @@ Backend Railway:
 - `OPENAI_API_KEY`
 - `PIN_PEPPER`
 - `PIN_SALT` if previously used
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
+- `RATE_LIMIT_WINDOW_MS`
+- `RATE_LIMIT_MAX`
+- `SENSITIVE_RATE_LIMIT_WINDOW_MS`
+- `SENSITIVE_RATE_LIMIT_MAX`
 - `INTERNAL_API_SECRET`
 - `CORS_ORIGINS`
 - `PASSKEY_RP_ID`
