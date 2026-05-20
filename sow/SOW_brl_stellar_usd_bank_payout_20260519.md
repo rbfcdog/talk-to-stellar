@@ -51,7 +51,7 @@ Already built or substantially available:
 - Frontend flows for onboarding, login, payment confirmation, Pix ramp, wallet profile, and global transfer testing.
 - Supabase/Postgres persistence for sessions, wallets, operations, external accounts, passkeys, idempotency, and financial events.
 - Mainnet preparation scripts and documentation.
-- Security hardening: HttpOnly session cookies, passkey enrollment authorization, versioned PIN hashing, Redis-backed rate limits, and RLS hardening SQL.
+- Security hardening: HttpOnly session cookies, passkey enrollment authorization, versioned PIN hashing, backend rate limits, and RLS hardening SQL.
 
 The new work is focused on the missing "USDC -> bank USD -> global account" leg and on making the full money movement model coherent.
 

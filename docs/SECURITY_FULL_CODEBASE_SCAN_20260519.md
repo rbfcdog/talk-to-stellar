@@ -218,7 +218,7 @@ Issue:
 The app has global and sensitive rate limits, but buckets are process-local Maps.
 
 Recommendation:
-Use Redis/Upstash/Valkey for Railway multi-instance or redeploy-resistant limits. Add per-user/session keys for login, PIN, passkey, recovery and payment confirmation.
+Keep the current in-process limits for the single-backend deployment. If the backend is scaled to multiple replicas later, add a distributed counter service and per-user/session keys for login, PIN, passkey, recovery and payment confirmation.
 
 ### FRONT-01 - Browser session is kept in localStorage
 
