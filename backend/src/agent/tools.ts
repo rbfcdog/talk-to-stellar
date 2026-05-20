@@ -30,6 +30,8 @@ import { PlatformFeeService } from "../api/services/platform-fee.service";
 import { InvoiceService } from "../api/services/invoice.service";
 import { GlobalProfileService } from "../api/services/global-profile.service";
 import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
+import { brlUsdQuoteService } from "../api/services/brl-usd-quote.service";
+import { internationalTransferService } from "../api/services/international-transfer.service";
 import { timingSafeEqualString } from "../utils/password";
 import { safeRedactedJson } from "../utils/redaction";
 import { hashWalletPin } from "../utils/pin-hash";
@@ -395,6 +397,55 @@ export const toolDefinitions = [
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "create_brl_usd_quote",
+    description: "Create a BRL to USD international account delivery quote. Use for cross-border USD account delivery planning; does not move money.",
+    parameters: {
+      type: "object",
+      properties: {
+        brl_amount: {
+          type: "string",
+          description: "BRL amount the user/institution wants to fund via Pix.",
+        },
+        user_id: {
+          type: "string",
+          description: "Current user ID when available.",
+        },
+        institution_id: {
+          type: "string",
+          description: "Institution/entity ID when this is a B2B transfer.",
+        },
+      },
+      required: ["brl_amount"],
+    },
+  },
+  {
+    name: "create_usd_bank_transfer_intent",
+    description: "Create a BRL-funded international USD bank account transfer intent from an existing quote. This only creates the tracked transfer; Pix funding, Stellar settlement and payout instruction happen in later steps.",
+    parameters: {
+      type: "object",
+      properties: {
+        quote_id: { type: "string", description: "Quote ID returned by create_brl_usd_quote." },
+        user_id: { type: "string", description: "Current user ID when available." },
+        institution_id: { type: "string", description: "Institution/entity ID when applicable." },
+        sender_legal_name: { type: "string", description: "Legal sender or account owner name." },
+        sender_entity_name: { type: "string", description: "Institution/entity legal name when applicable." },
+        sender_email: { type: "string", description: "Sender email when known." },
+        recipient_legal_name: { type: "string", description: "Recipient legal name." },
+        account_holder_name: { type: "string", description: "USD bank account holder name." },
+        account_holder_type: { type: "string", enum: ["individual", "business"], description: "USD bank account holder type." },
+        bank_name: { type: "string", description: "Destination bank/account provider name." },
+        routing_number: { type: "string", description: "US routing number when using ACH-compatible account details." },
+        account_number: { type: "string", description: "Destination account number. Do not repeat it back in chat." },
+        account_type: { type: "string", enum: ["checking", "savings"], description: "US account type." },
+        swift_bic: { type: "string", description: "SWIFT/BIC when provided." },
+        iban: { type: "string", description: "IBAN when provided." },
+        country: { type: "string", description: "Destination bank account country." },
+        provider_label: { type: "string", enum: ["wise", "mercury", "revolut", "other"], description: "Optional account provider label. Do not make the product Wise-specific." },
+      },
+      required: ["quote_id", "account_holder_name", "account_holder_type", "country"],
     },
   },
   {
@@ -1096,6 +1147,10 @@ export async function executeTool(
         return executeGetIntentHelp();
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
+      case "create_brl_usd_quote":
+        return await executeCreateBrlUsdQuote(toolInput);
+      case "create_usd_bank_transfer_intent":
+        return await executeCreateUsdBankTransferIntent(toolInput);
       case "send_receipt_image":
         return await executeSendReceiptImage(toolInput);
       case "create_wallet":
@@ -1329,6 +1384,80 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
     return JSON.stringify({
       success: false,
       error: errorMessage,
+    });
+  }
+}
+
+async function executeCreateBrlUsdQuote(input: any): Promise<string> {
+  try {
+    const quote = await brlUsdQuoteService.createQuote({
+      brl_amount: input.brl_amount || input.amount || input.amount_brl,
+      user_id: input.user_id || input.userId,
+      institution_id: input.institution_id || input.institutionId,
+    });
+
+    return JSON.stringify({
+      success: true,
+      quote,
+      message:
+        `Cotação criada para entrega internacional em conta USD: ` +
+        `R$ ${quote.brl_amount} estimados para US$ ${quote.estimated_usd_amount}. ` +
+        `Taxa total estimada: R$ ${quote.total_fee.amount_brl_equivalent}. ` +
+        `A cotação vence em ${quote.expires_at}.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeCreateUsdBankTransferIntent(input: any): Promise<string> {
+  try {
+    const transfer = await internationalTransferService.createTransfer({
+      quote_id: String(input.quote_id || input.quoteId || '').trim(),
+      user_id: input.user_id || input.userId,
+      institution_id: input.institution_id || input.institutionId,
+      sender_identity: {
+        legal_name: input.sender_legal_name || input.senderLegalName,
+        entity_name: input.sender_entity_name || input.senderEntityName,
+        email: input.sender_email || input.senderEmail,
+        country: input.sender_country || input.senderCountry || 'BR',
+        type: input.sender_entity_name || input.senderEntityName ? 'institution' : 'individual',
+      },
+      recipient_identity: {
+        legal_name: input.recipient_legal_name || input.recipientLegalName || input.account_holder_name || input.accountHolderName,
+        country: input.recipient_country || input.recipientCountry || input.country,
+        type: input.account_holder_type || input.accountHolderType,
+      },
+      payout_destination: {
+        accountHolderName: String(input.account_holder_name || input.accountHolderName || '').trim(),
+        accountHolderType: (input.account_holder_type || input.accountHolderType || 'individual') === 'business' ? 'business' : 'individual',
+        bankName: input.bank_name || input.bankName,
+        routingNumber: input.routing_number || input.routingNumber,
+        accountNumber: input.account_number || input.accountNumber,
+        accountType: input.account_type || input.accountType,
+        swiftBic: input.swift_bic || input.swiftBic,
+        iban: input.iban,
+        country: String(input.country || '').trim(),
+        providerLabel: input.provider_label || input.providerLabel || 'other',
+      },
+      same_name_payout_required: input.same_name_payout_required ?? input.sameNamePayoutRequired,
+    });
+
+    return JSON.stringify({
+      success: true,
+      transfer,
+      message:
+        `Transferência internacional criada com status ${transfer.status}. ` +
+        `Próximo passo: criar a intenção PIX em /api/transfers/${transfer.transfer_id}/pix-intent. ` +
+        `Conta destino modelada como conta bancária USD internacional.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

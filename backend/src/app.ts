@@ -12,6 +12,9 @@ import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
 import rampRouter from './api/routes/ramp.router';
 import evolutionRouter from './api/routes/evolution.router';
+import quotesRouter from './api/routes/quotes.router';
+import internationalTransfersRouter from './api/routes/international-transfers.router';
+import webhooksRouter from './api/routes/webhooks.router';
 import { idempotencyMiddleware } from './services/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import {
@@ -74,8 +77,12 @@ app.use('/api/passkeys', passkeyRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
 app.use('/api/ramp', rampRouter);
+app.use('/api/quotes', quotesRouter);
+app.use('/api/transfers', internationalTransfersRouter);
+app.use('/api/webhooks', webhooksRouter);
 app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
+app.use('/webhooks', webhooksRouter);
 
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
