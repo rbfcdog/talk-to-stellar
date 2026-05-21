@@ -6,7 +6,7 @@ import { ChatWindow } from "@/components/chat-window"
 import { WelcomeScreen } from "@/components/welcome-screen"
 
 export default function ChatPage() {
-  const [selectedChat, setSelectedChat] = useState<string | null>(null)
+  const [selectedChat, setSelectedChat] = useState<string | null>("agent")
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#111b21] text-white md:flex-row">
