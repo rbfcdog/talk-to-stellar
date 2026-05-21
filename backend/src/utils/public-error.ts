@@ -33,7 +33,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
   if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|already used|ja foi utilizado/.test(normalized)) {
     return 'Esse link expirou ou ja foi usado. Peca um novo link no chat.';
   }
-  if (/(session|sessao).*(expired|expirad)|login required|unauthorized|invalid jwt|jwt/.test(normalized)) {
+  if (/(session|sessao).*(expired|expirad)|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) {
     return 'Sua sessao expirou. Entre novamente para continuar.';
   }
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) {

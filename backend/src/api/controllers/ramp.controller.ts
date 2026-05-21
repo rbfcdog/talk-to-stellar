@@ -55,7 +55,8 @@ function requireInternalSandboxAuthorization(req: Request, res: Response): boole
   if (hasInternalSandboxAuthorization(req)) return true;
   res.status(403).json({
     success: false,
-    message: 'Internal authorization is required for Etherfuse sandbox helper endpoints.',
+    code: 'sandbox_helper_unauthorized',
+    message: 'Entre na sua conta para continuar este fluxo PIX neste ambiente.',
   });
   return false;
 }
