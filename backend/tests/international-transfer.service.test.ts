@@ -145,12 +145,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const pixFunding = {
       createPixIntent: jest.fn(async () => ({
         provider: 'etherfuse',
-        pix_payment_id: 'pix-order-1',
-        pix_order_id: 'pix-order-1',
+        pix_payment_id: 'mock_pix_order-1',
+        pix_order_id: 'mock_pix_order-1',
         operation_id: 'op-1',
         status: 'pending',
         payment_instructions: { pixCode: '000201' },
-        raw: {},
+        raw: { mode: 'mock', no_real_pix_created: true },
       })),
     };
     const stellarSettlement = {
@@ -219,9 +219,9 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       session_token: 'token-1',
     });
     expect(transfer.status).toBe('PIX_PENDING');
-    expect(transfer.pix_order_id).toBe('pix-order-1');
+    expect(transfer.pix_order_id).toBe('mock_pix_order-1');
 
-    transfer = await service.handlePixConfirmation({ order_id: 'pix-order-1', status: 'completed' });
+    transfer = await service.confirmSandboxFunding(transfer.transfer_id);
     expect(transfer.status).toBe('PIX_RECEIVED');
 
     transfer = await service.settleStellar(transfer.transfer_id);
@@ -233,13 +233,13 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(transfer.provider_payout_id).toBe('provider-payout-1');
 
     const reconciliation = await service.getReconciliation(transfer.transfer_id);
-    expect(reconciliation.pix_order_id).toBe('pix-order-1');
+    expect(reconciliation.pix_order_id).toBe('mock_pix_order-1');
     expect(reconciliation.stellar_tx_hash).toBe('stellar-hash-1');
     expect(reconciliation.provider_payout_id).toBe('provider-payout-1');
     const evidence = reconciliation.evidence as any;
     expect(evidence.on_off_ramp).toMatchObject({
       on_ramp_provider: 'etherfuse',
-      on_ramp_order_id: 'pix-order-1',
+      on_ramp_order_id: 'mock_pix_order-1',
       off_ramp_provider: 'mock',
     });
     expect(evidence.metrics).toMatchObject({

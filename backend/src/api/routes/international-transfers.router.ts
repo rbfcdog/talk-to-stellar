@@ -5,6 +5,7 @@ const router = Router();
 
 router.post('/', InternationalTransfersController.createTransfer);
 router.post('/:id/pix-intent', InternationalTransfersController.createPixIntent);
+router.post('/:id/funding-confirmation', InternationalTransfersController.confirmSandboxFunding);
 router.post('/:id/settle-stellar', InternationalTransfersController.settleStellar);
 router.post('/:id/payout-instruction', InternationalTransfersController.createPayoutInstruction);
 router.get('/:id/reconciliation', InternationalTransfersController.getReconciliation);
