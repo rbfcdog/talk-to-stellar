@@ -32,6 +32,7 @@ import { GlobalProfileService } from "../api/services/global-profile.service";
 import { BrlReferenceRateService } from "../api/services/brl-reference-rate.service";
 import { brlUsdQuoteService } from "../api/services/brl-usd-quote.service";
 import { internationalTransferService } from "../api/services/international-transfer.service";
+import { mainnetWalletService } from "../api/services/mainnet-wallet.service";
 import { timingSafeEqualString } from "../utils/password";
 import { safeRedactedJson } from "../utils/redaction";
 import { hashWalletPin } from "../utils/pin-hash";
@@ -508,6 +509,58 @@ export const toolDefinitions = [
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "get_mainnet_status",
+    description: "Show guarded Stellar Mainnet configuration status. Use only when the user explicitly asks about mainnet.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "attach_mainnet_wallet",
+    description: "Attach a user's external Stellar Mainnet public key in read-only mode. Never ask for or store a Mainnet secret key.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Current authenticated session ID." },
+        user_id: { type: "string", description: "Current user ID when available." },
+        public_key: { type: "string", description: "Stellar Mainnet public key beginning with G. Secret keys are not allowed." },
+        label: { type: "string", description: "Optional label for the wallet." },
+      },
+      required: ["session_id", "public_key"],
+    },
+  },
+  {
+    name: "get_mainnet_balance",
+    description: "Read the attached Stellar Mainnet wallet balance. Use only for explicit mainnet balance requests and clearly say this is real Mainnet read-only data.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Current authenticated session ID." },
+        user_id: { type: "string", description: "Current user ID when available." },
+        public_key: { type: "string", description: "Optional Stellar Mainnet public key. Prefer the attached wallet when available." },
+      },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "preview_mainnet_payment",
+    description: "Validate and preview a guarded Mainnet payment request without submitting it unless backend Mainnet mutation gates are explicitly configured.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Current authenticated session ID." },
+        user_id: { type: "string", description: "Current user ID when available." },
+        destination: { type: "string", description: "Destination Stellar Mainnet public key." },
+        amount: { type: "string", description: "Amount to preview." },
+        asset_code: { type: "string", description: "Asset code, default USDC." },
+        memo: { type: "string", description: "Optional memo." },
+      },
+      required: ["session_id", "destination", "amount"],
     },
   },
   {
@@ -1157,6 +1210,14 @@ export async function executeTool(
         return await executeCreateWallet(toolInput);
       case "get_balance":
         return await executeGetBalance(toolInput);
+      case "get_mainnet_status":
+        return await executeGetMainnetStatus();
+      case "attach_mainnet_wallet":
+        return await executeAttachMainnetWallet(toolInput);
+      case "get_mainnet_balance":
+        return await executeGetMainnetBalance(toolInput);
+      case "preview_mainnet_payment":
+        return await executePreviewMainnetPayment(toolInput);
       case "get_account":
         return await executeGetAccount(toolInput);
       case "get_saldo_tecnico":
@@ -1384,6 +1445,117 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
     return JSON.stringify({
       success: false,
       error: errorMessage,
+    });
+  }
+}
+
+async function executeGetMainnetStatus(): Promise<string> {
+  try {
+    const status = mainnetWalletService.getStatus();
+    const controls = (status as any).controls || {};
+    const readiness = (status as any).readiness || {};
+    return JSON.stringify({
+      success: true,
+      status,
+      message: [
+        'Mainnet esta disponivel como camada separada e protegida.',
+        `Runtime principal: ${controls.runtime_network || 'TESTNET'}.`,
+        `Modo de envio Mainnet: ${controls.mutations_available ? 'guardado com aprovacao manual' : 'somente leitura / preview'}.`,
+        `Bloqueios: ${Array.isArray(readiness.blockers) && readiness.blockers.length ? readiness.blockers.length : 0}.`,
+        'Para configurar no navegador, abra /mainnet e anexe apenas a public key G... da carteira Mainnet. Nunca envie secret key.',
+      ].join('\n'),
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeAttachMainnetWallet(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const userId = await resolveToolUserId({ ...input, session_id: sessionId });
+    const result = await mainnetWalletService.attachWallet({
+      sessionId,
+      userId,
+      publicKey: String(input.public_key || input.publicKey || '').trim(),
+      label: String(input.label || '').trim() || undefined,
+    });
+
+    return JSON.stringify({
+      ...result,
+      message:
+        'Carteira Mainnet anexada em modo somente leitura. ' +
+        'Eu consigo consultar saldo e historico publico, mas nao guardo secret key nem envio transacoes reais por padrao.',
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeGetMainnetBalance(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const userId = await resolveToolUserId({ ...input, session_id: sessionId });
+    const balance = await mainnetWalletService.getBalance({
+      sessionId,
+      userId,
+      publicKey: String(input.public_key || input.publicKey || '').trim() || undefined,
+    });
+    const balances = Array.isArray((balance as any).balances) ? (balance as any).balances : [];
+    const balanceLines = balances.length
+      ? balances.map((item: any) => `${item.asset_code}: ${item.balance}`).join('\n')
+      : ((balance as any).funded ? 'Sem linhas de saldo encontradas.' : 'Conta ainda nao funded na Mainnet.');
+
+    return JSON.stringify({
+      success: true,
+      balance,
+      message: [
+        'Saldo Stellar Mainnet (rede publica, valor real, leitura somente).',
+        balanceLines,
+        `Explorer: ${(balance as any).explorer_url || '-'}`,
+      ].join('\n'),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: message.includes('mainnet_public_key')
+        ? 'Nenhuma carteira Mainnet foi anexada. Abra /mainnet ou envie uma public key G... para configurar em modo somente leitura.'
+        : message,
+    });
+  }
+}
+
+async function executePreviewMainnetPayment(input: any): Promise<string> {
+  try {
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const userId = await resolveToolUserId({ ...input, session_id: sessionId });
+    const preview = await mainnetWalletService.createPaymentPreview({
+      sessionId,
+      userId,
+      destination: String(input.destination || input.destination_public_key || input.destinationPublicKey || '').trim(),
+      amount: String(input.amount || '').trim(),
+      assetCode: String(input.asset_code || input.assetCode || 'USDC').trim(),
+      memo: String(input.memo || '').trim(),
+    });
+
+    return JSON.stringify({
+      success: true,
+      preview,
+      message:
+        `${(preview as any).amount} ${(preview as any).asset_code} para ${(preview as any).destination_public_key} validado como preview Mainnet. ` +
+        `${(preview as any).can_submit ? 'Envio real exige aprovacao manual e signer configurado.' : 'Envio real esta desativado; nada foi submetido.'}`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

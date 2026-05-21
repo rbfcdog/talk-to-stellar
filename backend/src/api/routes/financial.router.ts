@@ -23,4 +23,11 @@ router.get('/u/:username', FinancialController.getPublicGlobalProfile);
 router.get('/transactions/:session_id', FinancialController.getTransactions);
 router.get('/wallet-profile/:public_key', FinancialController.getWalletProfile);
 
+router.get('/mainnet/status', FinancialController.getMainnetStatus);
+router.get('/mainnet/wallet', FinancialController.getMainnetWallet);
+router.post('/mainnet/wallet', FinancialController.attachMainnetWallet);
+router.get('/mainnet/balance', FinancialController.getMainnetBalance);
+router.get('/mainnet/operations', FinancialController.getMainnetOperations);
+router.post('/mainnet/payment-preview', FinancialController.previewMainnetPayment);
+
 export default router;
