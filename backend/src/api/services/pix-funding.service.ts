@@ -17,7 +17,35 @@ export class PixFundingService {
     session_id: string;
     session_token: string;
     email?: string;
+    mock?: boolean;
   }): Promise<PixFundingIntent> {
+    if (input.mock) {
+      const mockEnabled = process.env.NODE_ENV !== 'production' ||
+        String(process.env.INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX || '').trim().toLowerCase() === 'true';
+      if (!mockEnabled) {
+        throw new Error('Mock Pix intent is disabled. Set INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true for sandbox demos.');
+      }
+
+      const id = `mock_pix_${input.transfer.transfer_id}`;
+      return {
+        provider: 'etherfuse',
+        pix_payment_id: id,
+        pix_order_id: id,
+        operation_id: `mock_operation_${input.transfer.transfer_id}`,
+        status: 'pending',
+        payment_instructions: {
+          mode: 'mock',
+          amount_brl: input.transfer.brl_amount,
+          copy_paste: `00020126580014br.gov.bcb.pix0136${id.slice(0, 36)}520400005303986540${input.transfer.brl_amount}5802BR5909TTS MOCK6009SAO PAULO62070503***6304ABCD`,
+        },
+        raw: {
+          mode: 'mock',
+          no_real_pix_created: true,
+          note: 'Sandbox-only Pix funding intent for the international transfer lab.',
+        },
+      };
+    }
+
     if (!input.session_id || !input.session_token) {
       throw new Error('session_id and session_token are required to create a Pix funding intent.');
     }

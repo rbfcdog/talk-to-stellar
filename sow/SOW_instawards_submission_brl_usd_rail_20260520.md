@@ -6,13 +6,13 @@
 
 | Field | Answer |
 |---|---|
-| Project Name | TalkToStellar - Pix to Stellar USDC and USD Global Account Rail |
+| Project Name | TalkToStellar - PIX-to-USD Transfer Routing on Stellar |
 | Builder / Team Name | TalkToStellar |
-| Primary Contact (Name + Email) (Responsible for KYC) | Rodrigo Camargo - rodrigobfcdog@gmail.com |
+| Primary Contact (Name + Email) (Responsible for KYC) | Rodrigo Banin Ferraz de Camargo - rodrigobfcdog@gmail.com |
 | Ambassador Chapter | Brazil |
 | Ambassador Chapter Lead | Caio Mattos |
 | Date Submitted | 20/05/2026 |
-| Suggested Sprint Start Date | 20/05/2026 |
+| Suggested Sprint Start Date | 01/06/2026 |
 
 ## 2. Instawards Overview & Intent
 
@@ -20,24 +20,62 @@
 
 Instawards are designed to support short, clearly scoped, execution-focused work that helps a project make tangible progress toward building on Stellar. Instawards should fund specific, achievable outcomes that can be completed and demonstrated within 30 days or less.
 
-This SOW represents a focused 30-day work package for TalkToStellar. The project already has a Stellar testnet wallet assistant, WhatsApp/Evolution integration, Pix sandbox work, conversion flows, frontend ramp screens, and recent security hardening. This sprint will package those pieces into a clear, reviewable prototype for the core idea: Pix in Brazil -> Stellar USDC settlement -> simulated USD payout to a Wise-compatible or global bank account.
+This SOW represents a shared commitment between the Builder and the Ambassador Chapter Lead on what will be delivered, why it matters, and how success will be verified.
 
-This is not the full startup roadmap. The sprint is limited to a testnet/sandbox prototype, documentation, and evidence that the Stellar-based rail is technically coherent.
+This represents a focused 30-day infrastructure sprint for TalkToStellar.
+
+TalkToStellar already has:
+
+- Conversational WhatsApp/Telegram settlement interfaces.
+- Stellar wallet orchestration.
+- Pix integration on Etherfuse.
+- Stellar pathfinding and conversion logic.
+- BRL-to-USDC settlement flows.
+- Quote generation.
+- On/off-ramp abstractions.
+
+The next milestone is building the settlement infrastructure layer that enables programmable institution-to-institution transfers using Stellar as the settlement rail.
+
+This sprint focuses on this user flow:
+
+1. User sends BRL through its bank of preference via Pix.
+2. TalkToStellar receives BRL.
+3. Value moves through Stellar as USDC.
+4. USDC is redeemed or exchanged into bank USD.
+5. USD is deposited into a Wise-compatible USD account or another international bank account.
+
+The project does not attempt to replace global banking providers.
+
+Instead, it aims to execute a strategic wedge strategy: operating as a high-efficiency conversion rail before those accounts. This enables BRL-to-USD settlement into existing international accounts such as Wise, Revolut, or other USD banking destinations at a fraction of traditional costs. By capturing users through savings on their existing accounts, TalkToStellar can establish trust and volume, creating a later funnel for native financial services inside its own ecosystem.
+
+This sprint is intentionally limited to:
+
+- Creating BRL-to-USD transfer intents.
+- Recording Pix funding events.
+- Generating transfer quotes.
+- Executing or simulating Stellar USDC settlement.
+- Attaching Stellar transaction evidence to transfer records.
+- Generating payout instructions through adapter interfaces.
+- Tracking transfer lifecycle states.
+- Exposing orchestration logs and reconciliation metadata for review.
 
 ## 3. Problem Statement & Objective
 
 ### Problem Being Addressed
 
-- Brazilian users and companies can open global accounts, but moving BRL into usable USD is still expensive, fragmented, and hard to understand.
-- The product is not trying to replace Wise or compete with global accounts. The gap is the rail before the account: convert BRL paid by Pix into USD that can be delivered to a global bank account.
-- The technically important path is: user pays Pix -> backend records BRL intent -> value is represented and settled through Stellar USDC -> USD bank payout is created through an off-ramp provider adapter.
-- Builders and reviewers need a short, verifiable implementation that shows how Pix sandbox events, Stellar testnet settlement, and USD bank payout instructions can fit together without using real funds or claiming production compliance.
+Brazil already has fast domestic payments through Pix, but cross-border BRL-to-USD settlement is still expensive, fragmented, and operationally inefficient.
+
+Users and companies can already open international USD accounts through providers such as Wise or other global banking platforms. However, converting BRL into usable USD and delivering those funds internationally still depends on high FX spreads, correspondent banking networks, and expensive operational infrastructure.
+
+Most existing crypto applications focus on retail onboarding, wallets, trading, or speculative use cases. The real infrastructure gap exists between financial institutions and banking endpoints: BRL source institution -> FX conversion -> settlement rail -> USD payout institution. Traditional global accounts can also flag or reject inward transfers coming from third-party corporate crypto pools rather than from the user's own identity, so identity continuity and same-name alignment must be tracked by the routing layer.
+
+TalkToStellar already solved much of the consumer interaction layer: WhatsApp/Telegram interfaces, Stellar wallet orchestration, Pix handling, pathfinding, quote generation, and BRL-to-USDC settlement logic. The next technical milestone is creating programmable settlement infrastructure capable of orchestrating transfers between existing compliant financial accounts while preserving identity tracking across the rail.
 
 ### Objective of This Instaward
 
-At the end of 30 days, TalkToStellar will deliver a demo-ready Phase 1 prototype that creates a BRL-to-USD quote, simulates a Pix-funded transfer, links the transfer to Stellar testnet USDC settlement evidence, and creates a simulated USD payout instruction for a Wise-compatible/global bank account.
+At the end of 30 days, TalkToStellar will have delivered a demo-ready institutional settlement product that creates BRL-to-USD quotes, accepts simulated Pix-funded transfer intents, records Stellar USDC settlement evidence, orchestrates transfer lifecycle states, creates USD payout instructions through provider-adapter interfaces, and simulates delivery to international bank accounts.
 
-The MVP will be documented and verifiable through a public repository, demo video, screenshots, backend call examples, logs, and Stellar testnet transaction hashes or explorer links.
+This sprint is not intended to bypass regulation, licensing, compliance, or taxes. Instead, the infrastructure aims to reduce unnecessary banking intermediaries, correspondent settlement complexity, hidden FX spreads, and settlement inefficiencies.
 
 ## 4. Scope of Work (30-Day Deliverables)
 
@@ -45,26 +83,26 @@ The MVP will be documented and verifiable through a public repository, demo vide
 
 | Deliverable | Description (What will be built or produced?) | Why this matters |
 |---|---|---|
-| BRL to USD Quote and Recipient Prototype | A backend and frontend testing flow where a user enters a BRL amount and Wise-compatible/global USD bank details. The system returns a quote with FX rate, estimated USDC amount, estimated USD delivered, platform fee, off-ramp/bank fee placeholder, and quote expiry. | This validates the product thesis without overbuilding: TalkToStellar is the conversion and delivery rail, not a replacement for Wise or a card product. |
-| Stellar USDC Settlement and Payout Simulation | A sandbox/testnet flow that connects a Pix payment simulation to a transfer state machine, records Stellar USDC settlement evidence, and creates a simulated USD bank payout instruction through a provider-adapter interface. | It demonstrates where Stellar fits in the architecture and makes the bridge from Pix to bank USD understandable and reviewable. |
-| Evidence Package and Technical Walkthrough | A concise demo package including API calls, screenshots, demo script, backend logs, transfer statuses, testnet transaction evidence, setup notes, and known limitations. | It gives the Ambassador Chapter clear proof of execution without requiring them to infer the integration from a UI-only demo. |
+| PIX-to-Stellar Transfer Lifecycle Engine | Expansion of the existing TalkToStellar infrastructure into an orchestration engine capable of coordinating PIX intake, BRL-to-USDC conversion flows, Stellar settlement tracking, payout routing, reconciliation metadata, and transfer lifecycle management between financial endpoints. Includes integration of existing conversational settlement infrastructure with programmable payout coordination systems. | This extends the existing conversational wallet infrastructure into a programmable transfer-routing layer capable of coordinating and monitoring BRL-to-USDC transfer flows with clear operational visibility and settlement traceability. |
+| USD Delivery & Payout Coordination Layer | TalkToStellar will build a provider-agnostic payout adapter interface that converts completed Stellar USDC settlement events into payout instructions compatible with USD account destinations and payout-provider workflows. The payout adapter layer will support payout destination metadata, same-name account alignment checks, payout reference IDs, payout status tracking, settlement evidence attachment, and mocked or sandbox payout-provider responses for demonstration and compatibility validation purposes. Where sandbox or developer access is available, the sprint may validate compatibility with APIs and payout flows associated with providers such as Circle, Bridge, or Wise-compatible payout systems. | The purpose is not to launch production banking operations, but to demonstrate that Stellar-based settlement can coordinate efficiently with future compliant payout providers while minimizing routing overhead, settlement friction, and user-facing transfer fees. |
+| End-to-End Transfer Routing Demonstration | TalkToStellar will prepare a reviewer-ready demonstration environment showing the complete transfer-routing flow from PIX-funded transfer intake through quote generation, Stellar settlement execution or simulation, payout instruction generation, settlement evidence attachment, lifecycle tracking, and orchestration logging. The final demonstration package will include architecture diagrams, API walkthroughs, screenshots, transaction hashes where available, transfer records, technical documentation, setup instructions, and a demo video showing the complete operational flow. | This provides verifiable evidence that the transfer-routing architecture is technically coherent, integration-ready, operationally reviewable, and capable of supporting lower-cost BRL-to-USD settlement coordination using Stellar as the settlement rail. |
 
 ### Out-of-Scope (Explicitly Not Included)
 
-| Deliverable | Description (What is not included?) | Why this matters |
+| Deliverable | Description (What will not be built or produced?) | Why this matters |
 |---|---|---|
-| Production Mainnet Launch | No live public remittance, no real customer funds, no production Pix-to-USD payout. | The sprint is focused on a sandbox/testnet MVP that can be reviewed safely within 30 days. |
-| Licensing, Compliance Approval, or Regulated Financial Operations | No legal opinion, license application, KYC/AML operation, or regulated money transmission launch. | These require regulated partners and legal work beyond a 30-day software Instaward. |
-| Wise Replacement or Consumer Bank Account Product | No attempt to build a Wise competitor, wallet account, debit card, or bank-like product. | The product is a rail that can deliver USD to a user's preferred global account. |
-| Full Off-Ramp Provider Production Integration | No guarantee of live Circle, Bridge, Rail, bank, or ACH/wire provider approval. | The sprint will create the adapter and simulated/sandbox path so providers can be plugged in later. |
-| Multi-Country Payout Expansion | No support for many countries, many payout currencies, or multiple local payment systems. | The MVP focuses on the Brazil Pix -> Stellar USDC -> USD bank account path. |
+| Production Remittance Operations | This sprint will not launch a public remittance platform, operate production-scale customer fund flows, or function as a regulated banking or money transmission service. Selective low-value Stellar mainnet validation transactions may be executed only to verify settlement behavior, transaction evidence attachment, and lifecycle coordination inside the orchestration layer. | The sprint validates the settlement architecture and orchestration layer without introducing the operational, regulatory, or banking complexity of a full production launch within a 30-day scope. |
+| Regulated Financial Operations & Licensing | This sprint does not include production money transmission licensing, regulated FX operations, or production-scale compliance infrastructure. The focus is infrastructure orchestration and settlement coordination designed to support future compliant integrations with regulated partners. | These require separate legal, operational, and banking infrastructure outside the scope of this 30-day sprint. |
+| Consumer Wallet Expansion & Retail UX Expansion | No additional retail onboarding systems, wallet UX expansion, or consumer-facing conversational flows will be developed during this sprint. Existing TalkToStellar conversational infrastructure will instead be extended into institutional settlement and payout coordination systems. | TalkToStellar already has a working conversational settlement platform; the focus is now institutional settlement infrastructure. |
+| Full Production Off-Ramp Integration | The sprint will not depend on production integrations with Wise, ACH systems, wire infrastructure, or regulated banking partners. Instead, it will focus on provider-agnostic payout adapter interfaces capable of generating payout instructions, attaching settlement evidence, tracking payout states, and validating compatibility with sandbox or developer-access APIs where available. | This allows the architecture to be validated and integration-ready while avoiding dependencies on external banking approval cycles during the Instaward period. |
+| Multi-Currency & Multi-Corridor Expansion | The MVP will focus specifically on the Brazil PIX -> Stellar USDC -> USD payout-routing corridor rather than supporting multiple payout currencies, geographic corridors, or treasury settlement paths. | Narrowing the initial corridor allows the sprint to validate institutional settlement orchestration, payout coordination, and BRL-to-USD infrastructure flows before expanding into broader multi-currency settlement operations. |
 
 ### 4.2 Deliverable-Aligned Budget Request
 
 | Field | Answer |
 |---|---|
 | Requested Budget Amount | USD 5,000 |
-| Rationale for Budget Request | The budget supports 30 days of focused development and packaging for the BRL-to-USD rail prototype: quote and recipient flow, Pix sandbox transfer state, Stellar USDC settlement evidence, USD payout simulation, documentation, and final demo preparation. The amount is tied directly to the three deliverables above and respects the Instawards cap. |
+| Rationale for Budget Request | The budget supports 30 days of focused development for the institutional settlement prototype: transfer orchestration infrastructure, payout-adapter systems, Stellar settlement evidence integration, payout simulation flows, reconciliation infrastructure, documentation, and final demo preparation. The amount is directly tied to the three scoped deliverables above and respects the Instawards cap. |
 
 ## 5. 30-Day Execution Plan & Timeline
 
@@ -72,10 +110,10 @@ The MVP will be documented and verifiable through a public repository, demo vide
 
 | Week | Planned Work | Expected Output |
 |---|---|---|
-| Week 1 | Finalize the BRL-to-USD quote model, recipient bank-detail payload, frontend testing form, and backend quote endpoint. | A deployed test environment where a reviewer can request a BRL-to-USD quote and see estimated USD delivered with fee breakdown and expiry. |
-| Week 2 | Connect the quote to a Pix sandbox transfer state and implement the provider-adapter interface for simulated USD payout creation. | A working sandbox transfer object with statuses such as quoted, Pix pending, Pix received, Stellar settlement pending, and payout instruction created. |
-| Week 3 | Attach Stellar testnet settlement evidence to the transfer, including transaction hash, memo/reference, and balance/status logs. | A complete demo flow showing how the Pix-funded transfer maps to Stellar USDC settlement evidence and then to a simulated USD payout. |
-| Week 4 | Run end-to-end testing, fix integration issues, prepare demo video script, screenshots, API examples, setup notes, and final evidence package. | A polished Phase 1 MVP with repository links, documentation, screenshots, backend call examples, and Stellar testnet evidence ready for review. |
+| Week 1 | Expand the existing TalkToStellar infrastructure into an institutional transfer orchestration layer. Implement transfer lifecycle states, quote orchestration, reconciliation metadata structures, settlement references, and backend coordination flows integrated with existing PIX and Stellar infrastructure. | A functioning orchestration environment capable of coordinating BRL transfer intents, PIX settlement events, quote generation, Stellar settlement references, and institution-style transfer lifecycle tracking. |
+| Week 2 | Implement payout-provider abstraction infrastructure and integrate sandbox-compatible payout coordination flows for international USD account destinations. Add payout routing objects, transfer references, payout status tracking, and reconciliation handling compatible with ACH/wire-style payout systems. Validate compatibility with at least one real-world stablecoin settlement or payout provider API such as Circle or Bridge where sandbox/API access is available. | A provider-agnostic payout coordination layer capable of linking Stellar settlement flows with simulated international USD payout instructions and payout lifecycle monitoring. |
+| Week 3 | Connect the complete end-to-end transfer-routing flow and validate operational coordination between PIX funding events, Stellar settlement flows, payout instruction generation, and transfer lifecycle tracking. The system will attach settlement evidence, payout references, timestamps, reconciliation metadata, and orchestration logs directly to transfer records while refining observability and operational traceability. Selective low-value Stellar mainnet validation transactions may be executed to verify settlement behavior and transaction evidence coordination within the routing layer. | A complete institutional settlement flow where a PIX-funded transfer generates Stellar settlement evidence and coordinates a simulated USD payout flow tied to an international account destination. |
+| Week 4 | Run end-to-end orchestration testing, improve transfer visibility and operational logs, refine reconciliation flows, finalize architecture documentation, prepare API walkthroughs, screenshots, demo environments, and reviewer evidence packages. | A polished institutional settlement prototype demonstrating PIX intake, Stellar settlement coordination, payout orchestration flows, transfer lifecycle monitoring, and integration-ready infrastructure documentation for technical review. |
 
 ## 6. Evidence of Completion (Required)
 
@@ -83,9 +121,9 @@ The MVP will be documented and verifiable through a public repository, demo vide
 
 | Deliverable | Evidence Type (link, repo, demo, screenshot, doc, tx hash, etc.) | Description |
 |---|---|---|
-| BRL to USD Quote and Recipient Prototype | Demo link, screenshots, GitHub repository, API request/response examples | The reviewer can see the quote form, bank-detail payload, fee breakdown, quote expiry, and estimated USD delivered. |
-| Stellar USDC Settlement and Payout Simulation | Backend logs, transfer status records, Stellar testnet transaction hash or explorer link, provider-adapter code | The reviewer can verify that the sandbox Pix flow leads to Stellar settlement evidence and a simulated USD bank payout instruction. |
-| Evidence Package and Technical Walkthrough | Demo video, walkthrough script, setup guide, screenshots, architecture notes | The reviewer can understand the full path from Pix to Stellar USDC to USD bank payout simulation without needing deep codebase knowledge. |
+| Cross-Border Settlement Orchestration Engine | GitHub repository, orchestration logs, transfer lifecycle records, API request/response examples, reconciliation metadata samples, operational dashboard screenshots | Reviewers can verify the orchestration architecture, transfer lifecycle logic, quote flow, and payout object handling. |
+| Stellar USDC Settlement + Payout Adapter Infrastructure | Stellar mainnet/testnet transaction hashes, payout adapter source code, settlement logs, provider integration examples, payout orchestration records, Etherfuse and Circle integration evidence, transfer reference mapping samples | Reviewers can verify that PIX-funded transfers map to Stellar settlement evidence and simulated USD payout instructions. |
+| Institutional Settlement Flow Demonstration + Technical Walkthrough | Demo video, screenshots, architecture diagrams, technical walkthrough, setup documentation | Reviewers can understand the full settlement flow from PIX to Stellar settlement to international USD payout orchestration. |
 
 ## 7. Next-Step Alignment
 
@@ -97,7 +135,11 @@ The MVP will be documented and verifiable through a public repository, demo vide
 - [ ] Seek other ecosystem support
 - [ ] Other: __________________________
 
-The likely next step is a larger SCF Build Award or equivalent funding path focused on regulated provider integration, production ledger/reconciliation, partner onboarding, and a controlled B2B pilot.
+The likely next step after this sprint is a larger infrastructure-focused funding path centered on:
+
+- Phase 1 - Compliance: regulated provider integrations, production payout orchestration, treasury infrastructure, ACH/wire integrations, institutional pilots, and compliant settlement operations.
+- Phase 2 - Retention: introducing a Stellar USDC yield vault using Soroban smart contracts, allowing users to park and yield funds natively on-chain before executing bank payouts.
+- Phase 3 - Expansion: transitioning from an intermediary rail into native account controls inside TalkToStellar, converting utility users into full-stack platform clients.
 
 ## 8. Instawards Constraints Acknowledgement
 
@@ -110,5 +152,3 @@ The likely next step is a larger SCF Build Award or equivalent funding path focu
 ## 9. Submission Confirmation
 
 Once finalized, this Statement of Work should be submitted by the Ambassador Chapter Lead through the appropriate Instawards submission process for review and approval.
-
-Before submission, confirm the demo links, repository links, screenshots, and testnet transaction evidence that will be attached after completion.

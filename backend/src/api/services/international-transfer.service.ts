@@ -126,6 +126,7 @@ export class InternationalTransferService {
     session_id: string;
     session_token: string;
     email?: string;
+    mock?: boolean;
   }): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
     this.assertTransition(transfer, 'PIX_PENDING');

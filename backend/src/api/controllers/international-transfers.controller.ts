@@ -41,6 +41,7 @@ export class InternationalTransfersController {
         session_id: String(req.body?.session_id || req.body?.sessionId || ''),
         session_token: String(req.body?.session_token || req.body?.sessionToken || ''),
         email: req.body?.email,
+        mock: req.body?.mock === true || req.body?.mock_pix_intent === true || req.body?.mockPixIntent === true,
       });
       res.status(201).json({ success: true, transfer });
     } catch (error: any) {

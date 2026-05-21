@@ -18,6 +18,11 @@ New backend modules:
 - `PayoutProviderAdapter`: generic USD payout provider interface.
 - `MockUsdPayoutAdapter`, `CircleCompatibilityAdapter`, `BridgeCompatibilityAdapter`: payout adapter implementations.
 
+Frontend testing surface:
+
+- `/international-transfer`: live API tester for quote, transfer creation, Pix funding, Pix webhook simulation, Stellar settlement, payout instruction and reconciliation.
+- `/global-transfer`: cost and operational assumption lab.
+
 Transfer states:
 
 `QUOTE_CREATED -> PIX_PENDING -> PIX_RECEIVED -> BRL_TO_USDC_PENDING -> USDC_SETTLEMENT_PENDING -> USDC_SETTLED -> PAYOUT_INSTRUCTION_CREATED -> PAYOUT_PENDING -> PAYOUT_COMPLETED`
@@ -51,6 +56,7 @@ USDC_ASSET_ISSUER=GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
 ETHERFUSE_API_KEY=api_sand:...
 ETHERFUSE_WEBHOOK_SECRET=change-me
 PAYOUT_PROVIDER=mock
+INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true
 ```
 
 Optional real testnet Stellar settlement:
