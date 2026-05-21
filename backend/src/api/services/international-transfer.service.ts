@@ -41,10 +41,11 @@ function appendError(transfer: InternationalTransfer, error: unknown, stage: str
   ];
 }
 
-function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge' {
+function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge' | 'etherfuse' {
   const normalized = String(provider || process.env.PAYOUT_PROVIDER || 'mock').trim().toLowerCase();
   if (normalized === 'circle') return 'circle';
   if (normalized === 'bridge') return 'bridge';
+  if (normalized === 'etherfuse') return 'etherfuse';
   return 'mock';
 }
 
@@ -253,7 +254,7 @@ export class InternationalTransferService {
     }
   }
 
-  async createPayoutInstruction(transferId: string, provider?: string): Promise<InternationalTransfer> {
+  async createPayoutInstruction(transferId: string, provider?: string, providerOptions: Record<string, unknown> = {}): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
     this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
     const selectedProvider = normalizePayoutProvider(provider);
@@ -271,7 +272,10 @@ export class InternationalTransferService {
         metadata: {
           same_name_match_status: transfer.same_name_match_status,
           identity_risk_notes: transfer.identity_risk_notes,
+          on_ramp_provider: 'etherfuse',
+          off_ramp_provider: adapter.providerName,
         },
+        providerOptions,
       });
 
       let updated = await this.repository.updateTransfer(transfer.transfer_id, {
@@ -283,6 +287,7 @@ export class InternationalTransferService {
         reconciliation_metadata: {
           ...(transfer.reconciliation_metadata || {}),
           payout_instruction: instruction,
+          off_ramp_provider: adapter.providerName,
         },
       });
 
@@ -295,6 +300,7 @@ export class InternationalTransferService {
         reconciliation_metadata: {
           ...(updated.reconciliation_metadata || {}),
           payout_instruction: instruction,
+          off_ramp_provider: adapter.providerName,
           next_action: instruction.status === 'completed' ? 'done' : 'poll_payout_status',
         },
       });

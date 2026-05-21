@@ -16,11 +16,12 @@ New backend modules:
 - `StellarSettlementService`: creates or mocks USDC Stellar settlement evidence.
 - `SettlementEvidenceService`: builds reconciliation records.
 - `PayoutProviderAdapter`: generic USD payout provider interface.
-- `MockUsdPayoutAdapter`, `CircleCompatibilityAdapter`, `BridgeCompatibilityAdapter`: payout adapter implementations.
+- `MockUsdPayoutAdapter`, `EtherfusePixOffRampAdapter`, `CircleCompatibilityAdapter`, `BridgeCompatibilityAdapter`: payout adapter implementations.
 
 Frontend testing surface:
 
-- `/international-transfer`: live API tester for quote, transfer creation, Pix funding, Pix webhook simulation, Stellar settlement, payout instruction and reconciliation.
+- `/institution-settlement`: live API tester for quote, transfer creation, Etherfuse Pix funding, funding webhook simulation, Stellar settlement, Etherfuse/provider off-ramp proof, metric validation and reconciliation.
+- `/international-transfer`: compatibility route for the same tester.
 - `/global-transfer`: cost and operational assumption lab.
 
 Transfer states:
@@ -40,7 +41,8 @@ Failure states:
 
 ## What Is Sandboxed
 
-- USD bank payout defaults to `PAYOUT_PROVIDER=mock`.
+- USD bank payout/off-ramp proof defaults to sandbox behavior. `PAYOUT_PROVIDER=etherfuse` prepares an Etherfuse off-ramp proof payload by default and only executes the sandbox proof if the request includes session credentials, wallet PIN and `run_etherfuse_offramp_test=true`.
+- `PAYOUT_PROVIDER=mock` still creates a pure mock USD destination instruction.
 - Circle and Bridge adapters prepare provider-shaped payout payloads but do not execute a bank payout unless `ENABLE_REAL_PAYOUT_EXECUTION=true` and provider create URL/API key are explicitly configured.
 - If Stellar settlement secrets or destination account are missing, the settlement layer creates mock evidence and marks that no real money moved.
 - Mainnet settlement does not execute unless `ENABLE_MAINNET_SETTLEMENT_VALIDATION=true` and the amount is below `MAX_MAINNET_VALIDATION_AMOUNT_USD`.
@@ -55,8 +57,9 @@ USDC_ASSET_CODE=USDC
 USDC_ASSET_ISSUER=GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
 ETHERFUSE_API_KEY=api_sand:...
 ETHERFUSE_WEBHOOK_SECRET=change-me
-PAYOUT_PROVIDER=mock
+PAYOUT_PROVIDER=etherfuse
 INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true
+ETHERFUSE_SANDBOX_PIX_FALLBACK=true
 ```
 
 Optional real testnet Stellar settlement:
@@ -79,7 +82,7 @@ MAX_MAINNET_VALIDATION_AMOUNT_USD=25
 Provider adapter selection:
 
 ```bash
-PAYOUT_PROVIDER=mock # mock|circle|bridge
+PAYOUT_PROVIDER=etherfuse # etherfuse|mock|circle|bridge
 CIRCLE_API_KEY=
 CIRCLE_PAYOUT_CREATE_URL=
 BRIDGE_API_KEY=
@@ -172,15 +175,31 @@ curl -s -X POST http://localhost:3001/api/transfers/TR_ID/settle-stellar | jq
 
 The transfer moves through `BRL_TO_USDC_PENDING`, `USDC_SETTLEMENT_PENDING` and `USDC_SETTLED`. Evidence includes Stellar tx hash, memo/reference, source account, destination account, asset and network.
 
-### 6. Create USD Payout Instruction
+### 6. Create USD Payout / Off-Ramp Proof Instruction
 
 ```bash
 curl -s -X POST http://localhost:3001/api/transfers/TR_ID/payout-instruction \
   -H "Content-Type: application/json" \
-  -d '{ "provider": "mock" }' | jq
+  -d '{ "provider": "etherfuse" }' | jq
 ```
 
-Default behavior creates a sandbox instruction and does not execute ACH, wire or SWIFT.
+Default Etherfuse behavior prepares a sandbox off-ramp proof payload and does not sign or execute anything.
+
+To execute the Etherfuse sandbox off-ramp proof, send credentials and PIN explicitly:
+
+```bash
+curl -s -X POST http://localhost:3001/api/transfers/TR_ID/payout-instruction \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "etherfuse",
+    "session_id": "SESSION_ID",
+    "session_token": "SESSION_TOKEN",
+    "wallet_pin": "PIN",
+    "run_etherfuse_offramp_test": true
+  }' | jq
+```
+
+This proof uses Etherfuse sandbox PIX off-ramp mechanics as a validation leg. It does not claim live USD bank payout execution.
 
 ### 7. Reconciliation
 
@@ -201,7 +220,27 @@ Example output includes:
     "stellar_memo": "tts-reference",
     "payout_instruction_id": "mock_instruction_...",
     "provider_payout_id": "mock_payout_...",
-    "final_payout_status": "pending"
+    "final_payout_status": "pending",
+    "evidence": {
+      "on_off_ramp": {
+        "on_ramp_provider": "etherfuse",
+        "off_ramp_provider": "etherfuse"
+      },
+      "metrics": {
+        "source_amount_brl": "560",
+        "baseline_usd_before_route_costs": "100",
+        "destination_usd_after_route_costs": "99.45075",
+        "total_fee_usd_equivalent": "0.54925",
+        "retained_pct": "99.4508"
+      },
+      "metric_validation": {
+        "source_amount_positive": true,
+        "fx_rate_positive": true,
+        "fee_math_matches_delta": true,
+        "route_delta_explained_by_fees": true
+      },
+      "metrics_valid": true
+    }
   }
 }
 ```
