@@ -365,6 +365,7 @@ export default function PixRampClient({
   const queryString = initialQuery;
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const queryParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
+  const debugEnabled = useMemo(() => queryParams.get("debug") === "1", [queryParams]);
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
@@ -475,10 +476,11 @@ export default function PixRampClient({
   const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
   const externalProviderUserId = String(queryParams.get("provider_user_id") || "").trim();
   const externalSource = String(queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
-  const hasExternalChatContext = Boolean(launchedFromChat && externalProvider && externalProviderUserId);
   const hasSession = Boolean(sessionId);
-  const needsLoginForChatLink = Boolean(hasExternalChatContext && !hasSession);
-  const canResolveWallet = Boolean(hasSession || (!needsLoginForChatLink && rampEmail.trim()));
+  const allowEmailAccountLookup = Boolean(debugEnabled && !launchedFromChat);
+  const needsBrowserLoginForPix = Boolean(!hasSession && !allowEmailAccountLookup);
+  const needsBrowserLoginForChatLink = Boolean(launchedFromChat && !hasSession);
+  const canResolveWallet = Boolean(hasSession || (allowEmailAccountLookup && rampEmail.trim()));
   const customer = customerPayload?.customer;
   const customerId = String(customer?.id || "");
   const bankAccountId = String(customer?.bankAccountId || "");
@@ -525,17 +527,17 @@ export default function PixRampClient({
   const sandboxQrPayload = isSandboxMockOrder
     ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
     : "";
-  const debugEnabled = useMemo(() => queryParams.get("debug") === "1", [queryParams]);
   const loginHref = useMemo(() => {
-    if (!needsLoginForChatLink) return "";
+    if (!needsBrowserLoginForPix) return "";
     const params = new URLSearchParams();
-    params.set("provider", externalProvider);
-    params.set("provider_user_id", externalProviderUserId);
-    params.set("source", externalSource || externalProvider || "chat");
+    if (externalProvider) params.set("provider", externalProvider);
+    if (externalProviderUserId) params.set("provider_user_id", externalProviderUserId);
+    if (externalSource) params.set("source", externalSource || externalProvider || "chat");
+    if (rampEmail.includes("@")) params.set("email", rampEmail);
     params.set("next", `${rampMode === "offramp" ? "/pix-off" : "/pix-on"}?${queryString}`);
     params.set("lang", language);
     return `/login?${params.toString()}`;
-  }, [externalProvider, externalProviderUserId, externalSource, language, needsLoginForChatLink, queryString, rampMode]);
+  }, [externalProvider, externalProviderUserId, externalSource, language, needsBrowserLoginForPix, queryString, rampEmail, rampMode]);
   const operationStorageKey = intentId ? `talk-to-stellar.pix-ramp.completed:${intentId}` : "";
   const buildIdempotencyKey = useCallback((action: string) => (
     `pix-ramp:${atomicIntentKey}:${action}`
@@ -550,8 +552,12 @@ export default function PixRampClient({
       return [
         {
           label: "Conta TalkToStellar",
-          detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
-          state: walletPublicKey ? "done" : loading === "Resolving account" ? "active" : "pending",
+          detail: walletPublicKey
+            ? L("Conta localizada.", "Account found.")
+            : needsBrowserLoginForPix
+              ? L("Entre com PIN para continuar com sua conta.", "Sign in with PIN to continue with your account.")
+              : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
+          state: walletPublicKey ? "done" : needsBrowserLoginForPix ? "warning" : loading === "Resolving account" ? "active" : "pending",
         },
         {
           label: L("Valor de saída", "Outgoing amount"),
@@ -587,12 +593,14 @@ export default function PixRampClient({
     return [
       {
         label: "TalkToStellar account",
-        detail: walletPublicKey
-          ? L("Conta localizada.", "Account found.")
-          : needsLoginForChatLink
-            ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
-            : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
-        state: walletPublicKey ? "done" : needsLoginForChatLink ? "warning" : loading === "Resolving account" ? "active" : "pending",
+          detail: walletPublicKey
+            ? L("Conta localizada.", "Account found.")
+            : needsBrowserLoginForPix
+              ? needsBrowserLoginForChatLink
+                ? L("A sessão deste navegador não foi detectada. Entre com PIN para continuar este PIX aberto pelo chat.", "This browser session was not detected. Sign in with PIN to continue this PIX opened from chat.")
+                : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
+              : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
+        state: walletPublicKey ? "done" : needsBrowserLoginForPix ? "warning" : loading === "Resolving account" ? "active" : "pending",
       },
       {
         label: L("Conta PIX", "PIX account"),
@@ -668,7 +676,8 @@ export default function PixRampClient({
     autoPayAsset,
     pixFundedTransferResult,
     walletPublicKey,
-    needsLoginForChatLink,
+    needsBrowserLoginForPix,
+    needsBrowserLoginForChatLink,
     L,
     language,
   ]);
@@ -784,14 +793,14 @@ export default function PixRampClient({
   useEffect(() => {
     if (rampMode !== "offramp") return;
     if (offRampAutoResolvedRef.current) return;
-    if (hasSession || !rampEmail.trim() || loading) return;
+    if (hasSession || !allowEmailAccountLookup || !rampEmail.trim() || loading) return;
 
     offRampAutoResolvedRef.current = true;
     void run("Resolving account", async () => {
       const auth = await resolveWalletFromEmail();
       await loadExternalBankAccount(auth);
     });
-  }, [hasSession, loading, rampEmail, rampMode]);
+  }, [allowEmailAccountLookup, hasSession, loading, rampEmail, rampMode]);
 
   const addDebugLog = useCallback((entry: Omit<DebugLogEntry, "id" | "at">) => {
     setDebugLogs((current) => [{
@@ -864,8 +873,10 @@ export default function PixRampClient({
     if (sessionId) {
       return { session_id: sessionId };
     }
-    if (needsLoginForChatLink) {
-      throw new Error(L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat."));
+    if (needsBrowserLoginForPix) {
+      throw new Error(needsBrowserLoginForChatLink
+        ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
+        : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account."));
     }
 
     const email = rampEmail.trim().toLowerCase();
@@ -1542,8 +1553,10 @@ export default function PixRampClient({
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {needsLoginForChatLink
-              ? L("Este PIX veio do chat. Entre com PIN neste navegador para preparar o pagamento e manter a operação vinculada à sua conta.", "This PIX came from chat. Sign in with PIN in this browser to prepare payment and keep the operation linked to your account.")
+            {needsBrowserLoginForPix
+              ? needsBrowserLoginForChatLink
+                ? L("Este PIX veio do chat, mas este navegador ainda não tem uma sessão ativa. Entre com PIN aqui para preparar o pagamento na mesma conta.", "This PIX came from chat, but this browser does not have an active session yet. Sign in with PIN here to prepare the payment on the same account.")
+                : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
               : t("pix_need_email")}
             {loginHref && (
               <a
@@ -1743,7 +1756,7 @@ export default function PixRampClient({
               </div>
             </div>
 
-            {!hasSession && !needsLoginForChatLink && (
+            {!hasSession && allowEmailAccountLookup && (
             <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4">
               <label className="block text-sm font-bold text-emerald-50">{L("Email da conta", "Account email")}</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
