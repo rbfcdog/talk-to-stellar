@@ -4,13 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  Activity,
   ArrowLeft,
+  AlertCircle,
   Banknote,
   Building2,
   CheckCircle2,
   ClipboardList,
+  Copy,
+  Database,
   Code2,
   Landmark,
+  ListChecks,
   Loader2,
   Network,
   Play,
@@ -18,6 +23,7 @@ import {
   RefreshCw,
   Route,
   Send,
+  Server,
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
@@ -33,6 +39,15 @@ type LogEntry = {
   request?: unknown;
   response?: unknown;
   error?: string;
+};
+
+type EventEntry = {
+  id: string;
+  at: string;
+  title: string;
+  detail: string;
+  state: "running" | "ok" | "error" | "info";
+  path?: string;
 };
 
 type TransferState =
@@ -62,6 +77,34 @@ const states: Array<{ key: TransferState; label: string; icon: any }> = [
 
 const stateRank = new Map(states.map((state, index) => [state.key, index]));
 
+const nextActionByState: Partial<Record<TransferState, string>> = {
+  QUOTE_CREATED: "Create the Pix funding intent and attach the Pix reference to the transfer.",
+  PIX_PENDING: "Wait for Etherfuse Pix confirmation or simulate the Pix webhook in sandbox.",
+  PIX_RECEIVED: "Trigger Stellar settlement so USDC evidence can be attached.",
+  BRL_TO_USDC_PENDING: "Backend is moving from BRL exposure into USDC settlement preparation.",
+  USDC_SETTLEMENT_PENDING: "Backend is submitting or mocking the Stellar USDC transaction.",
+  USDC_SETTLED: "Create a USD payout instruction through the selected provider adapter.",
+  PAYOUT_INSTRUCTION_CREATED: "Move the provider payout instruction into pending or completed state.",
+  PAYOUT_PENDING: "Poll provider payout status and inspect reconciliation evidence.",
+  PAYOUT_COMPLETED: "Capture reconciliation output, screenshots and transaction evidence.",
+  FAILED: "Open the latest API log and error logs on the transfer object.",
+  REFUNDED: "Capture refund evidence and close the transfer record.",
+};
+
+const phaseDescriptions: Record<TransferState, string> = {
+  QUOTE_CREATED: "The quote is accepted and the transfer record exists, but no Pix funding has settled yet.",
+  PIX_PENDING: "A Pix funding reference exists. The system is waiting for the funding event before value moves forward.",
+  PIX_RECEIVED: "Pix funding is confirmed. The transfer can now move into USDC settlement.",
+  BRL_TO_USDC_PENDING: "The backend is representing the BRL exposure as USDC for the Stellar leg.",
+  USDC_SETTLEMENT_PENDING: "The Stellar transaction is being prepared, submitted, or mocked depending on env configuration.",
+  USDC_SETTLED: "Stellar settlement evidence is attached to the transfer record.",
+  PAYOUT_INSTRUCTION_CREATED: "The USD payout adapter has created an instruction object for the bank-destination leg.",
+  PAYOUT_PENDING: "The payout provider has a pending instruction. Live providers would be polled or reconciled by webhook.",
+  PAYOUT_COMPLETED: "The transfer reached terminal success in the orchestration layer.",
+  FAILED: "The flow failed and the transfer error log should be inspected.",
+  REFUNDED: "The flow ended in refund state.",
+};
+
 function text(value: unknown) {
   return String(value || "").trim();
 }
@@ -77,6 +120,22 @@ function formatCurrency(value: unknown, currency: "BRL" | "USD") {
     currency,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(numeric) ? numeric : 0);
+}
+
+function shortId(value: unknown, size = 18) {
+  const raw = text(value);
+  if (!raw) return "-";
+  return raw.length > size ? `${raw.slice(0, size)}...` : raw;
+}
+
+function formatTime(value: string) {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return value;
+  return new Date(parsed).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function Field({
@@ -165,6 +224,21 @@ function ActionButton({
   );
 }
 
+function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; children: ReactNode }) {
+  const classes = {
+    running: "border-sky-200 bg-sky-50 text-sky-800",
+    ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    error: "border-red-200 bg-red-50 text-red-800",
+    info: "border-slate-200 bg-slate-50 text-slate-700",
+    idle: "border-slate-200 bg-white text-slate-600",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-bold ${classes[state]}`}>
+      {children}
+    </span>
+  );
+}
+
 export default function InternationalTransferClient() {
   const [brlAmount, setBrlAmount] = useState("1000");
   const [senderName, setSenderName] = useState("Rodrigo Banin");
@@ -186,6 +260,16 @@ export default function InternationalTransferClient() {
   const [transfer, setTransfer] = useState<any>(null);
   const [reconciliation, setReconciliation] = useState<any>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [events, setEvents] = useState<EventEntry[]>([
+    {
+      id: "initial",
+      at: new Date().toISOString(),
+      title: "Ready",
+      detail: "Create a quote or run the full sandbox flow to start recording orchestration events.",
+      state: "info",
+    },
+  ]);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -197,6 +281,28 @@ export default function InternationalTransferClient() {
 
   const activeStatus = text(transfer?.status) as TransferState;
   const activeRank = stateRank.get(activeStatus) ?? -1;
+  const latestEvent = events[0];
+  const currentPhase = activeStatus && phaseDescriptions[activeStatus]
+    ? phaseDescriptions[activeStatus]
+    : "No transfer has been created yet.";
+  const nextAction = activeStatus && nextActionByState[activeStatus]
+    ? nextActionByState[activeStatus]
+    : "Create a BRL -> USD quote.";
+  const evidenceItems = useMemo(
+    () => [
+      { label: "Quote ID", value: quote?.quote_id, ready: Boolean(quote?.quote_id) },
+      { label: "Transfer ID", value: transfer?.transfer_id, ready: Boolean(transfer?.transfer_id) },
+      { label: "Pix reference", value: transfer?.pix_order_id || transfer?.pix_payment_id, ready: Boolean(transfer?.pix_order_id || transfer?.pix_payment_id) },
+      { label: "Pix status", value: transfer?.pix_status, ready: transfer?.status === "PIX_RECEIVED" || activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2) },
+      { label: "Stellar hash", value: transfer?.stellar_tx_hash, ready: Boolean(transfer?.stellar_tx_hash) },
+      { label: "Stellar memo", value: transfer?.stellar_memo, ready: Boolean(transfer?.stellar_memo) },
+      { label: "Payout instruction", value: transfer?.payout_instruction_id, ready: Boolean(transfer?.payout_instruction_id) },
+      { label: "Provider payout", value: transfer?.provider_payout_id, ready: Boolean(transfer?.provider_payout_id) },
+      { label: "Reconciliation", value: reconciliation?.transfer_id, ready: Boolean(reconciliation?.transfer_id) },
+      { label: "Same-name check", value: transfer?.same_name_match_status, ready: Boolean(transfer?.same_name_match_status) },
+    ],
+    [activeRank, quote?.quote_id, reconciliation?.transfer_id, transfer],
+  );
 
   const transferPayload = useMemo(
     () => ({
@@ -228,10 +334,58 @@ export default function InternationalTransferClient() {
     [accountHolderType, accountNumber, accountType, bankName, country, providerLabel, quote?.quote_id, recipientName, routingNumber, senderEmail, senderName, sessionId],
   );
 
+  function pushEvent(title: string, detail: string, state: EventEntry["state"], path?: string) {
+    setEvents((items) => [
+      {
+        id: `${Date.now()}-${title}-${Math.random().toString(16).slice(2)}`,
+        at: new Date().toISOString(),
+        title,
+        detail,
+        state,
+        path,
+      },
+      ...items,
+    ].slice(0, 20));
+  }
+
+  async function copyDebugBundle() {
+    const bundle = {
+      generated_at: new Date().toISOString(),
+      current_operation: busy || "idle",
+      quote,
+      transfer,
+      reconciliation,
+      events,
+      api_logs: logs,
+    };
+    await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  function resetRun() {
+    setQuote(null);
+    setTransfer(null);
+    setReconciliation(null);
+    setLogs([]);
+    setError("");
+    setCopied(false);
+    setEvents([
+      {
+        id: `reset-${Date.now()}`,
+        at: new Date().toISOString(),
+        title: "Reset",
+        detail: "The local tester state was cleared. Backend records were not deleted.",
+        state: "info",
+      },
+    ]);
+  }
+
   async function callApi(label: string, method: string, path: string, body?: unknown) {
     const startedAt = performance.now();
     setBusy(label);
     setError("");
+    pushEvent(label, `${method} ${path}`, "running", path);
     try {
       const response = await fetch(path, {
         method,
@@ -253,10 +407,18 @@ export default function InternationalTransferClient() {
       if (!response.ok || payload?.success === false) {
         throw new Error(payload?.message || `${label} failed with ${response.status}`);
       }
+      const status = text(payload?.transfer?.status || payload?.quote?.quote_status || payload?.reconciliation?.final_payout_status);
+      pushEvent(
+        label,
+        `HTTP ${response.status} in ${Math.round(performance.now() - startedAt)}ms${status ? `; backend state: ${status}` : ""}.`,
+        "ok",
+        path,
+      );
       return payload;
     } catch (apiError: any) {
       const message = apiError?.message || String(apiError);
       setError(message);
+      pushEvent(label, message, "error", path);
       setLogs((items) => [
         {
           id: `${Date.now()}-${label}-error`,
@@ -346,23 +508,35 @@ export default function InternationalTransferClient() {
   }
 
   async function runSandboxFlow() {
-    const q = await createQuote();
-    const t = await createTransfer(q);
-    const pix = await createPixIntent(t, true);
-    const funded = await simulatePixReceived(pix);
-    const settled = await settleStellar(funded);
-    const payout = await createPayoutInstruction(settled);
-    await loadReconciliation(payout);
+    pushEvent("Sandbox flow started", "Running quote, transfer, Pix mock, Pix webhook, Stellar settlement, payout instruction and reconciliation.", "info");
+    try {
+      const q = await createQuote();
+      const t = await createTransfer(q);
+      const pix = await createPixIntent(t, true);
+      const funded = await simulatePixReceived(pix);
+      const settled = await settleStellar(funded);
+      const payout = await createPayoutInstruction(settled);
+      await loadReconciliation(payout);
+      pushEvent("Sandbox flow complete", "All orchestration steps returned successfully. Capture the evidence checklist and reconciliation panel.", "ok");
+    } catch (flowError: any) {
+      pushEvent("Sandbox flow stopped", flowError?.message || String(flowError), "error");
+    }
   }
 
   return (
     <main className="min-h-screen bg-[#f4f7f5] text-slate-950">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-500">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Home
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-500">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Home
+            </Link>
+            <Link href="/global-transfer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-500">
+              <Route className="h-4 w-4" aria-hidden="true" />
+              Cost lab
+            </Link>
+          </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Live backend tester</p>
             <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">BRL to USD transfer rail</h1>
@@ -484,6 +658,16 @@ export default function InternationalTransferClient() {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
               Run sandbox flow
             </ActionButton>
+            <div className="grid grid-cols-2 gap-3">
+              <ActionButton onClick={copyDebugBundle} disabled={Boolean(busy)} variant="light">
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                {copied ? "Copied" : "Copy logs"}
+              </ActionButton>
+              <ActionButton onClick={resetRun} disabled={Boolean(busy)} variant="light">
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Reset
+              </ActionButton>
+            </div>
           </div>
         </section>
 
@@ -493,6 +677,73 @@ export default function InternationalTransferClient() {
               {error}
             </section>
           ) : null}
+
+          <section className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-800">
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Activity className="h-5 w-5" aria-hidden="true" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">What is happening</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">{busy || transfer?.status || "Waiting for first action"}</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{busy ? latestEvent?.detail : currentPhase}</p>
+                  </div>
+                </div>
+                <StatusPill state={busy ? "running" : error ? "error" : transfer ? "ok" : "idle"}>
+                  {busy ? "running" : error ? "needs attention" : transfer ? "state synced" : "idle"}
+                </StatusPill>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <Server className="h-4 w-4" aria-hidden="true" />
+                    Backend call
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">{latestEvent?.path || "No request yet"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <Database className="h-4 w-4" aria-hidden="true" />
+                    Persisted record
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">{shortId(transfer?.transfer_id || quote?.quote_id, 26)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <ListChecks className="h-4 w-4" aria-hidden="true" />
+                    Next action
+                  </div>
+                  <p className="mt-2 text-sm font-semibold leading-5 text-slate-800">{nextAction}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-5 w-5 text-emerald-700" aria-hidden="true" />
+                  <h2 className="text-base font-bold text-slate-950">Evidence checklist</h2>
+                </div>
+                <StatusPill state="info">{evidenceItems.filter((item) => item.ready).length}/{evidenceItems.length}</StatusPill>
+              </div>
+              <div className="grid gap-2">
+                {evidenceItems.map((item) => (
+                  <div key={item.label} className="grid grid-cols-[22px_minmax(0,0.9fr)_minmax(0,1.1fr)] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                    {item.ready ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                    )}
+                    <span className="font-semibold text-slate-700">{item.label}</span>
+                    <span className="truncate text-right font-mono text-xs text-slate-600">{shortId(item.value, 30)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
 
           <section className="grid gap-3 md:grid-cols-4">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -564,12 +815,76 @@ export default function InternationalTransferClient() {
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-base font-bold text-slate-950">API log</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-sky-800" aria-hidden="true" />
+                <h2 className="text-base font-bold text-slate-950">Execution stream</h2>
+              </div>
+              <button
+                type="button"
+                onClick={copyDebugBundle}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:border-slate-500"
+              >
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                {copied ? "Copied" : "Copy debug bundle"}
+              </button>
+            </div>
+            <div className="space-y-3">
+              {events.map((event, index) => (
+                <div key={event.id} className="grid grid-cols-[34px_minmax(0,1fr)] gap-3">
+                  <div className="relative flex justify-center">
+                    <div
+                      className={`grid h-8 w-8 place-items-center rounded-lg ${
+                        event.state === "ok"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : event.state === "error"
+                            ? "bg-red-100 text-red-800"
+                            : event.state === "running"
+                              ? "bg-sky-100 text-sky-800"
+                              : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {event.state === "running" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : event.state === "error" ? (
+                        <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </div>
+                    {index < events.length - 1 ? <div className="absolute top-9 h-full w-px bg-slate-200" /> : null}
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-950">{event.title}</h3>
+                        <StatusPill state={event.state}>{event.state}</StatusPill>
+                      </div>
+                      <span className="font-mono text-xs text-slate-500">{formatTime(event.at)}</span>
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{event.detail}</p>
+                    {event.path ? <p className="mt-2 font-mono text-xs text-slate-500">{event.path}</p> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Code2 className="h-5 w-5 text-slate-700" aria-hidden="true" />
+              <h2 className="text-base font-bold text-slate-950">API log</h2>
+            </div>
             <div className="mt-4 grid gap-3">
               {logs.length ? logs.map((log) => (
                 <details key={log.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <summary className="cursor-pointer text-sm font-bold text-slate-900">
-                    {log.method} {log.path} {log.status ? `- ${log.status}` : ""} {log.durationMs ? `(${log.durationMs}ms)` : ""}
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <span className="font-mono">{log.method}</span>
+                      <span>{log.path}</span>
+                      {log.status ? <StatusPill state={log.status >= 200 && log.status < 300 ? "ok" : "error"}>{log.status}</StatusPill> : null}
+                      {log.durationMs ? <span className="text-xs text-slate-500">{log.durationMs}ms</span> : null}
+                    </span>
                   </summary>
                   <pre className="mt-3 max-h-[320px] overflow-auto rounded-lg bg-white p-3 text-xs leading-5 text-slate-700">
                     {pretty({ label: log.label, request: log.request, response: log.response, error: log.error })}
