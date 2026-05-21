@@ -17,6 +17,7 @@ import { PlatformFeeService } from '../services/platform-fee.service';
 import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
 import { timingSafeEqualString } from '../../utils/password';
 import { publicErrorMessage } from '../../utils/public-error';
+import { mainnetWalletService } from '../services/mainnet-wallet.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -539,6 +540,115 @@ export class FinancialController {
       return res.status(200).json({ success: true, ...payload });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
+    }
+  }
+
+  static async getMainnetStatus(_req: Request, res: Response) {
+    try {
+      return res.status(200).json(mainnetWalletService.getStatus());
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui carregar a configuracao Mainnet agora."),
+      });
+    }
+  }
+
+  static async getMainnetWallet(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const wallet = await mainnetWalletService.getPrimaryWallet(auth.sessionId, auth.userId);
+      return res.status(200).json({
+        success: true,
+        wallet,
+        configured: Boolean(wallet),
+        message: wallet
+          ? 'Carteira Mainnet configurada em modo somente leitura.'
+          : 'Nenhuma carteira Mainnet foi anexada a esta conta ainda.',
+      });
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui carregar a carteira Mainnet agora."),
+      });
+    }
+  }
+
+  static async attachMainnetWallet(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const result = await mainnetWalletService.attachWallet({
+        sessionId: auth.sessionId,
+        userId: auth.userId,
+        publicKey: String(req.body?.public_key || req.body?.publicKey || '').trim(),
+        label: String(req.body?.label || '').trim() || undefined,
+      });
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui configurar a carteira Mainnet agora."),
+      });
+    }
+  }
+
+  static async getMainnetBalance(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const payload = await mainnetWalletService.getBalance({
+        sessionId: auth.sessionId,
+        userId: auth.userId,
+        publicKey: String(req.query.public_key || req.body?.public_key || '').trim() || undefined,
+      });
+      return res.status(200).json(payload);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui consultar o saldo Mainnet agora."),
+      });
+    }
+  }
+
+  static async getMainnetOperations(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const payload = await mainnetWalletService.listOperations({
+        sessionId: auth.sessionId,
+        userId: auth.userId,
+        publicKey: String(req.query.public_key || req.body?.public_key || '').trim() || undefined,
+        limit: Number(req.query.limit || req.body?.limit || 12),
+      });
+      return res.status(200).json(payload);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui consultar as operacoes Mainnet agora."),
+      });
+    }
+  }
+
+  static async previewMainnetPayment(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+      const payload = await mainnetWalletService.createPaymentPreview({
+        sessionId: auth.sessionId,
+        userId: auth.userId,
+        destination: String(req.body?.destination || req.body?.destination_public_key || '').trim(),
+        amount: String(req.body?.amount || '').trim(),
+        assetCode: String(req.body?.asset_code || 'USDC').trim(),
+        memo: String(req.body?.memo || '').trim(),
+      });
+      return res.status(200).json(payload);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, "Nao consegui preparar essa interacao Mainnet agora."),
+      });
     }
   }
 }
