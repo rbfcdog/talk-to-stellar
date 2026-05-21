@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
+import { mapPublicError } from "@/lib/public-errors";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -341,6 +342,18 @@ function formatDebugJson(value: unknown) {
   return JSON.stringify(hideInternalAssetNames(value || {}), null, 2);
 }
 
+function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const isTechnical =
+    /internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
+  if (isTechnical) return mapPublicError(raw, language).message;
+  return raw || mapPublicError(raw, language).message;
+}
+
 export default function PixRampClient({
   initialQuery = "",
   lockedMode,
@@ -351,6 +364,7 @@ export default function PixRampClient({
   const { language, t } = useLanguage();
   const queryString = initialQuery;
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  const queryParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
@@ -457,8 +471,14 @@ export default function PixRampClient({
   ).trim();
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
+  const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
+  const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
+  const externalProviderUserId = String(queryParams.get("provider_user_id") || "").trim();
+  const externalSource = String(queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
+  const hasExternalChatContext = Boolean(launchedFromChat && externalProvider && externalProviderUserId);
   const hasSession = Boolean(sessionId);
-  const canResolveWallet = Boolean(hasSession || rampEmail.trim());
+  const needsLoginForChatLink = Boolean(hasExternalChatContext && !hasSession);
+  const canResolveWallet = Boolean(hasSession || (!needsLoginForChatLink && rampEmail.trim()));
   const customer = customerPayload?.customer;
   const customerId = String(customer?.id || "");
   const bankAccountId = String(customer?.bankAccountId || "");
@@ -505,14 +525,17 @@ export default function PixRampClient({
   const sandboxQrPayload = isSandboxMockOrder
     ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
     : "";
-  const launchedFromChat = useMemo(() => {
-    const params = new URLSearchParams(queryString);
-    return params.get("from") === "chat";
-  }, [queryString]);
-  const debugEnabled = useMemo(() => {
-    const params = new URLSearchParams(queryString);
-    return params.get("debug") === "1";
-  }, [queryString]);
+  const debugEnabled = useMemo(() => queryParams.get("debug") === "1", [queryParams]);
+  const loginHref = useMemo(() => {
+    if (!needsLoginForChatLink) return "";
+    const params = new URLSearchParams();
+    params.set("provider", externalProvider);
+    params.set("provider_user_id", externalProviderUserId);
+    params.set("source", externalSource || externalProvider || "chat");
+    params.set("next", `${rampMode === "offramp" ? "/pix-off" : "/pix-on"}?${queryString}`);
+    params.set("lang", language);
+    return `/login?${params.toString()}`;
+  }, [externalProvider, externalProviderUserId, externalSource, language, needsLoginForChatLink, queryString, rampMode]);
   const operationStorageKey = intentId ? `talk-to-stellar.pix-ramp.completed:${intentId}` : "";
   const buildIdempotencyKey = useCallback((action: string) => (
     `pix-ramp:${atomicIntentKey}:${action}`
@@ -564,8 +587,12 @@ export default function PixRampClient({
     return [
       {
         label: "TalkToStellar account",
-        detail: walletPublicKey ? L("Conta localizada.", "Account found.") : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
-        state: walletPublicKey ? "done" : loading === "Resolving account" ? "active" : "pending",
+        detail: walletPublicKey
+          ? L("Conta localizada.", "Account found.")
+          : needsLoginForChatLink
+            ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
+            : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
+        state: walletPublicKey ? "done" : needsLoginForChatLink ? "warning" : loading === "Resolving account" ? "active" : "pending",
       },
       {
         label: L("Conta PIX", "PIX account"),
@@ -641,6 +668,7 @@ export default function PixRampClient({
     autoPayAsset,
     pixFundedTransferResult,
     walletPublicKey,
+    needsLoginForChatLink,
     L,
     language,
   ]);
@@ -836,6 +864,9 @@ export default function PixRampClient({
     if (sessionId) {
       return { session_id: sessionId };
     }
+    if (needsLoginForChatLink) {
+      throw new Error(L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat."));
+    }
 
     const email = rampEmail.trim().toLowerCase();
     if (!email) {
@@ -860,7 +891,8 @@ export default function PixRampClient({
       error: !response.ok || payload?.success === false ? payload?.message || payload?.error : undefined,
     });
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || L("Não encontrei uma conta TalkToStellar ativa para este email.", "I could not find an active TalkToStellar account for this email."));
+      const publicMessage = publicRampErrorMessage(payload?.message || payload?.error || response.statusText, language);
+      throw new Error(publicMessage || L("Não encontrei uma conta TalkToStellar ativa para este email.", "I could not find an active TalkToStellar account for this email."));
     }
 
     const nextSessionId = String(payload.session_id || "");
@@ -1025,7 +1057,7 @@ export default function PixRampClient({
     } catch (err) {
       const payload = (err as Error & { payload?: RampResponse })?.payload;
       if (payload?.kyc_url) setOnboardingUrl(String(payload.kyc_url));
-      setError(err instanceof Error ? err.message : String(err));
+      setError(publicRampErrorMessage(err, language));
     } finally {
       setLoading("");
     }
@@ -1510,7 +1542,17 @@ export default function PixRampClient({
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {t("pix_need_email")}
+            {needsLoginForChatLink
+              ? L("Este PIX veio do chat. Entre com PIN neste navegador para preparar o pagamento e manter a operação vinculada à sua conta.", "This PIX came from chat. Sign in with PIN in this browser to prepare payment and keep the operation linked to your account.")
+              : t("pix_need_email")}
+            {loginHref && (
+              <a
+                className="mt-3 inline-flex rounded-full bg-amber-200 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950 transition hover:bg-amber-100"
+                href={loginHref}
+              >
+                {L("Entrar com PIN", "Sign in with PIN")}
+              </a>
+            )}
           </section>
         )}
 
@@ -1701,7 +1743,7 @@ export default function PixRampClient({
               </div>
             </div>
 
-            {!hasSession && (
+            {!hasSession && !needsLoginForChatLink && (
             <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4">
               <label className="block text-sm font-bold text-emerald-50">{L("Email da conta", "Account email")}</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
