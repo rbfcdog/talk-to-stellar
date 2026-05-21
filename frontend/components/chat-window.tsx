@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
-import { clearClientSession, getClientSession, isClientSessionExpired, redirectToExpiredLogin, touchClientSessionActivity } from "@/lib/session";
+import { clearClientSession, getClientSession, isClientSessionExpired, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/ui/feedback";
@@ -176,7 +176,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [browserSessionExpired, setBrowserSessionExpired] = useState(false);
   const previousChatIdRef = useRef(chatId);
+  const browserSessionExpiredRef = useRef(false);
+  const expiredNoticeShownRef = useRef(false);
 
   const generateSessionId = (): string => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -188,11 +191,52 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       return v.toString(16);
     });
   };
+
+  const appendExpiredSessionNotice = useCallback(() => {
+    if (expiredNoticeShownRef.current) return;
+    expiredNoticeShownRef.current = true;
+    const notice: Message = {
+      id: `session-expired-${Date.now()}`,
+      role: "assistant",
+      content: L(
+        "Sua sessão do navegador expirou. Envie uma mensagem, como \"login\", para receber aqui um novo link de acesso.",
+        "Your browser session expired. Send a message, such as \"login\", to receive a new access link here.",
+      ),
+      createdAt: new Date(),
+    };
+    setMessages((prev) => (prev.some((message) => message.id.startsWith("session-expired-")) ? prev : [...prev, notice]));
+  }, [language]);
+
+  const beginExpiredBrowserSession = useCallback((appendNotice = true) => {
+    if (typeof window === "undefined") return "";
+
+    clearClientSession();
+    const newSessionId = generateSessionId();
+    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setSessionId(newSessionId);
+    browserSessionExpiredRef.current = true;
+    setBrowserSessionExpired(true);
+    if (appendNotice) appendExpiredSessionNotice();
+    return newSessionId;
+  }, [appendExpiredSessionNotice, chatId]);
+
+  const restoreAuthenticatedBrowserSession = useCallback(async () => {
+    const { sessionId: cookieSessionId, authenticated } = await getClientSession();
+    if (!authenticated || !cookieSessionId || typeof window === "undefined") return "";
+
+    sessionStorage.setItem(`chat-session-${chatId}`, cookieSessionId);
+    setSessionId(cookieSessionId);
+    browserSessionExpiredRef.current = false;
+    setBrowserSessionExpired(false);
+    expiredNoticeShownRef.current = false;
+    touchClientSessionActivity();
+    return cookieSessionId;
+  }, [chatId]);
   
   // --- Initialize session ID on mount ---
   useEffect(() => {
     if (chatId === "agent" && isClientSessionExpired()) {
-      redirectToExpiredLogin();
+      beginExpiredBrowserSession(true);
       return;
     }
 
@@ -216,7 +260,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         });
       }
     }
-  }, [chatId, t]);
+  }, [beginExpiredBrowserSession, chatId, t]);
 
   useEffect(() => {
     const starterIds = new Set(Object.values(chatMeta).flatMap((meta) => meta.starter.map((message) => message.id)));
@@ -376,9 +420,10 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const fetchServerMessages = useCallback(async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
     if (isClientSessionExpired()) {
-      redirectToExpiredLogin();
+      beginExpiredBrowserSession(true);
       return;
     }
+    if (browserSessionExpiredRef.current) return;
 
     const resolvedSessionId = getStoredChatSessionId(chatId) || sessionId;
     if (!resolvedSessionId) return;
@@ -410,7 +455,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     } finally {
       pollInFlightRef.current = false;
     }
-  }, [chatId, mergeServerMessages, sessionId]);
+  }, [beginExpiredBrowserSession, chatId, mergeServerMessages, sessionId]);
 
   useEffect(() => {
     if (chatId !== "agent" || !sessionId) return;
@@ -514,12 +559,25 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-    if (chatId === "agent" && isClientSessionExpired()) {
-      redirectToExpiredLogin();
-      return;
+
+    let activeSessionId = sessionId;
+    let requestBrowserSessionExpired = browserSessionExpiredRef.current;
+    if (chatId === "agent") {
+      if (browserSessionExpiredRef.current) {
+        const restoredSessionId = await restoreAuthenticatedBrowserSession();
+        if (restoredSessionId) {
+          activeSessionId = restoredSessionId;
+          requestBrowserSessionExpired = false;
+        }
+      }
+
+      if (isClientSessionExpired()) {
+        activeSessionId = beginExpiredBrowserSession(false) || activeSessionId;
+        requestBrowserSessionExpired = true;
+      }
     }
     
-    if (!sessionId) {
+    if (!activeSessionId) {
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
@@ -553,7 +611,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
 
       const storedSessionId = getStoredChatSessionId(chatId);
-      const resolvedSessionId = storedSessionId || sessionId;
+      const resolvedSessionId = storedSessionId || activeSessionId;
       const browserId = getOrCreateBrowserId();
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
@@ -568,6 +626,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           metadata: {
             browser_id: browserId,
             language,
+            browser_session_expired: requestBrowserSessionExpired || undefined,
           },
         }),
       });
@@ -578,10 +637,16 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       }
 
       const data = await response.json();
+      const loginRequired = Boolean(data.onboardingRequired || data.loginRequired || data.creationUrl);
       if (data.session_id && typeof window !== "undefined") {
         sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
         setSessionId(data.session_id);
-        touchClientSessionActivity();
+        if (!loginRequired) {
+          browserSessionExpiredRef.current = false;
+          setBrowserSessionExpired(false);
+          expiredNoticeShownRef.current = false;
+          touchClientSessionActivity();
+        }
       }
       
       // Handle error responses that still return 200
@@ -604,7 +669,12 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         );
         return alreadyRendered ? prev : [...prev, botMessage];
       });
-      touchClientSessionActivity();
+      if (!loginRequired) {
+        browserSessionExpiredRef.current = false;
+        setBrowserSessionExpired(false);
+        expiredNoticeShownRef.current = false;
+        touchClientSessionActivity();
+      }
 
       if (isLogoutResponse(botResponse, data.action)) {
         try {
@@ -695,7 +765,11 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
           <div className="min-w-0 flex-1 overflow-hidden">
             <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
             <p className="truncate text-xs text-[#8696a0]">
-              {isLoading ? <TypingDots className="text-[#8ea4b1]" /> : t("chat_online")}
+              {isLoading
+                ? <TypingDots className="text-[#8ea4b1]" />
+                : browserSessionExpired
+                  ? L("Sessão expirada; envie mensagem para novo link", "Session expired; send a message for a new link")
+                  : t("chat_online")}
             </p>
           </div>
         </div>
@@ -762,7 +836,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={t("chat_input_placeholder")}
+            placeholder={browserSessionExpired ? L("Digite login para receber um novo link", "Type login to receive a new link") : t("chat_input_placeholder")}
             className="h-11 min-w-0 flex-1 truncate rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
             disabled={isLoading}
           />

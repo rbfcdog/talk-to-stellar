@@ -593,8 +593,32 @@ export function createAgentRoutes(
 
       if (normalizedSource === "web") {
         const providerUserId = String(metadata?.browser_id || metadata?.provider_user_id || "").trim();
+        const forceWebLogin =
+          metadata?.browser_session_expired === true ||
+          metadata?.force_relogin === true ||
+          metadata?.force_login === true;
         if (providerUserId) {
           const existing = await externalService.checkExternalAccount("web", providerUserId);
+          if (existing && forceWebLogin) {
+            const { url } = await externalService.createLoginUrlWithShortLink("web", providerUserId, {
+              sessionId: String(existing.session_id || requestedSessionId || '').trim() || undefined,
+              userId: String(existing.user_id || '').trim() || undefined,
+              source: "web",
+              language: requestLanguage,
+            });
+            return res.status(200).json({
+              session_id: existing.session_id || session_id || null,
+              success: true,
+              onboardingRequired: true,
+              reason: "browser_session_expired",
+              creationUrl: url,
+              message: localized(
+                requestLanguage,
+                `Sua sessão do navegador expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
+                `Your browser session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+              ),
+            });
+          }
           if (!existing) {
             // If the browser already sent a valid, existing session_id, do not force onboarding again.
             if (requestedSessionData) {
