@@ -1,5 +1,6 @@
 import React from "react";
 import { MessageCircle, Send, Monitor } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 type ChannelButtonsProps = {
   compact?: boolean;
@@ -11,9 +12,11 @@ const WHATSAPP_MESSAGE = "Oi, quero usar o TalkToStellar.";
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
 
 export default function ChannelButtons({ compact = false, className = "" }: ChannelButtonsProps) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const baseSize = compact ? "px-3 py-2 text-xs" : "px-6 py-4 text-base";
   const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
-  const webLabel = compact ? "Try in browser" : "Try now in browser";
+  const webLabel = compact ? L("Chat web", "Web chat") : L("Abrir chat web", "Open web chat");
 
   return (
     <div className={`flex flex-col sm:flex-row min-w-0 gap-3 ${className}`.trim()}>
