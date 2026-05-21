@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { internationalTransferService } from '../services/international-transfer.service';
+import { publicErrorMessage } from '../../utils/public-error';
 
 function statusFromError(error: any): number {
   const explicit = Number(error?.status || error?.statusCode || 0);
@@ -13,7 +14,7 @@ function statusFromError(error: any): number {
 function errorBody(error: any) {
   return {
     success: false,
-    message: error instanceof Error ? error.message : String(error),
+    message: publicErrorMessage(error, 'Nao consegui atualizar a rota entre instituicoes agora. Tente novamente em alguns segundos.'),
   };
 }
 

@@ -1869,7 +1869,7 @@ export default function PixRampClient({
                   <div className="space-y-3">
                     <div className="rounded-3xl bg-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Recebedor", "Receiver")}</p>
-                      <p className="mt-1 text-lg font-black">Etherfuse</p>
+                      <p className="mt-1 text-lg font-black">TalkToStellar</p>
                     </div>
                     <div className="rounded-3xl bg-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-lime-200">{L("Valor", "Amount")}</p>
@@ -1889,7 +1889,7 @@ export default function PixRampClient({
                         {L("Este QR é demonstrativo e usado apenas para simular o fluxo PIX nesta tela.", "This QR is a demo code used only to simulate the PIX flow on this screen.")}
                       </p>
                       <p className="mt-2 text-amber-100/80">
-                        {L("Digite seu PIN e confirme nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real.", "Enter your PIN and confirm on this screen to continue. When bank PIX is active, this same screen will show the real copy-and-paste PIX code.")}
+                        {L("Digite seu PIN e simule a confirmação nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real e verificará o status no provedor.", "Enter your PIN and simulate confirmation on this screen to continue. When bank PIX is active, this same screen will show the real copy-and-paste PIX code and verify status with the provider.")}
                       </p>
                     </div>
                   ) : (
@@ -1931,7 +1931,7 @@ export default function PixRampClient({
                           <>
                             <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-50">{L("Depois de pagar o PIX", "After paying PIX")}</p>
                             <p className="mt-2 text-sm font-bold leading-6 text-amber-50/90">
-                              {L("Digite o PIN e toque no botão grande abaixo. É esse botão que confirma o PIX de fato e libera a entrega pela rota mais otimizada.", "Enter the PIN and tap the large button below. This is the button that actually confirms PIX and releases delivery through the most optimized route.")}
+                              {L("Digite o PIN e toque no botão abaixo para simular a confirmação PIX neste ambiente de teste. Em produção, a confirmação vem do provedor PIX.", "Enter the PIN and tap the button below to simulate PIX confirmation in this test environment. In production, confirmation comes from the PIX provider.")}
                             </p>
                             <label className="mt-4 block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
                             <WalletPinInput
@@ -1949,7 +1949,7 @@ export default function PixRampClient({
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Já fiz o PIX. Confirmar agora", "I paid PIX. Confirm now")}
+                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Simular pagamento PIX neste ambiente de teste", "Simulate PIX payment in this test environment")}
                             </button>
                           </>
                         )}

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { brlUsdQuoteService } from '../services/brl-usd-quote.service';
+import { publicErrorMessage } from '../../utils/public-error';
 
 function statusFromError(error: any): number {
   const message = String(error?.message || error || '');
@@ -19,7 +20,7 @@ export class QuotesController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: error instanceof Error ? error.message : String(error),
+        message: publicErrorMessage(error, 'Nao consegui criar a cotacao agora. Tente novamente em alguns segundos.'),
       });
     }
   }

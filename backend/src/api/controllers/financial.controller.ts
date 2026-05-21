@@ -16,6 +16,7 @@ import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../util
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
 import { timingSafeEqualString } from '../../utils/password';
+import { publicErrorMessage } from '../../utils/public-error';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -214,7 +215,7 @@ export class FinancialController {
         await FinancialController.buildConversionPreviewPayload(req, false)
       );
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -224,7 +225,7 @@ export class FinancialController {
         await FinancialController.buildConversionPreviewPayload(req, true)
       );
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -284,7 +285,7 @@ export class FinancialController {
         },
       });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -299,7 +300,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, feed: data });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -314,7 +315,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, insights });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -329,7 +330,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, contacts });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -344,7 +345,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, replay });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -355,7 +356,7 @@ export class FinancialController {
       const savings = await EconomyEngineService.calculateMonthly({ sessionId: auth.sessionId, userId: auth.userId });
       return res.status(200).json({ success: true, ...savings });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -375,7 +376,7 @@ export class FinancialController {
       });
       return res.status(201).json({ success: true, invoice });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -390,7 +391,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, invoices });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -407,7 +408,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, profile });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -420,7 +421,7 @@ export class FinancialController {
       }
       return res.status(200).json({ success: true, profile });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -504,7 +505,7 @@ export class FinancialController {
         message: `Link de confirmação gerado para pagar ${destinationName}.`,
       });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -521,7 +522,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, ...payload });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 
@@ -537,7 +538,7 @@ export class FinancialController {
       });
       return res.status(200).json({ success: true, ...payload });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error?.message || String(error) });
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
     }
   }
 }

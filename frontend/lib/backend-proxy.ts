@@ -5,6 +5,7 @@ import {
   buildSessionHeaders,
   passthroughResponseWithSession,
 } from "@/lib/server-session";
+import { publicErrorPayload } from "@/lib/public-errors";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -59,12 +60,7 @@ export async function proxyBackendApi(req: NextRequest, basePath: string, path: 
     const text = await res.text();
     return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Backend proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or NEXT_PUBLIC_BACKEND_URL.`,
-      },
-      { status: 502 }
-    );
+    console.error("[backend-proxy] request failed", { target, error: error?.message || error });
+    return NextResponse.json(publicErrorPayload(error, { code: "backend_unavailable" }), { status: 502 });
   }
 }

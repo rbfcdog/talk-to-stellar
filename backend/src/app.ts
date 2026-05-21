@@ -23,7 +23,8 @@ import {
   securityHeaders,
   sensitiveRateLimit,
 } from './api/middlewares/security.middleware';
-import { isProductionLikeEnvironment, readBooleanEnv } from './config/runtime';
+import { readBooleanEnv } from './config/runtime';
+import { publicErrorPayload } from './utils/public-error';
 
 const app = express();
 
@@ -95,12 +96,13 @@ app.use((req, res) => {
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
   const statusCode = err.statusCode || err.status || 500;
-  const productionLike = isProductionLikeEnvironment();
+  const payload = publicErrorPayload(err, { includeSupportCode: true });
   
-  logger.error(`Unhandled error: ${errorMessage}`);
+  logger.error(`Unhandled error ${payload.support_code}: ${errorMessage}`);
   
   res.status(statusCode).json({
-    error: productionLike && statusCode >= 500 ? 'Internal Server Error' : errorMessage || 'Internal Server Error',
+    ...payload,
+    error: payload.message,
     status: statusCode,
   });
 });

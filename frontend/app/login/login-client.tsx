@@ -72,6 +72,8 @@ function formatExternalIdentifier(provider: string, value: string): string {
   return raw
 }
 
+const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()
   const searchParams = useSearchParams()
@@ -346,6 +348,15 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
       const payload = await response.json().catch(() => ({}))
       if (payload?.emailConfirmationRequired) {
+        if (!EMAIL_CONFIRMATION_ENABLED) {
+          setEmailConfirmationRequired(false)
+          actionLockRef.current = false
+          setStatus("error")
+          setError(language === "pt-BR"
+            ? "Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat e entre com PIN."
+            : "Email confirmation is disabled in this environment. Request a new link in chat and sign in with PIN.")
+          return
+        }
         setEmailConfirmationRequired(true)
         actionLockRef.current = false
         setStatus("idle")
@@ -595,7 +606,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 />
               </label>
 
-              {emailConfirmationRequired && (
+              {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
                 <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
                   <span className="text-sm font-medium text-cyan-50">{t("login_email_code")}</span>
                   <input
@@ -616,11 +627,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
               <button
                 type="submit"
-                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim() || (emailConfirmationRequired && emailConfirmationCode.length !== 6)}
+                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim() || (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LogIn className="h-4 w-4" />
-                {status === "pin" ? t("login_submitting") : emailConfirmationRequired ? t("login_confirm_submit") : t("login_submit")}
+                {status === "pin" ? t("login_submitting") : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? t("login_confirm_submit") : t("login_submit")}
               </button>
             </form>
 
