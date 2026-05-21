@@ -17,7 +17,6 @@ import {
   Landmark,
   ListChecks,
   Loader2,
-  Moon,
   Network,
   Play,
   QrCode,
@@ -26,7 +25,6 @@ import {
   Send,
   Server,
   ShieldCheck,
-  Sun,
   WalletCards,
 } from "lucide-react";
 import { getClientSession } from "@/lib/session";
@@ -220,10 +218,10 @@ function ActionButton({
   full?: boolean;
 }) {
   const classes = {
-    dark: "bg-slate-950 text-white hover:bg-slate-800 dark:bg-cyan-300 dark:text-slate-950 dark:hover:bg-cyan-200",
-    light: "border border-slate-300 bg-white text-slate-800 hover:border-slate-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:hover:border-cyan-400",
-    green: "border border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-500 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:border-emerald-300",
-    blue: "bg-sky-900 text-white hover:bg-sky-800 dark:bg-indigo-400 dark:text-slate-950 dark:hover:bg-indigo-300",
+    dark: "border border-cyan-400/45 bg-black text-cyan-100 hover:border-cyan-300 hover:bg-neutral-950",
+    light: "border border-neutral-700 bg-black text-slate-100 hover:border-cyan-400 hover:bg-neutral-950",
+    green: "border border-emerald-400/45 bg-black text-emerald-100 hover:border-emerald-300 hover:bg-neutral-950",
+    blue: "border border-indigo-400/45 bg-black text-indigo-100 hover:border-indigo-300 hover:bg-neutral-950",
   };
 
   return (
@@ -240,11 +238,11 @@ function ActionButton({
 
 function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; children: ReactNode }) {
   const classes = {
-    running: "border-sky-200 bg-sky-50 text-sky-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200",
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200",
-    error: "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200",
-    info: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-    idle: "border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400",
+    running: "border-cyan-400/35 bg-black text-cyan-200",
+    ok: "border-emerald-400/35 bg-black text-emerald-200",
+    error: "border-red-400/35 bg-black text-red-200",
+    info: "border-neutral-700 bg-black text-slate-300",
+    idle: "border-neutral-800 bg-black text-slate-400",
   };
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-bold ${classes[state]}`}>
@@ -254,7 +252,6 @@ function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; 
 }
 
 export default function InternationalTransferClient() {
-  const [darkMode, setDarkMode] = useState(true);
   const [brlAmount, setBrlAmount] = useState("1000");
   const [senderName, setSenderName] = useState("Origin BR Institution Ltda");
   const [senderEmail, setSenderEmail] = useState("ops@origin-institution.example");
@@ -294,16 +291,6 @@ export default function InternationalTransferClient() {
       setSessionId(session.sessionId || "");
     });
   }, []);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("tts-usd-rail-theme");
-    if (saved === "light") setDarkMode(false);
-    if (saved === "dark") setDarkMode(true);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("tts-usd-rail-theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
 
   const activeStatus = text(transfer?.status) as TransferState;
   const activeRank = stateRank.get(activeStatus) ?? -1;
@@ -610,33 +597,67 @@ export default function InternationalTransferClient() {
   ];
 
   return (
-    <main className={`${darkMode ? "dark usd-rail-dark" : ""} min-h-screen bg-[#f4f7f5] text-slate-950 transition-colors dark:bg-[#06110f] dark:text-slate-100`}>
+    <main className="dark usd-rail-dark min-h-screen bg-black text-slate-100 transition-colors">
       <style jsx global>{`
         .usd-rail-dark {
           color-scheme: dark;
+          background: #000;
         }
         .usd-rail-dark .bg-white {
-          background-color: rgba(15, 23, 42, 0.84) !important;
+          background-color: #000 !important;
         }
         .usd-rail-dark .bg-slate-50 {
-          background-color: rgba(2, 6, 23, 0.54) !important;
+          background-color: #000 !important;
+        }
+        .usd-rail-dark .bg-slate-900,
+        .usd-rail-dark .bg-slate-950 {
+          background-color: #000 !important;
         }
         .usd-rail-dark .bg-emerald-50,
         .usd-rail-dark .bg-emerald-100 {
-          background-color: rgba(16, 185, 129, 0.12) !important;
+          background-color: #000 !important;
         }
         .usd-rail-dark .bg-sky-50,
         .usd-rail-dark .bg-sky-100,
         .usd-rail-dark .bg-cyan-50,
         .usd-rail-dark .bg-cyan-100 {
-          background-color: rgba(34, 211, 238, 0.12) !important;
+          background-color: #000 !important;
         }
         .usd-rail-dark .bg-red-50 {
-          background-color: rgba(248, 113, 113, 0.12) !important;
+          background-color: #000 !important;
+        }
+        .usd-rail-dark [class*="bg-white"],
+        .usd-rail-dark [class*="bg-slate-"],
+        .usd-rail-dark [class*="bg-neutral-"],
+        .usd-rail-dark [class*="bg-emerald-"],
+        .usd-rail-dark [class*="bg-sky-"],
+        .usd-rail-dark [class*="bg-cyan-"],
+        .usd-rail-dark [class*="bg-indigo-"],
+        .usd-rail-dark [class*="bg-red-"],
+        .usd-rail-dark [class*="bg-amber-"] {
+          background-color: #000 !important;
+        }
+        .usd-rail-dark [class*="bg-black"] {
+          background-color: #000 !important;
         }
         .usd-rail-dark .border-slate-200,
-        .usd-rail-dark .border-slate-300 {
-          border-color: rgba(51, 65, 85, 0.92) !important;
+        .usd-rail-dark .border-slate-300,
+        .usd-rail-dark .border-slate-700,
+        .usd-rail-dark .border-slate-800,
+        .usd-rail-dark .border-neutral-700,
+        .usd-rail-dark .border-neutral-800 {
+          border-color: #262626 !important;
+        }
+        .usd-rail-dark .border-emerald-200,
+        .usd-rail-dark .border-emerald-300 {
+          border-color: rgba(52, 211, 153, 0.38) !important;
+        }
+        .usd-rail-dark .border-sky-200,
+        .usd-rail-dark .border-cyan-300 {
+          border-color: rgba(34, 211, 238, 0.38) !important;
+        }
+        .usd-rail-dark .border-red-200 {
+          border-color: rgba(248, 113, 113, 0.38) !important;
         }
         .usd-rail-dark .text-slate-950,
         .usd-rail-dark .text-slate-900,
@@ -662,10 +683,17 @@ export default function InternationalTransferClient() {
           color: rgb(125, 211, 252) !important;
         }
         .usd-rail-dark .shadow-sm {
-          box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28) !important;
+          box-shadow: 0 18px 46px rgba(0, 0, 0, 0.72) !important;
+        }
+        .usd-rail-dark input,
+        .usd-rail-dark select,
+        .usd-rail-dark textarea,
+        .usd-rail-dark pre,
+        .usd-rail-dark code {
+          background-color: #000 !important;
         }
       `}</style>
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+      <header className="border-b border-neutral-800 bg-black backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-500">
@@ -677,20 +705,9 @@ export default function InternationalTransferClient() {
               Cost lab
             </Link>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3 text-right">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Institution settlement tester</p>
-              <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">USD rail control room</h1>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDarkMode((value) => !value)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-cyan-400"
-              aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {darkMode ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-              {darkMode ? "Light" : "Dark"}
-            </button>
+          <div className="text-right">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Institution settlement tester</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">USD rail control room</h1>
           </div>
         </div>
       </header>
