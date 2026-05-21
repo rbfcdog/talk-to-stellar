@@ -166,6 +166,41 @@ function isExpiredQuoteError(error: unknown) {
   return /quote (is not active:\s*)?expired|not active:\s*expired/i.test(message);
 }
 
+function quoteStatus(value: any) {
+  return text(value?.quote_status || value?.status).toUpperCase();
+}
+
+function quoteExpiresAtMs(value: any) {
+  const parsed = Date.parse(text(value?.expires_at));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isInactiveQuote(value: any, nowMs = Date.now()) {
+  if (!value?.quote_id) return false;
+  const status = quoteStatus(value);
+  if (status && status !== "ACTIVE") return true;
+  const expiresAt = quoteExpiresAtMs(value);
+  return expiresAt > 0 && expiresAt <= nowMs;
+}
+
+function quoteAmountMatches(value: any, sourceAmount: unknown) {
+  if (!value?.quote_id) return false;
+  return Math.abs(parseNumber(value.brl_amount) - parseNumber(sourceAmount)) < 0.01;
+}
+
+function formatQuoteFreshness(value: any, nowMs: number) {
+  if (!value?.quote_id) return "No quote";
+  const status = quoteStatus(value) || "UNKNOWN";
+  if (status !== "ACTIVE") return status;
+  const expiresAt = quoteExpiresAtMs(value);
+  if (!expiresAt) return status;
+  const totalSeconds = Math.floor((expiresAt - nowMs) / 1000);
+  if (totalSeconds <= 0) return "EXPIRED";
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s left`;
+}
+
 function Field({
   label,
   value,
@@ -304,6 +339,7 @@ export default function InternationalTransferClient() {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const migrationError = /international_transfer_quotes|international_transfers|schema cache/i.test(error);
 
   useEffect(() => {
@@ -312,14 +348,30 @@ export default function InternationalTransferClient() {
     });
   }, []);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const activeStatus = text(transfer?.status) as TransferState;
   const activeRank = stateRank.get(activeStatus) ?? -1;
   const latestEvent = events[0];
+  const quoteExpired = isInactiveQuote(quote, nowMs);
+  const quoteAmountStale = Boolean(quote?.quote_id && !quoteAmountMatches(quote, brlAmount));
+  const quoteNeedsRefresh = Boolean(quote?.quote_id && (quoteExpired || quoteAmountStale));
+  const quoteReady = Boolean(quote?.quote_id && !quoteNeedsRefresh);
+  const quoteFreshness = quoteAmountStale ? "STALE AMOUNT" : formatQuoteFreshness(quote, nowMs);
   const currentPhase = activeStatus && phaseDescriptions[activeStatus]
     ? phaseDescriptions[activeStatus]
+    : quoteNeedsRefresh
+      ? "The current BRL/USD quote is no longer usable. Press Route to refresh it and create the institution settlement record."
     : "No institution settlement has been created yet.";
   const nextAction = activeStatus && nextActionByState[activeStatus]
     ? nextActionByState[activeStatus]
+    : quoteNeedsRefresh
+      ? "Refresh the route quote, then create the institution-to-institution settlement record."
+    : quoteReady
+      ? "Create the institution-to-institution settlement route from the active quote."
     : "Create an institution-to-institution settlement quote.";
   const quoteDelta = useMemo(() => {
     const sourceBrl = parseNumber(quote?.brl_amount || brlAmount);
@@ -388,7 +440,11 @@ export default function InternationalTransferClient() {
   }, [quote, quoteDelta, reconciliation, transfer?.fees?.total_fee?.amount_usd_equivalent]);
   const evidenceItems = useMemo(
     () => [
-      { label: "Quote ID", value: quote?.quote_id, ready: Boolean(quote?.quote_id) },
+      {
+        label: "Quote ID",
+        value: quote?.quote_id ? `${quote.quote_id}${quoteReady ? "" : ` (${quoteFreshness.toLowerCase()})`}` : "",
+        ready: quoteReady,
+      },
       { label: "Settlement ID", value: transfer?.transfer_id, ready: Boolean(transfer?.transfer_id) },
       { label: "Funding reference", value: transfer?.pix_order_id || transfer?.pix_payment_id, ready: Boolean(transfer?.pix_order_id || transfer?.pix_payment_id) },
       { label: "Funding status", value: transfer?.pix_status, ready: transfer?.status === "PIX_RECEIVED" || activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2) },
@@ -399,7 +455,7 @@ export default function InternationalTransferClient() {
       { label: "Reconciliation", value: reconciliation?.transfer_id, ready: Boolean(reconciliation?.transfer_id) },
       { label: "Same-name check", value: transfer?.same_name_match_status, ready: Boolean(transfer?.same_name_match_status) },
     ],
-    [activeRank, quote?.quote_id, reconciliation?.transfer_id, transfer],
+    [activeRank, quote?.quote_id, quoteFreshness, quoteReady, reconciliation?.transfer_id, transfer],
   );
 
   const transferPayload = useMemo(
@@ -548,12 +604,27 @@ export default function InternationalTransferClient() {
     return payload.quote;
   }
 
+  async function ensureActiveRouteQuote(currentQuote = quote) {
+    if (!currentQuote?.quote_id) {
+      pushEvent("Quote needed", "Creating a BRL/USD quote before creating the institution route.", "info", "/api/quotes/brl-usd");
+      return createQuote();
+    }
+
+    if (isInactiveQuote(currentQuote) || !quoteAmountMatches(currentQuote, brlAmount)) {
+      const reason = isInactiveQuote(currentQuote) ? "expired" : "not aligned with the current BRL amount";
+      pushEvent("Quote refresh", `The existing BRL/USD quote is ${reason}. Creating a fresh quote before routing.`, "info", "/api/quotes/brl-usd");
+      return createQuote();
+    }
+
+    return currentQuote;
+  }
+
   async function createTransfer(currentQuote = quote) {
-    if (!currentQuote?.quote_id) throw new Error("Create a route quote first.");
+    const activeQuote = await ensureActiveRouteQuote(currentQuote);
     try {
       const payload = await callApi("Create institution route", "POST", "/api/transfers", {
         ...transferPayload,
-        quote_id: currentQuote.quote_id,
+        quote_id: activeQuote.quote_id,
       });
       setTransfer(payload.transfer);
       setReconciliation(null);
@@ -561,6 +632,11 @@ export default function InternationalTransferClient() {
     } catch (routeError) {
       if (!isExpiredQuoteError(routeError)) throw routeError;
 
+      setQuote((stored: any) => (
+        stored?.quote_id === activeQuote.quote_id
+          ? { ...stored, quote_status: "EXPIRED", updated_at: new Date().toISOString() }
+          : stored
+      ));
       pushEvent("Quote expired", "Creating a fresh BRL/USD quote and retrying the institution route.", "info", "/api/quotes/brl-usd");
       const freshQuote = await createQuote();
       const retryPayload = await callApi("Create institution route", "POST", "/api/transfers", {
@@ -569,6 +645,7 @@ export default function InternationalTransferClient() {
       });
       setTransfer(retryPayload.transfer);
       setReconciliation(null);
+      setError("");
       return retryPayload.transfer;
     }
   }
@@ -645,16 +722,16 @@ export default function InternationalTransferClient() {
   const guidedSteps = [
     {
       label: "Quote",
-      detail: quote ? formatCurrency(quote.estimated_usd_amount, "USD") : "BRL -> USD route",
-      done: Boolean(quote),
-      active: !quote,
+      detail: quote ? (quoteReady ? formatCurrency(quote.estimated_usd_amount, "USD") : quoteFreshness) : "BRL -> USD route",
+      done: quoteReady,
+      active: !quoteReady,
       icon: ClipboardList,
     },
     {
       label: "Route",
-      detail: transfer ? shortId(transfer.transfer_id, 16) : "Create record",
+      detail: transfer ? shortId(transfer.transfer_id, 16) : quoteNeedsRefresh ? "Refresh first" : "Create record",
       done: Boolean(transfer),
-      active: Boolean(quote && !transfer),
+      active: Boolean(quoteReady && !transfer),
       icon: Route,
     },
     {
@@ -903,9 +980,9 @@ export default function InternationalTransferClient() {
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
               Quote
             </ActionButton>
-            <ActionButton onClick={() => createTransfer()} disabled={Boolean(busy || !quote)} variant="light">
+            <ActionButton onClick={() => createTransfer()} disabled={Boolean(busy)} variant="light">
               <Route className="h-4 w-4" aria-hidden="true" />
-              Route
+              {quoteReady ? "Route" : "Quote + Route"}
             </ActionButton>
             <ActionButton onClick={() => createPixIntent()} disabled={Boolean(busy || !transfer)} variant="light">
               <QrCode className="h-4 w-4" aria-hidden="true" />
@@ -970,7 +1047,7 @@ export default function InternationalTransferClient() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">Guided path</p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">BRL source to USD destination</h2>
               </div>
-              <StatusPill state={transfer ? "ok" : quote ? "running" : "idle"}>
+              <StatusPill state={transfer ? "ok" : quoteNeedsRefresh ? "error" : quoteReady ? "running" : "idle"}>
                 {evidenceItems.filter((item) => item.ready).length} evidence items ready
               </StatusPill>
             </div>
@@ -1033,7 +1110,13 @@ export default function InternationalTransferClient() {
                     <Database className="h-4 w-4" aria-hidden="true" />
                     Persisted record
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{shortId(transfer?.transfer_id || quote?.quote_id, 26)}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {transfer?.transfer_id
+                      ? shortId(transfer.transfer_id, 26)
+                      : quote?.quote_id
+                        ? `${shortId(quote.quote_id, 22)} ${quoteFreshness}`
+                        : "-"}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -1073,7 +1156,7 @@ export default function InternationalTransferClient() {
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Source value</p>
               <p className="mt-2 text-lg font-bold text-slate-950">{quote ? formatCurrency(quote.brl_amount, "BRL") : formatCurrency(brlAmount, "BRL")}</p>
-              <p className="text-sm text-slate-600">{quote ? `FX ${quote.fx_rate} BRL/USD` : "No route quote"}</p>
+              <p className="text-sm text-slate-600">{quote ? `FX ${quote.fx_rate} BRL/USD - ${quoteFreshness}` : "No route quote"}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Baseline USD</p>
