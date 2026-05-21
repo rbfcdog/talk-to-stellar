@@ -17,6 +17,7 @@ import {
   Landmark,
   ListChecks,
   Loader2,
+  Moon,
   Network,
   Play,
   QrCode,
@@ -25,6 +26,7 @@ import {
   Send,
   Server,
   ShieldCheck,
+  Sun,
   WalletCards,
 } from "lucide-react";
 import { getClientSession } from "@/lib/session";
@@ -163,13 +165,13 @@ function Field({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-400">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-500"
+        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-400"
       />
     </label>
   );
@@ -188,11 +190,11 @@ function SelectField<T extends string>({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-400">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as T)}
-        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 shadow-sm outline-none focus:border-sky-500"
+        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 shadow-sm outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:focus:border-cyan-400"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -209,17 +211,19 @@ function ActionButton({
   onClick,
   disabled,
   variant = "dark",
+  full = false,
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   variant?: "dark" | "light" | "green" | "blue";
+  full?: boolean;
 }) {
   const classes = {
-    dark: "bg-slate-950 text-white hover:bg-slate-800",
-    light: "border border-slate-300 bg-white text-slate-800 hover:border-slate-500",
-    green: "border border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-500",
-    blue: "bg-sky-900 text-white hover:bg-sky-800",
+    dark: "bg-slate-950 text-white hover:bg-slate-800 dark:bg-cyan-300 dark:text-slate-950 dark:hover:bg-cyan-200",
+    light: "border border-slate-300 bg-white text-slate-800 hover:border-slate-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:hover:border-cyan-400",
+    green: "border border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-500 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:border-emerald-300",
+    blue: "bg-sky-900 text-white hover:bg-sky-800 dark:bg-indigo-400 dark:text-slate-950 dark:hover:bg-indigo-300",
   };
 
   return (
@@ -227,7 +231,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${classes[variant]}`}
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${full ? "w-full" : ""} ${classes[variant]}`}
     >
       {children}
     </button>
@@ -236,11 +240,11 @@ function ActionButton({
 
 function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; children: ReactNode }) {
   const classes = {
-    running: "border-sky-200 bg-sky-50 text-sky-800",
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    error: "border-red-200 bg-red-50 text-red-800",
-    info: "border-slate-200 bg-slate-50 text-slate-700",
-    idle: "border-slate-200 bg-white text-slate-600",
+    running: "border-sky-200 bg-sky-50 text-sky-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200",
+    ok: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200",
+    error: "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200",
+    info: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+    idle: "border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400",
   };
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-bold ${classes[state]}`}>
@@ -250,6 +254,7 @@ function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; 
 }
 
 export default function InternationalTransferClient() {
+  const [darkMode, setDarkMode] = useState(true);
   const [brlAmount, setBrlAmount] = useState("1000");
   const [senderName, setSenderName] = useState("Origin BR Institution Ltda");
   const [senderEmail, setSenderEmail] = useState("ops@origin-institution.example");
@@ -289,6 +294,16 @@ export default function InternationalTransferClient() {
       setSessionId(session.sessionId || "");
     });
   }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("tts-usd-rail-theme");
+    if (saved === "light") setDarkMode(false);
+    if (saved === "dark") setDarkMode(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("tts-usd-rail-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const activeStatus = text(transfer?.status) as TransferState;
   const activeRank = stateRank.get(activeStatus) ?? -1;
@@ -556,9 +571,101 @@ export default function InternationalTransferClient() {
     }
   }
 
+  const guidedSteps = [
+    {
+      label: "Quote",
+      detail: quote ? formatCurrency(quote.estimated_usd_amount, "USD") : "BRL -> USD route",
+      done: Boolean(quote),
+      active: !quote,
+      icon: ClipboardList,
+    },
+    {
+      label: "Route",
+      detail: transfer ? shortId(transfer.transfer_id, 16) : "Create record",
+      done: Boolean(transfer),
+      active: Boolean(quote && !transfer),
+      icon: Route,
+    },
+    {
+      label: "Funding",
+      detail: transfer?.pix_status || "Source event",
+      done: activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2),
+      active: Boolean(transfer && activeRank < (stateRank.get("PIX_RECEIVED") ?? 2)),
+      icon: Banknote,
+    },
+    {
+      label: "Blockchain",
+      detail: transfer?.stellar_tx_hash ? shortId(transfer.stellar_tx_hash, 16) : "USDC evidence",
+      done: activeRank >= (stateRank.get("USDC_SETTLED") ?? 5),
+      active: Boolean(transfer && activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2) && activeRank < (stateRank.get("USDC_SETTLED") ?? 5)),
+      icon: Network,
+    },
+    {
+      label: "Destination",
+      detail: transfer?.payout_status || "USD instruction",
+      done: activeRank >= (stateRank.get("PAYOUT_INSTRUCTION_CREATED") ?? 6),
+      active: Boolean(transfer && activeRank >= (stateRank.get("USDC_SETTLED") ?? 5) && activeRank < (stateRank.get("PAYOUT_INSTRUCTION_CREATED") ?? 6)),
+      icon: Landmark,
+    },
+  ];
+
   return (
-    <main className="min-h-screen bg-[#f4f7f5] text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
+    <main className={`${darkMode ? "dark usd-rail-dark" : ""} min-h-screen bg-[#f4f7f5] text-slate-950 transition-colors dark:bg-[#06110f] dark:text-slate-100`}>
+      <style jsx global>{`
+        .usd-rail-dark {
+          color-scheme: dark;
+        }
+        .usd-rail-dark .bg-white {
+          background-color: rgba(15, 23, 42, 0.84) !important;
+        }
+        .usd-rail-dark .bg-slate-50 {
+          background-color: rgba(2, 6, 23, 0.54) !important;
+        }
+        .usd-rail-dark .bg-emerald-50,
+        .usd-rail-dark .bg-emerald-100 {
+          background-color: rgba(16, 185, 129, 0.12) !important;
+        }
+        .usd-rail-dark .bg-sky-50,
+        .usd-rail-dark .bg-sky-100,
+        .usd-rail-dark .bg-cyan-50,
+        .usd-rail-dark .bg-cyan-100 {
+          background-color: rgba(34, 211, 238, 0.12) !important;
+        }
+        .usd-rail-dark .bg-red-50 {
+          background-color: rgba(248, 113, 113, 0.12) !important;
+        }
+        .usd-rail-dark .border-slate-200,
+        .usd-rail-dark .border-slate-300 {
+          border-color: rgba(51, 65, 85, 0.92) !important;
+        }
+        .usd-rail-dark .text-slate-950,
+        .usd-rail-dark .text-slate-900,
+        .usd-rail-dark .text-slate-800 {
+          color: rgb(248, 250, 252) !important;
+        }
+        .usd-rail-dark .text-slate-700,
+        .usd-rail-dark .text-slate-600 {
+          color: rgb(203, 213, 225) !important;
+        }
+        .usd-rail-dark .text-slate-500 {
+          color: rgb(148, 163, 184) !important;
+        }
+        .usd-rail-dark .text-emerald-700,
+        .usd-rail-dark .text-emerald-800,
+        .usd-rail-dark .text-emerald-900 {
+          color: rgb(110, 231, 183) !important;
+        }
+        .usd-rail-dark .text-sky-700,
+        .usd-rail-dark .text-sky-800,
+        .usd-rail-dark .text-cyan-700,
+        .usd-rail-dark .text-cyan-800 {
+          color: rgb(125, 211, 252) !important;
+        }
+        .usd-rail-dark .shadow-sm {
+          box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28) !important;
+        }
+      `}</style>
+      <header className="border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-500">
@@ -570,22 +677,33 @@ export default function InternationalTransferClient() {
               Cost lab
             </Link>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Institution settlement tester</p>
-            <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Institution-to-institution blockchain rail</h1>
+          <div className="flex flex-wrap items-center justify-end gap-3 text-right">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Institution settlement tester</p>
+              <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">USD rail control room</h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDarkMode((value) => !value)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-cyan-400"
+              aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {darkMode ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+              {darkMode ? "Light" : "Dark"}
+            </button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
           <div className="mb-4 flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-800">
               <Building2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-bold">Institution route input</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Compare source value, blockchain settlement evidence and final destination value.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Origin value, blockchain evidence and destination value in one run.</p>
             </div>
           </div>
 
@@ -656,6 +774,14 @@ export default function InternationalTransferClient() {
             </div>
           </div>
 
+          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <ActionButton onClick={runSandboxFlow} disabled={Boolean(busy)} variant="dark" full>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+              Run complete sandbox route
+            </ActionButton>
+            <p className="mt-2 text-xs font-semibold text-slate-500">Recommended for demos: creates quote, funding event, blockchain evidence and destination instruction.</p>
+          </div>
+
           <div className="mt-4 grid grid-cols-2 gap-3">
             <ActionButton onClick={() => createQuote()} disabled={Boolean(busy)} variant="dark">
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
@@ -686,10 +812,6 @@ export default function InternationalTransferClient() {
             <ActionButton onClick={() => loadReconciliation()} disabled={Boolean(busy || !transfer)} variant="light">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               Reconciliation
-            </ActionButton>
-            <ActionButton onClick={runSandboxFlow} disabled={Boolean(busy)} variant="dark">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-              Run sandbox flow
             </ActionButton>
             <div className="grid grid-cols-2 gap-3">
               <ActionButton onClick={copyDebugBundle} disabled={Boolean(busy)} variant="light">
@@ -725,6 +847,44 @@ export default function InternationalTransferClient() {
               ) : null}
             </section>
           ) : null}
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">Guided path</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">BRL source to USD destination</h2>
+              </div>
+              <StatusPill state={transfer ? "ok" : quote ? "running" : "idle"}>
+                {evidenceItems.filter((item) => item.ready).length} evidence items ready
+              </StatusPill>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-5">
+              {guidedSteps.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <div
+                    key={step.label}
+                    className={`rounded-lg border p-3 ${
+                      step.done
+                        ? "border-emerald-300 bg-emerald-50 dark:border-emerald-400/35 dark:bg-emerald-400/10"
+                        : step.active
+                          ? "border-cyan-300 bg-cyan-50 dark:border-cyan-300/45 dark:bg-cyan-300/10"
+                          : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={`grid h-9 w-9 place-items-center rounded-lg ${step.done ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-200" : step.active ? "bg-cyan-100 text-cyan-800 dark:bg-cyan-400/15 dark:text-cyan-200" : "bg-white text-slate-500"}`}>
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <span className="font-mono text-xs font-bold text-slate-500">0{index + 1}</span>
+                    </div>
+                    <p className="mt-3 text-sm font-bold text-slate-950">{step.label}</p>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-600">{step.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
