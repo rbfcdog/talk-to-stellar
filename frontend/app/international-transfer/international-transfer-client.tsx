@@ -394,6 +394,25 @@ export default function InternationalTransferClient() {
       retainedPct,
     };
   }, [brlAmount, quote, transfer?.quoted_usd_amount]);
+  const feeStory = useMemo(() => {
+    const routeFeeUsd = parseNumber(quote?.total_fee?.amount_usd_equivalent || transfer?.fees?.total_fee?.amount_usd_equivalent);
+    const traditionalFeePct = 3.5;
+    const traditionalFeeUsd = quoteDelta.baselineUsd > 0 ? quoteDelta.baselineUsd * (traditionalFeePct / 100) : 0;
+    const savingsUsd = Math.max(0, traditionalFeeUsd - routeFeeUsd);
+    const savingsBrl = quoteDelta.fxRate > 0 ? savingsUsd * quoteDelta.fxRate : 0;
+    const routeFeePct = quoteDelta.baselineUsd > 0 ? (routeFeeUsd / quoteDelta.baselineUsd) * 100 : 0;
+    const savingsPct = quoteDelta.baselineUsd > 0 ? (savingsUsd / quoteDelta.baselineUsd) * 100 : 0;
+
+    return {
+      routeFeeUsd,
+      routeFeePct,
+      traditionalFeePct,
+      traditionalFeeUsd,
+      savingsUsd,
+      savingsBrl,
+      savingsPct,
+    };
+  }, [quote?.total_fee?.amount_usd_equivalent, quoteDelta.baselineUsd, quoteDelta.fxRate, transfer?.fees?.total_fee?.amount_usd_equivalent]);
   const metricValidation = useMemo(() => {
     const backendMetrics = reconciliation?.evidence?.metrics || {};
     const backendValidation = reconciliation?.evidence?.metric_validation || {};
@@ -664,10 +683,7 @@ export default function InternationalTransferClient() {
 
   async function simulatePixReceived(currentTransfer = transfer) {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
-    const reference = currentTransfer.pix_order_id || currentTransfer.pix_payment_id || currentTransfer.transfer_id;
-    const payload = await callApi("Simulate funding webhook", "POST", "/api/webhooks/etherfuse/pix", {
-      transfer_id: currentTransfer.transfer_id,
-      order_id: reference,
+    const payload = await callApi("Confirm sandbox funding", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/funding-confirmation`, {
       status: "completed",
       event: "pix.received",
     });
@@ -704,7 +720,7 @@ export default function InternationalTransferClient() {
   }
 
   async function runSandboxFlow() {
-    pushEvent("Sandbox flow started", "Running quote, source funding mock, funding webhook, blockchain settlement, destination instruction and reconciliation.", "info");
+    pushEvent("Sandbox flow started", "Running quote, mock source funding, sandbox funding confirmation, blockchain settlement, destination instruction and reconciliation.", "info");
     try {
       const q = await createQuote();
       const t = await createTransfer(q);
@@ -868,7 +884,7 @@ export default function InternationalTransferClient() {
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Institution settlement tester</p>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">USD rail control room</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">Cost-efficient USD route room</h1>
           </div>
         </div>
       </header>
@@ -881,7 +897,29 @@ export default function InternationalTransferClient() {
             </div>
             <div>
               <h2 className="text-base font-bold">Institution route input</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Origin value, blockchain evidence and destination value in one run.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Compare origin value, route fees, Stellar evidence and destination value in one run.</p>
+            </div>
+          </div>
+
+          <div className="mb-4 grid gap-2 rounded-lg border border-emerald-400/30 bg-black p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-300">Fee thesis</span>
+              <span className="rounded-md border border-emerald-400/30 px-2 py-1 text-xs font-bold text-emerald-200">
+                {quote ? `${formatPercent(feeStory.routeFeePct)} route fee` : "waiting quote"}
+              </span>
+            </div>
+            <p className="text-sm font-semibold leading-6 text-slate-200">
+              Show that the route keeps more of the original BRL value by making the fee delta visible before the destination instruction.
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-slate-400">
+              <div className="rounded-md border border-neutral-800 p-2">
+                <p className="uppercase tracking-[0.08em]">Target benchmark</p>
+                <p className="mt-1 text-slate-100">{formatPercent(feeStory.traditionalFeePct)} traditional FX</p>
+              </div>
+              <div className="rounded-md border border-neutral-800 p-2">
+                <p className="uppercase tracking-[0.08em]">Projected saving</p>
+                <p className="mt-1 text-emerald-200">{quote ? formatCurrency(feeStory.savingsBrl, "BRL") : "-"}</p>
+              </div>
             </div>
           </div>
 
@@ -945,26 +983,36 @@ export default function InternationalTransferClient() {
                 onChange={(event) => setMockPix(event.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
-              Mock source funding intent
+              Use sandbox PIX funding intent
             </label>
-            {payoutProvider === "etherfuse" ? (
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={runEtherfuseOffRamp}
-                  onChange={(event) => setRunEtherfuseOffRamp(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Execute Etherfuse off-ramp sandbox proof
-              </label>
-            ) : null}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Session ID" value={manualSessionId} onChange={setManualSessionId} placeholder={sessionId || "cookie"} />
-              <Field label="Session token" value={manualSessionToken} onChange={setManualSessionToken} placeholder="cookie" />
-            </div>
-            {payoutProvider === "etherfuse" && runEtherfuseOffRamp ? (
-              <Field label="Wallet PIN for off-ramp" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute Etherfuse off-ramp" />
-            ) : null}
+            <details className="rounded-lg border border-neutral-800 bg-black p-3">
+              <summary className="cursor-pointer text-sm font-bold text-slate-200">
+                Advanced execution credentials
+              </summary>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                Keep this closed for normal demos. Open only when you intentionally want to execute provider-specific sandbox helpers.
+              </p>
+              <div className="mt-3 grid gap-3">
+                {payoutProvider === "etherfuse" ? (
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={runEtherfuseOffRamp}
+                      onChange={(event) => setRunEtherfuseOffRamp(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    Execute Etherfuse off-ramp sandbox proof
+                  </label>
+                ) : null}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Session ID" value={manualSessionId} onChange={setManualSessionId} placeholder={sessionId || "cookie"} />
+                  <Field label="Session token" value={manualSessionToken} onChange={setManualSessionToken} placeholder="cookie" />
+                </div>
+                {payoutProvider === "etherfuse" && runEtherfuseOffRamp ? (
+                  <Field label="Wallet PIN for off-ramp" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute Etherfuse off-ramp" />
+                ) : null}
+              </div>
+            </details>
           </div>
 
           <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -990,7 +1038,7 @@ export default function InternationalTransferClient() {
             </ActionButton>
             <ActionButton onClick={() => simulatePixReceived()} disabled={Boolean(busy || !transfer)} variant="green">
               <Banknote className="h-4 w-4" aria-hidden="true" />
-              Funding confirmed
+              Confirm funding
             </ActionButton>
             <ActionButton onClick={() => settleStellar()} disabled={Boolean(busy || !transfer)} variant="blue">
               <Network className="h-4 w-4" aria-hidden="true" />
@@ -1040,6 +1088,43 @@ export default function InternationalTransferClient() {
               ) : null}
             </section>
           ) : null}
+
+          <section className="rounded-lg border border-emerald-400/35 bg-black p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Fee compression view</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-100">How much value survives the route?</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                  This panel compares the route fee against a 3.5% traditional FX benchmark so the demo proves the cost thesis with numbers, not only a transaction hash.
+                </p>
+              </div>
+              <StatusPill state={quote ? "ok" : "idle"}>
+                {quote ? `${formatPercent(quoteDelta.retainedPct)} retained` : "quote needed"}
+              </StatusPill>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border border-neutral-800 bg-black p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Route fee</p>
+                <p className="mt-2 text-xl font-black text-cyan-200">{quote ? formatCurrency(feeStory.routeFeeUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? formatPercent(feeStory.routeFeePct) : "Waiting for quote"}</p>
+              </div>
+              <div className="rounded-lg border border-neutral-800 bg-black p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Traditional fee</p>
+                <p className="mt-2 text-xl font-black text-amber-200">{quote ? formatCurrency(feeStory.traditionalFeeUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{formatPercent(feeStory.traditionalFeePct)} benchmark</p>
+              </div>
+              <div className="rounded-lg border border-emerald-400/35 bg-black p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">Estimated saving</p>
+                <p className="mt-2 text-xl font-black text-emerald-200">{quote ? formatCurrency(feeStory.savingsUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(feeStory.savingsBrl, "BRL")} / ${formatPercent(feeStory.savingsPct)}` : "Waiting for quote"}</p>
+              </div>
+              <div className="rounded-lg border border-neutral-800 bg-black p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Final delivery</p>
+                <p className="mt-2 text-xl font-black text-slate-100">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">destination instruction value</p>
+              </div>
+            </div>
+          </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">

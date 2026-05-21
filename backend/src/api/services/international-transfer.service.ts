@@ -203,6 +203,30 @@ export class InternationalTransferService {
     return updated;
   }
 
+  async confirmSandboxFunding(transferId: string, input: Record<string, unknown> = {}): Promise<InternationalTransfer> {
+    const transfer = await this.requireTransfer(transferId);
+    const intent = (transfer.reconciliation_metadata || {}).pix_funding_intent as any;
+    const reference = transfer.pix_order_id || transfer.pix_payment_id || transfer.transfer_id;
+    const intentMode = String(intent?.payment_instructions?.mode || intent?.raw?.mode || '').trim().toLowerCase();
+    const isMockFunding = intentMode === 'mock' ||
+      String(reference || '').startsWith('mock_pix_') ||
+      intent?.raw?.no_real_pix_created === true;
+
+    if (!isMockFunding) {
+      throw new Error('Sandbox funding confirmation can only be used for mock Pix funding intents. Use the real Etherfuse webhook for live/provider funding.');
+    }
+
+    return this.handlePixConfirmation({
+      transfer_id: transfer.transfer_id,
+      order_id: reference,
+      status: input.status || 'completed',
+      event: input.event || 'pix.received',
+      simulated: true,
+      simulated_by: input.simulated_by || 'institution_settlement_tester',
+      confirmed_at: now(),
+    });
+  }
+
   async settleStellar(transferId: string): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
     let current = transfer;

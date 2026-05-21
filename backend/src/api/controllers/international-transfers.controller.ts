@@ -59,6 +59,15 @@ export class InternationalTransfersController {
     }
   }
 
+  static async confirmSandboxFunding(req: Request, res: Response) {
+    try {
+      const transfer = await internationalTransferService.confirmSandboxFunding(String(req.params.id), req.body || {});
+      res.status(200).json({ success: true, transfer });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBody(error));
+    }
+  }
+
   static async createPayoutInstruction(req: Request, res: Response) {
     try {
       const transfer = await internationalTransferService.createPayoutInstruction(
