@@ -5,7 +5,13 @@ export const metadata = {
   description: "Send balance to your PIX through TalkToStellar.",
 };
 
-function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+async function resolveSearchParams(searchParams?: SearchParams | Promise<SearchParams>) {
+  return Promise.resolve(searchParams || {});
+}
+
+function serializeSearchParams(searchParams?: SearchParams) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams || {})) {
     if (Array.isArray(value)) {
@@ -18,10 +24,11 @@ function serializeSearchParams(searchParams?: Record<string, string | string[] |
   return params.toString();
 }
 
-export default function PixOffPage({
+export default async function PixOffPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: SearchParams | Promise<SearchParams>;
 }) {
-  return <PixRampClient initialQuery={serializeSearchParams(searchParams)} lockedMode="offramp" />;
+  const resolved = await resolveSearchParams(searchParams);
+  return <PixRampClient initialQuery={serializeSearchParams(resolved)} lockedMode="offramp" />;
 }
