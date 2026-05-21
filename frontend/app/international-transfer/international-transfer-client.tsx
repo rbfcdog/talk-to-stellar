@@ -161,6 +161,11 @@ function formatTime(value: string) {
   });
 }
 
+function isExpiredQuoteError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /quote (is not active:\s*)?expired|not active:\s*expired/i.test(message);
+}
+
 function Field({
   label,
   value,
@@ -545,13 +550,27 @@ export default function InternationalTransferClient() {
 
   async function createTransfer(currentQuote = quote) {
     if (!currentQuote?.quote_id) throw new Error("Create a route quote first.");
-    const payload = await callApi("Create institution route", "POST", "/api/transfers", {
-      ...transferPayload,
-      quote_id: currentQuote.quote_id,
-    });
-    setTransfer(payload.transfer);
-    setReconciliation(null);
-    return payload.transfer;
+    try {
+      const payload = await callApi("Create institution route", "POST", "/api/transfers", {
+        ...transferPayload,
+        quote_id: currentQuote.quote_id,
+      });
+      setTransfer(payload.transfer);
+      setReconciliation(null);
+      return payload.transfer;
+    } catch (routeError) {
+      if (!isExpiredQuoteError(routeError)) throw routeError;
+
+      pushEvent("Quote expired", "Creating a fresh BRL/USD quote and retrying the institution route.", "info", "/api/quotes/brl-usd");
+      const freshQuote = await createQuote();
+      const retryPayload = await callApi("Create institution route", "POST", "/api/transfers", {
+        ...transferPayload,
+        quote_id: freshQuote.quote_id,
+      });
+      setTransfer(retryPayload.transfer);
+      setReconciliation(null);
+      return retryPayload.transfer;
+    }
   }
 
   async function createPixIntent(currentTransfer = transfer, useMock = mockPix) {
