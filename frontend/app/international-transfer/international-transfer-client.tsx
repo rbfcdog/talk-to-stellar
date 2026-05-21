@@ -64,44 +64,44 @@ type TransferState =
   | "REFUNDED";
 
 const states: Array<{ key: TransferState; label: string; icon: any }> = [
-  { key: "QUOTE_CREATED", label: "Quote", icon: ClipboardList },
-  { key: "PIX_PENDING", label: "Pix pending", icon: QrCode },
-  { key: "PIX_RECEIVED", label: "Pix received", icon: Banknote },
+  { key: "QUOTE_CREATED", label: "Route quote", icon: ClipboardList },
+  { key: "PIX_PENDING", label: "Funding pending", icon: QrCode },
+  { key: "PIX_RECEIVED", label: "Funding received", icon: Banknote },
   { key: "BRL_TO_USDC_PENDING", label: "BRL -> USDC", icon: WalletCards },
-  { key: "USDC_SETTLEMENT_PENDING", label: "Stellar send", icon: Network },
+  { key: "USDC_SETTLEMENT_PENDING", label: "Blockchain send", icon: Network },
   { key: "USDC_SETTLED", label: "USDC settled", icon: CheckCircle2 },
-  { key: "PAYOUT_INSTRUCTION_CREATED", label: "Payout created", icon: Landmark },
-  { key: "PAYOUT_PENDING", label: "Payout pending", icon: Send },
+  { key: "PAYOUT_INSTRUCTION_CREATED", label: "Destination instruction", icon: Landmark },
+  { key: "PAYOUT_PENDING", label: "Destination pending", icon: Send },
   { key: "PAYOUT_COMPLETED", label: "Done", icon: ShieldCheck },
 ];
 
 const stateRank = new Map(states.map((state, index) => [state.key, index]));
 
 const nextActionByState: Partial<Record<TransferState, string>> = {
-  QUOTE_CREATED: "Create the Pix funding intent and attach the Pix reference to the transfer.",
-  PIX_PENDING: "Wait for Etherfuse Pix confirmation or simulate the Pix webhook in sandbox.",
-  PIX_RECEIVED: "Trigger Stellar settlement so USDC evidence can be attached.",
+  QUOTE_CREATED: "Create the institution funding intent and attach the funding reference to the settlement record.",
+  PIX_PENDING: "Wait for source-institution funding confirmation or simulate the funding webhook in sandbox.",
+  PIX_RECEIVED: "Trigger blockchain settlement so USDC evidence can be attached.",
   BRL_TO_USDC_PENDING: "Backend is moving from BRL exposure into USDC settlement preparation.",
-  USDC_SETTLEMENT_PENDING: "Backend is submitting or mocking the Stellar USDC transaction.",
-  USDC_SETTLED: "Create a USD payout instruction through the selected provider adapter.",
-  PAYOUT_INSTRUCTION_CREATED: "Move the provider payout instruction into pending or completed state.",
-  PAYOUT_PENDING: "Poll provider payout status and inspect reconciliation evidence.",
-  PAYOUT_COMPLETED: "Capture reconciliation output, screenshots and transaction evidence.",
-  FAILED: "Open the latest API log and error logs on the transfer object.",
-  REFUNDED: "Capture refund evidence and close the transfer record.",
+  USDC_SETTLEMENT_PENDING: "Backend is submitting or mocking the Stellar blockchain transaction.",
+  USDC_SETTLED: "Create the destination-institution USD instruction through the selected adapter.",
+  PAYOUT_INSTRUCTION_CREATED: "Move the destination instruction into pending or completed state.",
+  PAYOUT_PENDING: "Poll destination provider status and inspect reconciliation evidence.",
+  PAYOUT_COMPLETED: "Capture reconciliation output, screenshots and delta evidence.",
+  FAILED: "Open the latest API log and error logs on the settlement record.",
+  REFUNDED: "Capture refund evidence and close the settlement record.",
 };
 
 const phaseDescriptions: Record<TransferState, string> = {
-  QUOTE_CREATED: "The quote is accepted and the transfer record exists, but no Pix funding has settled yet.",
-  PIX_PENDING: "A Pix funding reference exists. The system is waiting for the funding event before value moves forward.",
-  PIX_RECEIVED: "Pix funding is confirmed. The transfer can now move into USDC settlement.",
+  QUOTE_CREATED: "The quote is accepted and the institution settlement record exists, but source funding has not settled yet.",
+  PIX_PENDING: "A funding reference exists. The system is waiting for the source institution event before value moves forward.",
+  PIX_RECEIVED: "Source funding is confirmed. The route can now move into USDC settlement.",
   BRL_TO_USDC_PENDING: "The backend is representing the BRL exposure as USDC for the Stellar leg.",
-  USDC_SETTLEMENT_PENDING: "The Stellar transaction is being prepared, submitted, or mocked depending on env configuration.",
-  USDC_SETTLED: "Stellar settlement evidence is attached to the transfer record.",
-  PAYOUT_INSTRUCTION_CREATED: "The USD payout adapter has created an instruction object for the bank-destination leg.",
-  PAYOUT_PENDING: "The payout provider has a pending instruction. Live providers would be polled or reconciled by webhook.",
-  PAYOUT_COMPLETED: "The transfer reached terminal success in the orchestration layer.",
-  FAILED: "The flow failed and the transfer error log should be inspected.",
+  USDC_SETTLEMENT_PENDING: "The Stellar blockchain transaction is being prepared, submitted, or mocked depending on env configuration.",
+  USDC_SETTLED: "Blockchain settlement evidence is attached to the institution settlement record.",
+  PAYOUT_INSTRUCTION_CREATED: "The USD adapter has created an instruction object for the destination institution.",
+  PAYOUT_PENDING: "The destination provider has a pending instruction. Live providers would be polled or reconciled by webhook.",
+  PAYOUT_COMPLETED: "The institution settlement reached terminal success in the orchestration layer.",
+  FAILED: "The flow failed and the settlement error log should be inspected.",
   REFUNDED: "The flow ended in refund state.",
 };
 
@@ -120,6 +120,16 @@ function formatCurrency(value: unknown, currency: "BRL" | "USD") {
     currency,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(numeric) ? numeric : 0);
+}
+
+function parseNumber(value: unknown) {
+  const numeric = Number(String(value || "0").replace(",", "."));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatPercent(value: number) {
+  if (!Number.isFinite(value)) return "0.00%";
+  return `${value.toFixed(2)}%`;
 }
 
 function shortId(value: unknown, size = 18) {
@@ -241,11 +251,11 @@ function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; 
 
 export default function InternationalTransferClient() {
   const [brlAmount, setBrlAmount] = useState("1000");
-  const [senderName, setSenderName] = useState("Rodrigo Banin");
-  const [senderEmail, setSenderEmail] = useState("rodrigo@example.com");
-  const [recipientName, setRecipientName] = useState("Rodrigo Banin");
-  const [accountHolderType, setAccountHolderType] = useState<"individual" | "business">("individual");
-  const [bankName, setBankName] = useState("International USD Bank");
+  const [senderName, setSenderName] = useState("Origin BR Institution Ltda");
+  const [senderEmail, setSenderEmail] = useState("ops@origin-institution.example");
+  const [recipientName, setRecipientName] = useState("Destination USD Institution LLC");
+  const [accountHolderType, setAccountHolderType] = useState<"individual" | "business">("business");
+  const [bankName, setBankName] = useState("Destination USD Banking Partner");
   const [routingNumber, setRoutingNumber] = useState("021000021");
   const [accountNumber, setAccountNumber] = useState("123456789");
   const [accountType, setAccountType] = useState<"checking" | "savings">("checking");
@@ -265,13 +275,14 @@ export default function InternationalTransferClient() {
       id: "initial",
       at: new Date().toISOString(),
       title: "Ready",
-      detail: "Create a quote or run the full sandbox flow to start recording orchestration events.",
+      detail: "Create an institution route quote or run the full sandbox flow to start recording blockchain settlement events.",
       state: "info",
     },
   ]);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const migrationError = /international_transfer_quotes|international_transfers|schema cache/i.test(error);
 
   useEffect(() => {
     getClientSession().then((session) => {
@@ -284,20 +295,41 @@ export default function InternationalTransferClient() {
   const latestEvent = events[0];
   const currentPhase = activeStatus && phaseDescriptions[activeStatus]
     ? phaseDescriptions[activeStatus]
-    : "No transfer has been created yet.";
+    : "No institution settlement has been created yet.";
   const nextAction = activeStatus && nextActionByState[activeStatus]
     ? nextActionByState[activeStatus]
-    : "Create a BRL -> USD quote.";
+    : "Create an institution-to-institution settlement quote.";
+  const quoteDelta = useMemo(() => {
+    const sourceBrl = parseNumber(quote?.brl_amount || brlAmount);
+    const fxRate = parseNumber(quote?.fx_rate);
+    const baselineUsd = fxRate > 0 ? sourceBrl / fxRate : 0;
+    const finalUsd = parseNumber(quote?.estimated_usd_amount || transfer?.quoted_usd_amount);
+    const deltaUsd = baselineUsd > 0 ? finalUsd - baselineUsd : 0;
+    const costUsd = Math.abs(Math.min(deltaUsd, 0));
+    const deltaPct = baselineUsd > 0 ? (deltaUsd / baselineUsd) * 100 : 0;
+    const retainedPct = baselineUsd > 0 ? (finalUsd / baselineUsd) * 100 : 0;
+
+    return {
+      sourceBrl,
+      fxRate,
+      baselineUsd,
+      finalUsd,
+      deltaUsd,
+      costUsd,
+      deltaPct,
+      retainedPct,
+    };
+  }, [brlAmount, quote, transfer?.quoted_usd_amount]);
   const evidenceItems = useMemo(
     () => [
       { label: "Quote ID", value: quote?.quote_id, ready: Boolean(quote?.quote_id) },
-      { label: "Transfer ID", value: transfer?.transfer_id, ready: Boolean(transfer?.transfer_id) },
-      { label: "Pix reference", value: transfer?.pix_order_id || transfer?.pix_payment_id, ready: Boolean(transfer?.pix_order_id || transfer?.pix_payment_id) },
-      { label: "Pix status", value: transfer?.pix_status, ready: transfer?.status === "PIX_RECEIVED" || activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2) },
-      { label: "Stellar hash", value: transfer?.stellar_tx_hash, ready: Boolean(transfer?.stellar_tx_hash) },
-      { label: "Stellar memo", value: transfer?.stellar_memo, ready: Boolean(transfer?.stellar_memo) },
-      { label: "Payout instruction", value: transfer?.payout_instruction_id, ready: Boolean(transfer?.payout_instruction_id) },
-      { label: "Provider payout", value: transfer?.provider_payout_id, ready: Boolean(transfer?.provider_payout_id) },
+      { label: "Settlement ID", value: transfer?.transfer_id, ready: Boolean(transfer?.transfer_id) },
+      { label: "Funding reference", value: transfer?.pix_order_id || transfer?.pix_payment_id, ready: Boolean(transfer?.pix_order_id || transfer?.pix_payment_id) },
+      { label: "Funding status", value: transfer?.pix_status, ready: transfer?.status === "PIX_RECEIVED" || activeRank >= (stateRank.get("PIX_RECEIVED") ?? 2) },
+      { label: "Blockchain hash", value: transfer?.stellar_tx_hash, ready: Boolean(transfer?.stellar_tx_hash) },
+      { label: "Blockchain memo", value: transfer?.stellar_memo, ready: Boolean(transfer?.stellar_memo) },
+      { label: "Destination instruction", value: transfer?.payout_instruction_id, ready: Boolean(transfer?.payout_instruction_id) },
+      { label: "Destination provider ID", value: transfer?.provider_payout_id, ready: Boolean(transfer?.provider_payout_id) },
       { label: "Reconciliation", value: reconciliation?.transfer_id, ready: Boolean(reconciliation?.transfer_id) },
       { label: "Same-name check", value: transfer?.same_name_match_status, ready: Boolean(transfer?.same_name_match_status) },
     ],
@@ -352,6 +384,7 @@ export default function InternationalTransferClient() {
     const bundle = {
       generated_at: new Date().toISOString(),
       current_operation: busy || "idle",
+      value_delta: quoteDelta,
       quote,
       transfer,
       reconciliation,
@@ -449,8 +482,8 @@ export default function InternationalTransferClient() {
   }
 
   async function createTransfer(currentQuote = quote) {
-    if (!currentQuote?.quote_id) throw new Error("Create a quote first.");
-    const payload = await callApi("Create transfer", "POST", "/api/transfers", {
+    if (!currentQuote?.quote_id) throw new Error("Create a route quote first.");
+    const payload = await callApi("Create institution route", "POST", "/api/transfers", {
       ...transferPayload,
       quote_id: currentQuote.quote_id,
     });
@@ -460,8 +493,8 @@ export default function InternationalTransferClient() {
   }
 
   async function createPixIntent(currentTransfer = transfer, useMock = mockPix) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create a transfer first.");
-    const payload = await callApi("Create Pix intent", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/pix-intent`, {
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Create funding intent", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/pix-intent`, {
       mock_pix_intent: useMock,
       session_id: manualSessionId || undefined,
       session_token: manualSessionToken || undefined,
@@ -472,9 +505,9 @@ export default function InternationalTransferClient() {
   }
 
   async function simulatePixReceived(currentTransfer = transfer) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create a transfer first.");
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
     const reference = currentTransfer.pix_order_id || currentTransfer.pix_payment_id || currentTransfer.transfer_id;
-    const payload = await callApi("Simulate Pix webhook", "POST", "/api/webhooks/etherfuse/pix", {
+    const payload = await callApi("Simulate funding webhook", "POST", "/api/webhooks/etherfuse/pix", {
       transfer_id: currentTransfer.transfer_id,
       order_id: reference,
       status: "completed",
@@ -485,15 +518,15 @@ export default function InternationalTransferClient() {
   }
 
   async function settleStellar(currentTransfer = transfer) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create a transfer first.");
-    const payload = await callApi("Settle Stellar", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/settle-stellar`);
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Settle blockchain", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/settle-stellar`);
     setTransfer(payload.transfer);
     return payload.transfer;
   }
 
   async function createPayoutInstruction(currentTransfer = transfer) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create a transfer first.");
-    const payload = await callApi("Create payout", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/payout-instruction`, {
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Create destination instruction", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/payout-instruction`, {
       provider: payoutProvider,
     });
     setTransfer(payload.transfer);
@@ -501,14 +534,14 @@ export default function InternationalTransferClient() {
   }
 
   async function loadReconciliation(currentTransfer = transfer) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create a transfer first.");
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
     const payload = await callApi("Load reconciliation", "GET", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/reconciliation`);
     setReconciliation(payload.reconciliation);
     return payload.reconciliation;
   }
 
   async function runSandboxFlow() {
-    pushEvent("Sandbox flow started", "Running quote, transfer, Pix mock, Pix webhook, Stellar settlement, payout instruction and reconciliation.", "info");
+    pushEvent("Sandbox flow started", "Running quote, source funding mock, funding webhook, blockchain settlement, destination instruction and reconciliation.", "info");
     try {
       const q = await createQuote();
       const t = await createTransfer(q);
@@ -517,7 +550,7 @@ export default function InternationalTransferClient() {
       const settled = await settleStellar(funded);
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
-      pushEvent("Sandbox flow complete", "All orchestration steps returned successfully. Capture the evidence checklist and reconciliation panel.", "ok");
+      pushEvent("Sandbox flow complete", "All orchestration steps returned successfully. Capture the delta, evidence checklist and reconciliation panel.", "ok");
     } catch (flowError: any) {
       pushEvent("Sandbox flow stopped", flowError?.message || String(flowError), "error");
     }
@@ -538,8 +571,8 @@ export default function InternationalTransferClient() {
             </Link>
           </div>
           <div className="text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Live backend tester</p>
-            <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">BRL to USD transfer rail</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Institution settlement tester</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Institution-to-institution blockchain rail</h1>
           </div>
         </div>
       </header>
@@ -551,18 +584,18 @@ export default function InternationalTransferClient() {
               <Building2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-base font-bold">Transfer input</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Same-origin API proxy, backend state machine and reconciliation.</p>
+              <h2 className="text-base font-bold">Institution route input</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Compare source value, blockchain settlement evidence and final destination value.</p>
             </div>
           </div>
 
           <div className="grid gap-3">
-            <Field label="BRL amount" type="number" value={brlAmount} onChange={setBrlAmount} />
-            <Field label="Sender legal name" value={senderName} onChange={setSenderName} />
-            <Field label="Sender email" value={senderEmail} onChange={setSenderEmail} />
-            <Field label="Account holder" value={recipientName} onChange={setRecipientName} />
+            <Field label="Source amount" type="number" value={brlAmount} onChange={setBrlAmount} />
+            <Field label="Origin institution" value={senderName} onChange={setSenderName} />
+            <Field label="Origin ops email" value={senderEmail} onChange={setSenderEmail} />
+            <Field label="Destination institution" value={recipientName} onChange={setRecipientName} />
             <SelectField
-              label="Holder type"
+              label="Destination owner type"
               value={accountHolderType}
               onChange={setAccountHolderType}
               options={[
@@ -570,7 +603,7 @@ export default function InternationalTransferClient() {
                 { value: "business", label: "Business" },
               ]}
             />
-            <Field label="Bank name" value={bankName} onChange={setBankName} />
+            <Field label="Destination provider" value={bankName} onChange={setBankName} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Routing" value={routingNumber} onChange={setRoutingNumber} />
               <Field label="Account" value={accountNumber} onChange={setAccountNumber} />
@@ -588,18 +621,18 @@ export default function InternationalTransferClient() {
               <Field label="Country" value={country} onChange={setCountry} />
             </div>
             <SelectField
-              label="Account provider"
+              label="Destination account profile"
               value={providerLabel}
               onChange={setProviderLabel}
               options={[
                 { value: "other", label: "Other" },
-                { value: "wise", label: "Wise-compatible" },
+                { value: "wise", label: "USD account provider" },
                 { value: "mercury", label: "Mercury" },
                 { value: "revolut", label: "Revolut" },
               ]}
             />
             <SelectField
-              label="Payout adapter"
+              label="Destination adapter"
               value={payoutProvider}
               onChange={setPayoutProvider}
               options={[
@@ -615,7 +648,7 @@ export default function InternationalTransferClient() {
                 onChange={(event) => setMockPix(event.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
-              Mock Pix funding intent
+              Mock source funding intent
             </label>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Session ID" value={manualSessionId} onChange={setManualSessionId} placeholder={sessionId || "cookie"} />
@@ -630,23 +663,23 @@ export default function InternationalTransferClient() {
             </ActionButton>
             <ActionButton onClick={() => createTransfer()} disabled={Boolean(busy || !quote)} variant="light">
               <Route className="h-4 w-4" aria-hidden="true" />
-              Transfer
+              Route
             </ActionButton>
             <ActionButton onClick={() => createPixIntent()} disabled={Boolean(busy || !transfer)} variant="light">
               <QrCode className="h-4 w-4" aria-hidden="true" />
-              Pix intent
+              Funding intent
             </ActionButton>
             <ActionButton onClick={() => simulatePixReceived()} disabled={Boolean(busy || !transfer)} variant="green">
               <Banknote className="h-4 w-4" aria-hidden="true" />
-              Pix paid
+              Funding confirmed
             </ActionButton>
             <ActionButton onClick={() => settleStellar()} disabled={Boolean(busy || !transfer)} variant="blue">
               <Network className="h-4 w-4" aria-hidden="true" />
-              Stellar
+              Blockchain
             </ActionButton>
             <ActionButton onClick={() => createPayoutInstruction()} disabled={Boolean(busy || !transfer)} variant="blue">
               <Send className="h-4 w-4" aria-hidden="true" />
-              Payout
+              Destination
             </ActionButton>
           </div>
           <div className="mt-3 grid gap-3">
@@ -675,6 +708,21 @@ export default function InternationalTransferClient() {
           {error ? (
             <section className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
               {error}
+              {migrationError ? (
+                <div className="mt-4 rounded-lg border border-red-200 bg-white p-3 text-sm font-semibold text-red-900">
+                  <p className="font-bold">Migration missing in this Supabase project.</p>
+                  <p className="mt-2 leading-6">
+                    Run this SQL in Supabase SQL Editor, then redeploy or retry:
+                  </p>
+                  <code className="mt-2 block rounded-md bg-red-950 p-2 text-xs text-red-50">
+                    backend/migrations/20260520_00_international_usd_transfers.sql
+                  </code>
+                  <p className="mt-2 leading-6">
+                    After running it, the tables `international_transfer_quotes`, `international_transfers` and
+                    `international_transfer_reconciliations` must exist in `public`.
+                  </p>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -687,7 +735,7 @@ export default function InternationalTransferClient() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">What is happening</p>
-                    <h2 className="mt-1 text-lg font-bold text-slate-950">{busy || transfer?.status || "Waiting for first action"}</h2>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">{busy || transfer?.status || "Waiting for route quote"}</h2>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{busy ? latestEvent?.detail : currentPhase}</p>
                   </div>
                 </div>
@@ -747,24 +795,52 @@ export default function InternationalTransferClient() {
 
           <section className="grid gap-3 md:grid-cols-4">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Quote</p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{quote ? formatCurrency(quote.brl_amount, "BRL") : "-"}</p>
-              <p className="text-sm text-slate-600">{quote ? `${formatCurrency(quote.estimated_usd_amount, "USD")} net` : "No quote"}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Source value</p>
+              <p className="mt-2 text-lg font-bold text-slate-950">{quote ? formatCurrency(quote.brl_amount, "BRL") : formatCurrency(brlAmount, "BRL")}</p>
+              <p className="text-sm text-slate-600">{quote ? `FX ${quote.fx_rate} BRL/USD` : "No route quote"}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Status</p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{transfer?.status || "-"}</p>
-              <p className="text-sm text-slate-600">{transfer?.transfer_id ? transfer.transfer_id.slice(0, 24) : "No transfer"}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Baseline USD</p>
+              <p className="mt-2 text-lg font-bold text-slate-950">{quote ? formatCurrency(quoteDelta.baselineUsd, "USD") : "-"}</p>
+              <p className="text-sm text-slate-600">Before route costs</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Stellar</p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{transfer?.stellar_tx_hash ? "Evidence attached" : "-"}</p>
-              <p className="text-sm text-slate-600">{transfer?.stellar_memo || "No memo"}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Destination value</p>
+              <p className="mt-2 text-lg font-bold text-emerald-800">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "-"}</p>
+              <p className="text-sm text-slate-600">{quote ? `${formatPercent(quoteDelta.retainedPct)} retained` : "No destination value"}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Payout</p>
-              <p className="mt-2 text-lg font-bold text-slate-950">{transfer?.payout_status || "-"}</p>
-              <p className="text-sm text-slate-600">{transfer?.payout_provider || payoutProvider}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Route delta</p>
+              <p className={`mt-2 text-lg font-bold ${quoteDelta.deltaUsd < 0 ? "text-amber-800" : "text-emerald-800"}`}>
+                {quote ? `${quoteDelta.deltaUsd >= 0 ? "+" : "-"}${formatCurrency(Math.abs(quoteDelta.deltaUsd), "USD")}` : "-"}
+              </p>
+              <p className="text-sm text-slate-600">{quote ? `${formatPercent(quoteDelta.deltaPct)} vs baseline` : "No delta"}</p>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Network className="h-5 w-5 text-sky-800" aria-hidden="true" />
+              <h2 className="text-base font-bold text-slate-950">Institution value route</h2>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Origin institution</p>
+                <p className="mt-2 text-sm font-bold text-slate-950">{senderName}</p>
+                <p className="mt-1 text-sm text-slate-600">{formatCurrency(quoteDelta.sourceBrl, "BRL")} funded</p>
+              </div>
+              <div className="hidden items-center text-slate-400 md:flex">→</div>
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-sky-700">Blockchain settlement</p>
+                <p className="mt-2 text-sm font-bold text-slate-950">{transfer?.stellar_asset_code || "USDC"} on Stellar</p>
+                <p className="mt-1 text-sm text-slate-600">{transfer?.stellar_tx_hash ? shortId(transfer.stellar_tx_hash, 28) : "Evidence pending"}</p>
+              </div>
+              <div className="hidden items-center text-slate-400 md:flex">→</div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-700">Destination institution</p>
+                <p className="mt-2 text-sm font-bold text-slate-950">{recipientName}</p>
+                <p className="mt-1 text-sm text-slate-600">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "USD instruction pending"}</p>
+              </div>
             </div>
           </section>
 
@@ -801,7 +877,7 @@ export default function InternationalTransferClient() {
             <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-slate-100 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-slate-300" aria-hidden="true" />
-                <h2 className="text-base font-bold">Transfer</h2>
+                <h2 className="text-base font-bold">Settlement record</h2>
               </div>
               <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(transfer)}</pre>
             </div>

@@ -1,12 +1,95 @@
-# Env and migrations guide - security hardening
+# Env and migrations guide - security hardening and institution settlement
 
 This guide is for deploying the hardening commit that moved session secrets to HttpOnly cookies, added the new PIN hash format, added backend rate limits, and prepared the Supabase RLS hardening SQL.
+
+It also covers the institution-to-institution settlement rail. The table names still use the internal prefix `international_transfer_*` because that is the backend storage contract, but the product surface should be described as BRL source institution -> Stellar USDC blockchain settlement -> USD destination institution.
 
 Commit to deploy:
 
 ```bash
 4bf6d5a fix: harden sessions pin and rate limits
 ```
+
+## 0. Fix the missing quote table error
+
+If the frontend shows this error:
+
+```text
+Failed to create BRL/USD quote: Could not find the table 'public.international_transfer_quotes' in the schema cache
+```
+
+it means the backend code was deployed before the Supabase migration was applied to the same Supabase project used by Railway. The API endpoint `/api/quotes/brl-usd` is working, but PostgREST cannot see the required table.
+
+Run the institution settlement migration:
+
+```bash
+backend/migrations/20260520_00_international_usd_transfers.sql
+```
+
+Option A - Supabase SQL Editor:
+
+1. Open the Supabase project whose URL matches the backend `SUPABASE_URL`.
+2. Go to SQL Editor.
+3. Paste the full contents of `backend/migrations/20260520_00_international_usd_transfers.sql`.
+4. Run the SQL.
+5. Wait a few seconds and retry `/api/quotes/brl-usd`.
+
+Option B - direct Postgres URL:
+
+```bash
+export DATABASE_URL="postgresql://postgres.your-ref:YOUR_PASSWORD@aws-...pooler.supabase.com:6543/postgres?sslmode=require"
+psql "$DATABASE_URL" -f backend/migrations/20260520_00_international_usd_transfers.sql
+```
+
+Verify the tables exist:
+
+```sql
+select
+  to_regclass('public.international_transfer_quotes') as quotes,
+  to_regclass('public.international_transfers') as transfers,
+  to_regclass('public.international_transfer_reconciliations') as reconciliations;
+```
+
+Expected result:
+
+```text
+public.international_transfer_quotes | public.international_transfers | public.international_transfer_reconciliations
+```
+
+If the query returns null for any table, the migration was run in the wrong Supabase project or failed before completion.
+
+Minimum backend env for this rail:
+
+```bash
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+STELLAR_NETWORK="TESTNET"
+USDC_ASSET_CODE="USDC"
+USDC_ASSET_ISSUER="testnet-or-mainnet-usdc-issuer"
+ETHERFUSE_API_KEY="api_sand_or_live_key"
+ETHERFUSE_WEBHOOK_SECRET="shared-webhook-secret"
+PAYOUT_PROVIDER="mock"
+ENABLE_REAL_PAYOUT_EXECUTION="false"
+ENABLE_MAINNET_SETTLEMENT_VALIDATION="false"
+MAX_MAINNET_VALIDATION_AMOUNT_USD="25"
+INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX="true"
+```
+
+Minimum frontend env:
+
+```bash
+BACKEND_URL="https://your-backend-service.up.railway.app"
+NEXT_PUBLIC_BACKEND_URL="https://your-backend-service.up.railway.app"
+ETHERFUSE_WEBHOOK_SECRET="shared-webhook-secret"
+```
+
+Notes:
+
+- Keep `PAYOUT_PROVIDER=mock` until Circle/Bridge credentials and compliance approval are ready.
+- Keep `STELLAR_NETWORK=TESTNET` while the rest of the app is still operating on testnet.
+- `ENABLE_REAL_PAYOUT_EXECUTION=false` prevents real payout execution even if a compatibility adapter is selected.
+- `INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true` lets the tester create sandbox funding intents without requiring a real Pix payment.
+- The tables have RLS enabled, but the backend writes with `SUPABASE_SERVICE_ROLE_KEY`. Do not use anon/browser keys for these settlement records.
 
 ## 1. Backend env
 
