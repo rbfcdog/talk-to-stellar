@@ -1,8 +1,8 @@
 import InternationalTransferClient from "./international-transfer-client";
 
 export const metadata = {
-  title: "International USD Transfer Tester",
-  description: "Live tester for the TalkToStellar BRL to Stellar USDC to USD payout rail.",
+  title: "Institution Blockchain Settlement Tester",
+  description: "Live tester for the TalkToStellar institution-to-institution BRL to Stellar USDC to USD rail.",
 };
 
 export default function InternationalTransferPage() {
