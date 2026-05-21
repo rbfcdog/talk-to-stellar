@@ -24,6 +24,10 @@ Frontend testing surface:
 - `/international-transfer`: compatibility route for the same tester.
 - `/global-transfer`: cost and operational assumption lab.
 
+Interface walkthrough:
+
+- `docs/INSTITUTION_SETTLEMENT_INTERFACE_GUIDE.md`: step-by-step guide for using the interface to demonstrate institution-to-institution infrastructure, on/off-ramp proof, reconciliation and metrics.
+
 Transfer states:
 
 `QUOTE_CREATED -> PIX_PENDING -> PIX_RECEIVED -> BRL_TO_USDC_PENDING -> USDC_SETTLEMENT_PENDING -> USDC_SETTLED -> PAYOUT_INSTRUCTION_CREATED -> PAYOUT_PENDING -> PAYOUT_COMPLETED`
