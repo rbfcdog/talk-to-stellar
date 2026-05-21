@@ -89,8 +89,9 @@ export async function POST(req: Request) {
   let sessionId: string | null = null;
 
   try {
-    const session = readSessionCookies(req);
     const { messages, session_id, source, metadata, language } = await req.json();
+    const browserSessionExpired = metadata?.browser_session_expired === true || metadata?.force_relogin === true;
+    const session = browserSessionExpired ? { sessionId: "", sessionToken: "" } : readSessionCookies(req);
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -127,7 +128,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": idempotencyKey,
-        ...buildSessionHeaders(req),
+        ...(browserSessionExpired ? {} : buildSessionHeaders(req)),
       },
       body: JSON.stringify(dataToSend),
       signal: controller.signal,
@@ -150,6 +151,9 @@ export async function POST(req: Request) {
       session_id: agentApiData?.session_id || sessionId,
       action: agentApiData?.action || null,
       intent: agentApiData?.intent || null,
+      onboardingRequired: Boolean(agentApiData?.onboardingRequired || agentApiData?.loginRequired),
+      creationUrl: agentApiData?.creationUrl || null,
+      reason: agentApiData?.reason || null,
       success: typeof agentApiData?.success === "boolean" ? agentApiData.success : true,
     });
   } catch (error) {
