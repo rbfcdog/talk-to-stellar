@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { AnchorService } from './anchor.service';
 import {
   PayoutInstruction,
   PayoutProviderName,
@@ -15,6 +16,7 @@ export type CreatePayoutInput = {
   stellarTxHash?: string;
   stellarMemo?: string;
   metadata?: Record<string, unknown>;
+  providerOptions?: Record<string, unknown>;
 };
 
 export interface PayoutProviderAdapter {
@@ -45,6 +47,15 @@ function createInstruction(input: CreatePayoutInput, providerName: PayoutProvide
     created_at: now(),
     metadata,
   };
+}
+
+function readText(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function readBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 }
 
 export class MockUsdPayoutAdapter implements PayoutProviderAdapter {
@@ -157,9 +168,96 @@ export class BridgeCompatibilityAdapter extends CompatibilityPayoutAdapter {
   createUrlEnvName = 'BRIDGE_PAYOUT_CREATE_URL';
 }
 
+export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
+  providerName: PayoutProviderName = 'etherfuse';
+
+  async createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction> {
+    const options = input.providerOptions || {};
+    const runSandboxTest = readBoolean(options.run_etherfuse_offramp_test || options.runEtherfuseOffRampTest);
+    const sessionId = readText(options.session_id || options.sessionId);
+    const sessionToken = readText(options.session_token || options.sessionToken);
+    const walletPin = readText(options.wallet_pin || options.walletPin || options.pin);
+    const targetBrl = readText(options.target_brl || options.targetBrl);
+
+    if (runSandboxTest && sessionId && sessionToken && walletPin) {
+      const result = await AnchorService.runTemporarySandboxOffRampTest({
+        session_id: sessionId,
+        session_token: sessionToken,
+        pin: walletPin,
+        wallet_pin: walletPin,
+        source_asset_code: 'USDC',
+        source_amount: input.amountUsd,
+        amount: input.amountUsd,
+        target_brl: targetBrl || undefined,
+        external_bank_account: {
+          account_holder_name: input.destination.accountHolderName,
+          account_holder_type: input.destination.accountHolderType,
+          bank_name: input.destination.bankName,
+          country: input.destination.country,
+          provider_label: input.destination.providerLabel,
+        },
+      });
+
+      return {
+        payout_instruction_id: `etherfuse_instruction_${crypto.randomUUID()}`,
+        provider_name: 'etherfuse',
+        provider_payout_id: String(result.final_transaction?.id || result.transaction?.id || result.submit_result?.order_id || crypto.randomUUID()),
+        status: result.submitted ? 'completed' : 'pending',
+        destination: input.destination,
+        amount_usd: input.amountUsd,
+        currency: 'USD',
+        created_at: now(),
+        metadata: {
+          mode: 'etherfuse_sandbox_offramp_test',
+          rail: 'pix',
+          source_asset_code: 'USDC',
+          requested_source_amount: input.amountUsd,
+          target_brl: result.target_brl,
+          destination_amount: result.destination_amount,
+          destination_asset_code: result.destination_asset_code,
+          ready_to_sign: result.ready_to_sign,
+          submitted: result.submitted,
+          submit_hash: result.submit_result?.hash,
+          receipt_url: result.receipt_url,
+          order_id: result.transaction?.id,
+          final_status: result.final_transaction?.status,
+          balance_delta: result.balance_delta,
+          note: 'Etherfuse sandbox off-ramp was executed as the proof leg. No USD bank payout claim is made.',
+        },
+      };
+    }
+
+    return createInstruction(input, 'etherfuse', {
+      mode: 'etherfuse_sandbox_payload_prepared',
+      rail: 'pix',
+      execution_ready: Boolean(sessionId && sessionToken && walletPin),
+      run_etherfuse_offramp_test_requested: runSandboxTest,
+      source_asset_code: 'USDC',
+      requested_source_amount: input.amountUsd,
+      target_brl: targetBrl || null,
+      stellar_tx_hash: input.stellarTxHash,
+      stellar_memo: input.stellarMemo,
+      transfer_id: input.transferId,
+      destination_preview: {
+        account_holder_name: input.destination.accountHolderName,
+        account_holder_type: input.destination.accountHolderType,
+        bank_name: input.destination.bankName,
+        country: input.destination.country,
+        provider_label: input.destination.providerLabel,
+      },
+      note: 'Etherfuse off-ramp adapter prepared the sandbox proof payload. Send session_id, session_token, wallet_pin and run_etherfuse_offramp_test=true to execute the sandbox off-ramp test.',
+    });
+  }
+
+  async getPayoutStatus(_providerPayoutId: string): Promise<PayoutStatus> {
+    return 'pending';
+  }
+}
+
 export function getPayoutProviderAdapter(provider = process.env.PAYOUT_PROVIDER): PayoutProviderAdapter {
   const normalized = String(provider || 'mock').trim().toLowerCase();
   if (normalized === 'circle') return new CircleCompatibilityAdapter();
   if (normalized === 'bridge') return new BridgeCompatibilityAdapter();
+  if (normalized === 'etherfuse') return new EtherfusePixOffRampAdapter();
   return new MockUsdPayoutAdapter();
 }

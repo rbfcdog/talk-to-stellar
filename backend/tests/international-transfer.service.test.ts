@@ -236,5 +236,23 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(reconciliation.pix_order_id).toBe('pix-order-1');
     expect(reconciliation.stellar_tx_hash).toBe('stellar-hash-1');
     expect(reconciliation.provider_payout_id).toBe('provider-payout-1');
+    const evidence = reconciliation.evidence as any;
+    expect(evidence.on_off_ramp).toMatchObject({
+      on_ramp_provider: 'etherfuse',
+      on_ramp_order_id: 'pix-order-1',
+      off_ramp_provider: 'mock',
+    });
+    expect(evidence.metrics).toMatchObject({
+      source_amount_brl: '560',
+      fx_rate_brl_per_usd: '5.6',
+      baseline_usd_before_route_costs: '100',
+    });
+    expect(evidence.metric_validation).toMatchObject({
+      source_amount_positive: true,
+      fx_rate_positive: true,
+      fee_math_matches_delta: true,
+      route_delta_explained_by_fees: true,
+    });
+    expect(evidence.metrics_valid).toBe(true);
   });
 });

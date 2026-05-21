@@ -113,6 +113,19 @@ function pretty(value: unknown) {
   return JSON.stringify(value || {}, null, 2);
 }
 
+function redactSensitive(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+      if (/pin|token|secret|key|accountNumber|account_number/i.test(key)) {
+        return [key, item ? "[redacted]" : item];
+      }
+      return [key, redactSensitive(item)];
+    }),
+  );
+}
+
 function formatCurrency(value: unknown, currency: "BRL" | "USD") {
   const numeric = Number(String(value || "0").replace(",", "."));
   return new Intl.NumberFormat(currency === "BRL" ? "pt-BR" : "en-US", {
@@ -263,11 +276,13 @@ export default function InternationalTransferClient() {
   const [accountType, setAccountType] = useState<"checking" | "savings">("checking");
   const [country, setCountry] = useState("US");
   const [providerLabel, setProviderLabel] = useState<"wise" | "mercury" | "revolut" | "other">("other");
-  const [payoutProvider, setPayoutProvider] = useState<"mock" | "circle" | "bridge">("mock");
+  const [payoutProvider, setPayoutProvider] = useState<"mock" | "etherfuse" | "circle" | "bridge">("etherfuse");
   const [mockPix, setMockPix] = useState(true);
+  const [runEtherfuseOffRamp, setRunEtherfuseOffRamp] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [manualSessionId, setManualSessionId] = useState("");
   const [manualSessionToken, setManualSessionToken] = useState("");
+  const [walletPin, setWalletPin] = useState("");
   const [quote, setQuote] = useState<any>(null);
   const [transfer, setTransfer] = useState<any>(null);
   const [reconciliation, setReconciliation] = useState<any>(null);
@@ -322,6 +337,50 @@ export default function InternationalTransferClient() {
       retainedPct,
     };
   }, [brlAmount, quote, transfer?.quoted_usd_amount]);
+  const metricValidation = useMemo(() => {
+    const backendMetrics = reconciliation?.evidence?.metrics || {};
+    const backendValidation = reconciliation?.evidence?.metric_validation || {};
+    const totalFeeUsd = parseNumber(quote?.total_fee?.amount_usd_equivalent || transfer?.fees?.total_fee?.amount_usd_equivalent);
+    const impliedCostUsd = quoteDelta.baselineUsd > 0 ? Math.max(0, quoteDelta.baselineUsd - quoteDelta.finalUsd) : 0;
+    const feeDeltaUsd = Math.abs(impliedCostUsd - totalFeeUsd);
+    const checks = [
+      {
+        label: "Source amount is valid",
+        ok: quoteDelta.sourceBrl > 0 || backendValidation.source_amount_positive === true,
+        detail: formatCurrency(quoteDelta.sourceBrl, "BRL"),
+      },
+      {
+        label: "FX rate is valid",
+        ok: quoteDelta.fxRate > 0 || backendValidation.fx_rate_positive === true,
+        detail: quoteDelta.fxRate ? `${quoteDelta.fxRate.toFixed(6)} BRL/USD` : "-",
+      },
+      {
+        label: "Final value is non-negative",
+        ok: quoteDelta.finalUsd >= 0 || backendValidation.destination_not_negative === true,
+        detail: formatCurrency(quoteDelta.finalUsd, "USD"),
+      },
+      {
+        label: "Fees explain the route delta",
+        ok: quote ? feeDeltaUsd <= 0.02 : backendValidation.fee_math_matches_delta === true,
+        detail: quote ? `${formatCurrency(feeDeltaUsd, "USD")} variance` : "-",
+      },
+      {
+        label: "Retention is in expected range",
+        ok: quote ? quoteDelta.retainedPct >= 0 && quoteDelta.retainedPct <= 100.5 : backendValidation.retained_pct_in_expected_range === true,
+        detail: `${formatPercent(quoteDelta.retainedPct)} retained`,
+      },
+    ];
+
+    return {
+      backendMetrics,
+      backendValidation,
+      totalFeeUsd,
+      impliedCostUsd,
+      feeDeltaUsd,
+      checks,
+      allOk: checks.every((check) => check.ok),
+    };
+  }, [quote, quoteDelta, reconciliation, transfer?.fees?.total_fee?.amount_usd_equivalent]);
   const evidenceItems = useMemo(
     () => [
       { label: "Quote ID", value: quote?.quote_id, ready: Boolean(quote?.quote_id) },
@@ -387,9 +446,10 @@ export default function InternationalTransferClient() {
       generated_at: new Date().toISOString(),
       current_operation: busy || "idle",
       value_delta: quoteDelta,
-      quote,
-      transfer,
-      reconciliation,
+      metric_validation: metricValidation,
+      quote: redactSensitive(quote),
+      transfer: redactSensitive(transfer),
+      reconciliation: redactSensitive(reconciliation),
       events,
       api_logs: logs,
     };
@@ -435,7 +495,7 @@ export default function InternationalTransferClient() {
         path,
         status: response.status,
         durationMs: Math.round(performance.now() - startedAt),
-        request: body,
+        request: redactSensitive(body),
         response: payload,
       };
       setLogs((items) => [entry, ...items].slice(0, 8));
@@ -460,7 +520,7 @@ export default function InternationalTransferClient() {
           label,
           method,
           path,
-          request: body,
+          request: redactSensitive(body),
           error: message,
           durationMs: Math.round(performance.now() - startedAt),
         },
@@ -530,6 +590,11 @@ export default function InternationalTransferClient() {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
     const payload = await callApi("Create destination instruction", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/payout-instruction`, {
       provider: payoutProvider,
+      session_id: manualSessionId || sessionId || undefined,
+      session_token: manualSessionToken || undefined,
+      wallet_pin: walletPin || undefined,
+      run_etherfuse_offramp_test: payoutProvider === "etherfuse" && runEtherfuseOffRamp,
+      target_brl: quoteDelta.sourceBrl ? String(quoteDelta.sourceBrl) : undefined,
     });
     setTransfer(payload.transfer);
     return payload.transfer;
@@ -771,7 +836,8 @@ export default function InternationalTransferClient() {
               value={payoutProvider}
               onChange={setPayoutProvider}
               options={[
-                { value: "mock", label: "Mock" },
+                { value: "etherfuse", label: "Etherfuse off-ramp proof" },
+                { value: "mock", label: "Mock USD instruction" },
                 { value: "circle", label: "Circle compatibility" },
                 { value: "bridge", label: "Bridge compatibility" },
               ]}
@@ -785,10 +851,24 @@ export default function InternationalTransferClient() {
               />
               Mock source funding intent
             </label>
+            {payoutProvider === "etherfuse" ? (
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={runEtherfuseOffRamp}
+                  onChange={(event) => setRunEtherfuseOffRamp(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Execute Etherfuse off-ramp sandbox proof
+              </label>
+            ) : null}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Session ID" value={manualSessionId} onChange={setManualSessionId} placeholder={sessionId || "cookie"} />
               <Field label="Session token" value={manualSessionToken} onChange={setManualSessionToken} placeholder="cookie" />
             </div>
+            {payoutProvider === "etherfuse" && runEtherfuseOffRamp ? (
+              <Field label="Wallet PIN for off-ramp" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute Etherfuse off-ramp" />
+            ) : null}
           </div>
 
           <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -995,6 +1075,72 @@ export default function InternationalTransferClient() {
             </div>
           </section>
 
+          <section className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <QrCode className="h-5 w-5 text-emerald-700" aria-hidden="true" />
+                <h2 className="text-base font-bold text-slate-950">On/off ramp proof</h2>
+              </div>
+              <div className="grid gap-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">On-ramp</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">Etherfuse PIX funding</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-600">{mockPix ? "Sandbox mock intent enabled" : "Real Etherfuse intent mode"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Off-ramp</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{payoutProvider === "etherfuse" ? "Etherfuse off-ramp proof" : `${payoutProvider} destination adapter`}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-600">
+                    {payoutProvider === "etherfuse"
+                      ? runEtherfuseOffRamp
+                        ? "Will execute sandbox proof when credentials and PIN are present."
+                        : "Will prepare an Etherfuse off-ramp payload without signing."
+                      : "USD bank payout remains sandbox/provider-compatible."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-cyan-700" aria-hidden="true" />
+                  <h2 className="text-base font-bold text-slate-950">Metric validation</h2>
+                </div>
+                <StatusPill state={metricValidation.allOk ? "ok" : quote ? "error" : "idle"}>
+                  {metricValidation.allOk ? "valid" : quote ? "check" : "waiting"}
+                </StatusPill>
+              </div>
+              <div className="grid gap-2">
+                {metricValidation.checks.map((check) => (
+                  <div key={check.label} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    {check.ok ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-red-400" aria-hidden="true" />
+                    )}
+                    <span className="font-semibold text-slate-700">{check.label}</span>
+                    <span className="truncate text-right font-mono text-xs text-slate-600">{check.detail}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Total fee</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{quote ? formatCurrency(metricValidation.totalFeeUsd, "USD") : "-"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Implied cost</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{quote ? formatCurrency(metricValidation.impliedCostUsd, "USD") : "-"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Variance</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{quote ? formatCurrency(metricValidation.feeDeltaUsd, "USD") : "-"}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Network className="h-5 w-5 text-sky-800" aria-hidden="true" />
@@ -1049,21 +1195,21 @@ export default function InternationalTransferClient() {
                 <Code2 className="h-5 w-5 text-slate-300" aria-hidden="true" />
                 <h2 className="text-base font-bold">Quote</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(quote)}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(redactSensitive(quote))}</pre>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-slate-100 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-slate-300" aria-hidden="true" />
                 <h2 className="text-base font-bold">Settlement record</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(transfer)}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(redactSensitive(transfer))}</pre>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-slate-100 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-slate-300" aria-hidden="true" />
                 <h2 className="text-base font-bold">Reconciliation</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(reconciliation)}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-5 text-slate-200">{pretty(redactSensitive(reconciliation))}</pre>
             </div>
           </section>
 

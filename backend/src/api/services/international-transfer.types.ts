@@ -15,7 +15,7 @@ export const INTERNATIONAL_TRANSFER_STATES = [
 export type InternationalTransferState = typeof INTERNATIONAL_TRANSFER_STATES[number];
 export type QuoteStatus = 'ACTIVE' | 'EXPIRED' | 'ACCEPTED' | 'CANCELLED';
 export type SameNameMatchStatus = 'MATCHED' | 'MISMATCHED' | 'UNKNOWN';
-export type PayoutProviderName = 'mock' | 'circle' | 'bridge';
+export type PayoutProviderName = 'mock' | 'circle' | 'bridge' | 'etherfuse';
 export type PayoutStatus = 'instruction_created' | 'pending' | 'completed' | 'failed' | 'cancelled';
 
 export type CurrencyFee = {

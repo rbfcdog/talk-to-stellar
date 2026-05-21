@@ -63,6 +63,13 @@ export class InternationalTransfersController {
       const transfer = await internationalTransferService.createPayoutInstruction(
         String(req.params.id),
         req.body?.provider || req.body?.payout_provider || req.body?.payoutProvider,
+        {
+          session_id: req.body?.session_id || req.body?.sessionId,
+          session_token: req.body?.session_token || req.body?.sessionToken,
+          wallet_pin: req.body?.wallet_pin || req.body?.walletPin || req.body?.pin,
+          run_etherfuse_offramp_test: req.body?.run_etherfuse_offramp_test ?? req.body?.runEtherfuseOffRampTest,
+          target_brl: req.body?.target_brl || req.body?.targetBrl,
+        },
       );
       res.status(201).json({ success: true, transfer });
     } catch (error: any) {

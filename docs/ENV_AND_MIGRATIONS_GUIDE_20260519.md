@@ -68,11 +68,12 @@ USDC_ASSET_CODE="USDC"
 USDC_ASSET_ISSUER="testnet-or-mainnet-usdc-issuer"
 ETHERFUSE_API_KEY="api_sand_or_live_key"
 ETHERFUSE_WEBHOOK_SECRET="shared-webhook-secret"
-PAYOUT_PROVIDER="mock"
+PAYOUT_PROVIDER="etherfuse"
 ENABLE_REAL_PAYOUT_EXECUTION="false"
 ENABLE_MAINNET_SETTLEMENT_VALIDATION="false"
 MAX_MAINNET_VALIDATION_AMOUNT_USD="25"
 INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX="true"
+ETHERFUSE_SANDBOX_PIX_FALLBACK="true"
 ```
 
 Minimum frontend env:
@@ -85,10 +86,13 @@ ETHERFUSE_WEBHOOK_SECRET="shared-webhook-secret"
 
 Notes:
 
-- Keep `PAYOUT_PROVIDER=mock` until Circle/Bridge credentials and compliance approval are ready.
+- Use `PAYOUT_PROVIDER=etherfuse` for the institution rail tester when you want the on-ramp and off-ramp proof surfaces to be Etherfuse-shaped. The off-ramp proof prepares a sandbox payload by default.
+- Use `PAYOUT_PROVIDER=mock` only when you want a pure USD payout mock without Etherfuse off-ramp evidence.
+- Keep Circle/Bridge credentials disabled until provider credentials and compliance approval are ready.
 - Keep `STELLAR_NETWORK=TESTNET` while the rest of the app is still operating on testnet.
 - `ENABLE_REAL_PAYOUT_EXECUTION=false` prevents real payout execution even if a compatibility adapter is selected.
 - `INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true` lets the tester create sandbox funding intents without requiring a real Pix payment.
+- `ETHERFUSE_SANDBOX_PIX_FALLBACK=true` lets Etherfuse sandbox off-ramp tests fall back to local PIX settlement proof when no sandbox fiat account is registered.
 - The tables have RLS enabled, but the backend writes with `SUPABASE_SERVICE_ROLE_KEY`. Do not use anon/browser keys for these settlement records.
 
 ## 1. Backend env
