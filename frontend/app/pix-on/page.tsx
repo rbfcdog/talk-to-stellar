@@ -5,7 +5,13 @@ export const metadata = {
   description: "Add money with PIX and receive BRL or USDC in your TalkToStellar account.",
 };
 
-function serializeSearchParams(searchParams?: Record<string, string | string[] | undefined>) {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+async function resolveSearchParams(searchParams?: SearchParams | Promise<SearchParams>) {
+  return Promise.resolve(searchParams || {});
+}
+
+function serializeSearchParams(searchParams?: SearchParams) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams || {})) {
     if (Array.isArray(value)) {
@@ -18,10 +24,11 @@ function serializeSearchParams(searchParams?: Record<string, string | string[] |
   return params.toString();
 }
 
-export default function PixOnPage({
+export default async function PixOnPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: SearchParams | Promise<SearchParams>;
 }) {
-  return <PixRampClient initialQuery={serializeSearchParams(searchParams)} lockedMode="onramp" />;
+  const resolved = await resolveSearchParams(searchParams);
+  return <PixRampClient initialQuery={serializeSearchParams(resolved)} lockedMode="onramp" />;
 }

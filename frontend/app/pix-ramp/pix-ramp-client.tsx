@@ -396,6 +396,7 @@ export default function PixRampClient({
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
+  const [queryReady, setQueryReady] = useState(false);
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferRecipientKey, setTransferRecipientKey] = useState("");
@@ -578,8 +579,12 @@ export default function PixRampClient({
       {
         label: L("Estimativa", "Estimate"),
         detail: quote
-          ? L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
-          : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
+          ? transferFlow && transferRecipientLabel
+            ? L(`${formatMoney(quote.fromAmount || amountBrl)} via PIX para enviar a ${transferRecipientLabel}.`, `${formatMoney(quote.fromAmount || amountBrl)} via PIX to send to ${transferRecipientLabel}.`)
+            : L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
+          : transferFlow && transferRecipientLabel
+            ? L(`Alvo: mandar ${formatMoney(amountBrl)} para ${transferRecipientLabel}.`, `Target: send ${formatMoney(amountBrl)} to ${transferRecipientLabel}.`)
+            : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
         state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
       },
       {
@@ -651,7 +656,10 @@ export default function PixRampClient({
   }, []);
 
   useEffect(() => {
-    if (queryAppliedRef.current) return;
+    if (queryAppliedRef.current) {
+      setQueryReady(true);
+      return;
+    }
     queryAppliedRef.current = true;
 
     const params = new URLSearchParams(queryString);
@@ -708,6 +716,7 @@ export default function PixRampClient({
     if (recipientPublicKey) setTransferRecipientPublicKey(recipientPublicKey);
     if (payAmount) setAutoPayAmount(payAmount);
     if (payAsset === "BRL" || payAsset === "USDC") setAutoPayAsset(payAsset);
+    setQueryReady(true);
   }, [lockedMode, queryString]);
 
   useEffect(() => {
@@ -1254,6 +1263,7 @@ export default function PixRampClient({
   useEffect(() => {
     const params = new URLSearchParams(queryString);
     if (params.get("autostart") !== "1") return;
+    if (!queryReady) return;
     if (autoStartedRef.current) return;
     if (rampMode !== "onramp") return;
     if (operationLocked) return;
@@ -1261,7 +1271,7 @@ export default function PixRampClient({
 
     autoStartedRef.current = true;
     void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
-  }, [canResolveWallet, loading, operationLocked, order, queryString, quote, rampMode, waitingForReceiveEstimate]);
+  }, [canResolveWallet, loading, operationLocked, order, queryReady, queryString, quote, rampMode, waitingForReceiveEstimate]);
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
@@ -1466,7 +1476,11 @@ export default function PixRampClient({
             </div>
             <div className="space-y-4">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                  {rampMode === "onramp" ? t("pix_add_title") : t("pix_send_title")}
+                  {rampMode === "onramp"
+                    ? transferFlow && transferRecipientLabel
+                      ? L(`Pagar ${transferRecipientLabel} com PIX`, `Pay ${transferRecipientLabel} with PIX`)
+                      : t("pix_add_title")
+                    : t("pix_send_title")}
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                   {rampMode === "onramp"
@@ -1679,7 +1693,11 @@ export default function PixRampClient({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">PIX</p>
-                <h2 className="mt-1 text-2xl font-black text-white">{L("Quanto você quer colocar?", "How much do you want to add?")}</h2>
+                <h2 className="mt-1 text-2xl font-black text-white">
+                  {transferFlow && transferRecipientLabel
+                    ? L(`Quanto você quer mandar para ${transferRecipientLabel}?`, `How much do you want to send to ${transferRecipientLabel}?`)
+                    : L("Quanto você quer colocar?", "How much do you want to add?")}
+                </h2>
               </div>
             </div>
 
