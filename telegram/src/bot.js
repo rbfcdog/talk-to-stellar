@@ -6,7 +6,12 @@ function formatWelcomeMessage() {
   return [
     'Olá — TalkToStellar está online no Telegram!',
     '',
-    'Envie uma mensagem como “enviar 10 USDC para Ana” e eu enviarei para o agente.',
+    'Posso ajudar com saldo, PIX, contatos, pagamentos e conversões.',
+    'Exemplos:',
+    '1. saldo',
+    '2. colocar 10 reais via PIX',
+    '3. enviar 5 dólares para Ana',
+    '4. histórico',
     'Use /reset para limpar a sessão local.',
   ].join('\n');
 }

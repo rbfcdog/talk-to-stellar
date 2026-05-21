@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
 import { clearClientSession, getClientSession, isClientSessionExpired, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
+import { publicErrorPayload } from "@/lib/public-errors";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/ui/feedback";
 import { useLanguage } from "@/lib/i18n";
@@ -174,6 +175,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const selectedMeta = chatMeta[chatId] || chatMeta.agent;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [retryText, setRetryText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [browserSessionExpired, setBrowserSessionExpired] = useState(false);
@@ -559,6 +561,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    const submittedText = input.trim();
 
     let activeSessionId = sessionId;
     let requestBrowserSessionExpired = browserSessionExpiredRef.current;
@@ -590,12 +593,13 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: input,
+      content: submittedText,
       createdAt: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
+    setRetryText('');
     setIsLoading(true);
 
     try {
@@ -693,10 +697,13 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
     } catch (error) {
       console.error("Error in handleSubmit:", error);
+      const publicError = publicErrorPayload(error, { language });
+      setRetryText(userMessage.content);
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `${t("chat_error_prefix")}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: `${publicError.message}\n\n${L("Código de suporte", "Support code")}: ${publicError.support_code}`,
+        createdAt: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -773,11 +780,24 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-4 text-[#aebac1] sm:gap-5">
-          <Video className="h-5 w-5 cursor-pointer"/>
-          <Phone className="h-5 w-5 cursor-pointer"/>
-          <Search className="h-5 w-5 cursor-pointer"/>
-          <MoreVertical className="h-5 w-5 cursor-pointer"/>
+        <div className="flex shrink-0 items-center gap-2 text-[#aebac1] sm:gap-3">
+          {[
+            { Icon: Video, label: L("Chamada de vídeo indisponível nesta demo", "Video call unavailable in this demo") },
+            { Icon: Phone, label: L("Chamada indisponível nesta demo", "Call unavailable in this demo") },
+            { Icon: Search, label: L("Busca indisponível nesta demo", "Search unavailable in this demo") },
+            { Icon: MoreVertical, label: L("Mais opções indisponível nesta demo", "More options unavailable in this demo") },
+          ].map(({ Icon, label }) => (
+            <button
+              key={label}
+              type="button"
+              aria-label={label}
+              title={label}
+              disabled
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#aebac1] opacity-60"
+            >
+              <Icon className="h-5 w-5" />
+            </button>
+          ))}
         </div>
       </div>
 
@@ -829,6 +849,22 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
       </div>
 
       <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
+        {retryText && !isLoading && chatId === "agent" && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100">
+            <span>{L("A última mensagem não concluiu.", "The last message did not complete.")}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setInput(retryText);
+                setRetryText("");
+                window.setTimeout(() => inputRef.current?.focus(), 0);
+              }}
+              className="shrink-0 rounded-full bg-amber-200 px-3 py-1 font-black text-amber-950 transition hover:bg-amber-100"
+            >
+              {L("Tentar novamente", "Try again")}
+            </button>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />
           <Paperclip className="hidden h-6 w-6 text-[#8696a0] sm:block" />
@@ -838,7 +874,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             onChange={(e) => setInput(e.target.value)}
             placeholder={browserSessionExpired ? L("Digite login para receber um novo link", "Type login to receive a new link") : t("chat_input_placeholder")}
             className="h-11 min-w-0 flex-1 truncate rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
-            disabled={isLoading}
           />
           {input.trim() ? (
             <Button type="submit" size="icon" className="h-10 w-10 rounded-full bg-transparent text-[#8696a0] hover:bg-transparent" disabled={isLoading}>

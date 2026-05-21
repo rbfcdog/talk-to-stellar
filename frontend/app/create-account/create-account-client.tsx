@@ -25,6 +25,8 @@ type FinalizeResponse = {
   devCode?: string
 }
 
+const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID()
@@ -299,6 +301,19 @@ export default function CreateAccountClient({
       finishTelegramFlow(L(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`, `Account created successfully.\nConnected account: ${resolvedUserId || "user"}`))
     } else {
       finishAndClose(L(`Conta criada com sucesso.\nConta conectada: ${resolvedUserId || "usuário"}`, `Account created successfully.\nConnected account: ${resolvedUserId || "user"}`))
+    }
+  }
+
+  function finishWithoutPasskey() {
+    const connectedLabel = email || name || result?.userId || L("usuário", "user")
+    const feedback = L(
+      `Conta criada com sucesso.\nConta conectada: ${connectedLabel}`,
+      `Account created successfully.\nConnected account: ${connectedLabel}`,
+    )
+    if (isTelegramContext) {
+      finishTelegramFlow(feedback)
+    } else {
+      finishAndClose(feedback)
     }
   }
 
@@ -621,6 +636,9 @@ export default function CreateAccountClient({
         return
       }
       if (payload?.emailConfirmationRequired) {
+        if (!EMAIL_CONFIRMATION_ENABLED) {
+          throw new Error(L("Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat ou entre com PIN.", "Email confirmation is disabled in this environment. Request a new link in chat or sign in with PIN."))
+        }
         setEmailConfirmationRequired(true)
         setResult(payload)
         setStatus("ready")
@@ -853,6 +871,9 @@ export default function CreateAccountClient({
 
       const payload = await response.json().catch(() => ({}))
       if (payload?.emailConfirmationRequired) {
+        if (!EMAIL_CONFIRMATION_ENABLED) {
+          throw new Error(L("Confirmação por e-mail está desativada neste ambiente. Entre com PIN pelo link do chat.", "Email confirmation is disabled in this environment. Sign in with PIN from the chat link."))
+        }
         setExistingEmailConfirmationRequired(true)
         setExistingStatus("idle")
         setExistingError(String(payload?.message || "Enter the code sent by email to continue."))
@@ -1014,10 +1035,10 @@ export default function CreateAccountClient({
                   onChange={(event) => setRequestPasskey(event.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
                 />
-                <span>{L("Ativar passkey agora (recomendado para login rápido e seguro).", "Enable passkey now (recommended for fast, secure login).")}</span>
+                <span>{L("Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.", "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.")}</span>
               </label>
 
-              {emailConfirmationRequired && (
+              {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
                 <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
                   <span className="text-sm font-medium text-cyan-50">{L("Código enviado por e-mail", "Code sent by email")}</span>
                   <input
@@ -1038,10 +1059,10 @@ export default function CreateAccountClient({
 
               <button
                 type="submit"
-                disabled={submitLocked || !pin.trim() || !pinConfirm.trim() || (emailConfirmationRequired && emailConfirmationCode.length !== 6)}
+                disabled={submitLocked || !pin.trim() || !pinConfirm.trim() || (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("Finalizar conta", "Finish account")}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("Finalizar conta", "Finish account")}
               </button>
             </form>
 
@@ -1082,10 +1103,19 @@ export default function CreateAccountClient({
                       ? L('Preparando biometria...', 'Preparing biometrics...')
                       : passkeyStatus === 'registering'
                         ? L('Abrindo biometria...', 'Opening biometrics...')
-                        : L('Ativar biometria', 'Enable biometrics')}
+                        : L('Opcional: ativar biometria', 'Optional: enable biometrics')}
                   </button>
+                  {passkeyStatus !== "registering" && passkeyStatus !== "preparing" && passkeyStatus !== "done" && (
+                    <button
+                      type="button"
+                      onClick={finishWithoutPasskey}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                    >
+                      {L("Pular por agora e continuar com PIN", "Skip for now and continue with PIN")}
+                    </button>
+                  )}
                   <p className="text-xs text-slate-400">
-                    {L("Toque no botão para abrir a confirmação por digital, Face ID ou desbloqueio do celular.", "Tap the button to confirm with fingerprint, Face ID, or your phone unlock.")}
+                    {L("Passkey é opcional. Se o celular demorar ou cancelar, continue com PIN.", "Passkey is optional. If the phone times out or cancels, continue with PIN.")}
                   </p>
                   {passkeyHint && <p className="text-xs text-cyan-200">{passkeyHint}</p>}
                   {passkeyQrImageUrl && (

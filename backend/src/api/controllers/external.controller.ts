@@ -22,6 +22,7 @@ import {
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getRequiredJwtSecret } from '../../config/secrets';
 import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
+import { publicErrorMessage } from '../../utils/public-error';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
@@ -679,11 +680,11 @@ export class ExternalController {
 
         if (sessionsByEmailResp.error) {
           console.error(`${reqTag} sessionsByEmail query error: ${sessionsByEmailResp.error.message}`);
-          return res.status(500).json({ success: false, message: sessionsByEmailResp.error.message });
+          return res.status(500).json({ success: false, message: publicErrorMessage(sessionsByEmailResp.error) });
         }
         if (sessionsByUserIdResp.error) {
           console.error(`${reqTag} sessionsByUserId query error: ${sessionsByUserIdResp.error.message}`);
-          return res.status(500).json({ success: false, message: sessionsByUserIdResp.error.message });
+          return res.status(500).json({ success: false, message: publicErrorMessage(sessionsByUserIdResp.error) });
         }
 
         const dedupeBySessionId = new Map<string, any>();

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { buildSessionHeaders, readSessionCookies } from "@/lib/server-session";
+import { publicErrorPayload } from "@/lib/public-errors";
 
 const getBackendBaseUrl = () => {
   const raw =
@@ -87,9 +88,11 @@ function generateSessionId(): string {
 
 export async function POST(req: Request) {
   let sessionId: string | null = null;
+  let requestLanguage = "pt-BR";
 
   try {
     const { messages, session_id, source, metadata, language } = await req.json();
+    requestLanguage = language || metadata?.language || "pt-BR";
     const browserSessionExpired = metadata?.browser_session_expired === true || metadata?.force_relogin === true;
     const session = browserSessionExpired ? { sessionId: "", sessionToken: "" } : readSessionCookies(req);
     const userMessage = messages?.[messages.length - 1];
@@ -158,12 +161,14 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("Next.js API proxy error:", message);
+    const payload = publicErrorPayload(error, { code: "chat_unavailable", language: requestLanguage });
+    console.error("Next.js API proxy error:", message, payload.support_code);
     return NextResponse.json({ 
-      error: message,
-      content: `Error: ${message}`,
+      ...payload,
+      error: payload.message,
+      content: `${payload.message}\n\n${requestLanguage === "en" ? "Support code" : "Código de suporte"}: ${payload.support_code}`,
       session_id: sessionId || null 
-    }, { status: 500 });
+    }, { status: 502 });
   }
 }
 
@@ -206,7 +211,8 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("Next.js API messages proxy error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const payload = publicErrorPayload(error, { code: "chat_messages_unavailable" });
+    console.error("Next.js API messages proxy error:", message, payload.support_code);
+    return NextResponse.json({ ...payload, error: payload.message }, { status: 502 });
   }
 }

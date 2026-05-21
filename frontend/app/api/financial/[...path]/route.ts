@@ -5,6 +5,7 @@ import {
   buildSessionHeaders,
   passthroughResponseWithSession,
 } from "@/lib/server-session";
+import { publicErrorPayload } from "@/lib/public-errors";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -47,13 +48,8 @@ async function proxy(req: NextRequest, path: string[]) {
     const text = await res.text();
     return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL on frontend deployment.`,
-      },
-      { status: 502 }
-    );
+    console.error("[financial-proxy] request failed", { target, error: error?.message || error });
+    return NextResponse.json(publicErrorPayload(error, { code: "financial_service_unavailable" }), { status: 502 });
   }
 }
 

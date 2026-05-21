@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AnchorService } from '../services/anchor.service';
 import { timingSafeEqualString } from '../../utils/password';
+import { publicErrorMessage } from '../../utils/public-error';
 
 function statusFromError(error: any): number {
   const status = Number(error?.statusCode || error?.status || 500);
@@ -9,7 +10,7 @@ function statusFromError(error: any): number {
 }
 
 function errorMessage(error: any): string {
-  return error instanceof Error ? error.message : String(error || 'Unknown error');
+  return publicErrorMessage(error, 'Nao consegui concluir a operacao PIX agora. Tente novamente em alguns segundos.');
 }
 
 function errorPayload(error: any): Record<string, unknown> {

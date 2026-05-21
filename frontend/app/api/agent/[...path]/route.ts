@@ -5,6 +5,7 @@ import {
   buildSessionHeaders,
   passthroughResponseWithSession,
 } from "@/lib/server-session";
+import { publicErrorPayload } from "@/lib/public-errors";
 
 function getBackendBaseUrl() {
   const raw =
@@ -44,13 +45,8 @@ async function proxy(req: NextRequest, path: string[]) {
     const text = await res.text();
     return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Agent proxy error: ${error?.message || "fetch failed"}. Check BACKEND_URL or AGENT_API_URL.`,
-      },
-      { status: 502 }
-    );
+    console.error("[agent-proxy] request failed", { target, error: error?.message || error });
+    return NextResponse.json(publicErrorPayload(error, { code: "agent_unavailable" }), { status: 502 });
   }
 }
 
