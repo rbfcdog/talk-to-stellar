@@ -292,7 +292,7 @@ function buildFeeSummary(input: {
   return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
-function buildMobileConfirmedFeedback(payload: any, language: AppLanguage) {
+function buildConfirmedFeedback(payload: any, language: AppLanguage) {
   const amount = String(
     payload?.destination_amount ||
     payload?.amount ||
@@ -324,7 +324,7 @@ function buildMobileConfirmedFeedback(payload: any, language: AppLanguage) {
   const recipientKey = formatRecipientKey(payload)
 
   return [
-    T(language, "Pagamento confirmado pelo celular.", "Payment confirmed on mobile."),
+    T(language, "Pagamento confirmado.", "Payment confirmed."),
     amount && asset ? `${T(language, "Valor", "Amount")}: ${formatPaymentAmount(amount, asset)}` : "",
     `${T(language, "Destino", "Destination")}: ${formatRecipientLabel(payload, language)}`,
     recipientKey ? `${T(language, "Chave", "Key")}: ${recipientKey}` : "",
@@ -443,9 +443,9 @@ export default function ConfirmPaymentClient({
             success: true,
             valid: true,
             payload: payload?.payload || fallbackPayload,
-            message: T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."),
+            message: T(feedbackLanguage, "Confirmação em andamento...", "Confirmation in progress..."),
           })
-          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."))
+          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento...", "Confirmation in progress..."))
           return
         }
         if (!response.ok || !payload?.valid) {
@@ -489,13 +489,13 @@ export default function ConfirmPaymentClient({
         if (cancelled) return
 
         if (response.status === 409 && payload?.processing) {
-          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento no celular...", "Confirmation in progress on mobile..."))
+          setMobileSyncStatus(T(feedbackLanguage, "Confirmação em andamento...", "Confirmation in progress..."))
           return
         }
 
         if (response.status === 409 && payload?.used) {
           const payloadForFeedback = payload?.payload || validation?.payload || decodeJwtPayload(token)
-          const feedback = buildMobileConfirmedFeedback(payloadForFeedback, feedbackLanguage)
+          const feedback = buildConfirmedFeedback(payloadForFeedback, feedbackLanguage)
           submitLockRef.current = true
           setResult((prev) => prev || {
             success: true,
@@ -730,7 +730,7 @@ export default function ConfirmPaymentClient({
         const serverMessage = String(payload?.message || payload?.error || "")
         if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
           submitLockRef.current = false
-          setMobileSyncStatus("Biometric challenge expired while switching devices. Generating a new challenge...")
+          setMobileSyncStatus("A confirmação expirou. Gerando uma nova confirmação...")
           setPasskeyStatus("starting")
           await handlePasskeyConfirm(attempt + 1)
           return
@@ -743,7 +743,7 @@ export default function ConfirmPaymentClient({
       const message = getPasskeyErrorMessage(error)
       if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
         submitLockRef.current = false
-        setMobileSyncStatus("Biometric challenge expired while switching devices. Generating a new challenge...")
+        setMobileSyncStatus("A confirmação expirou. Gerando uma nova confirmação...")
         setPasskeyStatus("starting")
         await handlePasskeyConfirm(attempt + 1)
         return
