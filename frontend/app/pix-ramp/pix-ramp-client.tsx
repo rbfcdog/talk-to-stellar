@@ -353,6 +353,16 @@ function hideInternalAssetNames(value: unknown): unknown {
   }));
 }
 
+function getRampCustomerId(payload: RampResponse | null | undefined) {
+  return String(
+    payload?.customer?.id ||
+    payload?.customer?.customerId ||
+    payload?.customer_id ||
+    payload?.customerId ||
+    "",
+  ).trim();
+}
+
 function formatDebugJson(value: unknown) {
   return JSON.stringify(hideInternalAssetNames(value || {}), null, 2);
 }
@@ -498,9 +508,6 @@ export default function PixRampClient({
   const needsBrowserLoginForPix = Boolean(!hasSession && !allowEmailAccountLookup);
   const needsBrowserLoginForChatLink = Boolean(launchedFromChat && !hasSession);
   const canResolveWallet = Boolean(!etherfuseRailUnavailable && (hasSession || (allowEmailAccountLookup && rampEmail.trim())));
-  const customer = customerPayload?.customer;
-  const customerId = String(customer?.id || "");
-  const bankAccountId = String(customer?.bankAccountId || "");
   const quote = quotePayload?.quote;
   const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
   const order = statusPayload?.transaction || orderPayload?.transaction;
@@ -578,6 +585,8 @@ export default function PixRampClient({
             ? L("Conta localizada.", "Account found.")
             : needsBrowserLoginForPix
               ? L("Entre com PIN para continuar com sua conta.", "Sign in with PIN to continue with your account.")
+              : hasSession
+                ? L("Sessão detectada. Preparando sua conta PIX.", "Session detected. Preparing your PIX account.")
               : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
           state: walletPublicKey ? "done" : needsBrowserLoginForPix ? "warning" : loading === "Resolving account" ? "active" : "pending",
         },
@@ -621,6 +630,8 @@ export default function PixRampClient({
               ? needsBrowserLoginForChatLink
                 ? L("A sessão deste navegador não foi detectada. Entre com PIN para continuar este PIX aberto pelo chat.", "This browser session was not detected. Sign in with PIN to continue this PIX opened from chat.")
                 : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
+              : hasSession
+                ? L("Sessão detectada. Preparando sua conta PIX.", "Session detected. Preparing your PIX account.")
               : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
         state: walletPublicKey ? "done" : needsBrowserLoginForPix ? "warning" : loading === "Resolving account" ? "active" : "pending",
       },
@@ -699,6 +710,7 @@ export default function PixRampClient({
     autoPayAsset,
     pixFundedTransferResult,
     walletPublicKey,
+    hasSession,
     needsBrowserLoginForPix,
     needsBrowserLoginForChatLink,
     L,
@@ -1253,15 +1265,19 @@ export default function PixRampClient({
     setWalletPin("");
 
     const auth = await resolveWalletFromEmail();
-    const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
+    const customerResult = getRampCustomerId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
+    const quoteCustomerId = getRampCustomerId(customerResult);
+    if (!quoteCustomerId) {
+      throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente gerar o PIX outra vez.", "I could not prepare your PIX account right now. Sign in again and try generating PIX again."));
+    }
     setCustomerPayload(customerResult);
     setProgrammaticOnboarding(customerResult?.programmatic_onboarding || null);
 
     const payload = await callRamp("/api/ramp/etherfuse/quote", {
-      customer_id: customerResult?.customer?.id,
+      customer_id: quoteCustomerId,
       direction: "onramp",
       from_currency: "BRL",
       to_currency: "TESOURO",
@@ -1281,13 +1297,14 @@ export default function PixRampClient({
       let quoteForOrder = quote;
       let customerForOrder = customerPayload;
       let authForOrder: RampAuth | undefined;
-      if (!quoteForOrder?.id || quoteStaleForOrder) {
+      const quoteNeedsCustomerRefresh = Boolean(quoteForOrder?.id && !getRampCustomerId(customerForOrder));
+      if (!quoteForOrder?.id || quoteStaleForOrder || quoteNeedsCustomerRefresh) {
         addDebugLog({
-          label: quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
+          label: quoteNeedsCustomerRefresh ? "Quote has no customer context, refreshing" : quoteForOrder?.id ? "Quote too close to expiration before order, refreshing" : "No quote available, creating quote before order",
           method: "POST",
           path: "/api/ramp/etherfuse/quote",
           request: { amount: amountBrl, targetAsset, desiredFinalAmount, desiredFinalAsset },
-          response: { reason: quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
+          response: { reason: quoteNeedsCustomerRefresh ? "missing_customer_context" : quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
         });
         const fresh = await requestQuote();
         authForOrder = fresh.auth;
@@ -1295,13 +1312,17 @@ export default function PixRampClient({
         customerForOrder = fresh.customerResult;
       }
       if (!quoteForOrder?.id) throw new Error(L("Peça uma estimativa primeiro.", "Request an estimate first."));
+      const orderCustomerId = getRampCustomerId(customerForOrder);
+      if (!orderCustomerId) {
+        throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente gerar o PIX outra vez.", "I could not prepare your PIX account right now. Sign in again and try generating PIX again."));
+      }
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
       setOnRampBalancesAfter([]);
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
-        customer_id: String(customerForOrder?.customer?.id || customerId),
+        customer_id: orderCustomerId,
         quote_id: quoteForOrder.id,
         amount: amountBrl,
         expected_to_amount: quoteForOrder.toAmount,
@@ -1456,15 +1477,19 @@ export default function PixRampClient({
 
   async function previewOffRampFees() {
     const auth = await resolveWalletFromEmail();
-    const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
+    const customerResult = getRampCustomerId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
+    const previewCustomerId = getRampCustomerId(customerResult);
+    if (!previewCustomerId) {
+      throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente calcular a taxa outra vez.", "I could not prepare your PIX account right now. Sign in again and try calculating the fee again."));
+    }
     setCustomerPayload(customerResult);
     const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
     const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
       intent_id: atomicIntentKey,
-      customer_id: customerResult?.customer?.id,
+      customer_id: previewCustomerId,
       amount: sourceAmount,
       source_amount: sourceAmount,
       source_asset_code: offRampInputAsset,
