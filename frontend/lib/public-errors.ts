@@ -54,7 +54,7 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
-  if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|already used|ja foi utilizado/.test(normalized)) {
+  if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|invalid or expired link|already used|ja foi utilizado/.test(normalized)) {
     return {
       code: "link_expired",
       message: copy(language, "Esse link expirou ou já foi usado. Peça um novo link no chat.", "This link expired or was already used. Request a new link in chat."),
@@ -86,6 +86,13 @@ export function mapPublicError(error: unknown, language?: string) {
     return {
       code: "insufficient_balance",
       message: copy(language, "Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.", "Insufficient balance. Add funds with PIX and try again."),
+    };
+  }
+
+  if (/nao consegui encontrar uma rota segura|nao foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)) {
+    return {
+      code: "conversion_route_unavailable",
+      message: copy(language, "Não consegui encontrar uma rota segura para essa conversão agora. Tente novamente em alguns segundos ou escolha outro valor.", "I could not find a safe route for this conversion right now. Try again in a few seconds or choose another amount."),
     };
   }
 

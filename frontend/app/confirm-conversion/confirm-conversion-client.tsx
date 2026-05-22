@@ -7,6 +7,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
+import { mapPublicError } from "@/lib/public-errors"
 
 type ValidationResult = {
   success?: boolean
@@ -116,6 +117,10 @@ function getProviderLabel(provider?: string) {
   return normalized ? normalized : ""
 }
 
+function publicConversionErrorMessage(error: unknown, language: AppLanguage) {
+  return mapPublicError(error, language).message
+}
+
 export default function ConfirmConversionClient({
   initialToken = '',
   initialValidation = null,
@@ -160,7 +165,7 @@ export default function ConfirmConversionClient({
             success: false,
             valid: false,
             payload: fallbackPayload,
-            message: payload?.message || "Invalid or expired link. Generate a new confirmation link.",
+            message: publicConversionErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
           })
           return
         }
@@ -196,8 +201,14 @@ export default function ConfirmConversionClient({
       })
 
       const payload = (await response.json()) as ConfirmResponse
-      setResult(payload)
-      setStatus(response.ok ? "done" : "error")
+      setResult(response.ok && payload?.success
+        ? payload
+        : {
+          ...payload,
+          success: false,
+          error: publicConversionErrorMessage(payload?.message || payload?.error || "Failed to confirm conversion", feedbackLanguage),
+        })
+      setStatus(response.ok && payload?.success ? "done" : "error")
       if (response.ok && payload?.success) {
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
         const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
@@ -228,7 +239,7 @@ export default function ConfirmConversionClient({
       }
     } catch (error) {
       submitLockRef.current = false
-      const message = error instanceof Error ? error.message : "Failed to confirm conversion"
+      const message = publicConversionErrorMessage(error instanceof Error ? error.message : "Failed to confirm conversion", feedbackLanguage)
       setResult({ success: false, error: message })
       setStatus("error")
     }
@@ -251,6 +262,9 @@ export default function ConfirmConversionClient({
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
   const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
+  const visibleError = result?.error || result?.message
+    ? publicConversionErrorMessage(result?.error || result?.message, feedbackLanguage)
+    : T(feedbackLanguage, "Não consegui confirmar essa conversão agora. Tente novamente em alguns segundos.", "I could not confirm this conversion right now. Try again in a few seconds.")
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
@@ -363,7 +377,7 @@ export default function ConfirmConversionClient({
                   <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Something went wrong."}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{visibleError}</motion.p>}
               </AnimatePresence>
             </div>
           </section>

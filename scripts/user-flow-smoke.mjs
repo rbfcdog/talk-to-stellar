@@ -36,6 +36,15 @@ const rawErrorPatterns = [
   /Unhandled/i,
   /erro desconhecido/i,
   /unknown error/i,
+  /Friendbot/i,
+  /createAccountAlreadyExist/i,
+  /No path/i,
+  /sem rota de liquidez/i,
+  /source_issuer|dest_issuer|issuer=/i,
+  /_ISSUER/i,
+  /trustline/i,
+  /Horizon/i,
+  /\bXDR\b/i,
   /private key/i,
   /seed phrase/i,
   /secret key/i,
@@ -48,6 +57,7 @@ const chatForbiddenPatterns = [
   /\bissuer\b/i,
   /public key|chave publica|chave pública/i,
   /session_id|session token|session_token/i,
+  /source_issuer|dest_issuer|issuer=/i,
   /Supabase/i,
 ];
 
@@ -290,6 +300,18 @@ const authenticatedPromptScenarios = [
     prompt: "criar link de pagamento de 25 reais",
     mustMatch: [/link de pagamento|payment link|\/pay-anyone/i, /25/i],
     mustNotMatch: [/criar sua conta|create your account/i],
+  },
+  {
+    name: "conversion quote is user-facing",
+    prompt: "converter 10 reais para dolares",
+    mustMatch: [/convers[aã]o|converter|rota|confirmar|cotad/i, /R\$|US\$/i],
+    mustNotMatch: [/XLM|trustline|Horizon|issuer|source_issuer|dest_issuer|session_id|XDR/i],
+  },
+  {
+    name: "conversion to BRL never leaks routing internals",
+    prompt: "converter 5 dolares para reais",
+    mustMatch: [/convers[aã]o|converter|rota|confirmar|cotad|tente novamente|outro valor/i],
+    mustNotMatch: [/XLM|trustline|Horizon|issuer|source_issuer|dest_issuer|session_id|XDR|sem rota de liquidez/i],
   },
 ];
 

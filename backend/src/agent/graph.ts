@@ -1525,9 +1525,39 @@ export class AgentGraph {
   }
 
   private maskInternalAssetNames(value: unknown): string {
-    return String(value || '')
+    const raw = String(value || '')
       .replace(/TESOURO:[A-Z2-7]{56}/g, 'BRL')
       .replace(/\bTESOURO\b/g, 'BRL');
+
+    const parts = raw
+      .split(/\s*->\s*/)
+      .map((part) => part.trim().toUpperCase())
+      .filter(Boolean)
+      .map((part) => {
+        if (part === 'XLM' || part === 'NATIVE') return '';
+        if (part === 'USDC' || part === 'USD') return 'US$';
+        if (part === 'BRL') return 'R$';
+        return part;
+      })
+      .filter(Boolean)
+      .filter((part, index, list) => index === 0 || part !== list[index - 1]);
+
+    if (parts.length >= 2) return parts.join(' -> ');
+    if (parts.length === 1) return parts[0];
+
+    return raw
+      .replace(/\bXLM\b/g, '')
+      .replace(/\s*->\s*->\s*/g, ' -> ')
+      .replace(/^\s*->\s*|\s*->\s*$/g, '')
+      .trim();
+  }
+
+  private conversionUnavailableMessage(language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    return this.text(
+      language,
+      'Não consegui encontrar uma rota segura para essa conversão agora. Tente novamente em alguns segundos ou escolha outro valor.',
+      'I could not find a safe route for this conversion right now. Try again in a few seconds or choose another amount.'
+    );
   }
 
   private toAmountNumber(value: unknown): number {
@@ -3483,7 +3513,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     state.pending_conversion = undefined;
     if (!toolResult.success) {
       state.success = false;
-      state.response_message = `Não consegui converter os ativos: ${toolResult.error || 'erro desconhecido'}`;
+      state.response_message = this.conversionUnavailableMessage(this.getLanguage(state));
     } else {
       state.success = true;
       state.response_message = toolResult.message || 'Conversão concluída em poucos segundos. Recibo disponível no seu histórico.';
@@ -3553,7 +3583,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                 destIssuer = trustlineResult.asset_issuer;
               } else if (!trustlineResult.success) {
                 state.success = false;
-                state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode}: ${trustlineResult.error || 'erro desconhecido'}`;
+                state.response_message = 'Não consegui preparar sua conta para receber essa moeda agora. Tente novamente em alguns segundos.';
                 await this.saveAssistantResponse(state);
                 await this.repository.saveState(state.session_id, state);
                 return state;
@@ -3569,7 +3599,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             state.success = false;
-            state.response_message = `Não encontrei recebimento em ${finalDestAssetCode} ativo na sua conta. Ative esse recebimento antes de converter.`;
+            state.response_message = 'Sua conta ainda está sendo preparada para receber essa moeda. Tente novamente em alguns segundos.';
           } else {
           const toolResultRaw = await executeTool('get_best_route', {
             source_public_key: state.session_data.public_key,
@@ -3590,7 +3620,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
           if (!toolResult.success) {
             state.success = false;
-            state.response_message = `Não consegui cotar essa conversão: ${toolResult.error || 'erro desconhecido'}`;
+            state.response_message = this.conversionUnavailableMessage(this.getLanguage(state));
           } else {
             const conversionDestAmount = String(toolResult.quote?.destinationAmount || '').trim();
             const conversionPrepareRaw = await executeTool('prepare_conversion_confirmation', {
@@ -3604,6 +3634,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
               dest_asset_issuer: destIssuer,
               quote: toolResult.quote,
               optimization_criteria: toolResult.optimization_criteria,
+              provider: (state.action_params as any)?.external_provider,
+              provider_user_id: (state.action_params as any)?.external_provider_user_id,
+              source: (state.action_params as any)?.external_source,
             });
 
             let conversionPrepare: any;
@@ -3615,7 +3648,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
             if (!conversionPrepare.success || !conversionPrepare.url) {
               state.success = false;
-              state.response_message = `Não consegui gerar um link de confirmação para a conversão agora: ${conversionPrepare.error || 'erro desconhecido'}`;
+              state.response_message = 'Não consegui gerar um link de confirmação para a conversão agora. Tente novamente em alguns segundos.';
             } else {
               state.pending_conversion = undefined;
               state.success = true;

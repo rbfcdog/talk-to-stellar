@@ -37,6 +37,7 @@ import {
 } from '../services/email-confirmation.service';
 import { getRequiredJwtSecret } from '../../config/secrets';
 import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
+import { publicErrorMessage } from '../../utils/public-error';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -1379,13 +1380,13 @@ export default class ExternalFinalizeController {
         if (sourceAssetCode !== 'XLM' && !sourceAssetIssuer) {
           return res.status(400).json({
             success: false,
-            message: `${sourceAssetCode}_ISSUER não está configurado no backend.`,
+            message: publicErrorMessage(`${sourceAssetCode}_ISSUER não está configurado no backend.`, 'Não consegui preparar essa conversão agora. Tente novamente em alguns segundos.'),
           });
         }
         if (destAssetCode !== 'XLM' && !destAssetIssuer) {
           return res.status(400).json({
             success: false,
-            message: `${destAssetCode}_ISSUER não está configurado no backend.`,
+            message: publicErrorMessage(`${destAssetCode}_ISSUER não está configurado no backend.`, 'Não consegui preparar essa conversão agora. Tente novamente em alguns segundos.'),
           });
         }
 
@@ -1589,7 +1590,7 @@ export default class ExternalFinalizeController {
 
           return res.status(400).json({
             success: false,
-            message: result.error || 'Could not submit conversion',
+            message: publicErrorMessage(result.error || 'Could not submit conversion', 'Não consegui concluir essa conversão agora. Tente novamente em alguns segundos.'),
           });
         }
 
@@ -3088,7 +3089,10 @@ export default class ExternalFinalizeController {
           message: 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).',
         });
       }
-      return res.status(500).json({ success: false, message });
+      return res.status(500).json({
+        success: false,
+        message: publicErrorMessage(error, 'Não consegui concluir agora. Tente novamente em alguns segundos.'),
+      });
     }
   }
 }
