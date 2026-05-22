@@ -6,7 +6,7 @@ This adds a guarded Mainnet layer without changing the default TalkToStellar tes
 
 - Backend storage for user-attached Mainnet public wallets.
 - Authenticated API endpoints under `/api/financial/mainnet/*`.
-- Frontend console at `/mainnet`.
+- Frontend network console at `/mainnet` with a Testnet/Mainnet toggle.
 - Agent tools for explicit Mainnet requests:
   - `get_mainnet_status`
   - `attach_mainnet_wallet`
@@ -26,6 +26,8 @@ STELLAR_NETWORK=TESTNET
 ```
 
 Do not set `STELLAR_NETWORK=PUBLIC` unless you are doing an approved cutover and have reviewed all existing payment, PIX, wallet and conversion flows.
+
+Etherfuse is intentionally Testnet-only in this project. PIX/TESOURO routes must use the Testnet rail. If the backend runtime is `STELLAR_NETWORK=PUBLIC`, Etherfuse endpoints refuse PIX/TESOURO operations instead of silently running against a real-value network.
 
 ## Migration required
 
@@ -91,12 +93,15 @@ Open:
 
 Flow:
 
-1. Login in the browser or enter through a chat access link.
-2. Paste a Stellar Mainnet public key beginning with `G`.
-3. Click `Attach read-only wallet`.
-4. The page reads balances from Mainnet Horizon.
-5. The page shows recent public operations.
-6. The interaction panel can validate a payment preview without submitting a transaction.
+1. Open `/mainnet`.
+2. Use the `Testnet` tab for PIX, Etherfuse sandbox, chat payments and current product flows.
+3. Use the `Mainnet` tab only for real-value public wallet visibility.
+4. Login in the browser or enter through a chat access link.
+5. Paste a Stellar Mainnet public key beginning with `G`.
+6. Click `Attach read-only wallet`.
+7. The page reads balances from Mainnet Horizon.
+8. The page shows recent public operations.
+9. The interaction panel can validate a payment preview without submitting a transaction.
 
 ## Agent usage
 
@@ -107,9 +112,10 @@ status mainnet
 configurar carteira mainnet G...
 saldo mainnet
 preview mainnet payment 1 USDC para G...
+alternar mainnet
 ```
 
-The agent should always say that Mainnet is real-value and read-only by default, and it must never ask for secret keys.
+The agent should always say that Mainnet is real-value and read-only by default, and it must never ask for secret keys. If the user asks to toggle networks, send them to `/mainnet`. If they ask for Etherfuse or PIX on Mainnet, explain that Etherfuse is Testnet-only.
 
 ## API examples
 
@@ -155,4 +161,3 @@ curl -X POST http://localhost:3000/api/financial/mainnet/payment-preview \
 - Compliance review for real user funds.
 - Production audit logs for every Mainnet approval and submission.
 - Mainnet-specific monitoring and incident rollback process.
-

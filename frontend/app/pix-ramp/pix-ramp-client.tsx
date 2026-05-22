@@ -13,7 +13,11 @@ type RampMode = "onramp" | "offramp";
 
 type RampConfig = {
   sandbox?: boolean;
+  available?: boolean;
+  testnet_only?: boolean;
   network?: string;
+  stellar_network_id?: "TESTNET" | "PUBLIC";
+  unavailable_reason?: string;
   asset?: { code: string; issuer: string; identifier: string };
 };
 
@@ -478,9 +482,10 @@ export default function PixRampClient({
   const externalSource = String(queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
   const hasSession = Boolean(sessionId);
   const allowEmailAccountLookup = Boolean(debugEnabled && !launchedFromChat);
+  const etherfuseRailUnavailable = Boolean(config && !config.available);
   const needsBrowserLoginForPix = Boolean(!hasSession && !allowEmailAccountLookup);
   const needsBrowserLoginForChatLink = Boolean(launchedFromChat && !hasSession);
-  const canResolveWallet = Boolean(hasSession || (allowEmailAccountLookup && rampEmail.trim()));
+  const canResolveWallet = Boolean(!etherfuseRailUnavailable && (hasSession || (allowEmailAccountLookup && rampEmail.trim())));
   const customer = customerPayload?.customer;
   const customerId = String(customer?.id || "");
   const bankAccountId = String(customer?.bankAccountId || "");
@@ -523,7 +528,7 @@ export default function PixRampClient({
         ? formatRampAsset(finalReceivedAmount, targetAsset)
         : "Calculated automatically on confirmation";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
-  const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.sandbox && !payablePixAvailable)));
+  const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
     ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
     : "";
@@ -779,7 +784,7 @@ export default function PixRampClient({
     fetch("/api/ramp/etherfuse/config", { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => setConfig(payload))
-      .catch(() => setConfig({ sandbox: false, network: "Stellar" }));
+      .catch(() => setConfig({ sandbox: false, available: false, testnet_only: true, network: "Stellar Testnet" }));
   }, []);
 
   useEffect(() => {
@@ -1585,6 +1590,24 @@ export default function PixRampClient({
           </section>
         )}
 
+        {config && !config.available && (
+          <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
+            <p className="font-black">
+              {L("PIX/Etherfuse fica disponível apenas no trilho Testnet.", "PIX/Etherfuse is available only on the Testnet rail.")}
+            </p>
+            <p className="mt-2 leading-6 text-amber-100/85">
+              {config.unavailable_reason ||
+                L("Troque o runtime para STELLAR_NETWORK=TESTNET antes de usar PIX. Mainnet continua separada para leitura de carteira pública.", "Switch runtime to STELLAR_NETWORK=TESTNET before using PIX. Mainnet remains separate for public wallet reads.")}
+            </p>
+            <a
+              className="mt-3 inline-flex rounded-full border border-amber-200/40 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-50 transition hover:bg-amber-200/10"
+              href="/mainnet"
+            >
+              {L("Abrir seletor de rede", "Open network selector")}
+            </a>
+          </section>
+        )}
+
         {operationLocked && step !== "success" && (
           <section className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm font-bold text-emerald-100">
             {t("pix_done_sent_chat")}
@@ -1976,7 +1999,7 @@ export default function PixRampClient({
                     </div>
                   )}
 
-                  {config?.sandbox && !orderFailed && (
+                  {config?.available && !orderFailed && (
                     <div className="mt-5 rounded-3xl border-2 border-amber-200/70 bg-amber-300/15 p-4 text-amber-100 shadow-lg shadow-amber-950/20">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
@@ -2035,8 +2058,8 @@ export default function PixRampClient({
               title="On-ramp temporary endpoint"
               endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
               description="Runs the whole on-ramp server-side and returns the final transaction status."
-              disabled={!canResolveWallet || Boolean(loading) || !config?.sandbox || operationLocked}
-              hidden={!config?.sandbox}
+              disabled={!canResolveWallet || Boolean(loading) || !config?.available || operationLocked}
+              hidden={!config?.available}
               onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
               result={temporaryTestResult ? {
                 order_id: temporaryTestResult.transaction?.id,
@@ -2054,7 +2077,7 @@ export default function PixRampClient({
             </p>
             <label className="mt-5 block text-sm font-bold text-stone-600">Balance amount to off-ramp</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
-            {config?.sandbox ? (
+            {config?.available ? (
               <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
                 Test off-ramp and asset delta
               </button>

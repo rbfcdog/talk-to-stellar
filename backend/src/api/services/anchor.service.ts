@@ -611,8 +611,12 @@ export class AnchorService {
   static getRuntimeInfo(): {
     provider: 'etherfuse';
     sandbox: boolean;
+    available: boolean;
+    testnet_only: true;
     network: string;
+    stellar_network_id: 'TESTNET' | 'PUBLIC';
     base_url: string;
+    unavailable_reason?: string;
     asset: { code: 'TESOURO'; issuer: string; identifier: string };
   } {
     const apiKey = normalizeEtherfuseApiKey(coalesceString(
@@ -620,14 +624,25 @@ export class AnchorService {
       process.env.ETHERFUSE_SANDBOX_API_KEY,
     ));
     const baseUrl = coalesceString(process.env.ETHERFUSE_BASE_URL) || 'https://api.sand.etherfuse.com';
+    const stellarNetworkId = String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
+      ? 'PUBLIC'
+      : 'TESTNET';
+    const sandbox = isRampSandboxEnvironment(apiKey, baseUrl);
+    const available = stellarNetworkId === 'TESTNET' && sandbox;
 
     return {
       provider: 'etherfuse',
-      sandbox: isRampSandboxEnvironment(apiKey, baseUrl),
-      network: String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
-        ? 'Stellar Public'
-        : 'Stellar Testnet',
+      sandbox,
+      available,
+      testnet_only: true,
+      network: stellarNetworkId === 'PUBLIC' ? 'Stellar Public' : 'Stellar Testnet',
+      stellar_network_id: stellarNetworkId,
       base_url: baseUrl.replace(/\/$/, ''),
+      unavailable_reason: available
+        ? undefined
+        : stellarNetworkId === 'PUBLIC'
+          ? 'Etherfuse PIX/TESOURO integration is intentionally disabled on Stellar Public/Mainnet.'
+          : 'Etherfuse PIX is available only with the sandbox/devnet API configuration in this project.',
       asset: {
         code: 'TESOURO',
         issuer: this.getTesouroIssuer(),
@@ -636,7 +651,15 @@ export class AnchorService {
     };
   }
 
+  static assertEtherfuseTestnetRuntime(): void {
+    const runtime = this.getRuntimeInfo();
+    if (runtime.stellar_network_id !== 'TESTNET') {
+      throw apiError('Etherfuse PIX/TESOURO is available only on Stellar Testnet in TalkToStellar. Switch to the Testnet rail for PIX flows.', 403);
+    }
+  }
+
   private static getEtherfuseClient(): EtherfuseClient {
+    this.assertEtherfuseTestnetRuntime();
     const apiKey = normalizeEtherfuseApiKey(coalesceString(
       process.env.ETHERFUSE_API_KEY,
       process.env.ETHERFUSE_SANDBOX_API_KEY,
@@ -665,6 +688,7 @@ export class AnchorService {
   }
 
   private static async resolveSessionWallet(input: RampSessionInput): Promise<SessionWalletContext> {
+    this.assertEtherfuseTestnetRuntime();
     const sessionId = coalesceString(input.session_id, input.sessionId);
     const sessionToken = coalesceString(input.session_token, input.sessionToken);
 
@@ -770,6 +794,7 @@ export class AnchorService {
     public_key_display: string;
     wallet_found: boolean;
   }> {
+    this.assertEtherfuseTestnetRuntime();
     const email = String(input.email || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw apiError('Valid email is required to find a TalkToStellar wallet.', 400);
@@ -1016,7 +1041,9 @@ export class AnchorService {
   }
 
   private static sandboxPixFallbackEnabled(): boolean {
-    return this.getRuntimeInfo().sandbox &&
+    const runtime = this.getRuntimeInfo();
+    return runtime.stellar_network_id === 'TESTNET' &&
+      runtime.sandbox &&
       String(process.env.ETHERFUSE_SANDBOX_PIX_FALLBACK || 'true').trim().toLowerCase() !== 'false';
   }
 
