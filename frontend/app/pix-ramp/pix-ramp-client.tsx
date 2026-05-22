@@ -363,6 +363,16 @@ function getRampCustomerId(payload: RampResponse | null | undefined) {
   ).trim();
 }
 
+function mergeRampCustomerPayload(base: RampResponse | null | undefined, payload: RampResponse | null | undefined): RampResponse | null {
+  if (!payload?.customer && !payload?.customer_id && !payload?.customerId) return base || null;
+  const customerId = String(payload.customer_id || payload.customerId || payload.customer?.id || "").trim();
+  return {
+    ...(base || {}),
+    ...(payload.customer ? { customer: payload.customer } : {}),
+    ...(customerId ? { customer_id: customerId } : {}),
+  };
+}
+
 function formatDebugJson(value: unknown) {
   return JSON.stringify(hideInternalAssetNames(value || {}), null, 2);
 }
@@ -1270,14 +1280,11 @@ export default function PixRampClient({
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
     const quoteCustomerId = getRampCustomerId(customerResult);
-    if (!quoteCustomerId) {
-      throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente gerar o PIX outra vez.", "I could not prepare your PIX account right now. Sign in again and try generating PIX again."));
-    }
     setCustomerPayload(customerResult);
     setProgrammaticOnboarding(customerResult?.programmatic_onboarding || null);
 
     const payload = await callRamp("/api/ramp/etherfuse/quote", {
-      customer_id: quoteCustomerId,
+      customer_id: quoteCustomerId || undefined,
       direction: "onramp",
       from_currency: "BRL",
       to_currency: "TESOURO",
@@ -1286,9 +1293,11 @@ export default function PixRampClient({
       desired_final_amount: desiredFinalAmount || undefined,
       desired_final_asset: desiredFinalAsset || undefined,
     }, "POST", auth);
+    const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
+    setCustomerPayload(nextCustomerPayload);
     setQuotePayload(payload);
     setQuoteReceivedAt(Date.now());
-    return { auth, customerResult, quoteResult: payload };
+    return { auth, customerResult: nextCustomerPayload || customerResult, quoteResult: payload };
   }
 
   async function confirmQuoteAndCreatePix() {
@@ -1313,16 +1322,13 @@ export default function PixRampClient({
       }
       if (!quoteForOrder?.id) throw new Error(L("Peça uma estimativa primeiro.", "Request an estimate first."));
       const orderCustomerId = getRampCustomerId(customerForOrder);
-      if (!orderCustomerId) {
-        throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente gerar o PIX outra vez.", "I could not prepare your PIX account right now. Sign in again and try generating PIX again."));
-      }
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
       setOnRampBalancesAfter([]);
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
-        customer_id: orderCustomerId,
+        customer_id: orderCustomerId || undefined,
         quote_id: quoteForOrder.id,
         amount: amountBrl,
         expected_to_amount: quoteForOrder.toAmount,
@@ -1340,6 +1346,8 @@ export default function PixRampClient({
         setQuotePayload(payload);
         setQuoteReceivedAt(Date.now());
       }
+      const nextCustomerPayload = mergeRampCustomerPayload(customerForOrder, payload);
+      if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
       setOnboardingUrl("");
       setOrderPayload(payload);
       setStatusPayload(null);
@@ -1482,14 +1490,11 @@ export default function PixRampClient({
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
     const previewCustomerId = getRampCustomerId(customerResult);
-    if (!previewCustomerId) {
-      throw new Error(L("Não consegui preparar sua conta PIX agora. Entre novamente e tente calcular a taxa outra vez.", "I could not prepare your PIX account right now. Sign in again and try calculating the fee again."));
-    }
     setCustomerPayload(customerResult);
     const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
     const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
       intent_id: atomicIntentKey,
-      customer_id: previewCustomerId,
+      customer_id: previewCustomerId || undefined,
       amount: sourceAmount,
       source_amount: sourceAmount,
       source_asset_code: offRampInputAsset,
@@ -1497,6 +1502,8 @@ export default function PixRampClient({
       fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
       target_currency: "BRL",
     }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
+    const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
+    if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
     setOffRampPreviewPayload(payload);
   }
 
