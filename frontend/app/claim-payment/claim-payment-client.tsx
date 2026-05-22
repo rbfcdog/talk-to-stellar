@@ -9,7 +9,6 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { TypingDots } from "@/components/ui/feedback"
 import { useLanguage, type AppLanguage } from "@/lib/i18n"
-import { UserGuidance } from "@/components/user-guidance"
 
 type ValidationResult = {
   valid?: boolean
@@ -257,51 +256,29 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         <section className="min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-950/85 p-5 shadow-2xl sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
             <ShieldCheck className="h-4 w-4" />
-            {T(language, "Receber pagamento", "Receive Payment")}
+            Receive Payment
           </div>
 
           <h1 className="mt-5 text-3xl font-semibold text-white md:text-5xl">
-            {T(language, `${senderName} criou um link de ${sourceAmountLabel} para ${recipientName}`, `${senderName} created a ${sourceAmountLabel} link for ${recipientName}`)}
+            {senderName} created a {sourceAmountLabel} link for {recipientName}
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
-            {T(
-              language,
-              `Você vai receber ${isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} com crédito final em ${destinationAssetCode}` : sourceAmountLabel}. Entre ou crie sua conta para receber. O processo leva cerca de 2 minutos.`,
-              `You will receive ${isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} with final credit in ${destinationAssetCode}` : sourceAmountLabel}. Sign in or create your account to receive. This process takes about 2 minutes.`,
-            )}
-            {loggedIn && !isSenderSession ? ` ${T(language, "Como o login está válido, o crédito será processado automaticamente.", "As soon as the login is valid, the credit will be processed automatically.")}` : ""}
+            You will receive {isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} with final credit in ${destinationAssetCode}.` : sourceAmountLabel}. To receive it, sign in or create your global account.
+            This process takes about 2 minutes.
+            {isCrossAsset ? ` You receive in ${destinationAssetCode}.` : " The money is sent to the account authenticated on this page."}
+            {loggedIn && !isSenderSession ? " As soon as the login is valid, the credit will be processed automatically." : ""}
           </p>
 
-          <UserGuidance
-            className="mt-5"
-            eyebrow={T(language, "Como receber", "How to receive")}
-            title={T(language, "Entre com a conta certa antes do crédito", "Use the right account before crediting")}
-            body={T(
-              language,
-              "Se este navegador estiver logado na conta de quem enviou, troque de conta. O crédito vai para a conta autenticada nesta página.",
-              "If this browser is signed in to the sender account, switch accounts. The credit goes to the account authenticated on this page.",
-            )}
-            steps={[
-              { title: T(language, "Validar link", "Validate link"), body: T(language, "Confira se o link está ativo e não expirou.", "Check that the link is active and not expired.") },
-              { title: T(language, "Entrar ou criar conta", "Sign in or create account"), body: T(language, "Use PIN para demo e confirme a conta recebedora.", "Use PIN for demo and confirm the receiving account.") },
-              { title: T(language, "Ver comprovante", "View receipt"), body: T(language, "Depois do crédito, abra comprovante ou histórico.", "After credit, open receipt or history.") },
-            ]}
-            actions={[
-              { label: T(language, "Chat", "Chat"), href: "/chat" },
-              { label: T(language, "Histórico", "History"), href: "/transactions" },
-            ]}
-          />
-
           <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
-            <p className="text-slate-400">{T(language, "Status do link", "Link status")}</p>
+            <p className="text-slate-400">Link status</p>
             {validation.valid === false ? (
               <p className="mt-1 text-rose-300">
                 {isExpiredLink
-                  ? T(language, `Link expirado. ${validation.message || "Peça um novo link."}`, `Expired link. ${validation.message || "Request a new link."}`)
-                  : (validation.message || T(language, "Link inválido.", "Invalid link."))}
+                  ? `Expired link. ${validation.message || "Request a new link."}`
+                  : (validation.message || "Invalid link.")}
               </p>
             ) : (
-              <p className="mt-1 text-emerald-300">{T(language, "Link pronto. Próximo passo: entrar ou criar conta para receber.", "Link ready. Next step: sign in or create an account to receive this amount.")}</p>
+              <p className="mt-1 text-emerald-300">Link ready. Next step: sign in or create an account to receive this amount.</p>
             )}
           </div>
 
@@ -336,14 +313,14 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
                 <LogIn className="h-4 w-4" />
-                {T(language, "1. Entrar para receber", "1. Sign in to receive")}
+                1) Sign in to receive
               </Link>
               <Link
                 href={createAccountPath}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <UserPlus className="h-4 w-4" />
-                {T(language, "2. Criar conta para receber", "2. Create account to receive")}
+                2) Create account to receive
               </Link>
             </div>
           )}
