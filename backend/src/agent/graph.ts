@@ -1045,11 +1045,21 @@ export class AgentGraph {
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
     if (intent.recipient_key) url.searchParams.set('recipient_key', intent.recipient_key);
     if (intent.recipient_public_key) url.searchParams.set('recipient_public_key', intent.recipient_public_key);
-    if (intent.pay_amount) url.searchParams.set('pay_amount', intent.pay_amount);
-    if (intent.pay_asset_code) url.searchParams.set('pay_asset', intent.pay_asset_code);
+    const isPixFundedPayment = intent.direction === 'onramp' && intent.flow === 'fund_and_pay';
+    const finalPayAmount = intent.pay_amount || (isPixFundedPayment ? intent.amount : '');
+    const finalPayAsset = intent.pay_asset_code || (isPixFundedPayment ? intent.asset_code : undefined);
+    if (finalPayAmount) url.searchParams.set('pay_amount', finalPayAmount);
+    if (finalPayAsset) url.searchParams.set('pay_asset', finalPayAsset);
+    if (isPixFundedPayment && finalPayAmount && finalPayAsset) {
+      url.searchParams.set('receive_amount', finalPayAmount);
+      url.searchParams.set('receive_asset', finalPayAsset);
+    }
     if (intent.amount) {
       const amountCurrency = intent.amount_currency || intent.asset_code;
-      if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
+      if (isPixFundedPayment && finalPayAmount && finalPayAsset) {
+        url.searchParams.set('amount', intent.amount);
+        url.searchParams.set('currency', finalPayAsset);
+      } else if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
         url.searchParams.set('receive_amount', intent.amount);
         url.searchParams.set('receive_asset', 'USDC');
         url.searchParams.set('currency', 'USDC');

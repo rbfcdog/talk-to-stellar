@@ -238,7 +238,8 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
       expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
-      expect(parsed.searchParams.get('receive_amount')).toBe('40');
+      expect(parsed.searchParams.get('amount')).toBe('40');
+      expect(parsed.searchParams.get('receive_amount')).toBe('50');
       expect(parsed.searchParams.get('receive_asset')).toBe('USDC');
       expect(parsed.searchParams.get('recipient')).toBe('Carlos');
       expect(parsed.searchParams.get('pay_amount')).toBe('50');
@@ -312,6 +313,10 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.searchParams.get('amount')).toBe('100');
       expect(parsed.searchParams.get('currency')).toBe('BRL');
       expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('receive_amount')).toBe('100');
+      expect(parsed.searchParams.get('receive_asset')).toBe('BRL');
+      expect(parsed.searchParams.get('pay_amount')).toBe('100');
+      expect(parsed.searchParams.get('pay_asset')).toBe('BRL');
       expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
       expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
       expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
@@ -351,6 +356,10 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.response_message).toContain('ana silva');
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('amount')).toBe('10');
+      expect(parsed.searchParams.get('receive_amount')).toBe('10');
+      expect(parsed.searchParams.get('receive_asset')).toBe('BRL');
+      expect(parsed.searchParams.get('pay_amount')).toBe('10');
+      expect(parsed.searchParams.get('pay_asset')).toBe('BRL');
       expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
       expect(parsed.searchParams.get('recipient')).toBe('ana silva');
       expect(parsed.searchParams.get('recipient_public_key')).toBeNull();

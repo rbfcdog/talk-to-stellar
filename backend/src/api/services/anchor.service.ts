@@ -101,6 +101,10 @@ interface QuoteForSessionInput extends RampSessionInput {
   finalAsset?: string;
   final_asset_code?: string;
   finalAssetCode?: string;
+  desired_final_amount?: string;
+  desiredFinalAmount?: string;
+  desired_final_asset?: string;
+  desiredFinalAsset?: string;
 }
 
 interface CreateOnRampForSessionInput extends RampSessionInput {
@@ -626,6 +630,71 @@ export class AnchorService {
 
   static getTesouroIdentifier(): string {
     return `TESOURO:${this.getTesouroIssuer()}`;
+  }
+
+  private static decorateOnRampQuoteForFinalAsset(input: {
+    quote: Quote;
+    sourceAmountBrl: string;
+    finalAsset?: { code: string; issuer?: string };
+    desiredFinalAmount?: string;
+    desiredFinalAssetCode?: string;
+  }): Quote {
+    const quote = input.quote as Quote & Record<string, unknown>;
+    const finalAsset = input.finalAsset;
+    if (!finalAsset) return input.quote;
+
+    const anchorAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
+    const finalIsAnchor = sameIssuedAsset(finalAsset, anchorAsset);
+    const anchorAmountBeforeFee = coalesceString(quote.destinationAmountBeforeFee, quote.toAmount);
+    const anchorAmountAfterFee = coalesceString(quote.destinationAmountAfterFee, quote.toAmount);
+    const desiredFinalAmount = coalesceString(input.desiredFinalAmount);
+    const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || finalAsset.code);
+
+    const decorated: Quote & Record<string, unknown> = {
+      ...input.quote,
+      sourceCurrency: 'BRL',
+      sourceAmountBrl: input.sourceAmountBrl,
+      anchorCurrency: this.getTesouroIdentifier(),
+      anchorAsset,
+      anchorAmountBeforeFee,
+      anchorAmountAfterFee,
+      anchorProviderFeeAmount: quote.feeAmount || quote.fee || '0',
+      anchorProviderFeeCurrency: 'BRL',
+    };
+
+    if (finalIsAnchor) {
+      decorated.userFacingToCurrency = this.getTesouroIdentifier();
+      decorated.userFacingToAmount = anchorAmountAfterFee;
+      decorated.finalCurrency = this.getTesouroIdentifier();
+      decorated.finalAmountBeforeFee = anchorAmountBeforeFee;
+      decorated.finalAmountAfterFee = anchorAmountAfterFee;
+      decorated.finalConversionRequired = false;
+      return decorated;
+    }
+
+    const exactFinalAmount = desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code)
+      ? desiredFinalAmount
+      : (finalAsset.code === 'BRL' ? input.sourceAmountBrl : '');
+
+    decorated.userFacingToCurrency = assetIdentifier(finalAsset);
+    decorated.finalCurrency = assetIdentifier(finalAsset);
+    decorated.finalAsset = finalAsset;
+    decorated.finalConversionRequired = true;
+    decorated.finalConversionSourceCurrency = this.getTesouroIdentifier();
+    decorated.finalConversionSourceAmount = anchorAmountAfterFee;
+    decorated.finalConversionMode = exactFinalAmount
+      ? `strict_receive_exact_${normalizeAssetCode(finalAsset.code).toLowerCase()}`
+      : 'strict_send_anchor_tesouro';
+
+    if (exactFinalAmount) {
+      decorated.userFacingToAmount = exactFinalAmount;
+      decorated.finalAmountBeforeFee = exactFinalAmount;
+      decorated.finalAmountAfterFee = exactFinalAmount;
+      decorated.requestedFinalAmount = exactFinalAmount;
+      decorated.requestedFinalAssetCode = normalizeAssetCode(finalAsset.code);
+    }
+
+    return decorated;
   }
 
   static getRuntimeInfo(): {
@@ -2131,19 +2200,34 @@ export class AnchorService {
     const finalAsset = direction === 'onramp'
       ? resolveRampFinalAsset(input.final_asset, input.finalAsset, input.final_asset_code, input.finalAssetCode, input.to_currency, input.toCurrency, 'TESOURO')
       : undefined;
+    const desiredFinalAmount = coalesceString(input.desired_final_amount, input.desiredFinalAmount)
+      ? normalizeAmount(coalesceString(input.desired_final_amount, input.desiredFinalAmount), 'desired_final_amount')
+      : '';
+    const desiredFinalAssetCode = desiredFinalAmount
+      ? normalizeAssetCode(coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset?.code))
+      : '';
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) ||
       (direction === 'offramp' ? this.getTesouroIdentifier() : 'BRL');
     const toCurrency = coalesceString(input.to_currency, input.toCurrency) ||
       (direction === 'offramp' ? 'BRL' : this.getTesouroIdentifier());
     const anchorToCurrency = direction === 'onramp' ? this.getTesouroIdentifier() : toCurrency;
 
-    const quote = await this.getEtherfuseClient().getQuote({
+    const providerQuote = await this.getEtherfuseClient().getQuote({
       customerId,
       stellarAddress: context.publicKey,
       fromCurrency,
       toCurrency: anchorToCurrency,
       fromAmount: amount,
     });
+    const quote = direction === 'onramp'
+      ? this.decorateOnRampQuoteForFinalAsset({
+          quote: providerQuote,
+          sourceAmountBrl: amount,
+          finalAsset,
+          desiredFinalAmount,
+          desiredFinalAssetCode,
+        })
+      : providerQuote;
 
     return {
       quote,
@@ -2481,7 +2565,11 @@ export class AnchorService {
       crypto_wallet_id: cryptoWalletId,
       source_amount_brl: amount,
       destination_amount_anchor: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount, transaction.toAmount),
-      final_amount: sameIssuedAsset(finalAsset, targetAsset) ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount)) : undefined,
+      final_amount: desiredFinalAmount || (finalAsset.code === 'BRL'
+        ? amount
+        : sameIssuedAsset(finalAsset, targetAsset)
+          ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount))
+          : undefined),
       final_asset_code: finalAsset.code,
       final_asset_issuer: finalAsset.issuer,
       desired_final_amount: desiredFinalAmount || undefined,
@@ -2510,6 +2598,16 @@ export class AnchorService {
       mockRecord.operationContext = operationContext;
     }
 
+    const decoratedOrderQuote = orderQuote
+      ? this.decorateOnRampQuoteForFinalAsset({
+          quote: orderQuote,
+          sourceAmountBrl: amount,
+          finalAsset,
+          desiredFinalAmount,
+          desiredFinalAssetCode,
+        })
+      : undefined;
+
     return {
       transaction,
       operation_id: operationId,
@@ -2517,7 +2615,7 @@ export class AnchorService {
       final_trustline: finalTrustline,
       customer_id: customerId,
       ...(preparedCustomer ? { customer: preparedCustomer } : {}),
-      quote: orderQuote,
+      quote: decoratedOrderQuote,
       quote_refreshed: Boolean(orderQuote),
     };
   }
@@ -2588,8 +2686,12 @@ export class AnchorService {
         transaction.toAmount,
       ));
       const secret = await new VaultService(supabase).getSecret(vaultSecretId);
+      const desiredFinalAmount = coalesceString(context.desired_final_amount);
+      const desiredFinalAssetCode = normalizeAssetCode(coalesceString(context.desired_final_asset_code, context.desired_final_asset, finalAsset.code));
       const exactFinalBrl = finalAsset.code === 'BRL'
-        ? coalesceString(context.source_amount_brl, transaction.fromAmount)
+        ? (desiredFinalAmount && desiredFinalAssetCode === 'BRL'
+            ? desiredFinalAmount
+            : coalesceString(context.final_amount, context.source_amount_brl, transaction.fromAmount))
         : '';
       const usesStrictReceive = Boolean(exactFinalBrl);
       const xdr = usesStrictReceive

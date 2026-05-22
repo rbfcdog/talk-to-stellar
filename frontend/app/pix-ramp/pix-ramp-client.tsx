@@ -126,14 +126,16 @@ function formatRampAsset(value: unknown, code = "BRL") {
   return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
 }
 
-function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
+function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" | "TESOURO" = "BRL") {
   const normalized = String(value || "").trim().toUpperCase().split(":")[0];
   if (normalized === "USDC") return "USDC";
-  if (normalized === "BRL" || normalized === "TESOURO") return "BRL";
+  if (normalized === "BRL") return "BRL";
+  if (normalized === "TESOURO") return "TESOURO";
   return fallback;
 }
 
-function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" = "BRL") {
+function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" | "TESOURO" = "BRL") {
+  if (currency === "TESOURO") return formatAsset(value, "TESOURO");
   return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
 }
 
@@ -2410,9 +2412,19 @@ function RampFeeBridge({
   if (!quote) return null;
 
   const sourceCurrency = quoteCurrencyCode(quote.fromCurrency, "BRL");
-  const destinationCurrency = quoteCurrencyCode(quote.toCurrency, "BRL");
-  const destinationBeforeRaw = quote.destinationAmountBeforeFee || quote.destinationAmount || "";
-  const destinationAfterRaw = quote.destinationAmountAfterFee || quote.toAmount || "";
+  const hasFinalConversionAmount = Boolean(quote.finalAmountAfterFee || quote.userFacingToAmount);
+  const destinationCurrency = hasFinalConversionAmount
+    ? quoteCurrencyCode(quote.finalCurrency || quote.userFacingToCurrency, "BRL")
+    : quoteCurrencyCode(quote.toCurrency, "BRL");
+  const destinationBeforeRaw = hasFinalConversionAmount
+    ? (quote.finalAmountBeforeFee || quote.finalAmountAfterFee || quote.userFacingToAmount || "")
+    : (quote.destinationAmountBeforeFee || quote.destinationAmount || "");
+  const destinationAfterRaw = hasFinalConversionAmount
+    ? (quote.finalAmountAfterFee || quote.userFacingToAmount || "")
+    : (quote.destinationAmountAfterFee || quote.toAmount || "");
+  const anchorCurrency = quoteCurrencyCode(quote.anchorCurrency || quote.toCurrency, "TESOURO");
+  const anchorAfterRaw = quote.anchorAmountAfterFee || quote.destinationAmountAfterFee || quote.toAmount || "";
+  const anchorBeforeRaw = quote.anchorAmountBeforeFee || quote.destinationAmountBeforeFee || quote.destinationAmount || "";
   const providerFeeRaw = quote.feeAmount || quote.fee || "";
   const destinationBefore = parseHumanAmount(destinationBeforeRaw);
   const destinationAfter = parseHumanAmount(destinationAfterRaw);
@@ -2430,6 +2442,9 @@ function RampFeeBridge({
     : Number.isFinite(destinationBefore) && destinationBefore > 0
       ? (feeAmount / destinationBefore) * 100
       : NaN;
+  const feeCurrency = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
+    ? destinationCurrency
+    : sourceCurrency;
   const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
   const ttsTransactionFeePct = ttsTransactionFeeBps / 100;
   const ttsTransactionFeeAmount = Number.isFinite(sourceAmount) && sourceAmount > 0
@@ -2442,13 +2457,15 @@ function RampFeeBridge({
   const estimatedSavingsVsTraditional = Number.isFinite(sourceAmount) && sourceAmount > 0
     ? sourceAmount * (Math.max(0, TRADITIONAL_FX_FEE_PCT - visibleRouteFeePct) / 100)
     : 0;
-  const retainedPct = Number.isFinite(destinationBefore) && destinationBefore > 0 && Number.isFinite(destinationAfter)
-    ? (destinationAfter / destinationBefore) * 100
+  const retainedPct = Number.isFinite(sourceAmount) && sourceAmount > 0 && destinationCurrency === sourceCurrency && Number.isFinite(destinationAfter)
+    ? (destinationAfter / sourceAmount) * 100
+    : Number.isFinite(destinationBefore) && destinationBefore > 0 && Number.isFinite(destinationAfter)
+      ? (destinationAfter / destinationBefore) * 100
     : NaN;
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
   const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
-  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), destinationCurrency)}${
+  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}${
     Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
   }`;
   const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), sourceCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
@@ -2461,6 +2478,7 @@ function RampFeeBridge({
   const feeCaption = mode === "onramp"
     ? L("Mostra só a taxa de entrada PIX/on-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/on-ramp fee and the TalkToStellar transaction fee.")
     : L("Mostra só a taxa de saída PIX/off-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/off-ramp fee and the TalkToStellar transaction fee.");
+  const showAnchorBridge = mode === "onramp" && hasFinalConversionAmount && anchorAfterRaw;
 
   return (
     <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-4">
@@ -2494,6 +2512,26 @@ function RampFeeBridge({
           <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("valor líquido da instrução", "net value in the instruction")}</p>
         </div>
       </div>
+
+      {showAnchorBridge && (
+        <div className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs font-bold text-cyan-50">
+          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">
+            {L("Ativo ponte Etherfuse", "Etherfuse bridge asset")}
+          </span>
+          <span className="mt-1 block text-sm font-black">
+            {formatQuoteAmount(anchorAfterRaw, anchorCurrency)}
+          </span>
+          <span className="mt-1 block leading-5 text-cyan-50/75">
+            {L(
+              `A cotação real do provider liquida primeiro em ${anchorCurrency}. O backend converte esse ativo para ${destinationCurrency} antes de pagar o destinatário.`,
+              `The real provider quote first settles as ${anchorCurrency}. The backend converts that asset to ${destinationCurrency} before paying the recipient.`,
+            )}
+            {anchorBeforeRaw && anchorBeforeRaw !== anchorAfterRaw
+              ? ` ${L("Antes da taxa do provider", "Before provider fee")}: ${formatQuoteAmount(anchorBeforeRaw, anchorCurrency)}.`
+              : ""}
+          </span>
+        </div>
+      )}
 
       <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-3">
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
