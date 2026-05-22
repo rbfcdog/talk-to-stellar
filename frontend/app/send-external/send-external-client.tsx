@@ -33,6 +33,7 @@ type SendResult = {
 }
 
 const PUBLIC_KEY_REGEX = /^G[A-Z2-7]{55}$/
+const PASSKEY_EXTERNAL_SEND_ENABLED = false
 
 function normalizeAsset(value: string | null): AssetCode {
   return "USDC"
@@ -293,16 +294,18 @@ export default function SendExternalClient() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <button className="rounded-xl border border-white/10 px-4 py-3 font-bold text-slate-200" onClick={() => setStep("form")}>Cancelar</button>
-                <button className="rounded-xl bg-cyan-300 px-4 py-3 font-bold text-slate-950" onClick={() => { setStep("auth"); void authenticateWithPasskey(); }}>Confirmar envio</button>
+                <button className="rounded-xl bg-cyan-300 px-4 py-3 font-bold text-slate-950" onClick={() => setStep("auth")}>Confirmar envio</button>
               </div>
             </div>
           )}
 
           {step === "auth" && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-300">Confirme com Passkey. Se não funcionar, use seu PIN.</p>
+              <p className="text-sm text-slate-300">Digite seu PIN para confirmar este envio.</p>
               {authError && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm text-rose-100">{authError}</p>}
-              <button className="w-full rounded-xl bg-indigo-400 px-4 py-3 font-bold text-white" onClick={authenticateWithPasskey}>Tentar Passkey novamente</button>
+              {PASSKEY_EXTERNAL_SEND_ENABLED && (
+                <button className="w-full rounded-xl bg-indigo-400 px-4 py-3 font-bold text-white" onClick={authenticateWithPasskey}>Tentar Passkey novamente</button>
+              )}
               <form onSubmit={submitPin} className="space-y-3">
                 <input
                   value={pin}

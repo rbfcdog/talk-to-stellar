@@ -3,7 +3,7 @@ import LoginClient from "./login-client"
 
 export const metadata: Metadata = {
   title: "Sign In",
-  description: "Sign in to your TalkToStellar account with PIN or Passkey.",
+  description: "Sign in to your TalkToStellar account with PIN.",
 }
 
 export default async function LoginPage({
