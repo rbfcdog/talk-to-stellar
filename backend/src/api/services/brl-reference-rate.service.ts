@@ -1,6 +1,7 @@
 import { Asset } from '@stellar/stellar-sdk';
 import { server } from '../../config/stellar';
 import { getAssetIssuer, getTrustedPathAssetCodes, normalizeAssetCode } from '../../config/assets';
+import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
 
 type AssetInput = {
   code: string;
@@ -118,6 +119,14 @@ export class BrlReferenceRateService {
     if (!source || !destination) {
       throw new Error('Configured BRL/USDC on-chain quote returned an invalid amount.');
     }
+
+    assertSaneBrlUsdcQuote({
+      sourceAssetCode: input.sourceAssetCode,
+      destinationAssetCode: input.destinationAssetCode,
+      sourceAmount,
+      destinationAmount,
+      context: 'BRL reference rate',
+    });
 
     const brlPerUsdc = input.sourceAssetCode === 'USDC'
       ? destination / source

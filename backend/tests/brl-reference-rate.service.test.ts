@@ -85,4 +85,14 @@ describe('BrlReferenceRateService', () => {
 
     await expect(BrlReferenceRateService.getReferenceRate()).rejects.toThrow(/trusted on-chain BRL\/USDC path/);
   });
+
+  it('rejects configured on-chain BRL prices that are outside the safe fiat range', async () => {
+    strictSendPathsMock.mockReturnValue({
+      call: jest.fn().mockResolvedValue({
+        records: [{ destination_amount: '119.0600000', path: [] }],
+      }),
+    });
+
+    await expect(BrlReferenceRateService.getReferenceRate()).rejects.toThrow(/fora da faixa segura/);
+  });
 });
