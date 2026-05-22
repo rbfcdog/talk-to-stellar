@@ -6,6 +6,7 @@ import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 import { mapPublicError } from "@/lib/public-errors";
+import { UserGuidance } from "@/components/user-guidance";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = "BRL" | "USDC";
@@ -1636,6 +1637,59 @@ export default function PixRampClient({
             </div>
           </section>
         </header>
+
+        <UserGuidance
+          className="mt-5"
+          eyebrow={L("Guia desta tela", "Page guide")}
+          title={
+            rampMode === "offramp"
+              ? L("Retire saldo para PIX sem perder o passo", "Withdraw balance to PIX without losing the next step")
+              : transferFlow && transferRecipientLabel
+                ? L(`Pague ${transferRecipientLabel} com PIX em uma sequência guiada`, `Pay ${transferRecipientLabel} with PIX in a guided sequence`)
+                : L("Coloque dinheiro via PIX e acompanhe a entrega", "Add money with PIX and follow delivery")
+          }
+          body={L(
+            "A tela mostra valor, destino, taxa real quando o provider retorna a cotação, PIN e status. Se veio do chat, mantenha o mesmo navegador logado.",
+            "This page shows amount, destination, real provider fee when returned, PIN, and status. If it came from chat, keep the same browser signed in.",
+          )}
+          steps={
+            rampMode === "offramp"
+              ? [
+                  {
+                    title: L("Veja taxa real", "Check real fee"),
+                    body: L("Toque em Ver taxa real antes do PIN para entender o valor que chega no PIX.", "Tap Show real fee before PIN to understand what arrives in PIX."),
+                  },
+                  {
+                    title: L("Digite o PIN", "Enter PIN"),
+                    body: L("O PIN autoriza retirar saldo da conta TalkToStellar.", "PIN authorizes withdrawing balance from the TalkToStellar account."),
+                  },
+                  {
+                    title: L("Confirme a retirada", "Confirm withdrawal"),
+                    body: L("O status final mostra o que saiu da conta e o que entrou no PIX.", "Final status shows what left the account and what arrived in PIX."),
+                  },
+                ]
+              : [
+                  {
+                    title: L("Confira valor e destino", "Review amount and destination"),
+                    body: transferFlow && transferRecipientLabel
+                      ? L(`Este PIX financia o pagamento para ${transferRecipientLabel}.`, `This PIX funds the payment to ${transferRecipientLabel}.`)
+                      : L("Este PIX adiciona saldo à sua conta.", "This PIX adds balance to your account."),
+                  },
+                  {
+                    title: L("Gere o PIX", "Generate PIX"),
+                    body: L("A cotação expira para evitar preço velho; se expirar, gere outra.", "The quote expires to avoid stale pricing; if it expires, generate another one."),
+                  },
+                  {
+                    title: L("Acompanhe a entrega", "Track delivery"),
+                    body: L("Depois da confirmação, a linha do tempo mostra saldo, pagamento ou comprovante.", "After confirmation, the timeline shows balance, payment, or receipt."),
+                  },
+                ]
+          }
+          actions={[
+            { label: L("Abrir chat", "Open chat"), href: "/chat" },
+            { label: L("Histórico", "History"), href: "/transactions" },
+          ]}
+        />
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
