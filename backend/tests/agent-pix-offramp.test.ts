@@ -323,6 +323,44 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('does not block PIX-funded recipient link on contact enrichment before wallet is active', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    const contactLookup = jest.spyOn(graph as any, 'getContactByPublicKeyOrName');
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const state = createState('quero mandar 10 brl em pix pra ana silva');
+      state.session_data = {
+        ...state.session_data!,
+        public_key: '',
+      };
+
+      const result = await graph.processInput(state);
+      const url = String(result.response_message.match(/https?:\/\/\S+/)?.[0] || '');
+      const parsed = new URL(url);
+
+      expect(contactLookup).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('ana silva');
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('amount')).toBe('10');
+      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+      expect(parsed.searchParams.get('recipient')).toBe('ana silva');
+      expect(parsed.searchParams.get('recipient_public_key')).toBeNull();
+    } finally {
+      contactLookup.mockRestore();
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('extracts direct payment wording with insufficient balance as a normal payment intent', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 
