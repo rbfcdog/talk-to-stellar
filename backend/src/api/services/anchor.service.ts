@@ -25,6 +25,7 @@ import { EconomyEngineService } from './economy-engine.service';
 import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
+import { PlatformFeeService } from './platform-fee.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
 import crypto from 'crypto';
@@ -292,6 +293,12 @@ function toStellarAmount(value: unknown): string {
     throw apiError('amount must be a positive decimal amount.', 400);
   }
   return amount.toFixed(7);
+}
+
+function formatDecimalAmount(value: unknown): string {
+  const amount = parseHumanAmountNumber(value);
+  if (!Number.isFinite(amount) || amount <= 0) return '0';
+  return amount.toFixed(7).replace(/\.?0+$/, '');
 }
 
 function formatDisplayAmount(value: unknown, assetCode: string): string {
@@ -649,6 +656,7 @@ export class AnchorService {
     const anchorAmountAfterFee = coalesceString(quote.destinationAmountAfterFee, quote.toAmount);
     const desiredFinalAmount = coalesceString(input.desiredFinalAmount);
     const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || finalAsset.code);
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.sourceAmountBrl, quote);
 
     const decorated: Quote & Record<string, unknown> = {
       ...input.quote,
@@ -674,7 +682,7 @@ export class AnchorService {
 
     const exactFinalAmount = desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code)
       ? desiredFinalAmount
-      : (finalAsset.code === 'BRL' ? input.sourceAmountBrl : '');
+      : (finalAsset.code === 'BRL' ? brlFeeBridge.netAmount : '');
 
     decorated.userFacingToCurrency = assetIdentifier(finalAsset);
     decorated.finalCurrency = assetIdentifier(finalAsset);
@@ -688,13 +696,59 @@ export class AnchorService {
 
     if (exactFinalAmount) {
       decorated.userFacingToAmount = exactFinalAmount;
-      decorated.finalAmountBeforeFee = exactFinalAmount;
+      decorated.finalAmountBeforeFee = finalAsset.code === 'BRL' ? brlFeeBridge.grossAmount : exactFinalAmount;
       decorated.finalAmountAfterFee = exactFinalAmount;
       decorated.requestedFinalAmount = exactFinalAmount;
       decorated.requestedFinalAssetCode = normalizeAssetCode(finalAsset.code);
+      if (finalAsset.code === 'BRL') {
+        decorated.talkToStellarFeeAmount = brlFeeBridge.talkToStellarFeeAmount;
+        decorated.talkToStellarFeeCurrency = 'BRL';
+        decorated.totalFeeAmount = brlFeeBridge.totalFeeAmount;
+        decorated.totalFeeCurrency = 'BRL';
+      }
     }
 
     return decorated;
+  }
+
+  private static estimateOnRampBrlFeeBridge(sourceAmountBrl: unknown, quote?: Record<string, unknown> | null): {
+    grossAmount: string;
+    netAmount: string;
+    providerFeeAmount: string;
+    talkToStellarFeeAmount: string;
+    totalFeeAmount: string;
+  } {
+    const gross = Math.max(0, parseHumanAmountNumber(sourceAmountBrl));
+    const rawProviderFee = Math.max(0, parseHumanAmountNumber(
+      coalesceString(
+        quote?.feeAmount,
+        quote?.fee,
+        quote?.anchorProviderFeeAmount,
+      ) || '0',
+    ));
+    const feeBps = Math.max(0, parseHumanAmountNumber(quote?.feeBps));
+    const providerFee = rawProviderFee > 0
+      ? rawProviderFee
+      : gross > 0 && feeBps > 0
+        ? gross * (feeBps / 10000)
+        : 0;
+    const platformFee = PlatformFeeService.calculateSpread({
+      sourceAmount: gross,
+      sourceAssetCode: 'BRL',
+      destinationAssetCode: 'USDC',
+      mode: 'deduct_from_source',
+    });
+    const talkToStellarFee = Math.max(0, parseHumanAmountNumber(platformFee.feeAmount));
+    const totalFee = Math.min(gross, providerFee + talkToStellarFee);
+    const net = Math.max(0, gross - totalFee);
+
+    return {
+      grossAmount: formatDecimalAmount(gross),
+      netAmount: formatDecimalAmount(net),
+      providerFeeAmount: formatDecimalAmount(providerFee),
+      talkToStellarFeeAmount: formatDecimalAmount(talkToStellarFee),
+      totalFeeAmount: formatDecimalAmount(totalFee),
+    };
   }
 
   static getRuntimeInfo(): {
@@ -1184,12 +1238,19 @@ export class AnchorService {
     expectedToAmount?: string;
     desiredFinalAmount?: string;
     desiredFinalAssetCode?: string;
+    quote?: Quote;
     upstreamError?: string;
   }): OnRampTransaction {
     const orderId = `sandbox-pix-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const destinationAmount = estimateTesouroFromBrl(input.amount, input.expectedToAmount);
     const finalIsTesouro = sameIssuedAsset(input.finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.amount, input.quote as Record<string, unknown> | undefined);
+    const finalAmount = finalIsTesouro
+      ? destinationAmount
+      : input.finalAsset.code === 'BRL' && !input.desiredFinalAmount
+        ? brlFeeBridge.netAmount
+        : undefined;
     const transaction = {
       id: orderId,
       customerId: input.customerId,
@@ -1197,7 +1258,7 @@ export class AnchorService {
       status: 'pending' as const,
       fromAmount: input.amount,
       fromCurrency: 'BRL',
-      toAmount: finalIsTesouro ? destinationAmount : '',
+      toAmount: finalAmount || '',
       toCurrency: assetIdentifier(input.finalAsset),
       stellarAddress: input.context.publicKey,
       paymentInstructions: this.buildSandboxPixInstructions(orderId, input.amount),
@@ -1229,7 +1290,7 @@ export class AnchorService {
       destinationAmount,
       finalAssetCode: input.finalAsset.code,
       finalAssetIssuer: input.finalAsset.issuer,
-      finalAmount: finalIsTesouro ? destinationAmount : undefined,
+      finalAmount,
       desiredFinalAmount: input.desiredFinalAmount,
       desiredFinalAssetCode: input.desiredFinalAssetCode,
       upstreamError: input.upstreamError,
@@ -1522,7 +1583,7 @@ export class AnchorService {
     if (finalAsset.code === 'BRL' && finalAsset.issuer) {
       const exactBrl = desiredFinalAmount && desiredFinalAssetCode === 'BRL'
         ? desiredFinalAmount
-        : toStellarAmount(record.sourceAmountBrl);
+        : toStellarAmount(record.finalAmount || record.sourceAmountBrl);
       const exactBrlConversion = await StellarService.submitStrictReceivePaymentFromSecret({
         sourceSecret,
         destination: record.publicKey,
@@ -2495,6 +2556,7 @@ export class AnchorService {
       expectedToAmount: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount),
       desiredFinalAmount: desiredFinalAmount || undefined,
       desiredFinalAssetCode: desiredFinalAssetCode || undefined,
+      quote: orderQuote,
       upstreamError: debugErrorMessage(error),
     });
 
@@ -2551,6 +2613,13 @@ export class AnchorService {
       }
     }
 
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(amount, orderQuote as Record<string, unknown> | undefined);
+    const operationFinalAmount = desiredFinalAmount || (finalAsset.code === 'BRL'
+      ? brlFeeBridge.netAmount
+      : sameIssuedAsset(finalAsset, targetAsset)
+        ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount))
+        : undefined);
+
     const operationContext = {
       provider: 'etherfuse',
       rail: 'pix',
@@ -2565,13 +2634,13 @@ export class AnchorService {
       crypto_wallet_id: cryptoWalletId,
       source_amount_brl: amount,
       destination_amount_anchor: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount, transaction.toAmount),
-      final_amount: desiredFinalAmount || (finalAsset.code === 'BRL'
-        ? amount
-        : sameIssuedAsset(finalAsset, targetAsset)
-          ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount))
-          : undefined),
+      final_amount: operationFinalAmount,
       final_asset_code: finalAsset.code,
       final_asset_issuer: finalAsset.issuer,
+      provider_onramp_fee_amount: brlFeeBridge.providerFeeAmount,
+      talktostellar_transaction_fee_amount: brlFeeBridge.talkToStellarFeeAmount,
+      total_fee_amount: brlFeeBridge.totalFeeAmount,
+      fee_currency: 'BRL',
       desired_final_amount: desiredFinalAmount || undefined,
       desired_final_asset_code: desiredFinalAssetCode || undefined,
       auto_pay_after_ramp: autoPayAfterRamp || undefined,

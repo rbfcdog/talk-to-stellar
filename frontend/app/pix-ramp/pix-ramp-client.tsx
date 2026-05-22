@@ -138,6 +138,110 @@ function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC
   return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
 }
 
+function formatApiAmount(value: unknown) {
+  const numeric = parseHumanAmount(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  return numeric.toFixed(7).replace(/\.?0+$/, "");
+}
+
+function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null | undefined) {
+  if (!quote) return null;
+
+  const sourceCurrency = quoteCurrencyCode(quote.fromCurrency, "BRL");
+  const hasFinalConversionAmount = Boolean(quote.finalAmountAfterFee || quote.userFacingToAmount);
+  const destinationCurrency = hasFinalConversionAmount
+    ? quoteCurrencyCode(quote.finalCurrency || quote.userFacingToCurrency, "BRL")
+    : quoteCurrencyCode(quote.toCurrency, "BRL");
+  const destinationBeforeRaw = hasFinalConversionAmount
+    ? (quote.finalAmountBeforeFee || quote.finalAmountAfterFee || quote.userFacingToAmount || "")
+    : (quote.destinationAmountBeforeFee || quote.destinationAmount || "");
+  const destinationAfterRaw = hasFinalConversionAmount
+    ? (quote.finalAmountAfterFee || quote.userFacingToAmount || "")
+    : (quote.destinationAmountAfterFee || quote.toAmount || "");
+  const sourceAmount = parseHumanAmount(quote.fromAmount);
+  const destinationBefore = parseHumanAmount(destinationBeforeRaw);
+  const destinationAfter = parseHumanAmount(destinationAfterRaw);
+  const providerFeeRaw = quote.anchorProviderFeeAmount || quote.feeAmount || quote.fee || "";
+  const backendTotalFee = parseHumanAmount(quote.totalFeeAmount);
+  const backendTtsFee = parseHumanAmount(quote.talkToStellarFeeAmount);
+  const providerFee = parseHumanAmount(providerFeeRaw);
+  const feeBps = parseHumanAmount(quote.feeBps);
+  const hasBackendFeeBridge = Number.isFinite(backendTotalFee) && backendTotalFee >= 0 && Number.isFinite(destinationAfter);
+  const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
+    ? Math.max(destinationBefore - destinationAfter, 0)
+    : NaN;
+  const providerFeeFromBps = Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(feeBps) && feeBps > 0
+    ? sourceAmount * (feeBps / 10000)
+    : 0;
+  const providerFeeAmount = hasBackendFeeBridge && Number.isFinite(providerFee)
+    ? providerFee
+    : Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
+    ? inferredDestinationFee
+    : Number.isFinite(providerFee) && providerFee > 0
+      ? providerFee
+      : providerFeeFromBps;
+  const providerFeeCurrency = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
+    ? destinationCurrency
+    : sourceCurrency;
+  const providerFeePct = Number.isFinite(feeBps) && feeBps > 0
+    ? feeBps / 100
+    : Number.isFinite(destinationBefore) && destinationBefore > 0
+      ? (providerFeeAmount / destinationBefore) * 100
+      : Number.isFinite(sourceAmount) && sourceAmount > 0
+        ? (providerFeeAmount / sourceAmount) * 100
+        : NaN;
+  const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
+  const ttsTransactionFeePct = ttsTransactionFeeBps / 100;
+  const ttsTransactionFeeAmount = hasBackendFeeBridge && Number.isFinite(backendTtsFee)
+    ? backendTtsFee
+    : Number.isFinite(sourceAmount) && sourceAmount > 0
+      ? sourceAmount * (ttsTransactionFeeBps / 10000)
+      : 0;
+  const sameCurrencyBridge = sourceCurrency === destinationCurrency && Number.isFinite(sourceAmount) && sourceAmount > 0;
+  const grossComparableAmount = sameCurrencyBridge
+    ? sourceAmount
+    : Number.isFinite(destinationBefore) && destinationBefore > 0
+      ? destinationBefore
+      : NaN;
+  const providerFeeInDestination = sameCurrencyBridge && providerFeeCurrency === destinationCurrency
+    ? providerFeeAmount
+    : providerFeeAmount;
+  const ttsFeeInDestination = sameCurrencyBridge ? ttsTransactionFeeAmount : 0;
+  const netDestinationAmount = hasBackendFeeBridge && Number.isFinite(destinationAfter)
+    ? destinationAfter
+    : sameCurrencyBridge && Number.isFinite(grossComparableAmount)
+    ? Math.max(0, grossComparableAmount - providerFeeInDestination - ttsFeeInDestination)
+    : Number.isFinite(destinationAfter)
+      ? destinationAfter
+      : NaN;
+  const totalRouteFeePct = (Number.isFinite(providerFeePct) ? providerFeePct : 0) + ttsTransactionFeePct;
+
+  return {
+    sourceCurrency,
+    destinationCurrency,
+    destinationBeforeRaw: sameCurrencyBridge && Number.isFinite(grossComparableAmount) ? formatApiAmount(grossComparableAmount) : destinationBeforeRaw,
+    destinationAfterRaw: Number.isFinite(netDestinationAmount) ? formatApiAmount(netDestinationAmount) : destinationAfterRaw,
+    providerFeeAmount,
+    providerFeeCurrency,
+    providerFeePct,
+    ttsTransactionFeeAmount,
+    ttsTransactionFeePct,
+    totalRouteFeePct,
+    netDestinationAmount,
+    sourceAmount,
+    sameCurrencyBridge,
+    retainedPct: Number.isFinite(grossComparableAmount) && grossComparableAmount > 0 && Number.isFinite(netDestinationAmount)
+      ? (netDestinationAmount / grossComparableAmount) * 100
+      : NaN,
+    estimatedTraditionalFee: Number.isFinite(sourceAmount) && sourceAmount > 0
+      ? sourceAmount * (TRADITIONAL_FX_FEE_PCT / 100)
+      : 0,
+    estimatedSavingsVsTraditional: Number.isFinite(sourceAmount) && sourceAmount > 0
+      ? sourceAmount * (Math.max(0, TRADITIONAL_FX_FEE_PCT - totalRouteFeePct) / 100)
+      : 0,
+  };
+}
+
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
   if (displayCode === "USDC") return "digital dollar";
@@ -529,6 +633,17 @@ export default function PixRampClient({
   const needsBrowserLoginForChatLink = Boolean(launchedFromChat && !hasSession);
   const canResolveWallet = Boolean(!etherfuseRailUnavailable && (hasSession || (allowEmailAccountLookup && rampEmail.trim())));
   const quote = quotePayload?.quote;
+  const activeOnRampQuote = orderPayload?.quote || quote;
+  const onRampFeeEstimate = buildRampFeeBridgeEstimate("onramp", activeOnRampQuote);
+  const feeAdjustedAutoPayAmount = transferFlow &&
+    onRampFeeEstimate?.destinationCurrency === (autoPayAsset || targetAsset) &&
+    Number.isFinite(onRampFeeEstimate.netDestinationAmount)
+      ? formatApiAmount(onRampFeeEstimate.netDestinationAmount)
+      : "";
+  const feeAdjustedAutoPayAsset = feeAdjustedAutoPayAmount ? (autoPayAsset || targetAsset) : "";
+  const feeAdjustedAutoPayDisplayAmount = feeAdjustedAutoPayAmount
+    ? formatRampAsset(feeAdjustedAutoPayAmount, feeAdjustedAutoPayAsset)
+    : autoPayDisplayAmount;
   const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
   const order = statusPayload?.transaction || orderPayload?.transaction;
   const operationId = String(orderPayload?.operation_id || "");
@@ -560,8 +675,10 @@ export default function PixRampClient({
   const onRampComplete = Boolean(order && isSuccessStatus(status));
   const orderFailed = Boolean(order && isFailureStatus(status));
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
-  const estimatedReceiveLabel = targetAsset === "BRL"
-      ? formatMoney(order?.toAmount || finalReceivedAmount || amountBrl)
+  const estimatedReceiveLabel = feeAdjustedAutoPayAmount
+      ? feeAdjustedAutoPayDisplayAmount
+      : targetAsset === "BRL"
+        ? formatMoney(order?.toAmount || finalReceivedAmount || amountBrl)
       : desiredFinalAmount && desiredFinalAsset === targetAsset
         ? formatRampAsset(desiredFinalAmount, targetAsset)
       : finalReceivedAmount
@@ -1285,6 +1402,8 @@ export default function PixRampClient({
     setWalletPin("");
 
     const auth = await resolveWalletFromEmail();
+    const requestedFinalAmount = transferFlow ? "" : desiredFinalAmount;
+    const requestedFinalAsset = requestedFinalAmount ? desiredFinalAsset : "";
     const customerResult = getRampCustomerId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
       email: rampEmail.trim().toLowerCase() || undefined,
@@ -1300,8 +1419,8 @@ export default function PixRampClient({
       to_currency: "TESOURO",
       final_asset: targetAsset,
       amount: amountBrl,
-      desired_final_amount: desiredFinalAmount || undefined,
-      desired_final_asset: desiredFinalAsset || undefined,
+      desired_final_amount: requestedFinalAmount || undefined,
+      desired_final_asset: requestedFinalAsset || undefined,
     }, "POST", auth);
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
     setCustomerPayload(nextCustomerPayload);
@@ -1345,11 +1464,11 @@ export default function PixRampClient({
         from_currency: "BRL",
         to_currency: "TESOURO",
         final_asset: targetAsset,
-        desired_final_amount: desiredFinalAmount || undefined,
-        desired_final_asset: desiredFinalAsset || undefined,
+        desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
+        desired_final_asset: transferFlow ? undefined : desiredFinalAsset || undefined,
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
-        auto_pay_amount: autoPayAmount || undefined,
+        auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
         auto_pay_asset_code: autoPayAsset || targetAsset,
       }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
       if (payload?.quote) {
@@ -1454,8 +1573,8 @@ export default function PixRampClient({
   async function submitPixFundedTransfer(completedTransaction?: RampResponse) {
     const auth = await resolveWalletFromEmail();
     const pin = getValidatedWalletPin();
-    const requestedAutoPayAmount = autoPayAmount && autoPayAsset ? autoPayAmount : "";
-    const requestedAutoPayAsset = autoPayAsset || targetAsset;
+    const requestedAutoPayAmount = feeAdjustedAutoPayAmount || (autoPayAmount && autoPayAsset ? autoPayAmount : "");
+    const requestedAutoPayAsset = feeAdjustedAutoPayAsset || autoPayAsset || targetAsset;
     const transferAmount = requestedAutoPayAmount || (targetAsset === "BRL"
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
       : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || ""));
@@ -1484,8 +1603,8 @@ export default function PixRampClient({
       amount: amountBrl,
       to_currency: "TESOURO",
       final_asset: targetAsset,
-      desired_final_amount: desiredFinalAmount || undefined,
-      desired_final_asset: desiredFinalAsset || undefined,
+      desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
+      desired_final_asset: transferFlow ? undefined : desiredFinalAsset || undefined,
     }, "POST", auth, buildIdempotencyKey("test-onramp"));
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -1980,7 +2099,7 @@ export default function PixRampClient({
             {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
                 <p>
-                  {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${autoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${autoPayDisplayAmount} to ${transferRecipientLabel}.`)}
+                  {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel}.`)}
                 </p>
                 {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-emerald-100/75">{transferRecipientDisplayKey}</p>}
               </div>
@@ -2295,7 +2414,7 @@ export default function PixRampClient({
                     </>
                   ) : (
                     <p className="mt-3 text-sm font-bold text-amber-50">
-                      {L(`PIX confirmado. Enviando automaticamente ${autoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}...`, `PIX confirmed. Automatically sending ${autoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}...`)}
+                      {L(`PIX confirmado. Enviando automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}...`, `PIX confirmed. Automatically sending ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}...`)}
                     </p>
                   )}
                 </div>
@@ -2357,57 +2476,26 @@ function RampFeeBridge({
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   if (!quote) return null;
 
-  const sourceCurrency = quoteCurrencyCode(quote.fromCurrency, "BRL");
+  const estimate = buildRampFeeBridgeEstimate(mode, quote);
+  if (!estimate) return null;
+
+  const sourceCurrency = estimate.sourceCurrency;
   const hasFinalConversionAmount = Boolean(quote.finalAmountAfterFee || quote.userFacingToAmount);
-  const destinationCurrency = hasFinalConversionAmount
-    ? quoteCurrencyCode(quote.finalCurrency || quote.userFacingToCurrency, "BRL")
-    : quoteCurrencyCode(quote.toCurrency, "BRL");
-  const destinationBeforeRaw = hasFinalConversionAmount
-    ? (quote.finalAmountBeforeFee || quote.finalAmountAfterFee || quote.userFacingToAmount || "")
-    : (quote.destinationAmountBeforeFee || quote.destinationAmount || "");
-  const destinationAfterRaw = hasFinalConversionAmount
-    ? (quote.finalAmountAfterFee || quote.userFacingToAmount || "")
-    : (quote.destinationAmountAfterFee || quote.toAmount || "");
+  const destinationCurrency = estimate.destinationCurrency;
+  const destinationBeforeRaw = estimate.destinationBeforeRaw;
+  const destinationAfterRaw = estimate.destinationAfterRaw;
   const anchorCurrency = quoteCurrencyCode(quote.anchorCurrency || quote.toCurrency, "TESOURO");
   const anchorAfterRaw = quote.anchorAmountAfterFee || quote.destinationAmountAfterFee || quote.toAmount || "";
   const anchorBeforeRaw = quote.anchorAmountBeforeFee || quote.destinationAmountBeforeFee || quote.destinationAmount || "";
-  const providerFeeRaw = quote.feeAmount || quote.fee || "";
-  const destinationBefore = parseHumanAmount(destinationBeforeRaw);
-  const destinationAfter = parseHumanAmount(destinationAfterRaw);
-  const sourceAmount = parseHumanAmount(quote.fromAmount);
-  const providerFee = parseHumanAmount(providerFeeRaw);
-  const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
-    ? Math.max(destinationBefore - destinationAfter, 0)
-    : NaN;
-  const feeAmount = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
-    ? inferredDestinationFee
-    : (Number.isFinite(providerFee) ? providerFee : 0);
-  const feeBps = parseHumanAmount(quote.feeBps);
-  const feePct = Number.isFinite(feeBps) && feeBps > 0
-    ? feeBps / 100
-    : Number.isFinite(destinationBefore) && destinationBefore > 0
-      ? (feeAmount / destinationBefore) * 100
-      : NaN;
-  const feeCurrency = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
-    ? destinationCurrency
-    : sourceCurrency;
-  const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
-  const ttsTransactionFeePct = ttsTransactionFeeBps / 100;
-  const ttsTransactionFeeAmount = Number.isFinite(sourceAmount) && sourceAmount > 0
-    ? sourceAmount * (ttsTransactionFeeBps / 10000)
-    : 0;
-  const visibleRouteFeePct = (Number.isFinite(feePct) ? feePct : 0) + ttsTransactionFeePct;
-  const estimatedTraditionalFee = Number.isFinite(sourceAmount) && sourceAmount > 0
-    ? sourceAmount * (TRADITIONAL_FX_FEE_PCT / 100)
-    : 0;
-  const estimatedSavingsVsTraditional = Number.isFinite(sourceAmount) && sourceAmount > 0
-    ? sourceAmount * (Math.max(0, TRADITIONAL_FX_FEE_PCT - visibleRouteFeePct) / 100)
-    : 0;
-  const retainedPct = Number.isFinite(sourceAmount) && sourceAmount > 0 && destinationCurrency === sourceCurrency && Number.isFinite(destinationAfter)
-    ? (destinationAfter / sourceAmount) * 100
-    : Number.isFinite(destinationBefore) && destinationBefore > 0 && Number.isFinite(destinationAfter)
-      ? (destinationAfter / destinationBefore) * 100
-    : NaN;
+  const feeAmount = estimate.providerFeeAmount;
+  const feePct = estimate.providerFeePct;
+  const feeCurrency = estimate.providerFeeCurrency;
+  const ttsTransactionFeePct = estimate.ttsTransactionFeePct;
+  const ttsTransactionFeeAmount = estimate.ttsTransactionFeeAmount;
+  const estimatedTraditionalFee = estimate.estimatedTraditionalFee;
+  const estimatedSavingsVsTraditional = estimate.estimatedSavingsVsTraditional;
+  const retainedPct = estimate.retainedPct;
+  const sourceAmount = estimate.sourceAmount;
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
   const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
