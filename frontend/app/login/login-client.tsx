@@ -8,7 +8,6 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { KeyRound, LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
-import { UserGuidance } from "@/components/user-guidance"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -77,7 +76,6 @@ const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMA
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()
-  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const searchParams = useSearchParams()
   const requestedAuthMethod = String(searchParams.get("auth") || "").trim().toLowerCase()
   const emailFromQuery = String(searchParams.get("email") || "").trim()
@@ -543,31 +541,6 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 </p>
               )}
             </div>
-
-            <UserGuidance
-              eyebrow={L("Como entrar", "How to sign in")}
-              title={L("Entre e volte direto para a ação que você pediu", "Sign in and return directly to the action you requested")}
-              body={L(
-                "Use e-mail e PIN para a demo principal. Depois de entrar, volte ao chat e peça saldo, contatos, PIX ou histórico.",
-                "Use email and PIN for the main demo. After signing in, go back to chat and ask for balance, contacts, PIX, or history.",
-              )}
-              steps={[
-                {
-                  title: L("Informe a conta", "Enter account"),
-                  body: hasExternalContext
-                    ? L("O canal do chat já foi detectado; confirme com PIN.", "The chat channel was detected; confirm with PIN.")
-                    : L("Digite o e-mail usado na conta TalkToStellar.", "Enter the email used on the TalkToStellar account."),
-                },
-                {
-                  title: L("Confirme com PIN", "Confirm with PIN"),
-                  body: L("PIN é o caminho previsível para demo. Passkey continua opcional.", "PIN is the predictable demo path. Passkey remains optional."),
-                },
-                {
-                  title: L("Continue pelo chat", "Continue in chat"),
-                  body: L("Comandos úteis: saldo, contatos, colocar 10 reais via PIX, histórico.", "Useful commands: balance, contacts, add 10 reais with PIX, history."),
-                },
-              ]}
-            />
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">

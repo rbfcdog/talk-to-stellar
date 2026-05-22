@@ -103,23 +103,25 @@ export class TransferNotificationService {
       language,
       `${greeting}\n` +
         `Login concluido. Sua conta esta conectada.\n` +
-        `Para começar sem erro, siga este caminho rápido:\n` +
+        `Para começar pelo chat, siga este caminho rápido:\n` +
         `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
         `2) Digite "contatos" para ver para quem já pode enviar.\n` +
-        `3) Digite "enviar 10 dólares para [nome] da forma mais otimizada" para iniciar um pagamento com confirmação.\n` +
-        `4) Digite "quero trazer 100 reais via PIX" para receber PIX na conta.\n` +
-        `5) Digite "quero retirar 100 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
+        `3) Digite "colocar 10 reais via PIX" para adicionar saldo.\n` +
+        `4) Digite "enviar 5 dólares para Ana" para iniciar um pagamento com confirmação.\n` +
+        `5) Digite "retirar 5 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
+        `6) Digite "histórico" para ver operações e comprovantes.\n` +
         `Se a página de cadastro abrir e você já tiver conta, use "Já tenho conta".\n` +
         `Se quiser usar em inglês, peça "change to English".\n` +
         `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`,
       `${greeting}\n` +
         `Login complete. Your account is connected.\n` +
-        `Fast path to get started:\n` +
+        `Fast path to get started in chat:\n` +
         `1) Type "balance" to check available money.\n` +
         `2) Type "contacts" to see who you can pay.\n` +
-        `3) Type "send 10 dollars to [name] with the most optimized route" to start a payment with confirmation.\n` +
-        `4) Type "deposit 100 reais with PIX" to add money to your account.\n` +
-        `5) Type "withdraw 100 reais to my PIX" to send money out to your PIX.\n` +
+        `3) Type "add 10 reais with PIX" to add balance.\n` +
+        `4) Type "send 5 dollars to Ana" to start a payment with confirmation.\n` +
+        `5) Type "withdraw 5 reais to my PIX" to send money out to your PIX.\n` +
+        `6) Type "history" to see operations and receipts.\n` +
         `If the sign-up page opens and you already have an account, use "I already have an account".\n` +
         `You can switch languages anytime by asking for Portuguese or English.\n` +
         `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`

@@ -23,7 +23,7 @@ const englishDictionary: Dictionary = {
     language_label: "Language",
     language_current: "English",
     chat_agent_welcome:
-      "Tell me what you want to do: balance, add money with PIX, send to Ana, convert, or view history. If you are not signed in yet, send “login” and I will create a secure access link.",
+      "Hi, this is TalkToStellar.\n\nI can help with balance, PIX, contacts, payments and conversions.\n\nExamples:\n1. balance\n2. add 10 reais with PIX\n3. send 5 dollars to Ana\n4. withdraw 5 reais to my PIX\n5. history\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
     chat_search_placeholder: "Search account contacts...",
     chat_sidebar_preview: "Hi. How can I help with your account, balance, and contacts today?",
     chat_input_placeholder: "Type: balance, add money with PIX, withdraw to PIX, or send to someone",
@@ -107,7 +107,7 @@ const portugueseDictionary: Dictionary = {
     language_label: "Idioma",
     language_current: "Português",
     chat_agent_welcome:
-      "Me diga o que quer fazer: saldo, colocar dinheiro com PIX, enviar para Ana, converter ou ver histórico. Se ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
+      "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com saldo, PIX, contatos, pagamentos e conversões.\n\nExemplos:\n1. saldo\n2. colocar 10 reais via PIX\n3. enviar 5 dólares para Ana\n4. retirar 5 reais para meu PIX\n5. histórico\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
     chat_search_placeholder: "Buscar contatos da conta...",
     chat_sidebar_preview: "Oi. Como posso ajudar com sua conta, saldo e contatos hoje?",
     chat_input_placeholder: "Digite: saldo, colocar dinheiro com PIX, retirar para PIX ou enviar para alguém",

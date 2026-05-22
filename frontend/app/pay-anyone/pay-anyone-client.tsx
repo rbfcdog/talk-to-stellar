@@ -9,8 +9,6 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { getClientSession } from "@/lib/session"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
-import { useLanguage } from "@/lib/i18n"
-import { UserGuidance } from "@/components/user-guidance"
 
 type CreatePayLinkResponse = {
   success?: boolean
@@ -39,8 +37,6 @@ function friendlyName(value: string) {
 }
 
 export default function PayAnyoneClient() {
-  const { language } = useLanguage()
-  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const router = useRouter()
   const searchParams = useSearchParams()
   const [sessionId, setSessionId] = useState("")
@@ -199,54 +195,28 @@ export default function PayAnyoneClient() {
         <section className="min-w-0 space-y-6 overflow-hidden">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-emerald-200">
             <ShieldCheck className="h-4 w-4" />
-            {L("Pagar ou receber", "Pay Anyone")}
+            Pay Anyone
           </div>
           <div className="space-y-4">
-            <p className="text-lg font-semibold text-emerald-200">{L("Bem-vindo", "Welcome")}, {userName}</p>
+            <p className="text-lg font-semibold text-emerald-200">Welcome, {userName}</p>
             <h1 className="max-w-xl text-4xl font-semibold text-white md:text-6xl">
-              {isReceiveMode ? L("Receba dinheiro pelo seu link global", "Receive money through your global link") : L("Envie dinheiro para quem ainda não tem conta", "Send money to someone who does not have an account yet")}
+              {isReceiveMode ? "Receive money through your global link" : "Send money to someone who does not have an account yet"}
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
               {isReceiveMode
-                ? L("Compartilhe seu link. A pessoa abre, informa o valor e paga direto para sua conta.", "Share your link. They open it, enter the amount, and pay directly to your account.")
-                : L("Seu PIN autoriza a criação do link. O destinatário entra ou cria a própria conta para receber.", "Your PIN authorizes link creation. The recipient signs in or creates their own account to receive the amount.")}
+                ? "Share your link with customers. They open it, enter the amount, and pay directly to your account."
+                : "Your PIN authorizes link creation. The recipient must sign in or create their own global account to receive the amount."}
             </p>
           </div>
 
-          <UserGuidance
-            eyebrow={L("O que fazer", "What to do")}
-            title={isReceiveMode ? L("Crie um link e compartilhe", "Create and share a link") : L("Crie um pagamento com revisão antes do envio", "Create a payment with review before sending")}
-            body={L(
-              "Esta tela é para link de pagamento. Para PIX direto, peça no chat: colocar 10 reais via PIX ou retirar 5 reais via PIX.",
-              "This page is for payment links. For direct PIX, ask in chat: add 10 reais with PIX or withdraw 5 reais with PIX.",
-            )}
-            steps={
-              isReceiveMode
-                ? [
-                    { title: L("Gerar link", "Generate link"), body: L("O link de recebimento é fixo para sua conta.", "Your receive link is fixed to your account.") },
-                    { title: L("Compartilhar", "Share"), body: L("Envie pelo WhatsApp, Telegram ou copie.", "Send through WhatsApp, Telegram, or copy it.") },
-                    { title: L("Acompanhar", "Track"), body: L("Depois confira o histórico e o comprovante.", "Then check history and receipt.") },
-                  ]
-                : [
-                    { title: L("Preencher destino", "Fill destination"), body: L("Informe nome, valor e moeda que a pessoa recebe.", "Enter name, amount, and currency received.") },
-                    { title: L("Autorizar com PIN", "Authorize with PIN"), body: L("O PIN cria o link de forma segura.", "PIN securely creates the link.") },
-                    { title: L("Compartilhar link", "Share link"), body: L("O destinatário entra ou cria conta para receber.", "The recipient signs in or creates an account to receive.") },
-                  ]
-            }
-            actions={[
-              { label: L("Voltar ao chat", "Back to chat"), href: "/chat" },
-              { label: L("Ver histórico", "View history"), href: "/transactions" },
-            ]}
-          />
-
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-            {(isReceiveMode ? [L("Criar", "Create"), L("Compartilhar", "Share"), L("Receber", "Receive")] : [L("Criar", "Create"), L("Compartilhar", "Share"), L("Receber", "Receive")]).map((label, index) => (
+            {(isReceiveMode ? ["Create", "Share", "Receive"] : ["Create", "Share", "Receive"]).map((label, index) => (
               <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-slate-200">
-                  {index === 0 && (isReceiveMode ? L("Gere seu link público de recebimento.", "Generate your public receive link.") : L("Informe valor, destinatário e PIN.", "Enter amount, recipient, and PIN."))}
-                  {index === 1 && L("Envie o link pelo canal que preferir.", "Send the link through your preferred channel.")}
-                  {index === 2 && (isReceiveMode ? L("O pagamento entra na sua conta.", "The payment lands in your account.") : L("O destinatário recebe na própria conta.", "The recipient receives it in their own account."))}
+                  {index === 0 && (isReceiveMode ? "Generate your public receive link." : "Enter amount, recipient, and PIN.")}
+                  {index === 1 && "Send the link through your preferred channel."}
+                  {index === 2 && (isReceiveMode ? "The payment lands in your account." : "The recipient receives it in their own account.")}
                 </p>
               </div>
             ))}
@@ -262,9 +232,9 @@ export default function PayAnyoneClient() {
           )}
           {!loggedIn && (
             <div className="mb-5 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-              {L("Entre na conta antes de criar o link.", "Sign in before creating a payment link.")}
+              Sign in before creating a payment link.
               <Link href="/login?next=/pay-anyone" className="ml-2 font-semibold text-white underline">
-                {L("Entrar", "Sign in")}
+                Sign in
               </Link>
             </div>
           )}
@@ -281,7 +251,7 @@ export default function PayAnyoneClient() {
               }}
               className={`rounded-md px-4 py-2 font-semibold transition ${!isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
             >
-              {L("Enviar", "Send")}
+              Send
             </button>
             <button
               type="button"
@@ -294,18 +264,18 @@ export default function PayAnyoneClient() {
               }}
               className={`rounded-md px-4 py-2 font-semibold transition ${isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
             >
-              {L("Receber", "Receive")}
+              Receive
             </button>
           </div>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Nome do destinatário", "Recipient name")}</span>
+                <span className="text-sm font-medium text-slate-200">Recipient name</span>
                 <input
                   value={recipientName}
                   onChange={(event) => setRecipientName(event.target.value)}
-                  placeholder={L("Ana Silva", "Ana Silva")}
+                  placeholder="John"
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
                 />
               </label>
@@ -313,7 +283,7 @@ export default function PayAnyoneClient() {
 
             {!isReceiveMode && <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Valor", "Amount")}</span>
+                <span className="text-sm font-medium text-slate-200">Amount</span>
                 <input
                   value={amount}
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
@@ -323,7 +293,7 @@ export default function PayAnyoneClient() {
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Você paga", "You pay")}</span>
+                <span className="text-sm font-medium text-slate-200">You pay</span>
                 <select
                   value={assetCode}
                   onChange={(event) => setAssetCode(event.target.value)}
@@ -334,7 +304,7 @@ export default function PayAnyoneClient() {
                 </select>
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Recebe em", "Receives in")}</span>
+                <span className="text-sm font-medium text-slate-200">Receives in</span>
                 <select
                   value={destinationAssetCode}
                   onChange={(event) => setDestinationAssetCode(event.target.value)}
@@ -345,7 +315,7 @@ export default function PayAnyoneClient() {
                 </select>
               </label>
               <label className="block space-y-2 sm:col-span-3">
-                <span className="text-sm font-medium text-slate-200">{L("Expira em (opcional)", "Expires at (optional)")}</span>
+                <span className="text-sm font-medium text-slate-200">Expires at (optional)</span>
                 <input
                   value={expiresAtLocal}
                   onChange={(event) => setExpiresAtLocal(event.target.value)}
@@ -357,26 +327,26 @@ export default function PayAnyoneClient() {
 
             {isReceiveMode && (
               <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
-                {L("Seu link de recebimento é fixo. A pessoa escolhe o valor na página pública e o pagamento entra identificado para você.", "Your receive link is fixed. The customer chooses the amount on the public page and the payment is identified as an incoming payment for you.")}
+                Your receive link is fixed. The customer chooses the amount on the public page and the payment is identified as an incoming payment for you.
               </div>
             )}
 
             {!isReceiveMode && destinationAssetCode !== assetCode && (
               <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
-                {L("O link debita", "The link debits")} {amount || "0"} {displayAsset(assetCode)} {L("da sua conta e o destinatário recebe em", "from your account and the recipient receives it in")} {displayAsset(destinationAssetCode)} {L("quando entrar.", "when they sign in.")}
+                The link debits {amount || "0"} {displayAsset(assetCode)} from your account and the recipient receives it in {displayAsset(destinationAssetCode)} when they sign in.
               </p>
             )}
 
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Seu PIN", "Your PIN")}</span>
+                <span className="text-sm font-medium text-slate-200">Your PIN</span>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder={L("Autorizar criação do link", "Authorize link creation")}
+                  placeholder="Authorize link creation"
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
                 />
               </label>
@@ -389,16 +359,16 @@ export default function PayAnyoneClient() {
             >
               <Link2 className="h-4 w-4" />
               {status === "submitting"
-                ? <span className="inline-flex items-center gap-2"><Spinner />{L("Criando link...", "Creating link...")}</span>
-                : isReceiveMode ? L("Criar link de recebimento", "Create receive link") : L("Criar link de pagamento", "Create payment link")}
+                ? <span className="inline-flex items-center gap-2"><Spinner />Creating link...</span>
+                : isReceiveMode ? "Create receive link" : "Create payment link"}
             </button>
           </form>
 
           <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4 text-sm">
             <p className="font-medium text-white">Link</p>
-            {status === "idle" && <p className="mt-2 text-slate-400">{L("O link aparece aqui depois da autorização.", "The link appears here after authorization.")}</p>}
-            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />{L("Gerando link seguro...", "Generating secure link...")}</div>}
-            {status === "error" && <p className="mt-2 text-rose-300">{result?.message || L("Não consegui criar o link.", "Could not create the link.")}</p>}
+            {status === "idle" && <p className="mt-2 text-slate-400">The link appears here after authorization.</p>}
+            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />Generating secure link...</div>}
+            {status === "error" && <p className="mt-2 text-rose-300">{result?.message || "Could not create the link."}</p>}
             <AnimatePresence mode="wait">
             {status === "done" && result?.url && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
@@ -410,7 +380,7 @@ export default function PayAnyoneClient() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 font-semibold text-white transition hover:bg-white/10"
                   >
                     <Copy className="h-4 w-4" />
-                    {copied ? L("Copiado", "Copied") : L("Copiar", "Copy")}
+                    {copied ? "Copied" : "Copy"}
                   </button>
                   <a
                     href={whatsappUrl}
@@ -419,7 +389,7 @@ export default function PayAnyoneClient() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 font-semibold text-slate-950 transition hover:bg-[#35e176]"
                   >
                     <Send className="h-4 w-4" />
-                    {L("Enviar", "Send")}
+                    Send
                   </a>
                 </div>
                 <p className="text-slate-300">{result.message}</p>

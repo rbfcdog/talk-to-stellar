@@ -4,14 +4,15 @@ const { createSessionStore } = require('./session-store');
 
 function formatWelcomeMessage() {
   return [
-    'Olá — TalkToStellar está online no Telegram!',
+    'Olá, aqui é o TalkToStellar.',
     '',
     'Posso ajudar com saldo, PIX, contatos, pagamentos e conversões.',
     'Exemplos:',
     '1. saldo',
     '2. colocar 10 reais via PIX',
     '3. enviar 5 dólares para Ana',
-    '4. histórico',
+    '4. retirar 5 reais para meu PIX',
+    '5. histórico',
     'Use /reset para limpar a sessão local.',
   ].join('\n');
 }

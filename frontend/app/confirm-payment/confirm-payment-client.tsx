@@ -8,7 +8,6 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
-import { UserGuidance } from "@/components/user-guidance"
 
 type ValidationResult = {
   success?: boolean
@@ -802,18 +801,18 @@ export default function ConfirmPaymentClient({
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-emerald-200">
-              {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
+              Payment Confirmation
             </div>
             <div className="space-y-4">
               <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {T(feedbackLanguage, "Confirme este pagamento", "Confirm this payment")}
+                Confirm this payment
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                {T(feedbackLanguage, "Confira valor, destino e taxa antes de digitar seu PIN.", "Review amount, destination, and fee before entering your PIN.")}
+                Review the details below and enter your PIN to authorize the transfer.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {[T(feedbackLanguage, "Revisar", "Review"), T(feedbackLanguage, "Autorizar", "Authorize"), T(feedbackLanguage, "Concluir", "Complete")].map((step, index) => {
+              {["Review", "Authorize", "Complete"].map((step, index) => {
                 const active = currentStep >= index + 1
                 return (
                   <motion.div
@@ -827,34 +826,15 @@ export default function ConfirmPaymentClient({
               })}
             </div>
 
-            <UserGuidance
-              eyebrow={T(feedbackLanguage, "Antes de confirmar", "Before confirming")}
-              title={T(feedbackLanguage, "O PIN só deve vir depois da revisão", "PIN should come only after review")}
-              body={T(
-                feedbackLanguage,
-                "Esta tela é o último checkpoint: veja quem recebe, quanto sai, quanto chega e depois autorize.",
-                "This page is the last checkpoint: see who receives, what leaves, what arrives, then authorize.",
-              )}
-              steps={[
-                { title: T(feedbackLanguage, "Revise o resumo", "Review summary"), body: T(feedbackLanguage, "Confirme valor, destino e chave.", "Confirm amount, destination, and key.") },
-                { title: T(feedbackLanguage, "Digite o PIN", "Enter PIN"), body: T(feedbackLanguage, "Use PIN para demo; passkey é opcional.", "Use PIN for demo; passkey is optional.") },
-                { title: T(feedbackLanguage, "Veja o resultado", "View result"), body: T(feedbackLanguage, "Depois abra comprovante ou histórico.", "Then open receipt or history.") },
-              ]}
-              actions={[
-                { label: T(feedbackLanguage, "Chat", "Chat"), href: "/chat" },
-                { label: T(feedbackLanguage, "Histórico", "History"), href: "/transactions" },
-              ]}
-            />
-
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{T(feedbackLanguage, "Pagamento", "Payment")}</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Payment</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {isCrossCurrency ? sourceAmountLabel : amountLabel}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{T(feedbackLanguage, "Destinatário", "Recipient")}</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Recipient</p>
                 <p className="mt-2 text-sm text-slate-200">
                   {destinationLabel}
                 </p>
@@ -906,7 +886,7 @@ export default function ConfirmPaymentClient({
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder={T(feedbackLanguage, "Digite seu PIN", "Enter your PIN")}
+                  placeholder="Enter your PIN"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
                 />
               </div>
@@ -916,7 +896,7 @@ export default function ConfirmPaymentClient({
                 disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</span> : T(feedbackLanguage, "Confirmar pagamento", "Confirm payment")}
+                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming payment...</span> : "Confirm payment"}
               </button>
               <button
                 type="button"
@@ -924,7 +904,7 @@ export default function ConfirmPaymentClient({
                 disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {showPasskeyOptions ? T(feedbackLanguage, "Ocultar opções de passkey", "Hide Passkey options") : T(feedbackLanguage, "Usar biometria (opcional)", "Use Touch ID (Passkey)")}
+                {showPasskeyOptions ? "Hide Passkey options" : "Use Touch ID (Passkey)"}
               </button>
               {showPasskeyOptions && (
                 <>
@@ -935,8 +915,8 @@ export default function ConfirmPaymentClient({
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
-                      ? T(feedbackLanguage, "Autenticando com biometria...", "Authenticating with Touch ID...")
-                      : T(feedbackLanguage, "Confirmar com biometria", "Confirm with Touch ID (Passkey)")}
+                      ? "Authenticating with Touch ID..."
+                      : "Confirm with Touch ID (Passkey)"}
                   </button>
                   {passkeyError && (
                     <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
@@ -949,8 +929,8 @@ export default function ConfirmPaymentClient({
 
             {showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">{T(feedbackLanguage, "Confirmar no celular com biometria", "Confirm on mobile with Touch ID")}</p>
-                <p className="mt-1 text-slate-300">{T(feedbackLanguage, "Escaneie o QR no celular para abrir esta confirmação.", "Scan the QR with your phone to open this confirmation.")}</p>
+                <p className="font-medium text-white">Confirm on mobile with Touch ID</p>
+                <p className="mt-1 text-slate-300">Scan the QR with your phone to open this confirmation and authorize with Touch ID.</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
@@ -962,10 +942,10 @@ export default function ConfirmPaymentClient({
             )}
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">{T(feedbackLanguage, "Resultado", "Result")}</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
+              <p className="font-medium text-white">Result</p>
+              {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
               {status === "submitting" && (
-                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{T(feedbackLanguage, "Enviando pagamento...", "Processing payment...")}</div>
+                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Processing on the network...</div>
               )}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
