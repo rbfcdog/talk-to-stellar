@@ -527,6 +527,12 @@ export default function PixRampClient({
       : finalReceivedAmount
         ? formatRampAsset(finalReceivedAmount, targetAsset)
         : "Calculated automatically on confirmation";
+  const quoteGrossLabel = quote ? formatMoney(quote.fromAmount || amountBrl) : formatMoney(amountBrl);
+  const quoteCostLabel = quote ? String(quote.fee || "").trim() || L("R$ 0,00", "$0.00") : "-";
+  const quoteNetLabel = quote ? estimatedReceiveLabel : "-";
+  const quoteCostContext = transferFlow && transferRecipientLabel
+    ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
+    : L("valor que entra na sua conta", "value credited to your account");
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
@@ -1885,11 +1891,31 @@ export default function PixRampClient({
                     {quoteCountdown}
                   </div>
                 </div>
-                <dl className="mt-5 grid gap-3 text-sm">
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Você paga", "You pay")}</dt><dd className="font-black text-white">{formatMoney(quote.fromAmount)}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Você recebe", "You receive")}</dt><dd className="font-black text-white">{estimatedReceiveLabel}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-300">{L("Taxa", "Fee")}</dt><dd className="font-black text-white">{quote.fee || "0"}</dd></div>
-                </dl>
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl bg-white/5 p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Antes das taxas", "Before fees/taxes")}</p>
+                      <p className="mt-2 text-lg font-black text-white">{quoteGrossLabel}</p>
+                      <p className="mt-1 text-xs font-bold text-slate-400">{L("valor que sai no PIX", "source PIX amount")}</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">{L("Taxas/custos", "Fees/taxes")}</p>
+                      <p className="mt-2 text-lg font-black text-amber-50">{quoteCostLabel}</p>
+                      <p className="mt-1 text-xs font-bold text-amber-100/70">{L("mostrado antes de confirmar", "shown before confirmation")}</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{L("Depois das taxas", "After fees/taxes")}</p>
+                      <p className="mt-2 text-lg font-black text-emerald-50">{quoteNetLabel}</p>
+                      <p className="mt-1 text-xs font-bold text-emerald-100/70">{quoteCostContext}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-300">
+                    {L(
+                      "A tela separa o valor bruto, os custos estimados e o valor liquido antes do PIN. Se imposto/IOF nao vier do provedor sandbox, ele nao e inventado na cotacao.",
+                      "This screen separates gross amount, estimated costs and net amount before PIN. If tax/IOF is not returned by the sandbox provider, it is not invented in the quote.",
+                    )}
+                  </p>
+                </div>
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
                     {L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")}

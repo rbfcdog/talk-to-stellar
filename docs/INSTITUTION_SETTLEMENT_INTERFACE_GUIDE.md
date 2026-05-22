@@ -190,7 +190,34 @@ O que cada etapa prova:
 - `Blockchain`: o settlement USDC foi registrado com hash/memo ou evidencia mockada.
 - `Destination`: a instrucao de destino/off-ramp foi criada.
 
-### 3. Veja `Source value`, `Baseline USD`, `Destination value`, `Route delta`
+### 3. Veja `Before and after fees/taxes`
+
+Esse painel e o principal para explicar transparencia de custos.
+
+Ele separa:
+
+- `Before fees/taxes`: USD teorico bruto antes da rota consumir qualquer custo.
+- `Fees/taxes deducted`: soma dos custos explicitos disponiveis na quote.
+- `After fees/taxes`: USD liquido que chega na instrucao de destino.
+- `Traditional benchmark`: economia estimada contra uma referencia tradicional de FX.
+
+O bloco `Cost bridge` mostra a ponte numerica:
+
+```text
+Gross USD before route costs
+- Platform spread
+- Provider/off-ramp fee
+- Tax/IOF estimate, se configurado pelo provedor
+= Net USD after fees/taxes
+```
+
+Importante para a demo:
+
+```text
+Se o ambiente sandbox nao retorna IOF/imposto, a UI mostra "Not configured in sandbox quote". Isso evita inventar imposto e deixa claro que compliance/fiscal depende de um provedor regulado ou configuracao futura.
+```
+
+### 4. Veja `Source value`, `Baseline USD`, `Destination value`, `Route delta`
 
 Esses cards sao a parte mais importante para explicar economia da rota.
 
@@ -205,7 +232,7 @@ Exemplo de explicacao:
 Aqui a tela compara o valor inicial em BRL contra o USD teorico antes de custos e contra o USD final depois da rota. O delta mostra quanto a infraestrutura consumiu em fee/spread estimado.
 ```
 
-### 4. Veja `On/off ramp proof`
+### 5. Veja `On/off ramp proof`
 
 Esse painel explica as duas pontas fora da blockchain:
 
@@ -216,7 +243,7 @@ Se `Execute Etherfuse off-ramp sandbox proof` estiver desligado, a tela prepara 
 
 Se estiver ligado e houver credenciais, ela tenta executar a prova sandbox.
 
-### 5. Veja `Metric validation`
+### 6. Veja `Metric validation`
 
 Esse painel valida se os numeros fazem sentido.
 
@@ -234,7 +261,7 @@ Se todos estiverem validos, o backend e a UI concordam que:
 valor inicial - fees estimadas = valor final esperado
 ```
 
-### 6. Veja `Evidence checklist`
+### 7. Veja `Evidence checklist`
 
 Esse painel mostra se as evidencias principais existem:
 
@@ -251,7 +278,7 @@ Esse painel mostra se as evidencias principais existem:
 
 Para uma demo forte, tente chegar no maximo possivel de itens completos.
 
-### 7. Veja `Institution value route`
+### 8. Veja `Institution value route`
 
 Esse painel e a narrativa visual:
 
@@ -263,7 +290,7 @@ Origin institution
 
 Use para explicar que a proposta nao e "substituir banco", mas conectar instituicoes por uma rota mais programavel e rastreavel.
 
-### 8. Veja os JSONs tecnicos
+### 9. Veja os JSONs tecnicos
 
 Os cards `Quote`, `Settlement record` e `Reconciliation` mostram o que o backend persistiu.
 
@@ -277,7 +304,7 @@ Use `Reconciliation` para mostrar:
 
 Os dados sensiveis como PIN, tokens e account number sao redigidos na UI.
 
-### 9. Veja `Execution stream` e `API log`
+### 10. Veja `Execution stream` e `API log`
 
 Esses paineis mostram as chamadas ao backend.
 

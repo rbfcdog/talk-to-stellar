@@ -413,6 +413,79 @@ export default function InternationalTransferClient() {
       savingsPct,
     };
   }, [quote?.total_fee?.amount_usd_equivalent, quoteDelta.baselineUsd, quoteDelta.fxRate, transfer?.fees?.total_fee?.amount_usd_equivalent]);
+  const feeBreakdown = useMemo(() => {
+    const metadata = quote?.metadata?.fee_breakdown || transfer?.reconciliation_metadata?.fee_breakdown || {};
+    const platformFeeBrl = parseNumber(
+      metadata.platform_fee_brl ||
+      quote?.platform_fee?.amount ||
+      transfer?.fees?.platform_fee?.amount,
+    );
+    const platformFeeUsd = parseNumber(metadata.platform_fee_usd) || (quoteDelta.fxRate > 0 ? platformFeeBrl / quoteDelta.fxRate : 0);
+    const providerFeeUsd = parseNumber(
+      metadata.provider_fee_usd ||
+      quote?.estimated_provider_fee?.amount ||
+      transfer?.fees?.estimated_provider_fee?.amount,
+    );
+    const taxEstimateUsd = parseNumber(metadata.tax_estimate_usd || transfer?.reconciliation_metadata?.tax_estimate_usd);
+    const totalFeeUsd = parseNumber(
+      metadata.total_fee_usd ||
+      quote?.total_fee?.amount_usd_equivalent ||
+      transfer?.fees?.total_fee?.amount_usd_equivalent,
+    ) || Math.max(0, platformFeeUsd + providerFeeUsd + taxEstimateUsd);
+    const totalFeeBrl = parseNumber(
+      metadata.total_fee_brl ||
+      quote?.total_fee?.amount_brl_equivalent ||
+      transfer?.fees?.total_fee?.amount_brl_equivalent,
+    ) || (quoteDelta.fxRate > 0 ? totalFeeUsd * quoteDelta.fxRate : 0);
+    const grossUsd = parseNumber(metadata.gross_usd_before_fees || quoteDelta.baselineUsd);
+    const afterPlatformUsd = parseNumber(metadata.after_platform_fee_usd) || Math.max(0, grossUsd - platformFeeUsd);
+    const afterAllUsd = parseNumber(metadata.estimated_usd_after_all_fees || quoteDelta.finalUsd);
+    const impliedCostUsd = Math.max(0, grossUsd - afterAllUsd);
+    const explicitCostUsd = totalFeeUsd || impliedCostUsd;
+    const otherRouteCostUsd = Math.max(0, explicitCostUsd - platformFeeUsd - providerFeeUsd - taxEstimateUsd);
+    const totalFeePct = grossUsd > 0 ? (explicitCostUsd / grossUsd) * 100 : 0;
+    const platformFeePct = grossUsd > 0 ? (platformFeeUsd / grossUsd) * 100 : 0;
+    const providerFeePct = grossUsd > 0 ? (providerFeeUsd / grossUsd) * 100 : 0;
+    const retainedPct = grossUsd > 0 ? (afterAllUsd / grossUsd) * 100 : quoteDelta.retainedPct;
+    const taxEstimateSource = text(metadata.tax_estimate_source || transfer?.reconciliation_metadata?.tax_estimate_source);
+    const taxConfigured = taxEstimateUsd > 0 || Boolean(taxEstimateSource && !/not_configured/i.test(taxEstimateSource));
+
+    return {
+      grossUsd,
+      platformFeeBrl,
+      platformFeeUsd,
+      providerFeeUsd,
+      taxEstimateUsd,
+      taxConfigured,
+      taxEstimateSource,
+      otherRouteCostUsd,
+      totalFeeUsd: explicitCostUsd,
+      totalFeeBrl,
+      totalFeePct,
+      platformFeePct,
+      providerFeePct,
+      afterPlatformUsd,
+      afterAllUsd,
+      retainedPct,
+    };
+  }, [
+    quote?.estimated_provider_fee?.amount,
+    quote?.metadata?.fee_breakdown,
+    quote?.platform_fee?.amount,
+    quote?.total_fee?.amount_brl_equivalent,
+    quote?.total_fee?.amount_usd_equivalent,
+    quoteDelta.baselineUsd,
+    quoteDelta.finalUsd,
+    quoteDelta.fxRate,
+    quoteDelta.retainedPct,
+    transfer?.fees?.estimated_provider_fee?.amount,
+    transfer?.fees?.platform_fee?.amount,
+    transfer?.fees?.total_fee?.amount_brl_equivalent,
+    transfer?.fees?.total_fee?.amount_usd_equivalent,
+    transfer?.reconciliation_metadata?.fee_breakdown,
+    transfer?.reconciliation_metadata?.tax_estimate_source,
+    transfer?.reconciliation_metadata?.tax_estimate_usd,
+  ]);
   const metricValidation = useMemo(() => {
     const backendMetrics = reconciliation?.evidence?.metrics || {};
     const backendValidation = reconciliation?.evidence?.metric_validation || {};
@@ -1092,36 +1165,84 @@ export default function InternationalTransferClient() {
           <section className="rounded-lg border border-emerald-400/35 bg-black p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Fee compression view</p>
-                <h2 className="mt-1 text-lg font-bold text-slate-100">How much value survives the route?</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Before and after fees/taxes</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-100">Gross route value to net destination value</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  This panel compares the route fee against a 3.5% traditional FX benchmark so the demo proves the cost thesis with numbers, not only a transaction hash.
+                  This is the reviewer-facing cost bridge: source BRL, theoretical USD before route costs, explicit platform/provider/tax lines, and the net USD that reaches the destination instruction.
                 </p>
               </div>
               <StatusPill state={quote ? "ok" : "idle"}>
-                {quote ? `${formatPercent(quoteDelta.retainedPct)} retained` : "quote needed"}
+                {quote ? `${formatPercent(feeBreakdown.retainedPct)} retained` : "quote needed"}
               </StatusPill>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-lg border border-neutral-800 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Route fee</p>
-                <p className="mt-2 text-xl font-black text-cyan-200">{quote ? formatCurrency(feeStory.routeFeeUsd, "USD") : "-"}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? formatPercent(feeStory.routeFeePct) : "Waiting for quote"}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Before fees/taxes</p>
+                <p className="mt-2 text-xl font-black text-cyan-200">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(quoteDelta.sourceBrl, "BRL")} at ${quoteDelta.fxRate.toFixed(4)} BRL/USD` : "Waiting for quote"}</p>
               </div>
-              <div className="rounded-lg border border-neutral-800 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Traditional fee</p>
-                <p className="mt-2 text-xl font-black text-amber-200">{quote ? formatCurrency(feeStory.traditionalFeeUsd, "USD") : "-"}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{formatPercent(feeStory.traditionalFeePct)} benchmark</p>
+              <div className="rounded-lg border border-amber-400/35 bg-black p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-amber-300">Fees/taxes deducted</p>
+                <p className="mt-2 text-xl font-black text-amber-200">{quote ? formatCurrency(feeBreakdown.totalFeeUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(feeBreakdown.totalFeeBrl, "BRL")} / ${formatPercent(feeBreakdown.totalFeePct)}` : "Waiting for quote"}</p>
               </div>
               <div className="rounded-lg border border-emerald-400/35 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">Estimated saving</p>
-                <p className="mt-2 text-xl font-black text-emerald-200">{quote ? formatCurrency(feeStory.savingsUsd, "USD") : "-"}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(feeStory.savingsBrl, "BRL")} / ${formatPercent(feeStory.savingsPct)}` : "Waiting for quote"}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">After fees/taxes</p>
+                <p className="mt-2 text-xl font-black text-emerald-200">{quote ? formatCurrency(feeBreakdown.afterAllUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatPercent(feeBreakdown.retainedPct)} of gross USD delivered` : "Waiting for quote"}</p>
               </div>
               <div className="rounded-lg border border-neutral-800 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Final delivery</p>
-                <p className="mt-2 text-xl font-black text-slate-100">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "-"}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">destination instruction value</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Traditional benchmark</p>
+                <p className="mt-2 text-xl font-black text-slate-100">{quote ? formatCurrency(feeStory.savingsUsd, "USD") : "-"}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `saved vs ${formatPercent(feeStory.traditionalFeePct)} FX fee` : "Waiting for quote"}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+              <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Cost bridge</p>
+                <div className="mt-3 grid gap-2 text-sm">
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">Gross USD before route costs</span>
+                    <span className="font-black text-cyan-100">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">Platform spread</span>
+                    <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.platformFeeUsd, "USD")} (${formatPercent(feeBreakdown.platformFeePct)})` : "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">Provider/off-ramp fee</span>
+                    <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.providerFeeUsd, "USD")} (${formatPercent(feeBreakdown.providerFeePct)})` : "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">Tax/IOF estimate</span>
+                    <span className="text-right font-black text-slate-100">
+                      {quote
+                        ? feeBreakdown.taxConfigured
+                          ? `-${formatCurrency(feeBreakdown.taxEstimateUsd, "USD")}`
+                          : "Not configured in sandbox quote"
+                        : "-"}
+                    </span>
+                  </div>
+                  {quote && feeBreakdown.otherRouteCostUsd > 0.005 ? (
+                    <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                      <span className="text-slate-300">Other route delta</span>
+                      <span className="font-black text-amber-100">-{formatCurrency(feeBreakdown.otherRouteCostUsd, "USD")}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between gap-4 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 py-2">
+                    <span className="font-bold text-emerald-100">Net USD after fees/taxes</span>
+                    <span className="font-black text-emerald-100">{quote ? formatCurrency(feeBreakdown.afterAllUsd, "USD") : "-"}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Demo explanation</p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  Use this panel to explain that the app does not hide costs inside a final number. The reviewer sees the value before costs, each available deduction, and the final destination amount before the payout instruction is created.
+                </p>
+                <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-xs font-semibold leading-5 text-amber-100">
+                  Tax/IOF appears only when a configured quote provider returns that component. In sandbox, the UI marks it as not configured instead of inventing a tax amount.
+                </p>
               </div>
             </div>
           </section>
