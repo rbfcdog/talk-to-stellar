@@ -2104,12 +2104,27 @@ export class AnchorService {
     direction: 'onramp' | 'offramp';
     from_currency: string;
     to_currency: string;
+    customer?: Customer;
+    customer_id?: string;
     final_asset?: { code: string; issuer?: string; identifier: string };
     anchor_asset?: { code: 'TESOURO'; issuer: string; identifier: string };
   }> {
     const context = await this.resolveSessionWallet(input);
-    const customerId = coalesceString(input.customer_id, input.customerId);
-    if (!customerId) throw apiError('customer_id is required.', 400);
+    let customerId = coalesceString(input.customer_id, input.customerId);
+    let preparedCustomer: Customer | undefined;
+    if (!customerId) {
+      const customerResult = await this.createCustomerForSession({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        email: context.email,
+        country: 'BR',
+      });
+      customerId = customerResult.customer.id;
+      preparedCustomer = customerResult.customer;
+    }
+    if (!customerId) {
+      throw apiError('Não consegui preparar a conta PIX para cotação. Entre novamente e tente gerar o PIX outra vez.', 409);
+    }
 
     const direction = input.direction === 'offramp' ? 'offramp' : 'onramp';
     const amount = normalizeAmount(coalesceString(input.amount, input.from_amount));
@@ -2135,6 +2150,8 @@ export class AnchorService {
       direction,
       from_currency: fromCurrency,
       to_currency: anchorToCurrency,
+      customer_id: customerId,
+      ...(preparedCustomer ? { customer: preparedCustomer } : {}),
       ...(finalAsset ? {
         final_asset: {
           ...finalAsset,
@@ -2240,11 +2257,14 @@ export class AnchorService {
     operation_id?: string;
     trustline: TrustlineResult;
     final_trustline?: TrustlineResult;
+    customer?: Customer;
+    customer_id?: string;
     quote?: Quote;
     quote_refreshed?: boolean;
   }> {
     const context = await this.resolveSessionWallet(input);
-    const customerId = coalesceString(input.customer_id, input.customerId);
+    let customerId = coalesceString(input.customer_id, input.customerId);
+    let preparedCustomer: Customer | undefined;
     let quoteId = coalesceString(input.quote_id, input.quoteId);
     const amount = normalizeAmount(input.amount);
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) || 'BRL';
@@ -2274,7 +2294,6 @@ export class AnchorService {
     const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
     const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
 
-    if (!customerId) throw apiError('customer_id is required.', 400);
     const existingIntent = await this.findActiveRampOperationByIntent({
       userId: context.userId,
       type: 'PIX_ONRAMP',
@@ -2282,6 +2301,20 @@ export class AnchorService {
     });
     if (existingIntent) {
       throw apiError('Esta operação PIX já foi criada. Use o link aberto ou gere uma nova solicitação no chat.', 409);
+    }
+
+    if (!customerId) {
+      const customerResult = await this.createCustomerForSession({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        email: context.email,
+        country: 'BR',
+      });
+      customerId = customerResult.customer.id;
+      preparedCustomer = customerResult.customer;
+    }
+    if (!customerId) {
+      throw apiError('Não consegui preparar a conta PIX para criar a ordem. Entre novamente e tente gerar o PIX outra vez.', 409);
     }
 
     const trustline = await this.ensureIssuedAssetTrustline(context, {
@@ -2482,6 +2515,8 @@ export class AnchorService {
       operation_id: operationId,
       trustline,
       final_trustline: finalTrustline,
+      customer_id: customerId,
+      ...(preparedCustomer ? { customer: preparedCustomer } : {}),
       quote: orderQuote,
       quote_refreshed: Boolean(orderQuote),
     };
