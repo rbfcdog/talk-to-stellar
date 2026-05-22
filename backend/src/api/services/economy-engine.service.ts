@@ -31,8 +31,8 @@ export type SavingsIdentity = {
   message: string;
 };
 
-const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.045);
-const DEFAULT_COMPARISON_METHOD = 'traditional_providers_average_4_5pct';
+const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.035);
+const DEFAULT_COMPARISON_METHOD = 'traditional_providers_average_3_5pct';
 const DEFAULT_USD_BRL_REFERENCE_RATE = 5;
 
 export class EconomyEngineService {

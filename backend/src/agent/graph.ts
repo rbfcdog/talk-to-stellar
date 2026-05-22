@@ -983,6 +983,36 @@ export class AgentGraph {
     };
   }
 
+  private extractAmountFollowUpFromText(text: string): string | undefined {
+    const normalized = this.normalizeTextForIntent(text);
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    return amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
+  }
+
+  private resumePendingPixRampIntent(state: AgentState): {
+    is_pix_ramp: boolean;
+    direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
+    amount?: string;
+    amount_currency?: 'BRL' | 'USDC';
+    asset_code: 'BRL' | 'USDC';
+    recipient_query?: string;
+  } | null {
+    const pending = state.pending_pix_ramp || (state.action_params as any)?.pending_pix_ramp;
+    if (!pending?.direction || !pending?.asset_code) return null;
+    const amount = this.extractAmountFollowUpFromText(state.current_input);
+    if (!amount) return null;
+    return {
+      is_pix_ramp: true,
+      direction: pending.direction === 'offramp' ? 'offramp' : 'onramp',
+      flow: pending.flow === 'fund_and_pay' ? 'fund_and_pay' : 'fund_wallet',
+      amount,
+      amount_currency: pending.amount_currency === 'USDC' ? 'USDC' : 'BRL',
+      asset_code: pending.asset_code === 'USDC' ? 'USDC' : 'BRL',
+      recipient_query: String(pending.recipient_query || '').trim() || undefined,
+    };
+  }
+
   private async buildPixRampUrl(state: AgentState, intent: {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
@@ -1054,12 +1084,27 @@ export class AgentGraph {
   }
 
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
-    const intent = this.extractPixRampIntentFromText(state.current_input);
+    const extractedIntent = this.extractPixRampIntentFromText(state.current_input);
+    const intent = extractedIntent.is_pix_ramp
+      ? extractedIntent
+      : (this.resumePendingPixRampIntent(state) || extractedIntent);
     const language = this.getLanguage(state);
     if (!intent.is_pix_ramp) {
+      state.pending_pix_ramp = undefined;
+      state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
       state.success = false;
       state.response_message = this.text(language, 'Você quer colocar dinheiro via PIX na conta ou retirar dinheiro para PIX?', 'Do you want to add money to your account with PIX or withdraw money to your PIX?');
     } else if (!intent.amount) {
+      const pendingPixRamp = {
+        direction: intent.direction,
+        flow: intent.flow,
+        amount_currency: intent.amount_currency || 'BRL',
+        asset_code: intent.asset_code,
+        recipient_query: intent.recipient_query,
+        created_at: new Date().toISOString(),
+      };
+      state.pending_pix_ramp = pendingPixRamp;
+      state.action_params = { ...(state.action_params || {}), pending_pix_ramp: pendingPixRamp };
       state.success = false;
       state.response_message = intent.direction === 'offramp'
         ? this.text(language, 'Qual valor em reais você quer retirar para PIX?', 'How much in reais do you want to withdraw to PIX?')
@@ -1083,6 +1128,8 @@ export class AgentGraph {
       };
       const url = await this.buildPixRampUrl(state, pixIntent);
       state.success = true;
+      state.pending_pix_ramp = undefined;
+      state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
       if (intent.direction === 'offramp') {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
@@ -1698,7 +1745,7 @@ export class AgentGraph {
       return this.text(language, `PIX para completar: ${this.formatMoneyByAsset(amount, 'BRL')}.`, `PIX needed: ${this.formatMoneyByAsset(amount, 'BRL')}.`);
     }
     if (normalizedAsset !== 'USDC' || numeric <= 0) {
-      return this.text(language, 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.', 'The screen calculates the PIX amount and shows the total fee before confirmation.');
+      return this.text(language, 'A tela calcula o valor do PIX e separa taxa do ramp e taxa TalkToStellar antes de confirmar.', 'The screen calculates the PIX amount and separates the ramp fee and TalkToStellar fee before confirmation.');
     }
 
     try {
@@ -1709,15 +1756,15 @@ export class AgentGraph {
         const estimatedBrl = numeric * brlPerUsdc;
         return this.text(
           language,
-          `PIX estimado pela rota mais otimizada: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e mostra a taxa total antes de confirmar.`,
-          `Estimated PIX with the most optimized route: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and shows the total fee before confirmation.`
+          `PIX estimado pela rota mais otimizada: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e separa taxa do ramp e taxa TalkToStellar antes de confirmar.`,
+          `Estimated PIX with the most optimized route: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and separates the ramp fee and TalkToStellar fee before confirmation.`
         );
       }
     } catch (error) {
       logger.warn(`[pix-funding-estimate] failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    return this.text(language, 'A tela calcula o valor do PIX e mostra a taxa total antes de confirmar.', 'The screen calculates the PIX amount and shows the total fee before confirmation.');
+    return this.text(language, 'A tela calcula o valor do PIX e separa taxa do ramp e taxa TalkToStellar antes de confirmar.', 'The screen calculates the PIX amount and separates the ramp fee and TalkToStellar fee before confirmation.');
   }
 
   private async buildPixFundedPaymentMessage(state: AgentState, input: {
@@ -3663,7 +3710,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
-      const deterministicPixRamp = this.extractPixRampIntentFromText(state.current_input);
+      const extractedPixRamp = this.extractPixRampIntentFromText(state.current_input);
+      const resumedPixRamp = extractedPixRamp.is_pix_ramp ? null : this.resumePendingPixRampIntent(state);
+      const deterministicPixRamp = resumedPixRamp || extractedPixRamp;
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(

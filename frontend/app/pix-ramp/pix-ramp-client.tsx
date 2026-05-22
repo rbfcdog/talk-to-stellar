@@ -64,6 +64,14 @@ type DebugLogEntry = {
   error?: string;
 };
 
+const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
+const TRADITIONAL_FX_FEE_PCT = 3.5;
+
+function clientTtsTransactionFeeBps() {
+  const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : DEFAULT_TTS_TRANSACTION_FEE_BPS;
+}
+
 function getStoredSession() {
   if (typeof window === "undefined") return { sessionId: "" };
   return {
@@ -2354,6 +2362,7 @@ function RampFeeBridge({
   const providerFeeRaw = quote.feeAmount || quote.fee || "";
   const destinationBefore = parseHumanAmount(destinationBeforeRaw);
   const destinationAfter = parseHumanAmount(destinationAfterRaw);
+  const sourceAmount = parseHumanAmount(quote.fromAmount);
   const providerFee = parseHumanAmount(providerFeeRaw);
   const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
     ? Math.max(destinationBefore - destinationAfter, 0)
@@ -2367,6 +2376,18 @@ function RampFeeBridge({
     : Number.isFinite(destinationBefore) && destinationBefore > 0
       ? (feeAmount / destinationBefore) * 100
       : NaN;
+  const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
+  const ttsTransactionFeePct = ttsTransactionFeeBps / 100;
+  const ttsTransactionFeeAmount = Number.isFinite(sourceAmount) && sourceAmount > 0
+    ? sourceAmount * (ttsTransactionFeeBps / 10000)
+    : 0;
+  const visibleRouteFeePct = (Number.isFinite(feePct) ? feePct : 0) + ttsTransactionFeePct;
+  const estimatedTraditionalFee = Number.isFinite(sourceAmount) && sourceAmount > 0
+    ? sourceAmount * (TRADITIONAL_FX_FEE_PCT / 100)
+    : 0;
+  const estimatedSavingsVsTraditional = Number.isFinite(sourceAmount) && sourceAmount > 0
+    ? sourceAmount * (Math.max(0, TRADITIONAL_FX_FEE_PCT - visibleRouteFeePct) / 100)
+    : 0;
   const retainedPct = Number.isFinite(destinationBefore) && destinationBefore > 0 && Number.isFinite(destinationAfter)
     ? (destinationAfter / destinationBefore) * 100
     : NaN;
@@ -2376,12 +2397,16 @@ function RampFeeBridge({
   const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), destinationCurrency)}${
     Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
   }`;
+  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), sourceCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
+  const traditionalFeeValue = Number.isFinite(sourceAmount) && sourceAmount > 0
+    ? `${formatQuoteAmount(estimatedTraditionalFee.toFixed(7), sourceCurrency)} (${TRADITIONAL_FX_FEE_PCT.toFixed(2)}%)`
+    : `${TRADITIONAL_FX_FEE_PCT.toFixed(2)}%`;
   const feeTitle = mode === "onramp"
     ? L("Taxa real do on-ramp", "Real on-ramp fee")
     : L("Taxa real do off-ramp", "Real off-ramp fee");
   const feeCaption = mode === "onramp"
-    ? L("Taxa retornada pela cotação Etherfuse antes do saldo entrar.", "Fee returned by the Etherfuse quote before balance arrives.")
-    : L("Taxa retornada pela cotação Etherfuse antes do PIX sair.", "Fee returned by the Etherfuse quote before PIX leaves.");
+    ? L("Mostra só a taxa de entrada PIX/on-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/on-ramp fee and the TalkToStellar transaction fee.")
+    : L("Mostra só a taxa de saída PIX/off-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/off-ramp fee and the TalkToStellar transaction fee.");
 
   return (
     <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-4">
@@ -2416,20 +2441,31 @@ function RampFeeBridge({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-3">
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
-          <span className="block uppercase tracking-[0.14em] text-amber-100/70">Etherfuse</span>
+          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
+            {mode === "onramp" ? L("Taxa on-ramp", "On-ramp fee") : L("Taxa off-ramp", "Off-ramp fee")}
+          </span>
           <span className="mt-1 block text-sm font-black">{feeValue}</span>
         </div>
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-50">
+          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("Taxa TalkToStellar", "TalkToStellar fee")}</span>
+          <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
+        </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-          <span className="block uppercase tracking-[0.14em] text-slate-400">{L("Tax/IOF", "Tax/IOF")}</span>
-          <span className="mt-1 block text-sm font-black text-white">{L("Não retornado pela cotação sandbox", "Not returned by sandbox quote")}</span>
+          <span className="block uppercase tracking-[0.14em] text-slate-400">{L("Normal/tradicional", "Traditional benchmark")}</span>
+          <span className="mt-1 block text-sm font-black text-white">{traditionalFeeValue}</span>
+          {estimatedSavingsVsTraditional > 0 && (
+            <span className="mt-1 block text-xs font-black text-emerald-200">
+              {L("Economia estimada", "Estimated saving")}: {formatQuoteAmount(estimatedSavingsVsTraditional.toFixed(7), sourceCurrency)}
+            </span>
+          )}
         </div>
       </div>
       <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
         {L(
-          "Este bloco usa somente campos retornados pela cotação real do provider. Quando imposto ou IOF não vem na resposta, a UI marca como não retornado em vez de inventar valor.",
-          "This block uses only fields returned by the real provider quote. When tax or IOF is not returned, the UI marks it as not returned instead of inventing a value.",
+          "Para demo, a tela separa somente as taxas que importam para o fluxo: ramp, transação TalkToStellar e comparação normal de 3,5%. Imposto/IOF não é inventado na UI sandbox.",
+          "For demos, the screen separates only the fees that matter to this flow: ramp, TalkToStellar transaction, and a 3.5% traditional benchmark. Tax/IOF is not invented in the sandbox UI.",
         )}
       </p>
     </div>
