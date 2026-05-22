@@ -9,6 +9,14 @@ import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
 
 const STELLAR_BASE_FEE_STROOPS = '100';
 
+function isFriendbotAccountAlreadyExists(body: string): boolean {
+    const normalized = String(body || '').toLowerCase();
+    return normalized.includes('createaccountalreadyexist') ||
+        normalized.includes('create_account_already_exist') ||
+        normalized.includes('account already exist') ||
+        normalized.includes('account already exists');
+}
+
 interface BuildPaymentInput {
   sourcePublicKey: string;
   destination: string;
@@ -354,6 +362,10 @@ export class StellarService {
     });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
+      if (response.status === 400 && isFriendbotAccountAlreadyExists(body)) {
+        this.fundedAccounts.add(publicKey);
+        return;
+      }
       throw new Error(`Failed to fund account using Friendbot: ${response.status} ${body}`);
     }
     await response.json().catch(() => undefined);
@@ -407,6 +419,15 @@ export class StellarService {
 
     await this.fundWithFriendbot(publicKey);
     await this.waitForAccount(publicKey);
+
+    if (minimumXlm > 0) {
+      const account = await server.loadAccount(publicKey);
+      const nativeBalance = account.balances.find((balance) => balance.asset_type === 'native');
+      const balance = nativeBalance ? parseFloat(nativeBalance.balance) : 0;
+      if (balance < minimumXlm) {
+        throw new Error(`Testnet account exists but does not have enough XLM for this operation. Required: ${minimumXlm.toFixed(7)} XLM.`);
+      }
+    }
   }
 
   private static getHorizonErrorMessage(error: any): string {

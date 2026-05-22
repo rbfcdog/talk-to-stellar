@@ -427,8 +427,16 @@ function formatStartupBalanceLine(balance: any, index: number): string {
   return `${index + 1}. ${asset}: ${amount}`;
 }
 
+function startupBalanceFallbackMessage(): string {
+  return [
+    'Sua conta já está criada.',
+    'O saldo ainda está sincronizando; tente "saldo" novamente em alguns segundos.',
+    'Você já pode usar os comandos abaixo enquanto a preparação termina.',
+  ].join('\n');
+}
+
 async function buildSessionStartMessage(sessionId: string, publicKey: string): Promise<string> {
-  let balanceBlock = 'Não consegui consultar seu saldo agora.';
+  let balanceBlock = startupBalanceFallbackMessage();
 
   try {
     const balanceRaw = await executeTool('get_balance', { session_id: sessionId, public_key: publicKey });
@@ -438,10 +446,10 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
         .map((balance: any, index: number) => formatStartupBalanceLine(balance, index))
         .join('\n');
     } else if (balanceResult?.error) {
-      balanceBlock = `Não consegui consultar seu saldo agora: ${balanceResult.error}`;
+      balanceBlock = startupBalanceFallbackMessage();
     }
   } catch (error) {
-    balanceBlock = `Não consegui consultar seu saldo agora: ${error instanceof Error ? error.message : String(error)}`;
+    balanceBlock = startupBalanceFallbackMessage();
   }
 
   return [
