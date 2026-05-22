@@ -231,6 +231,17 @@ const directAgentPromptScenarios = [
   },
 ];
 
+const directAgentMultiTurnScenarios = [
+  {
+    name: "direct PIX off-ramp amount follow-up returns link",
+    prompts: ["quero sacar via pix", "5"],
+    steps: [
+      { mustMatch: [/qual valor|how much/i], expectedSuccess: false },
+      { mustMatch: [/pix/i, /\/pix-off|\/r\//i, /5/i], expectedSuccess: true },
+    ],
+  },
+];
+
 const llmPromptScenarios = [
   {
     name: "LLM price quote prompt",
@@ -451,6 +462,50 @@ async function postAgentDirectScenario(scenario, repeatIndex = 0) {
   };
 }
 
+async function postAgentDirectMultiTurnScenario(scenario, repeatIndex = 0) {
+  const requestSessionId = crypto.randomUUID();
+  const previews = [];
+  let lastPayload = null;
+  for (let index = 0; index < scenario.prompts.length; index += 1) {
+    const prompt = scenario.prompts[index];
+    const step = scenario.steps[index] || {};
+    const response = await fetchWithTimeout(`${backendBaseUrl}/api/agent/query`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `user-flow-direct-multiturn-${repeatIndex}-${index}-${crypto.randomUUID()}`,
+      },
+      body: JSON.stringify({
+        session_id: requestSessionId,
+        language,
+        query: prompt,
+      }),
+    }, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    const payload = await readJson(response);
+    const content = String(payload.message || payload.content || payload.error || payload.raw || "");
+    if (!response.ok) {
+      fail(`direct-agent multiturn "${scenario.name}" step ${index + 1}: expected 2xx, got ${response.status}: ${content}`);
+    }
+    if (!content.trim()) {
+      fail(`direct-agent multiturn "${scenario.name}" step ${index + 1}: empty assistant response`);
+    }
+    assertNoRawError(content, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    assertNoChatForbidden(content, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    assertMatches(content, step.mustMatch, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    assertNotMatches(content, step.mustNotMatch, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    assertPayloadExpectations(payload, step, `direct-agent multiturn "${scenario.name}" step ${index + 1}`);
+    previews.push(content.replace(/\s+/g, " ").slice(0, 120));
+    lastPayload = payload;
+  }
+  return {
+    status: 200,
+    action: lastPayload?.action || null,
+    intent: lastPayload?.intent || null,
+    success: lastPayload?.success,
+    preview: previews.join(" | "),
+  };
+}
+
 async function main() {
   const results = [];
 
@@ -474,6 +529,10 @@ async function main() {
       for (const scenario of scenarios) {
         const result = await postAgentDirectScenario(scenario, repeat);
         results.push({ type: "agent-direct", repeat: repeat + 1, name: scenario.name, ...result });
+      }
+      for (const scenario of directAgentMultiTurnScenarios) {
+        const result = await postAgentDirectMultiTurnScenario(scenario, repeat);
+        results.push({ type: "agent-direct-multiturn", repeat: repeat + 1, name: scenario.name, ...result });
       }
     }
   } else {

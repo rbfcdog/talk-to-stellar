@@ -426,12 +426,11 @@ export default function InternationalTransferClient() {
       quote?.estimated_provider_fee?.amount ||
       transfer?.fees?.estimated_provider_fee?.amount,
     );
-    const taxEstimateUsd = parseNumber(metadata.tax_estimate_usd || transfer?.reconciliation_metadata?.tax_estimate_usd);
     const totalFeeUsd = parseNumber(
       metadata.total_fee_usd ||
       quote?.total_fee?.amount_usd_equivalent ||
       transfer?.fees?.total_fee?.amount_usd_equivalent,
-    ) || Math.max(0, platformFeeUsd + providerFeeUsd + taxEstimateUsd);
+    ) || Math.max(0, platformFeeUsd + providerFeeUsd);
     const totalFeeBrl = parseNumber(
       metadata.total_fee_brl ||
       quote?.total_fee?.amount_brl_equivalent ||
@@ -442,22 +441,17 @@ export default function InternationalTransferClient() {
     const afterAllUsd = parseNumber(metadata.estimated_usd_after_all_fees || quoteDelta.finalUsd);
     const impliedCostUsd = Math.max(0, grossUsd - afterAllUsd);
     const explicitCostUsd = totalFeeUsd || impliedCostUsd;
-    const otherRouteCostUsd = Math.max(0, explicitCostUsd - platformFeeUsd - providerFeeUsd - taxEstimateUsd);
+    const otherRouteCostUsd = Math.max(0, explicitCostUsd - platformFeeUsd - providerFeeUsd);
     const totalFeePct = grossUsd > 0 ? (explicitCostUsd / grossUsd) * 100 : 0;
     const platformFeePct = grossUsd > 0 ? (platformFeeUsd / grossUsd) * 100 : 0;
     const providerFeePct = grossUsd > 0 ? (providerFeeUsd / grossUsd) * 100 : 0;
     const retainedPct = grossUsd > 0 ? (afterAllUsd / grossUsd) * 100 : quoteDelta.retainedPct;
-    const taxEstimateSource = text(metadata.tax_estimate_source || transfer?.reconciliation_metadata?.tax_estimate_source);
-    const taxConfigured = taxEstimateUsd > 0 || Boolean(taxEstimateSource && !/not_configured/i.test(taxEstimateSource));
 
     return {
       grossUsd,
       platformFeeBrl,
       platformFeeUsd,
       providerFeeUsd,
-      taxEstimateUsd,
-      taxConfigured,
-      taxEstimateSource,
       otherRouteCostUsd,
       totalFeeUsd: explicitCostUsd,
       totalFeeBrl,
@@ -483,8 +477,6 @@ export default function InternationalTransferClient() {
     transfer?.fees?.total_fee?.amount_brl_equivalent,
     transfer?.fees?.total_fee?.amount_usd_equivalent,
     transfer?.reconciliation_metadata?.fee_breakdown,
-    transfer?.reconciliation_metadata?.tax_estimate_source,
-    transfer?.reconciliation_metadata?.tax_estimate_usd,
   ]);
   const metricValidation = useMemo(() => {
     const backendMetrics = reconciliation?.evidence?.metrics || {};
@@ -1165,10 +1157,10 @@ export default function InternationalTransferClient() {
           <section className="rounded-lg border border-emerald-400/35 bg-black p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Before and after fees/taxes</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Before and after fees</p>
                 <h2 className="mt-1 text-lg font-bold text-slate-100">Gross route value to net destination value</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  This is the reviewer-facing cost bridge: source BRL, theoretical USD before route costs, explicit platform/provider/tax lines, and the net USD that reaches the destination instruction.
+                  This is the reviewer-facing cost bridge: source BRL, theoretical USD before route costs, explicit TalkToStellar transaction and off-ramp/payout lines, and the net USD that reaches the destination instruction.
                 </p>
               </div>
               <StatusPill state={quote ? "ok" : "idle"}>
@@ -1177,17 +1169,17 @@ export default function InternationalTransferClient() {
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-lg border border-neutral-800 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Before fees/taxes</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Before fees</p>
                 <p className="mt-2 text-xl font-black text-cyan-200">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(quoteDelta.sourceBrl, "BRL")} at ${quoteDelta.fxRate.toFixed(4)} BRL/USD` : "Waiting for quote"}</p>
               </div>
               <div className="rounded-lg border border-amber-400/35 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-amber-300">Fees/taxes deducted</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-amber-300">Fees deducted</p>
                 <p className="mt-2 text-xl font-black text-amber-200">{quote ? formatCurrency(feeBreakdown.totalFeeUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatCurrency(feeBreakdown.totalFeeBrl, "BRL")} / ${formatPercent(feeBreakdown.totalFeePct)}` : "Waiting for quote"}</p>
               </div>
               <div className="rounded-lg border border-emerald-400/35 bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">After fees/taxes</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">After fees</p>
                 <p className="mt-2 text-xl font-black text-emerald-200">{quote ? formatCurrency(feeBreakdown.afterAllUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-slate-500">{quote ? `${formatPercent(feeBreakdown.retainedPct)} of gross USD delivered` : "Waiting for quote"}</p>
               </div>
@@ -1206,22 +1198,12 @@ export default function InternationalTransferClient() {
                     <span className="font-black text-cyan-100">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                    <span className="text-slate-300">Platform spread</span>
+                    <span className="text-slate-300">TalkToStellar transaction fee</span>
                     <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.platformFeeUsd, "USD")} (${formatPercent(feeBreakdown.platformFeePct)})` : "-"}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                    <span className="text-slate-300">Provider/off-ramp fee</span>
+                    <span className="text-slate-300">USD off-ramp/payout fee</span>
                     <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.providerFeeUsd, "USD")} (${formatPercent(feeBreakdown.providerFeePct)})` : "-"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                    <span className="text-slate-300">Tax/IOF estimate</span>
-                    <span className="text-right font-black text-slate-100">
-                      {quote
-                        ? feeBreakdown.taxConfigured
-                          ? `-${formatCurrency(feeBreakdown.taxEstimateUsd, "USD")}`
-                          : "Not configured in sandbox quote"
-                        : "-"}
-                    </span>
                   </div>
                   {quote && feeBreakdown.otherRouteCostUsd > 0.005 ? (
                     <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
@@ -1230,7 +1212,7 @@ export default function InternationalTransferClient() {
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-4 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 py-2">
-                    <span className="font-bold text-emerald-100">Net USD after fees/taxes</span>
+                    <span className="font-bold text-emerald-100">Net USD after fees</span>
                     <span className="font-black text-emerald-100">{quote ? formatCurrency(feeBreakdown.afterAllUsd, "USD") : "-"}</span>
                   </div>
                 </div>
@@ -1238,10 +1220,10 @@ export default function InternationalTransferClient() {
               <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Demo explanation</p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Use this panel to explain that the app does not hide costs inside a final number. The reviewer sees the value before costs, each available deduction, and the final destination amount before the payout instruction is created.
+                  Use this panel to explain that the app does not hide costs inside a final number. The reviewer sees the value before costs, the TalkToStellar transaction fee, the off-ramp/payout fee, and the final destination amount before the payout instruction is created.
                 </p>
                 <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-xs font-semibold leading-5 text-amber-100">
-                  Tax/IOF appears only when a configured quote provider returns that component. In sandbox, the UI marks it as not configured instead of inventing a tax amount.
+                  The normal benchmark is fixed at 3.5% for demo comparison. This sandbox view does not invent tax/IOF values.
                 </p>
               </div>
             </div>

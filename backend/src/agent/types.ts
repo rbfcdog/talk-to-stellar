@@ -67,6 +67,15 @@ export interface AgentState {
     dest_amount: string;
     quote?: any;
   };
+
+  pending_pix_ramp?: {
+    direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
+    amount_currency?: 'BRL' | 'USDC';
+    asset_code: 'BRL' | 'USDC';
+    recipient_query?: string;
+    created_at?: string;
+  };
   
   // Response
   response_message: string;
