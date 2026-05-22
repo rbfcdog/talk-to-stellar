@@ -1068,7 +1068,7 @@ export class AgentGraph {
       let resolvedRecipientLabel = String(intent.recipient_query || '').trim();
       let resolvedRecipientKey = '';
       let resolvedRecipientPublicKey = '';
-      if (intent.flow === 'fund_and_pay' && intent.recipient_query) {
+      if (intent.flow === 'fund_and_pay' && intent.recipient_query && state.session_data?.public_key) {
         const userId = String(state.session_data?.user_id || state.session_data?.email || '').trim();
         const resolvedRecipient = await this.resolvePaymentRecipient(intent.recipient_query, userId);
         resolvedRecipientLabel = String(resolvedRecipient.destinationName || intent.recipient_query).trim();
