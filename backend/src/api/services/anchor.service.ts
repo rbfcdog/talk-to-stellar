@@ -53,6 +53,14 @@ interface RampSessionInput {
   walletCode?: string;
   passcode?: string;
   trusted_internal?: boolean;
+  provider?: string;
+  providerUserId?: string;
+  provider_user_id?: string;
+  source?: string;
+  external_provider?: string;
+  externalProvider?: string;
+  external_provider_user_id?: string;
+  externalProviderUserId?: string;
 }
 
 interface SessionWalletContext {
@@ -324,6 +332,16 @@ function normalizeRampIntentId(input: RampSessionInput): string {
   return coalesceString(input.intent_id, input.intentId, input.operation_key, input.operationKey)
     .replace(/[^A-Za-z0-9._:-]/g, '')
     .slice(0, 96);
+}
+
+function externalChannelProvider(input: RampSessionInput): string {
+  const provider = coalesceString(input.external_provider, input.externalProvider, input.provider, input.source).toLowerCase();
+  if (['etherfuse', 'pix', 'ramp', 'sandbox'].includes(provider)) return '';
+  return provider;
+}
+
+function externalChannelProviderUserId(input: RampSessionInput): string {
+  return coalesceString(input.external_provider_user_id, input.externalProviderUserId, input.provider_user_id, input.providerUserId);
 }
 
 function normalizeRampUserAsset(...values: unknown[]): { code: string; issuer?: string; identifier: string } {
@@ -1100,6 +1118,8 @@ export class AnchorService {
         type: 'payment_received',
         sessionId: record.sessionId,
         userId: record.userId,
+        provider: coalesceString(record.operationContext?.external_provider) || undefined,
+        providerUserId: coalesceString(record.operationContext?.external_provider_user_id) || undefined,
         counterpartyLabel: 'PIX Etherfuse',
         sourceAmount: record.sourceAmountBrl,
         sourceAssetCode: 'BRL',
@@ -1478,6 +1498,60 @@ export class AnchorService {
       await this.persistSandboxOnRampContext(record, { receipt_url: record.receiptUrl });
     }
     return record;
+  }
+
+  private static async sendCompletedOnRampReceiptForOperation(input: {
+    transaction: OnRampTransaction;
+    operation: Record<string, unknown>;
+    context: Record<string, unknown>;
+    finalAsset: { code: string; issuer?: string };
+    destinationAmount?: string;
+    hash?: string;
+  }): Promise<string> {
+    const existingReceiptUrl = coalesceString(input.context.receipt_url);
+    if (existingReceiptUrl) return existingReceiptUrl;
+
+    const userFacingFinalAsset = normalizeAssetCode(input.finalAsset.code) === 'TESOURO'
+      ? 'BRL'
+      : input.finalAsset.code;
+    const destinationAmount = coalesceString(
+      input.destinationAmount,
+      input.context.final_amount,
+      (input.transaction as OnRampTransaction & { finalAmount?: string }).finalAmount,
+      input.transaction.toAmount,
+      input.context.destination_amount_anchor,
+      input.context.destination_amount,
+    );
+    if (!destinationAmount) return '';
+
+    const receiptUrl = await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: coalesceString(input.operation.source_session_id, input.context.session_id),
+      userId: coalesceString(input.operation.user_id, input.context.user_id),
+      provider: coalesceString(input.context.external_provider) || undefined,
+      providerUserId: coalesceString(input.context.external_provider_user_id) || undefined,
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: coalesceString(input.context.source_amount_brl, input.transaction.fromAmount, input.operation.amount),
+      sourceAssetCode: 'BRL',
+      destinationAmount,
+      destinationAssetCode: userFacingFinalAsset,
+      hash: input.hash || coalesceString(input.context.final_conversion_hash, input.transaction.id) || null,
+      status: 'completed',
+      contextMessage: `PIX confirmado. Entregamos ${userFacingFinalAsset} na sua conta TalkToStellar.`,
+    });
+
+    const operationId = coalesceString(input.operation.id);
+    if (receiptUrl && operationId) {
+      await OperationRepository.update(operationId, {
+        context: JSON.stringify({
+          ...input.context,
+          receipt_url: receiptUrl,
+        }),
+      } as any).catch((error) => {
+        console.warn('[ramp] Could not persist completed PIX on-ramp receipt URL:', debugErrorMessage(error));
+      });
+    }
+    return receiptUrl;
   }
 
   private static async failSandboxOnRamp(record: SandboxMockOnRampOrder, message: string): Promise<SandboxMockOnRampOrder> {
@@ -2438,6 +2512,8 @@ export class AnchorService {
     const autoPayRecipient = coalesceString(input.auto_pay_recipient, input.autoPayRecipient);
     const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
     const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
+    const externalProvider = externalChannelProvider(input);
+    const externalProviderUserId = externalChannelProviderUserId(input);
 
     const existingIntent = await this.findActiveRampOperationByIntent({
       userId: context.userId,
@@ -2624,6 +2700,9 @@ export class AnchorService {
       provider: 'etherfuse',
       rail: 'pix',
       direction: 'onramp',
+      external_provider: externalProvider || undefined,
+      external_provider_user_id: externalProviderUserId || undefined,
+      external_source: coalesceString(input.source) || undefined,
       intent_id: intentId || undefined,
       customer_id: customerId,
       quote_id: quoteId,
@@ -2704,16 +2783,34 @@ export class AnchorService {
     const finalAsset = resolveRampFinalAsset(context.target_asset, context.final_asset, 'TESOURO');
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
     if (sameIssuedAsset(finalAsset, tesouroAsset)) {
-      return transaction;
+      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
+        transaction,
+        operation: operation as unknown as Record<string, unknown>,
+        context,
+        finalAsset,
+        destinationAmount: coalesceString(context.destination_amount_anchor, transaction.toAmount),
+      });
+      return receiptUrl
+        ? ({ ...transaction, receiptUrl, receipt_url: receiptUrl } as OnRampTransaction & { receiptUrl?: string; receipt_url?: string })
+        : transaction;
     }
 
     const existingHash = coalesceString(context.final_conversion_hash);
     if (existingHash) {
+      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
+        transaction,
+        operation: operation as unknown as Record<string, unknown>,
+        context,
+        finalAsset,
+        destinationAmount: coalesceString(context.final_amount, transaction.toAmount),
+        hash: existingHash,
+      });
       return {
         ...transaction,
         toAmount: coalesceString(context.final_amount, transaction.toAmount),
         toCurrency: assetIdentifier(finalAsset),
         finalAmount: coalesceString(context.final_amount, transaction.toAmount),
+        ...(receiptUrl ? { receiptUrl, receipt_url: receiptUrl } : {}),
         finalAsset,
         auto_conversion: {
           required: true,
@@ -2814,12 +2911,21 @@ export class AnchorService {
         final_amount: finalAmount,
       };
       await OperationRepository.update(operationId, { context: JSON.stringify(updatedContext) } as any);
+      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
+        transaction,
+        operation: operation as unknown as Record<string, unknown>,
+        context: updatedContext,
+        finalAsset,
+        destinationAmount: finalAmount || transaction.toAmount,
+        hash: result.hash,
+      });
 
       return {
         ...transaction,
         toAmount: finalAmount || transaction.toAmount,
         toCurrency: assetIdentifier(finalAsset),
         finalAmount: finalAmount || transaction.toAmount,
+        ...(receiptUrl ? { receiptUrl, receipt_url: receiptUrl } : {}),
         finalAsset,
         auto_conversion: {
           required: true,
@@ -3611,6 +3717,8 @@ export class AnchorService {
           type: 'payment_sent',
           sessionId: context.sessionId,
           userId: context.userId,
+          provider: externalChannelProvider(input) || undefined,
+          providerUserId: externalChannelProviderUserId(input) || undefined,
           counterpartyLabel: bankLabel,
           sourceAmount: requestedSourceAmount,
           sourceAssetCode: sourceAsset.code,
@@ -3817,6 +3925,8 @@ export class AnchorService {
         type: 'payment_sent',
         sessionId: context.sessionId,
         userId: context.userId,
+        provider: externalChannelProvider(input) || undefined,
+        providerUserId: externalChannelProviderUserId(input) || undefined,
         counterpartyLabel: recipient.displayName,
         sourceAmount: amount,
         sourceAssetCode: asset.code,

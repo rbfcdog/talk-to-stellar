@@ -513,7 +513,7 @@ export class EtherfuseClient implements Anchor {
         });
 
         return {
-            id: response.quoteId,
+            id: response.quoteId || quoteId,
             fromCurrency: response.quoteAssets.sourceAsset,
             toCurrency: response.quoteAssets.targetAsset,
             fromAmount: response.sourceAmount,
