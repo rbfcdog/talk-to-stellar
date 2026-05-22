@@ -90,6 +90,9 @@ export class BrlUsdQuoteService {
     const providerFeeRate = providerFeeBps() / 10000;
     const estimatedProviderFeeUsd = Math.max(estimatedUsdcAfterPlatformFee * providerFeeRate, providerMinFeeUsd());
     const estimatedUsd = Math.max(0, estimatedUsdcAfterPlatformFee - estimatedProviderFeeUsd);
+    const totalFeeUsd = platformFeeUsd + estimatedProviderFeeUsd;
+    const totalFeeBrl = platformFeeBrl + estimatedProviderFeeUsd * brlPerUsd;
+    const retainedPct = estimatedUsdcGross > 0 ? (estimatedUsd / estimatedUsdcGross) * 100 : 0;
     const issuedAt = this.now();
     const expiresAt = new Date(issuedAt.getTime() + quoteTtlSeconds() * 1000);
 
@@ -114,8 +117,8 @@ export class BrlUsdQuoteService {
         bps: providerFeeBps(),
       },
       total_fee: {
-        amount_brl_equivalent: amount(platformFeeBrl + estimatedProviderFeeUsd * brlPerUsd, 2),
-        amount_usd_equivalent: amount(platformFeeUsd + estimatedProviderFeeUsd),
+        amount_brl_equivalent: amount(totalFeeBrl, 2),
+        amount_usd_equivalent: amount(totalFeeUsd),
       },
       expires_at: expiresAt.toISOString(),
       quote_status: 'ACTIVE',
@@ -124,6 +127,20 @@ export class BrlUsdQuoteService {
         reference_quote: referenceQuote,
         usdc_assumed_usd_parity: true,
         provider_fee_min_usd: providerMinFeeUsd(),
+        fee_breakdown: {
+          gross_usd_before_fees: amount(estimatedUsdcGross),
+          platform_fee_brl: amount(platformFeeBrl, 2),
+          platform_fee_usd: amount(platformFeeUsd),
+          after_platform_fee_usd: amount(estimatedUsdcAfterPlatformFee),
+          provider_fee_usd: amount(estimatedProviderFeeUsd),
+          provider_fee_bps: providerFeeBps(),
+          tax_estimate_usd: '0',
+          tax_estimate_source: 'not_configured_for_sandbox_quote',
+          total_fee_usd: amount(totalFeeUsd),
+          total_fee_brl: amount(totalFeeBrl, 2),
+          estimated_usd_after_all_fees: amount(estimatedUsd),
+          retained_pct: amount(retainedPct, 4),
+        },
       },
       created_at: issuedAt.toISOString(),
       updated_at: issuedAt.toISOString(),

@@ -42,13 +42,25 @@ Qual evidencia prova cada etapa?
 
 ## Melhorias implementadas nesta passada
 
-- Adicionado painel "Fee compression view" acima do fluxo tecnico.
+- Adicionado painel "Before and after fees/taxes" acima do fluxo tecnico.
+- A quote BRL/USD agora inclui `metadata.fee_breakdown` com:
+  - USD bruto antes de custos;
+  - spread/plataforma;
+  - fee de provedor/off-ramp;
+  - tax/IOF como componente explicito quando configurado;
+  - USD liquido depois de custos;
+  - percentual retido.
+- A UI nao inventa imposto quando o sandbox nao retorna IOF; ela mostra que esse componente nao esta configurado.
 - Comparacao contra benchmark tradicional de 3,5%.
 - Destaque de:
-  - taxa da rota;
-  - taxa tradicional estimada;
-  - economia estimada;
-  - valor final entregue.
+  - valor antes de taxas;
+  - custos/taxas deduzidos;
+  - valor depois de taxas;
+  - economia estimada contra rota tradicional.
+- O fluxo PIX agora mostra uma ponte simples antes do PIN:
+  - valor que sai no PIX;
+  - taxas/custos estimados;
+  - valor liquido que entra na conta ou paga o destinatario.
 - Troca de copy de "USD rail control room" para "Cost-efficient USD route room".
 - Campos de `Session ID`, `Session token` e PIN movidos para "Advanced execution credentials".
 - Botao de funding mudou de "Funding confirmed" para "Confirm funding".
@@ -158,4 +170,3 @@ Usar sempre:
 4. Esconder JSON/logs por padrao.
 5. Adicionar guardrail quando rota nao for melhor.
 6. Criar demo script focado em "menos taxa" com timestamps.
-
