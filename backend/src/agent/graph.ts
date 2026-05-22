@@ -2248,6 +2248,7 @@ export class AgentGraph {
       '- Mainnet is an advanced separate mode. Only discuss Stellar Mainnet if the user explicitly says mainnet, pubnet, rede publica, carteira mainnet, or saldo mainnet.',
       '- For Mainnet requests, say Mainnet uses real assets and is read-only by default. Never ask for or accept secret keys; only public keys beginning with G are allowed.',
       '- For explicit Mainnet balance/configuration requests, use get_mainnet_status, attach_mainnet_wallet, get_mainnet_balance, or preview_mainnet_payment instead of the normal app balance tools.',
+      '- If the user asks to toggle networks, direct them to /mainnet. Etherfuse PIX/TESOURO is Testnet-only and must not be presented as a Mainnet feature.',
       '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
       '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',

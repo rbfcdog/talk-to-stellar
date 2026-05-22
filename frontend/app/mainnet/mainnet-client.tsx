@@ -5,7 +5,9 @@ import {
   Activity,
   AlertTriangle,
   ExternalLink,
+  Landmark,
   Loader2,
+  QrCode,
   RefreshCw,
   Send,
   ShieldCheck,
@@ -73,6 +75,25 @@ type OperationLine = {
   explorer_tx_url?: string;
 };
 
+type NetworkMode = "testnet" | "mainnet";
+
+type RampConfig = {
+  success?: boolean;
+  provider?: string;
+  sandbox?: boolean;
+  available?: boolean;
+  testnet_only?: boolean;
+  network?: string;
+  stellar_network_id?: "TESTNET" | "PUBLIC";
+  base_url?: string;
+  unavailable_reason?: string;
+  asset?: {
+    code?: string;
+    issuer?: string;
+    identifier?: string;
+  };
+};
+
 function compactKey(value?: string | null) {
   const key = String(value || "").trim();
   if (key.length <= 16) return key || "-";
@@ -107,9 +128,20 @@ async function financialApi(path: string, init?: RequestInit) {
   return payload;
 }
 
+async function rampConfigApi(): Promise<RampConfig> {
+  const response = await fetch("/api/ramp/etherfuse/config", { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.message || "Could not load Etherfuse status.");
+  }
+  return payload;
+}
+
 export default function MainnetClient() {
+  const [networkMode, setNetworkMode] = useState<NetworkMode>("testnet");
   const [session, setSession] = useState({ authenticated: false, sessionId: "" });
   const [status, setStatus] = useState<MainnetStatus | null>(null);
+  const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
   const [wallet, setWallet] = useState<MainnetWallet | null>(null);
   const [balance, setBalance] = useState<any | null>(null);
   const [operations, setOperations] = useState<OperationLine[]>([]);
@@ -129,17 +161,28 @@ export default function MainnetClient() {
 
   const hasWallet = Boolean(wallet?.public_key);
   const canAttach = isValidPublicKey(publicKey);
+  const etherfuseAvailable = Boolean(rampConfig?.available);
+  const currentNetworkLabel = networkMode === "testnet" ? "Stellar Testnet" : "Stellar Mainnet";
 
   async function refreshAll() {
     setApiState({ loading: true, message: "", error: "" });
     try {
-      const [sessionPayload, statusPayload] = await Promise.all([
+      const [sessionPayload, statusPayload, rampPayload] = await Promise.all([
         getClientSession(),
         financialApi("status"),
+        rampConfigApi().catch((error) => ({
+          success: false,
+          available: false,
+          testnet_only: true,
+          network: "Stellar Testnet",
+          stellar_network_id: "TESTNET" as const,
+          unavailable_reason: error instanceof Error ? error.message : String(error),
+        })),
       ]);
 
       setSession(sessionPayload);
       setStatus(statusPayload);
+      setRampConfig(rampPayload);
 
       if (!sessionPayload.authenticated) {
         setWallet(null);
@@ -147,7 +190,7 @@ export default function MainnetClient() {
         setOperations([]);
         setApiState({
           loading: false,
-          message: "Sign in from chat or browser login to attach a Mainnet wallet.",
+          message: "Network console loaded. Sign in to attach Mainnet wallets or run authenticated Testnet flows.",
           error: "",
         });
         return;
@@ -259,24 +302,42 @@ export default function MainnetClient() {
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-amber-200">
               <ShieldCheck className="h-4 w-4" />
-              Mainnet real-value mode
+              Network toggle
             </div>
             <h1 className="text-3xl font-black tracking-tight text-white md:text-5xl">
-              Stellar Mainnet wallet console
+              Stellar network console
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
-              Attach a public Mainnet wallet, read real balances, inspect recent public operations and preview guarded interactions.
-              TalkToStellar keeps the product runtime on testnet unless Mainnet activation is explicitly approved.
+              Switch between the Testnet product rail and the guarded Mainnet wallet view. Etherfuse PIX stays Testnet-only;
+              Mainnet is opt-in, public-key based and read-only unless operational gates are explicitly enabled.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={refreshAll}
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-white/15 bg-white px-4 py-2 text-sm font-black text-black hover:bg-slate-200"
-          >
-            {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Refresh
-          </button>
+          <div className="flex flex-col gap-3 sm:min-w-[320px]">
+            <div className="grid grid-cols-2 border border-white/10 bg-white/[0.03] p-1">
+              <button
+                type="button"
+                onClick={() => setNetworkMode("testnet")}
+                className={`min-h-11 px-3 text-sm font-black ${networkMode === "testnet" ? "bg-white text-black" : "text-slate-300 hover:bg-white/10"}`}
+              >
+                Testnet
+              </button>
+              <button
+                type="button"
+                onClick={() => setNetworkMode("mainnet")}
+                className={`min-h-11 px-3 text-sm font-black ${networkMode === "mainnet" ? "bg-amber-200 text-black" : "text-slate-300 hover:bg-white/10"}`}
+              >
+                Mainnet
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={refreshAll}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-white/15 bg-white px-4 py-2 text-sm font-black text-black hover:bg-slate-200"
+            >
+              {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Refresh {currentNetworkLabel}
+            </button>
+          </div>
         </header>
 
         {apiState.error ? (
@@ -296,12 +357,20 @@ export default function MainnetClient() {
         ) : null}
 
         <section className="grid gap-4 lg:grid-cols-4">
-          <Metric label="Runtime" value={status?.controls?.runtime_network || "-"} detail="Default app network" />
+          <Metric label="Selected rail" value={networkMode === "testnet" ? "Testnet" : "Mainnet"} detail={currentNetworkLabel} />
+          <Metric label="Etherfuse PIX" value={etherfuseAvailable ? "Testnet on" : "Off"} detail={rampConfig?.testnet_only ? "Testnet-only rail" : "Provider status"} />
           <Metric label="Mainnet mutations" value={status?.controls?.mutations_available ? "Guarded" : "Off"} detail="Read-only unless gated" />
-          <Metric label="Signer" value={status?.controls?.signer_mode || "disabled"} detail="No secret stored here" />
-          <Metric label="Config" value={status?.readiness?.configuration_ready ? "Ready" : "Preparing"} detail={`${status?.readiness?.blockers?.length || 0} blockers`} />
+          <Metric label="Runtime" value={status?.controls?.runtime_network || "-"} detail="Default product runtime" />
         </section>
 
+        {networkMode === "testnet" ? (
+          <TestnetRailPanel
+            sessionAuthenticated={session.authenticated}
+            rampConfig={rampConfig}
+            etherfuseAvailable={etherfuseAvailable}
+          />
+        ) : (
+          <>
         <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-start justify-between gap-4">
@@ -538,16 +607,112 @@ export default function MainnetClient() {
           </div>
         </section>
 
+          </>
+        )}
+
         <section className="border border-white/10 bg-white/[0.03] p-5">
-          <h2 className="text-lg font-black text-white">What this adds for every new user</h2>
+          <h2 className="text-lg font-black text-white">Network policy</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <InfoBlock title="Default remains testnet" body="Existing TalkToStellar wallet, PIX, quote and chat flows stay on the configured testnet runtime." />
-            <InfoBlock title="Mainnet is opt-in" body="A user can attach a public Mainnet wallet after login without giving custody or a secret key to the app." />
-            <InfoBlock title="Interactions are gated" body="The UI and agent can preview interactions, but real Mainnet submission requires explicit backend signer and approval settings." />
+            <InfoBlock title="Default remains Testnet" body="Existing TalkToStellar wallet, PIX, quote and chat flows stay on the configured testnet runtime." />
+            <InfoBlock title="Etherfuse is Testnet-only" body="PIX/TESOURO routes use Etherfuse only on the Testnet rail. Mainnet never runs Etherfuse PIX helpers." />
+            <InfoBlock title="Mainnet is opt-in" body="Users can attach a public Mainnet wallet after login. Transaction submission remains gated by backend signer and approval settings." />
           </div>
         </section>
       </section>
     </main>
+  );
+}
+
+function TestnetRailPanel({
+  sessionAuthenticated,
+  rampConfig,
+  etherfuseAvailable,
+}: {
+  sessionAuthenticated: boolean;
+  rampConfig: RampConfig | null;
+  etherfuseAvailable: boolean;
+}) {
+  return (
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="border border-white/10 bg-white/[0.03] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-black text-white">
+              <QrCode className="h-5 w-5 text-emerald-200" />
+              Testnet PIX rail
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              This is the active TalkToStellar product rail for PIX, Etherfuse sandbox, BRL/TESOURO settlement and testnet wallet flows.
+            </p>
+          </div>
+          <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${etherfuseAvailable ? "border-emerald-300/30 text-emerald-200" : "border-amber-300/30 text-amber-200"}`}>
+            {etherfuseAvailable ? "Ready" : "Check env"}
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <MiniStat label="Provider" value={rampConfig?.provider || "etherfuse"} />
+          <MiniStat label="Network" value={rampConfig?.network || "Stellar Testnet"} />
+          <MiniStat label="Mode" value={rampConfig?.sandbox ? "Sandbox/devnet" : "Unavailable"} />
+          <MiniStat label="Asset" value={rampConfig?.asset?.code || "TESOURO"} />
+        </div>
+
+        {!etherfuseAvailable ? (
+          <div className="mt-5 border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+            <p className="font-black">Etherfuse is intentionally Testnet-only here.</p>
+            <p className="mt-2 leading-6">
+              {rampConfig?.unavailable_reason || "Use STELLAR_NETWORK=TESTNET with Etherfuse sandbox credentials for PIX flows."}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-5 border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">
+            <p className="font-black">Etherfuse PIX is available on the Testnet rail.</p>
+            <p className="mt-2 leading-6">
+              Mainnet wallet viewing stays separate and never routes through Etherfuse.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a href="/pix-on" className="inline-flex min-h-11 items-center justify-center gap-2 bg-emerald-200 px-4 py-2 text-sm font-black text-black">
+            <QrCode className="h-4 w-4" />
+            PIX in
+          </a>
+          <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-white/15 px-4 py-2 text-sm font-black text-white">
+            PIX out
+          </a>
+          <a href="/chat" className="inline-flex min-h-11 items-center justify-center border border-white/15 px-4 py-2 text-sm font-black text-white">
+            Chat
+          </a>
+        </div>
+      </div>
+
+      <div className="border border-white/10 bg-white/[0.03] p-5">
+        <h2 className="flex items-center gap-2 text-lg font-black text-white">
+          <Landmark className="h-5 w-5 text-cyan-200" />
+          What the toggle means
+        </h2>
+        <div className="mt-5 space-y-3">
+          <InfoBlock
+            title="Testnet is operational"
+            body="Use this mode for PIX, Etherfuse sandbox, chat payments, quotes, conversions and demo flows that move through the current TalkToStellar app wallet."
+          />
+          <InfoBlock
+            title="Mainnet is isolated"
+            body="Switch to Mainnet only to attach a public wallet, read real balances and preview guarded interactions. It does not enable Etherfuse."
+          />
+          <InfoBlock
+            title="No accidental real rail"
+            body="If the backend runtime is changed to Stellar Public, Etherfuse endpoints refuse PIX/TESOURO operations instead of silently using a real-value network."
+          />
+        </div>
+        {!sessionAuthenticated ? (
+          <div className="mt-5 border border-white/10 bg-black p-4 text-sm text-slate-300">
+            Sign in to use authenticated Testnet flows and attach a Mainnet public wallet.
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

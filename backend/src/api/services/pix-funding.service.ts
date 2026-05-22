@@ -19,6 +19,8 @@ export class PixFundingService {
     email?: string;
     mock?: boolean;
   }): Promise<PixFundingIntent> {
+    AnchorService.assertEtherfuseTestnetRuntime();
+
     if (input.mock) {
       const mockEnabled = process.env.NODE_ENV !== 'production' ||
         String(process.env.INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX || '').trim().toLowerCase() === 'true';
