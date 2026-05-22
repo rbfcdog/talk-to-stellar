@@ -536,6 +536,18 @@ async function configureWalletAssetsAndContacts(input: {
   }
 }
 
+async function ensureOnboardingAccountReady(input: {
+  userId: string;
+  publicKey: string;
+}) {
+  try {
+    await StellarService.ensureTestnetAccountFunded(input.publicKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[external-finalize] testnet funding still pending for ${input.userId}: ${message}`);
+  }
+}
+
 function runPostOnboardingTasks(input: {
   userId: string;
   publicKey: string;
@@ -549,6 +561,11 @@ function runPostOnboardingTasks(input: {
   language?: string;
 }) {
   void (async () => {
+    await ensureOnboardingAccountReady({
+      userId: input.userId,
+      publicKey: input.publicKey,
+    });
+
     await configureWalletAssetsAndContacts({
       userId: input.userId,
       publicKey: input.publicKey,
@@ -2898,20 +2915,9 @@ export default class ExternalFinalizeController {
       }
       onboardingReservationTokenHash = tokenHash;
 
-      let publicKey = '';
-      let secretKey = '';
-
-      try {
-        const generated = await StellarService.createTestAccount();
-        secretKey = generated.secret;
-      } catch (error: any) {
-        const fallback = StellarService.generateStellarKeypair();
-        await StellarService.ensureTestnetAccountFunded(fallback.publicKey);
-        secretKey = fallback.secret;
-        console.warn('[external-finalize] friendbot first attempt failed; funded retry account:', error?.message || error);
-      }
-
-      publicKey = Keypair.fromSecret(secretKey).publicKey();
+      const generated = StellarService.generateStellarKeypair();
+      let publicKey = generated.publicKey;
+      let secretKey = generated.secret;
 
       const vaultSecretId = await vaultService.storeSecret(
         secretKey,

@@ -25,6 +25,8 @@ const finalizeGetAccountBalanceMock = jest.fn();
 const finalizeLoadAccountMock = jest.fn();
 const finalizeSignAndSubmitXdrMock = jest.fn();
 const finalizeGetSubmittedPaymentDetailsMock = jest.fn();
+const finalizeCreateTestAccountMock = jest.fn();
+const finalizeEnsureTestnetAccountFundedMock = jest.fn();
 const finalizeCreateDefaultTrustlinesMock = jest.fn();
 const finalizeEnsureStarterContactsForUserMock = jest.fn();
 const finalizeSupabaseFromMock = jest.fn();
@@ -71,14 +73,12 @@ jest.mock('../src/services/vault.service', () => ({
 
 jest.mock('../src/api/services/stellar.service', () => ({
   StellarService: {
-    createTestAccount: jest.fn(async () => ({
-      publicKey: testPublicKey,
-      secret: testSecretKey,
-    })),
+    createTestAccount: finalizeCreateTestAccountMock,
     generateStellarKeypair: jest.fn(() => ({
       publicKey: testPublicKey,
       secret: testSecretKey,
     })),
+    ensureTestnetAccountFunded: finalizeEnsureTestnetAccountFundedMock,
     buildPaymentXdr: finalizeBuildPaymentXdrMock,
     buildPathPaymentXdr: finalizeBuildPathPaymentXdrMock,
     quotePathPayment: finalizeQuotePathPaymentMock,
@@ -221,6 +221,8 @@ describe('ExternalFinalizeController', () => {
     finalizeLoadAccountMock.mockReset();
     finalizeSignAndSubmitXdrMock.mockReset();
     finalizeGetSubmittedPaymentDetailsMock.mockReset();
+    finalizeCreateTestAccountMock.mockReset();
+    finalizeEnsureTestnetAccountFundedMock.mockReset();
     finalizeCreateDefaultTrustlinesMock.mockReset();
     finalizeEnsureStarterContactsForUserMock.mockReset();
     finalizeSupabaseFromMock.mockReset();
@@ -252,6 +254,11 @@ describe('ExternalFinalizeController', () => {
       destinationAssetCode: 'USDC',
       feeXlm: '0.0000100',
     });
+    finalizeCreateTestAccountMock.mockResolvedValue({
+      publicKey: testPublicKey,
+      secret: testSecretKey,
+    });
+    finalizeEnsureTestnetAccountFundedMock.mockResolvedValue(undefined);
     finalizeCreateDefaultTrustlinesMock.mockResolvedValue({ success: true, assets: ['USDC'], errors: [] });
     finalizeEnsureStarterContactsForUserMock.mockResolvedValue({ created: 0, updated: 0, skipped: 0, errors: [] });
     finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
@@ -282,6 +289,7 @@ describe('ExternalFinalizeController', () => {
     expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(1);
     expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(1);
     expect(finalizeStoreSecretMock).toHaveBeenCalledTimes(1);
+    expect(finalizeCreateTestAccountMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
