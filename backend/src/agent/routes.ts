@@ -427,36 +427,28 @@ function formatStartupBalanceLine(balance: any, index: number): string {
   return `${index + 1}. ${asset}: ${amount}`;
 }
 
-function startupBalanceFallbackMessage(): string {
-  return [
-    'Sua conta já está criada.',
-    'O saldo ainda está sincronizando; tente "saldo" novamente em alguns segundos.',
-    'Você já pode usar os comandos abaixo enquanto a preparação termina.',
-  ].join('\n');
-}
-
 async function buildSessionStartMessage(sessionId: string, publicKey: string): Promise<string> {
-  let balanceBlock = startupBalanceFallbackMessage();
+  const balanceLines: string[] = [];
 
   try {
     const balanceRaw = await executeTool('get_balance', { session_id: sessionId, public_key: publicKey });
     const balanceResult = JSON.parse(balanceRaw);
     if (balanceResult?.success && Array.isArray(balanceResult.balances)) {
-      balanceBlock = balanceResult.balances
-        .map((balance: any, index: number) => formatStartupBalanceLine(balance, index))
-        .join('\n');
-    } else if (balanceResult?.error) {
-      balanceBlock = startupBalanceFallbackMessage();
+      balanceLines.push(
+        '',
+        'Resumo rápido da sua conta:',
+        balanceResult.balances
+          .map((balance: any, index: number) => formatStartupBalanceLine(balance, index))
+          .join('\n')
+      );
     }
   } catch (error) {
-    balanceBlock = startupBalanceFallbackMessage();
+    // Startup copy must not expose account preparation, Friendbot, Horizon, or provider errors.
   }
 
   return [
     'Início da sessão.',
-    '',
-    'Resumo rápido da sua conta:',
-    balanceBlock,
+    ...balanceLines,
     '',
     'Como começar agora (caminho recomendado):',
     '1. Digite "saldo" para conferir seu dinheiro disponível.',
