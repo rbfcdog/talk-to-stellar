@@ -3099,7 +3099,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (!toolResult.success) {
         state.success = false;
-        state.response_message = this.text(language, `Não consegui consultar seu saldo agora: ${toolResult.error || 'erro desconhecido'}`, `I could not check your balance right now: ${toolResult.error || 'unknown error'}`);
+        state.response_message = this.text(
+          language,
+          'Não consegui consultar seu saldo agora. Tente novamente em alguns segundos.',
+          'I could not check your balance right now. Try again in a few seconds.'
+        );
       } else {
         const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
         const byAsset = new Map<string, any>();

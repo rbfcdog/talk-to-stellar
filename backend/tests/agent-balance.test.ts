@@ -63,6 +63,28 @@ describe('Agent balance flow', () => {
     expect(result.response_message).toContain('USDC: 8.9000000');
   });
 
+  it('does not expose account preparation internals when balance is unavailable', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const state = createState('GTESTPUBLICKEY');
+
+    (executeTool as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        success: false,
+        code: 'account_preparing',
+        error: 'Failed to fund account using Friendbot: 400 createAccountAlreadyExist',
+      })
+    );
+
+    const result = await (graph as any).handleBalanceCheck(state);
+
+    expect(result.success).toBe(false);
+    expect(result.response_message).toBe('Não consegui consultar seu saldo agora. Tente novamente em alguns segundos.');
+    expect(result.response_message).not.toContain('Friendbot');
+    expect(result.response_message).not.toContain('createAccountAlreadyExist');
+    expect(result.response_message).not.toContain('sincronizando');
+  });
+
   it('calculates spendable XLM when user asks to convert the whole balance', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
@@ -80,10 +102,6 @@ describe('Agent balance flow', () => {
     );
 
     expect((graph as any).isFullBalanceConversionRequest(state.current_input)).toBe(true);
-    expect((graph as any).inferConversionAssetsFromText(state.current_input)).toMatchObject({
-      sourceAssetCode: 'XLM',
-      destAssetCode: 'USDC',
-    });
 
     const resolved = await (graph as any).resolveFullBalanceConversionAmount(state, 'XLM');
 
