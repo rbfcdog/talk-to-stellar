@@ -30,7 +30,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
   if (/(quote|cotacao).*(expired|expirad)|not active:\s*expired/.test(normalized)) {
     return 'A cotacao expirou. Gere uma nova cotacao para continuar.';
   }
-  if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|already used|ja foi utilizado/.test(normalized)) {
+  if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|invalid or expired link|already used|ja foi utilizado/.test(normalized)) {
     return 'Esse link expirou ou ja foi usado. Peca um novo link no chat.';
   }
   if (/(session|sessao).*(expired|expirad)|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) {
@@ -45,11 +45,16 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) {
     return 'Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.';
   }
+  if (
+    /nao consegui encontrar uma rota segura|nao foi encontrado caminho|não foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)
+  ) {
+    return 'Nao consegui encontrar uma rota segura para essa conversao agora. Tente novamente em alguns segundos ou escolha outro valor.';
+  }
   if (/etherfuse|evolution|provider|pix provider|sandbox provider|fetch failed|timeout|timed out|econn/.test(normalized)) {
     return 'O servico de pagamento nao respondeu agora. Tente novamente em alguns segundos.';
   }
 
-  return raw || fallback;
+  return fallback || raw || 'Nao consegui concluir agora. Tente novamente em alguns segundos.';
 }
 
 export function publicErrorPayload(error: unknown, options: { code?: string; includeSupportCode?: boolean; fallback?: string } = {}): PublicErrorPayload {

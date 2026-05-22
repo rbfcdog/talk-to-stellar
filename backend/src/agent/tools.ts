@@ -329,11 +329,37 @@ function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unkn
 function formatNoPathFallbackMessage(errorMessage: string): string {
   const raw = String(errorMessage || '').trim();
   const normalized = raw.toLowerCase();
+  const mentionsQuoteExpired =
+    /(quote|cotacao|cotação).*(expired|expirad)|not active:\s*expired/.test(normalized);
+  if (mentionsQuoteExpired) {
+    return 'A cotação expirou. Gere uma nova cotação para continuar.';
+  }
+
   const mentionsNoPath =
     normalized.includes('não foi encontrado caminho') ||
     normalized.includes('nenhum caminho encontrado') ||
-    normalized.includes('sem rota de liquidez');
-  return raw;
+    normalized.includes('sem rota de liquidez') ||
+    normalized.includes('no path') ||
+    normalized.includes('path not found') ||
+    normalized.includes('liquidez');
+  const mentionsInternalRoutingDetail =
+    normalized.includes('source_issuer') ||
+    normalized.includes('dest_issuer') ||
+    normalized.includes('issuer=') ||
+    normalized.includes('_issuer') ||
+    normalized.includes('trustline') ||
+    normalized.includes('horizon') ||
+    normalized.includes('path payment') ||
+    normalized.includes('strictsend') ||
+    normalized.includes('strict send') ||
+    normalized.includes('xdr') ||
+    normalized.includes('dex');
+
+  if (mentionsNoPath || mentionsInternalRoutingDetail) {
+    return 'Não consegui encontrar uma rota segura para essa conversão agora. Tente novamente em alguns segundos ou escolha outro valor.';
+  }
+
+  return raw || 'Não consegui concluir a conversão agora. Tente novamente em alguns segundos.';
 }
 
 function formatBrl(value: number): string {
@@ -864,6 +890,18 @@ export const toolDefinitions = [
         quote: {
           type: "object",
           description: "Optional quote details to embed in token context.",
+        },
+        provider: {
+          type: "string",
+          description: "External channel provider when the confirmation originated from WhatsApp or Telegram.",
+        },
+        provider_user_id: {
+          type: "string",
+          description: "External channel user ID for sending completion feedback after confirmation.",
+        },
+        source: {
+          type: "string",
+          description: "External source channel when available.",
         },
       },
       required: ["session_id", "owner_id", "dest_amount", "source_asset_code", "dest_asset_code"],
@@ -2043,7 +2081,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: formatNoPathFallbackMessage(errorMessage),
     });
   }
 }
@@ -2296,7 +2334,7 @@ async function executeConvertAssets(input: any): Promise<string> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: formatNoPathFallbackMessage(errorMessage),
     });
   }
 }
@@ -2620,6 +2658,9 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       quote_issued_at: input.quote?.quote_issued_at || null,
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
+      provider: String(input.provider || input.external_provider || '').trim() || null,
+      provider_user_id: String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim() || null,
+      source: String(input.source || input.external_source || input.provider || input.external_provider || '').trim() || null,
     });
 
     return JSON.stringify({
@@ -2643,7 +2684,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
     const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: formatNoPathFallbackMessage(errorMessage),
     });
   }
 }

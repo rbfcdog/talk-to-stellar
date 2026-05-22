@@ -40,10 +40,12 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
 describe('Agent tool execution', () => {
   let executeTool: (toolName: string, toolInput: Record<string, any>) => Promise<string>;
   let supabaseMock: any;
+  let apiStellarService: any;
 
   beforeAll(() => {
     ({ executeTool } = require('../src/agent/tools'));
     ({ supabase: supabaseMock } = require('../src/config/supabase'));
+    ({ StellarService: apiStellarService } = require('../src/api/services/stellar.service'));
   });
 
   beforeEach(() => {
@@ -106,6 +108,35 @@ describe('Agent tool execution', () => {
     expect(parsed.usdc_per_brl).toBe('0.19493177');
     expect(parsed.message).toContain('BRL da sua conta');
     expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
+  });
+
+  it('sanitizes conversion route failures before returning them to chat', async () => {
+    const quoteSpy = jest
+      .spyOn(apiStellarService, 'quoteStrictSendConversion')
+      .mockRejectedValueOnce(new Error(
+        'Não foi encontrado caminho de conversão entre USDC e BRL. source_issuer=GUSDC; dest_issuer=GBRL. Diagnóstico: Sem rota de liquidez | Confirme trustline.'
+      ));
+
+    try {
+      const output = await executeTool('get_best_route', {
+        source_public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        destination: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        source_amount: '100',
+        source_asset_code: 'USDC',
+        source_asset_issuer: 'GUSDC',
+        dest_asset_code: 'BRL',
+        dest_asset_issuer: 'GBRL',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('rota segura');
+      expect(parsed.error).not.toContain('source_issuer');
+      expect(parsed.error).not.toContain('dest_issuer');
+      expect(parsed.error).not.toMatch(/trustline|liquidez/i);
+    } finally {
+      quoteSpy.mockRestore();
+    }
   });
 
   it('adds an existing TalkToStellar user by email directly from the database', async () => {
