@@ -145,6 +145,10 @@ function isHorizonNotFound(error: any): boolean {
   return status === 404 || message === 'not found' || message.includes('not found');
 }
 
+function accountPreparationMessage(): string {
+  return 'Sua conta foi criada e ainda está sincronizando. Tente novamente em alguns segundos.';
+}
+
 async function getAccountWithTestnetRepair(input: any, publicKey: string): Promise<{
   account: any;
   account_repair: {
@@ -1786,9 +1790,8 @@ async function executeGetBalance(input: any): Promise<string> {
     if (!accountLookup.account) {
       return JSON.stringify({
         success: false,
-        error: accountLookup.account_repair.error
-          ? `A conta ainda está sendo preparada e o ajuste automático falhou: ${accountLookup.account_repair.error}`
-          : 'A conta ainda está sendo preparada.',
+        code: 'account_preparing',
+        error: accountPreparationMessage(),
       });
     }
     let account = accountLookup.account;
