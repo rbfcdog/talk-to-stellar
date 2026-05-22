@@ -520,6 +520,11 @@ export class EtherfuseClient implements Anchor {
             toAmount: response.destinationAmountAfterFee || response.destinationAmount,
             exchangeRate: response.exchangeRate,
             fee: response.feeAmount || '0',
+            feeBps: response.feeBps || undefined,
+            feeAmount: response.feeAmount || '0',
+            destinationAmountBeforeFee: response.destinationAmount,
+            destinationAmountAfterFee: response.destinationAmountAfterFee || response.destinationAmount,
+            provider: 'etherfuse',
             expiresAt: response.expiresAt,
             createdAt: response.createdAt,
         };

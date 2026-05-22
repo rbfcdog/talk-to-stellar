@@ -181,6 +181,15 @@ export class RampController {
     }
   }
 
+  static async previewEtherfuseOffRamp(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.previewOffRampForSession(requestInput(req));
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
   static async getEtherfuseOffRamp(req: Request, res: Response) {
     try {
       const orderId = String(req.params.orderId || req.query.order_id || req.query.orderId || '').trim();

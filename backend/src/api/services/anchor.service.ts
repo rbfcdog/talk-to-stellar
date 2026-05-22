@@ -161,6 +161,26 @@ interface CreateOffRampForSessionInput extends RampSessionInput {
   memo?: string;
 }
 
+interface PreviewOffRampForSessionInput extends RampSessionInput {
+  amount?: string;
+  amount_currency?: string;
+  amountCurrency?: string;
+  asset_code?: string;
+  assetCode?: string;
+  source_asset_code?: string;
+  sourceAssetCode?: string;
+  source_amount?: string;
+  sourceAmount?: string;
+  fiat_amount?: string;
+  fiatAmount?: string;
+  target_brl?: string;
+  targetBrl?: string;
+  to_amount?: string;
+  toAmount?: string;
+  customer_id?: string;
+  customerId?: string;
+}
+
 interface ExternalBankAccountInput extends RampSessionInput {}
 
 interface SubmitOffRampForSessionInput extends RampSessionInput {
@@ -2767,6 +2787,145 @@ export class AnchorService {
     if (mockRecord) mockRecord.operationId = operationId;
 
     return { transaction, operation_id: operationId };
+  }
+
+  static async previewOffRampForSession(input: PreviewOffRampForSessionInput): Promise<{
+    success: true;
+    preview: true;
+    sandbox: boolean;
+    customer: Customer;
+    quote: Quote;
+    amount_tesouro: string;
+    source_amount: string;
+    source_asset_code: string;
+    source_asset_issuer?: string;
+    target_brl: string;
+    destination_amount: string;
+    destination_asset_code: 'BRL';
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    const sourceAsset = normalizeRampUserAsset(
+      input.source_asset_code,
+      input.sourceAssetCode,
+      input.asset_code,
+      input.assetCode,
+      input.amount_currency,
+      input.amountCurrency,
+      'BRL',
+    );
+    const requestedTargetBrl = coalesceString(
+      input.fiat_amount,
+      input.fiatAmount,
+      input.target_brl,
+      input.targetBrl,
+      input.to_amount,
+      input.toAmount,
+    );
+    const requestedSourceAmount = normalizeAmount(
+      coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'),
+      'amount',
+    );
+
+    let estimatedTargetBrl = requestedSourceAmount;
+    if (sourceAsset.code === 'USDC') {
+      try {
+        const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
+        estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
+      } catch (error) {
+        const fallbackBrl = EconomyEngineService.estimateAmountInBrl({
+          amount: requestedSourceAmount,
+          assetCode: 'USDC',
+        });
+        if (!fallbackBrl) {
+          throw apiError('Não consegui calcular o valor em BRL para estimar esta saída PIX.', 409);
+        }
+        estimatedTargetBrl = toStellarAmount(fallbackBrl);
+        console.warn(`[ramp] BRL/USDC path unavailable for off-ramp preview; using fallback rate: ${debugErrorMessage(error)}`);
+      }
+    } else if (sourceAsset.code !== 'BRL') {
+      estimatedTargetBrl = toStellarAmount(EconomyEngineService.estimateAmountInBrl({
+        amount: requestedSourceAmount,
+        assetCode: sourceAsset.code,
+      }));
+    }
+
+    const targetBrl = normalizeAmount(
+      requestedTargetBrl || estimatedTargetBrl,
+      sourceAsset.code === 'BRL' ? 'fiat_amount' : 'target_brl',
+    );
+    const customerIdInput = coalesceString(input.customer_id, input.customerId);
+    const customerResult = customerIdInput
+      ? {
+          customer: {
+            id: customerIdInput,
+            kycStatus: 'not_started' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      : await this.createCustomerForSession({
+          session_id: context.sessionId,
+          session_token: context.sessionToken,
+          country: 'BR',
+        });
+
+    const probeQuote = await this.getQuoteForSession({
+      session_id: context.sessionId,
+      session_token: context.sessionToken,
+      customer_id: customerResult.customer.id,
+      direction: 'offramp',
+      amount: '1',
+      from_currency: this.getTesouroIdentifier(),
+      to_currency: 'BRL',
+    });
+    const probeReceive = Number(String(probeQuote.quote.toAmount || '').replace(',', '.'));
+    const impliedRate = Number(String(probeQuote.quote.exchangeRate || '').replace(',', '.'));
+    const brlPerTesouro = Number.isFinite(probeReceive) && probeReceive > 0
+      ? probeReceive
+      : (Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : 1.154);
+
+    let amount = targetBrl
+      ? toStellarAmount(Number(targetBrl) / brlPerTesouro)
+      : requestedSourceAmount;
+    let quoteResult = await this.getQuoteForSession({
+      session_id: context.sessionId,
+      session_token: context.sessionToken,
+      customer_id: customerResult.customer.id,
+      direction: 'offramp',
+      amount,
+      from_currency: this.getTesouroIdentifier(),
+      to_currency: 'BRL',
+    });
+
+    const quotedReceive = Number(String(quoteResult.quote.toAmount || '').replace(',', '.'));
+    const targetReceive = Number(targetBrl);
+    if (Number.isFinite(quotedReceive) && quotedReceive > 0 && Math.abs(quotedReceive - targetReceive) > 0.01) {
+      amount = toStellarAmount(Number(amount) * (targetReceive / quotedReceive));
+      quoteResult = await this.getQuoteForSession({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        customer_id: customerResult.customer.id,
+        direction: 'offramp',
+        amount,
+        from_currency: this.getTesouroIdentifier(),
+        to_currency: 'BRL',
+      });
+    }
+
+    return {
+      success: true,
+      preview: true,
+      sandbox: this.getRuntimeInfo().sandbox,
+      customer: customerResult.customer as Customer,
+      quote: quoteResult.quote,
+      amount_tesouro: amount,
+      source_amount: requestedSourceAmount,
+      source_asset_code: sourceAsset.code,
+      source_asset_issuer: sourceAsset.issuer,
+      target_brl: targetBrl,
+      destination_amount: quoteResult.quote.toAmount || targetBrl,
+      destination_asset_code: 'BRL',
+    };
   }
 
   static async getOffRampStatus(orderId: string, operationId?: string): Promise<{

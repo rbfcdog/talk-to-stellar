@@ -15,6 +15,7 @@ router.post('/etherfuse/quote', RampController.createEtherfuseQuote);
 router.post('/etherfuse/trustline', RampController.ensureEtherfuseTesouroTrustline);
 router.post('/etherfuse/onramp', RampController.createEtherfuseOnRamp);
 router.get('/etherfuse/onramp/:orderId', RampController.getEtherfuseOnRamp);
+router.post('/etherfuse/offramp-preview', RampController.previewEtherfuseOffRamp);
 router.post('/etherfuse/offramp', RampController.createEtherfuseOffRamp);
 router.get('/etherfuse/offramp/:orderId', RampController.getEtherfuseOffRamp);
 router.post('/etherfuse/offramp/:orderId/submit', RampController.submitEtherfuseOffRamp);

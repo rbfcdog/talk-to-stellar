@@ -6,10 +6,11 @@ export const metadata: Metadata = {
   description: "Sign in to your TalkToStellar account with PIN or Passkey.",
 }
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { expired?: string }
+  searchParams: Promise<{ expired?: string }>
 }) {
-  return <LoginClient expired={searchParams?.expired === "1"} />
+  const resolvedSearchParams = await searchParams
+  return <LoginClient expired={resolvedSearchParams?.expired === "1"} />
 }

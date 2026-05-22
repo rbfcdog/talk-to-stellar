@@ -9,8 +9,9 @@ export const metadata: Metadata = {
 export default async function ConfirmPaymentPage({
   searchParams,
 }: {
-  searchParams: { token?: string }
+  searchParams: Promise<{ token?: string }>
 }) {
-  const token = searchParams?.token || ''
+  const resolvedSearchParams = await searchParams
+  const token = resolvedSearchParams?.token || ''
   return <ConfirmPaymentClient initialToken={token} initialValidation={null} />
 }
