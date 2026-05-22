@@ -2,6 +2,7 @@ import { supabase } from '../../config/supabase';
 import { AgentRepository } from '../../repositories/agent.repository';
 import { logger } from '../../utils/logger';
 import { formatCustomerAssetAmount } from '../../utils/fee-display';
+import { EvolutionService } from './evolution.service';
 
 type ExternalMapping = {
   provider?: string | null;
@@ -588,11 +589,6 @@ export class TransferNotificationService {
     sessionPhoneNumber: string | undefined,
     text: string
   ): Promise<void> {
-    const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
-    const authToken = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
-    const from = this.normalizeWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER);
-    if (!accountSid || !authToken || !from) return;
-
     const phones = mappings
       .filter((mapping) => ['whatsapp', 'phone'].includes(String(mapping.provider || '').toLowerCase()))
       .flatMap((mapping) => [
@@ -602,11 +598,39 @@ export class TransferNotificationService {
       ]);
     if (sessionPhoneNumber) phones.push(sessionPhoneNumber);
 
-    const recipients = Array.from(new Set(
+    const phoneDigits = Array.from(new Set(
       phones
+        .map((phone) => this.normalizeWhatsAppDigits(phone))
+        .filter(Boolean) as string[]
+    ));
+    if (phoneDigits.length === 0) return;
+
+    const deliveredByEvolution = new Set<string>();
+    const evolutionInstance = this.evolutionInstance();
+    if (this.hasEvolutionWhatsAppConfig() && evolutionInstance) {
+      await Promise.all(phoneDigits.map(async (phone) => {
+        try {
+          await EvolutionService.sendText(evolutionInstance, phone, text);
+          deliveredByEvolution.add(phone);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn(`[whatsapp-notify] evolution send failed for ***${phone.slice(-4)}: ${message}`);
+        }
+      }));
+    }
+
+    const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
+    const authToken = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
+    const from = this.normalizeWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER);
+    if (!accountSid || !authToken || !from) return;
+
+    const recipients = Array.from(new Set(
+      phoneDigits
+        .filter((phone) => !deliveredByEvolution.has(phone))
         .map((phone) => this.normalizeWhatsAppAddress(phone))
         .filter(Boolean) as string[]
     ));
+    if (recipients.length === 0) return;
 
     await Promise.all(recipients.map(async (to) => {
       try {
@@ -627,6 +651,23 @@ export class TransferNotificationService {
         logger.warn(`[incoming-transfer] whatsapp send failed: ${message}`);
       }
     }));
+  }
+
+  private static hasEvolutionWhatsAppConfig(): boolean {
+    return Boolean(
+      String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_BASE_URL || process.env.EVOLUTION_SERVER_URL || '').trim() &&
+      String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || process.env.EVOLUTION_GLOBAL_API_KEY || '').trim() &&
+      this.evolutionInstance()
+    );
+  }
+
+  private static evolutionInstance(): string {
+    return String(process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
+  }
+
+  private static normalizeWhatsAppDigits(value: unknown): string | undefined {
+    const digits = String(value || '').replace(/\D+/g, '');
+    return digits || undefined;
   }
 
   private static normalizeWhatsAppAddress(value: unknown): string | undefined {

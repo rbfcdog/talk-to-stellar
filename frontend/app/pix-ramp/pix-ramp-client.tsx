@@ -1124,7 +1124,12 @@ export default function PixRampClient({
   const callRamp = useCallback(async (path: string, body?: Record<string, unknown>, method = "POST", authOverride?: RampAuth, idempotencyKey?: string) => {
     const auth = authOverride || { session_id: sessionId };
     if (!auth.session_id) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
-    const requestBody: Record<string, unknown> = { ...auth, language, ...(body || {}) };
+    const externalContext: Record<string, unknown> = {
+      ...(externalProvider ? { provider: externalProvider, external_provider: externalProvider } : {}),
+      ...(externalProviderUserId ? { provider_user_id: externalProviderUserId, external_provider_user_id: externalProviderUserId } : {}),
+      ...(externalSource ? { source: externalSource } : {}),
+    };
+    const requestBody: Record<string, unknown> = { ...auth, language, ...externalContext, ...(body || {}) };
     const pin = typeof requestBody.pin === "string" ? requestBody.pin : "";
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -1153,7 +1158,7 @@ export default function PixRampClient({
       throw requestError;
     }
     return payload;
-  }, [L, addDebugLog, language, sessionId]);
+  }, [L, addDebugLog, externalProvider, externalProviderUserId, externalSource, language, sessionId]);
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId };
@@ -1449,7 +1454,15 @@ export default function PixRampClient({
         quoteForOrder = fresh.quoteResult?.quote;
         customerForOrder = fresh.customerResult;
       }
-      if (!quoteForOrder?.id) throw new Error(L("Peça uma estimativa primeiro.", "Request an estimate first."));
+      if (!quoteForOrder?.id) {
+        addDebugLog({
+          label: "Continuing PIX creation without client-side quote id",
+          method: "POST",
+          path: "/api/ramp/etherfuse/onramp",
+          request: { amount: amountBrl, targetAsset },
+          response: { reason: "backend_will_create_fresh_quote" },
+        });
+      }
       const orderCustomerId = getRampCustomerId(customerForOrder);
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
@@ -1458,9 +1471,9 @@ export default function PixRampClient({
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
         customer_id: orderCustomerId || undefined,
-        quote_id: quoteForOrder.id,
+        quote_id: quoteForOrder?.id || undefined,
         amount: amountBrl,
-        expected_to_amount: quoteForOrder.toAmount,
+        expected_to_amount: quoteForOrder?.toAmount || undefined,
         from_currency: "BRL",
         to_currency: "TESOURO",
         final_asset: targetAsset,
