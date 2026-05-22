@@ -2018,6 +2018,7 @@ export class AnchorService {
 
   static async createCustomerForSession(input: CustomerForSessionInput): Promise<{
     customer: Customer;
+    customer_id: string;
     kyc_url?: string;
     programmatic_onboarding?: Record<string, unknown>;
     provider: 'etherfuse';
@@ -2050,6 +2051,7 @@ export class AnchorService {
 
     return {
       customer,
+      customer_id: customer.id,
       kyc_url: preparedProxy.kycUrl,
       programmatic_onboarding: programmatic.steps,
       provider: 'etherfuse',
