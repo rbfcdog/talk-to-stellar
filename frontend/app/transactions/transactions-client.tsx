@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { FileDown, Loader2, Wallet2 } from "lucide-react"
 import { getClientSession } from "@/lib/session"
+import { useLanguage } from "@/lib/i18n"
+import { UserGuidance } from "@/components/user-guidance"
 
 type TransactionItem = {
   id: string | number
@@ -47,6 +49,8 @@ function formatWhen(value?: string | null) {
 }
 
 export default function TransactionsClient() {
+  const { language } = useLanguage()
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const now = new Date()
   const [sessionId, setSessionId] = useState("")
   const [month, setMonth] = useState(String(now.getMonth() + 1))
@@ -58,8 +62,8 @@ export default function TransactionsClient() {
   const pageTitle = useMemo(() => {
     const monthNum = Math.max(1, Math.min(12, Number(month || "1")))
     const date = new Date(Number(year || now.getFullYear()), monthNum - 1, 1)
-    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-  }, [month, year, now])
+    return date.toLocaleDateString(language === "pt-BR" ? "pt-BR" : "en-US", { month: "long", year: "numeric" })
+  }, [month, year, now, language])
 
   useEffect(() => {
     getClientSession().then(({ sessionId: sid, authenticated }) => {
@@ -106,14 +110,20 @@ export default function TransactionsClient() {
           <div className="no-print flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
               <Wallet2 className="h-4 w-4" />
-              History
+              {L("Histórico", "History")}
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href="/chat"
                 className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
               >
-                Back to chat
+                {L("Voltar ao chat", "Back to chat")}
+              </Link>
+              <Link
+                href="/pix-on"
+                className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-300/20"
+              >
+                PIX
               </Link>
               <button
                 type="button"
@@ -121,15 +131,15 @@ export default function TransactionsClient() {
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300"
               >
                 <FileDown className="h-4 w-4" />
-                Export PDF
+                {L("Exportar PDF", "Export PDF")}
               </button>
             </div>
           </div>
 
           <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-semibold text-white md:text-5xl">Transactions for {pageTitle}</h1>
-              <p className="mt-2 text-sm text-slate-300">Full list with person, transaction context, and short profile link.</p>
+              <h1 className="text-3xl font-semibold text-white md:text-5xl">{L("Transações de", "Transactions for")} {pageTitle}</h1>
+              <p className="mt-2 text-sm text-slate-300">{L("Veja status, pessoa, valor e caminho para comprovante.", "View status, person, amount, and receipt path.")}</p>
             </div>
             <div className="no-print flex items-center gap-2">
               <select
@@ -139,7 +149,7 @@ export default function TransactionsClient() {
               >
                 {Array.from({ length: 12 }).map((_, index) => (
                   <option key={index + 1} value={String(index + 1)}>
-                    {new Date(2000, index, 1).toLocaleDateString("en-US", { month: "long" })}
+                    {new Date(2000, index, 1).toLocaleDateString(language === "pt-BR" ? "pt-BR" : "en-US", { month: "long" })}
                   </option>
                 ))}
               </select>
@@ -148,32 +158,63 @@ export default function TransactionsClient() {
                 onChange={(event) => setYear(event.target.value.replace(/\D/g, "").slice(0, 4))}
                 className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
                 inputMode="numeric"
-                placeholder="Year"
+                placeholder={L("Ano", "Year")}
               />
               <button
                 type="button"
                 onClick={() => void loadTransactions()}
                 className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10"
               >
-                Refresh
+                {L("Atualizar", "Refresh")}
               </button>
             </div>
           </div>
+
+          <UserGuidance
+            className="no-print mt-6"
+            eyebrow={L("Como usar", "How to use")}
+            title={L("Use o histórico para fechar a operação", "Use history to close the operation")}
+            body={L(
+              "Depois de qualquer PIX, envio ou conversão, volte aqui para conferir status, data, contraparte e comprovante.",
+              "After any PIX, send, or conversion, come back here to check status, date, counterparty, and receipt.",
+            )}
+            steps={[
+              { title: L("Filtre o mês", "Filter month"), body: L("Escolha o mês e toque em Atualizar.", "Choose the month and tap Refresh.") },
+              { title: L("Abra o comprovante", "Open receipt"), body: L("Use o perfil/receipt quando disponível.", "Use profile/receipt when available.") },
+              { title: L("Volte ao chat", "Return to chat"), body: L("Peça saldo, contatos, PIX ou comprovante.", "Ask for balance, contacts, PIX, or receipt.") },
+            ]}
+            actions={[
+              { label: L("Chat", "Chat"), href: "/chat" },
+              { label: L("Colocar PIX", "Add PIX"), href: "/pix-on" },
+              { label: L("Retirar PIX", "Withdraw PIX"), href: "/pix-off" },
+            ]}
+          />
 
           <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
             {status === "loading" && (
               <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-300">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading transactions...
+                {L("Carregando transações...", "Loading transactions...")}
               </div>
             )}
 
             {status === "error" && (
-              <div className="px-4 py-6 text-sm text-rose-300">{message || "Could not load history."}</div>
+              <div className="px-4 py-6 text-sm text-rose-300">{message || L("Não consegui carregar o histórico.", "Could not load history.")}</div>
             )}
 
             {status === "ready" && transactions.length === 0 && (
-              <div className="px-4 py-6 text-sm text-slate-300">No transactions in this period.</div>
+              <div className="space-y-3 px-4 py-6 text-sm text-slate-300">
+                <p className="font-semibold text-white">{L("Ainda não há transações neste período.", "No transactions in this period yet.")}</p>
+                <p>{L("Comece pelo chat: peça saldo, contatos, colocar 10 reais via PIX ou retirar 5 reais via PIX.", "Start from chat: ask for balance, contacts, add 10 reais with PIX, or withdraw 5 reais with PIX.")}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/chat" className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950">
+                    {L("Abrir chat", "Open chat")}
+                  </Link>
+                  <Link href="/pix-on" className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-emerald-100">
+                    {L("Colocar PIX", "Add PIX")}
+                  </Link>
+                </div>
+              </div>
             )}
 
             {status === "ready" && transactions.length > 0 && (

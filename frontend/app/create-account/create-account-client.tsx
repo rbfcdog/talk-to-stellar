@@ -9,6 +9,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 import { useLanguage } from "@/lib/i18n"
+import { UserGuidance } from "@/components/user-guidance"
 
 type FinalizeResponse = {
   success: boolean
@@ -948,6 +949,29 @@ export default function CreateAccountClient({
                 </motion.div>
               ))}
             </div>
+
+            <UserGuidance
+              eyebrow={L("Depois da conta", "After setup")}
+              title={L("Você já sai sabendo o que pedir ao assistente", "You leave knowing what to ask the assistant")}
+              body={L(
+                "A conta serve para operar pelo chat. Assim que finalizar, use comandos simples para saldo, contatos, PIX, pagamento e comprovante.",
+                "The account is used through chat. Once finished, use simple commands for balance, contacts, PIX, payment, and receipts.",
+              )}
+              steps={[
+                {
+                  title: L("Crie o PIN", "Create PIN"),
+                  body: L("Ele confirma pagamentos, PIX e ações sensíveis.", "It confirms payments, PIX, and sensitive actions."),
+                },
+                {
+                  title: L("Volte ao chat", "Return to chat"),
+                  body: L("Peça: saldo, contatos, colocar 10 reais via PIX.", "Ask: balance, contacts, add 10 reais with PIX."),
+                },
+                {
+                  title: L("Veja comprovantes", "View receipts"),
+                  body: L("Depois de operar, abra histórico ou comprovante.", "After operating, open history or receipt."),
+                },
+              ]}
+            />
 
           </section>
 

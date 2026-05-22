@@ -347,6 +347,43 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const pollInFlightRef = useRef(false);
+  const hasUserMessages = messages.some((message) => message.role === "user");
+  const commandSuggestions = [
+    {
+      label: L("Saldo", "Balance"),
+      command: "saldo",
+      helper: L("Ver quanto tenho na conta.", "Check my account balance."),
+    },
+    {
+      label: L("Contatos", "Contacts"),
+      command: "contatos",
+      helper: L("Ver para quem posso enviar.", "See who I can pay."),
+    },
+    {
+      label: "PIX in",
+      command: L("colocar 10 reais via pix", "add 10 reais with pix"),
+      helper: L("Colocar dinheiro na conta.", "Add money to the account."),
+    },
+    {
+      label: "PIX out",
+      command: L("retirar 5 reais via pix", "withdraw 5 reais with pix"),
+      helper: L("Mandar saldo para meu PIX.", "Send balance to my PIX."),
+    },
+    {
+      label: L("Enviar", "Send"),
+      command: L("enviar 10 reais para Ana Silva", "send 10 reais to Ana Silva"),
+      helper: L("Gerar link e confirmar com PIN.", "Create a link and confirm with PIN."),
+    },
+    {
+      label: L("Histórico", "History"),
+      command: L("historico", "history"),
+      helper: L("Ver comprovantes e status.", "View receipts and status."),
+    },
+  ];
+  const useCommandSuggestion = (command: string) => {
+    setInput(command);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
 
   useEffect(() => {
     const scrollToBottom = () => {
@@ -813,6 +850,35 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
               <Shimmer className="ml-auto h-14 w-[58%] rounded-2xl" />
             </div>
           )}
+          {chatId === "agent" && !hasUserMessages && (
+            <section className="mb-3 rounded-lg border border-[#2a3942] bg-[#111b21]/95 p-3 text-[#e9edef] shadow-md">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#00a884]">
+                {L("Primeira vez aqui", "First time here")}
+              </p>
+              <h3 className="mt-1 text-base font-semibold">
+                {L("Comece por uma dessas ações", "Start with one of these actions")}
+              </h3>
+              <p className="mt-1 text-sm leading-5 text-[#aebac1]">
+                {L(
+                  "Toque em uma opção para preencher a mensagem. Depois envie no chat. O assistente guia login, PIN, PIX, pagamento e comprovante.",
+                  "Tap an option to fill the message, then send it. The assistant guides login, PIN, PIX, payment, and receipts.",
+                )}
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {commandSuggestions.map((item) => (
+                  <button
+                    key={item.command}
+                    type="button"
+                    onClick={() => useCommandSuggestion(item.command)}
+                    className="rounded-lg border border-[#2a3942] bg-[#202c33] p-3 text-left transition hover:border-[#00a884]/60 hover:bg-[#263842]"
+                  >
+                    <span className="block text-sm font-semibold text-white">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-4 text-[#aebac1]">{item.helper}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           <AnimatePresence initial={false}>
             {messages.map((m) => (
               <motion.div
@@ -863,6 +929,20 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
             >
               {L("Tentar novamente", "Try again")}
             </button>
+          </div>
+        )}
+        {chatId === "agent" && (
+          <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+            {commandSuggestions.slice(0, 5).map((item) => (
+              <button
+                key={`chip-${item.command}`}
+                type="button"
+                onClick={() => useCommandSuggestion(item.command)}
+                className="shrink-0 rounded-full border border-[#2a3942] bg-[#111b21] px-3 py-1.5 text-xs font-semibold text-[#d1f4e0] transition hover:border-[#00a884]/70 hover:bg-[#182229]"
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         )}
         <form onSubmit={handleSubmit} className="flex min-w-0 items-center gap-2 sm:gap-3">

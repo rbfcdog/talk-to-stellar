@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Download, ExternalLink } from "lucide-react"
+import { useLanguage } from "@/lib/i18n"
+import { UserGuidance } from "@/components/user-guidance"
 
 function inferFileName(imageUrl: string) {
   if (imageUrl.startsWith("data:image/png")) return "talktostellar-receipt.png"
@@ -13,19 +15,21 @@ function inferFileName(imageUrl: string) {
 }
 
 function ReceiptFallback() {
+  const { language } = useLanguage()
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
       <section className="max-w-lg rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
-        <h1 className="text-2xl font-semibold text-white">Receipt not found</h1>
+        <h1 className="text-2xl font-semibold text-white">{L("Comprovante não encontrado", "Receipt not found")}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-300">
-          This link may have expired. Open the receipt from the web chat conversation.
+          {L("Este link pode ter expirado. Abra o comprovante pelo histórico ou peça um novo no chat.", "This link may have expired. Open the receipt from history or ask for a new one in chat.")}
         </p>
         <Link
           href="/chat"
           className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
         >
           <ExternalLink className="h-4 w-4" />
-          Back to chat
+          {L("Voltar ao chat", "Back to chat")}
         </Link>
       </section>
     </main>
@@ -33,6 +37,8 @@ function ReceiptFallback() {
 }
 
 export default function ReceiptByCodePage() {
+  const { language } = useLanguage()
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const params = useParams<{ code: string }>()
   const code = String(params?.code || "").trim()
   const [imageUrl, setImageUrl] = useState("")
@@ -71,7 +77,7 @@ export default function ReceiptByCodePage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <p className="text-sm text-slate-300">Loading receipt...</p>
+        <p className="text-sm text-slate-300">{L("Carregando comprovante...", "Loading receipt...")}</p>
       </main>
     )
   }
@@ -84,8 +90,8 @@ export default function ReceiptByCodePage() {
         <section className="w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Receipt</p>
-              <h1 className="mt-2 text-3xl font-semibold text-white">View and download receipt</h1>
+              <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">{L("Comprovante", "Receipt")}</p>
+              <h1 className="mt-2 text-3xl font-semibold text-white">{L("Ver e baixar comprovante", "View and download receipt")}</h1>
             </div>
             <div className="flex flex-wrap gap-3">
               <a
@@ -94,17 +100,36 @@ export default function ReceiptByCodePage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
               >
                 <Download className="h-4 w-4" />
-                Download image
+                {L("Baixar imagem", "Download image")}
               </a>
               <Link
                 href="/chat"
                 className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <ExternalLink className="h-4 w-4" />
-                Back to chat
+                {L("Voltar ao chat", "Back to chat")}
               </Link>
             </div>
           </div>
+
+          <UserGuidance
+            className="mt-6"
+            eyebrow={L("Como usar", "How to use")}
+            title={L("Confirme o comprovante e volte ao histórico", "Confirm the receipt and return to history")}
+            body={L(
+              "O comprovante mostra a evidência visual. O histórico é o lugar certo para revisar status, data e contraparte.",
+              "The receipt shows visual evidence. History is the right place to review status, date, and counterparty.",
+            )}
+            steps={[
+              { title: L("Conferir", "Review"), body: L("Veja se valor e destino fazem sentido.", "Check that amount and destination make sense.") },
+              { title: L("Baixar", "Download"), body: L("Salve a imagem para compartilhar.", "Save the image to share.") },
+              { title: L("Histórico", "History"), body: L("Abra a lista completa se precisar de suporte.", "Open the full list if support is needed.") },
+            ]}
+            actions={[
+              { label: L("Histórico", "History"), href: "/transactions" },
+              { label: L("Chat", "Chat"), href: "/chat" },
+            ]}
+          />
 
           <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-xl">
             <img
