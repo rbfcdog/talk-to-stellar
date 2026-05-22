@@ -5,6 +5,7 @@ import { Operation as OpType } from '../../types';
 import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS, getTrustedPathAssetCodes } from '../../config/assets';
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
+import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
 
 const STELLAR_BASE_FEE_STROOPS = '100';
 
@@ -810,6 +811,14 @@ export class StellarService {
             }
         }
 
+        assertSaneBrlUsdcQuote({
+            sourceAssetCode: assetCode(sourceAssetObj),
+            destinationAssetCode: assetCode(destAssetObj),
+            sourceAmount: bestPath.source_amount,
+            destinationAmount: destAmount,
+            context: 'strict-receive path quote',
+        });
+
         const platformFee = PlatformFeeService.calculateSpread({
             sourceAmount: bestPath.source_amount,
             sourceAssetCode: assetCode(sourceAssetObj),
@@ -886,6 +895,14 @@ export class StellarService {
                 bestPath = path;
             }
         }
+
+        assertSaneBrlUsdcQuote({
+            sourceAssetCode: assetCode(sourceAssetObj),
+            destinationAssetCode: assetCode(destAssetObj),
+            sourceAmount: effectiveSourceAmount,
+            destinationAmount: bestPath.destination_amount,
+            context: 'strict-send path quote',
+        });
 
         const networkFeeXlm = DEFAULT_NETWORK_FEE_XLM;
 
