@@ -6,7 +6,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { KeyRound, LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
+import { LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
 
 function generateBrowserId(): string {
@@ -73,11 +73,12 @@ function formatExternalIdentifier(provider: string, value: string): string {
 }
 
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+const PASSKEY_LOGIN_ENABLED = false
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()
   const searchParams = useSearchParams()
-  const requestedAuthMethod = String(searchParams.get("auth") || "").trim().toLowerCase()
+  const requestedAuthMethod = PASSKEY_LOGIN_ENABLED ? String(searchParams.get("auth") || "").trim().toLowerCase() : ""
   const emailFromQuery = String(searchParams.get("email") || "").trim()
   const rawNextPath = String(searchParams.get("next") || "").trim()
   const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
@@ -183,6 +184,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }, [externalToken, hasExternalContext])
 
   const mobileRedirectUrl = useMemo(() => {
+    if (!PASSKEY_LOGIN_ENABLED) return ""
     if (typeof window === "undefined") return ""
     const normalizedEmail = email.trim()
     if (!normalizedEmail) return ""
@@ -200,6 +202,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }, [qrTargetUrl])
 
   useEffect(() => {
+    if (!PASSKEY_LOGIN_ENABLED) {
+      setQrTargetUrl("")
+      return
+    }
     let cancelled = false
     async function prepareQrTarget() {
       if (!mobileRedirectUrl) {
@@ -482,6 +488,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   useEffect(() => {
+    if (!PASSKEY_LOGIN_ENABLED) return
     if (requestedAuthMethod !== "passkey") return
     if (passkeyAutoTriggerRef.current) return
     if (!email.trim()) {
@@ -548,8 +555,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 <p className="mt-2 text-sm text-slate-200">{t("login_pin_card_body")}</p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_passkey_card_title")}</p>
-                <p className="mt-2 text-sm text-slate-200">{t("login_passkey_card_body")}</p>
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_next_card_title")}</p>
+                <p className="mt-2 text-sm text-slate-200">{t("login_next_card_body")}</p>
               </div>
             </div>
           </section>
@@ -635,18 +642,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
               </button>
             </form>
 
-            <button
-              type="button"
-              onClick={() => {
-                void handlePasskeyLogin();
-              }}
-              disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <KeyRound className="h-4 w-4" />
-              {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
-            </button>
-            {false && qrImageUrl && !externalLinkUsed && (
+            {PASSKEY_LOGIN_ENABLED && (
+              <button
+                type="button"
+                onClick={() => {
+                  void handlePasskeyLogin();
+                }}
+                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
+              </button>
+            )}
+            {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && (
               <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">{t("login_passkey_qr_title")}</p>
                 <p className="mt-1 text-slate-300">{t("login_passkey_qr_body")}</p>

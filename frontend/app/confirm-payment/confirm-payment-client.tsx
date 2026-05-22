@@ -371,6 +371,8 @@ function isPasskeyChallengeExpiredMessage(message?: string) {
   )
 }
 
+const PASSKEY_CONFIRMATION_ENABLED = false
+
 export default function ConfirmPaymentClient({
   initialToken = '',
   initialValidation = null,
@@ -381,7 +383,9 @@ export default function ConfirmPaymentClient({
   const searchParams = useSearchParams()
   const { language } = useLanguage()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
-  const requestedAuthMethod = useMemo(() => String(searchParams.get("auth") || "").trim().toLowerCase(), [searchParams])
+  const requestedAuthMethod = useMemo(() => (
+    PASSKEY_CONFIRMATION_ENABLED ? String(searchParams.get("auth") || "").trim().toLowerCase() : ""
+  ), [searchParams])
   const publicKeyFromUrl = useMemo(() => searchParams.get("public_key") || searchParams.get("destination_public_key") || '', [searchParams])
 
   const [token, setToken] = useState(tokenFromUrl)
@@ -525,6 +529,7 @@ export default function ConfirmPaymentClient({
   }, [status])
 
   const mobileRedirectUrl = useMemo(() => {
+    if (!PASSKEY_CONFIRMATION_ENABLED) return ""
     if (!token || typeof window === "undefined") return ""
     const url = new URL(`${window.location.origin}/confirm-payment`)
     url.searchParams.set("token", token)
@@ -539,6 +544,10 @@ export default function ConfirmPaymentClient({
   }, [qrTargetUrl])
 
   useEffect(() => {
+    if (!PASSKEY_CONFIRMATION_ENABLED) {
+      setQrTargetUrl("")
+      return
+    }
     let cancelled = false
     async function prepareQrTarget() {
       if (!mobileRedirectUrl) {
@@ -577,6 +586,7 @@ export default function ConfirmPaymentClient({
   }, [mobileRedirectUrl, token, validation?.payload])
 
   useEffect(() => {
+    if (!PASSKEY_CONFIRMATION_ENABLED) return
     if (requestedAuthMethod !== "passkey") return
     if (passkeyAutoTriggerRef.current) return
     if (!token.trim()) return
@@ -898,15 +908,17 @@ export default function ConfirmPaymentClient({
               >
                 {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming payment...</span> : "Confirm payment"}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowPasskeyOptions((current) => !current)}
-                disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
-                className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {showPasskeyOptions ? "Hide Passkey options" : "Use Touch ID (Passkey)"}
-              </button>
-              {showPasskeyOptions && (
+              {PASSKEY_CONFIRMATION_ENABLED && (
+                <button
+                  type="button"
+                  onClick={() => setShowPasskeyOptions((current) => !current)}
+                  disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
+                  className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {showPasskeyOptions ? "Hide Passkey options" : "Use Touch ID (Passkey)"}
+                </button>
+              )}
+              {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && (
                 <>
                   <button
                     type="button"
@@ -927,7 +939,7 @@ export default function ConfirmPaymentClient({
               )}
             </form>
 
-            {showPasskeyOptions && qrImageUrl && status !== "done" && (
+            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">Confirm on mobile with Touch ID</p>
                 <p className="mt-1 text-slate-300">Scan the QR with your phone to open this confirmation and authorize with Touch ID.</p>

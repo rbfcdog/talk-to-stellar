@@ -26,6 +26,7 @@ type FinalizeResponse = {
 }
 
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+const PASSKEY_ENROLLMENT_ENABLED = false
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -195,6 +196,7 @@ export default function CreateAccountClient({
     return ""
   }, [email, result?.userId])
   const passkeyLoginRedirectUrl = useMemo(() => {
+    if (!PASSKEY_ENROLLMENT_ENABLED) return ""
     if (typeof window === "undefined" || !passkeyLoginEmail) return ""
     const url = new URL(`${window.location.origin}/login`)
     url.searchParams.set("auth", "passkey")
@@ -674,7 +676,7 @@ export default function CreateAccountClient({
         localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "User")
       }
 
-      if (response.ok && payload.success && requestPasskey) {
+      if (response.ok && payload.success && PASSKEY_ENROLLMENT_ENABLED && requestPasskey) {
         setPasskeyHint(L("Conta criada. Preparando biometria para este aparelho.", "Account created. Preparing biometrics for this device."))
         void preparePasskeyRegistration(payload.userId || "", payload)
         return
@@ -1028,15 +1030,17 @@ export default function CreateAccountClient({
                 />
               </label>
 
-              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={requestPasskey}
-                  onChange={(event) => setRequestPasskey(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
-                />
-                <span>{L("Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.", "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.")}</span>
-              </label>
+              {PASSKEY_ENROLLMENT_ENABLED && (
+                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={requestPasskey}
+                    onChange={(event) => setRequestPasskey(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
+                  />
+                  <span>{L("Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.", "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.")}</span>
+                </label>
+              )}
 
               {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
                 <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
@@ -1091,7 +1095,7 @@ export default function CreateAccountClient({
                   <p>{L("Conta criada com sucesso.", "Account created successfully.")}</p>
                 </motion.div>
               )}
-              {result?.success && (
+              {result?.success && PASSKEY_ENROLLMENT_ENABLED && (
                 <div className="mt-3 space-y-2">
                   <button
                     type="button"
@@ -1134,8 +1138,22 @@ export default function CreateAccountClient({
                   {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
                 </div>
               )}
+              {result?.success && !PASSKEY_ENROLLMENT_ENABLED && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-slate-400">
+                    {L("Use seu PIN para entrar e confirmar operações nesta demo.", "Use your PIN to sign in and confirm operations in this demo.")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={finishWithoutPasskey}
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    {L("Continuar com PIN", "Continue with PIN")}
+                  </button>
+                </div>
+              )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || L("Algo deu errado.", "Something went wrong.")}</motion.p>}
-              {passkeyStatus === 'done' && (
+              {PASSKEY_ENROLLMENT_ENABLED && passkeyStatus === 'done' && (
                 <p className="mt-2 break-all text-emerald-300">{L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}</p>
               )}
               </AnimatePresence>
