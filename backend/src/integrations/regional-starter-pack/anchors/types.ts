@@ -56,6 +56,16 @@ export interface Quote {
     exchangeRate: string;
     /** Total fee as a decimal string. */
     fee: string;
+    /** Fee in basis points when the provider returns it. */
+    feeBps?: string;
+    /** Provider fee amount before any UI formatting. */
+    feeAmount?: string;
+    /** Destination amount before provider fee deduction. */
+    destinationAmountBeforeFee?: string;
+    /** Destination amount after provider fee deduction. */
+    destinationAmountAfterFee?: string;
+    /** Provider that generated this quote. */
+    provider?: string;
     /** ISO 8601 expiration timestamp. */
     expiresAt: string;
     /** ISO 8601 creation timestamp. */

@@ -1,9 +1,10 @@
 import ClaimPaymentClient from "./claim-payment-client"
 
-export default function ClaimPaymentPage({
+export default async function ClaimPaymentPage({
   searchParams,
 }: {
-  searchParams: { token?: string }
+  searchParams: Promise<{ token?: string }>
 }) {
-  return <ClaimPaymentClient initialToken={searchParams?.token || ""} />
+  const resolvedSearchParams = await searchParams
+  return <ClaimPaymentClient initialToken={resolvedSearchParams?.token || ""} />
 }

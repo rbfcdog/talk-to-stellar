@@ -117,6 +117,17 @@ function formatRampAsset(value: unknown, code = "BRL") {
   return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
 }
 
+function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
+  const normalized = String(value || "").trim().toUpperCase().split(":")[0];
+  if (normalized === "USDC") return "USDC";
+  if (normalized === "BRL" || normalized === "TESOURO") return "BRL";
+  return fallback;
+}
+
+function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" = "BRL") {
+  return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
+}
+
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
   if (displayCode === "USDC") return "digital dollar";
@@ -415,6 +426,7 @@ export default function PixRampClient({
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
+  const [offRampPreviewPayload, setOffRampPreviewPayload] = useState<RampResponse | null>(null);
   const [queryReady, setQueryReady] = useState(false);
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
@@ -490,6 +502,7 @@ export default function PixRampClient({
   const customerId = String(customer?.id || "");
   const bankAccountId = String(customer?.bankAccountId || "");
   const quote = quotePayload?.quote;
+  const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
   const order = statusPayload?.transaction || orderPayload?.transaction;
   const operationId = String(orderPayload?.operation_id || "");
   const orderId = String(order?.id || "");
@@ -528,8 +541,6 @@ export default function PixRampClient({
         ? formatRampAsset(finalReceivedAmount, targetAsset)
         : "Calculated automatically on confirmation";
   const quoteGrossLabel = quote ? formatMoney(quote.fromAmount || amountBrl) : formatMoney(amountBrl);
-  const quoteCostLabel = quote ? String(quote.fee || "").trim() || L("R$ 0,00", "$0.00") : "-";
-  const quoteNetLabel = quote ? estimatedReceiveLabel : "-";
   const quoteCostContext = transferFlow && transferRecipientLabel
     ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
     : L("valor que entra na sua conta", "value credited to your account");
@@ -582,7 +593,7 @@ export default function PixRampClient({
           detail: offRampPixTargetAmount
             ? L(`Saldo convertido para chegar em ${offRampPixTargetDisplay}.`, `Balance converted to arrive as ${offRampPixTargetDisplay}.`)
             : L("A tela converte automaticamente para BRL quando você confirma.", "The screen automatically converts to BRL when you confirm."),
-          state: temporaryOffRampTestResult?.quote ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
+          state: offRampQuote ? "done" : loading === "Previewing PIX off-ramp fees" || loading === "Confirming PIX off-ramp" ? "active" : "pending",
         },
         {
           label: L("Confirmação e saída", "Confirmation and withdrawal"),
@@ -678,6 +689,7 @@ export default function PixRampClient({
     receivedCode,
     onRampComplete,
     temporaryOffRampTestResult,
+    offRampQuote,
     finalReceivedAmount,
     targetAsset,
     transferFlow,
@@ -1199,6 +1211,7 @@ export default function PixRampClient({
     setStatusPayload(null);
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
+    setOffRampPreviewPayload(null);
     setExternalBankAccount(null);
     setOffRampAmountLocked(false);
     setOnboardingUrl("");
@@ -1219,6 +1232,7 @@ export default function PixRampClient({
     setQuoteReceivedAt(0);
     setOrderPayload(null);
     setStatusPayload(null);
+    setOffRampPreviewPayload(null);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setQrDataUrl("");
@@ -1438,6 +1452,27 @@ export default function PixRampClient({
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOnRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
     setOnRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
+  }
+
+  async function previewOffRampFees() {
+    const auth = await resolveWalletFromEmail();
+    const customerResult = customerPayload || await callRamp("/api/ramp/etherfuse/customer", {
+      country: "BR",
+      email: rampEmail.trim().toLowerCase() || undefined,
+    }, "POST", auth);
+    setCustomerPayload(customerResult);
+    const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+    const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
+      intent_id: atomicIntentKey,
+      customer_id: customerResult?.customer?.id,
+      amount: sourceAmount,
+      source_amount: sourceAmount,
+      source_asset_code: offRampInputAsset,
+      amount_currency: offRampInputAsset,
+      fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+      target_currency: "BRL",
+    }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
+    setOffRampPreviewPayload(payload);
   }
 
   async function runTemporaryOffRampEndpointTest() {
@@ -1678,6 +1713,8 @@ export default function PixRampClient({
                   aria-label={L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
                   onChange={(event) => {
                     const next = event.target.value;
+                    setOffRampPreviewPayload(null);
+                    setTemporaryOffRampTestResult(null);
                     if (offRampInputAsset === "BRL") {
                       setOffRampFiatAmount(next);
                       setOffRampAmount(next);
@@ -1706,6 +1743,37 @@ export default function PixRampClient({
                     <p className="mt-1 truncate font-black text-white">{displayedExternalBankAccount.pix_key}</p>
                   </div>
                 </div>
+              </div>
+              <div className="mt-5 rounded-3xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">{L("Taxas reais da saída", "Real exit fees")}</p>
+                    <p className="mt-2 text-sm font-bold leading-6 text-cyan-50/85">
+                      {L("Calcule a cotação Etherfuse do off-ramp antes do PIN. A confirmação só acontece no botão final.", "Calculate the Etherfuse off-ramp quote before PIN. Confirmation only happens on the final button.")}
+                    </p>
+                  </div>
+                  <button
+                    className="w-fit rounded-2xl bg-cyan-300 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-950 transition hover:bg-cyan-200 disabled:opacity-50"
+                    disabled={!canResolveWallet || Boolean(loading) || operationLocked}
+                    onClick={() => run("Previewing PIX off-ramp fees", previewOffRampFees)}
+                  >
+                    {loading === "Previewing PIX off-ramp fees" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Ver taxa real", "Show real fee")}
+                  </button>
+                </div>
+                {offRampQuote ? (
+                  <RampFeeBridge
+                    mode="offramp"
+                    quote={offRampQuote}
+                    language={language}
+                    sourceLabel={offRampDisplayAmount}
+                    sourceCaption={L("saldo que sai antes do off-ramp", "balance leaving before off-ramp")}
+                    destinationCaption={L("valor líquido que chega no PIX", "net amount arriving in PIX")}
+                  />
+                ) : (
+                  <p className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs font-semibold leading-5 text-cyan-50/70">
+                    {L("Nenhuma taxa é estimada localmente aqui. Toque em Ver taxa real para buscar a cotação do provider.", "No fee is estimated locally here. Tap Show real fee to fetch the provider quote.")}
+                  </p>
+                )}
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">{L("PIN da conta", "Account PIN")}</label>
               <WalletPinInput
@@ -1891,31 +1959,14 @@ export default function PixRampClient({
                     {quoteCountdown}
                   </div>
                 </div>
-                <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl bg-white/5 p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Antes das taxas", "Before fees/taxes")}</p>
-                      <p className="mt-2 text-lg font-black text-white">{quoteGrossLabel}</p>
-                      <p className="mt-1 text-xs font-bold text-slate-400">{L("valor que sai no PIX", "source PIX amount")}</p>
-                    </div>
-                    <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">{L("Taxas/custos", "Fees/taxes")}</p>
-                      <p className="mt-2 text-lg font-black text-amber-50">{quoteCostLabel}</p>
-                      <p className="mt-1 text-xs font-bold text-amber-100/70">{L("mostrado antes de confirmar", "shown before confirmation")}</p>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{L("Depois das taxas", "After fees/taxes")}</p>
-                      <p className="mt-2 text-lg font-black text-emerald-50">{quoteNetLabel}</p>
-                      <p className="mt-1 text-xs font-bold text-emerald-100/70">{quoteCostContext}</p>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-300">
-                    {L(
-                      "A tela separa o valor bruto, os custos estimados e o valor liquido antes do PIN. Se imposto/IOF nao vier do provedor sandbox, ele nao e inventado na cotacao.",
-                      "This screen separates gross amount, estimated costs and net amount before PIN. If tax/IOF is not returned by the sandbox provider, it is not invented in the quote.",
-                    )}
-                  </p>
-                </div>
+                <RampFeeBridge
+                  mode="onramp"
+                  quote={quote}
+                  language={language}
+                  sourceLabel={quoteGrossLabel}
+                  sourceCaption={L("valor que sai no PIX", "source PIX amount")}
+                  destinationCaption={quoteCostContext}
+                />
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-100">
                     {L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")}
@@ -2242,6 +2293,113 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
       {result && (
         <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify(result, null, 2)}</pre>
       )}
+    </div>
+  );
+}
+
+function RampFeeBridge({
+  mode,
+  quote,
+  language,
+  sourceLabel,
+  sourceCaption,
+  destinationCaption,
+}: {
+  mode: RampMode;
+  quote: RampResponse | null | undefined;
+  language: "pt-BR" | "en";
+  sourceLabel?: string;
+  sourceCaption?: string;
+  destinationCaption?: string;
+}) {
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  if (!quote) return null;
+
+  const sourceCurrency = quoteCurrencyCode(quote.fromCurrency, "BRL");
+  const destinationCurrency = quoteCurrencyCode(quote.toCurrency, "BRL");
+  const destinationBeforeRaw = quote.destinationAmountBeforeFee || quote.destinationAmount || "";
+  const destinationAfterRaw = quote.destinationAmountAfterFee || quote.toAmount || "";
+  const providerFeeRaw = quote.feeAmount || quote.fee || "";
+  const destinationBefore = parseHumanAmount(destinationBeforeRaw);
+  const destinationAfter = parseHumanAmount(destinationAfterRaw);
+  const providerFee = parseHumanAmount(providerFeeRaw);
+  const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
+    ? Math.max(destinationBefore - destinationAfter, 0)
+    : NaN;
+  const feeAmount = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
+    ? inferredDestinationFee
+    : (Number.isFinite(providerFee) ? providerFee : 0);
+  const feeBps = parseHumanAmount(quote.feeBps);
+  const feePct = Number.isFinite(feeBps) && feeBps > 0
+    ? feeBps / 100
+    : Number.isFinite(destinationBefore) && destinationBefore > 0
+      ? (feeAmount / destinationBefore) * 100
+      : NaN;
+  const retainedPct = Number.isFinite(destinationBefore) && destinationBefore > 0 && Number.isFinite(destinationAfter)
+    ? (destinationAfter / destinationBefore) * 100
+    : NaN;
+  const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
+  const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
+  const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
+  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), destinationCurrency)}${
+    Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
+  }`;
+  const feeTitle = mode === "onramp"
+    ? L("Taxa real do on-ramp", "Real on-ramp fee")
+    : L("Taxa real do off-ramp", "Real off-ramp fee");
+  const feeCaption = mode === "onramp"
+    ? L("Taxa retornada pela cotação Etherfuse antes do saldo entrar.", "Fee returned by the Etherfuse quote before balance arrives.")
+    : L("Taxa retornada pela cotação Etherfuse antes do PIX sair.", "Fee returned by the Etherfuse quote before PIX leaves.");
+
+  return (
+    <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{L("Antes e depois das taxas", "Before and after fees")}</p>
+          <h3 className="mt-1 text-xl font-black text-white">{feeTitle}</h3>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{feeCaption}</p>
+        </div>
+        {Number.isFinite(retainedPct) && (
+          <span className="w-fit rounded-full bg-emerald-300 px-3 py-1 text-xs font-black text-slate-950">
+            {retainedPct.toFixed(2)}% {L("retido", "retained")}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl bg-white/5 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Entrada", "Source")}</p>
+          <p className="mt-2 text-lg font-black text-white">{sourceValue}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">{sourceCaption || L("valor antes de executar a rota", "value before executing the route")}</p>
+        </div>
+        <div className="rounded-2xl bg-white/5 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Antes da taxa", "Before fee")}</p>
+          <p className="mt-2 text-lg font-black text-white">{beforeValue}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">{L("valor bruto cotado pelo provider", "gross value quoted by provider")}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{L("Depois da taxa", "After fee")}</p>
+          <p className="mt-2 text-lg font-black text-emerald-50">{afterValue}</p>
+          <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("valor líquido da instrução", "net value in the instruction")}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 sm:grid-cols-2">
+        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
+          <span className="block uppercase tracking-[0.14em] text-amber-100/70">Etherfuse</span>
+          <span className="mt-1 block text-sm font-black">{feeValue}</span>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+          <span className="block uppercase tracking-[0.14em] text-slate-400">{L("Tax/IOF", "Tax/IOF")}</span>
+          <span className="mt-1 block text-sm font-black text-white">{L("Não retornado pela cotação sandbox", "Not returned by sandbox quote")}</span>
+        </div>
+      </div>
+      <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
+        {L(
+          "Este bloco usa somente campos retornados pela cotação real do provider. Quando imposto ou IOF não vem na resposta, a UI marca como não retornado em vez de inventar valor.",
+          "This block uses only fields returned by the real provider quote. When tax or IOF is not returned, the UI marks it as not returned instead of inventing a value.",
+        )}
+      </p>
     </div>
   );
 }
