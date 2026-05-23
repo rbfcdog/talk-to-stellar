@@ -196,25 +196,27 @@ Esse painel e o principal para explicar transparencia de custos.
 
 Ele separa:
 
-- `Before fees/taxes`: USD teorico bruto antes da rota consumir qualquer custo.
-- `Fees/taxes deducted`: soma dos custos explicitos disponiveis na quote.
-- `After fees/taxes`: USD liquido que chega na instrucao de destino.
+- `Before fees`: USD teorico bruto antes da rota consumir qualquer custo.
+- `Fees deducted`: soma empirica dos custos observados na rota.
+- `After fees`: USD liquido estimado que chega na instrucao de destino.
 - `Traditional benchmark`: economia estimada contra uma referencia tradicional de FX.
 
 O bloco `Cost bridge` mostra a ponte numerica:
 
 ```text
 Gross USD before route costs
-- Platform spread
-- Provider/off-ramp fee
-- Tax/IOF estimate, se configurado pelo provedor
-= Net USD after fees/taxes
+- Source on-ramp fee, se retornada pelo provider
+- TalkToStellar transaction fee
+- Destination off-ramp/payout fee, se retornada pelo provider
+- Tax/IOF, se retornado/configurado pelo provider
+- Other route delta, se o gross-to-net mostrar custo nao explicado por uma linha explicita
+= Net USD after fees
 ```
 
 Importante para a demo:
 
 ```text
-Se o ambiente sandbox nao retorna IOF/imposto, a UI mostra "Not configured in sandbox quote". Isso evita inventar imposto e deixa claro que compliance/fiscal depende de um provedor regulado ou configuracao futura.
+A taxa da rota nao e fixa. Ela e calculada a partir do quote/on-ramp Etherfuse, metadata/off-ramp do provider e delta bruto-liquido da reconciliacao. Se o sandbox nao retorna fee, IOF ou imposto, a UI mostra "pending provider quote" ou "not returned by provider" em vez de inventar valor.
 ```
 
 ### 4. Veja `Source value`, `Baseline USD`, `Destination value`, `Route delta`
@@ -433,4 +435,4 @@ Olhe:
 - `Reconciliation.evidence.metrics`;
 - `Reconciliation.evidence.metric_validation`.
 
-O objetivo e que o custo implicito do delta fique proximo da fee total estimada.
+O objetivo e que o custo implicito do delta seja explicado pelas linhas empiricas: on-ramp, TalkToStellar, off-ramp/payout, tax/IOF quando houver, e delta residual quando o provider ainda nao separou tudo.

@@ -197,6 +197,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
           provider_label: input.destination.providerLabel,
         },
       });
+      const quote = (result.quote || {}) as Record<string, unknown>;
 
       return {
         payout_instruction_id: `etherfuse_instruction_${crypto.randomUUID()}`,
@@ -215,6 +216,10 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
           target_brl: result.target_brl,
           destination_amount: result.destination_amount,
           destination_asset_code: result.destination_asset_code,
+          quote,
+          provider_off_ramp_fee_amount: readText(quote.feeAmount || quote.fee),
+          provider_off_ramp_fee_bps: readText(quote.feeBps),
+          provider_off_ramp_fee_currency: 'BRL',
           ready_to_sign: result.ready_to_sign,
           submitted: result.submitted,
           submit_hash: result.submit_result?.hash,
