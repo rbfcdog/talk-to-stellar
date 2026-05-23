@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { internationalTransferService } from '../services/international-transfer.service';
 import { publicErrorMessage } from '../../utils/public-error';
+import { timingSafeEqualString } from '../../utils/password';
 
 function statusFromError(error: any): number {
   const explicit = Number(error?.status || error?.statusCode || 0);
@@ -16,6 +17,31 @@ function errorBody(error: any) {
     success: false,
     message: publicErrorMessage(error, 'Nao consegui atualizar a rota entre instituicoes agora. Tente novamente em alguns segundos.'),
   };
+}
+
+function readBearerToken(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  return auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+}
+
+function hasInternalOpsAuthorization(req: Request): boolean {
+  const expected = String(process.env.INTERNATIONAL_TRANSFER_OPS_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  const provided = String(
+    req.headers['x-international-transfer-ops-secret'] ||
+      req.headers['x-internal-api-secret'] ||
+      readBearerToken(req) ||
+      ''
+  ).trim();
+  return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+}
+
+function requireInternalOpsAuthorization(req: Request, res: Response): boolean {
+  if (hasInternalOpsAuthorization(req)) return true;
+  res.status(403).json({
+    success: false,
+    message: 'Operacao mock/sandbox interna requer autorizacao do backend.',
+  });
+  return false;
 }
 
 export class InternationalTransfersController {
@@ -38,11 +64,13 @@ export class InternationalTransfersController {
 
   static async createPixIntent(req: Request, res: Response) {
     try {
+      const requestedMock = req.body?.mock === true || req.body?.mock_pix_intent === true || req.body?.mockPixIntent === true;
+      if (requestedMock && !requireInternalOpsAuthorization(req, res)) return;
       const transfer = await internationalTransferService.createPixIntent(String(req.params.id), {
         session_id: String(req.body?.session_id || req.body?.sessionId || ''),
         session_token: String(req.body?.session_token || req.body?.sessionToken || ''),
         email: req.body?.email,
-        mock: req.body?.mock === true || req.body?.mock_pix_intent === true || req.body?.mockPixIntent === true,
+        mock: requestedMock,
       });
       res.status(201).json({ success: true, transfer });
     } catch (error: any) {
@@ -61,6 +89,7 @@ export class InternationalTransfersController {
 
   static async confirmSandboxFunding(req: Request, res: Response) {
     try {
+      if (!requireInternalOpsAuthorization(req, res)) return;
       const transfer = await internationalTransferService.confirmSandboxFunding(String(req.params.id), req.body || {});
       res.status(200).json({ success: true, transfer });
     } catch (error: any) {

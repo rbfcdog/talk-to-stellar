@@ -8,6 +8,7 @@ import type {
 } from '../../integrations/regional-starter-pack/anchors/types';
 import { AnchorError } from '../../integrations/regional-starter-pack/anchors/types';
 import { supabase } from '../../config/supabase';
+import { mockPolicySnapshot, specificMockAllowed } from '../../config/mock-policy';
 import {
   assetMatchesConfiguredIssuer,
   ETHERFUSE_TESOURO_ISSUER,
@@ -778,6 +779,9 @@ export class AnchorService {
     stellar_network_id: 'TESTNET' | 'PUBLIC';
     base_url: string;
     unavailable_reason?: string;
+    user_facing_mocks_allowed: boolean;
+    ops_mocks_allowed: boolean;
+    local_mock_fallback_allowed: boolean;
     asset: { code: 'TESOURO'; issuer: string; identifier: string };
   } {
     const apiKey = normalizeEtherfuseApiKey(coalesceString(
@@ -790,6 +794,7 @@ export class AnchorService {
       : 'TESTNET';
     const sandbox = isRampSandboxEnvironment(apiKey, baseUrl);
     const available = stellarNetworkId === 'TESTNET' && sandbox;
+    const mockPolicy = mockPolicySnapshot();
 
     return {
       provider: 'etherfuse',
@@ -799,6 +804,9 @@ export class AnchorService {
       network: stellarNetworkId === 'PUBLIC' ? 'Stellar Public' : 'Stellar Testnet',
       stellar_network_id: stellarNetworkId,
       base_url: baseUrl.replace(/\/$/, ''),
+      user_facing_mocks_allowed: mockPolicy.user_facing_mocks_allowed,
+      ops_mocks_allowed: mockPolicy.ops_mocks_allowed,
+      local_mock_fallback_allowed: mockPolicy.local_pix_fallback_allowed,
       unavailable_reason: available
         ? undefined
         : stellarNetworkId === 'PUBLIC'
@@ -1207,7 +1215,7 @@ export class AnchorService {
     const runtime = this.getRuntimeInfo();
     return runtime.stellar_network_id === 'TESTNET' &&
       runtime.sandbox &&
-      String(process.env.ETHERFUSE_SANDBOX_PIX_FALLBACK || 'true').trim().toLowerCase() !== 'false';
+      specificMockAllowed('ETHERFUSE_SANDBOX_PIX_FALLBACK', 'user');
   }
 
   private static buildSandboxPixInstructions(orderId: string, amount: string) {

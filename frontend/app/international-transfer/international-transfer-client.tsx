@@ -317,6 +317,7 @@ function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; 
 }
 
 export default function InternationalTransferClient() {
+  const opsMocksAllowed = String(process.env.NEXT_PUBLIC_ALLOW_OPS_MOCKS || "").toLowerCase() === "true";
   const [brlAmount, setBrlAmount] = useState("1000");
   const [senderName, setSenderName] = useState("Origin BR Institution Ltda");
   const [senderEmail, setSenderEmail] = useState("ops@origin-institution.example");
@@ -329,7 +330,7 @@ export default function InternationalTransferClient() {
   const [country, setCountry] = useState("US");
   const [providerLabel, setProviderLabel] = useState<"wise" | "mercury" | "revolut" | "other">("other");
   const [payoutProvider, setPayoutProvider] = useState<"mock" | "etherfuse" | "circle" | "bridge">("etherfuse");
-  const [mockPix, setMockPix] = useState(true);
+  const [mockPix, setMockPix] = useState(false);
   const [runEtherfuseOffRamp, setRunEtherfuseOffRamp] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [manualSessionId, setManualSessionId] = useState("");
@@ -795,6 +796,9 @@ export default function InternationalTransferClient() {
 
   async function createPixIntent(currentTransfer = transfer, useMock = mockPix) {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    if (useMock && !opsMocksAllowed) {
+      throw new Error("Mock Pix funding is disabled. Configure Etherfuse session credentials and create a provider-backed Pix intent.");
+    }
     const payload = await callApi("Create funding intent", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/pix-intent`, {
       mock_pix_intent: useMock,
       session_id: manualSessionId || undefined,
@@ -807,6 +811,9 @@ export default function InternationalTransferClient() {
 
   async function simulatePixReceived(currentTransfer = transfer) {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    if (!opsMocksAllowed) {
+      throw new Error("Sandbox funding confirmation is an internal mock helper and is disabled. Wait for the provider webhook instead.");
+    }
     const payload = await callApi("Confirm sandbox funding", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/funding-confirmation`, {
       status: "completed",
       event: "pix.received",
@@ -844,18 +851,23 @@ export default function InternationalTransferClient() {
   }
 
   async function runSandboxFlow() {
-    pushEvent("Sandbox flow started", "Running quote, mock source funding, sandbox funding confirmation, blockchain settlement, destination instruction and reconciliation.", "info");
+    pushEvent("Provider-backed route started", "Running quote, institution route creation and Etherfuse Pix funding intent without local mock confirmation.", "info");
     try {
       const q = await createQuote();
       const t = await createTransfer(q);
-      const pix = await createPixIntent(t, true);
+      const pix = await createPixIntent(t, false);
+      if (!opsMocksAllowed) {
+        pushEvent("Provider funding pending", "Mock funding confirmation is disabled. The next transition must come from the provider webhook or a real sandbox callback.", "info");
+        await loadReconciliation(pix).catch(() => null);
+        return;
+      }
       const funded = await simulatePixReceived(pix);
       const settled = await settleStellar(funded);
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
-      pushEvent("Sandbox flow complete", "All orchestration steps returned successfully. Capture the delta, evidence checklist and reconciliation panel.", "ok");
+      pushEvent("Ops sandbox route complete", "The ops-only mock confirmation path completed. Keep this out of user-facing demos.", "ok");
     } catch (flowError: any) {
-      pushEvent("Sandbox flow stopped", flowError?.message || String(flowError), "error");
+      pushEvent("Provider-backed route stopped", flowError?.message || String(flowError), "error");
     }
   }
 
@@ -1092,23 +1104,29 @@ export default function InternationalTransferClient() {
             <SelectField
               label="Destination adapter"
               value={payoutProvider}
-              onChange={setPayoutProvider}
+              onChange={(value) => setPayoutProvider(value as "mock" | "etherfuse" | "circle" | "bridge")}
               options={[
                 { value: "etherfuse", label: "Etherfuse off-ramp proof" },
-                { value: "mock", label: "Mock USD instruction" },
+                ...(opsMocksAllowed ? [{ value: "mock", label: "Mock USD instruction" }] : []),
                 { value: "circle", label: "Circle compatibility" },
                 { value: "bridge", label: "Bridge compatibility" },
               ]}
             />
-            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={mockPix}
-                onChange={(event) => setMockPix(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              Use sandbox PIX funding intent
-            </label>
+            {opsMocksAllowed ? (
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={mockPix}
+                  onChange={(event) => setMockPix(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Use mock PIX funding intent
+              </label>
+            ) : (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-sm font-semibold text-emerald-100">
+                Mock funding is disabled. This route creates only provider-backed Etherfuse Pix intents.
+              </div>
+            )}
             <details className="rounded-lg border border-neutral-800 bg-black p-3">
               <summary className="cursor-pointer text-sm font-bold text-slate-200">
                 Advanced execution credentials
@@ -1142,9 +1160,9 @@ export default function InternationalTransferClient() {
           <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
             <ActionButton onClick={runSandboxFlow} disabled={Boolean(busy)} variant="dark" full>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-              Run complete sandbox route
+              Run provider-backed route
             </ActionButton>
-            <p className="mt-2 text-xs font-semibold text-slate-500">Recommended for demos: creates quote, funding event, blockchain evidence and destination instruction.</p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">Creates quote, route record and Etherfuse funding intent. Later steps require provider webhook/settlement evidence instead of local mock success.</p>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
