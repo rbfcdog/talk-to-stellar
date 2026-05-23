@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 
@@ -141,6 +142,8 @@ export default function ConfirmConversionClient({
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
+  const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
+  const [progressNow, setProgressNow] = useState(Date.now())
   const submitLockRef = useRef(false)
   const feedbackLanguage = useMemo(
     () => normalizeLanguage(searchParams.get("lang") || validation?.payload?.language || validation?.payload?.lang || decodeJwtPayload(token)?.language || language),
@@ -184,6 +187,20 @@ export default function ConfirmConversionClient({
     if (!(status === "done" && result?.success)) return
     closeIntermediatePage()
   }, [status, result?.success])
+
+  useEffect(() => {
+    if (status === "ready") {
+      setProgressStartedAt(null)
+      setProgressNow(Date.now())
+      return
+    }
+    if (status !== "submitting") return
+    const startedAt = Date.now()
+    setProgressStartedAt((current) => current || startedAt)
+    setProgressNow(startedAt)
+    const timer = window.setInterval(() => setProgressNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -268,6 +285,26 @@ export default function ConfirmConversionClient({
   const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
   const showResultFee = hasUsableFeeDisplay(resultFeeDisplay)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
+  const progressStatus = (status === "submitting" || status === "done" || status === "error" ? status : "ready") as OperationProgressStatus
+  const progressElapsedSeconds = progressStartedAt ? Math.max(0, Math.floor((progressNow - progressStartedAt) / 1000)) : 0
+  const conversionProgressSteps = [
+    {
+      label: T(feedbackLanguage, "PIN validado", "PIN validated"),
+      detail: T(feedbackLanguage, "A autorização é conferida antes de converter saldo.", "Authorization is checked before converting balance."),
+    },
+    {
+      label: T(feedbackLanguage, "Rota recalculada", "Route recalculated"),
+      detail: T(feedbackLanguage, "O backend confirma a rota mais segura disponível.", "The backend confirms the safest available route."),
+    },
+    {
+      label: T(feedbackLanguage, "Conversão enviada", "Conversion submitted"),
+      detail: T(feedbackLanguage, "A transação é assinada e enviada para a Stellar.", "The transaction is signed and submitted to Stellar."),
+    },
+    {
+      label: T(feedbackLanguage, "Saldo atualizado", "Balance updated"),
+      detail: T(feedbackLanguage, "O resultado é salvo e o chat recebe a confirmação.", "The result is saved and chat receives confirmation."),
+    },
+  ]
   const visibleError = result?.error || result?.message
     ? publicConversionErrorMessage(result?.error || result?.message, feedbackLanguage)
     : T(feedbackLanguage, "Não consegui confirmar essa conversão agora. Tente novamente em alguns segundos.", "I could not confirm this conversion right now. Try again in a few seconds.")
@@ -346,16 +383,29 @@ export default function ConfirmConversionClient({
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
+	              <button
+	                type="submit"
+	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming conversion...</span> : "Confirm conversion"}
-              </button>
-            </form>
+	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming conversion...</span> : "Confirm conversion"}
+	              </button>
+	            </form>
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
+	            <div className="mt-5">
+	              <OperationProgressPanel
+	                status={progressStatus}
+	                elapsedSeconds={progressElapsedSeconds}
+	                title={T(feedbackLanguage, "Andamento da conversão", "Conversion progress")}
+	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra validação, rota, rede e saldo.", "After confirmation, this screen shows validation, route, network and balance.")}
+	                runningMessage={T(feedbackLanguage, "Conversão em andamento. Não clique de novo; a rota e a rede estão sendo processadas.", "Conversion in progress. Do not click again; route and network are being processed.")}
+	                doneMessage={T(feedbackLanguage, "Conversão concluída. O saldo e o chat serão atualizados.", "Conversion completed. Balance and chat will be updated.")}
+	                errorMessage={T(feedbackLanguage, "A conversão parou antes de concluir. Leia o erro abaixo antes de tentar novamente.", "The conversion stopped before completion. Read the error below before trying again.")}
+	                steps={conversionProgressSteps}
+	              />
+	            </div>
+
+	            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
               <p className="font-medium text-white">Result</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
               {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}

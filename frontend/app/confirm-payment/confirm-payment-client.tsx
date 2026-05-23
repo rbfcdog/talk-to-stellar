@@ -7,6 +7,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 
@@ -406,6 +407,8 @@ export default function ConfirmPaymentClient({
   const [passkeyError, setPasskeyError] = useState("")
   const [qrTargetUrl, setQrTargetUrl] = useState("")
   const [mobileSyncStatus, setMobileSyncStatus] = useState("")
+  const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
+  const [progressNow, setProgressNow] = useState(Date.now())
   const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
   const submitLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
@@ -534,6 +537,20 @@ export default function ConfirmPaymentClient({
   useEffect(() => {
     if (status !== "done") return
     closeIntermediatePage()
+  }, [status])
+
+  useEffect(() => {
+    if (status === "ready") {
+      setProgressStartedAt(null)
+      setProgressNow(Date.now())
+      return
+    }
+    if (status !== "submitting") return
+    const startedAt = Date.now()
+    setProgressStartedAt((current) => current || startedAt)
+    setProgressNow(startedAt)
+    const timer = window.setInterval(() => setProgressNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
   }, [status])
 
   const mobileRedirectUrl = useMemo(() => {
@@ -828,6 +845,26 @@ export default function ConfirmPaymentClient({
   })
   const showResultFee = hasUsableFeeDisplay(resultFeeSummary) || Boolean(result?.transferDetails)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
+  const progressStatus = (status === "submitting" || status === "done" || status === "error" ? status : "ready") as OperationProgressStatus
+  const progressElapsedSeconds = progressStartedAt ? Math.max(0, Math.floor((progressNow - progressStartedAt) / 1000)) : 0
+  const paymentProgressSteps = [
+    {
+      label: T(feedbackLanguage, "PIN validado", "PIN validated"),
+      detail: T(feedbackLanguage, "O backend confere a autorização antes de movimentar saldo.", "The backend checks authorization before moving funds."),
+    },
+    {
+      label: T(feedbackLanguage, "Transação preparada", "Transaction prepared"),
+      detail: T(feedbackLanguage, "A rota, saldo e destinatário são revalidados.", "Route, balance and recipient are revalidated."),
+    },
+    {
+      label: T(feedbackLanguage, "Envio na Stellar", "Stellar submission"),
+      detail: T(feedbackLanguage, "A operação é assinada e enviada para a rede.", "The operation is signed and submitted to the network."),
+    },
+    {
+      label: T(feedbackLanguage, "Comprovante e chat", "Receipt and chat"),
+      detail: T(feedbackLanguage, "O comprovante é salvo e a mensagem final é enviada ao canal de origem.", "The receipt is saved and the final message is sent to the origin channel."),
+    },
+  ]
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
   const successReceiptUrl = String(result?.receipt_url || "")
@@ -950,8 +987,8 @@ export default function ConfirmPaymentClient({
                   {showPasskeyOptions ? "Ocultar Passkey" : "Usar Passkey"}
                 </button>
               )}
-              {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && (
-                <>
+	              {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && (
+	                <>
                   <button
                     type="button"
                     onClick={() => { void handlePasskeyConfirm(); }}
@@ -967,11 +1004,24 @@ export default function ConfirmPaymentClient({
                       {passkeyError}
                     </p>
                   )}
-                </>
-              )}
-            </form>
+	                </>
+	              )}
+	            </form>
 
-            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
+	            <div className="mt-5">
+	              <OperationProgressPanel
+	                status={progressStatus}
+	                elapsedSeconds={progressElapsedSeconds}
+	                title={T(feedbackLanguage, "Andamento da operação", "Operation progress")}
+	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra cada etapa até o comprovante.", "After you confirm, this screen shows each step until the receipt.")}
+	                runningMessage={T(feedbackLanguage, "Pagamento em andamento. Não clique de novo; estamos aguardando a rede e o comprovante.", "Payment in progress. Do not click again; we are waiting for the network and receipt.")}
+	                doneMessage={T(feedbackLanguage, "Pagamento concluído. O comprovante e o chat serão atualizados.", "Payment completed. The receipt and chat will be updated.")}
+	                errorMessage={T(feedbackLanguage, "A operação parou antes de concluir. Leia o erro abaixo antes de tentar novamente.", "The operation stopped before completion. Read the error below before trying again.")}
+	                steps={paymentProgressSteps}
+	              />
+	            </div>
+
+	            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
                 <p className="font-medium text-white">Confirmar com Passkey</p>
                 <p className="mt-1 text-slate-300">Abra esta confirmação no aparelho onde sua Passkey está cadastrada.</p>
