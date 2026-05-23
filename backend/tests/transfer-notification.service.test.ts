@@ -86,4 +86,40 @@ describe('TransferNotificationService', () => {
       { reliable: true }
     );
   });
+
+  it('infers WhatsApp delivery when a chat callback carries a phone provider id', async () => {
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'chat',
+      providerUserId: '5519981808102',
+      text: 'PIX confirmado e transferencia enviada.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'PIX confirmado e transferencia enviada.',
+      { reliable: true }
+    );
+  });
+
+  it('uses EVOLUTION_NOTIFY_INSTANCE as a fallback instance name for callbacks', async () => {
+    process.env.EVOLUTION_INSTANCE = '';
+    process.env.EVOLUTION_INSTANCE_NAME = '';
+    process.env.EVOLUTION_NOTIFY_INSTANCE = 'notify-main';
+
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'whatsapp',
+      providerUserId: '5519981808102',
+      text: 'Pagamento concluido.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'notify-main',
+      '5519981808102',
+      'Pagamento concluido.',
+      { reliable: true }
+    );
+  });
 });

@@ -114,7 +114,14 @@ function evolutionApiKey(): string {
 }
 
 function configuredInstance(): string {
-  return String(process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
+  return String(
+    process.env.EVOLUTION_INSTANCE ||
+    process.env.EVOLUTION_INSTANCE_NAME ||
+    process.env.EVOLUTION_NOTIFY_INSTANCE ||
+    process.env.EVOLUTION_DEFAULT_INSTANCE ||
+    process.env.EVOLUTION_INSTANCE_ID ||
+    ''
+  ).trim();
 }
 
 function normalizeAgentResponse(payload: any): string {

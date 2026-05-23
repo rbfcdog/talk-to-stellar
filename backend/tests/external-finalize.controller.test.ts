@@ -402,6 +402,73 @@ describe('ExternalFinalizeController', () => {
     );
   });
 
+  it('routes chat-origin payment completion back to WhatsApp when the provider id is a phone number', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.USDC_ISSUER = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'USDC',
+      destination: testPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+      source: 'chat',
+      provider_user_id: '5519981808102',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([
+      { asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0' },
+    ]);
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0.0000000' },
+      ],
+    });
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+        source: 'chat',
+        provider_user_id: '5519981808102',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
+
+    expect(PaymentReceiptService.sendReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'whatsapp',
+        providerUserId: '5519981808102',
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it('uses official testnet USDC issuer when env is not set', async () => {
     const crypto = require('crypto');
     const jwt = require('jsonwebtoken');

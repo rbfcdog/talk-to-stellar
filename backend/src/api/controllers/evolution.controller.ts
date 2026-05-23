@@ -21,6 +21,17 @@ function hasDiagnosticAuthorization(req: Request): boolean {
   return Boolean(expected && provided && timingSafeEqualString(expected, provided));
 }
 
+function configuredEvolutionInstance(): string {
+  return String(
+    process.env.EVOLUTION_INSTANCE ||
+    process.env.EVOLUTION_INSTANCE_NAME ||
+    process.env.EVOLUTION_NOTIFY_INSTANCE ||
+    process.env.EVOLUTION_DEFAULT_INSTANCE ||
+    process.env.EVOLUTION_INSTANCE_ID ||
+    ''
+  ).trim();
+}
+
 export default class EvolutionController {
   static async webhook(req: Request, res: Response) {
     try {
@@ -52,7 +63,7 @@ export default class EvolutionController {
       });
     }
 
-    const instance = String(req.body?.instance || process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
+    const instance = String(req.body?.instance || configuredEvolutionInstance()).trim();
     const number = String(req.body?.number || req.body?.phone || req.body?.provider_user_id || '').trim();
     const text = String(req.body?.text || 'Teste TalkToStellar: envio Evolution funcionando.').trim();
     if (!number) {
