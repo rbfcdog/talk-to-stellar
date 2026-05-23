@@ -169,15 +169,6 @@ function verifyPinAgainstSession(pin: string, session: any) {
 }
 
 function resolveCompletionChannel(payload: any, body: any): { provider: string; providerUserId: string } {
-  const provider = normalizeExternalProvider(
-    String(
-      payload?.provider ||
-      body?.provider ||
-      body?.external_provider ||
-      body?.source ||
-      ''
-    )
-  );
   const rawProviderUserId = String(
     payload?.provider_user_id ||
     body?.provider_user_id ||
@@ -186,6 +177,16 @@ function resolveCompletionChannel(payload: any, body: any): { provider: string; 
     body?.externalProviderUserId ||
     ''
   );
+  const explicitProvider = normalizeExternalProvider(
+    String(payload?.provider || body?.provider || body?.external_provider || '')
+  );
+  const sourceProvider = normalizeExternalProvider(String(payload?.source || body?.source || ''));
+  const deliveryProvider = (provider: string) => (
+    ['telegram', 'whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(provider) ? provider : ''
+  );
+  const phoneDigits = rawProviderUserId.replace(/\D+/g, '');
+  const inferredProvider = phoneDigits.length >= 10 && phoneDigits.length <= 15 ? 'whatsapp' : '';
+  const provider = deliveryProvider(explicitProvider) || deliveryProvider(sourceProvider) || inferredProvider;
   const providerUserId = provider ? normalizeExternalProviderUserId(provider, rawProviderUserId) : '';
   return { provider, providerUserId };
 }

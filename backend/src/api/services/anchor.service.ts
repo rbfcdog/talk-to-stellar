@@ -336,8 +336,8 @@ function normalizeRampIntentId(input: RampSessionInput): string {
 
 function externalChannelProvider(input: RampSessionInput): string {
   const provider = coalesceString(input.external_provider, input.externalProvider, input.provider, input.source).toLowerCase();
-  if (['etherfuse', 'pix', 'ramp', 'sandbox'].includes(provider)) return '';
-  return provider;
+  if (['telegram', 'whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(provider)) return provider;
+  return '';
 }
 
 function externalChannelProviderUserId(input: RampSessionInput): string {

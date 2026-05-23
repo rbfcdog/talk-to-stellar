@@ -366,13 +366,29 @@ export class TransferNotificationService {
   }
 
   private static buildDirectMapping(provider?: string | null, providerUserId?: string | null): ExternalMapping | null {
-    const normalizedProvider = String(provider || '').trim().toLowerCase();
     const normalizedProviderUserId = String(providerUserId || '').trim();
-    if (!normalizedProvider || !normalizedProviderUserId) return null;
+    if (!normalizedProviderUserId) return null;
+    const rawProvider = String(provider || '').trim().toLowerCase();
+    const normalizedProvider = this.normalizeDeliveryProvider(rawProvider, normalizedProviderUserId);
+    if (!normalizedProvider) return null;
     return {
       provider: normalizedProvider,
       provider_user_id: normalizedProviderUserId,
     };
+  }
+
+  private static normalizeDeliveryProvider(provider: string, providerUserId?: string | null): string {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    if (['telegram', 'whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(normalizedProvider)) {
+      return normalizedProvider;
+    }
+
+    const digits = this.normalizeWhatsAppDigits(providerUserId);
+    if (digits && digits.length >= 10 && digits.length <= 15 && (digits.startsWith('55') || normalizedProvider === 'chat')) {
+      return 'whatsapp';
+    }
+
+    return '';
   }
 
   private static dedupeMappings(mappings: ExternalMapping[]): ExternalMapping[] {
@@ -675,7 +691,14 @@ export class TransferNotificationService {
   }
 
   private static evolutionInstance(): string {
-    return String(process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
+    return String(
+      process.env.EVOLUTION_INSTANCE ||
+      process.env.EVOLUTION_INSTANCE_NAME ||
+      process.env.EVOLUTION_NOTIFY_INSTANCE ||
+      process.env.EVOLUTION_DEFAULT_INSTANCE ||
+      process.env.EVOLUTION_INSTANCE_ID ||
+      ''
+    ).trim();
   }
 
   private static normalizeWhatsAppDigits(value: unknown): string | undefined {
