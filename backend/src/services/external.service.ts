@@ -923,8 +923,8 @@ export class ExternalService {
   private async resolveExternalLinkContext(sessionId?: string, userId?: string): Promise<ExternalLinkContext> {
     const session = String(sessionId || '').trim();
     const user = String(userId || '').trim();
-    const selectContext = async (column: 'session_id' | 'user_id', value: string) => {
-      if (!value) return null;
+    const selectContextRows = async (column: 'session_id' | 'user_id', value: string): Promise<any[]> => {
+      if (!value) return [];
       const { data, error } = await this.supabase
         .from('external_accounts')
         .select('provider, provider_user_id')
@@ -935,16 +935,30 @@ export class ExternalService {
       if (error) {
         const message = String(error.message || '').toLowerCase();
         if (message.includes('external_accounts') || message.includes('schema cache') || message.includes('does not exist')) {
-          return null;
+          return [];
         }
         throw error;
       }
 
-      const rows = data || [];
-      return rows.find((row: any) => String(row.provider || '').toLowerCase() === 'telegram') || rows[0] || null;
+      return Array.isArray(data) ? data : [];
     };
 
-    const row = await selectContext('session_id', session) || await selectContext('user_id', user);
+    const pickDeliveryContext = (rows: any[]) => {
+      const priority = ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution', 'telegram'];
+      return priority
+        .map((provider) => rows.find((row: any) => String(row.provider || '').toLowerCase() === provider))
+        .find(Boolean) || null;
+    };
+
+    const sessionRows = await selectContextRows('session_id', session);
+    const userRows = await selectContextRows('user_id', user);
+    const row =
+      pickDeliveryContext(sessionRows) ||
+      pickDeliveryContext(userRows) ||
+      sessionRows[0] ||
+      userRows[0] ||
+      null;
+
     return this.normalizeExternalLinkContext(row || {});
   }
 

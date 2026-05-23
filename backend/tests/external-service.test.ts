@@ -33,6 +33,26 @@ function createSupabaseMock(input: {
   };
 }
 
+function createFilteredExternalAccountsSupabaseMock(externalAccounts: any[]) {
+  return {
+    from: jest.fn((table: string) => {
+      if (table !== 'external_accounts') return createQuery([]);
+      let rows = externalAccounts;
+      const query: any = {
+        select: jest.fn(() => query),
+        eq: jest.fn((column: string, value: string) => {
+          rows = rows.filter((row) => String(row[column] || '') === String(value || ''));
+          return query;
+        }),
+        order: jest.fn(() => query),
+        limit: jest.fn(async () => ({ data: rows, error: null })),
+        then: (resolve: any, reject: any) => Promise.resolve({ data: rows, error: null }).then(resolve, reject),
+      };
+      return query;
+    }),
+  };
+}
+
 describe('ExternalService.checkExternalAccount', () => {
   it('returns a linked Telegram account from external_accounts', async () => {
     const supabase = createSupabaseMock({
@@ -219,6 +239,42 @@ describe('ExternalService confirmation channel context', () => {
     const tokenPayload = JSON.parse(Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'));
 
     expect(parsedUrl.pathname).toBe('/confirm-conversion');
+    expect(parsedUrl.searchParams.get('provider')).toBe('whatsapp');
+    expect(parsedUrl.searchParams.get('provider_user_id')).toBe('5519981808102');
+    expect(tokenPayload.provider).toBe('whatsapp');
+    expect(tokenPayload.provider_user_id).toBe('5519981808102');
+  });
+
+  it('uses the user WhatsApp mapping for confirmation links when the browser session only has a web mapping', async () => {
+    const supabase = createFilteredExternalAccountsSupabaseMock([
+      {
+        provider: 'web',
+        provider_user_id: 'browser-session-1',
+        session_id: 'browser-session-1',
+        user_id: 'user-1',
+      },
+      {
+        provider: 'whatsapp',
+        provider_user_id: '5519981808102',
+        session_id: 'whatsapp-session-1',
+        user_id: 'user-1',
+      },
+    ]);
+    const service = new ExternalService(supabase as any);
+    const destination = Keypair.random().publicKey();
+
+    const result = await service.createPaymentConfirmUrl({
+      session_id: 'browser-session-1',
+      owner_id: 'user-1',
+      amount: '10',
+      asset_code: 'USDC',
+      destination,
+      destination_name: 'Ana Silva',
+    });
+
+    const parsedUrl = new URL(result.url);
+    const tokenPayload = JSON.parse(Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'));
+
     expect(parsedUrl.searchParams.get('provider')).toBe('whatsapp');
     expect(parsedUrl.searchParams.get('provider_user_id')).toBe('5519981808102');
     expect(tokenPayload.provider).toBe('whatsapp');

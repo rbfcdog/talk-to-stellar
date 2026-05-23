@@ -276,8 +276,8 @@ export class TransferNotificationService {
         .eq('session_id', sessionId);
 
       if (bySession.error) throw bySession.error;
-      const mappings = bySession.data || [];
-      if (mappings.length || !userId) return mappings;
+      const sessionMappings = bySession.data || [];
+      if (!userId) return sessionMappings;
 
       const byUser = await supabase
         .from('external_accounts')
@@ -285,7 +285,10 @@ export class TransferNotificationService {
         .eq('user_id', userId);
 
       if (byUser.error) throw byUser.error;
-      return byUser.data || [];
+      return this.dedupeMappings([
+        ...sessionMappings,
+        ...(byUser.data || []),
+      ]);
     } catch (error: any) {
       const message = String(error?.message || error || '').toLowerCase();
       if (message.includes('external_accounts') || message.includes('schema cache') || message.includes('does not exist')) {

@@ -129,6 +129,34 @@ describe('TransferNotificationService', () => {
     );
   });
 
+  it('falls back to user WhatsApp mapping when the browser confirmation session only has a web mapping', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [
+        { provider: 'web', provider_user_id: 'browser-session-1', data: {} },
+      ],
+      userMappings: [
+        { provider: 'whatsapp', provider_user_id: '55 19 98180-8102', data: {} },
+      ],
+    }));
+
+    await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      text: 'Pagamento concluido. Recibo disponivel.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Pagamento concluido. Recibo disponivel.',
+      { reliable: true }
+    );
+  });
+
   it('does not send a second welcome when the session intro was already saved', async () => {
     (TransferNotificationService as any).agentRepo = {
       getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
@@ -180,5 +208,26 @@ function emptySupabaseSelect() {
   chain.limit = jest.fn(() => chain);
   chain.then = (resolve: any, reject: any) =>
     Promise.resolve({ data: [], error: null }).then(resolve, reject);
+  return chain;
+}
+
+function externalAccountsBySessionAndUser(input: {
+  sessionMappings: any[];
+  userMappings: any[];
+}) {
+  const chain: any = {};
+  let selectedColumn = '';
+  chain.select = jest.fn(() => chain);
+  chain.eq = jest.fn((column: string) => {
+    selectedColumn = column;
+    return chain;
+  });
+  chain.order = jest.fn(() => chain);
+  chain.limit = jest.fn(() => chain);
+  chain.then = (resolve: any, reject: any) =>
+    Promise.resolve({
+      data: selectedColumn === 'user_id' ? input.userMappings : input.sessionMappings,
+      error: null,
+    }).then(resolve, reject);
   return chain;
 }
