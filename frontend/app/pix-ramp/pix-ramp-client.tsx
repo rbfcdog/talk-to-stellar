@@ -512,7 +512,7 @@ export default function PixRampClient({
 }) {
   const { language, t } = useLanguage();
   const queryString = initialQuery;
-  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  const L = useCallback((pt: string, en: string) => language === "pt-BR" ? pt : en, [language]);
   const queryParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
   const debugEnabled = useMemo(() => queryParams.get("debug") === "1", [queryParams]);
   const queryAppliedRef = useRef(false);
@@ -520,6 +520,7 @@ export default function PixRampClient({
   const offRampAutoResolvedRef = useRef(false);
   const atomicActionRef = useRef(false);
   const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
+  const recipientValidationKeyRef = useRef("");
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [rampEmail, setRampEmail] = useState("");
@@ -1191,6 +1192,7 @@ export default function PixRampClient({
       setVerifiedTransferRecipient(null);
       setRecipientVerificationError("");
       setRecipientVerificationLoading(false);
+      recipientValidationKeyRef.current = "";
       return;
     }
 
@@ -1199,19 +1201,40 @@ export default function PixRampClient({
       setVerifiedTransferRecipient(null);
       setRecipientVerificationError(recipient ? "" : L("Destinatário não informado.", "Recipient missing."));
       setRecipientVerificationLoading(false);
+      recipientValidationKeyRef.current = "";
       return;
     }
 
+    const validationKey = [
+      sessionId,
+      recipient.toLowerCase(),
+      transferRecipientKey.trim().toLowerCase(),
+      transferRecipientPublicKey.trim(),
+    ].join("|");
+    if (recipientValidationKeyRef.current === validationKey && (verifiedTransferRecipient?.recipient_public_key || recipientVerificationError)) {
+      setRecipientVerificationLoading(false);
+      return;
+    }
+    recipientValidationKeyRef.current = validationKey;
+
     let cancelled = false;
+    let timeoutId: number | null = null;
     setRecipientVerificationLoading(true);
     setRecipientVerificationError("");
 
-    callRamp("/api/ramp/etherfuse/sandbox/transfer-recipient", {
+    const validationRequest = callRamp("/api/ramp/etherfuse/sandbox/transfer-recipient", {
       recipient,
       recipient_name: recipient,
       recipient_key: transferRecipientKey || undefined,
       recipient_public_key: transferRecipientPublicKey || undefined,
-    }, "POST")
+    }, "POST");
+    const timeoutRequest = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        reject(new Error(L("A validação do contato demorou demais. Tente novamente ou volte ao chat e peça seus contatos.", "Contact validation took too long. Try again or return to chat and ask for your contacts.")));
+      }, 15000);
+    });
+
+    Promise.race([validationRequest, timeoutRequest])
       .then((payload) => {
         if (cancelled) return;
         const resolved = payload?.recipient || payload;
@@ -1221,10 +1244,14 @@ export default function PixRampClient({
         if (!nextPublicKey) {
           throw new Error(L("Esse contato não tem conta de destino ativa.", "This contact does not have an active destination account."));
         }
-        setVerifiedTransferRecipient(resolved);
-        if (nextName && nextName !== transferRecipient) setTransferRecipient(nextName);
-        if (nextKey && nextKey !== transferRecipientKey) setTransferRecipientKey(nextKey);
-        if (nextPublicKey && nextPublicKey !== transferRecipientPublicKey) setTransferRecipientPublicKey(nextPublicKey);
+        setVerifiedTransferRecipient({
+          ...resolved,
+          recipient_name: nextName || recipient,
+          contact_name: nextName || recipient,
+          recipient_key: nextKey,
+          recipient_pix_key: String(resolved?.recipient_pix_key || nextKey || "").trim(),
+          recipient_public_key: nextPublicKey,
+        });
       })
       .catch((requestError) => {
         if (cancelled) return;
@@ -1235,21 +1262,25 @@ export default function PixRampClient({
         setRecipientVerificationError(message);
       })
       .finally(() => {
+        if (timeoutId) window.clearTimeout(timeoutId);
         if (!cancelled) setRecipientVerificationLoading(false);
       });
 
     return () => {
       cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
     };
   }, [
     L,
     callRamp,
     queryReady,
+    recipientVerificationError,
     sessionId,
     transferFlow,
     transferRecipient,
     transferRecipientKey,
     transferRecipientPublicKey,
+    verifiedTransferRecipient,
   ]);
 
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
@@ -1696,7 +1727,7 @@ export default function PixRampClient({
       intent_id: atomicIntentKey,
       recipient: transferRecipientLabel,
       recipient_name: transferRecipientLabel,
-      recipient_key: transferRecipientKey || undefined,
+      recipient_key: transferRecipientDisplayKey || undefined,
       recipient_public_key: verifiedRecipientPublicKey,
       amount: transferAmount,
       asset_code: requestedAutoPayAsset,
@@ -1877,31 +1908,70 @@ export default function PixRampClient({
                   {transferFlow && transferRecipientDisplayKey && (
                     <p className="mt-1 break-all text-xs text-slate-400">{transferRecipientDisplayKey}</p>
                   )}
-                  {transferFlow && (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        className="rounded-full border border-emerald-300/35 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-300/10"
-                        onClick={() => setRecipientDetailsOpen((current) => !current)}
-                      >
-                        {recipientDetailsOpen ? L("Ocultar dados reais", "Hide real details") : L("Ver dados reais", "See real details")}
-                      </button>
-                      {recipientVerificationLoading && (
-                        <p className="mt-2 text-xs font-bold text-emerald-100">{L("Validando contato salvo...", "Validating saved contact...")}</p>
-                      )}
-                      {recipientVerificationError && (
-                        <p className="mt-2 text-xs font-bold text-rose-200">{recipientVerificationError}</p>
-                      )}
-                      {recipientDetailsOpen && transferRecipientVerified && (
-                        <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs text-emerald-50">
-                          <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Contato salvo validado", "Saved contact verified")}</p>
-                          <p className="mt-2"><span className="text-emerald-100/70">{L("Nome real", "Real name")}:</span> {transferRecipientLabel}</p>
-                          {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-emerald-100/70">{L("Chave", "Key")}:</span> {transferRecipientDisplayKey}</p>}
-                          {verifiedRecipientPublicKey && <p className="mt-1 break-all font-mono text-[11px]"><span className="font-sans text-emerald-100/70">{L("Conta Stellar", "Stellar account")}:</span> {verifiedRecipientPublicKey}</p>}
-                        </div>
-                      )}
-                    </div>
-                  )}
+	                  {transferFlow && (
+	                    <div className="mt-3">
+	                      <button
+	                        type="button"
+	                        className="rounded-full border border-emerald-300/35 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-300/10"
+	                        onClick={() => setRecipientDetailsOpen((current) => !current)}
+	                      >
+	                        {recipientDetailsOpen ? L("Ocultar dados reais", "Hide real details") : L("Ver dados reais", "See real details")}
+	                      </button>
+	                      <div className="mt-2 min-h-5 text-xs font-bold">
+	                        {recipientVerificationLoading ? (
+	                          <p className="inline-flex items-center gap-2 text-emerald-100"><InlineSpinner />{L("Validando contato salvo...", "Validating saved contact...")}</p>
+	                        ) : recipientVerificationError ? (
+	                          <p className="text-rose-200">{recipientVerificationError}</p>
+	                        ) : transferRecipientVerified ? (
+	                          <p className="text-emerald-100">{L("Contato salvo validado.", "Saved contact verified.")}</p>
+	                        ) : (
+	                          <p className="text-slate-300">{L("Aguardando validação do contato.", "Waiting for contact validation.")}</p>
+	                        )}
+	                      </div>
+	                      {recipientDetailsOpen && (
+	                        <div className={`mt-3 rounded-2xl border p-3 text-xs ${
+	                          recipientVerificationError
+	                            ? "border-rose-300/25 bg-rose-300/10 text-rose-50"
+	                            : "border-emerald-300/20 bg-emerald-300/10 text-emerald-50"
+	                        }`}>
+	                          {recipientVerificationLoading ? (
+	                            <div className="flex items-start gap-3">
+	                              <InlineSpinner />
+	                              <div>
+	                                <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Validando destinatário", "Validating recipient")}</p>
+	                                <p className="mt-2 text-emerald-100/80">{L("Estou conferindo se esse nome pertence a um contato real salvo na sua conta.", "Checking whether this name belongs to a real saved contact in your account.")}</p>
+	                              </div>
+	                            </div>
+	                          ) : recipientVerificationError ? (
+	                            <div>
+	                              <p className="font-black uppercase tracking-[0.14em] text-rose-100">{L("Contato não validado", "Contact not verified")}</p>
+	                              <p className="mt-2 text-rose-100/80">{recipientVerificationError}</p>
+	                              <button
+	                                type="button"
+	                                className="mt-3 rounded-full border border-rose-100/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-rose-50 transition hover:bg-rose-100/10"
+	                                onClick={() => {
+	                                  recipientValidationKeyRef.current = "";
+	                                  setRecipientVerificationError("");
+	                                  setVerifiedTransferRecipient(null);
+	                                }}
+	                              >
+	                                {L("Validar novamente", "Validate again")}
+	                              </button>
+	                            </div>
+	                          ) : transferRecipientVerified ? (
+	                            <div>
+	                              <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Contato salvo validado", "Saved contact verified")}</p>
+	                              <p className="mt-2"><span className="text-emerald-100/70">{L("Nome real", "Real name")}:</span> {transferRecipientLabel}</p>
+	                              {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-emerald-100/70">{L("Chave PIX/e-mail", "PIX/email key")}:</span> {transferRecipientDisplayKey}</p>}
+	                              {verifiedRecipientPublicKey && <p className="mt-1 break-all font-mono text-[11px]"><span className="font-sans text-emerald-100/70">{L("Conta Stellar", "Stellar account")}:</span> {verifiedRecipientPublicKey}</p>}
+	                            </div>
+	                          ) : (
+	                            <p className="text-slate-200">{L("Ainda não há dados reais para mostrar. Aguarde a validação ou volte ao chat e digite \"contatos\".", "No real details are available yet. Wait for validation or return to chat and type \"contacts\".")}</p>
+	                          )}
+	                        </div>
+	                      )}
+	                    </div>
+	                  )}
                 </div>
             </div>
           </section>
