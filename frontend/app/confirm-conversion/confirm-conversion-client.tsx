@@ -134,6 +134,9 @@ export default function ConfirmConversionClient({
   const router = useRouter()
 
   const [token, setToken] = useState(tokenFromUrl)
+  const [completionProvider] = useState(() => String(searchParams.get("provider") || decodeJwtPayload(tokenFromUrl)?.provider || "").trim().toLowerCase())
+  const [completionProviderUserId] = useState(() => String(searchParams.get("provider_user_id") || decodeJwtPayload(tokenFromUrl)?.provider_user_id || "").trim())
+  const [completionSource] = useState(() => String(searchParams.get("source") || decodeJwtPayload(tokenFromUrl)?.source || completionProvider || "").trim().toLowerCase())
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
@@ -197,6 +200,9 @@ export default function ConfirmConversionClient({
         body: JSON.stringify({
           token,
           pin,
+          ...(completionProvider ? { provider: completionProvider, external_provider: completionProvider } : {}),
+          ...(completionProviderUserId ? { provider_user_id: completionProviderUserId, external_provider_user_id: completionProviderUserId } : {}),
+          ...(completionSource ? { source: completionSource } : {}),
         }),
       })
 

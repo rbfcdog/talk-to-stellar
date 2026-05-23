@@ -168,6 +168,28 @@ function verifyPinAgainstSession(pin: string, session: any) {
   ]);
 }
 
+function resolveCompletionChannel(payload: any, body: any): { provider: string; providerUserId: string } {
+  const provider = normalizeExternalProvider(
+    String(
+      payload?.provider ||
+      body?.provider ||
+      body?.external_provider ||
+      body?.source ||
+      ''
+    )
+  );
+  const rawProviderUserId = String(
+    payload?.provider_user_id ||
+    body?.provider_user_id ||
+    body?.providerUserId ||
+    body?.external_provider_user_id ||
+    body?.externalProviderUserId ||
+    ''
+  );
+  const providerUserId = provider ? normalizeExternalProviderUserId(provider, rawProviderUserId) : '';
+  return { provider, providerUserId };
+}
+
 async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session: any): Promise<void> {
   const verification = verifyPinAgainstSession(pin, session);
   if (!verification.valid || !verification.needsRehash) return;
@@ -1640,12 +1662,13 @@ export default class ExternalFinalizeController {
           feeBrl: feeDisplay.fee_brl || null,
           quote,
         });
+        const completionChannel = resolveCompletionChannel(payload, req.body);
 
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
-          provider: String((payload as any).provider || ''),
-          providerUserId: String((payload as any).provider_user_id || ''),
+          provider: completionChannel.provider,
+          providerUserId: completionChannel.providerUserId,
           sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
           sourceAssetCode: String(publicTransferDetails.sourceAssetCode || quote.sourceAsset.code),
           destinationAmount: String(publicTransferDetails.destinationAmount || quote.destinationAmount),
@@ -2398,12 +2421,13 @@ export default class ExternalFinalizeController {
           feeBrl: feeDisplay.fee_brl || null,
           quote,
         });
+        const completionChannel = resolveCompletionChannel(payload, req.body);
 
         const receiptUrl = await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
-          provider: String((payload as any).provider || ''),
-          providerUserId: String((payload as any).provider_user_id || ''),
+          provider: completionChannel.provider,
+          providerUserId: completionChannel.providerUserId,
           amount: publicTransferDetails.destinationAmount,
           assetCode: publicTransferDetails.destinationAssetCode,
           sourceAmount: publicTransferDetails.sourceAmount,

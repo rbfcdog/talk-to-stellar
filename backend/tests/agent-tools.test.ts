@@ -139,6 +139,47 @@ describe('Agent tool execution', () => {
     }
   });
 
+  it('preserves WhatsApp channel context in payment confirmation links', async () => {
+    const ExternalService = require('../src/services/external.service').default;
+    const createPaymentSpy = jest
+      .spyOn(ExternalService.prototype, 'createPaymentConfirmUrl')
+      .mockResolvedValueOnce({
+        token: 'payment-token',
+        url: 'https://app.example.com/r/payment',
+      });
+
+    try {
+      const output = await executeTool('prepare_payment_confirmation', {
+        session_id: '11111111-1111-4111-8111-111111111111',
+        owner_id: 'user-1',
+        amount: '100',
+        asset_code: 'USDC',
+        destination: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        destination_name: 'Ana Silva',
+        provider: 'whatsapp',
+        provider_user_id: '5519981808102',
+        source: 'whatsapp',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(createPaymentSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: '11111111-1111-4111-8111-111111111111',
+          owner_id: 'user-1',
+          amount: '100',
+        }),
+        expect.objectContaining({
+          provider: 'whatsapp',
+          provider_user_id: '5519981808102',
+          source: 'whatsapp',
+        })
+      );
+    } finally {
+      createPaymentSpy.mockRestore();
+    }
+  });
+
   it('adds an existing TalkToStellar user by email directly from the database', async () => {
     const teamPublicKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     const tableResults: Record<string, Array<{ data: any; error: any }>> = {

@@ -226,6 +226,10 @@ describe('ExternalFinalizeController', () => {
     finalizeCreateDefaultTrustlinesMock.mockReset();
     finalizeEnsureStarterContactsForUserMock.mockReset();
     finalizeSupabaseFromMock.mockReset();
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
+    PaymentReceiptService.sendReceipt.mockClear();
+    PaymentReceiptService.buildReceiptImageSvg.mockClear();
+    PaymentReceiptService.buildHostedReceiptUrl.mockClear();
     finalizeSaveSessionMock.mockResolvedValue(undefined);
     finalizeSaveMessageMock.mockResolvedValue(undefined);
     finalizeSaveWalletMock.mockResolvedValue(undefined);
@@ -348,11 +352,14 @@ describe('ExternalFinalizeController', () => {
       body: {
         token: 'payment-token',
         pin,
+        provider: 'whatsapp',
+        provider_user_id: '5519981808102',
       },
     } as any;
     const res = createResponse();
 
     await ExternalFinalizeController.finalize(req, res);
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
 
     expect(finalizeBuildPaymentXdrMock).not.toHaveBeenCalled();
     expect(finalizeBuildPathPaymentXdrMock).toHaveBeenCalledWith(
@@ -372,6 +379,12 @@ describe('ExternalFinalizeController', () => {
         type: 'PATH_PAYMENT_STRICT_RECEIVE',
         asset_code: 'USDC',
         amount: 10,
+      })
+    );
+    expect(PaymentReceiptService.sendReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'whatsapp',
+        providerUserId: '5519981808102',
       })
     );
     expect(res.status).toHaveBeenCalledWith(200);
