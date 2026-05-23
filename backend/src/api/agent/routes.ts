@@ -9,17 +9,17 @@ import jwt from "jsonwebtoken";
 import { AgentState, IntentType, ActionType, SessionData } from "./types";
 import { AgentGraph } from "./graph";
 import { ALL_TOOLS, executeTool } from "./tools";
-import { AgentRepository } from "../repositories/agent.repository";
-import { WalletRepository } from "../repositories/wallet.repository";
-import { logger } from "../utils/logger";
-import { getStellarService } from "../services/stellar.service";
-import ExternalService from "../services/external.service";
-import { supabase } from "../config/supabase";
-import { isSessionExpired } from "../utils/session-expiry";
-import { TransferNotificationService } from "../api/services/transfer-notification.service";
-import { normalizeExternalProviderUserId } from "../repositories/external.repository";
-import { getRequiredJwtSecret } from "../config/secrets";
-import { timingSafeEqualString } from "../utils/password";
+import { AgentRepository } from "../repository/core/agent.repository";
+import { WalletRepository } from "../repository/core/wallet.repository";
+import { logger } from "../../utils/logger";
+import { getStellarService } from "../services/core/stellar.service";
+import ExternalService from "../services/core/external.service";
+import { supabase } from "../../config/supabase";
+import { isSessionExpired } from "../../utils/session-expiry";
+import { TransferNotificationService } from "../services/transfer-notification.service";
+import { normalizeExternalProviderUserId } from "../repository/core/external.repository";
+import { getRequiredJwtSecret } from "../../config/secrets";
+import { timingSafeEqualString } from "../../utils/password";
 
 function getJwtSecret() {
   return getRequiredJwtSecret();

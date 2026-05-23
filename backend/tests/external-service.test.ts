@@ -1,4 +1,4 @@
-import { ExternalService } from '../src/services/external.service';
+import { ExternalService } from '../src/api/services/core/external.service';
 import { Keypair } from '@stellar/stellar-sdk';
 
 function createQuery(data: any[] = [], error: any = null) {

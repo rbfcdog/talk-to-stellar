@@ -1,6 +1,6 @@
 import { supabase } from '../../../config/supabase';
 import crypto from 'crypto';
-import { AgentRepository } from '../../../repositories/agent.repository';
+import { AgentRepository } from '../../repository/core/agent.repository';
 import { logger } from '../../../utils/logger';
 import { buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../../utils/fee-display';
 import { buildUsedQuoteLabel } from '../../../utils/quote-display';

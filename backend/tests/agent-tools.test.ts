@@ -43,7 +43,7 @@ describe('Agent tool execution', () => {
   let apiStellarService: any;
 
   beforeAll(() => {
-    ({ executeTool } = require('../src/agent/tools'));
+    ({ executeTool } = require('../src/api/agent/tools'));
     ({ supabase: supabaseMock } = require('../src/config/supabase'));
     ({ StellarService: apiStellarService } = require('../src/api/services/stellar.service'));
   });
@@ -140,7 +140,7 @@ describe('Agent tool execution', () => {
   });
 
   it('preserves WhatsApp channel context in payment confirmation links', async () => {
-    const ExternalService = require('../src/services/external.service').default;
+    const ExternalService = require('../src/api/services/core/external.service').default;
     const createPaymentSpy = jest
       .spyOn(ExternalService.prototype, 'createPaymentConfirmUrl')
       .mockResolvedValueOnce({

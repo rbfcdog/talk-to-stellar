@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
-import ExternalService from '../../services/external.service';
+import ExternalService from '../services/core/external.service';
 import { isProductionLikeEnvironment } from '../../config/runtime';
 import { timingSafeEqualString } from '../../utils/password';
 

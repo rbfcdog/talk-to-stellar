@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { getAssetIssuer, getDefaultTrustedAssets, getStellarNetworkName, TESTNET_USDC_ISSUER } from '../../config/assets';
-import { AgentRepository } from '../../repositories/agent.repository';
-import { WalletRepository } from '../../repositories/wallet.repository';
-import { ExternalRepository } from '../../repositories/external.repository';
-import VaultService from '../../services/vault.service';
+import { AgentRepository } from '../repository/core/agent.repository';
+import { WalletRepository } from '../repository/core/wallet.repository';
+import { ExternalRepository } from '../repository/core/external.repository';
+import VaultService from './core/vault.service';
 import { StellarService } from './stellar.service';
 import { TrustlineService } from './trustline.service';
 import { logger } from '../../utils/logger';

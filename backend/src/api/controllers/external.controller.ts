@@ -2,17 +2,17 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../../config/supabase';
-import ExternalService from '../../services/external.service';
-import { AgentRepository } from '../../repositories/agent.repository';
-import { WalletRepository } from '../../repositories/wallet.repository';
-import PasskeyService from '../../services/passkey.service';
+import ExternalService from '../services/core/external.service';
+import { AgentRepository } from '../repository/core/agent.repository';
+import { WalletRepository } from '../repository/core/wallet.repository';
+import PasskeyService from '../services/core/passkey.service';
 import {
   ExternalRepository,
   externalProviderAliases,
   isPhoneProvider,
   normalizeExternalProvider,
   normalizeExternalProviderUserId,
-} from '../../repositories/external.repository';
+} from '../repository/core/external.repository';
 import { TransferNotificationService } from '../services/transfer-notification.service';
 import {
   EmailConfirmationError,

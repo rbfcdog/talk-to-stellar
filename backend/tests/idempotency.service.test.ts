@@ -1,4 +1,4 @@
-import { buildOperationFingerprint, stableHash } from '../src/services/idempotency.service';
+import { buildOperationFingerprint, stableHash } from '../src/api/services/core/idempotency.service';
 
 describe('Idempotency service helpers', () => {
   it('hashes equivalent payloads deterministically regardless of key order', () => {

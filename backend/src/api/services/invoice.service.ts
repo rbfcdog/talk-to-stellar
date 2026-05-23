@@ -1,8 +1,8 @@
 import { supabase } from '../../config/supabase';
-import ExternalService from '../../services/external.service';
+import ExternalService from './core/external.service';
 import { FinancialContextService, trackFinancialEvent } from './financial-context.service';
 import { SmartContactsService } from './smart-contacts.service';
-import { buildOperationFingerprint } from '../../services/idempotency.service';
+import { buildOperationFingerprint } from './core/idempotency.service';
 
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'expired' | 'cancelled';
 

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
-import PasskeyService from '../../services/passkey.service';
+import PasskeyService from '../services/core/passkey.service';
 
 function readSessionId(req: Request): string {
   return String(req.body?.session_id || req.body?.sessionId || req.headers['x-session-id'] || '').trim();

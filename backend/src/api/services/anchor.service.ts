@@ -17,9 +17,9 @@ import {
   normalizeAssetCode,
   resolveConfiguredAsset,
 } from '../../config/assets';
-import { AgentRepository } from '../../repositories/agent.repository';
-import { WalletInfo, WalletRepository } from '../../repositories/wallet.repository';
-import VaultService from '../../services/vault.service';
+import { AgentRepository } from '../repository/core/agent.repository';
+import { WalletInfo, WalletRepository } from '../repository/core/wallet.repository';
+import VaultService from './core/vault.service';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { OperationRepository } from '../repository/operation.repository';
 import { EconomyEngineService } from './economy-engine.service';

@@ -4,7 +4,7 @@
  */
 
 import { UserService } from '../src/api/services/user.service';
-import { StellarService } from '../src/services/stellar.service';
+import { StellarService } from '../src/api/services/core/stellar.service';
 import { logger } from '../src/utils/logger';
 
 describe('User Onboarding Process', () => {

@@ -1,5 +1,5 @@
 import { supabase } from '../../../config/supabase';
-import { AgentRepository } from '../../../repositories/agent.repository';
+import { AgentRepository } from '../../repository/core/agent.repository';
 import { logger } from '../../../utils/logger';
 import { formatCustomerAssetAmount } from '../../../utils/fee-display';
 import { EvolutionService } from '../evolution.service';

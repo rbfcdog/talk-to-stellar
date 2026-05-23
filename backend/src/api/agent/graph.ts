@@ -7,15 +7,15 @@ import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage, ToolMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { AgentState, IntentType, ActionType } from "./types";
-import { AgentRepository } from "../repositories/agent.repository";
+import { AgentRepository } from "../repository/core/agent.repository";
 import { ALL_TOOLS, executeTool } from "./tools";
-import { logger } from "../utils/logger";
-import ExternalService from '../services/external.service';
-import { supabase } from '../config/supabase';
-import { getAssetIssuer } from '../config/assets';
-import { WalletRepository } from '../repositories/wallet.repository';
-import { ActivityFeedService } from '../api/services/activity-feed.service';
-import { normalizeHumanAmountText, parseHumanAmountNumber } from '../utils/amount';
+import { logger } from "../../utils/logger";
+import ExternalService from '../services/core/external.service';
+import { supabase } from '../../config/supabase';
+import { getAssetIssuer } from '../../config/assets';
+import { WalletRepository } from '../repository/core/wallet.repository';
+import { ActivityFeedService } from '../services/activity-feed.service';
+import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
@@ -2916,7 +2916,7 @@ Sua conta está pronta para consultar saldo, salvar contatos e enviar dinheiro.`
 
       // If a secret key was provided, import/login an existing wallet
       if (secretKey) {
-        const { UserService } = await import("../api/services/user.service");
+        const { UserService } = await import("../services/user.service");
         const walletResult = await UserService.onboardUser({
           email: email || undefined,
           phoneNumber: phoneNumber || undefined,
@@ -2971,7 +2971,7 @@ Você já pode consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       // Create wallet using the backend service
-      const { UserService } = await import("../api/services/user.service");
+      const { UserService } = await import("../services/user.service");
       const walletResult = await UserService.onboardUser({
         email: email || undefined,
         phoneNumber: phoneNumber || undefined,
@@ -3144,7 +3144,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       return state;
     }
 
-    const { StellarService } = await import('../api/services/stellar.service');
+    const { StellarService } = await import('../services/stellar.service');
 
     const unsignedXdr = await StellarService.buildPaymentXdr({
       sourcePublicKey: state.session_data.public_key,

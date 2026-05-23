@@ -20,18 +20,18 @@ jest.mock('../src/config/supabase', () => ({
   },
 }));
 
-jest.mock('../src/agent/graph', () => ({
+jest.mock('../src/api/agent/graph', () => ({
   AgentGraph: jest.fn().mockImplementation(() => ({
     processInput: processInputMock,
   })),
 }));
 
-jest.mock('../src/agent/tools', () => ({
+jest.mock('../src/api/agent/tools', () => ({
   ALL_TOOLS: [],
   executeTool: jest.fn(),
 }));
 
-jest.mock('../src/services/external.service', () => ({
+jest.mock('../src/api/services/core/external.service', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
     checkExternalAccount: checkExternalAccountMock,
@@ -40,7 +40,7 @@ jest.mock('../src/services/external.service', () => ({
   })),
 }));
 
-jest.mock('../src/repositories/wallet.repository', () => ({
+jest.mock('../src/api/repository/core/wallet.repository', () => ({
   WalletRepository: jest.fn().mockImplementation(() => ({
     getWalletBySession: getWalletBySessionMock,
   })),
@@ -70,7 +70,7 @@ function createRepository(sessions: Record<string, any>) {
 }
 
 async function withAgentServer(repository: any, run: (baseUrl: string) => Promise<void>) {
-  const { createAgentRoutes } = await import('../src/agent/routes');
+  const { createAgentRoutes } = await import('../src/api/agent/routes');
   const app = express();
   app.use(express.json());
   app.use(createAgentRoutes(repository, 'test-openai-key'));

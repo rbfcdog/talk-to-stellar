@@ -14,13 +14,13 @@ import type {
   WebAuthnCredential,
 } from '@simplewebauthn/server';
 import { Keypair } from '@stellar/stellar-sdk';
-import { supabase } from '../config/supabase';
-import { AgentRepository } from '../repositories/agent.repository';
-import { WalletRepository } from '../repositories/wallet.repository';
-import { StellarService } from '../api/services/stellar.service';
-import { AuthService } from '../api/services/auth.service';
-import { isSessionExpired } from '../utils/session-expiry';
-import { getRequiredJwtSecret } from '../config/secrets';
+import { supabase } from '../../../config/supabase';
+import { AgentRepository } from '../../repository/core/agent.repository';
+import { WalletRepository } from '../../repository/core/wallet.repository';
+import { StellarService } from '../stellar.service';
+import { AuthService } from '../auth.service';
+import { isSessionExpired } from '../../../utils/session-expiry';
+import { getRequiredJwtSecret } from '../../../config/secrets';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);

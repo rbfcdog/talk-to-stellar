@@ -1,16 +1,16 @@
 import { Request, Response } from 'express';
 import { Keypair } from '@stellar/stellar-sdk';
 import { supabase } from '../../config/supabase';
-import { AgentRepository } from '../../repositories/agent.repository';
-import { WalletRepository } from '../../repositories/wallet.repository';
-import { VaultService } from '../../services/vault.service';
-import PasskeyService from '../../services/passkey.service';
+import { AgentRepository } from '../repository/core/agent.repository';
+import { WalletRepository } from '../repository/core/wallet.repository';
+import { VaultService } from '../services/core/vault.service';
+import PasskeyService from '../services/core/passkey.service';
 import { StellarService } from '../services/stellar.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
 import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { isSessionExpired } from '../../utils/session-expiry';
-import { buildOperationFingerprint } from '../../services/idempotency.service';
+import { buildOperationFingerprint } from '../services/core/idempotency.service';
 import { verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 
 const agentRepo = new AgentRepository(supabase);

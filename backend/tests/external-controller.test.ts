@@ -8,7 +8,7 @@ jest.mock('../src/config/supabase', () => ({
   supabase: {},
 }));
 
-jest.mock('../src/services/external.service', () => ({
+jest.mock('../src/api/services/core/external.service', () => ({
   __esModule: true,
 	  default: jest.fn().mockImplementation(() => ({
 	    checkExternalAccount: checkExternalAccountMock,
@@ -17,19 +17,19 @@ jest.mock('../src/services/external.service', () => ({
 	  })),
 	}));
 
-jest.mock('../src/repositories/wallet.repository', () => ({
+jest.mock('../src/api/repository/core/wallet.repository', () => ({
   WalletRepository: jest.fn().mockImplementation(() => ({
     getWalletBySession: getWalletBySessionMock,
   })),
 }));
 
-jest.mock('../src/repositories/agent.repository', () => ({
+jest.mock('../src/api/repository/core/agent.repository', () => ({
   AgentRepository: jest.fn().mockImplementation(() => ({
     getSession: getSessionMock,
   })),
 }));
 
-jest.mock('../src/services/passkey.service', () => ({
+jest.mock('../src/api/services/core/passkey.service', () => ({
   __esModule: true,
   default: {
     getUserPasskeys: getUserPasskeysMock,

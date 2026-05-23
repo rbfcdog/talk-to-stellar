@@ -1,13 +1,13 @@
 import jwt from 'jsonwebtoken';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ExternalRepository } from '../repositories/external.repository';
-import { ContactRepository } from '../api/repository/contact.repository';
+import { ExternalRepository } from '../../repository/core/external.repository';
+import { ContactRepository } from '../../repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
-import { logger } from '../utils/logger';
-import { getAssetIssuer, normalizeAssetCode } from '../config/assets';
+import { logger } from '../../../utils/logger';
+import { getAssetIssuer, normalizeAssetCode } from '../../../config/assets';
 import crypto from 'crypto';
-import { getRequiredJwtSecret } from '../config/secrets';
+import { getRequiredJwtSecret } from '../../../config/secrets';
 
 function getJwtSecret() {
   return getRequiredJwtSecret();
