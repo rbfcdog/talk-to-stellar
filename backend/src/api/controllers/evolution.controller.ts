@@ -1,5 +1,24 @@
 import { Request, Response } from 'express';
 import { EvolutionService } from '../services/evolution.service';
+import { isProductionLikeEnvironment } from '../../config/runtime';
+import { timingSafeEqualString } from '../../utils/password';
+
+function readBearerToken(req: Request): string {
+  const auth = String(req.headers.authorization || '').trim();
+  return auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+}
+
+function hasDiagnosticAuthorization(req: Request): boolean {
+  const expected = String(process.env.EVOLUTION_DIAGNOSTIC_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  if (!expected && !isProductionLikeEnvironment()) return true;
+  const provided = String(
+    req.headers['x-evolution-diagnostic-secret'] ||
+      req.headers['x-internal-api-secret'] ||
+      readBearerToken(req) ||
+      ''
+  ).trim();
+  return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+}
 
 export default class EvolutionController {
   static async webhook(req: Request, res: Response) {
@@ -22,5 +41,43 @@ export default class EvolutionController {
 
   static async ping(_req: Request, res: Response) {
     return res.status(200).json({ success: true, webhook: 'evolution' });
+  }
+
+  static async testSend(req: Request, res: Response) {
+    if (!hasDiagnosticAuthorization(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Internal authorization is required to test Evolution delivery.',
+      });
+    }
+
+    const instance = String(req.body?.instance || process.env.EVOLUTION_INSTANCE || process.env.EVOLUTION_INSTANCE_NAME || '').trim();
+    const number = String(req.body?.number || req.body?.phone || req.body?.provider_user_id || '').trim();
+    const text = String(req.body?.text || 'Teste TalkToStellar: envio Evolution funcionando.').trim();
+    if (!number) {
+      return res.status(400).json({ success: false, message: 'number is required.' });
+    }
+
+    try {
+      const response = await EvolutionService.sendText(instance, number, text, {
+        reliable: true,
+        attempts: Number(req.body?.attempts || process.env.EVOLUTION_NOTIFY_SEND_ATTEMPTS || 3),
+        timeoutMs: Number(req.body?.timeout_ms || req.body?.timeoutMs || process.env.EVOLUTION_NOTIFY_SEND_TIMEOUT_MS || 45000),
+      });
+      return res.status(200).json({
+        success: true,
+        instance,
+        recipient_tail: number.replace(/\D+/g, '').slice(-4),
+        response,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({
+        success: false,
+        instance,
+        recipient_tail: number.replace(/\D+/g, '').slice(-4),
+        message,
+      });
+    }
   }
 }

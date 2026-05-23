@@ -590,7 +590,7 @@ export class TransferNotificationService {
     text: string
   ): Promise<void> {
     const phones = mappings
-      .filter((mapping) => ['whatsapp', 'phone'].includes(String(mapping.provider || '').toLowerCase()))
+      .filter((mapping) => ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(String(mapping.provider || '').toLowerCase()))
       .flatMap((mapping) => [
         mapping.provider_user_id,
         mapping.data?.phone_number,
@@ -656,7 +656,7 @@ export class TransferNotificationService {
   private static hasEvolutionWhatsAppConfig(): boolean {
     return Boolean(
       String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_BASE_URL || process.env.EVOLUTION_SERVER_URL || '').trim() &&
-      String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || process.env.EVOLUTION_GLOBAL_API_KEY || '').trim() &&
+      String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || process.env.EVOLUTION_GLOBAL_API_KEY || process.env.AUTHENTICATION_API_KEY || '').trim() &&
       this.evolutionInstance()
     );
   }

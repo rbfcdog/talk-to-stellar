@@ -50,4 +50,40 @@ describe('TransferNotificationService', () => {
       { reliable: true }
     );
   });
+
+  it('treats AUTHENTICATION_API_KEY as a valid Evolution API key for completion callbacks', async () => {
+    process.env.EVOLUTION_API_KEY = '';
+    process.env.EVOLUTION_GLOBAL_API_KEY = '';
+    process.env.AUTHENTICATION_API_KEY = 'evolution-global-key';
+
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'whatsapp',
+      providerUserId: '55 19 98180-8102',
+      text: 'Pagamento concluido.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Pagamento concluido.',
+      { reliable: true }
+    );
+  });
+
+  it('accepts evolution as a WhatsApp delivery provider alias', async () => {
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'evolution',
+      providerUserId: '+55 19 98180-8102',
+      text: 'Recibo enviado.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Recibo enviado.',
+      { reliable: true }
+    );
+  });
 });

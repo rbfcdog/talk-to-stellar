@@ -159,7 +159,7 @@ describe('EvolutionService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('tries the alternate Evolution payload shape when the legacy sendText body is rejected', async () => {
+  it('tries the Evolution v1 textMessage payload shape when the v2 sendText body is rejected', async () => {
     const requestBodies: any[] = [];
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [, init] = args;
@@ -183,7 +183,9 @@ describe('EvolutionService', () => {
     });
     expect(requestBodies[1]).toMatchObject({
       number: '5519981808102',
-      text: 'ok',
+      textMessage: {
+        text: 'ok',
+      },
       options: {
         delay: 300,
         presence: 'composing',

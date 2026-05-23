@@ -31,6 +31,8 @@ type EvolutionSendTextOptions = {
   timeoutMs?: number;
 };
 
+type EvolutionSendTextBodyVariant = 'v2' | 'v1' | 'hybrid';
+
 class EvolutionSendTextError extends Error {
   status?: number;
   body?: unknown;
@@ -266,6 +268,12 @@ function normalizeOutboundWhatsAppNumber(value: unknown): string {
   return withoutJid.replace(/\D+/g, '');
 }
 
+function outboundWhatsAppNumberCandidates(value: unknown): string[] {
+  const digits = normalizeOutboundWhatsAppNumber(value);
+  if (!digits) return [];
+  return [digits, `+${digits}`];
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -283,6 +291,13 @@ function shouldRetrySend(error: unknown): boolean {
   const name = String((error as any)?.name || '').toLowerCase();
   const message = String(error instanceof Error ? error.message : error || '').toLowerCase();
   return name === 'aborterror' || message.includes('aborted') || message.includes('timeout') || message.includes('fetch failed') || message.includes('econn');
+}
+
+function sendTextBodyVariants(): EvolutionSendTextBodyVariant[] {
+  const configured = String(process.env.EVOLUTION_SEND_TEXT_BODY_VERSION || '').trim().toLowerCase();
+  if (configured === 'v1') return ['v1', 'v2', 'hybrid'];
+  if (configured === 'hybrid') return ['hybrid', 'v2', 'v1'];
+  return ['v2', 'v1', 'hybrid'];
 }
 
 function normalizeEvent(value: unknown): string {
@@ -536,22 +551,34 @@ export class EvolutionService {
     number: string;
     text: string;
     timeoutMs: number;
-    bodyVariant: 'legacy' | 'options';
+    bodyVariant: EvolutionSendTextBodyVariant;
   }): Promise<any> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     let response: Response;
-    const body = input.bodyVariant === 'options'
+    const body = input.bodyVariant === 'v1'
       ? {
           number: input.number,
-          text: input.text,
+          textMessage: {
+            text: input.text,
+          },
           options: {
             delay: 300,
             presence: 'composing',
             linkPreview: false,
           },
         }
-      : {
+      : input.bodyVariant === 'hybrid'
+        ? {
+            number: input.number,
+            text: input.text,
+            options: {
+              delay: 300,
+              presence: 'composing',
+              linkPreview: false,
+            },
+          }
+        : {
           number: input.number,
           text: input.text,
           delay: 300,
@@ -585,8 +612,8 @@ export class EvolutionService {
 
   static async sendText(instance: string, number: string, text: string, options: EvolutionSendTextOptions = {}): Promise<any> {
     const { baseUrl, apiKey } = assertEvolutionConfig(instance);
-    const normalizedNumber = normalizeOutboundWhatsAppNumber(number);
-    if (!normalizedNumber) throw new Error('Evolution sendText requires a WhatsApp number.');
+    const numberCandidates = outboundWhatsAppNumberCandidates(number);
+    if (numberCandidates.length === 0) throw new Error('Evolution sendText requires a WhatsApp number.');
 
     const reliable = Boolean(options.reliable);
     const attempts = clampNumber(
@@ -602,38 +629,40 @@ export class EvolutionService {
       180_000
     );
     let lastError: unknown = null;
+    const bodyVariants = sendTextBodyVariants();
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      try {
-        return await this.sendTextOnce({
-          baseUrl,
-          apiKey,
-          instance,
-          number: normalizedNumber,
-          text,
-          timeoutMs,
-          bodyVariant: 'legacy',
-        });
-      } catch (error) {
-        lastError = error;
-        if (shouldTryAlternateSendPayload(error)) {
+      let shouldTryRetry = true;
+
+      for (const candidateNumber of numberCandidates) {
+        for (const bodyVariant of bodyVariants) {
           try {
-            return await this.sendTextOnce({
+            const response = await this.sendTextOnce({
               baseUrl,
               apiKey,
               instance,
-              number: normalizedNumber,
+              number: candidateNumber,
               text,
               timeoutMs,
-              bodyVariant: 'options',
+              bodyVariant,
             });
-          } catch (alternateError) {
-            lastError = alternateError;
+            if (reliable) {
+              logger.info(`[evolution-send] delivered message to ***${normalizeOutboundWhatsAppNumber(candidateNumber).slice(-4)} using ${bodyVariant} payload`);
+            }
+            return response;
+          } catch (error) {
+            lastError = error;
+            if (!shouldTryAlternateSendPayload(error)) {
+              shouldTryRetry = shouldRetrySend(error);
+              break;
+            }
           }
         }
+
+        if (!shouldTryAlternateSendPayload(lastError)) break;
       }
 
-      if (attempt >= attempts || !shouldRetrySend(lastError)) break;
+      if (attempt >= attempts || !shouldTryRetry) break;
       const backoffMs = Math.min(1000 * attempt, 3000);
       await sleep(backoffMs);
     }
