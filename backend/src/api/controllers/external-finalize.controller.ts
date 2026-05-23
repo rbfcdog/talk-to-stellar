@@ -828,6 +828,23 @@ async function sendTelegramPaymentNotification(input: {
 
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+    const amountLabel = formatCustomerAssetAmount(input.amount, input.assetCode);
+    const sourceLabel = input.sourceAmount && input.sourceAssetCode && input.sourceAssetCode !== input.assetCode
+      ? formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)
+      : '';
+    const feeLabel = String(feeDisplay?.display || '').trim();
+    const settlementLabel = Number.isFinite(Number(input.settlementMs || 0)) && Number(input.settlementMs || 0) > 0
+      ? `${(Number(input.settlementMs) / 1000).toFixed(1)}s`
+      : '';
+    const externalDeliveryText = [
+      'Pagamento concluido.',
+      sourceLabel ? `Origem: ${sourceLabel}` : '',
+      `Valor: ${amountLabel}`,
+      `Destino: ${readableDestination || 'destinatario'}`,
+      feeLabel ? `Taxa: ${feeLabel}` : '',
+      settlementLabel ? `Liquidacao: ${settlementLabel}` : '',
+    ].filter(Boolean).join('\n');
+
     return await PaymentReceiptService.sendReceipt({
       type: 'payment_sent',
       sessionId: input.sessionId,
@@ -849,6 +866,7 @@ async function sendTelegramPaymentNotification(input: {
       savings: input.savings,
       settlementMs: input.settlementMs,
       contextMessage: input.contextMessage || null,
+      externalDeliveryText,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -874,6 +892,18 @@ async function sendTelegramConversionNotification(input: {
 }): Promise<string> {
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
+    const feeLabel = String(feeDisplay?.display || '').trim();
+    const settlementLabel = Number.isFinite(Number(input.settlementMs || 0)) && Number(input.settlementMs || 0) > 0
+      ? `${(Number(input.settlementMs) / 1000).toFixed(1)}s`
+      : '';
+    const externalDeliveryText = [
+      'Conversao concluida.',
+      `De: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}`,
+      `Para: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}`,
+      feeLabel ? `Taxa: ${feeLabel}` : '',
+      settlementLabel ? `Liquidacao: ${settlementLabel}` : '',
+    ].filter(Boolean).join('\n');
+
     return await PaymentReceiptService.sendReceipt({
       type: 'conversion',
       sessionId: input.sessionId,
@@ -892,6 +922,7 @@ async function sendTelegramConversionNotification(input: {
       quote: input.quote,
       savings: input.savings,
       settlementMs: input.settlementMs,
+      externalDeliveryText,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1739,6 +1770,9 @@ export default class ExternalFinalizeController {
           quote,
         });
         const completionChannel = resolveCompletionChannel(payload, req.body);
+        logger.info(
+          `[external-finalize] conversion completion callback channel provider=${completionChannel.provider || 'none'} provider_user_tail=${String(completionChannel.providerUserId || '').replace(/\D+/g, '').slice(-4) || 'none'} session=${String(session_id)}`
+        );
 
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
@@ -2498,6 +2532,9 @@ export default class ExternalFinalizeController {
           quote,
         });
         const completionChannel = resolveCompletionChannel(payload, req.body);
+        logger.info(
+          `[external-finalize] payment completion callback channel provider=${completionChannel.provider || 'none'} provider_user_tail=${String(completionChannel.providerUserId || '').replace(/\D+/g, '').slice(-4) || 'none'} session=${String(session_id)}`
+        );
 
         const receiptUrl = await sendTelegramPaymentNotification({
           sessionId: String(session_id),

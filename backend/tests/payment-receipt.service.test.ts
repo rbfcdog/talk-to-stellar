@@ -1,4 +1,5 @@
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
+import { TransferNotificationService } from '../src/api/services/transfer-notification.service';
 
 describe('PaymentReceiptService', () => {
   const originalEnv = process.env;
@@ -129,5 +130,43 @@ describe('PaymentReceiptService', () => {
 
     expect(receipt).toContain('Resumo: PIX enviado ao seu PIX.');
     expect(receipt).not.toContain('Retirada via PIX concluída');
+  });
+
+  it('uses a short external completion callback when provided', async () => {
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_sent',
+      sessionId: 'session-callback',
+      userId: 'user-callback',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      feeDisplay: 'US$ 0.01',
+      hash: 'tx-callback-1',
+      externalDeliveryText: 'Pagamento concluido.\nValor: US$ 100.00\nDestino: Ana Silva',
+    });
+
+    expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      text: expect.stringContaining('Pagamento concluido.'),
+      buttonText: 'Abrir comprovante',
+    }));
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Recibo registrado no seu histórico.');
+
+    notifySpy.mockRestore();
   });
 });

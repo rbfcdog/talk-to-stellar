@@ -712,6 +712,9 @@ export class TransferNotificationService {
     const attempts: WhatsAppDeliveryAttempt[] = [];
     const evolutionInstances = this.evolutionInstanceCandidates(whatsappMappings);
     if (this.hasEvolutionWhatsAppBaseConfig() && evolutionInstances.length > 0) {
+      logger.info(
+        `[whatsapp-notify] attempting Evolution delivery recipients=${phoneDigits.map((phone) => `***${phone.slice(-4)}`).join(',')} instances=${evolutionInstances.join(',')}`
+      );
       await Promise.all(phoneDigits.map(async (phone) => {
         for (const evolutionInstance of evolutionInstances) {
           if (deliveredByEvolution.has(phone)) break;
