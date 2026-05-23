@@ -2741,26 +2741,32 @@ function RampFeeBridge({
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
   const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
-  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}${
-    Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
-  }`;
-  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
-  const feeTitle = mode === "onramp"
-    ? L("Taxa real do on-ramp", "Real on-ramp fee")
-    : L("Taxa real do off-ramp", "Real off-ramp fee");
-  const feeCaption = mode === "onramp"
-    ? L("Mostra só a taxa de entrada PIX/on-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/on-ramp fee and the TalkToStellar transaction fee.")
-    : L("Mostra só a taxa de saída PIX/off-ramp e a taxa de transação TalkToStellar.", "Shows only the PIX/off-ramp fee and the TalkToStellar transaction fee.");
-  const showAnchorBridge = mode === "onramp" && hasFinalConversionAmount && anchorAfterRaw;
+	  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}${
+	    Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
+	  }`;
+	  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
+	  const sameFeeCurrency = feeCurrency === ttsTransactionFeeCurrency;
+	  const totalFeeDisplay = sameFeeCurrency
+	    ? `${formatQuoteAmount((feeAmount + ttsTransactionFeeAmount).toFixed(7), feeCurrency)}${
+	        Number.isFinite(estimate.totalRouteFeePct) ? ` (${estimate.totalRouteFeePct.toFixed(2)}%)` : ""
+	      }`
+	    : `${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)} + ${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
+	  const feeTitle = mode === "onramp"
+	    ? L("O que você paga neste PIX", "What you pay in this PIX")
+	    : L("O que você paga nesta retirada", "What you pay in this withdrawal");
+	  const feeCaption = mode === "onramp"
+	    ? L("Aqui entram apenas duas cobranças: a taxa real do on-ramp/Etherfuse e a taxa de transação TalkToStellar.", "Only two charges are counted here: the real on-ramp/Etherfuse fee and the TalkToStellar transaction fee.")
+	    : L("Aqui entram apenas duas cobranças: a taxa real do off-ramp/Etherfuse e a taxa de transação TalkToStellar.", "Only two charges are counted here: the real off-ramp/Etherfuse fee and the TalkToStellar transaction fee.");
+	  const showAnchorBridge = mode === "onramp" && hasFinalConversionAmount && anchorAfterRaw;
 
   return (
     <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{L("Antes e depois das taxas", "Before and after fees")}</p>
-          <h3 className="mt-1 text-xl font-black text-white">{feeTitle}</h3>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{feeCaption}</p>
-        </div>
+	          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{L("Taxas cobradas agora", "Fees charged now")}</p>
+	          <h3 className="mt-1 text-xl font-black text-white">{feeTitle}</h3>
+	          <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{feeCaption}</p>
+	        </div>
         {Number.isFinite(retainedPct) && (
           <span className="w-fit rounded-full bg-emerald-300 px-3 py-1 text-xs font-black text-slate-950">
             {retainedPct.toFixed(2)}% {L("retido", "retained")}
@@ -2768,22 +2774,34 @@ function RampFeeBridge({
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl bg-white/5 p-3">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Entrada", "Source")}</p>
-          <p className="mt-2 text-lg font-black text-white">{sourceValue}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{sourceCaption || L("valor antes de executar a rota", "value before executing the route")}</p>
-        </div>
-        <div className="rounded-2xl bg-white/5 p-3">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Antes da taxa", "Before fee")}</p>
-          <p className="mt-2 text-lg font-black text-white">{beforeValue}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{L("valor bruto cotado pelo provider", "gross value quoted by provider")}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{L("Depois da taxa", "After fee")}</p>
-          <p className="mt-2 text-lg font-black text-emerald-50">{afterValue}</p>
-          <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("valor líquido da instrução", "net value in the instruction")}</p>
-        </div>
+	      <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4">
+	        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+	          <div>
+	            <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">{L("Total de taxa deste fluxo", "Total fee in this flow")}</p>
+	            <p className="mt-1 text-2xl font-black text-emerald-50">{totalFeeDisplay}</p>
+	          </div>
+	          <p className="max-w-sm text-xs font-bold leading-5 text-emerald-50/75">
+	            {L("Benchmark de 3,5%, IOF/imposto e taxas opcionais são comparação ou configuração externa. Eles não são somados neste total.", "The 3.5% benchmark, tax/IOF and optional fees are comparison or external configuration. They are not added to this total.")}
+	          </p>
+	        </div>
+	      </div>
+
+	      <div className="mt-3 grid gap-3 md:grid-cols-3">
+	        <div className="rounded-2xl bg-white/5 p-3">
+	          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{mode === "onramp" ? L("Você paga no PIX", "You pay with PIX") : L("Sai do saldo", "Leaves balance")}</p>
+	          <p className="mt-2 text-lg font-black text-white">{sourceValue}</p>
+	          <p className="mt-1 text-xs font-bold text-slate-400">{sourceCaption || L("valor bruto antes das taxas cobradas neste fluxo", "gross value before fees charged in this flow")}</p>
+	        </div>
+	        <div className="rounded-2xl bg-white/5 p-3">
+	          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Base da cotação", "Quote base")}</p>
+	          <p className="mt-2 text-lg font-black text-white">{beforeValue}</p>
+	          <p className="mt-1 text-xs font-bold text-slate-400">{L("valor bruto retornado pela cotação antes de descontar as taxas mapeadas", "gross value returned by the quote before mapped fees are deducted")}</p>
+	        </div>
+	        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
+	          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{mode === "onramp" ? L("Valor líquido usado", "Net value used") : L("Valor líquido enviado", "Net value sent")}</p>
+	          <p className="mt-2 text-lg font-black text-emerald-50">{afterValue}</p>
+	          <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("valor líquido da instrução", "net value in the instruction")}</p>
+	        </div>
       </div>
 
       {showAnchorBridge && (
@@ -2807,23 +2825,23 @@ function RampFeeBridge({
       )}
 
       <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-2">
-        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
-          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
-            {mode === "onramp" ? L("Taxa on-ramp", "On-ramp fee") : L("Taxa off-ramp", "Off-ramp fee")}
-          </span>
-          <span className="mt-1 block text-sm font-black">{feeValue}</span>
-        </div>
-        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-50">
-          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("Taxa TalkToStellar", "TalkToStellar fee")}</span>
-          <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
-        </div>
-      </div>
-      <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
-        {L(
-          "Esta tela separa somente taxas cobradas neste fluxo: taxa do ramp/provider e taxa de transação TalkToStellar. Benchmark, IOF/imposto e taxas opcionais não entram nesta conta.",
-          "This screen separates only charged fees in this flow: ramp/provider fee and TalkToStellar transaction fee. Benchmarks, tax/IOF and optional fees are not included in this count.",
-        )}
-      </p>
+	        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
+	          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
+	            {mode === "onramp" ? L("1. Etherfuse / on-ramp", "1. Etherfuse / on-ramp") : L("1. Etherfuse / off-ramp", "1. Etherfuse / off-ramp")}
+	          </span>
+	          <span className="mt-1 block text-sm font-black">{feeValue}</span>
+	        </div>
+	        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-50">
+	          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("2. TalkToStellar", "2. TalkToStellar")}</span>
+	          <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
+	        </div>
+	      </div>
+	      <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
+	        {L(
+	          "Leitura rápida: o usuário paga o valor do PIX/saldo, o sistema desconta somente as duas taxas listadas acima e usa o valor líquido para entregar saldo ou enviar ao destinatário.",
+	          "Quick read: the user pays the PIX/balance amount, the system deducts only the two fees listed above, and uses the net value to deliver balance or pay the recipient.",
+	        )}
+	      </p>
     </div>
   );
 }
