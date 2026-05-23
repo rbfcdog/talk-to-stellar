@@ -121,11 +121,41 @@ export class AgentGraph {
     return result;
   }
 
-  private sanitizeAssistantResponse(content: string): string {
+  private sanitizeAssistantLinks(content: string): string {
     return String(content || '')
       .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
       .replace(/\[([^\]\n]+)\]\(\s*\)/g, '$1')
       .replace(/\[([^\]\n]+)\]\(\s*([^)\s]+)\s*\)/g, (_match, label, url) => `${String(label).trim()}:\n${String(url).trim()}`)
+      .trim();
+  }
+
+  private isApprovedRichWhatsappMessage(content: string): boolean {
+    const normalized = String(content || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const hasSavingsCore =
+      normalized.includes('economiz') ||
+      normalized.includes('taxa talktostellar') ||
+      normalized.includes('banco tradicional');
+
+    const isKnownTemplate =
+      normalized.includes('simulacao de envio') ||
+      normalized.includes('transferencia concluida') ||
+      normalized.includes('conversao concluida') ||
+      normalized.includes('seu resumo de economia');
+
+    return hasSavingsCore && isKnownTemplate;
+  }
+
+  private sanitizeAssistantResponse(content: string): string {
+    const linkSafe = this.sanitizeAssistantLinks(content);
+    if (this.isApprovedRichWhatsappMessage(linkSafe)) {
+      return linkSafe;
+    }
+
+    return linkSafe
       .replace(/[\u2705\u2713\u26A0\u2B07\uFE0F]/g, '')
       .replace(/\p{Extended_Pictographic}/gu, '')
       .trim();
@@ -2422,6 +2452,7 @@ export class AgentGraph {
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
+      '- Strict contact rule: if a payment names a person, use only a real saved contact from RUNTIME CONTEXT/tool results. If not found, ask for an exact saved contact or transfer key/email/CPF/phone; never create a recipient from a typo.',
       '- In payment and conversion tools, source/origin asset is what the sender spends; destination asset is what the recipient receives.',
       '- Example: "transferir 200 BRL para Carlos receber em USDC" means source_amount=200, source_asset_code=BRL, destination/dest asset=USDC. Do not send 200 USDC.',
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
@@ -2438,6 +2469,9 @@ export class AgentGraph {
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
       '- If the user asks for XLM or technical balances, show only the app balance in R$ and US$ and say TalkToStellar displays the available app balance.',
+      '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
+      '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
+      '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -2447,6 +2481,7 @@ export class AgentGraph {
       '- If the user asks "quanto custa enviar", "quanto vou pagar", "vale a pena", "comparado com o banco", "banco", or "Wise" with a transfer amount, call show_savings_calculator before asking for confirmation. Never answer fee comparison only with free text.',
       '- After any payment or conversion is completed inside the agent flow, call send_receipt_with_savings instead of only confirming with free text. The receipt must put the user savings before the Stellar evidence/hash.',
       '- If the user asks "quanto eu economizei", "resumo do ano", or "histórico de economia", call show_annual_savings_summary.',
+      '- Approved savings tool messages are WhatsApp-ready. Preserve emojis, *bold*, and _italic_ exactly as returned by show_savings_calculator, send_receipt_with_savings, or show_annual_savings_summary.',
     ].join('\n');
   }
 
