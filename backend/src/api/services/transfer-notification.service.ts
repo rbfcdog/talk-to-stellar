@@ -589,13 +589,15 @@ export class TransferNotificationService {
     sessionPhoneNumber: string | undefined,
     text: string
   ): Promise<void> {
-    const phones = mappings
-      .filter((mapping) => ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(String(mapping.provider || '').toLowerCase()))
-      .flatMap((mapping) => [
-        mapping.provider_user_id,
-        mapping.data?.phone_number,
-        mapping.data?.phone,
-      ]);
+    const whatsappMappings = mappings
+      .filter((mapping) => ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(String(mapping.provider || '').toLowerCase()));
+    if (whatsappMappings.length === 0 && !sessionPhoneNumber) return;
+
+    const phones = whatsappMappings.flatMap((mapping) => [
+      mapping.provider_user_id,
+      mapping.data?.phone_number,
+      mapping.data?.phone,
+    ]);
     if (sessionPhoneNumber) phones.push(sessionPhoneNumber);
 
     const phoneDigits = Array.from(new Set(
@@ -603,7 +605,11 @@ export class TransferNotificationService {
         .map((phone) => this.normalizeWhatsAppDigits(phone))
         .filter(Boolean) as string[]
     ));
-    if (phoneDigits.length === 0) return;
+    if (phoneDigits.length === 0) {
+      const providers = mappings.map((mapping) => String(mapping.provider || '').trim()).filter(Boolean).join(',');
+      logger.warn(`[whatsapp-notify] skipped: no WhatsApp recipient digits found. providers=${providers || 'none'}`);
+      return;
+    }
 
     const deliveredByEvolution = new Set<string>();
     const evolutionInstance = this.evolutionInstance();
@@ -617,12 +623,19 @@ export class TransferNotificationService {
           logger.warn(`[whatsapp-notify] evolution send failed for ***${phone.slice(-4)}: ${message}`);
         }
       }));
+    } else {
+      logger.warn('[whatsapp-notify] evolution skipped: set EVOLUTION_API_URL, EVOLUTION_INSTANCE and EVOLUTION_API_KEY or AUTHENTICATION_API_KEY in the backend environment');
     }
 
     const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
     const authToken = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
     const from = this.normalizeWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER);
-    if (!accountSid || !authToken || !from) return;
+    if (!accountSid || !authToken || !from) {
+      if (deliveredByEvolution.size === 0) {
+        logger.warn('[whatsapp-notify] no WhatsApp provider delivered the message. Twilio fallback is not configured.');
+      }
+      return;
+    }
 
     const recipients = Array.from(new Set(
       phoneDigits

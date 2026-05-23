@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { EvolutionService } from '../services/evolution.service';
+import { TransferNotificationService } from '../services/transfer-notification.service';
 import { isProductionLikeEnvironment } from '../../config/runtime';
 import { timingSafeEqualString } from '../../utils/password';
 
@@ -76,6 +77,54 @@ export default class EvolutionController {
         success: false,
         instance,
         recipient_tail: number.replace(/\D+/g, '').slice(-4),
+        message,
+      });
+    }
+  }
+
+  static async testNotify(req: Request, res: Response) {
+    if (!hasDiagnosticAuthorization(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Internal authorization is required to test notification delivery.',
+      });
+    }
+
+    const provider = String(req.body?.provider || 'whatsapp').trim();
+    const providerUserId = String(req.body?.provider_user_id || req.body?.providerUserId || req.body?.number || req.body?.phone || '').trim();
+    const sessionId = String(req.body?.session_id || req.body?.sessionId || '').trim();
+    const userId = String(req.body?.user_id || req.body?.userId || '').trim();
+    const text = String(req.body?.text || 'Teste TalkToStellar: camada de notificação funcionando.').trim();
+    if (!providerUserId && !sessionId && !userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'provider_user_id, session_id or user_id is required.',
+      });
+    }
+
+    try {
+      await TransferNotificationService.notifyExternalChannelMessage({
+        sessionId: sessionId || undefined,
+        userId: userId || undefined,
+        provider,
+        providerUserId: providerUserId || undefined,
+        text,
+      });
+      return res.status(200).json({
+        success: true,
+        provider,
+        recipient_tail: providerUserId.replace(/\D+/g, '').slice(-4) || null,
+        session_id: sessionId || null,
+        user_id: userId || null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({
+        success: false,
+        provider,
+        recipient_tail: providerUserId.replace(/\D+/g, '').slice(-4) || null,
+        session_id: sessionId || null,
+        user_id: userId || null,
         message,
       });
     }
