@@ -3234,12 +3234,24 @@ export class AnchorService {
       });
     }
 
+    const decoratedQuote: Quote & Record<string, unknown> = { ...quoteResult.quote };
+    if (PlatformFeeService.isUsdcBrlTransaction(sourceAsset.code, 'BRL')) {
+      const talkToStellarFee = PlatformFeeService.calculateSpread({
+        sourceAmount: requestedSourceAmount,
+        sourceAssetCode: sourceAsset.code,
+        destinationAssetCode: 'BRL',
+        mode: 'deduct_from_source',
+      });
+      decoratedQuote.talkToStellarFeeAmount = talkToStellarFee.feeAmount;
+      decoratedQuote.talkToStellarFeeCurrency = talkToStellarFee.feeAssetCode;
+    }
+
     return {
       success: true,
       preview: true,
       sandbox: this.getRuntimeInfo().sandbox,
       customer: customerResult.customer as Customer,
-      quote: quoteResult.quote,
+      quote: decoratedQuote,
       amount_tesouro: amount,
       source_amount: requestedSourceAmount,
       source_asset_code: sourceAsset.code,

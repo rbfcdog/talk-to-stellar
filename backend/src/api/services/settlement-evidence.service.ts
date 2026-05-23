@@ -212,19 +212,12 @@ function buildRouteMetrics(transfer: InternationalTransfer) {
   const platformFeeUsd = fxRate > 0 ? platformFeeBrl / fxRate : 0;
   const onRampFee = extractOnRampFee({ transfer, fxRate });
   const offRampFee = extractOffRampFee({ transfer, fxRate });
-  const configuredProviderFeeUsd = toNumber(transfer.fees?.estimated_provider_fee?.amount);
-  const quoteMetadata = asRecord(asRecord(asRecord(transfer.reconciliation_metadata).quote).metadata);
-  const quoteFeeBreakdown = asRecord(quoteMetadata.fee_breakdown);
-  const taxFeeUsd = firstPositiveNumber(quoteFeeBreakdown.tax_estimate_usd, quoteFeeBreakdown.tax_fee_usd);
-  const knownComponentFeeUsd = platformFeeUsd + onRampFee.amountUsd + offRampFee.amountUsd + taxFeeUsd;
-  const impliedCostUsd = Math.max(0, baselineUsd - quotedDestinationUsd);
-  const unallocatedRouteDeltaUsd = Math.max(0, impliedCostUsd - knownComponentFeeUsd);
-  const empiricalFeeUsd = knownComponentFeeUsd + unallocatedRouteDeltaUsd;
-  const empiricalFeeBrl = fxRate > 0 ? empiricalFeeUsd * fxRate : 0;
-  const destinationUsd = Math.max(0, baselineUsd - empiricalFeeUsd);
+  const totalChargedFeeUsd = platformFeeUsd + onRampFee.amountUsd + offRampFee.amountUsd;
+  const totalChargedFeeBrl = platformFeeBrl + onRampFee.amountBrl + offRampFee.amountBrl;
+  const destinationUsd = Math.max(0, baselineUsd - totalChargedFeeUsd);
   const routeDeltaUsd = destinationUsd - baselineUsd;
   const retainedPct = baselineUsd > 0 ? (destinationUsd / baselineUsd) * 100 : 0;
-  const effectiveFeeBps = baselineUsd > 0 ? (empiricalFeeUsd / baselineUsd) * 10000 : 0;
+  const effectiveFeeBps = baselineUsd > 0 ? (totalChargedFeeUsd / baselineUsd) * 10000 : 0;
 
   return {
     source_amount_brl: amount(sourceBrl, 2),
@@ -249,20 +242,19 @@ function buildRouteMetrics(transfer: InternationalTransfer) {
     provider_off_ramp_fee_bps: amount(offRampFee.bps, 2),
     provider_off_ramp_fee_source: offRampFee.source,
     off_ramp_provider: offRampFee.provider,
-    configured_provider_fee_usd: amount(configuredProviderFeeUsd),
-    tax_fee_usd_equivalent: amount(taxFeeUsd),
-    tax_fee_source: taxFeeUsd > 0 ? 'configured_quote_tax_component' : 'not_returned_by_provider',
-    known_component_fee_usd: amount(knownComponentFeeUsd),
-    unallocated_route_delta_usd: amount(unallocatedRouteDeltaUsd),
-    total_fee_usd_equivalent: amount(empiricalFeeUsd),
-    total_empirical_fee_usd: amount(empiricalFeeUsd),
-    total_empirical_fee_brl_equivalent: amount(empiricalFeeBrl, 2),
+    known_component_fee_usd: amount(totalChargedFeeUsd),
+    total_charged_fee_usd: amount(totalChargedFeeUsd),
+    total_charged_fee_brl_equivalent: amount(totalChargedFeeBrl, 2),
+    total_fee_usd_equivalent: amount(totalChargedFeeUsd),
+    total_empirical_fee_usd: amount(totalChargedFeeUsd),
+    total_empirical_fee_brl_equivalent: amount(totalChargedFeeBrl, 2),
     route_delta_usd: amount(routeDeltaUsd),
-    implied_cost_usd: amount(impliedCostUsd),
+    implied_cost_usd: amount(totalChargedFeeUsd),
     retained_pct: amount(retainedPct, 4),
     effective_fee_bps: amount(effectiveFeeBps, 2),
-    fee_delta_usd: amount(Math.abs((baselineUsd - destinationUsd) - empiricalFeeUsd)),
-    fee_source: 'empirical_on_off_ramp_components',
+    fee_delta_usd: amount(Math.abs((baselineUsd - destinationUsd) - totalChargedFeeUsd)),
+    fee_model: 'charged_on_off_ramp_transaction_fees_only',
+    fee_source: 'charged_on_off_ramp_transaction_fees_only',
   };
 }
 
