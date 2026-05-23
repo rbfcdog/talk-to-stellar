@@ -128,12 +128,20 @@ export class TransferNotificationService {
         `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`
     );
 
+    let shouldDeliverWelcome = true;
     try {
-      await this.agentRepo.saveMessage(sessionId, 'assistant', text);
+      shouldDeliverWelcome = await this.agentRepo.saveMessageOnce(
+        sessionId,
+        'assistant',
+        text,
+        `session_intro:${sessionId}`
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[session-welcome] failed to save chat message: ${message}`);
     }
+
+    if (!shouldDeliverWelcome) return;
 
     await Promise.all([
       this.sendTelegramToMappings(mappings, text),

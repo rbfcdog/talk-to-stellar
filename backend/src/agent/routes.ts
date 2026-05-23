@@ -881,7 +881,7 @@ export function createAgentRoutes(
 
       if (messages.length === 0 && sessionData.public_key) {
         const startupMessage = await buildSessionStartMessage(session_id, sessionData.public_key);
-        await repository.saveMessage(session_id, 'assistant', startupMessage);
+        await repository.saveMessageOnce(session_id, 'assistant', startupMessage, `session_intro:${session_id}`);
         responseMessages = await repository.getMessages(session_id, limit);
       }
 

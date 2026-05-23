@@ -18,6 +18,12 @@ export class AgentRepository {
     );
   }
 
+  private isUniqueViolation(error: any): boolean {
+    const code = String(error?.code || '').trim();
+    const message = String(error?.message || '').toLowerCase();
+    return code === '23505' || message.includes('duplicate key') || message.includes('violates unique constraint');
+  }
+
   /**
    * Create or update session data
    */
@@ -145,6 +151,61 @@ export class AgentRepository {
     if (error) {
       throw new Error(`Failed to save message: ${error.message || JSON.stringify(error)}`);
     }
+  }
+
+  async saveMessageOnce(
+    sessionId: string,
+    role: 'user' | 'assistant',
+    content: string,
+    dedupeKey: string
+  ): Promise<boolean> {
+    const normalizedDedupeKey = String(dedupeKey || '').trim();
+    if (!normalizedDedupeKey) {
+      await this.saveMessage(sessionId, role, content);
+      return true;
+    }
+
+    const { error } = await this.supabase
+      .from('agent_messages')
+      .insert({
+        session_id: sessionId,
+        role,
+        content,
+        dedupe_key: normalizedDedupeKey,
+        created_at: new Date().toISOString(),
+      });
+
+    if (!error) return true;
+    if (this.isUniqueViolation(error)) return false;
+
+    if (this.isMissingColumnError(error, 'dedupe_key')) {
+      const recentMessages = await this.getMessages(sessionId, 20).catch(() => []);
+      const normalize = (value: unknown) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+      const isSessionIntro = normalizedDedupeKey.startsWith('session_intro:');
+      const alreadyHasSameIntro = recentMessages.some((message) => (
+        String(message?.role || '') === role && (
+          String(message?.content || '').trim() === String(content || '').trim() ||
+          (
+            isSessionIntro &&
+            (
+              normalize(message?.content).includes('inicio da sessao') ||
+              normalize(message?.content).includes('login concluido') ||
+              normalize(message?.content).includes('login complete') ||
+              normalize(message?.content).includes('session started')
+            )
+          )
+        )
+      ));
+      if (alreadyHasSameIntro) return false;
+      await this.saveMessage(sessionId, role, content);
+      return true;
+    }
+
+    throw new Error(`Failed to save message once: ${error.message || JSON.stringify(error)}`);
   }
 
   /**
