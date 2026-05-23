@@ -322,6 +322,42 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
     data.telegram_username = username;
     data.username = username;
   }
+  if (['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(provider)) {
+    const phoneNumber = String(
+      payload?.phone_number ||
+      payload?.phoneNumber ||
+      payload?.whatsapp_number ||
+      payload?.whatsappNumber ||
+      payload?.number ||
+      payload?.provider_user_id ||
+      ''
+    ).replace(/\D+/g, '');
+    const remoteJid = String(payload?.remote_jid || payload?.remoteJid || payload?.jid || '').trim();
+    const instance = String(
+      payload?.instance ||
+      payload?.instanceName ||
+      payload?.instance_name ||
+      payload?.evolution_instance ||
+      payload?.evolutionInstance ||
+      ''
+    ).trim();
+    const messageId = String(payload?.message_id || payload?.messageId || '').trim();
+    if (phoneNumber) {
+      data.phone_number = phoneNumber;
+      data.whatsapp_number = phoneNumber;
+    }
+    if (remoteJid) {
+      data.remote_jid = remoteJid;
+      data.jid = remoteJid;
+    }
+    if (instance) {
+      data.instance = instance;
+      data.evolution_instance = instance;
+    }
+    if (messageId) {
+      data.last_message_id = messageId;
+    }
+  }
   return data;
 }
 

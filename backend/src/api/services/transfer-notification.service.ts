@@ -10,6 +10,26 @@ type ExternalMapping = {
   data?: Record<string, any> | null;
 };
 
+type WhatsAppDeliveryAttempt = {
+  phone_tail: string;
+  instance: string;
+  delivered: boolean;
+  error?: string;
+};
+
+type WhatsAppDeliveryReport = {
+  attempted: boolean;
+  delivered: number;
+  recipients: number;
+  instances: string[];
+  attempts: WhatsAppDeliveryAttempt[];
+  skipped_reason?: string;
+};
+
+export type ExternalChannelMessageDeliveryReport = {
+  whatsapp: WhatsAppDeliveryReport;
+};
+
 export type IncomingTransferNotification = {
   recipientSessionId?: string | null;
   recipientUserId?: string | null;
@@ -215,7 +235,7 @@ export class TransferNotificationService {
     ]);
   }
 
-  static async notifyExternalChannelMessage(input: ExternalChannelMessageNotification): Promise<void> {
+  static async notifyExternalChannelMessage(input: ExternalChannelMessageNotification): Promise<ExternalChannelMessageDeliveryReport> {
     const sessionId = String(input.sessionId || '').trim();
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
     const session = sessionId ? await this.safeGetSession(sessionId) : null;
@@ -224,13 +244,14 @@ export class TransferNotificationService {
       ...(directMapping ? [directMapping] : []),
       ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
-    await Promise.all([
+    const [, whatsapp] = await Promise.all([
       this.sendTelegramToMappings(mappings, input.text, {
         buttonText: input.buttonText,
         buttonUrl: input.buttonUrl,
       }),
       this.sendWhatsAppToMappings(mappings, session?.phone_number, input.text),
     ]);
+    return { whatsapp };
   }
 
   static async notifyExternalChannelImage(input: ExternalChannelImageNotification): Promise<void> {
@@ -615,15 +636,30 @@ export class TransferNotificationService {
     mappings: ExternalMapping[],
     sessionPhoneNumber: string | undefined,
     text: string
-  ): Promise<void> {
+  ): Promise<WhatsAppDeliveryReport> {
     const whatsappMappings = mappings
       .filter((mapping) => ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(String(mapping.provider || '').toLowerCase()));
-    if (whatsappMappings.length === 0 && !sessionPhoneNumber) return;
+    if (whatsappMappings.length === 0 && !sessionPhoneNumber) {
+      return {
+        attempted: false,
+        delivered: 0,
+        recipients: 0,
+        instances: [],
+        attempts: [],
+        skipped_reason: 'no_whatsapp_mapping',
+      };
+    }
 
     const phones = whatsappMappings.flatMap((mapping) => [
       mapping.provider_user_id,
       mapping.data?.phone_number,
       mapping.data?.phone,
+      mapping.data?.whatsapp_number,
+      mapping.data?.whatsappNumber,
+      mapping.data?.number,
+      mapping.data?.remote_jid,
+      mapping.data?.remoteJid,
+      mapping.data?.jid,
     ]);
     if (sessionPhoneNumber) phones.push(sessionPhoneNumber);
 
@@ -635,23 +671,45 @@ export class TransferNotificationService {
     if (phoneDigits.length === 0) {
       const providers = mappings.map((mapping) => String(mapping.provider || '').trim()).filter(Boolean).join(',');
       logger.warn(`[whatsapp-notify] skipped: no WhatsApp recipient digits found. providers=${providers || 'none'}`);
-      return;
+      return {
+        attempted: false,
+        delivered: 0,
+        recipients: 0,
+        instances: [],
+        attempts: [],
+        skipped_reason: 'no_recipient_digits',
+      };
     }
 
     const deliveredByEvolution = new Set<string>();
-    const evolutionInstance = this.evolutionInstance();
-    if (this.hasEvolutionWhatsAppConfig() && evolutionInstance) {
+    const attempts: WhatsAppDeliveryAttempt[] = [];
+    const evolutionInstances = this.evolutionInstanceCandidates(whatsappMappings);
+    if (this.hasEvolutionWhatsAppBaseConfig() && evolutionInstances.length > 0) {
       await Promise.all(phoneDigits.map(async (phone) => {
-        try {
-          await EvolutionService.sendText(evolutionInstance, phone, text, { reliable: true });
-          deliveredByEvolution.add(phone);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.warn(`[whatsapp-notify] evolution send failed for ***${phone.slice(-4)}: ${message}`);
+        for (const evolutionInstance of evolutionInstances) {
+          if (deliveredByEvolution.has(phone)) break;
+          try {
+            await EvolutionService.sendText(evolutionInstance, phone, text, { reliable: true });
+            deliveredByEvolution.add(phone);
+            attempts.push({
+              phone_tail: phone.slice(-4),
+              instance: evolutionInstance,
+              delivered: true,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            attempts.push({
+              phone_tail: phone.slice(-4),
+              instance: evolutionInstance,
+              delivered: false,
+              error: message,
+            });
+            logger.warn(`[whatsapp-notify] evolution send failed for ***${phone.slice(-4)} on instance ${evolutionInstance}: ${message}`);
+          }
         }
       }));
     } else {
-      logger.warn('[whatsapp-notify] evolution skipped: set EVOLUTION_API_URL, EVOLUTION_INSTANCE and EVOLUTION_API_KEY or AUTHENTICATION_API_KEY in the backend environment');
+      logger.warn('[whatsapp-notify] evolution skipped: set EVOLUTION_API_URL plus EVOLUTION_API_KEY/AUTHENTICATION_API_KEY and provide EVOLUTION_INSTANCE or a saved WhatsApp mapping instance.');
     }
 
     const accountSid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
@@ -661,7 +719,14 @@ export class TransferNotificationService {
       if (deliveredByEvolution.size === 0) {
         logger.warn('[whatsapp-notify] no WhatsApp provider delivered the message. Twilio fallback is not configured.');
       }
-      return;
+      return {
+        attempted: attempts.length > 0,
+        delivered: deliveredByEvolution.size,
+        recipients: phoneDigits.length,
+        instances: evolutionInstances,
+        attempts,
+        ...(attempts.length === 0 ? { skipped_reason: 'evolution_not_configured_or_no_instance' } : {}),
+      };
     }
 
     const recipients = Array.from(new Set(
@@ -670,7 +735,15 @@ export class TransferNotificationService {
         .map((phone) => this.normalizeWhatsAppAddress(phone))
         .filter(Boolean) as string[]
     ));
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) {
+      return {
+        attempted: attempts.length > 0,
+        delivered: deliveredByEvolution.size,
+        recipients: phoneDigits.length,
+        instances: evolutionInstances,
+        attempts,
+      };
+    }
 
     await Promise.all(recipients.map(async (to) => {
       try {
@@ -691,13 +764,20 @@ export class TransferNotificationService {
         logger.warn(`[incoming-transfer] whatsapp send failed: ${message}`);
       }
     }));
+
+    return {
+      attempted: attempts.length > 0 || recipients.length > 0,
+      delivered: deliveredByEvolution.size,
+      recipients: phoneDigits.length,
+      instances: evolutionInstances,
+      attempts,
+    };
   }
 
-  private static hasEvolutionWhatsAppConfig(): boolean {
+  private static hasEvolutionWhatsAppBaseConfig(): boolean {
     return Boolean(
       String(process.env.EVOLUTION_API_URL || process.env.EVOLUTION_BASE_URL || process.env.EVOLUTION_SERVER_URL || '').trim() &&
-      String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || process.env.EVOLUTION_GLOBAL_API_KEY || process.env.AUTHENTICATION_API_KEY || '').trim() &&
-      this.evolutionInstance()
+      String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_APIKEY || process.env.EVOLUTION_GLOBAL_API_KEY || process.env.AUTHENTICATION_API_KEY || '').trim()
     );
   }
 
@@ -710,6 +790,32 @@ export class TransferNotificationService {
       process.env.EVOLUTION_INSTANCE_ID ||
       ''
     ).trim();
+  }
+
+  private static evolutionInstanceCandidates(mappings: ExternalMapping[]): string[] {
+    const fromMappings = mappings
+      .map((mapping) => this.mappingEvolutionInstance(mapping))
+      .filter(Boolean) as string[];
+    const configured = this.evolutionInstance();
+    return Array.from(new Set([
+      ...fromMappings,
+      ...(configured ? [configured] : []),
+    ]));
+  }
+
+  private static mappingEvolutionInstance(mapping: ExternalMapping): string | undefined {
+    const data = mapping.data || {};
+    const instance = String(
+      data.evolution_instance ||
+      data.evolutionInstance ||
+      data.instance ||
+      data.instance_name ||
+      data.instanceName ||
+      data.notify_instance ||
+      data.notifyInstance ||
+      ''
+    ).trim();
+    return instance || undefined;
   }
 
   private static normalizeWhatsAppDigits(value: unknown): string | undefined {

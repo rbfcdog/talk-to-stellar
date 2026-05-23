@@ -191,6 +191,66 @@ function resolveCompletionChannel(payload: any, body: any): { provider: string; 
   return { provider, providerUserId };
 }
 
+function externalChannelMetadata(payload: any, body: any, fallbackPhoneNumber?: string): Record<string, unknown> {
+  const provider = normalizeExternalProvider(String(payload?.provider || body?.provider || body?.external_provider || ''));
+  if (!['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(provider)) return {};
+
+  const phoneNumber = String(
+    fallbackPhoneNumber ||
+    body?.phone_number ||
+    body?.phoneNumber ||
+    payload?.phone_number ||
+    payload?.phoneNumber ||
+    body?.whatsapp_number ||
+    body?.whatsappNumber ||
+    payload?.whatsapp_number ||
+    payload?.whatsappNumber ||
+    body?.provider_user_id ||
+    payload?.provider_user_id ||
+    ''
+  ).replace(/\D+/g, '');
+  const remoteJid = String(
+    body?.remote_jid ||
+    body?.remoteJid ||
+    payload?.remote_jid ||
+    payload?.remoteJid ||
+    body?.jid ||
+    payload?.jid ||
+    ''
+  ).trim();
+  const instance = String(
+    body?.instance ||
+    body?.instanceName ||
+    body?.instance_name ||
+    body?.evolution_instance ||
+    body?.evolutionInstance ||
+    payload?.instance ||
+    payload?.instanceName ||
+    payload?.instance_name ||
+    payload?.evolution_instance ||
+    payload?.evolutionInstance ||
+    ''
+  ).trim();
+  const messageId = String(body?.message_id || body?.messageId || payload?.message_id || payload?.messageId || '').trim();
+  const metadata: Record<string, unknown> = {};
+  if (phoneNumber) {
+    metadata.phone_number = phoneNumber;
+    metadata.whatsapp_number = phoneNumber;
+  }
+  if (remoteJid) {
+    metadata.remote_jid = remoteJid;
+    metadata.jid = remoteJid;
+  }
+  if (instance) {
+    metadata.instance = instance;
+    metadata.evolution_instance = instance;
+  }
+  if (messageId) {
+    metadata.last_message_id = messageId;
+  }
+  return metadata;
+}
+
 async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session: any): Promise<void> {
   const verification = verifyPinAgainstSession(pin, session);
   if (!verification.valid || !verification.needsRehash) return;
@@ -2641,6 +2701,7 @@ export default class ExternalFinalizeController {
       if (!provider || !provider_user_id) {
         return res.status(400).json({ success: false, message: 'token missing provider data' });
       }
+      const channelMetadata = externalChannelMetadata(payload, req.body, normalizedPhoneNumber);
       if (isPhoneProvider(provider) && !normalizedPhoneNumber) {
         normalizedPhoneNumber = provider_user_id;
       }
@@ -2771,6 +2832,7 @@ export default class ExternalFinalizeController {
               email: email || null,
               phone_number: normalizedPhoneNumber || null,
               cpf: normalizedCpf || null,
+              ...channelMetadata,
             },
           });
 
@@ -2863,6 +2925,7 @@ export default class ExternalFinalizeController {
               email: email || null,
               phone_number: normalizedPhoneNumber || null,
               cpf: normalizedCpf || null,
+              ...channelMetadata,
             },
           });
 
@@ -2934,6 +2997,7 @@ export default class ExternalFinalizeController {
           phone_number: normalizedPhoneNumber || null,
           cpf: normalizedCpf || null,
           browser_id: browserId || null,
+          ...channelMetadata,
         },
       });
       if (!onboardingReservation.ok) {
@@ -2983,6 +3047,7 @@ export default class ExternalFinalizeController {
               email: email || null,
               phone_number: normalizedPhoneNumber || null,
               cpf: normalizedCpf || null,
+              ...channelMetadata,
             },
           });
 
@@ -3056,6 +3121,7 @@ export default class ExternalFinalizeController {
           email: email || null,
           phone_number: normalizedPhoneNumber || null,
           cpf: normalizedCpf || null,
+          ...channelMetadata,
         },
       });
 

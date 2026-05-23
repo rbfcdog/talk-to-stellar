@@ -278,7 +278,11 @@ function normalizeOutboundWhatsAppNumber(value: unknown): string {
 function outboundWhatsAppNumberCandidates(value: unknown): string[] {
   const digits = normalizeOutboundWhatsAppNumber(value);
   if (!digits) return [];
-  return [digits, `+${digits}`];
+  return Array.from(new Set([
+    digits,
+    `+${digits}`,
+    `${digits}@s.whatsapp.net`,
+  ]));
 }
 
 function sleep(ms: number): Promise<void> {

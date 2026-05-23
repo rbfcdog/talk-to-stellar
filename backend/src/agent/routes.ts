@@ -542,11 +542,21 @@ export function createAgentRoutes(
           external_provider: normalizedProvider,
           external_provider_user_id: channelProviderUserId,
           external_source: normalizedProvider,
+          ...(metadata?.remote_jid ? { external_remote_jid: String(metadata.remote_jid) } : {}),
+          ...(metadata?.instance ? { external_instance: String(metadata.instance) } : {}),
+          ...(metadata?.message_id ? { external_message_id: String(metadata.message_id) } : {}),
         };
 
         const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
         if (!existing) {
-          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, { language: requestLanguage });
+          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+            language: requestLanguage,
+            ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
+            ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
+            ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
+            ...(metadata?.phone_number ? { phone_number: String(metadata.phone_number) } : {}),
+            ...(metadata?.whatsapp_number ? { whatsapp_number: String(metadata.whatsapp_number) } : {}),
+          });
           return res.status(200).json({
             session_id: session_id || null,
             success: true,
@@ -570,6 +580,11 @@ export function createAgentRoutes(
               userId: String(existing.user_id || '').trim() || undefined,
               source: normalizedProvider,
               language: requestLanguage,
+              ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
+              ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
+              ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
+              ...(metadata?.phone_number ? { phone_number: String(metadata.phone_number) } : {}),
+              ...(metadata?.whatsapp_number ? { whatsapp_number: String(metadata.whatsapp_number) } : {}),
             });
             return res.status(200).json({
               session_id: session_id || null,
@@ -699,6 +714,11 @@ export function createAgentRoutes(
               userId: String(sessionData.user_id || sessionData.email || '').trim() || undefined,
               source: provider,
               language: requestLanguage,
+              ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
+              ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
+              ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
+              ...(metadata?.phone_number ? { phone_number: String(metadata.phone_number) } : {}),
+              ...(metadata?.whatsapp_number ? { whatsapp_number: String(metadata.whatsapp_number) } : {}),
             })
           : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId, { language: requestLanguage });
 
