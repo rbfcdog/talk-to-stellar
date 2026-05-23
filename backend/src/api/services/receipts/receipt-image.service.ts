@@ -274,7 +274,8 @@ export class ReceiptImageService {
     const amount = fitText(`${input.currency}${input.amount}`, 18);
     const subtitle = fitText(String(input.subtitle || 'Pagamento enviado com sucesso'), 46);
     const recipient = fitText(String(input.recipientName || 'Destinatário'), 34);
-    const description = compactReceiptMessage(String(input.description || 'Transferência internacional'));
+    const rawDescription = String(input.description || 'Transferência internacional');
+    const description = compactReceiptMessage(rawDescription);
     const converted = fitText(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`, 24);
     const fee = fitText(String(input.feeLabel || '-'), 30);
     const quote = fitText(String(input.quoteLabel || '-'), 34);
@@ -337,6 +338,7 @@ export class ReceiptImageService {
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
+  <desc>${escapeXml(rawDescription)}</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#0F1731"/>
@@ -419,11 +421,15 @@ export class ReceiptImageService {
 
     const contextMessage = compactReceiptMessage(String(input.contextMessage || '').replace(/\s+/g, ' ').trim());
     const counterpartyKey = String(input.counterpartyKey || '').trim();
-    const description = contextMessage || (counterpartyKey && !/^G[A-Z2-7]{55}$/i.test(counterpartyKey) ? `Chave ${counterpartyKey}` : 'Transferência otimizada');
+    const isPixOffRampReceipt = /pix/i.test(contextMessage) && quoteDestAsset === 'BRL';
+    const description = isPixOffRampReceipt
+      ? 'PIX enviado ao seu PIX'
+      : (contextMessage || (counterpartyKey && !/^G[A-Z2-7]{55}$/i.test(counterpartyKey) ? `Chave ${counterpartyKey}` : 'Transferência otimizada'));
 
     return {
       amount: formatDisplayAmount(input.destinationAmount, 2),
       currency: displaySymbol(quoteDestAsset),
+      subtitle: isPixOffRampReceipt ? 'PIX enviado ao seu PIX' : undefined,
       recipientName: String(input.counterpartyLabel || 'Destinatário'),
       description,
       convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),

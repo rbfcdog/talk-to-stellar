@@ -8,21 +8,86 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-only-jwt-secret-with-enough-entropy';
 
+function mockCreateSupabaseQueryBuilder(table: string) {
+  const responseForTable = () => {
+    if (table === 'wallets') {
+      return {
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows found in test mock' },
+      };
+    }
+
+    if (table === 'users') {
+      return {
+        data: {
+          id: 'test-user-id',
+          email: 'test@example.com',
+          phone_number: '+10000000000',
+        },
+        error: null,
+      };
+    }
+
+    return {
+      data: {
+        id: 'test-row-id',
+        session_id: 'test-session-id',
+        user_id: 'test-user-id',
+      },
+      error: null,
+    };
+  };
+
+  const listResponse = () => ({ data: [], error: null });
+  const writeResponse = () => ({ data: null, error: null });
+  const builder: any = {};
+  const chain = () => builder;
+
+  [
+    'select',
+    'insert',
+    'update',
+    'upsert',
+    'delete',
+    'eq',
+    'neq',
+    'gt',
+    'gte',
+    'lt',
+    'lte',
+    'like',
+    'ilike',
+    'in',
+    'contains',
+    'containedBy',
+    'match',
+    'is',
+    'not',
+    'or',
+    'order',
+    'limit',
+    'range',
+    'returns',
+    'throwOnError',
+  ].forEach((method) => {
+    builder[method] = jest.fn(chain);
+  });
+
+  builder.single = jest.fn(() => Promise.resolve(responseForTable()));
+  builder.maybeSingle = jest.fn(() => Promise.resolve({ data: null, error: null }));
+  builder.call = jest.fn(() => Promise.resolve(listResponse()));
+  builder.then = (onFulfilled: any, onRejected: any) => (
+    Promise.resolve(writeResponse()).then(onFulfilled, onRejected)
+  );
+
+  return builder;
+}
+
 // Mock Supabase by default (can be overridden in tests)
 jest.mock('../src/config/supabase', () => ({
   supabase: {
     rpc: jest.fn().mockResolvedValue({ data: 'vault-secret-id', error: null }),
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: { id: 'test-user-id' }, error: null }),
-      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
-      call: jest.fn().mockResolvedValue({ data: [], error: null }),
-    })),
+    from: jest.fn((table: string) => mockCreateSupabaseQueryBuilder(table)),
   },
 }));
 

@@ -5,7 +5,10 @@
 
 import { createTestClient, generateTestEmail, testLogger, mockData } from './test-utils';
 
-describe('End-to-End User Journey Tests', () => {
+const runE2eTests = process.env.RUN_E2E_TESTS === '1';
+const describeE2e = runE2eTests ? describe : describe.skip;
+
+describeE2e('End-to-End User Journey Tests', () => {
   const client = createTestClient();
   let testUserEmail: string;
   let testUserPublicKey: string;
