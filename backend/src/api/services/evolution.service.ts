@@ -25,6 +25,23 @@ type AgentResponse = {
   raw: any;
 };
 
+type EvolutionSendTextOptions = {
+  reliable?: boolean;
+  attempts?: number;
+  timeoutMs?: number;
+};
+
+class EvolutionSendTextError extends Error {
+  status?: number;
+  body?: unknown;
+
+  constructor(message: string, status?: number, body?: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 const processedMessages = new Map<string, number>();
 const processedMessageContent = new Map<string, number>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
@@ -89,6 +106,7 @@ function evolutionApiKey(): string {
     process.env.EVOLUTION_API_KEY ||
     process.env.EVOLUTION_APIKEY ||
     process.env.EVOLUTION_GLOBAL_API_KEY ||
+    process.env.AUTHENTICATION_API_KEY ||
     ''
   ).trim();
 }
@@ -233,6 +251,38 @@ async function reserveEvolutionWebhookDedupe(input: {
 function shouldSendFailureFallback(): boolean {
   const value = String(process.env.EVOLUTION_SEND_FAILURE_FALLBACK || '').trim().toLowerCase();
   return value === 'true' || value === '1';
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+function normalizeOutboundWhatsAppNumber(value: unknown): string {
+  const raw = String(value || '').trim();
+  const withoutPrefix = raw.startsWith('whatsapp:') ? raw.slice('whatsapp:'.length) : raw;
+  const withoutJid = withoutPrefix.split('@')[0] || withoutPrefix;
+  return withoutJid.replace(/\D+/g, '');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldTryAlternateSendPayload(error: unknown): boolean {
+  const status = error instanceof EvolutionSendTextError ? Number(error.status || 0) : 0;
+  return status === 400 || status === 422;
+}
+
+function shouldRetrySend(error: unknown): boolean {
+  if (error instanceof EvolutionSendTextError) {
+    const status = Number(error.status || 0);
+    return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+  }
+  const name = String((error as any)?.name || '').toLowerCase();
+  const message = String(error instanceof Error ? error.message : error || '').toLowerCase();
+  return name === 'aborterror' || message.includes('aborted') || message.includes('timeout') || message.includes('fetch failed') || message.includes('econn');
 }
 
 function normalizeEvent(value: unknown): string {
@@ -479,35 +529,116 @@ export class EvolutionService {
     };
   }
 
-  static async sendText(instance: string, number: string, text: string): Promise<any> {
-    const { baseUrl, apiKey } = assertEvolutionConfig(instance);
+  private static async sendTextOnce(input: {
+    baseUrl: string;
+    apiKey: string;
+    instance: string;
+    number: string;
+    text: string;
+    timeoutMs: number;
+    bodyVariant: 'legacy' | 'options';
+  }): Promise<any> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     let response: Response;
+    const body = input.bodyVariant === 'options'
+      ? {
+          number: input.number,
+          text: input.text,
+          options: {
+            delay: 300,
+            presence: 'composing',
+            linkPreview: false,
+          },
+        }
+      : {
+          number: input.number,
+          text: input.text,
+          delay: 300,
+          linkPreview: false,
+        };
+
     try {
-      response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
+      response = await fetch(`${input.baseUrl}/message/sendText/${encodeURIComponent(input.instance)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: apiKey,
+          apikey: input.apiKey,
         },
-        body: JSON.stringify({
-          number,
-          text,
-          delay: 300,
-          linkPreview: false,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
     } finally {
       clearTimeout(timeout);
     }
 
-    const body = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+    const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
     if (!response.ok) {
-      throw new Error(`Evolution sendText failed: ${response.status} ${JSON.stringify(body)}`);
+      throw new EvolutionSendTextError(
+        `Evolution sendText failed: ${response.status} ${JSON.stringify(responseBody)}`,
+        response.status,
+        responseBody
+      );
     }
-    return body;
+    return responseBody;
+  }
+
+  static async sendText(instance: string, number: string, text: string, options: EvolutionSendTextOptions = {}): Promise<any> {
+    const { baseUrl, apiKey } = assertEvolutionConfig(instance);
+    const normalizedNumber = normalizeOutboundWhatsAppNumber(number);
+    if (!normalizedNumber) throw new Error('Evolution sendText requires a WhatsApp number.');
+
+    const reliable = Boolean(options.reliable);
+    const attempts = clampNumber(
+      options.attempts || process.env.EVOLUTION_NOTIFY_SEND_ATTEMPTS,
+      reliable ? 3 : 1,
+      1,
+      5
+    );
+    const timeoutMs = clampNumber(
+      options.timeoutMs || process.env.EVOLUTION_NOTIFY_SEND_TIMEOUT_MS,
+      reliable ? 45_000 : 15_000,
+      5_000,
+      180_000
+    );
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await this.sendTextOnce({
+          baseUrl,
+          apiKey,
+          instance,
+          number: normalizedNumber,
+          text,
+          timeoutMs,
+          bodyVariant: 'legacy',
+        });
+      } catch (error) {
+        lastError = error;
+        if (shouldTryAlternateSendPayload(error)) {
+          try {
+            return await this.sendTextOnce({
+              baseUrl,
+              apiKey,
+              instance,
+              number: normalizedNumber,
+              text,
+              timeoutMs,
+              bodyVariant: 'options',
+            });
+          } catch (alternateError) {
+            lastError = alternateError;
+          }
+        }
+      }
+
+      if (attempt >= attempts || !shouldRetrySend(lastError)) break;
+      const backoffMs = Math.min(1000 * attempt, 3000);
+      await sleep(backoffMs);
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Evolution sendText failed'));
   }
 
   static verifyWebhookSecret(value: unknown): boolean {
@@ -568,7 +699,7 @@ export class EvolutionService {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
         if (!shouldSendFailureFallback()) return;
-        void this.sendText(instance, recipient, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.')
+        void this.sendText(instance, recipient, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.', { reliable: true })
           .catch((sendError) => {
             const sendMessage = sendError instanceof Error ? sendError.message : String(sendError);
             logger.warn(`[evolution-webhook] failed to send fallback reply to ***${recipient.slice(-4)}: ${sendMessage}`);
@@ -605,7 +736,7 @@ export class EvolutionService {
       messageId: input.messageId,
     });
     try {
-      await this.sendText(input.instance, input.recipient, response.message);
+      await this.sendText(input.instance, input.recipient, response.message, { reliable: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[evolution-webhook] generated agent reply but Evolution sendText failed for ***${input.recipient.slice(-4)}: ${message}`);

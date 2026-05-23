@@ -610,7 +610,7 @@ export class TransferNotificationService {
     if (this.hasEvolutionWhatsAppConfig() && evolutionInstance) {
       await Promise.all(phoneDigits.map(async (phone) => {
         try {
-          await EvolutionService.sendText(evolutionInstance, phone, text);
+          await EvolutionService.sendText(evolutionInstance, phone, text, { reliable: true });
           deliveredByEvolution.add(phone);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
