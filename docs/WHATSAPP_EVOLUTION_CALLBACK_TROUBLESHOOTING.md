@@ -135,6 +135,28 @@ EVOLUTION_API_KEY=...
 EVOLUTION_INSTANCE=nome-da-instancia-conectada
 ```
 
+No deploy atual do TalkToStellar, os logs mostram a instancia conectada como:
+
+```text
+TalkToStellar
+```
+
+Entao, no servico **backend** do Railway, use:
+
+```text
+EVOLUTION_INSTANCE=TalkToStellar
+EVOLUTION_NOTIFY_INSTANCE=TalkToStellar
+EVOLUTION_DEFAULT_INSTANCE=TalkToStellar
+```
+
+Nao use `main` nesse deploy. Este erro significa que a env do backend esta apontando para uma instancia inexistente:
+
+```text
+Evolution sendText failed: 404 ... The "main" instance does not exist
+```
+
+Depois de trocar essas variaveis, redeploye o backend e gere um link novo.
+
 Aliases aceitos para API key:
 
 ```text

@@ -226,6 +226,53 @@ describe('EvolutionService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('discovers the real Evolution instance when the configured fallback instance does not exist', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url, init] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://evolution.local/message/sendText/main') {
+        return new Response(JSON.stringify({
+          status: 404,
+          error: 'Not Found',
+          response: {
+            message: ['The "main" instance does not exist'],
+          },
+        }), { status: 404 });
+      }
+      if (normalizedUrl === 'http://evolution.local/instance/fetchInstances') {
+        return new Response(JSON.stringify([
+          {
+            instance: {
+              instanceName: 'TalkToStellar',
+              status: 'open',
+            },
+          },
+        ]), { status: 200 });
+      }
+      if (normalizedUrl === 'http://evolution.local/message/sendText/TalkToStellar') {
+        const body = JSON.parse(String((init as RequestInit).body || '{}'));
+        expect(body.number).toBe('5519997624114');
+        expect(body.text).toBe('Pagamento concluido.');
+        return new Response(JSON.stringify({ sent: true, instance: 'TalkToStellar' }), { status: 201 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.sendText(
+      'main',
+      '5519997624114',
+      'Pagamento concluido.',
+      { reliable: true, attempts: 1, timeoutMs: 5000 }
+    )).resolves.toEqual({ sent: true, instance: 'TalkToStellar' });
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'http://evolution.local/message/sendText/main',
+      'http://evolution.local/instance/fetchInstances',
+      'http://evolution.local/message/sendText/TalkToStellar',
+    ]);
+  });
+
   it('tries the Evolution v1 textMessage payload shape when the v2 sendText body is rejected', async () => {
     const requestBodies: any[] = [];
     const fetchMock = jest.fn(async (...args: any[]) => {

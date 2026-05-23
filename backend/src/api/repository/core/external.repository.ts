@@ -72,10 +72,28 @@ export class ExternalRepository {
 
   async createMapping(payload: Partial<ExternalAccountRow>) {
     const normalizedProvider = normalizeExternalProvider(String(payload.provider || ''));
+    const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, String(payload.provider_user_id || ''));
+    let existing: ExternalAccountRow | null = null;
+    try {
+      existing = await this.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
+    } catch {
+      existing = null;
+    }
+
+    const existingData = existing?.data && typeof existing.data === 'object' ? existing.data : {};
+    const incomingData = payload.data && typeof payload.data === 'object' ? payload.data : {};
+    const mergedData = {
+      ...existingData,
+      ...incomingData,
+    };
+
     const normalizedPayload = {
       ...payload,
       provider: normalizedProvider,
-      provider_user_id: normalizeExternalProviderUserId(normalizedProvider, String(payload.provider_user_id || '')),
+      provider_user_id: normalizedProviderUserId,
+      session_id: payload.session_id || existing?.session_id || null,
+      user_id: payload.user_id || existing?.user_id || null,
+      data: Object.keys(mergedData).length > 0 ? mergedData : payload.data || existing?.data || {},
     };
     const { data, error } = await this.supabase
       .from('external_accounts')

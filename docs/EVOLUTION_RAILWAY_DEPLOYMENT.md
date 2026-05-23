@@ -248,7 +248,9 @@ No servico backend, estas variaveis precisam apontar para a Evolution:
 ```env
 EVOLUTION_API_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
 EVOLUTION_API_KEY=change-me-long-random-evolution-global-api-key
-EVOLUTION_INSTANCE=main
+EVOLUTION_INSTANCE=TalkToStellar
+EVOLUTION_NOTIFY_INSTANCE=TalkToStellar
+EVOLUTION_DEFAULT_INSTANCE=TalkToStellar
 EVOLUTION_WEBHOOK_SECRET=change-me-long-random-evolution-webhook-secret
 EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
 EVOLUTION_AGENT_TIMEOUT_MS=120000
@@ -261,7 +263,8 @@ Regras importantes:
 
 - `EVOLUTION_API_KEY` no backend deve ser igual a `AUTHENTICATION_API_KEY` na Evolution.
 - `EVOLUTION_WEBHOOK_SECRET` no backend deve ser igual ao `secret` usado em `WEBHOOK_GLOBAL_URL`.
-- `EVOLUTION_INSTANCE` deve ser igual ao nome da instancia criada na Evolution. Use `main`.
+- `EVOLUTION_INSTANCE` deve ser igual ao nome da instancia criada na Evolution. Pelos logs atuais do projeto, use `TalkToStellar`.
+- Nao use `main` se a Evolution mostra a instancia conectada como `TalkToStellar`. O erro `The "main" instance does not exist` significa que o backend esta apontando para a instancia errada.
 - `EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000` evita respostas duplicadas quando a Evolution reenvia o mesmo webhook em ate 90 segundos. A deduplicacao tambem usa a tabela `idempotency_keys` do Supabase, entao ela funciona mesmo com restart ou mais de uma instancia do backend.
 
 ## 7. Deploy
@@ -301,7 +304,7 @@ AUTHENTICATION_API_KEY
 Crie a instancia:
 
 ```text
-Instance name: main
+Instance name: TalkToStellar
 Integration: WHATSAPP-BAILEYS
 Reject calls: true
 Groups ignore: true
@@ -439,7 +442,7 @@ Verifique no backend:
 ```env
 EVOLUTION_API_URL=https://YOUR-EVOLUTION-SERVICE.up.railway.app
 EVOLUTION_API_KEY=mesmo-valor-do-AUTHENTICATION_API_KEY
-EVOLUTION_INSTANCE=main
+EVOLUTION_INSTANCE=TalkToStellar
 EVOLUTION_AGENT_URL=https://YOUR-BACKEND-SERVICE.up.railway.app/api/agent/query
 EVOLUTION_CONTENT_DEDUPE_TTL_MS=90000
 ```
@@ -481,6 +484,6 @@ Se os servicos tiverem outro nome, troque `Postgres` e `Redis`.
 - [ ] `WEBHOOK_GLOBAL_URL` aponta para o backend.
 - [ ] Backend tem `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE` e `EVOLUTION_WEBHOOK_SECRET`.
 - [ ] Manager abriu.
-- [ ] Instancia `main` criada.
+- [ ] Instancia `TalkToStellar` criada.
 - [ ] QR escaneado.
 - [ ] WhatsApp recebeu resposta do agente.
