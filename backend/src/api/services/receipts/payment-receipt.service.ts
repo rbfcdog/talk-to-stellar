@@ -38,6 +38,7 @@ export type PaymentReceiptInput = {
   completedAt?: string | null;
   status?: string | null;
   contextMessage?: string | null;
+  externalDeliveryText?: string | null;
 };
 
 type FeeBreakdown = {
@@ -211,6 +212,12 @@ export class PaymentReceiptService {
     }
 
     const textWithLink = viewerUrl ? `${text}\nComprovante: ${viewerUrl}` : text;
+    const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
+    const externalDeliveryText = externalDeliveryBase
+      ? viewerUrl
+        ? `${externalDeliveryBase}\nComprovante: ${viewerUrl}`
+        : externalDeliveryBase
+      : textWithLink;
 
     try {
       await this.saveReceiptMessage({
@@ -237,12 +244,15 @@ export class PaymentReceiptService {
     }
 
     try {
+      logger.info(
+        `[receipt] attempting external delivery provider=${input.provider || 'none'} provider_user_tail=${String(input.providerUserId || '').replace(/\D+/g, '').slice(-4) || 'none'} session=${input.sessionId || 'none'} user=${input.userId || 'none'} text_len=${externalDeliveryText.length}`
+      );
       const delivery = await TransferNotificationService.notifyExternalChannelMessage({
         sessionId: input.sessionId,
         userId: input.userId,
         provider: input.provider,
         providerUserId: input.providerUserId,
-        text: textWithLink,
+        text: externalDeliveryText,
         buttonText: viewerUrl ? 'Abrir comprovante' : null,
         buttonUrl: viewerUrl || null,
       });

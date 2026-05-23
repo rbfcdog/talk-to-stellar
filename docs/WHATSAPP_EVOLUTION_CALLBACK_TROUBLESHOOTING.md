@@ -94,6 +94,24 @@ Os logs da Evolution so provam que a instancia esta conectada e recebeu/enviou a
 [evolution-webhook]
 ```
 
+Correcao de callback curto aplicada depois:
+
+- o callback de finalizacao enviado ao WhatsApp agora e uma mensagem curta e explicita, por exemplo `Pagamento concluido.` ou `Conversao concluida.`;
+- o recibo completo continua salvo no historico/web e o link do comprovante continua anexado quando existir;
+- isso evita que uma mensagem longa de recibo atrapalhe a entrega ativa pela Evolution;
+- o backend agora loga tres pontos do caminho:
+
+```text
+[external-finalize] payment completion callback channel provider=whatsapp provider_user_tail=4114 session=...
+[receipt] attempting external delivery provider=whatsapp provider_user_tail=4114 session=... text_len=...
+[whatsapp-notify] attempting Evolution delivery recipients=***4114 instances=TalkToStellar
+```
+
+Se o pagamento conclui e o primeiro log nao aparece, a finalizacao nao chegou na camada de callback.
+Se o primeiro aparece e o segundo nao aparece, o recibo/notificacao nao foi chamado.
+Se o segundo aparece e o terceiro nao aparece, o mapping/canal WhatsApp nao foi resolvido.
+Se o terceiro aparece e nao entrega, o erro deve aparecer em `[whatsapp-notify] evolution send failed...` ou em `[receipt] receipt was not delivered...`.
+
 ## Arquivos relevantes
 
 ```text
