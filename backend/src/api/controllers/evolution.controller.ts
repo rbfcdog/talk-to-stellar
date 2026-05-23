@@ -114,19 +114,29 @@ export default class EvolutionController {
     }
 
     try {
-      await TransferNotificationService.notifyExternalChannelMessage({
+      const report = await TransferNotificationService.notifyExternalChannelMessage({
         sessionId: sessionId || undefined,
         userId: userId || undefined,
         provider,
         providerUserId: providerUserId || undefined,
         text,
       });
-      return res.status(200).json({
-        success: true,
+      const providerKey = provider.toLowerCase();
+      const whatsappRequested = ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(providerKey);
+      const whatsappFailed =
+        whatsappRequested &&
+        report.whatsapp.recipients > 0 &&
+        report.whatsapp.delivered === 0;
+      return res.status(whatsappFailed ? 502 : 200).json({
+        success: !whatsappFailed,
         provider,
         recipient_tail: providerUserId.replace(/\D+/g, '').slice(-4) || null,
         session_id: sessionId || null,
         user_id: userId || null,
+        delivery: report,
+        ...(whatsappFailed
+          ? { message: 'Evolution notification was attempted but no WhatsApp recipient was delivered. Check delivery.attempts for the provider error.' }
+          : {}),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -194,6 +194,27 @@ describe('EvolutionService', () => {
     });
   });
 
+  it('tries a WhatsApp JID outbound number candidate when plain number shapes are rejected', async () => {
+    const attemptedNumbers: string[] = [];
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [, init] = args;
+      const body = JSON.parse(String((init as RequestInit).body || '{}'));
+      attemptedNumbers.push(String(body.number || ''));
+      if (String(body.number || '') === '5519981808102@s.whatsapp.net') {
+        return new Response(JSON.stringify({ sent: true, number: body.number }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: 'number format rejected' }), { status: 400 });
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.sendText('main', '+55 19 98180-8102', 'ok', { reliable: true, attempts: 1 }))
+      .resolves.toEqual({ sent: true, number: '5519981808102@s.whatsapp.net' });
+
+    expect(attemptedNumbers).toContain('5519981808102');
+    expect(attemptedNumbers).toContain('+5519981808102');
+    expect(attemptedNumbers).toContain('5519981808102@s.whatsapp.net');
+  });
+
   it('does not call the agent for unsupported empty messages', async () => {
     const fetchMock = jest.fn();
     global.fetch = fetchMock as any;
