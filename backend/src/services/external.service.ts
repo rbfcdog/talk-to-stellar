@@ -583,7 +583,13 @@ export class ExternalService {
   async createPaymentConfirmUrl(payload: { amount: string; destination: string; destination_name?: string; destination_contact?: Record<string, any>; session_id?: string; owner_id?: string; asset_code?: string; asset_issuer?: string; nonce?: string }, extra = {}) {
     const assetCode = normalizeAssetCode(payload.asset_code || 'XLM');
     const assetIssuer = getAssetIssuer(assetCode, payload.asset_issuer);
-    const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
+    const compactedExtra = compactExtra(extra as Record<string, any>);
+    const resolvedExternalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
+    const explicitExternalContext = this.normalizeExternalLinkContext(compactedExtra);
+    const externalContext = {
+      ...resolvedExternalContext,
+      ...explicitExternalContext,
+    };
     const language = normalizeLanguage((extra as any)?.language || (extra as any)?.lang || (extra as any)?.locale);
 
     const tokenPayload = {
@@ -597,8 +603,8 @@ export class ExternalService {
       session_id: payload.session_id || null,
       owner_id: payload.owner_id || null,
       nonce: payload.nonce || uuidv4(),
+      ...compactedExtra,
       ...externalContext,
-      ...compactExtra(extra as Record<string, any>),
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
@@ -859,8 +865,8 @@ export class ExternalService {
       dest_asset_issuer: destAssetIssuer || null,
       quote: compactQuote(payload.quote),
       nonce: payload.nonce || uuidv4(),
-      ...externalContext,
       ...compactedExtra,
+      ...externalContext,
     };
 
     const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '24h' });
@@ -909,8 +915,8 @@ export class ExternalService {
   }, extra = {}) {
     const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);
     return await this.createConversionConfirmUrl(payload, {
-      ...extra,
       ...externalContext,
+      ...extra,
     });
   }
 

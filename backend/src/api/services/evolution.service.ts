@@ -406,7 +406,7 @@ function assertEvolutionConfig(instance: string) {
   const baseUrl = evolutionBaseUrl();
   const apiKey = evolutionApiKey();
   if (!baseUrl) throw new Error('EVOLUTION_API_URL is required.');
-  if (!apiKey) throw new Error('EVOLUTION_API_KEY is required.');
+  if (!apiKey) throw new Error('EVOLUTION_API_KEY or AUTHENTICATION_API_KEY is required.');
   if (!instance) throw new Error('EVOLUTION_INSTANCE is required.');
   return { baseUrl, apiKey, instance };
 }

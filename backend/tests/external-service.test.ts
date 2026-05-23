@@ -1,4 +1,5 @@
 import { ExternalService } from '../src/services/external.service';
+import { Keypair } from '@stellar/stellar-sdk';
 
 function createQuery(data: any[] = [], error: any = null) {
   const result = { data, error };
@@ -10,6 +11,8 @@ function createQuery(data: any[] = [], error: any = null) {
     limit: jest.fn(async () => result),
     maybeSingle: jest.fn(async () => ({ data: data[0] || null, error })),
     single: jest.fn(async () => ({ data: data[0] || null, error })),
+    insert: jest.fn(async () => ({ data: null, error: null })),
+    upsert: jest.fn(async () => ({ data: null, error: null })),
     then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
   };
   return query;
@@ -130,5 +133,95 @@ describe('ExternalService.checkExternalAccount', () => {
     const account = await service.checkExternalAccount('telegram', '6405034913');
 
     expect(account).toBeNull();
+  });
+});
+
+describe('ExternalService confirmation channel context', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      DISABLE_SHORT_LINKS: 'true',
+      PAYMENT_CONFIRM_BASE: 'https://app.example.com',
+      JWT_SECRET: 'test-jwt-secret',
+    };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('keeps the current WhatsApp channel on payment links even when the session has another saved channel', async () => {
+    const supabase = createSupabaseMock({
+      externalAccounts: [
+        {
+          provider: 'telegram',
+          provider_user_id: '6405034913',
+          session_id: 'session-1',
+          user_id: 'user-1',
+        },
+      ],
+    });
+    const service = new ExternalService(supabase as any);
+    const destination = Keypair.random().publicKey();
+
+    const result = await service.createPaymentConfirmUrl({
+      session_id: 'session-1',
+      owner_id: 'user-1',
+      amount: '10',
+      asset_code: 'USDC',
+      destination,
+      destination_name: 'Ana Silva',
+    }, {
+      provider: 'whatsapp',
+      provider_user_id: '5519981808102',
+      source: 'whatsapp',
+    });
+
+    const parsedUrl = new URL(result.url);
+    const tokenPayload = JSON.parse(Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'));
+
+    expect(parsedUrl.pathname).toBe('/confirm-payment');
+    expect(parsedUrl.searchParams.get('provider')).toBe('whatsapp');
+    expect(parsedUrl.searchParams.get('provider_user_id')).toBe('5519981808102');
+    expect(tokenPayload.provider).toBe('whatsapp');
+    expect(tokenPayload.provider_user_id).toBe('5519981808102');
+  });
+
+  it('keeps the current WhatsApp channel on conversion links when resolved session context points elsewhere', async () => {
+    const supabase = createSupabaseMock({
+      externalAccounts: [
+        {
+          provider: 'telegram',
+          provider_user_id: '6405034913',
+          session_id: 'session-1',
+          user_id: 'user-1',
+        },
+      ],
+    });
+    const service = new ExternalService(supabase as any);
+
+    const result = await service.createConversionConfirmUrlWithContext({
+      session_id: 'session-1',
+      owner_id: 'user-1',
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      dest_amount: '50',
+      dest_asset_code: 'BRL',
+    }, {
+      provider: 'whatsapp',
+      provider_user_id: '5519981808102',
+      source: 'whatsapp',
+    });
+
+    const parsedUrl = new URL(result.url);
+    const tokenPayload = JSON.parse(Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'));
+
+    expect(parsedUrl.pathname).toBe('/confirm-conversion');
+    expect(parsedUrl.searchParams.get('provider')).toBe('whatsapp');
+    expect(parsedUrl.searchParams.get('provider_user_id')).toBe('5519981808102');
+    expect(tokenPayload.provider).toBe('whatsapp');
+    expect(tokenPayload.provider_user_id).toBe('5519981808102');
   });
 });
