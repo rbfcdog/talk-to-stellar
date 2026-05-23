@@ -13,13 +13,18 @@ jest.mock('../src/api/services/evolution.service', () => ({
 }));
 
 import { TransferNotificationService } from '../src/api/services/transfer-notification.service';
+import { supabase } from '../src/config/supabase';
 
 describe('TransferNotificationService', () => {
   const originalEnv = process.env;
+  const originalAgentRepo = (TransferNotificationService as any).agentRepo;
 
   beforeEach(() => {
     sendTextMock.mockReset();
     sendTextMock.mockResolvedValue({ success: true });
+    (supabase.from as jest.Mock).mockReset();
+    (supabase.from as jest.Mock).mockImplementation(() => emptySupabaseSelect());
+    (TransferNotificationService as any).agentRepo = originalAgentRepo;
     process.env = {
       ...originalEnv,
       EVOLUTION_API_URL: 'http://evolution.local',
@@ -33,6 +38,7 @@ describe('TransferNotificationService', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    (TransferNotificationService as any).agentRepo = originalAgentRepo;
   });
 
   it('sends completion callbacks to WhatsApp through Evolution direct mappings', async () => {
@@ -122,4 +128,57 @@ describe('TransferNotificationService', () => {
       { reliable: true }
     );
   });
+
+  it('does not send a second welcome when the session intro was already saved', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+      saveMessageOnce: jest.fn(async () => false),
+    };
+
+    await TransferNotificationService.notifySessionWelcome({
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      userId: 'user-1',
+      provider: 'whatsapp',
+      providerUserId: '5519981808102',
+      name: 'User Example',
+      language: 'pt-BR',
+    });
+
+    expect(sendTextMock).not.toHaveBeenCalled();
+  });
+
+  it('sends one welcome when it wins the session intro dedupe key', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+      saveMessageOnce: jest.fn(async () => true),
+    };
+
+    await TransferNotificationService.notifySessionWelcome({
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      userId: 'user-1',
+      provider: 'whatsapp',
+      providerUserId: '5519981808102',
+      name: 'User Example',
+      language: 'pt-BR',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      expect.stringContaining('Login concluido'),
+      { reliable: true }
+    );
+  });
 });
+
+function emptySupabaseSelect() {
+  const chain: any = {};
+  chain.select = jest.fn(() => chain);
+  chain.eq = jest.fn(() => chain);
+  chain.order = jest.fn(() => chain);
+  chain.limit = jest.fn(() => chain);
+  chain.then = (resolve: any, reject: any) =>
+    Promise.resolve({ data: [], error: null }).then(resolve, reject);
+  return chain;
+}
