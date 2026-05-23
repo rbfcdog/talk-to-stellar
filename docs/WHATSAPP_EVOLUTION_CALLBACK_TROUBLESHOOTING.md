@@ -64,6 +64,15 @@ Agora o backend:
 - tenta payloads Evolution `v2`, `v1` e `hybrid`;
 - retorna relatorio de entrega em `/api/evolution/test-notify`.
 
+Correcao adicional aplicada depois:
+
+- quando um link de confirmacao carrega `provider/provider_user_id`, o backend tambem cria um mapping direto temporario para aquele canal;
+- antes, esse mapping direto podia ter o mesmo `provider_user_id` do mapping salvo no Supabase, mas sem `instance` e sem `remote_jid`;
+- o dedupe mantinha o mapping direto e descartava o mapping salvo mais rico;
+- com isso, o envio dependia da instancia global do env e podia falhar mesmo com `external_accounts.data.instance` correto;
+- agora mappings duplicados sao mesclados, preservando `instance`, `remote_jid`, `whatsapp_number` e demais dados do mapping salvo;
+- `/api/evolution/test-notify` tambem busca mapping por `user_id` mesmo quando nao recebe `session_id`.
+
 ## Arquivos relevantes
 
 ```text

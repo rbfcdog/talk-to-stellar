@@ -242,7 +242,7 @@ export class TransferNotificationService {
     const userId = String(input.userId || session?.user_id || '').trim();
     const mappings = this.dedupeMappings([
       ...(directMapping ? [directMapping] : []),
-      ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
+      ...(sessionId || userId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
     const [, whatsapp] = await Promise.all([
       this.sendTelegramToMappings(mappings, input.text, {
@@ -261,7 +261,7 @@ export class TransferNotificationService {
     const userId = String(input.userId || session?.user_id || '').trim();
     const mappings = this.dedupeMappings([
       ...(directMapping ? [directMapping] : []),
-      ...(sessionId ? await this.findExternalMappings(sessionId, userId) : []),
+      ...(sessionId || userId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
 
     await Promise.all([
@@ -291,13 +291,16 @@ export class TransferNotificationService {
 
   private static async findExternalMappings(sessionId: string, userId?: string): Promise<ExternalMapping[]> {
     try {
-      const bySession = await supabase
-        .from('external_accounts')
-        .select('provider, provider_user_id, data')
-        .eq('session_id', sessionId);
+      let sessionMappings: ExternalMapping[] = [];
+      if (sessionId) {
+        const bySession = await supabase
+          .from('external_accounts')
+          .select('provider, provider_user_id, data')
+          .eq('session_id', sessionId);
 
-      if (bySession.error) throw bySession.error;
-      const sessionMappings = bySession.data || [];
+        if (bySession.error) throw bySession.error;
+        sessionMappings = bySession.data || [];
+      }
       if (!userId) return sessionMappings;
 
       const byUser = await supabase
@@ -424,15 +427,39 @@ export class TransferNotificationService {
   }
 
   private static dedupeMappings(mappings: ExternalMapping[]): ExternalMapping[] {
-    const seen = new Set<string>();
-    return mappings.filter((mapping) => {
+    const byKey = new Map<string, ExternalMapping>();
+    for (const mapping of mappings) {
       const provider = String(mapping.provider || '').trim().toLowerCase();
       const providerUserId = String(mapping.provider_user_id || '').trim();
       const key = `${provider}:${providerUserId}`;
-      if (!provider || !providerUserId || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (!provider || !providerUserId) continue;
+
+      const normalized: ExternalMapping = {
+        ...mapping,
+        provider,
+        provider_user_id: providerUserId,
+      };
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, normalized);
+        continue;
+      }
+
+      const existingData = existing.data || {};
+      const incomingData = normalized.data || {};
+      const mergedData = {
+        ...existingData,
+        ...incomingData,
+      };
+
+      byKey.set(key, {
+        provider: existing.provider || normalized.provider,
+        provider_user_id: existing.provider_user_id || normalized.provider_user_id,
+        data: Object.keys(mergedData).length > 0 ? mergedData : existing.data || normalized.data || null,
+      });
+    }
+
+    return Array.from(byKey.values());
   }
 
   private static async sendTelegramToMappings(
