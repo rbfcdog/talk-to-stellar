@@ -9,6 +9,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 import { useLanguage } from "@/lib/i18n"
+import { mapPublicError } from "@/lib/public-errors"
 
 type FinalizeResponse = {
   success: boolean
@@ -107,6 +108,10 @@ function isPasskeyChallengeExpiredMessage(message?: string) {
 
 function readableErrorMessage(error: any) {
   return error instanceof Error ? error.message : String(error || "")
+}
+
+function publicCreateAccountErrorMessage(error: unknown, language: string) {
+  return mapPublicError(error, language).message
 }
 
 function isLikelyEmbeddedBrowser() {
@@ -1152,7 +1157,11 @@ export default function CreateAccountClient({
                   </button>
                 </div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || L("Algo deu errado.", "Something went wrong.")}</motion.p>}
+              {status === "error" && (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">
+                  {publicCreateAccountErrorMessage(result?.error || result?.message || L("Algo deu errado.", "Something went wrong."), language)}
+                </motion.p>
+              )}
               {PASSKEY_ENROLLMENT_ENABLED && passkeyStatus === 'done' && (
                 <p className="mt-2 break-all text-emerald-300">{L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}</p>
               )}

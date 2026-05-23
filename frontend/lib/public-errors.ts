@@ -75,6 +75,13 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
+  if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) {
+    return {
+      code: "account_preparing",
+      message: copy(language, "Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.", "Your account is still being prepared. Try again in a few seconds."),
+    };
+  }
+
   if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) {
     return {
       code: "invalid_pin",

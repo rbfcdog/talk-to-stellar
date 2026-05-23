@@ -36,6 +36,7 @@ import { mainnetWalletService } from "../api/services/mainnet-wallet.service";
 import { timingSafeEqualString } from "../utils/password";
 import { safeRedactedJson } from "../utils/redaction";
 import { hashWalletPin } from "../utils/pin-hash";
+import { publicErrorMessage } from "../utils/public-error";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
@@ -1743,10 +1744,9 @@ async function executeLogoutSession(input: any): Promise<string> {
       message: "Sessão encerrada com sucesso. Você pode entrar novamente quando quiser.",
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: publicErrorMessage(error, 'Não consegui encerrar a sessão agora. Tente novamente em alguns segundos.'),
     });
   }
 }
@@ -1809,10 +1809,9 @@ async function executeCreateWallet(input: any): Promise<string> {
         : "Account linked successfully!",
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: publicErrorMessage(error, 'Não consegui criar a conta agora. Tente novamente em alguns segundos.'),
     });
   }
 }
@@ -1880,9 +1879,7 @@ async function executeGetAccount(input: any): Promise<string> {
     if (!accountLookup.account) {
       return JSON.stringify({
         success: false,
-        error: accountLookup.account_repair.error
-          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
-          : 'A conta Stellar ainda não existe na rede.',
+        error: accountPreparationMessage(),
         account_repair: accountLookup.account_repair,
       });
     }
@@ -1903,10 +1900,9 @@ async function executeGetAccount(input: any): Promise<string> {
       message: "Account details retrieved",
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: publicErrorMessage(error, 'Não consegui consultar sua conta agora. Tente novamente em alguns segundos.'),
     });
   }
 }
@@ -1919,9 +1915,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
     if (!accountLookup.account) {
       return JSON.stringify({
         success: false,
-        error: accountLookup.account_repair.error
-          ? `A conta Stellar ainda não existe na rede e o reparo automático falhou: ${accountLookup.account_repair.error}`
-          : 'A conta Stellar ainda não existe na rede.',
+        error: accountPreparationMessage(),
         account_repair: accountLookup.account_repair,
       });
     }
@@ -1955,10 +1949,9 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       message: "Technical balances retrieved",
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({
       success: false,
-      error: errorMessage,
+      error: publicErrorMessage(error, 'Não consegui consultar sua conta agora. Tente novamente em alguns segundos.'),
     });
   }
 }
