@@ -3,6 +3,51 @@
  * Tests the complete user registration and wallet setup process
  */
 
+jest.mock('../src/api/services/stellar.service', () => ({
+  StellarService: {
+    createTestAccount: jest.fn(async () => ({
+      publicKey: 'GCF5VFWXAY4UAXUEBNEGRSVHDAFUQJ6PEXBV3XOXBERC7Z6FFC4IAERX',
+      secret: 'SALI6N4H7CMJV554FHABZV2YBJ2W4W2CBJ4QOHN4YVYQ4N3P7SCAGYSF',
+    })),
+  },
+}));
+
+jest.mock('../src/api/services/contact-seed.service', () => ({
+  ContactSeedService: {
+    derivePixKey: jest.fn((userId: string, input?: { email?: string }) => input?.email || `${userId}@pix.test`),
+    createDefaultTrustlines: jest.fn(async () => ({
+      success: true,
+      assets: ['USDC'],
+      errors: [],
+      conversion: { attempted: true, completed: true, sourceAmount: '1', destinationAmount: '1' },
+    })),
+    ensureStarterContactsForUser: jest.fn(async () => undefined),
+  },
+}));
+
+jest.mock('../src/api/services/core/stellar.service', () => {
+  class MockStellarService {
+    async getAccount(publicKey: string) {
+      if (!/^G[A-Z2-7]{55}$/.test(publicKey)) {
+        throw new Error('Invalid Stellar public key');
+      }
+
+      return {
+        id: publicKey,
+        balances: [{ balance: '100.0000000', asset_type: 'native' }],
+        sequence: '1',
+      };
+    }
+
+    async getBalance(publicKey: string) {
+      await this.getAccount(publicKey);
+      return '100.0000000';
+    }
+  }
+
+  return { StellarService: MockStellarService };
+});
+
 import { UserService } from '../src/api/services/user.service';
 import { StellarService } from '../src/api/services/core/stellar.service';
 import { logger } from '../src/utils/logger';

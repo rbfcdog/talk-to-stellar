@@ -6,11 +6,15 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 
 describe('Stellar SDK Integration Tests', () => {
+  const runNetworkTests = process.env.RUN_STELLAR_NETWORK_TESTS === '1';
+  const networkIt = runNetworkTests ? it : it.skip;
   const server = new StellarSDK.Horizon.Server('https://horizon-testnet.stellar.org');
   const isTestnet = true;
 
   let testPublicKey: string;
   let testSecretKey: string;
+  let paymentDestinationPublicKey: string;
+  let assetIssuerPublicKey: string;
   let accountInfo: StellarSDK.Horizon.AccountResponse;
 
   beforeAll(async () => {
@@ -19,8 +23,12 @@ describe('Stellar SDK Integration Tests', () => {
 
     // Generate a new keypair for testing
     const keypair = StellarSDK.Keypair.random();
+    const paymentDestination = StellarSDK.Keypair.random();
+    const assetIssuer = StellarSDK.Keypair.random();
     testPublicKey = keypair.publicKey();
     testSecretKey = keypair.secret();
+    paymentDestinationPublicKey = paymentDestination.publicKey();
+    assetIssuerPublicKey = assetIssuer.publicKey();
 
     console.log(`\n📝 Generated Test Keypair:`);
     console.log(`  - Public: ${testPublicKey.substring(0, 20)}...`);
@@ -62,7 +70,7 @@ describe('Stellar SDK Integration Tests', () => {
       console.log(`✓ Public key validation working`);
     });
 
-    it('should fetch account information from Stellar', async () => {
+    networkIt('should fetch account information from Stellar', async () => {
       console.log('\n📝 Test: Fetch account info from Stellar');
 
       try {
@@ -95,7 +103,7 @@ describe('Stellar SDK Integration Tests', () => {
         })
           .addOperation(
             StellarSDK.Operation.payment({
-              destination: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+              destination: paymentDestinationPublicKey,
               amount: '1',
               asset: StellarSDK.Asset.native(),
             })
@@ -127,7 +135,7 @@ describe('Stellar SDK Integration Tests', () => {
         })
           .addOperation(
             StellarSDK.Operation.payment({
-              destination: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+              destination: paymentDestinationPublicKey,
               amount: '1',
               asset: StellarSDK.Asset.native(),
             })
@@ -159,7 +167,7 @@ describe('Stellar SDK Integration Tests', () => {
         })
           .addOperation(
             StellarSDK.Operation.payment({
-              destination: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+              destination: paymentDestinationPublicKey,
               amount: '1',
               asset: StellarSDK.Asset.native(),
             })
@@ -199,10 +207,10 @@ describe('Stellar SDK Integration Tests', () => {
     it('should create a non-native asset', () => {
       console.log('\n📝 Test: Create non-native asset');
 
-      const asset = new StellarSDK.Asset('USDC', 'GBBD47UZQ5PBC7BY76I3PN4RYSEE3U2IRVIB42IXLKNVGIZCMARVEL6');
+      const asset = new StellarSDK.Asset('USDC', assetIssuerPublicKey);
 
       expect(asset.getCode()).toBe('USDC');
-      expect(asset.getIssuer()).toBe('GBBD47UZQ5PBC7BY76I3PN4RYSEE3U2IRVIB42IXLKNVGIZCMARVEL6');
+      expect(asset.getIssuer()).toBe(assetIssuerPublicKey);
       console.log(`✓ Non-native asset created`);
       console.log(`  - Code: ${asset.getCode()}`);
       console.log(`  - Issuer: ${asset.getIssuer()?.substring(0, 20)}...`);
@@ -217,7 +225,7 @@ describe('Stellar SDK Integration Tests', () => {
         const account = new StellarSDK.Account(testPublicKey, '0');
 
         const sendAsset = StellarSDK.Asset.native();
-        const destAsset = new StellarSDK.Asset('USDC', 'GBBD47UZQ5PBC7BY76I3PN4RYSEE3U2IRVIB42IXLKNVGIZCMARVEL6');
+        const destAsset = new StellarSDK.Asset('USDC', assetIssuerPublicKey);
 
         const transaction = new StellarSDK.TransactionBuilder(account, {
           fee: StellarSDK.BASE_FEE,
@@ -225,7 +233,7 @@ describe('Stellar SDK Integration Tests', () => {
         })
           .addOperation(
             StellarSDK.Operation.pathPaymentStrictReceive({
-              destination: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+              destination: paymentDestinationPublicKey,
               sendAsset: sendAsset,
               sendMax: '100',
               destAsset: destAsset,
@@ -249,7 +257,7 @@ describe('Stellar SDK Integration Tests', () => {
   });
 
   describe('Server Operations', () => {
-    it('should connect to Stellar server', async () => {
+    networkIt('should connect to Stellar server', async () => {
       console.log('\n📝 Test: Connect to Stellar server');
 
       try {
@@ -263,7 +271,7 @@ describe('Stellar SDK Integration Tests', () => {
       }
     });
 
-    it('should fetch latest ledger info', async () => {
+    networkIt('should fetch latest ledger info', async () => {
       console.log('\n📝 Test: Fetch latest ledger');
 
       try {
@@ -283,12 +291,12 @@ describe('Stellar SDK Integration Tests', () => {
       }
     });
 
-    it('should fetch account transactions', async () => {
+    networkIt('should fetch account transactions', async () => {
       console.log('\n📝 Test: Fetch account transactions');
 
       try {
         // Use a known active account for testing
-        const activeAccount = 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5';
+        const activeAccount = paymentDestinationPublicKey;
         const transactions = await server
           .transactions()
           .forAccount(activeAccount)
@@ -323,7 +331,7 @@ describe('Stellar SDK Integration Tests', () => {
       console.log(`  - Total fee: ${totalFee} stroops`);
     });
 
-    it('should handle network fee rates', async () => {
+    networkIt('should handle network fee rates', async () => {
       console.log('\n📝 Test: Handle network fee rates');
 
       try {

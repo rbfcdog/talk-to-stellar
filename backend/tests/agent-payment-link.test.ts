@@ -81,17 +81,18 @@ describe('Agent payment link flow', () => {
     );
   });
 
-  it('uses the configured full frontend URL for login prompts', async () => {
+  it('uses the configured full frontend URL for short login prompts', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
 
     const message = await (graph as any).getOnboardingOrLoginMessage(undefined, true);
 
-    expect(message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
+    expect(message).toContain('https://talk-to-stellar-owxg.vercel.app/r/');
+    expect(message).not.toContain('https://talk-to-stellar-owxg.vercel.app/login');
     expect(message).not.toContain('talktostellar.com/login');
   });
 
-  it('returns deterministic configured login URL without LLM fallback', async () => {
+  it('returns deterministic configured short login URL without LLM fallback', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
     const baseState = createState();
@@ -106,7 +107,8 @@ describe('Agent payment link flow', () => {
 
     const result = await graph.processInput(state);
 
-    expect(result.response_message).toContain('https://talk-to-stellar-owxg.vercel.app/login');
+    expect(result.response_message).toContain('https://talk-to-stellar-owxg.vercel.app/r/');
+    expect(result.response_message).not.toContain('https://talk-to-stellar-owxg.vercel.app/login');
     expect(result.response_message).not.toContain('talktostellar.com/login');
     expect(repository.saveMessage).toHaveBeenCalledWith(
       state.session_id,

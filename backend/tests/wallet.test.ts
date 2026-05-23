@@ -3,6 +3,54 @@
  * Tests wallet creation, retrieval, and management
  */
 
+jest.mock('../src/api/services/stellar.service', () => ({
+  StellarService: {
+    createTestAccount: jest.fn(async () => ({
+      publicKey: 'GBFTTZTKHII4UV2PGQ5JU7WFUMMPZ6WH7NVOVFNVZVU6LJBNKVL7OSSI',
+      secret: 'SAPNUNQ7ENR7S4M5NO4M7YD45PMTVJJWEILPYVGLULIF6QVJ5WJVHX7E',
+    })),
+  },
+}));
+
+jest.mock('../src/api/services/contact-seed.service', () => ({
+  ContactSeedService: {
+    derivePixKey: jest.fn((userId: string, input?: { email?: string }) => input?.email || `${userId}@pix.test`),
+    createDefaultTrustlines: jest.fn(async () => ({
+      success: true,
+      assets: ['USDC'],
+      errors: [],
+      conversion: { attempted: true, completed: true, sourceAmount: '1', destinationAmount: '1' },
+    })),
+    ensureStarterContactsForUser: jest.fn(async () => undefined),
+  },
+}));
+
+jest.mock('../src/api/services/core/stellar.service', () => {
+  class MockStellarService {
+    async getAccount(publicKey: string) {
+      if (!/^G[A-Z2-7]{55}$/.test(publicKey)) {
+        throw new Error('Invalid Stellar public key');
+      }
+
+      return {
+        id: publicKey,
+        balances: [
+          { balance: '100.0000000', asset_type: 'native' },
+          { balance: '25.0000000', asset_type: 'credit_alphanum4', asset_code: 'USDC' },
+        ],
+        sequence: '1',
+      };
+    }
+
+    async getBalance(publicKey: string) {
+      await this.getAccount(publicKey);
+      return '100.0000000';
+    }
+  }
+
+  return { StellarService: MockStellarService };
+});
+
 import { UserService } from '../src/api/services/user.service';
 import { StellarService } from '../src/api/services/core/stellar.service';
 import { WalletRepository } from '../src/api/repository/core/wallet.repository';

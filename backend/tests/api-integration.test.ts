@@ -5,7 +5,10 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-describe('API Integration Tests', () => {
+const runApiIntegrationTests = process.env.RUN_API_INTEGRATION_TESTS === '1';
+const describeApiIntegration = runApiIntegrationTests ? describe : describe.skip;
+
+describeApiIntegration('API Integration Tests', () => {
   let client: AxiosInstance;
   const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api';
   const TEST_EMAIL = `test-${Date.now()}@example.com`;
