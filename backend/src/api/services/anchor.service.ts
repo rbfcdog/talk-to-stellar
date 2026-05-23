@@ -3778,6 +3778,7 @@ export class AnchorService {
   private static async resolveTransferRecipient(userId: string, recipientQuery: string, options: {
     preferredName?: string;
     preferredKey?: string;
+    preferredPublicKey?: string;
   } = {}): Promise<{
     publicKey: string;
     displayName: string;
@@ -3789,72 +3790,99 @@ export class AnchorService {
   }> {
     const query = coalesceString(recipientQuery);
     if (!query) throw apiError('recipient is required for PIX-funded transfer.', 400);
-    const preferredName = coalesceString(options.preferredName);
     const preferredKey = coalesceString(options.preferredKey);
-    if (/^G[A-Z2-7]{55}$/i.test(query)) {
-      return {
-        publicKey: query,
-        displayName: preferredName || truncatePublicKey(query),
-        pixKey: preferredKey || undefined,
-        recipientKey: preferredKey || undefined,
-      };
+    const preferredPublicKey = coalesceString(options.preferredPublicKey);
+
+    const normalizeLookup = (value: unknown) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w\s@.+-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    const normalizePhone = (value: unknown) => String(value || '').replace(/\D+/g, '');
+    const normalizedQuery = normalizeLookup(query);
+    const queryPhone = normalizePhone(query);
+    const requestedPublicKey = /^G[A-Z2-7]{55}$/i.test(query) ? query : preferredPublicKey;
+
+    const contactsResult = await supabase
+      .from('contacts')
+      .select('id, contact_name, stellar_public_key, pix_key, phone_number')
+      .eq('owner_id', userId);
+    if (contactsResult.error) throw apiError(`Could not resolve transfer recipient: ${contactsResult.error.message}`, 500);
+
+    const contacts = (contactsResult.data || []) as any[];
+    const aliasMatch = query.toLowerCase().match(/^(?:contato|contact)\s*(\d{1,3})$/);
+    let contact = requestedPublicKey
+      ? contacts.find((item) => coalesceString(item?.stellar_public_key) === requestedPublicKey)
+      : null;
+
+    if (!contact && aliasMatch) {
+      const index = Number(aliasMatch[1]);
+      if (Number.isFinite(index) && index >= 1 && index <= contacts.length) contact = contacts[index - 1];
     }
 
-    const normalized = query.toLowerCase();
-    const exactContact = await supabase
-      .from('contacts')
-      .select('contact_name, stellar_public_key, pix_key')
-      .eq('owner_id', userId)
-      .ilike('contact_name', query)
-      .maybeSingle();
-    if (exactContact.error) throw apiError(`Could not resolve transfer recipient: ${exactContact.error.message}`, 500);
+    if (!contact && queryPhone.length >= 8) {
+      contact = contacts.find((item) => normalizePhone(item?.phone_number) === queryPhone);
+    }
 
-    let contact = exactContact.data as any;
     if (!contact) {
-      const fuzzy = await supabase
-        .from('contacts')
-        .select('contact_name, stellar_public_key, pix_key')
-        .eq('owner_id', userId)
-        .or(`contact_name.ilike.%${normalized}%,pix_key.ilike.%${normalized}%`)
-        .limit(1)
-        .maybeSingle();
-      if (fuzzy.error) throw apiError(`Could not resolve transfer recipient: ${fuzzy.error.message}`, 500);
-      contact = fuzzy.data as any;
+      contact = contacts.find((item) => {
+        const normalizedName = normalizeLookup(item?.contact_name);
+        if (normalizedName === normalizedQuery) return true;
+        const normalizedPix = normalizeLookup(item?.pix_key);
+        return normalizedPix && normalizedPix === normalizedQuery;
+      });
+    }
+
+    if (!contact) {
+      throw apiError(`Recipient "${query}" was not found in your saved contacts. Open contacts and choose a real recipient before creating a PIX-funded transfer.`, 404);
     }
 
     const contactPublicKey = coalesceString(contact?.stellar_public_key);
+    if (preferredPublicKey && contactPublicKey !== preferredPublicKey) {
+      throw apiError('Recipient data does not match the saved contact. Open contacts and choose the recipient again.', 409);
+    }
     if (contactPublicKey) {
       const walletRepository = new WalletRepository(supabase);
       const destinationWallet = await walletRepository.getWalletByPublicKey(contactPublicKey).catch(() => null);
       return {
         publicKey: contactPublicKey,
-        displayName: preferredName || coalesceString(contact?.contact_name) || query,
-        pixKey: preferredKey || coalesceString(contact?.pix_key) || undefined,
-        recipientKey: preferredKey || coalesceString(contact?.pix_key) || undefined,
+        displayName: coalesceString(contact?.contact_name) || query,
+        pixKey: coalesceString(contact?.pix_key) || preferredKey || undefined,
+        recipientKey: coalesceString(contact?.pix_key) || preferredKey || undefined,
         sessionId: coalesceString(destinationWallet?.session_id) || undefined,
+        userId: coalesceString((destinationWallet as any)?.user_id) || undefined,
         vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
       };
     }
 
-    const walletByPix = await supabase
-      .from('wallets')
-      .select('public_key, name, pix_key, session_id, vault_secret_id')
-      .ilike('pix_key', normalized)
-      .limit(1)
-      .maybeSingle();
-    if (walletByPix.error) throw apiError(`Could not resolve recipient wallet: ${walletByPix.error.message}`, 500);
-    if (walletByPix.data?.public_key) {
-      return {
-        publicKey: String(walletByPix.data.public_key),
-        displayName: preferredName || coalesceString(walletByPix.data.name) || query,
-        pixKey: preferredKey || coalesceString(walletByPix.data.pix_key) || undefined,
-        recipientKey: preferredKey || coalesceString(walletByPix.data.pix_key) || undefined,
-        sessionId: coalesceString(walletByPix.data.session_id) || undefined,
-        vaultSecretId: coalesceString(walletByPix.data.vault_secret_id) || undefined,
-      };
-    }
+    throw apiError(`Saved contact "${coalesceString(contact?.contact_name) || query}" does not have a Stellar destination yet. Choose another contact.`, 409);
+  }
 
-    throw apiError(`Recipient "${query}" was not found in contacts or TalkToStellar wallets.`, 404);
+  static async resolvePixFundedTransferRecipientForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
+    const context = await this.resolveSessionWallet(input);
+    const recipient = await this.resolveTransferRecipient(
+      context.userId,
+      coalesceString(input.recipient, input.recipient_query, input.recipientQuery, input.recipient_public_key, input.recipientPublicKey),
+      {
+        preferredName: coalesceString(input.recipient_name, input.recipientName),
+        preferredKey: coalesceString(input.recipient_key, input.recipientKey, input.recipient_email, input.recipientEmail),
+        preferredPublicKey: coalesceString(input.recipient_public_key, input.recipientPublicKey),
+      }
+    );
+
+    return {
+      success: true,
+      recipient: {
+        contact_name: recipient.displayName,
+        recipient_name: recipient.displayName,
+        recipient_public_key: recipient.publicKey,
+        recipient_key: recipient.recipientKey || recipient.pixKey || '',
+        recipient_pix_key: recipient.pixKey || '',
+        session_id: recipient.sessionId || null,
+      },
+    };
   }
 
   static async submitPixFundedTransferForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
@@ -3881,10 +3909,11 @@ export class AnchorService {
 
     const recipient = await this.resolveTransferRecipient(
       context.userId,
-      coalesceString(input.recipient_public_key, input.recipientPublicKey, input.recipient, input.recipient_query, input.recipientQuery),
+      coalesceString(input.recipient, input.recipient_query, input.recipientQuery, input.recipient_public_key, input.recipientPublicKey),
       {
         preferredName: coalesceString(input.recipient_name, input.recipientName),
         preferredKey: coalesceString(input.recipient_key, input.recipientKey, input.recipient_email, input.recipientEmail),
+        preferredPublicKey: coalesceString(input.recipient_public_key, input.recipientPublicKey),
       }
     );
     if (recipient.vaultSecretId) {

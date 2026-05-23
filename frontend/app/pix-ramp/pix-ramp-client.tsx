@@ -566,6 +566,10 @@ export default function PixRampClient({
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferRecipientKey, setTransferRecipientKey] = useState("");
   const [transferRecipientPublicKey, setTransferRecipientPublicKey] = useState("");
+  const [verifiedTransferRecipient, setVerifiedTransferRecipient] = useState<RampResponse | null>(null);
+  const [recipientVerificationLoading, setRecipientVerificationLoading] = useState(false);
+  const [recipientVerificationError, setRecipientVerificationError] = useState("");
+  const [recipientDetailsOpen, setRecipientDetailsOpen] = useState(false);
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
@@ -612,14 +616,29 @@ export default function PixRampClient({
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
-  const transferRecipientLabel = String(pixFundedTransferResult?.recipient_name || transferRecipient || "").trim();
+  const transferRecipientLabel = String(
+    pixFundedTransferResult?.recipient_name ||
+    verifiedTransferRecipient?.recipient_name ||
+    verifiedTransferRecipient?.contact_name ||
+    transferRecipient ||
+    ""
+  ).trim();
   const transferRecipientDisplayKey = String(
     pixFundedTransferResult?.recipient_key ||
     pixFundedTransferResult?.recipient_email ||
     pixFundedTransferResult?.recipient_pix_key ||
+    verifiedTransferRecipient?.recipient_key ||
+    verifiedTransferRecipient?.recipient_pix_key ||
     transferRecipientKey ||
     ""
   ).trim();
+  const verifiedRecipientPublicKey = String(
+    pixFundedTransferResult?.recipient_public_key ||
+    verifiedTransferRecipient?.recipient_public_key ||
+    ""
+  ).trim();
+  const transferRecipientVerified = Boolean(!transferFlow || verifiedTransferRecipient?.recipient_public_key || pixFundedTransferResult?.recipient_public_key);
+  const safeTransferRecipientLabel = transferRecipientVerified ? transferRecipientLabel : "";
   const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
 
   const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
@@ -688,6 +707,11 @@ export default function PixRampClient({
   const quoteCostContext = transferFlow && transferRecipientLabel
     ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
     : L("valor que entra na sua conta", "value credited to your account");
+  const transferRecipientBlocker = transferFlow && !transferRecipientVerified
+    ? recipientVerificationLoading
+      ? L("Validando destinatário salvo...", "Validating saved recipient...")
+      : recipientVerificationError || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX.")
+    : "";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
@@ -1160,6 +1184,72 @@ export default function PixRampClient({
     return payload;
   }, [L, addDebugLog, externalProvider, externalProviderUserId, externalSource, language, sessionId]);
 
+  useEffect(() => {
+    if (!queryReady || !transferFlow) {
+      setVerifiedTransferRecipient(null);
+      setRecipientVerificationError("");
+      setRecipientVerificationLoading(false);
+      return;
+    }
+
+    const recipient = transferRecipient.trim();
+    if (!recipient || !sessionId) {
+      setVerifiedTransferRecipient(null);
+      setRecipientVerificationError(recipient ? "" : L("Destinatário não informado.", "Recipient missing."));
+      setRecipientVerificationLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRecipientVerificationLoading(true);
+    setRecipientVerificationError("");
+
+    callRamp("/api/ramp/etherfuse/sandbox/transfer-recipient", {
+      recipient,
+      recipient_name: recipient,
+      recipient_key: transferRecipientKey || undefined,
+      recipient_public_key: transferRecipientPublicKey || undefined,
+    }, "POST")
+      .then((payload) => {
+        if (cancelled) return;
+        const resolved = payload?.recipient || payload;
+        const nextName = String(resolved?.recipient_name || resolved?.contact_name || "").trim();
+        const nextKey = String(resolved?.recipient_key || resolved?.recipient_pix_key || "").trim();
+        const nextPublicKey = String(resolved?.recipient_public_key || "").trim();
+        if (!nextPublicKey) {
+          throw new Error(L("Esse contato não tem conta de destino ativa.", "This contact does not have an active destination account."));
+        }
+        setVerifiedTransferRecipient(resolved);
+        if (nextName && nextName !== transferRecipient) setTransferRecipient(nextName);
+        if (nextKey && nextKey !== transferRecipientKey) setTransferRecipientKey(nextKey);
+        if (nextPublicKey && nextPublicKey !== transferRecipientPublicKey) setTransferRecipientPublicKey(nextPublicKey);
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
+        const message = requestError instanceof Error
+          ? requestError.message
+          : L("Esse destinatário não existe nos seus contatos salvos.", "This recipient does not exist in your saved contacts.");
+        setVerifiedTransferRecipient(null);
+        setRecipientVerificationError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setRecipientVerificationLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    L,
+    callRamp,
+    queryReady,
+    sessionId,
+    transferFlow,
+    transferRecipient,
+    transferRecipientKey,
+    transferRecipientPublicKey,
+  ]);
+
   const callRampGet = useCallback(async (path: string, params?: Record<string, string>, authOverride?: RampAuth) => {
     const auth = authOverride || { session_id: sessionId };
     if (!auth.session_id) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
@@ -1437,6 +1527,9 @@ export default function PixRampClient({
   async function confirmQuoteAndCreatePix() {
     await runAtomicAction("preparar-pix", async () => {
       if (waitingForReceiveEstimate) throw new Error(L("Calculando o valor do PIX. Tente novamente em alguns segundos.", "Calculating the PIX amount. Try again in a few seconds."));
+      if (transferFlow && !transferRecipientVerified) {
+        throw new Error(transferRecipientBlocker || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX."));
+      }
       let quoteForOrder = quote;
       let customerForOrder = customerPayload;
       let authForOrder: RampAuth | undefined;
@@ -1586,6 +1679,9 @@ export default function PixRampClient({
   async function submitPixFundedTransfer(completedTransaction?: RampResponse) {
     const auth = await resolveWalletFromEmail();
     const pin = getValidatedWalletPin();
+    if (!transferRecipientVerified || !verifiedRecipientPublicKey) {
+      throw new Error(transferRecipientBlocker || L("Escolha um contato salvo real antes de enviar.", "Choose a real saved contact before sending."));
+    }
     const requestedAutoPayAmount = feeAdjustedAutoPayAmount || (autoPayAmount && autoPayAsset ? autoPayAmount : "");
     const requestedAutoPayAsset = feeAdjustedAutoPayAsset || autoPayAsset || targetAsset;
     const transferAmount = requestedAutoPayAmount || (targetAsset === "BRL"
@@ -1593,10 +1689,10 @@ export default function PixRampClient({
       : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || ""));
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/pix-funded-transfer", {
       intent_id: atomicIntentKey,
-      recipient: transferRecipient,
-      recipient_name: transferRecipient,
+      recipient: transferRecipientLabel,
+      recipient_name: transferRecipientLabel,
       recipient_key: transferRecipientKey || undefined,
-      recipient_public_key: transferRecipientPublicKey || undefined,
+      recipient_public_key: verifiedRecipientPublicKey,
       amount: transferAmount,
       asset_code: requestedAutoPayAsset,
       order_id: orderId,
@@ -1740,15 +1836,19 @@ export default function PixRampClient({
             <div className="space-y-4">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
                   {rampMode === "onramp"
-                    ? transferFlow && transferRecipientLabel
-                      ? L(`Pagar ${transferRecipientLabel} com PIX`, `Pay ${transferRecipientLabel} with PIX`)
+                    ? transferFlow && safeTransferRecipientLabel
+                      ? L(`Pagar ${safeTransferRecipientLabel} com PIX`, `Pay ${safeTransferRecipientLabel} with PIX`)
+                      : transferFlow
+                        ? L("PIX para contato salvo", "PIX to saved contact")
                       : t("pix_add_title")
                     : t("pix_send_title")}
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
                   {rampMode === "onramp"
-                    ? transferFlow && transferRecipientLabel
-                      ? t("pix_transfer_subtitle", { recipient: transferRecipientLabel })
+                    ? transferFlow && safeTransferRecipientLabel
+                      ? t("pix_transfer_subtitle", { recipient: safeTransferRecipientLabel })
+                      : transferFlow
+                        ? L("Antes de gerar o PIX, validamos se o destinatário existe nos seus contatos salvos.", "Before creating PIX, we verify that the recipient exists in your saved contacts.")
                       : t("pix_add_subtitle")
                     : t("pix_off_subtitle")}
                 </p>
@@ -1765,6 +1865,31 @@ export default function PixRampClient({
                   <p className="mt-2 text-sm text-slate-200">{transferFlow && transferRecipientLabel ? transferRecipientLabel : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
                   {transferFlow && transferRecipientDisplayKey && (
                     <p className="mt-1 break-all text-xs text-slate-400">{transferRecipientDisplayKey}</p>
+                  )}
+                  {transferFlow && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        className="rounded-full border border-emerald-300/35 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-300/10"
+                        onClick={() => setRecipientDetailsOpen((current) => !current)}
+                      >
+                        {recipientDetailsOpen ? L("Ocultar dados reais", "Hide real details") : L("Ver dados reais", "See real details")}
+                      </button>
+                      {recipientVerificationLoading && (
+                        <p className="mt-2 text-xs font-bold text-emerald-100">{L("Validando contato salvo...", "Validating saved contact...")}</p>
+                      )}
+                      {recipientVerificationError && (
+                        <p className="mt-2 text-xs font-bold text-rose-200">{recipientVerificationError}</p>
+                      )}
+                      {recipientDetailsOpen && transferRecipientVerified && (
+                        <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs text-emerald-50">
+                          <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Contato salvo validado", "Saved contact verified")}</p>
+                          <p className="mt-2"><span className="text-emerald-100/70">{L("Nome real", "Real name")}:</span> {transferRecipientLabel}</p>
+                          {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-emerald-100/70">{L("Chave", "Key")}:</span> {transferRecipientDisplayKey}</p>}
+                          {verifiedRecipientPublicKey && <p className="mt-1 break-all font-mono text-[11px]"><span className="font-sans text-emerald-100/70">{L("Conta Stellar", "Stellar account")}:</span> {verifiedRecipientPublicKey}</p>}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
             </div>
@@ -2112,15 +2237,29 @@ export default function PixRampClient({
             {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
                 <p>
-                  {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel}.`)}
+                  {transferRecipientVerified
+                    ? L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel}.`)
+                    : L(`Antes de gerar o PIX, vamos validar se "${transferRecipient}" existe nos seus contatos salvos.`, `Before creating PIX, we will verify that "${transferRecipient}" exists in your saved contacts.`)}
                 </p>
                 {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-emerald-100/75">{transferRecipientDisplayKey}</p>}
+                {transferRecipientVerified ? (
+                  <p className="mt-2 text-xs text-emerald-100/80">
+                    {L("Destinatário validado nos seus contatos salvos. Use o botão no topo para conferir os dados reais.", "Recipient verified in your saved contacts. Use the top button to inspect the real details.")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-rose-100">
+                    {transferRecipientBlocker}
+                  </p>
+                )}
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-3xl bg-emerald-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+            <button className="mt-6 w-full rounded-3xl bg-emerald-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
               {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando PIX...", "Preparing PIX...")}</span> : L("Gerar PIX pela rota mais otimizada", "Generate PIX with the most optimized route")}
             </button>
+            {transferRecipientBlocker && (
+              <p className="mt-3 text-sm font-bold text-rose-100">{transferRecipientBlocker}</p>
+            )}
 
             {quote && (
               <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
