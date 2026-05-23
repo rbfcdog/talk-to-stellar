@@ -14,35 +14,255 @@ function amount(value: number, decimals = 6): string {
   return rounded(value, decimals).toFixed(decimals).replace(/\.?0+$/, '') || '0';
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const parsed = String(value || '').trim();
+    if (parsed) return parsed;
+  }
+  return '';
+}
+
+function firstPositiveNumber(...values: unknown[]): number {
+  for (const value of values) {
+    const parsed = toNumber(value);
+    if (parsed > 0) return parsed;
+  }
+  return 0;
+}
+
+function normalizeCurrency(value: unknown, fallback: 'BRL' | 'USD' | 'USDC' = 'USD'): 'BRL' | 'USD' | 'USDC' {
+  const normalized = String(value || '').trim().toUpperCase().replace(/^USD$/, 'USD');
+  if (normalized === 'BRL') return 'BRL';
+  if (normalized === 'USDC') return 'USDC';
+  if (normalized === 'USD') return 'USD';
+  return fallback;
+}
+
+function usdEquivalent(value: number, currency: 'BRL' | 'USD' | 'USDC', fxRate: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (currency === 'BRL') return fxRate > 0 ? value / fxRate : 0;
+  return value;
+}
+
+function brlEquivalent(value: number, currency: 'BRL' | 'USD' | 'USDC', fxRate: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (currency === 'BRL') return value;
+  return fxRate > 0 ? value * fxRate : 0;
+}
+
+function quoteProviderFee(input: {
+  quote?: Record<string, unknown>;
+  sourceAmount?: unknown;
+  fallbackCurrency: 'BRL' | 'USD' | 'USDC';
+  defaultSource: string;
+}): {
+  amountOriginal: number;
+  currency: 'BRL' | 'USD' | 'USDC';
+  bps: number;
+  source: string;
+} {
+  const quote = asRecord(input.quote);
+  const rawFee = firstPositiveNumber(
+    quote.feeAmount,
+    quote.fee,
+    quote.anchorProviderFeeAmount,
+    quote.provider_fee_amount,
+    quote.feeAmountInFiat,
+  );
+  const bps = firstPositiveNumber(quote.feeBps, quote.fee_bps);
+  const sourceAmount = firstPositiveNumber(input.sourceAmount, quote.sourceAmount, quote.fromAmount);
+  const amountOriginal = rawFee > 0
+    ? rawFee
+    : bps > 0 && sourceAmount > 0
+      ? sourceAmount * (bps / 10000)
+      : 0;
+  const currency = normalizeCurrency(
+    quote.feeCurrency ||
+    quote.fee_currency ||
+    quote.anchorProviderFeeCurrency,
+    input.fallbackCurrency,
+  );
+
+  return {
+    amountOriginal,
+    currency,
+    bps,
+    source: amountOriginal > 0
+      ? input.defaultSource
+      : Object.keys(quote).length
+        ? `${input.defaultSource}_no_fee_returned`
+        : 'pending_provider_quote',
+  };
+}
+
+function extractOnRampFee(input: {
+  transfer: InternationalTransfer;
+  fxRate: number;
+}): {
+  amountOriginal: number;
+  amountBrl: number;
+  amountUsd: number;
+  currency: 'BRL' | 'USD' | 'USDC';
+  bps: number;
+  source: string;
+} {
+  const metadata = asRecord(input.transfer.reconciliation_metadata);
+  const pixIntent = asRecord(metadata.pix_funding_intent);
+  const raw = asRecord(pixIntent.raw);
+  const quote = asRecord(raw.quote || pixIntent.quote);
+  const explicitFee = firstPositiveNumber(
+    raw.provider_onramp_fee_amount,
+    raw.provider_on_ramp_fee_amount,
+    metadata.provider_onramp_fee_amount,
+  );
+
+  const quoted = quoteProviderFee({
+    quote,
+    sourceAmount: input.transfer.brl_amount,
+    fallbackCurrency: 'BRL',
+    defaultSource: 'etherfuse_on_ramp_quote',
+  });
+  const currency = explicitFee > 0 ? 'BRL' : quoted.currency;
+  const amountOriginal = explicitFee > 0 ? explicitFee : quoted.amountOriginal;
+  const source = explicitFee > 0
+    ? 'etherfuse_on_ramp_order_context'
+    : quoted.source === 'pending_provider_quote' && String(pixIntent.provider || '').trim()
+      ? 'etherfuse_on_ramp_quote_pending'
+      : quoted.source;
+
+  return {
+    amountOriginal,
+    amountBrl: brlEquivalent(amountOriginal, currency, input.fxRate),
+    amountUsd: usdEquivalent(amountOriginal, currency, input.fxRate),
+    currency,
+    bps: quoted.bps,
+    source,
+  };
+}
+
+function extractOffRampFee(input: {
+  transfer: InternationalTransfer;
+  payout?: PayoutInstruction;
+  fxRate: number;
+}): {
+  amountOriginal: number;
+  amountBrl: number;
+  amountUsd: number;
+  currency: 'BRL' | 'USD' | 'USDC';
+  bps: number;
+  source: string;
+  provider: string;
+} {
+  const metadata = asRecord(input.transfer.reconciliation_metadata);
+  const payout = input.payout || (asRecord(metadata.payout_instruction) as PayoutInstruction | undefined);
+  const payoutMetadata = asRecord(payout?.metadata);
+  const provider = firstText(payout?.provider_name, input.transfer.payout_provider, 'pending');
+  const quote = asRecord(
+    payoutMetadata.quote ||
+    payoutMetadata.off_ramp_quote ||
+    payoutMetadata.provider_quote ||
+    payoutMetadata.raw_quote,
+  );
+  const explicitFee = firstPositiveNumber(
+    payoutMetadata.provider_off_ramp_fee_amount,
+    payoutMetadata.off_ramp_fee_amount,
+    payoutMetadata.fee_amount,
+  );
+  const explicitCurrency = normalizeCurrency(
+    payoutMetadata.provider_off_ramp_fee_currency ||
+    payoutMetadata.off_ramp_fee_currency ||
+    payoutMetadata.fee_currency,
+    provider === 'etherfuse' ? 'BRL' : 'USD',
+  );
+  const quoted = quoteProviderFee({
+    quote,
+    sourceAmount: payoutMetadata.requested_source_amount || payout?.amount_usd,
+    fallbackCurrency: explicitCurrency,
+    defaultSource: `${provider}_off_ramp_quote`,
+  });
+  const amountOriginal = explicitFee > 0 ? explicitFee : quoted.amountOriginal;
+  const currency = explicitFee > 0 ? explicitCurrency : quoted.currency;
+  const source = amountOriginal > 0
+    ? (explicitFee > 0 ? `${provider}_off_ramp_metadata` : quoted.source)
+    : provider === 'pending'
+      ? 'pending_payout_adapter'
+      : `${provider}_off_ramp_quote_pending`;
+
+  return {
+    amountOriginal,
+    amountBrl: brlEquivalent(amountOriginal, currency, input.fxRate),
+    amountUsd: usdEquivalent(amountOriginal, currency, input.fxRate),
+    currency,
+    bps: quoted.bps,
+    source,
+    provider,
+  };
+}
+
 function buildRouteMetrics(transfer: InternationalTransfer) {
   const sourceBrl = toNumber(transfer.brl_amount);
   const fxRate = toNumber(transfer.fx_rate);
   const baselineUsd = fxRate > 0 ? sourceBrl / fxRate : 0;
-  const destinationUsd = toNumber(transfer.quoted_usd_amount);
+  const quotedDestinationUsd = toNumber(transfer.quoted_usd_amount);
   const platformFeeBrl = toNumber(transfer.fees?.platform_fee?.amount);
   const platformFeeUsd = fxRate > 0 ? platformFeeBrl / fxRate : 0;
-  const providerFeeUsd = toNumber(transfer.fees?.estimated_provider_fee?.amount);
-  const totalFeeUsd = toNumber(transfer.fees?.total_fee?.amount_usd_equivalent) || (platformFeeUsd + providerFeeUsd);
+  const onRampFee = extractOnRampFee({ transfer, fxRate });
+  const offRampFee = extractOffRampFee({ transfer, fxRate });
+  const configuredProviderFeeUsd = toNumber(transfer.fees?.estimated_provider_fee?.amount);
+  const quoteMetadata = asRecord(asRecord(asRecord(transfer.reconciliation_metadata).quote).metadata);
+  const quoteFeeBreakdown = asRecord(quoteMetadata.fee_breakdown);
+  const taxFeeUsd = firstPositiveNumber(quoteFeeBreakdown.tax_estimate_usd, quoteFeeBreakdown.tax_fee_usd);
+  const knownComponentFeeUsd = platformFeeUsd + onRampFee.amountUsd + offRampFee.amountUsd + taxFeeUsd;
+  const impliedCostUsd = Math.max(0, baselineUsd - quotedDestinationUsd);
+  const unallocatedRouteDeltaUsd = Math.max(0, impliedCostUsd - knownComponentFeeUsd);
+  const empiricalFeeUsd = knownComponentFeeUsd + unallocatedRouteDeltaUsd;
+  const empiricalFeeBrl = fxRate > 0 ? empiricalFeeUsd * fxRate : 0;
+  const destinationUsd = Math.max(0, baselineUsd - empiricalFeeUsd);
   const routeDeltaUsd = destinationUsd - baselineUsd;
-  const impliedCostUsd = Math.max(0, baselineUsd - destinationUsd);
-  const feeDeltaUsd = Math.abs(impliedCostUsd - totalFeeUsd);
   const retainedPct = baselineUsd > 0 ? (destinationUsd / baselineUsd) * 100 : 0;
-  const effectiveFeeBps = baselineUsd > 0 ? (impliedCostUsd / baselineUsd) * 10000 : 0;
+  const effectiveFeeBps = baselineUsd > 0 ? (empiricalFeeUsd / baselineUsd) * 10000 : 0;
 
   return {
     source_amount_brl: amount(sourceBrl, 2),
     fx_rate_brl_per_usd: amount(fxRate, 8),
     baseline_usd_before_route_costs: amount(baselineUsd),
+    quoted_destination_usd: amount(quotedDestinationUsd),
     destination_usd_after_route_costs: amount(destinationUsd),
     platform_fee_brl: amount(platformFeeBrl, 2),
     platform_fee_usd_equivalent: amount(platformFeeUsd),
-    provider_fee_usd: amount(providerFeeUsd),
-    total_fee_usd_equivalent: amount(totalFeeUsd),
+    talktostellar_fee_brl: amount(platformFeeBrl, 2),
+    talktostellar_fee_usd_equivalent: amount(platformFeeUsd),
+    provider_on_ramp_fee_amount: amount(onRampFee.amountOriginal),
+    provider_on_ramp_fee_currency: onRampFee.currency,
+    provider_on_ramp_fee_brl_equivalent: amount(onRampFee.amountBrl, 2),
+    provider_on_ramp_fee_usd_equivalent: amount(onRampFee.amountUsd),
+    provider_on_ramp_fee_bps: amount(onRampFee.bps, 2),
+    provider_on_ramp_fee_source: onRampFee.source,
+    provider_off_ramp_fee_amount: amount(offRampFee.amountOriginal),
+    provider_off_ramp_fee_currency: offRampFee.currency,
+    provider_off_ramp_fee_brl_equivalent: amount(offRampFee.amountBrl, 2),
+    provider_off_ramp_fee_usd_equivalent: amount(offRampFee.amountUsd),
+    provider_off_ramp_fee_bps: amount(offRampFee.bps, 2),
+    provider_off_ramp_fee_source: offRampFee.source,
+    off_ramp_provider: offRampFee.provider,
+    configured_provider_fee_usd: amount(configuredProviderFeeUsd),
+    tax_fee_usd_equivalent: amount(taxFeeUsd),
+    tax_fee_source: taxFeeUsd > 0 ? 'configured_quote_tax_component' : 'not_returned_by_provider',
+    known_component_fee_usd: amount(knownComponentFeeUsd),
+    unallocated_route_delta_usd: amount(unallocatedRouteDeltaUsd),
+    total_fee_usd_equivalent: amount(empiricalFeeUsd),
+    total_empirical_fee_usd: amount(empiricalFeeUsd),
+    total_empirical_fee_brl_equivalent: amount(empiricalFeeBrl, 2),
     route_delta_usd: amount(routeDeltaUsd),
     implied_cost_usd: amount(impliedCostUsd),
     retained_pct: amount(retainedPct, 4),
     effective_fee_bps: amount(effectiveFeeBps, 2),
-    fee_delta_usd: amount(feeDeltaUsd),
+    fee_delta_usd: amount(Math.abs((baselineUsd - destinationUsd) - empiricalFeeUsd)),
+    fee_source: 'empirical_on_off_ramp_components',
   };
 }
 

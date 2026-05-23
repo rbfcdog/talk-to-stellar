@@ -95,6 +95,11 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(quote.source_currency).toBe('BRL');
     expect(quote.destination_currency).toBe('USD');
     expect(quote.quote_source).toBe('stellar_pathfinding');
+    expect(quote.estimated_provider_fee).toMatchObject({
+      amount: '0',
+      currency: 'USD',
+    });
+    expect((quote.metadata as any)?.provider_fee_source).toBe('pending_provider_quote');
     expect(Number(quote.estimated_usdc_amount)).toBeGreaterThan(0);
     expect(Number(quote.estimated_usd_amount)).toBeGreaterThan(0);
     expect(repository.quotes.get(quote.quote_id)).toBeDefined();
@@ -150,7 +155,17 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
         operation_id: 'op-1',
         status: 'pending',
         payment_instructions: { pixCode: '000201' },
-        raw: { mode: 'mock', no_real_pix_created: true },
+        raw: {
+          mode: 'mock',
+          no_real_pix_created: true,
+          quote: {
+            id: 'etherfuse-on-quote-1',
+            fromAmount: '560',
+            toAmount: '99.9',
+            feeAmount: '0.56',
+            feeBps: '10',
+          },
+        },
       })),
     };
     const stellarSettlement = {
@@ -176,6 +191,16 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       amount_usd: '99',
       currency: 'USD',
       created_at: new Date().toISOString(),
+      metadata: {
+        quote: {
+          id: 'etherfuse-off-quote-1',
+          fromAmount: '99.7',
+          toAmount: '557.2',
+          feeAmount: '0.28',
+          feeBps: '5',
+        },
+        provider_off_ramp_fee_currency: 'BRL',
+      },
       destination: {
         accountHolderName: 'Rodrigo Banin',
         accountHolderType: 'individual',
@@ -246,6 +271,11 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       source_amount_brl: '560',
       fx_rate_brl_per_usd: '5.6',
       baseline_usd_before_route_costs: '100',
+      provider_on_ramp_fee_brl_equivalent: '0.56',
+      provider_on_ramp_fee_usd_equivalent: '0.1',
+      provider_off_ramp_fee_brl_equivalent: '0.28',
+      provider_off_ramp_fee_usd_equivalent: '0.05',
+      total_empirical_fee_usd: '0.45',
     });
     expect(evidence.metric_validation).toMatchObject({
       source_amount_positive: true,

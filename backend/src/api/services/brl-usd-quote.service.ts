@@ -24,16 +24,6 @@ function fallbackBrlPerUsd(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 5.6;
 }
 
-function providerFeeBps(): number {
-  const parsed = Number(process.env.USD_PAYOUT_PROVIDER_FEE_BPS || 25);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : 25;
-}
-
-function providerMinFeeUsd(): number {
-  const parsed = Number(process.env.USD_PAYOUT_PROVIDER_MIN_FEE_USD || 0);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-}
-
 type QuoteDeps = {
   repository?: InternationalTransferRepository;
   quoteBrlToUsdc?: (amountBrl: string) => Promise<BrlReferenceQuote>;
@@ -87,11 +77,10 @@ export class BrlUsdQuoteService {
     const platformFeeBrl = toPositiveNumber(platformFee.feeAmount);
     const platformFeeUsd = brlPerUsd > 0 ? platformFeeBrl / brlPerUsd : 0;
     const estimatedUsdcAfterPlatformFee = Math.max(0, estimatedUsdcGross - platformFeeUsd);
-    const providerFeeRate = providerFeeBps() / 10000;
-    const estimatedProviderFeeUsd = Math.max(estimatedUsdcAfterPlatformFee * providerFeeRate, providerMinFeeUsd());
-    const estimatedUsd = Math.max(0, estimatedUsdcAfterPlatformFee - estimatedProviderFeeUsd);
-    const totalFeeUsd = platformFeeUsd + estimatedProviderFeeUsd;
-    const totalFeeBrl = platformFeeBrl + estimatedProviderFeeUsd * brlPerUsd;
+    const estimatedProviderFeeUsd = 0;
+    const estimatedUsd = estimatedUsdcAfterPlatformFee;
+    const totalFeeUsd = platformFeeUsd;
+    const totalFeeBrl = platformFeeBrl;
     const retainedPct = estimatedUsdcGross > 0 ? (estimatedUsd / estimatedUsdcGross) * 100 : 0;
     const issuedAt = this.now();
     const expiresAt = new Date(issuedAt.getTime() + quoteTtlSeconds() * 1000);
@@ -114,7 +103,6 @@ export class BrlUsdQuoteService {
       estimated_provider_fee: {
         amount: amount(estimatedProviderFeeUsd),
         currency: 'USD',
-        bps: providerFeeBps(),
       },
       total_fee: {
         amount_brl_equivalent: amount(totalFeeBrl, 2),
@@ -126,14 +114,16 @@ export class BrlUsdQuoteService {
       metadata: {
         reference_quote: referenceQuote,
         usdc_assumed_usd_parity: true,
-        provider_fee_min_usd: providerMinFeeUsd(),
+        provider_fee_source: 'pending_provider_quote',
         fee_breakdown: {
           gross_usd_before_fees: amount(estimatedUsdcGross),
           platform_fee_brl: amount(platformFeeBrl, 2),
           platform_fee_usd: amount(platformFeeUsd),
           after_platform_fee_usd: amount(estimatedUsdcAfterPlatformFee),
           provider_fee_usd: amount(estimatedProviderFeeUsd),
-          provider_fee_bps: providerFeeBps(),
+          provider_fee_source: 'pending_provider_quote',
+          on_ramp_fee_source: 'pending_etherfuse_quote',
+          off_ramp_fee_source: 'pending_payout_adapter',
           tax_estimate_usd: '0',
           tax_estimate_source: 'not_configured_for_sandbox_quote',
           total_fee_usd: amount(totalFeeUsd),

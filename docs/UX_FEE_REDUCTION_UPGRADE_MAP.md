@@ -45,11 +45,12 @@ Qual evidencia prova cada etapa?
 - Adicionado painel "Before and after fees/taxes" acima do fluxo tecnico.
 - A quote BRL/USD agora inclui `metadata.fee_breakdown` com:
   - USD bruto antes de custos;
-  - spread/plataforma;
-  - fee de provedor/off-ramp;
-  - tax/IOF como componente explicito quando configurado;
+  - taxa de transacao TalkToStellar;
+  - fee de on-ramp/off-ramp apenas quando retornada pelo provider ou pela reconciliacao;
+  - tax/IOF como componente explicito quando retornado/configurado;
   - USD liquido depois de custos;
   - percentual retido.
+- A taxa de rota da rail institucional nao usa mais um bps fixo de provider por default. Ela e recalculada empiricamente a partir das evidencias de on-ramp, off-ramp/payout e delta bruto-liquido.
 - A UI nao inventa imposto quando o sandbox nao retorna IOF; ela mostra que esse componente nao esta configurado.
 - Comparacao contra benchmark tradicional de 3,5%.
 - Destaque de:

@@ -145,6 +145,18 @@ function formatPercent(value: number) {
   return `${value.toFixed(2)}%`;
 }
 
+function feeSourceLabel(value: unknown) {
+  const raw = text(value);
+  if (!raw) return "pending provider quote";
+  if (/not_returned|no_fee_returned/i.test(raw)) return "not returned by provider";
+  if (/pending/i.test(raw)) return "pending provider quote";
+  if (/order_context/i.test(raw)) return "from Etherfuse order context";
+  if (/metadata/i.test(raw)) return "from provider metadata";
+  if (/quote/i.test(raw)) return "from provider quote";
+  if (/configured/i.test(raw)) return "configured product fee";
+  return raw.replace(/_/g, " ");
+}
+
 function shortId(value: unknown, size = 18) {
   const raw = text(value);
   if (!raw) return "-";
@@ -394,8 +406,120 @@ export default function InternationalTransferClient() {
       retainedPct,
     };
   }, [brlAmount, quote, transfer?.quoted_usd_amount]);
+  const feeBreakdown = useMemo(() => {
+    const metrics = reconciliation?.evidence?.metrics || {};
+    const metadata = quote?.metadata?.fee_breakdown || transfer?.reconciliation_metadata?.fee_breakdown || {};
+    const grossUsd = parseNumber(
+      metrics.baseline_usd_before_route_costs ||
+      metadata.gross_usd_before_fees ||
+      quoteDelta.baselineUsd,
+    );
+    const platformFeeBrl = parseNumber(
+      metrics.talktostellar_fee_brl ||
+      metrics.platform_fee_brl ||
+      metadata.platform_fee_brl ||
+      quote?.platform_fee?.amount ||
+      transfer?.fees?.platform_fee?.amount,
+    );
+    const platformFeeUsd = parseNumber(
+      metrics.talktostellar_fee_usd_equivalent ||
+      metrics.platform_fee_usd_equivalent ||
+      metadata.platform_fee_usd,
+    ) || (quoteDelta.fxRate > 0 ? platformFeeBrl / quoteDelta.fxRate : 0);
+    const onRampFeeUsd = parseNumber(
+      metrics.provider_on_ramp_fee_usd_equivalent ||
+      metadata.on_ramp_fee_usd ||
+      metadata.provider_on_ramp_fee_usd,
+    );
+    const onRampFeeBrl = parseNumber(
+      metrics.provider_on_ramp_fee_brl_equivalent ||
+      metadata.on_ramp_fee_brl ||
+      metadata.provider_on_ramp_fee_brl,
+    ) || (quoteDelta.fxRate > 0 ? onRampFeeUsd * quoteDelta.fxRate : 0);
+    const offRampFeeUsd = parseNumber(
+      metrics.provider_off_ramp_fee_usd_equivalent ||
+      metadata.off_ramp_fee_usd ||
+      metadata.provider_off_ramp_fee_usd,
+    );
+    const offRampFeeBrl = parseNumber(
+      metrics.provider_off_ramp_fee_brl_equivalent ||
+      metadata.off_ramp_fee_brl ||
+      metadata.provider_off_ramp_fee_brl,
+    ) || (quoteDelta.fxRate > 0 ? offRampFeeUsd * quoteDelta.fxRate : 0);
+    const taxFeeUsd = parseNumber(metrics.tax_fee_usd_equivalent || metadata.tax_estimate_usd || metadata.tax_fee_usd);
+    const taxFeeBrl = quoteDelta.fxRate > 0 ? taxFeeUsd * quoteDelta.fxRate : 0;
+    const knownComponentFeeUsd = platformFeeUsd + onRampFeeUsd + offRampFeeUsd + taxFeeUsd;
+    const impliedCostUsd = parseNumber(metrics.implied_cost_usd) || Math.max(0, grossUsd - quoteDelta.finalUsd);
+    const unallocatedRouteCostUsd = parseNumber(metrics.unallocated_route_delta_usd) || Math.max(0, impliedCostUsd - knownComponentFeeUsd);
+    const empiricalTotalFeeUsd = parseNumber(
+      metrics.total_empirical_fee_usd ||
+      metrics.total_fee_usd_equivalent ||
+      metadata.total_empirical_fee_usd,
+    );
+    const totalFeeUsd = empiricalTotalFeeUsd || Math.max(0, knownComponentFeeUsd + unallocatedRouteCostUsd);
+    const totalFeeBrl = parseNumber(
+      metrics.total_empirical_fee_brl_equivalent ||
+      metadata.total_fee_brl ||
+      quote?.total_fee?.amount_brl_equivalent ||
+      transfer?.fees?.total_fee?.amount_brl_equivalent,
+    ) || (quoteDelta.fxRate > 0 ? totalFeeUsd * quoteDelta.fxRate : 0);
+    const afterPlatformUsd = parseNumber(metadata.after_platform_fee_usd) || Math.max(0, grossUsd - platformFeeUsd);
+    const afterAllUsd = parseNumber(
+      metrics.destination_usd_after_route_costs ||
+      metadata.estimated_usd_after_all_fees,
+    ) || Math.max(0, grossUsd - totalFeeUsd);
+    const totalFeePct = grossUsd > 0 ? (totalFeeUsd / grossUsd) * 100 : 0;
+    const platformFeePct = grossUsd > 0 ? (platformFeeUsd / grossUsd) * 100 : 0;
+    const onRampFeePct = grossUsd > 0 ? (onRampFeeUsd / grossUsd) * 100 : 0;
+    const offRampFeePct = grossUsd > 0 ? (offRampFeeUsd / grossUsd) * 100 : 0;
+    const taxFeePct = grossUsd > 0 ? (taxFeeUsd / grossUsd) * 100 : 0;
+    const retainedPct = grossUsd > 0 ? (afterAllUsd / grossUsd) * 100 : quoteDelta.retainedPct;
+
+    return {
+      grossUsd,
+      platformFeeBrl,
+      platformFeeUsd,
+      onRampFeeUsd,
+      onRampFeeBrl,
+      offRampFeeUsd,
+      offRampFeeBrl,
+      taxFeeUsd,
+      taxFeeBrl,
+      otherRouteCostUsd: unallocatedRouteCostUsd,
+      totalFeeUsd,
+      totalFeeBrl,
+      totalFeePct,
+      platformFeePct,
+      onRampFeePct,
+      offRampFeePct,
+      taxFeePct,
+      afterPlatformUsd,
+      afterAllUsd,
+      retainedPct,
+      onRampFeeSource: metrics.provider_on_ramp_fee_source || metadata.on_ramp_fee_source,
+      offRampFeeSource: metrics.provider_off_ramp_fee_source || metadata.off_ramp_fee_source,
+      taxFeeSource: metrics.tax_fee_source || metadata.tax_estimate_source,
+      feeSource: metrics.fee_source || metadata.provider_fee_source,
+    };
+  }, [
+    reconciliation?.evidence?.metrics,
+    quote?.estimated_provider_fee?.amount,
+    quote?.metadata?.fee_breakdown,
+    quote?.platform_fee?.amount,
+    quote?.total_fee?.amount_brl_equivalent,
+    quote?.total_fee?.amount_usd_equivalent,
+    quoteDelta.baselineUsd,
+    quoteDelta.finalUsd,
+    quoteDelta.fxRate,
+    quoteDelta.retainedPct,
+    transfer?.fees?.estimated_provider_fee?.amount,
+    transfer?.fees?.platform_fee?.amount,
+    transfer?.fees?.total_fee?.amount_brl_equivalent,
+    transfer?.fees?.total_fee?.amount_usd_equivalent,
+    transfer?.reconciliation_metadata?.fee_breakdown,
+  ]);
   const feeStory = useMemo(() => {
-    const routeFeeUsd = parseNumber(quote?.total_fee?.amount_usd_equivalent || transfer?.fees?.total_fee?.amount_usd_equivalent);
+    const routeFeeUsd = feeBreakdown.totalFeeUsd;
     const traditionalFeePct = 3.5;
     const traditionalFeeUsd = quoteDelta.baselineUsd > 0 ? quoteDelta.baselineUsd * (traditionalFeePct / 100) : 0;
     const savingsUsd = Math.max(0, traditionalFeeUsd - routeFeeUsd);
@@ -412,77 +536,12 @@ export default function InternationalTransferClient() {
       savingsBrl,
       savingsPct,
     };
-  }, [quote?.total_fee?.amount_usd_equivalent, quoteDelta.baselineUsd, quoteDelta.fxRate, transfer?.fees?.total_fee?.amount_usd_equivalent]);
-  const feeBreakdown = useMemo(() => {
-    const metadata = quote?.metadata?.fee_breakdown || transfer?.reconciliation_metadata?.fee_breakdown || {};
-    const platformFeeBrl = parseNumber(
-      metadata.platform_fee_brl ||
-      quote?.platform_fee?.amount ||
-      transfer?.fees?.platform_fee?.amount,
-    );
-    const platformFeeUsd = parseNumber(metadata.platform_fee_usd) || (quoteDelta.fxRate > 0 ? platformFeeBrl / quoteDelta.fxRate : 0);
-    const providerFeeUsd = parseNumber(
-      metadata.provider_fee_usd ||
-      quote?.estimated_provider_fee?.amount ||
-      transfer?.fees?.estimated_provider_fee?.amount,
-    );
-    const totalFeeUsd = parseNumber(
-      metadata.total_fee_usd ||
-      quote?.total_fee?.amount_usd_equivalent ||
-      transfer?.fees?.total_fee?.amount_usd_equivalent,
-    ) || Math.max(0, platformFeeUsd + providerFeeUsd);
-    const totalFeeBrl = parseNumber(
-      metadata.total_fee_brl ||
-      quote?.total_fee?.amount_brl_equivalent ||
-      transfer?.fees?.total_fee?.amount_brl_equivalent,
-    ) || (quoteDelta.fxRate > 0 ? totalFeeUsd * quoteDelta.fxRate : 0);
-    const grossUsd = parseNumber(metadata.gross_usd_before_fees || quoteDelta.baselineUsd);
-    const afterPlatformUsd = parseNumber(metadata.after_platform_fee_usd) || Math.max(0, grossUsd - platformFeeUsd);
-    const afterAllUsd = parseNumber(metadata.estimated_usd_after_all_fees || quoteDelta.finalUsd);
-    const impliedCostUsd = Math.max(0, grossUsd - afterAllUsd);
-    const explicitCostUsd = totalFeeUsd || impliedCostUsd;
-    const otherRouteCostUsd = Math.max(0, explicitCostUsd - platformFeeUsd - providerFeeUsd);
-    const totalFeePct = grossUsd > 0 ? (explicitCostUsd / grossUsd) * 100 : 0;
-    const platformFeePct = grossUsd > 0 ? (platformFeeUsd / grossUsd) * 100 : 0;
-    const providerFeePct = grossUsd > 0 ? (providerFeeUsd / grossUsd) * 100 : 0;
-    const retainedPct = grossUsd > 0 ? (afterAllUsd / grossUsd) * 100 : quoteDelta.retainedPct;
-
-    return {
-      grossUsd,
-      platformFeeBrl,
-      platformFeeUsd,
-      providerFeeUsd,
-      otherRouteCostUsd,
-      totalFeeUsd: explicitCostUsd,
-      totalFeeBrl,
-      totalFeePct,
-      platformFeePct,
-      providerFeePct,
-      afterPlatformUsd,
-      afterAllUsd,
-      retainedPct,
-    };
-  }, [
-    quote?.estimated_provider_fee?.amount,
-    quote?.metadata?.fee_breakdown,
-    quote?.platform_fee?.amount,
-    quote?.total_fee?.amount_brl_equivalent,
-    quote?.total_fee?.amount_usd_equivalent,
-    quoteDelta.baselineUsd,
-    quoteDelta.finalUsd,
-    quoteDelta.fxRate,
-    quoteDelta.retainedPct,
-    transfer?.fees?.estimated_provider_fee?.amount,
-    transfer?.fees?.platform_fee?.amount,
-    transfer?.fees?.total_fee?.amount_brl_equivalent,
-    transfer?.fees?.total_fee?.amount_usd_equivalent,
-    transfer?.reconciliation_metadata?.fee_breakdown,
-  ]);
+  }, [feeBreakdown.totalFeeUsd, quoteDelta.baselineUsd, quoteDelta.fxRate]);
   const metricValidation = useMemo(() => {
     const backendMetrics = reconciliation?.evidence?.metrics || {};
     const backendValidation = reconciliation?.evidence?.metric_validation || {};
-    const totalFeeUsd = parseNumber(quote?.total_fee?.amount_usd_equivalent || transfer?.fees?.total_fee?.amount_usd_equivalent);
-    const impliedCostUsd = quoteDelta.baselineUsd > 0 ? Math.max(0, quoteDelta.baselineUsd - quoteDelta.finalUsd) : 0;
+    const totalFeeUsd = feeBreakdown.totalFeeUsd;
+    const impliedCostUsd = feeBreakdown.grossUsd > 0 ? Math.max(0, feeBreakdown.grossUsd - feeBreakdown.afterAllUsd) : 0;
     const feeDeltaUsd = Math.abs(impliedCostUsd - totalFeeUsd);
     const checks = [
       {
@@ -497,8 +556,8 @@ export default function InternationalTransferClient() {
       },
       {
         label: "Final value is non-negative",
-        ok: quoteDelta.finalUsd >= 0 || backendValidation.destination_not_negative === true,
-        detail: formatCurrency(quoteDelta.finalUsd, "USD"),
+        ok: feeBreakdown.afterAllUsd >= 0 || backendValidation.destination_not_negative === true,
+        detail: formatCurrency(feeBreakdown.afterAllUsd, "USD"),
       },
       {
         label: "Fees explain the route delta",
@@ -507,8 +566,8 @@ export default function InternationalTransferClient() {
       },
       {
         label: "Retention is in expected range",
-        ok: quote ? quoteDelta.retainedPct >= 0 && quoteDelta.retainedPct <= 100.5 : backendValidation.retained_pct_in_expected_range === true,
-        detail: `${formatPercent(quoteDelta.retainedPct)} retained`,
+        ok: quote ? feeBreakdown.retainedPct >= 0 && feeBreakdown.retainedPct <= 100.5 : backendValidation.retained_pct_in_expected_range === true,
+        detail: `${formatPercent(feeBreakdown.retainedPct)} retained`,
       },
     ];
 
@@ -521,7 +580,7 @@ export default function InternationalTransferClient() {
       checks,
       allOk: checks.every((check) => check.ok),
     };
-  }, [quote, quoteDelta, reconciliation, transfer?.fees?.total_fee?.amount_usd_equivalent]);
+  }, [feeBreakdown, quote, quoteDelta, reconciliation]);
   const evidenceItems = useMemo(
     () => [
       {
@@ -968,13 +1027,13 @@ export default function InternationalTransferClient() {
 
           <div className="mb-4 grid gap-2 rounded-lg border border-emerald-400/30 bg-black p-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-300">Fee thesis</span>
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-300">Empirical route fee</span>
               <span className="rounded-md border border-emerald-400/30 px-2 py-1 text-xs font-bold text-emerald-200">
                 {quote ? `${formatPercent(feeStory.routeFeePct)} route fee` : "waiting quote"}
               </span>
             </div>
             <p className="text-sm font-semibold leading-6 text-slate-200">
-              Show that the route keeps more of the original BRL value by making the fee delta visible before the destination instruction.
+              Show the fee rate measured from the route itself: provider on-ramp quote, TalkToStellar transaction fee, provider off-ramp quote and any tax line returned by the provider.
             </p>
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-slate-400">
               <div className="rounded-md border border-neutral-800 p-2">
@@ -1160,7 +1219,7 @@ export default function InternationalTransferClient() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Before and after fees</p>
                 <h2 className="mt-1 text-lg font-bold text-slate-100">Gross route value to net destination value</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  This is the reviewer-facing cost bridge: source BRL, theoretical USD before route costs, explicit TalkToStellar transaction and off-ramp/payout lines, and the net USD that reaches the destination instruction.
+                  This is the reviewer-facing cost bridge: source BRL, theoretical USD before route costs, empirical on-ramp/off-ramp fee lines, TalkToStellar transaction fee, tax if returned, and the net USD that reaches the destination instruction.
                 </p>
               </div>
               <StatusPill state={quote ? "ok" : "idle"}>
@@ -1198,16 +1257,51 @@ export default function InternationalTransferClient() {
                     <span className="font-black text-cyan-100">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                    <span className="text-slate-300">TalkToStellar transaction fee</span>
-                    <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.platformFeeUsd, "USD")} (${formatPercent(feeBreakdown.platformFeePct)})` : "-"}</span>
+                    <span className="text-slate-300">
+                      Source on-ramp fee
+                      <span className="block text-[11px] font-semibold text-slate-500">{feeSourceLabel(feeBreakdown.onRampFeeSource)}</span>
+                    </span>
+                    <span className="text-right font-black text-amber-100">
+                      {quote ? `-${formatCurrency(feeBreakdown.onRampFeeUsd, "USD")} (${formatPercent(feeBreakdown.onRampFeePct)})` : "-"}
+                      {quote ? <span className="block text-[11px] text-slate-500">{formatCurrency(feeBreakdown.onRampFeeBrl, "BRL")}</span> : null}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                    <span className="text-slate-300">USD off-ramp/payout fee</span>
-                    <span className="font-black text-amber-100">{quote ? `-${formatCurrency(feeBreakdown.providerFeeUsd, "USD")} (${formatPercent(feeBreakdown.providerFeePct)})` : "-"}</span>
+                    <span className="text-slate-300">
+                      TalkToStellar transaction fee
+                      <span className="block text-[11px] font-semibold text-slate-500">configured product fee</span>
+                    </span>
+                    <span className="text-right font-black text-amber-100">
+                      {quote ? `-${formatCurrency(feeBreakdown.platformFeeUsd, "USD")} (${formatPercent(feeBreakdown.platformFeePct)})` : "-"}
+                      {quote ? <span className="block text-[11px] text-slate-500">{formatCurrency(feeBreakdown.platformFeeBrl, "BRL")}</span> : null}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">
+                      Destination off-ramp/payout fee
+                      <span className="block text-[11px] font-semibold text-slate-500">{feeSourceLabel(feeBreakdown.offRampFeeSource)}</span>
+                    </span>
+                    <span className="text-right font-black text-amber-100">
+                      {quote ? `-${formatCurrency(feeBreakdown.offRampFeeUsd, "USD")} (${formatPercent(feeBreakdown.offRampFeePct)})` : "-"}
+                      {quote ? <span className="block text-[11px] text-slate-500">{formatCurrency(feeBreakdown.offRampFeeBrl, "BRL")}</span> : null}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
+                    <span className="text-slate-300">
+                      Tax/IOF
+                      <span className="block text-[11px] font-semibold text-slate-500">{feeSourceLabel(feeBreakdown.taxFeeSource)}</span>
+                    </span>
+                    <span className="text-right font-black text-amber-100">
+                      {quote ? `-${formatCurrency(feeBreakdown.taxFeeUsd, "USD")} (${formatPercent(feeBreakdown.taxFeePct)})` : "-"}
+                      {quote ? <span className="block text-[11px] text-slate-500">{formatCurrency(feeBreakdown.taxFeeBrl, "BRL")}</span> : null}
+                    </span>
                   </div>
                   {quote && feeBreakdown.otherRouteCostUsd > 0.005 ? (
                     <div className="flex items-center justify-between gap-4 rounded-md bg-white/5 px-3 py-2">
-                      <span className="text-slate-300">Other route delta</span>
+                      <span className="text-slate-300">
+                        Other route delta
+                        <span className="block text-[11px] font-semibold text-slate-500">implied by gross minus net</span>
+                      </span>
                       <span className="font-black text-amber-100">-{formatCurrency(feeBreakdown.otherRouteCostUsd, "USD")}</span>
                     </div>
                   ) : null}
@@ -1220,10 +1314,10 @@ export default function InternationalTransferClient() {
               <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Demo explanation</p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Use this panel to explain that the app does not hide costs inside a final number. The reviewer sees the value before costs, the TalkToStellar transaction fee, the off-ramp/payout fee, and the final destination amount before the payout instruction is created.
+                  Use this panel to explain that the app does not hide costs inside a final number. The reviewer sees the value before costs, on-ramp fee, TalkToStellar fee, off-ramp/payout fee, tax if returned, and the final destination amount before the payout instruction is created.
                 </p>
                 <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-xs font-semibold leading-5 text-amber-100">
-                  The normal benchmark is fixed at 3.5% for demo comparison. This sandbox view does not invent tax/IOF values.
+                  The 3.5% benchmark is only a comparison baseline. The route fee shown here is calculated from provider quotes, payout metadata, and the observed gross-to-net delta. If Etherfuse or another provider does not return a fee/tax line, the UI marks it as pending or not returned instead of inventing a number.
                 </p>
               </div>
             </div>
