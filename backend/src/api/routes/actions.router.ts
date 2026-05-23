@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { ActionsController } from '../controllers/actions.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validation.middleware';
-import { 
-  loginSchema, 
+import {
   onboardUserSchema,
   addContactSchema,
   lookupContactByNameSchema,
@@ -18,8 +17,6 @@ import {
 } from '../dtos/actions.dto';
 
 const router = Router();
-
-router.post('/login', validate(loginSchema), ActionsController.login);
 
 router.post('/onboard-user', validate(onboardUserSchema), ActionsController.onboardUser);
 
