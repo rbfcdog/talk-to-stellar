@@ -73,6 +73,27 @@ Correcao adicional aplicada depois:
 - agora mappings duplicados sao mesclados, preservando `instance`, `remote_jid`, `whatsapp_number` e demais dados do mapping salvo;
 - `/api/evolution/test-notify` tambem busca mapping por `user_id` mesmo quando nao recebe `session_id`.
 
+Correcao de instancia aplicada depois dos logs de Railway:
+
+- os logs da Evolution podem mostrar `instanceId` como UUID, por exemplo `635afaa8-b4d2-4e04-8b35-3093d16ba1af`;
+- esse UUID e util para diagnostico, mas normalmente o endpoint `/message/sendText/:instance` espera o nome da instancia, por exemplo `TalkToStellar`;
+- agora o backend salva `instance_id` separadamente como metadata;
+- se existir `EVOLUTION_INSTANCE=TalkToStellar`, o backend usa esse nome para enviar e nao troca pelo UUID;
+- os logs do backend agora mostram entrada do webhook assim:
+
+```text
+[evolution-webhook] received message from ***4114 on instance TalkToStellar instance_id=635afaa8-b4d2-4e04-8b35-3093d16ba1af message_id=...
+```
+
+Os logs da Evolution so provam que a instancia esta conectada e recebeu/enviou algo internamente. Para confirmar callback de pagamento, procure logs no backend com:
+
+```text
+[receipt]
+[whatsapp-notify]
+[evolution-send]
+[evolution-webhook]
+```
+
 ## Arquivos relevantes
 
 ```text
@@ -110,7 +131,7 @@ Aliases aceitos para instancia:
 EVOLUTION_INSTANCE_NAME=nome-da-instancia-conectada
 EVOLUTION_NOTIFY_INSTANCE=nome-da-instancia-conectada
 EVOLUTION_DEFAULT_INSTANCE=nome-da-instancia-conectada
-EVOLUTION_INSTANCE_ID=nome-da-instancia-conectada
+EVOLUTION_INSTANCE_ID=uuid-da-instancia-apenas-se-voce-nao-tiver-o-nome
 ```
 
 Diagnostico protegido:
@@ -140,6 +161,8 @@ Observacoes:
 
 - `EVOLUTION_API_URL` deve apontar para a Evolution, nao para o backend.
 - `EVOLUTION_INSTANCE` deve ser exatamente o nome da instancia conectada na Evolution.
+- No seu caso atual, pelos logs, o nome da instancia e `TalkToStellar`. Use esse valor em `EVOLUTION_INSTANCE`.
+- Nao use o UUID de `instanceId` como `EVOLUTION_INSTANCE` se voce tem o nome da instancia.
 - O nome da instancia pode ser case-sensitive dependendo da Evolution.
 - Se `EVOLUTION_SEND_TEXT_BODY_VERSION` ficar vazio, o backend tenta `v2`, depois `v1`, depois `hybrid`.
 

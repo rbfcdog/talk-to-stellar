@@ -130,6 +130,73 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.', { reliable: true });
   });
 
+  it('keeps Evolution instanceId as diagnostic metadata and uses the configured instance name for delivery', async () => {
+    process.env.EVOLUTION_INSTANCE = 'TalkToStellar';
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Resposta pelo WhatsApp.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      data: {
+        key: {
+          remoteJid: '5519997624114@s.whatsapp.net',
+          id: 'evolution-instance-id-test-1',
+          fromMe: false,
+        },
+        instanceId: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+        message: {
+          conversation: 'olaa',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519997624114',
+      instance: 'TalkToStellar',
+    }));
+
+    await flushBackgroundWork();
+
+    const checkAccountCall = fetchMock.mock.calls.find(([url]) => String(url) === 'http://backend.local/api/external/check-account');
+    const checkAccountBody = JSON.parse(String((checkAccountCall?.[1] as RequestInit | undefined)?.body || '{}'));
+    expect(checkAccountBody).toMatchObject({
+      provider: 'whatsapp',
+      provider_user_id: '5519997624114',
+      instance: 'TalkToStellar',
+      instance_id: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+    });
+
+    const agentCall = fetchMock.mock.calls.find(([url]) => String(url) === 'http://backend.local/api/agent/query');
+    const agentBody = JSON.parse(String((agentCall?.[1] as RequestInit | undefined)?.body || '{}'));
+    expect(agentBody.metadata).toMatchObject({
+      provider: 'whatsapp',
+      provider_user_id: '5519997624114',
+      instance: 'TalkToStellar',
+      instance_id: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+    });
+    expect(sendTextSpy).toHaveBeenCalledWith('TalkToStellar', '5519997624114', 'Resposta pelo WhatsApp.', { reliable: true });
+  });
+
   it('normalizes outbound numbers and retries reliable completion messages after transient Evolution failures', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url, init] = args;

@@ -824,9 +824,13 @@ export class TransferNotificationService {
       .map((mapping) => this.mappingEvolutionInstance(mapping))
       .filter(Boolean) as string[];
     const configured = this.evolutionInstance();
+    const instanceIdFallbacks = mappings
+      .map((mapping) => this.mappingEvolutionInstanceId(mapping))
+      .filter(Boolean) as string[];
     return Array.from(new Set([
       ...fromMappings,
       ...(configured ? [configured] : []),
+      ...instanceIdFallbacks,
     ]));
   }
 
@@ -842,7 +846,30 @@ export class TransferNotificationService {
       data.notifyInstance ||
       ''
     ).trim();
-    return instance || undefined;
+    if (!instance || this.isLikelyEvolutionInstanceId(instance)) return undefined;
+    return instance;
+  }
+
+  private static mappingEvolutionInstanceId(mapping: ExternalMapping): string | undefined {
+    const data = mapping.data || {};
+    const instanceId = String(
+      data.instance_id ||
+      data.instanceId ||
+      data.evolution_instance_id ||
+      data.evolutionInstanceId ||
+      data.instance_uuid ||
+      data.instanceUuid ||
+      ''
+    ).trim();
+    if (instanceId) return instanceId;
+
+    const instance = String(data.instance || data.evolution_instance || '').trim();
+    return this.isLikelyEvolutionInstanceId(instance) ? instance : undefined;
+  }
+
+  private static isLikelyEvolutionInstanceId(value: unknown): boolean {
+    const raw = String(value || '').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
   }
 
   private static normalizeWhatsAppDigits(value: unknown): string | undefined {

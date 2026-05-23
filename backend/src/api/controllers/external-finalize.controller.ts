@@ -231,6 +231,17 @@ function externalChannelMetadata(payload: any, body: any, fallbackPhoneNumber?: 
     payload?.evolutionInstance ||
     ''
   ).trim();
+  const instanceId = String(
+    body?.instance_id ||
+    body?.instanceId ||
+    body?.evolution_instance_id ||
+    body?.evolutionInstanceId ||
+    payload?.instance_id ||
+    payload?.instanceId ||
+    payload?.evolution_instance_id ||
+    payload?.evolutionInstanceId ||
+    ''
+  ).trim();
   const messageId = String(body?.message_id || body?.messageId || payload?.message_id || payload?.messageId || '').trim();
   const metadata: Record<string, unknown> = {};
   if (phoneNumber) {
@@ -244,6 +255,10 @@ function externalChannelMetadata(payload: any, body: any, fallbackPhoneNumber?: 
   if (instance) {
     metadata.instance = instance;
     metadata.evolution_instance = instance;
+  }
+  if (instanceId) {
+    metadata.instance_id = instanceId;
+    metadata.evolution_instance_id = instanceId;
   }
   if (messageId) {
     metadata.last_message_id = messageId;
