@@ -39,6 +39,9 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) {
     return 'Este ambiente ainda esta finalizando uma configuracao. Tente novamente em alguns segundos.';
   }
+  if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) {
+    return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
+  }
   if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) {
     return 'Nao consegui validar o PIN. Confira e tente novamente.';
   }

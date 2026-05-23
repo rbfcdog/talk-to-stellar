@@ -17,4 +17,13 @@ describe('public-error utility', () => {
       'Nao consegui concluir agora. Tente novamente em alguns segundos.'
     );
   });
+
+  it('hides testnet account funding internals from user-facing messages', () => {
+    const message = publicErrorMessage(
+      'Failed to fund account using Friendbot: 400 createAccountAlreadyExist'
+    );
+
+    expect(message).toBe('Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.');
+    expect(message).not.toMatch(/Friendbot|createAccountAlreadyExist|Failed to fund/i);
+  });
 });

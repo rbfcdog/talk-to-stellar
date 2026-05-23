@@ -8,6 +8,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/ui/feedback"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
+import { mapPublicError } from "@/lib/public-errors"
 
 type ValidationResult = {
   success?: boolean
@@ -349,16 +350,20 @@ function getPasskeyErrorMessage(error: any): string {
   const normalized = message.toLowerCase()
 
   if (name === "NotAllowedError") {
-    return "Biometric authentication was canceled or expired. Try again."
+    return "A confirmação expirou ou foi cancelada. Use o PIN para confirmar."
   }
   if (name === "SecurityError" || normalized.includes("rp id")) {
-    return "Passkey must open on the correct domain with HTTPS."
+    return "Não consegui validar a Passkey neste domínio. Use o PIN para confirmar."
   }
   if (normalized.includes("registrationrequired")) {
-    return "No Passkey is registered for this account."
+    return "Não há Passkey cadastrada nesta conta. Use o PIN para confirmar."
   }
 
-  return message || "Could not confirm with biometrics."
+  return message || "Não consegui confirmar com Passkey. Use o PIN para confirmar."
+}
+
+function publicPaymentErrorMessage(error: unknown, language: AppLanguage) {
+  return mapPublicError(error, language).message
 }
 
 function isPasskeyChallengeExpiredMessage(message?: string) {
@@ -462,7 +467,7 @@ export default function ConfirmPaymentClient({
             success: false,
             valid: false,
             payload: fallbackPayload,
-            message: payload?.message || "Invalid or expired link. Generate a new confirmation link.",
+            message: publicPaymentErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
           })
           return
         }
@@ -617,7 +622,13 @@ export default function ConfirmPaymentClient({
       })
 
       const payload = (await response.json()) as ConfirmResponse
-      setResult(payload)
+      setResult(response.ok && payload?.success
+        ? payload
+        : {
+          ...payload,
+          success: false,
+          error: publicPaymentErrorMessage(payload?.message || payload?.error || "Failed to confirm payment", feedbackLanguage),
+        })
       setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (response.ok && payload?.success) {
@@ -667,7 +678,7 @@ export default function ConfirmPaymentClient({
       }
     } catch (error) {
       submitLockRef.current = false
-      const message = error instanceof Error ? error.message : "Failed to confirm payment"
+      const message = publicPaymentErrorMessage(error instanceof Error ? error.message : "Failed to confirm payment", feedbackLanguage)
       setResult({ success: false, error: message })
       setStatus("error")
     }
@@ -677,7 +688,7 @@ export default function ConfirmPaymentClient({
     if (!token.trim() || validation?.valid === false || submitLockRef.current || status === "done") return
     if (!window.PublicKeyCredential) {
       setPasskeyStatus("error")
-      setPasskeyError("This browser does not support Passkey/WebAuthn.")
+      setPasskeyError("Este navegador não suporta Passkey. Use o PIN para confirmar.")
       return
     }
 
@@ -698,7 +709,7 @@ export default function ConfirmPaymentClient({
       })
       const initPayload = await initResponse.json().catch(() => ({}))
       if (!initResponse.ok || !initPayload?.success) {
-        throw new Error(initPayload?.message || "Could not start biometric authentication.")
+        throw new Error(initPayload?.message || "Não consegui iniciar a confirmação com Passkey.")
       }
       if (initPayload?.registrationRequired) {
         throw new Error("registrationRequired")
@@ -720,7 +731,13 @@ export default function ConfirmPaymentClient({
       })
 
       const payload = (await response.json()) as ConfirmResponse
-      setResult(payload)
+      setResult(response.ok && payload?.success
+        ? payload
+        : {
+          ...payload,
+          success: false,
+          error: publicPaymentErrorMessage(payload?.message || payload?.error || "Failed to confirm payment", feedbackLanguage),
+        })
       setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (response.ok && payload?.success) {
@@ -737,7 +754,7 @@ export default function ConfirmPaymentClient({
         }
         submitLockRef.current = false
         setPasskeyStatus("error")
-        setPasskeyError(serverMessage || "Failed to confirm with biometrics.")
+        setPasskeyError(publicPaymentErrorMessage(serverMessage || "Failed to confirm with Passkey.", feedbackLanguage))
       }
     } catch (error: any) {
       const message = getPasskeyErrorMessage(error)
@@ -754,7 +771,7 @@ export default function ConfirmPaymentClient({
       setPasskeyError(message)
       setResult({
         success: false,
-        error: message,
+        error: publicPaymentErrorMessage(message, feedbackLanguage),
       })
     }
   }
@@ -805,6 +822,9 @@ export default function ConfirmPaymentClient({
   const successAutoConversionMessage = getAutoConversionMessage(result, feedbackLanguage)
   const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""), feedbackLanguage)
   const successDestinationKey = formatRecipientKey(result) || destinationKeyLabel
+  const visibleError = result?.error || result?.message
+    ? publicPaymentErrorMessage(result?.error || result?.message, feedbackLanguage)
+    : T(feedbackLanguage, "Não consegui confirmar esse pagamento agora. Tente novamente em alguns segundos.", "I could not confirm this payment right now. Try again in a few seconds.")
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
@@ -915,7 +935,7 @@ export default function ConfirmPaymentClient({
                   disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
                   className="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/20 px-4 py-3 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {showPasskeyOptions ? "Hide Passkey options" : "Use Touch ID (Passkey)"}
+                  {showPasskeyOptions ? "Ocultar Passkey" : "Usar Passkey"}
                 </button>
               )}
               {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && (
@@ -927,8 +947,8 @@ export default function ConfirmPaymentClient({
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
-                      ? "Authenticating with Touch ID..."
-                      : "Confirm with Touch ID (Passkey)"}
+                      ? "Confirmando com Passkey..."
+                      : "Confirmar com Passkey"}
                   </button>
                   {passkeyError && (
                     <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
@@ -941,12 +961,12 @@ export default function ConfirmPaymentClient({
 
             {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">Confirm on mobile with Touch ID</p>
-                <p className="mt-1 text-slate-300">Scan the QR with your phone to open this confirmation and authorize with Touch ID.</p>
+                <p className="font-medium text-white">Confirmar com Passkey</p>
+                <p className="mt-1 text-slate-300">Abra esta confirmação no aparelho onde sua Passkey está cadastrada.</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
-                    alt="QR code to confirm payment on mobile"
+                    alt="QR code to confirm payment"
                     className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
                   />
                 </div>
@@ -957,7 +977,7 @@ export default function ConfirmPaymentClient({
               <p className="font-medium text-white">Result</p>
               {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
               {status === "submitting" && (
-                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />Processing on the network...</div>
+                <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</div>
               )}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
@@ -1010,7 +1030,7 @@ export default function ConfirmPaymentClient({
                   <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{result?.error || result?.message || "Something went wrong."}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{visibleError}</motion.p>}
               </AnimatePresence>
             </div>
           </section>
