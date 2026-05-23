@@ -400,6 +400,7 @@ Entrega boa:
 
 ```text
 [evolution-send] delivered message to ***8102 using v2 payload
+[receipt] receipt delivered to WhatsApp recipients=1 delivered=1 instances=nome-da-instancia
 ```
 
 Falha de instancia/API:
@@ -425,6 +426,14 @@ Fallback de Twilio nao configurado:
 ```text
 [whatsapp-notify] no WhatsApp provider delivered the message. Twilio fallback is not configured.
 ```
+
+Recibo concluido mas WhatsApp nao entregue:
+
+```text
+[receipt] receipt was not delivered to WhatsApp: {"attempted":true,"delivered":0,"recipients":1,...}
+```
+
+Quando esse log aparecer, o pagamento/PIX terminou e o recibo foi gerado, mas a entrega ativa no WhatsApp falhou. O detalhe dentro de `attempts` mostra a instancia usada e o erro retornado pela Evolution.
 
 ## Checklist para Railway
 

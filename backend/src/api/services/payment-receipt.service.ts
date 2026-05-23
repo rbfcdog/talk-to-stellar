@@ -237,7 +237,7 @@ export class PaymentReceiptService {
     }
 
     try {
-      await TransferNotificationService.notifyExternalChannelMessage({
+      const delivery = await TransferNotificationService.notifyExternalChannelMessage({
         sessionId: input.sessionId,
         userId: input.userId,
         provider: input.provider,
@@ -246,6 +246,7 @@ export class PaymentReceiptService {
         buttonText: viewerUrl ? 'Abrir comprovante' : null,
         buttonUrl: viewerUrl || null,
       });
+      this.logExternalDelivery('receipt', delivery);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
@@ -253,7 +254,7 @@ export class PaymentReceiptService {
 
     if (cumulativeSavingsText) {
       try {
-        await TransferNotificationService.notifyExternalChannelMessage({
+        const delivery = await TransferNotificationService.notifyExternalChannelMessage({
           sessionId: input.sessionId,
           userId: input.userId,
           provider: input.provider,
@@ -262,6 +263,7 @@ export class PaymentReceiptService {
           buttonText: null,
           buttonUrl: null,
         });
+        this.logExternalDelivery('cumulative-savings', delivery);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(`[receipt] failed to deliver cumulative savings: ${message}`);
@@ -269,6 +271,31 @@ export class PaymentReceiptService {
     }
 
     return viewerUrl || '';
+  }
+
+  private static logExternalDelivery(context: string, delivery: Awaited<ReturnType<typeof TransferNotificationService.notifyExternalChannelMessage>>): void {
+    const whatsapp = delivery?.whatsapp;
+    if (!whatsapp) return;
+
+    if (whatsapp.delivered > 0) {
+      logger.info(
+        `[receipt] ${context} delivered to WhatsApp recipients=${whatsapp.recipients} delivered=${whatsapp.delivered} instances=${whatsapp.instances.join(',') || 'none'}`
+      );
+      return;
+    }
+
+    if (whatsapp.attempted || whatsapp.recipients > 0 || whatsapp.skipped_reason) {
+      logger.warn(
+        `[receipt] ${context} was not delivered to WhatsApp: ${JSON.stringify({
+          attempted: whatsapp.attempted,
+          delivered: whatsapp.delivered,
+          recipients: whatsapp.recipients,
+          instances: whatsapp.instances,
+          skipped_reason: whatsapp.skipped_reason,
+          attempts: whatsapp.attempts,
+        })}`
+      );
+    }
   }
 
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
