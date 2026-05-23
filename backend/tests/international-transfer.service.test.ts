@@ -99,7 +99,8 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       amount: '0',
       currency: 'USD',
     });
-    expect((quote.metadata as any)?.provider_fee_source).toBe('pending_provider_quote');
+    expect((quote.metadata as any)?.fee_model).toBe('charged_on_off_ramp_transaction_fees_only');
+    expect((quote.metadata as any)?.fee_breakdown?.total_charged_fee_usd).toBeDefined();
     expect(Number(quote.estimated_usdc_amount)).toBeGreaterThan(0);
     expect(Number(quote.estimated_usd_amount)).toBeGreaterThan(0);
     expect(repository.quotes.get(quote.quote_id)).toBeDefined();

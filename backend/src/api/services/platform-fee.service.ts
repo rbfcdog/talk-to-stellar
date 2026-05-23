@@ -92,7 +92,7 @@ export class PlatformFeeService {
       grossSourceAmount: formatAssetAmount(mode === 'add_on_top' ? gross + fee : gross),
       netSourceAmount: formatAssetAmount(net),
       treasuryPublicKey,
-      comparisonMethod: 'traditional_providers_average_3_5pct',
+      comparisonMethod: 'configured_talktostellar_transaction_fee',
     };
   }
 

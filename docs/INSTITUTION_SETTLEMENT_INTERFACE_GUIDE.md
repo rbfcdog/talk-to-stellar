@@ -190,33 +190,30 @@ O que cada etapa prova:
 - `Blockchain`: o settlement USDC foi registrado com hash/memo ou evidencia mockada.
 - `Destination`: a instrucao de destino/off-ramp foi criada.
 
-### 3. Veja `Before and after fees/taxes`
+### 3. Veja `Before and after fees`
 
 Esse painel e o principal para explicar transparencia de custos.
 
 Ele separa:
 
 - `Before fees`: USD teorico bruto antes da rota consumir qualquer custo.
-- `Fees deducted`: soma empirica dos custos observados na rota.
+- `Fees deducted`: soma das taxas cobradas no modelo atual.
 - `After fees`: USD liquido estimado que chega na instrucao de destino.
-- `Traditional benchmark`: economia estimada contra uma referencia tradicional de FX.
 
 O bloco `Cost bridge` mostra a ponte numerica:
 
 ```text
-Gross USD before route costs
+Gross USD before charged fees
 - Source on-ramp fee, se retornada pelo provider
 - TalkToStellar transaction fee
-- Destination off-ramp/payout fee, se retornada pelo provider
-- Tax/IOF, se retornado/configurado pelo provider
-- Other route delta, se o gross-to-net mostrar custo nao explicado por uma linha explicita
+- Destination off-ramp fee, se retornada pelo provider
 = Net USD after fees
 ```
 
 Importante para a demo:
 
 ```text
-A taxa da rota nao e fixa. Ela e calculada a partir do quote/on-ramp Etherfuse, metadata/off-ramp do provider e delta bruto-liquido da reconciliacao. Se o sandbox nao retorna fee, IOF ou imposto, a UI mostra "pending provider quote" ou "not returned by provider" em vez de inventar valor.
+A taxa da rota nao e fixa. Ela e calculada a partir do quote/on-ramp Etherfuse, da taxa TalkToStellar configurada e da metadata/off-ramp do provider. IOF, benchmark, taxa bancaria futura e delta residual nao entram como taxa cobrada.
 ```
 
 ### 4. Veja `Source value`, `Baseline USD`, `Destination value`, `Route delta`
@@ -435,4 +432,4 @@ Olhe:
 - `Reconciliation.evidence.metrics`;
 - `Reconciliation.evidence.metric_validation`.
 
-O objetivo e que o custo implicito do delta seja explicado pelas linhas empiricas: on-ramp, TalkToStellar, off-ramp/payout, tax/IOF quando houver, e delta residual quando o provider ainda nao separou tudo.
+O objetivo e que o custo cobrado seja explicado por tres linhas: on-ramp, TalkToStellar e off-ramp. Qualquer diferenca fora dessas linhas deve virar investigacao de reconciliacao, nao uma taxa inventada.

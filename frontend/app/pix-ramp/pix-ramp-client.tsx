@@ -68,7 +68,6 @@ type DebugLogEntry = {
 };
 
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
-const TRADITIONAL_FX_FEE_PCT = 3.5;
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -167,6 +166,7 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
   const providerFeeRaw = quote.anchorProviderFeeAmount || quote.feeAmount || quote.fee || "";
   const backendTotalFee = parseHumanAmount(quote.totalFeeAmount);
   const backendTtsFee = parseHumanAmount(quote.talkToStellarFeeAmount);
+  const backendTtsFeeCurrency = quoteCurrencyCode(quote.talkToStellarFeeCurrency, sourceCurrency);
   const providerFee = parseHumanAmount(providerFeeRaw);
   const feeBps = parseHumanAmount(quote.feeBps);
   const hasBackendFeeBridge = Number.isFinite(backendTotalFee) && backendTotalFee >= 0 && Number.isFinite(destinationAfter);
@@ -194,12 +194,14 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
         ? (providerFeeAmount / sourceAmount) * 100
         : NaN;
   const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
-  const ttsTransactionFeePct = ttsTransactionFeeBps / 100;
-  const ttsTransactionFeeAmount = hasBackendFeeBridge && Number.isFinite(backendTtsFee)
+  const canEstimateTtsFee = sourceCurrency === "BRL" || sourceCurrency === "USDC";
+  const ttsTransactionFeeAmount = Number.isFinite(backendTtsFee)
     ? backendTtsFee
-    : Number.isFinite(sourceAmount) && sourceAmount > 0
+    : canEstimateTtsFee && Number.isFinite(sourceAmount) && sourceAmount > 0
       ? sourceAmount * (ttsTransactionFeeBps / 10000)
       : 0;
+  const ttsTransactionFeePct = ttsTransactionFeeAmount > 0 ? ttsTransactionFeeBps / 100 : 0;
+  const ttsTransactionFeeCurrency = Number.isFinite(backendTtsFee) ? backendTtsFeeCurrency : sourceCurrency;
   const sameCurrencyBridge = sourceCurrency === destinationCurrency && Number.isFinite(sourceAmount) && sourceAmount > 0;
   const grossComparableAmount = sameCurrencyBridge
     ? sourceAmount
@@ -229,6 +231,7 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     providerFeePct,
     ttsTransactionFeeAmount,
     ttsTransactionFeePct,
+    ttsTransactionFeeCurrency,
     totalRouteFeePct,
     netDestinationAmount,
     sourceAmount,
@@ -236,12 +239,6 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     retainedPct: Number.isFinite(grossComparableAmount) && grossComparableAmount > 0 && Number.isFinite(netDestinationAmount)
       ? (netDestinationAmount / grossComparableAmount) * 100
       : NaN,
-    estimatedTraditionalFee: Number.isFinite(sourceAmount) && sourceAmount > 0
-      ? sourceAmount * (TRADITIONAL_FX_FEE_PCT / 100)
-      : 0,
-    estimatedSavingsVsTraditional: Number.isFinite(sourceAmount) && sourceAmount > 0
-      ? sourceAmount * (Math.max(0, TRADITIONAL_FX_FEE_PCT - totalRouteFeePct) / 100)
-      : 0,
   };
 }
 
@@ -2669,20 +2666,15 @@ function RampFeeBridge({
   const feeCurrency = estimate.providerFeeCurrency;
   const ttsTransactionFeePct = estimate.ttsTransactionFeePct;
   const ttsTransactionFeeAmount = estimate.ttsTransactionFeeAmount;
-  const estimatedTraditionalFee = estimate.estimatedTraditionalFee;
-  const estimatedSavingsVsTraditional = estimate.estimatedSavingsVsTraditional;
+  const ttsTransactionFeeCurrency = estimate.ttsTransactionFeeCurrency;
   const retainedPct = estimate.retainedPct;
-  const sourceAmount = estimate.sourceAmount;
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
   const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
   const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}${
     Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
   }`;
-  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), sourceCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
-  const traditionalFeeValue = Number.isFinite(sourceAmount) && sourceAmount > 0
-    ? `${formatQuoteAmount(estimatedTraditionalFee.toFixed(7), sourceCurrency)} (${TRADITIONAL_FX_FEE_PCT.toFixed(2)}%)`
-    : `${TRADITIONAL_FX_FEE_PCT.toFixed(2)}%`;
+  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
   const feeTitle = mode === "onramp"
     ? L("Taxa real do on-ramp", "Real on-ramp fee")
     : L("Taxa real do off-ramp", "Real off-ramp fee");
@@ -2744,7 +2736,7 @@ function RampFeeBridge({
         </div>
       )}
 
-      <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-3">
+      <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-2">
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
           <span className="block uppercase tracking-[0.14em] text-amber-100/70">
             {mode === "onramp" ? L("Taxa on-ramp", "On-ramp fee") : L("Taxa off-ramp", "Off-ramp fee")}
@@ -2755,20 +2747,11 @@ function RampFeeBridge({
           <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("Taxa TalkToStellar", "TalkToStellar fee")}</span>
           <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-          <span className="block uppercase tracking-[0.14em] text-slate-400">{L("Normal/tradicional", "Traditional benchmark")}</span>
-          <span className="mt-1 block text-sm font-black text-white">{traditionalFeeValue}</span>
-          {estimatedSavingsVsTraditional > 0 && (
-            <span className="mt-1 block text-xs font-black text-emerald-200">
-              {L("Economia estimada", "Estimated saving")}: {formatQuoteAmount(estimatedSavingsVsTraditional.toFixed(7), sourceCurrency)}
-            </span>
-          )}
-        </div>
       </div>
       <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
         {L(
-          "Para demo, a tela separa somente as taxas que importam para o fluxo: ramp, transação TalkToStellar e comparação normal de 3,5%. Imposto/IOF não é inventado na UI sandbox.",
-          "For demos, the screen separates only the fees that matter to this flow: ramp, TalkToStellar transaction, and a 3.5% traditional benchmark. Tax/IOF is not invented in the sandbox UI.",
+          "Esta tela separa somente taxas cobradas neste fluxo: taxa do ramp/provider e taxa de transação TalkToStellar. Benchmark, IOF/imposto e taxas opcionais não entram nesta conta.",
+          "This screen separates only charged fees in this flow: ramp/provider fee and TalkToStellar transaction fee. Benchmarks, tax/IOF and optional fees are not included in this count.",
         )}
       </p>
     </div>

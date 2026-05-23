@@ -77,7 +77,6 @@ export class BrlUsdQuoteService {
     const platformFeeBrl = toPositiveNumber(platformFee.feeAmount);
     const platformFeeUsd = brlPerUsd > 0 ? platformFeeBrl / brlPerUsd : 0;
     const estimatedUsdcAfterPlatformFee = Math.max(0, estimatedUsdcGross - platformFeeUsd);
-    const estimatedProviderFeeUsd = 0;
     const estimatedUsd = estimatedUsdcAfterPlatformFee;
     const totalFeeUsd = platformFeeUsd;
     const totalFeeBrl = platformFeeBrl;
@@ -101,7 +100,7 @@ export class BrlUsdQuoteService {
         bps: platformFee.feeBps,
       },
       estimated_provider_fee: {
-        amount: amount(estimatedProviderFeeUsd),
+        amount: '0',
         currency: 'USD',
       },
       total_fee: {
@@ -114,21 +113,25 @@ export class BrlUsdQuoteService {
       metadata: {
         reference_quote: referenceQuote,
         usdc_assumed_usd_parity: true,
-        provider_fee_source: 'pending_provider_quote',
+        fee_model: 'charged_on_off_ramp_transaction_fees_only',
         fee_breakdown: {
           gross_usd_before_fees: amount(estimatedUsdcGross),
+          talktostellar_transaction_fee_brl: amount(platformFeeBrl, 2),
+          talktostellar_transaction_fee_usd: amount(platformFeeUsd),
           platform_fee_brl: amount(platformFeeBrl, 2),
           platform_fee_usd: amount(platformFeeUsd),
           after_platform_fee_usd: amount(estimatedUsdcAfterPlatformFee),
-          provider_fee_usd: amount(estimatedProviderFeeUsd),
-          provider_fee_source: 'pending_provider_quote',
+          on_ramp_fee_usd: '0',
+          on_ramp_fee_brl: '0',
           on_ramp_fee_source: 'pending_etherfuse_quote',
-          off_ramp_fee_source: 'pending_payout_adapter',
-          tax_estimate_usd: '0',
-          tax_estimate_source: 'not_configured_for_sandbox_quote',
+          off_ramp_fee_usd: '0',
+          off_ramp_fee_brl: '0',
+          off_ramp_fee_source: 'pending_off_ramp_quote',
+          total_charged_fee_usd: amount(totalFeeUsd),
+          total_charged_fee_brl: amount(totalFeeBrl, 2),
           total_fee_usd: amount(totalFeeUsd),
           total_fee_brl: amount(totalFeeBrl, 2),
-          estimated_usd_after_all_fees: amount(estimatedUsd),
+          estimated_usd_after_charged_fees: amount(estimatedUsd),
           retained_pct: amount(retainedPct, 4),
         },
       },
