@@ -42,7 +42,7 @@ function appendError(transfer: InternationalTransfer, error: unknown, stage: str
 }
 
 function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge' | 'etherfuse' {
-  const normalized = String(provider || process.env.PAYOUT_PROVIDER || 'mock').trim().toLowerCase();
+  const normalized = String(provider || process.env.PAYOUT_PROVIDER || 'etherfuse').trim().toLowerCase();
   if (normalized === 'circle') return 'circle';
   if (normalized === 'bridge') return 'bridge';
   if (normalized === 'etherfuse') return 'etherfuse';

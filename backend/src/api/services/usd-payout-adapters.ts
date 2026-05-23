@@ -6,6 +6,7 @@ import {
   PayoutStatus,
   UsdBankDestination,
 } from './international-transfer.types';
+import { mockDisabledError, mockPolicySnapshot } from '../../config/mock-policy';
 
 export type CreatePayoutInput = {
   transferId: string;
@@ -62,6 +63,12 @@ export class MockUsdPayoutAdapter implements PayoutProviderAdapter {
   providerName: PayoutProviderName = 'mock';
 
   async createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction> {
+    if (!mockPolicySnapshot().mock_usd_payout_allowed) {
+      throw mockDisabledError(
+        'USD payout',
+        'Use provider=etherfuse, provider=circle, or provider=bridge. Mock USD payouts are ops-only and require ALLOW_OPS_MOCKS=true plus ALLOW_MOCK_USD_PAYOUTS=true.'
+      );
+    }
     return createInstruction(input, 'mock', {
       mode: 'mock',
       auto_complete: String(process.env.MOCK_USD_PAYOUT_AUTO_COMPLETE || '').toLowerCase() === 'true',
@@ -260,7 +267,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
 }
 
 export function getPayoutProviderAdapter(provider = process.env.PAYOUT_PROVIDER): PayoutProviderAdapter {
-  const normalized = String(provider || 'mock').trim().toLowerCase();
+  const normalized = String(provider || 'etherfuse').trim().toLowerCase();
   if (normalized === 'circle') return new CircleCompatibilityAdapter();
   if (normalized === 'bridge') return new BridgeCompatibilityAdapter();
   if (normalized === 'etherfuse') return new EtherfusePixOffRampAdapter();

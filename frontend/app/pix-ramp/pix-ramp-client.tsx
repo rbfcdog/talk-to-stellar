@@ -18,6 +18,9 @@ type RampConfig = {
   network?: string;
   stellar_network_id?: "TESTNET" | "PUBLIC";
   unavailable_reason?: string;
+  user_facing_mocks_allowed?: boolean;
+  ops_mocks_allowed?: boolean;
+  local_mock_fallback_allowed?: boolean;
   asset?: { code: string; issuer: string; identifier: string };
 };
 
@@ -671,6 +674,8 @@ export default function PixRampClient({
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
+  const localMockFallbackAllowed = Boolean(config?.local_mock_fallback_allowed);
+  const opsMocksAllowed = Boolean(config?.ops_mocks_allowed);
   const displayPixKey = isSandboxMockOrder ? (pixKey || `pix-${orderId.slice(-8) || "checkout"}@talktostellar.local`) : pixKey;
   const technicalFinalAssetCode = String(order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
   const receivedCode = userFacingAssetCode(technicalFinalAssetCode, targetAsset);
@@ -1647,6 +1652,9 @@ export default function PixRampClient({
   async function simulatePixPayment() {
     await runAtomicAction("confirmar-pix", async () => {
       if (!orderId) throw new Error(L("Prepare o PIX antes de confirmar o pagamento.", "Prepare the PIX before confirming payment."));
+      if (isSandboxMockOrder && !localMockFallbackAllowed) {
+        throw new Error(L("Este checkout foi criado como mock local antigo. Gere um novo PIX para usar somente Etherfuse sandbox/oficial.", "This checkout was created as an old local mock. Create a new PIX checkout to use only official Etherfuse sandbox/provider flow."));
+      }
       const pin = getValidatedWalletPin();
       const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
         intent_id: atomicIntentKey,
@@ -1706,6 +1714,9 @@ export default function PixRampClient({
   }
 
   async function runTemporaryEndpointTest() {
+    if (!opsMocksAllowed) {
+      throw new Error(L("Endpoint técnico de teste desativado. Use o fluxo PIX normal com Etherfuse sandbox/oficial.", "Technical test endpoint is disabled. Use the normal Etherfuse sandbox/provider PIX flow."));
+    }
     const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-onramp", {
       intent_id: atomicIntentKey,
@@ -1747,6 +1758,9 @@ export default function PixRampClient({
 
   async function runTemporaryOffRampEndpointTest() {
     await runAtomicAction("confirmar-retirada", async () => {
+      if (!opsMocksAllowed) {
+        throw new Error(L("Endpoint técnico de retirada mock desativado. Use a criação normal de off-ramp Etherfuse.", "Technical mock off-ramp endpoint is disabled. Use the normal Etherfuse off-ramp creation flow."));
+      }
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
       const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
@@ -2350,14 +2364,23 @@ export default function PixRampClient({
                   </div>
                 </div>
 
-                  {demoPixMode ? (
+                  {isSandboxMockOrder && !localMockFallbackAllowed ? (
+                    <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-50">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-rose-100">{L("Checkout antigo em mock local", "Old local mock checkout")}</p>
+                      <p className="mt-2">
+                        {L("Mocks locais estão desativados agora. Gere um novo checkout para usar somente Etherfuse sandbox/oficial.", "Local mocks are disabled now. Create a new checkout to use only official Etherfuse sandbox/provider flow.")}
+                      </p>
+                    </div>
+                  ) : demoPixMode ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{L("PIX integrado em preparação", "Integrated PIX in progress")}</p>
                       <p className="mt-2">
-                        {L("Este QR é demonstrativo e usado apenas para simular o fluxo PIX nesta tela.", "This QR is a demo code used only to simulate the PIX flow on this screen.")}
+                        {isSandboxMockOrder
+                          ? L("Este QR veio de um fallback local explicitamente habilitado para operadores.", "This QR came from a local fallback explicitly enabled for operators.")
+                          : L("Este checkout está no sandbox oficial do provider. Use o botão abaixo apenas para disparar a confirmação sandbox.", "This checkout is in the provider official sandbox. Use the button below only to trigger the sandbox confirmation.")}
                       </p>
                       <p className="mt-2 text-amber-100/80">
-                        {L("Digite seu PIN e simule a confirmação nesta tela para continuar. Quando o PIX bancário estiver ativo, esta mesma tela mostrará o PIX copia e cola real e verificará o status no provedor.", "Enter your PIN and simulate confirmation on this screen to continue. When bank PIX is active, this same screen will show the real copy-and-paste PIX code and verify status with the provider.")}
+                        {L("Sem mock local por padrão: se o provider não criar a ordem, a tela mostra erro em vez de inventar sucesso.", "No local mock by default: if the provider does not create the order, the screen shows an error instead of inventing success.")}
                       </p>
                     </div>
                   ) : (
@@ -2389,7 +2412,7 @@ export default function PixRampClient({
                     </div>
                   )}
 
-                  {config?.available && !orderFailed && (
+                  {config?.available && !orderFailed && !(isSandboxMockOrder && !localMockFallbackAllowed) && (
                     <div className="mt-5 rounded-3xl border-2 border-amber-200/70 bg-amber-300/15 p-4 text-amber-100 shadow-lg shadow-amber-950/20">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-black text-emerald-100">
@@ -2399,7 +2422,9 @@ export default function PixRampClient({
                           <>
                             <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-50">{L("Depois de pagar o PIX", "After paying PIX")}</p>
                             <p className="mt-2 text-sm font-bold leading-6 text-amber-50/90">
-                              {L("Digite o PIN e toque no botão abaixo para simular a confirmação PIX neste ambiente de teste. Em produção, a confirmação vem do provedor PIX.", "Enter the PIN and tap the button below to simulate PIX confirmation in this test environment. In production, confirmation comes from the PIX provider.")}
+                              {isSandboxMockOrder
+                                ? L("Digite o PIN para concluir este fallback local habilitado para operador.", "Enter the PIN to complete this operator-enabled local fallback.")
+                                : L("Digite o PIN para disparar a confirmação no sandbox oficial do provider. Em produção, a confirmação vem do webhook PIX.", "Enter the PIN to trigger confirmation in the provider official sandbox. In production, confirmation comes from the PIX webhook.")}
                             </p>
                             <label className="mt-4 block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
                             <WalletPinInput
@@ -2417,7 +2442,7 @@ export default function PixRampClient({
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Simular pagamento PIX neste ambiente de teste", "Simulate PIX payment in this test environment")}
+                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : isSandboxMockOrder ? L("Concluir fallback local autorizado", "Complete authorized local fallback") : L("Confirmar no sandbox Etherfuse", "Confirm in Etherfuse sandbox")}
                             </button>
                           </>
                         )}
@@ -2448,8 +2473,8 @@ export default function PixRampClient({
               title="On-ramp temporary endpoint"
               endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
               description="Runs the whole on-ramp server-side and returns the final transaction status."
-              disabled={!canResolveWallet || Boolean(loading) || !config?.available || operationLocked}
-              hidden={!config?.available}
+              disabled={!canResolveWallet || Boolean(loading) || !config?.available || !opsMocksAllowed || operationLocked}
+              hidden={!config?.available || !opsMocksAllowed}
               onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
               result={temporaryTestResult ? {
                 order_id: temporaryTestResult.transaction?.id,
@@ -2467,12 +2492,12 @@ export default function PixRampClient({
             </p>
             <label className="mt-5 block text-sm font-bold text-stone-600">Balance amount to off-ramp</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
-            {config?.available ? (
+            {config?.available && opsMocksAllowed ? (
               <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
                 Test off-ramp and asset delta
               </button>
             ) : (
-              <div className="mt-5 rounded-2xl bg-stone-100 p-4 text-sm font-bold text-stone-500">Hidden in production.</div>
+              <div className="mt-5 rounded-2xl bg-stone-100 p-4 text-sm font-bold text-stone-500">Mock/off-ramp test endpoint disabled. Use provider off-ramp flow.</div>
             )}
             {temporaryOffRampTestResult && (
               <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify({

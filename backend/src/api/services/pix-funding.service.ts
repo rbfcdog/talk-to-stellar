@@ -1,5 +1,6 @@
 import { AnchorService } from './anchor.service';
 import { InternationalTransfer } from './international-transfer.types';
+import { mockDisabledError, specificMockAllowed } from '../../config/mock-policy';
 
 export type PixFundingIntent = {
   provider: 'etherfuse';
@@ -22,10 +23,11 @@ export class PixFundingService {
     AnchorService.assertEtherfuseTestnetRuntime();
 
     if (input.mock) {
-      const mockEnabled = process.env.NODE_ENV !== 'production' ||
-        String(process.env.INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX || '').trim().toLowerCase() === 'true';
-      if (!mockEnabled) {
-        throw new Error('Mock Pix intent is disabled. Set INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true for sandbox demos.');
+      if (!specificMockAllowed('INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX', 'ops')) {
+        throw mockDisabledError(
+          'Institution transfer Pix intent',
+          'Use an Etherfuse Pix intent, or explicitly enable ops-only mocks with ALLOW_OPS_MOCKS=true and INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true.'
+        );
       }
 
       const id = `mock_pix_${input.transfer.transfer_id}`;

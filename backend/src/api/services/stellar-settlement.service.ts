@@ -3,6 +3,7 @@ import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
 import { stellarConfig } from '../../config/stellar';
 import { StellarService } from './stellar.service';
 import { InternationalTransfer, SettlementEvidence } from './international-transfer.types';
+import { mockDisabledError, specificMockAllowed } from '../../config/mock-policy';
 
 function toPositiveNumber(value: unknown): number {
   const parsed = Number(String(value || '').replace(',', '.'));
@@ -48,6 +49,10 @@ function settlementMemo(transferId: string): string {
 }
 
 export class StellarSettlementService {
+  private mockSettlementAllowed(): boolean {
+    return specificMockAllowed('ALLOW_STELLAR_MOCK_SETTLEMENT', 'ops');
+  }
+
   async settleUsdc(transfer: InternationalTransfer): Promise<SettlementEvidence> {
     const network = activeNetwork();
     const amount = stellarAmount(transfer.quoted_usd_amount);
@@ -68,6 +73,12 @@ export class StellarSettlementService {
     if (network === 'mainnet') {
       const usdAmount = toPositiveNumber(amount);
       if (!enableMainnetValidation) {
+        if (!this.mockSettlementAllowed()) {
+          throw mockDisabledError(
+            'Stellar mainnet settlement',
+            'ENABLE_MAINNET_SETTLEMENT_VALIDATION=true is required for mainnet validation; otherwise switch STELLAR_NETWORK=TESTNET.'
+          );
+        }
         return this.mockEvidence({
           transfer,
           amount,
@@ -87,6 +98,12 @@ export class StellarSettlementService {
     }
 
     if (!realExecutionPossible) {
+      if (!this.mockSettlementAllowed()) {
+        throw mockDisabledError(
+          'Stellar USDC settlement',
+          'Set STELLAR_SECRET_KEY and USD_OFFRAMP_STELLAR_DESTINATION/PAYOUT_STELLAR_DESTINATION_PUBLIC_KEY for real testnet settlement.'
+        );
+      }
       return this.mockEvidence({
         transfer,
         amount,
