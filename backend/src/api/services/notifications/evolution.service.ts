@@ -376,6 +376,15 @@ function shouldRetrySend(error: unknown): boolean {
   return name === 'aborterror' || message.includes('aborted') || message.includes('timeout') || message.includes('fetch failed') || message.includes('econn');
 }
 
+function isMissingEvolutionInstanceError(error: unknown): boolean {
+  if (!(error instanceof EvolutionSendTextError)) return false;
+  if (Number(error.status || 0) !== 404) return false;
+  const body = JSON.stringify(error.body || '').toLowerCase();
+  const message = String(error.message || '').toLowerCase();
+  return body.includes('instance') && body.includes('does not exist') ||
+    message.includes('instance') && message.includes('does not exist');
+}
+
 function sendTextBodyVariants(): EvolutionSendTextBodyVariant[] {
   const configured = String(process.env.EVOLUTION_SEND_TEXT_BODY_VERSION || '').trim().toLowerCase();
   if (configured === 'v1') return ['v1', 'v2', 'hybrid'];
@@ -494,6 +503,69 @@ function assertEvolutionConfig(instance: string) {
   if (!apiKey) throw new Error('EVOLUTION_API_KEY or AUTHENTICATION_API_KEY is required.');
   if (!sendInstance) throw new Error('EVOLUTION_INSTANCE is required.');
   return { baseUrl, apiKey, instance: sendInstance };
+}
+
+function collectEvolutionInstanceNames(payload: any): string[] {
+  const names: string[] = [];
+  const add = (value: unknown) => {
+    const name = String(value || '').trim();
+    if (!name || isLikelyEvolutionInstanceId(name)) return;
+    if (/^https?:\/\//i.test(name)) return;
+    if (name.includes('@')) return;
+    names.push(name);
+  };
+  const visit = (value: any, depth = 0) => {
+    if (!value || depth > 5) return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    add(value.name);
+    add(value.instanceName);
+    add(value.instance_name);
+    if (typeof value.instance === 'string') add(value.instance);
+    if (value.instance && typeof value.instance === 'object') {
+      add(value.instance.name);
+      add(value.instance.instanceName);
+      add(value.instance.instance_name);
+      if (typeof value.instance.instance === 'string') add(value.instance.instance);
+    }
+    visit(value.data, depth + 1);
+    visit(value.instances, depth + 1);
+    visit(value.response, depth + 1);
+  };
+
+  visit(payload);
+  return Array.from(new Set(names));
+}
+
+async function discoverEvolutionInstanceNames(baseUrl: string, apiKey: string): Promise<string[]> {
+  const endpoints = [
+    `${baseUrl}/instance/fetchInstances`,
+    `${baseUrl}/instance/fetchInstances/`,
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          apikey: apiKey,
+        },
+      });
+      if (!response.ok) continue;
+      const body = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+      const names = collectEvolutionInstanceNames(body);
+      if (names.length > 0) return names;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[evolution-send] instance discovery failed at ${endpoint}: ${message}`);
+    }
+  }
+
+  return [];
 }
 
 async function resolveExistingSession(input: {
@@ -754,6 +826,43 @@ export class EvolutionService {
       if (attempt >= attempts || !shouldTryRetry) break;
       const backoffMs = Math.min(1000 * attempt, 3000);
       await sleep(backoffMs);
+    }
+
+    if (isMissingEvolutionInstanceError(lastError)) {
+      const discoveredInstances = (await discoverEvolutionInstanceNames(baseUrl, apiKey))
+        .filter((candidate) => candidate !== instance);
+      if (discoveredInstances.length > 0) {
+        logger.warn(
+          `[evolution-send] configured instance "${instance}" was not found; retrying discovered instance(s): ${discoveredInstances.join(',')}`
+        );
+      }
+
+      for (const discoveredInstance of discoveredInstances) {
+        for (const candidateNumber of numberCandidates) {
+          for (const bodyVariant of bodyVariants) {
+            try {
+              const response = await this.sendTextOnce({
+                baseUrl,
+                apiKey,
+                instance: discoveredInstance,
+                number: candidateNumber,
+                text,
+                timeoutMs,
+                bodyVariant,
+              });
+              if (reliable) {
+                logger.info(`[evolution-send] delivered message to ***${normalizeOutboundWhatsAppNumber(candidateNumber).slice(-4)} using discovered instance ${discoveredInstance} and ${bodyVariant} payload`);
+              }
+              return response;
+            } catch (error) {
+              lastError = error;
+              if (!shouldTryAlternateSendPayload(error)) break;
+            }
+          }
+
+          if (!shouldTryAlternateSendPayload(lastError)) break;
+        }
+      }
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Evolution sendText failed'));
