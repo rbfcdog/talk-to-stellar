@@ -717,11 +717,14 @@ export class EvolutionService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     let response: Response;
+    // Preserve WhatsApp Markdown markers. Evolution/Baileys applies native
+    // formatting, so escaping '*' or '_' here would make receipts look broken.
+    const outboundText = String(input.text ?? '');
     const body = input.bodyVariant === 'v1'
       ? {
           number: input.number,
           textMessage: {
-            text: input.text,
+            text: outboundText,
           },
           options: {
             delay: 300,
@@ -732,7 +735,7 @@ export class EvolutionService {
       : input.bodyVariant === 'hybrid'
         ? {
             number: input.number,
-            text: input.text,
+            text: outboundText,
             options: {
               delay: 300,
               presence: 'composing',
@@ -741,7 +744,7 @@ export class EvolutionService {
           }
         : {
           number: input.number,
-          text: input.text,
+          text: outboundText,
           delay: 300,
           linkPreview: false,
         };

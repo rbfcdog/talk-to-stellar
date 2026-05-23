@@ -2444,6 +2444,9 @@ export class AgentGraph {
       '- When a quote or payment result has a fee, say it before confirmation in R$ and US$ only.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
+      '- If the user asks "quanto custa enviar", "quanto vou pagar", "vale a pena", "comparado com o banco", "banco", or "Wise" with a transfer amount, call show_savings_calculator before asking for confirmation. Never answer fee comparison only with free text.',
+      '- After any payment or conversion is completed inside the agent flow, call send_receipt_with_savings instead of only confirming with free text. The receipt must put the user savings before the Stellar evidence/hash.',
+      '- If the user asks "quanto eu economizei", "resumo do ano", or "histórico de economia", call show_annual_savings_summary.',
     ].join('\n');
   }
 
@@ -2561,6 +2564,9 @@ Respond ONLY with the intent name. Examples:
 - "quanto perdi em taxas?" -> financial_memory
 - "qual cliente mais me paga?" -> financial_memory
 - "quanto economizei em relação a métodos tradicionais?" -> financial_memory
+- "quanto custa enviar 5000 reais?" -> financial_memory
+- "vale a pena comparado com o banco?" -> financial_memory
+- "resumo do ano de economia" -> financial_memory
 - "seu saldo em reais perdeu 3% esse mes frente ao dolar" -> financial_memory
 - "deseja proteger parte do saldo?" -> financial_memory
 - "modo ai treasury" -> financial_memory
@@ -3422,6 +3428,90 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     return { period, view };
   }
 
+  private savingsCalculatorIntent(message: string): null | { brlAmount: string } {
+    const raw = String(message || '');
+    const normalized = this.normalizeTextForIntent(raw);
+    const asksCost =
+      normalized.includes('quanto custa enviar') ||
+      normalized.includes('quanto custa mandar') ||
+      normalized.includes('quanto vou pagar') ||
+      normalized.includes('quanto eu pago') ||
+      normalized.includes('qual a taxa') ||
+      normalized.includes('taxa para enviar') ||
+      normalized.includes('vale a pena') ||
+      normalized.includes('comparado com o banco') ||
+      normalized.includes('comparado ao banco') ||
+      normalized.includes('comparar com banco') ||
+      normalized.includes('comparar com o banco') ||
+      normalized.includes('comparado com wise') ||
+      normalized.includes('comparar com wise') ||
+      (/\b(banco|wise)\b/.test(normalized) && /\b(enviar|mandar|transferir|custa|taxa|pagar|vale)\b/.test(normalized));
+
+    if (!asksCost) return null;
+    if (this.wantsAnnualSavingsSummary(raw)) return null;
+
+    const amount = parseHumanAmountNumber(raw);
+    return {
+      brlAmount: Number.isFinite(amount) && amount > 0 ? String(amount) : '',
+    };
+  }
+
+  private wantsAnnualSavingsSummary(message: string): boolean {
+    const normalized = this.normalizeTextForIntent(message);
+    return (
+      normalized.includes('quanto eu economizei') ||
+      normalized.includes('quanto economizei') ||
+      normalized.includes('total economizado') ||
+      normalized.includes('resumo do ano') ||
+      normalized.includes('resumo anual') ||
+      normalized.includes('historico de economia') ||
+      normalized.includes('histórico de economia') ||
+      normalized.includes('minha economia no ano')
+    );
+  }
+
+  private async handleSavingsCalculatorIntent(state: AgentState, intent: { brlAmount: string }): Promise<AgentState> {
+    const resultRaw = await executeTool('show_savings_calculator', {
+      brl_amount: intent.brlAmount,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, message: 'Qual valor em reais você quer simular?' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = result.message || 'Qual valor em reais você quer simular?';
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handleAnnualSavingsSummaryIntent(state: AgentState): Promise<AgentState> {
+    const resultRaw = await executeTool('show_annual_savings_summary', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      public_key: state.session_data?.public_key,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Failed to parse annual savings summary' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = state.success
+      ? result.message
+      : `Não consegui calcular sua economia agora: ${result.error || 'erro desconhecido'}`;
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async handleFixedSavingsIntent(state: AgentState, fixed: {
     period: 'today' | 'month' | 'lifetime';
     view: 'summary' | 'traditional_cost' | 'biggest_operation';
@@ -3854,6 +3944,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
+      const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
+      const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
       const extractedPixRamp = this.extractPixRampIntentFromText(state.current_input);
       const resumedPixRamp = extractedPixRamp.is_pix_ramp ? null : this.resumePendingPixRampIntent(state);
@@ -3876,17 +3968,19 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                 ? IntentType.GENERAL
                 : wantsRampHistory
                   ? IntentType.FINANCIAL_MEMORY
-                  : deterministicExternalWallet.is_external_wallet
-                    ? IntentType.PAYMENT
-                    : deterministicBestRouteEstimate
+                  : savingsCalculator || wantsAnnualSavingsSummary
+                    ? IntentType.FINANCIAL_MEMORY
+                    : deterministicExternalWallet.is_external_wallet
                       ? IntentType.PAYMENT
-                    : deterministicPixRamp.is_pix_ramp
-                      ? IntentType.PIX
-                      : fixedSavings
-                        ? IntentType.FINANCIAL_MEMORY
-                        : deterministicFinancialMemory
-                          ? IntentType.FINANCIAL_MEMORY
-                        : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                      : deterministicBestRouteEstimate
+                        ? IntentType.PAYMENT
+                        : deterministicPixRamp.is_pix_ramp
+                          ? IntentType.PIX
+                          : fixedSavings
+                            ? IntentType.FINANCIAL_MEMORY
+                            : deterministicFinancialMemory
+                              ? IntentType.FINANCIAL_MEMORY
+                              : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -3896,6 +3990,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       );
 
       const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
+      if (savingsCalculator) {
+        return await this.handleSavingsCalculatorIntent(state, savingsCalculator);
+      }
+
       const onboardingIntents = new Set<IntentType>([
         IntentType.WALLET,
         IntentType.ONBOARD,
@@ -3950,6 +4048,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (deterministicExternalWallet.is_external_wallet) {
         return await this.handleExternalWalletRequest(state);
+      }
+
+      if (wantsAnnualSavingsSummary) {
+        return await this.handleAnnualSavingsSummaryIntent(state);
       }
 
       if (fixedSavings) {
