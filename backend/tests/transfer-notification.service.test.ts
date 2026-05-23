@@ -46,7 +46,8 @@ describe('TransferNotificationService', () => {
     expect(sendTextMock).toHaveBeenCalledWith(
       'main',
       '5519981808102',
-      'PIX confirmado. Seu pagamento foi concluido.'
+      'PIX confirmado. Seu pagamento foi concluido.',
+      { reliable: true }
     );
   });
 });

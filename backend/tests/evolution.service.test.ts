@@ -127,7 +127,69 @@ describe('EvolutionService', () => {
         message_id: 'evolution-agent-test-1',
       },
     });
-    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.');
+    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.', { reliable: true });
+  });
+
+  it('normalizes outbound numbers and retries reliable completion messages after transient Evolution failures', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url, init] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl !== 'http://evolution.local/message/sendText/main') {
+        throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+      }
+      const body = JSON.parse(String((init as RequestInit).body || '{}'));
+      expect(body.number).toBe('5519981808102');
+      expect(body.text).toBe('Pagamento concluido.');
+
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(JSON.stringify({ error: 'temporary unavailable' }), { status: 503 });
+      }
+      return new Response(JSON.stringify({ key: { id: 'msg-1' } }), { status: 201 });
+    });
+    global.fetch = fetchMock as any;
+
+    const result = await EvolutionService.sendText(
+      'main',
+      'whatsapp:+55 19 98180-8102@s.whatsapp.net',
+      'Pagamento concluido.',
+      { reliable: true, attempts: 2, timeoutMs: 5000 }
+    );
+
+    expect(result).toEqual({ key: { id: 'msg-1' } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('tries the alternate Evolution payload shape when the legacy sendText body is rejected', async () => {
+    const requestBodies: any[] = [];
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [, init] = args;
+      const body = JSON.parse(String((init as RequestInit).body || '{}'));
+      requestBodies.push(body);
+      if (requestBodies.length === 1) {
+        return new Response(JSON.stringify({ message: 'bad payload' }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ sent: true }), { status: 200 });
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.sendText('main', '5519981808102', 'ok', { reliable: true, attempts: 1 }))
+      .resolves.toEqual({ sent: true });
+
+    expect(requestBodies[0]).toMatchObject({
+      number: '5519981808102',
+      text: 'ok',
+      delay: 300,
+      linkPreview: false,
+    });
+    expect(requestBodies[1]).toMatchObject({
+      number: '5519981808102',
+      text: 'ok',
+      options: {
+        delay: 300,
+        presence: 'composing',
+        linkPreview: false,
+      },
+    });
   });
 
   it('does not call the agent for unsupported empty messages', async () => {
@@ -210,7 +272,7 @@ describe('EvolutionService', () => {
     await flushBackgroundWork();
 
     expect(sendTextSpy).toHaveBeenCalledTimes(1);
-    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.');
+    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.', { reliable: true });
   });
 
   it('does not send a user-visible fallback when the agent request fails by default', async () => {
