@@ -199,6 +199,83 @@ describe('TransferNotificationService', () => {
     });
   });
 
+  it('preserves saved Evolution metadata when a confirmation token also provides a direct WhatsApp mapping', async () => {
+    process.env.EVOLUTION_INSTANCE = '';
+    process.env.EVOLUTION_INSTANCE_NAME = '';
+    process.env.EVOLUTION_NOTIFY_INSTANCE = '';
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [],
+      userMappings: [
+        {
+          provider: 'whatsapp',
+          provider_user_id: '5519981808102',
+          data: {
+            instance: 'talktostellar-business',
+            remote_jid: '5519981808102@s.whatsapp.net',
+          },
+        },
+      ],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      provider: 'whatsapp',
+      providerUserId: '5519981808102',
+      text: 'Pagamento confirmado. Comprovante disponivel.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'talktostellar-business',
+      '5519981808102',
+      'Pagamento confirmado. Comprovante disponivel.',
+      { reliable: true }
+    );
+    expect(report.whatsapp.instances).toEqual(['talktostellar-business']);
+  });
+
+  it('can notify WhatsApp from a user_id-only callback diagnostic request', async () => {
+    process.env.EVOLUTION_INSTANCE = '';
+    process.env.EVOLUTION_INSTANCE_NAME = '';
+    process.env.EVOLUTION_NOTIFY_INSTANCE = '';
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [],
+      userMappings: [
+        {
+          provider: 'whatsapp',
+          provider_user_id: '5519981808102',
+          data: {
+            instance: 'talktostellar-business',
+            remote_jid: '5519981808102@s.whatsapp.net',
+          },
+        },
+      ],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      userId: 'user-1',
+      text: 'Teste por usuario.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'talktostellar-business',
+      '5519981808102',
+      'Teste por usuario.',
+      { reliable: true }
+    );
+    expect(report.whatsapp).toMatchObject({
+      attempted: true,
+      delivered: 1,
+      recipients: 1,
+      instances: ['talktostellar-business'],
+    });
+  });
+
   it('can recover the WhatsApp recipient from mapping data remote_jid', async () => {
     process.env.EVOLUTION_INSTANCE = '';
     process.env.EVOLUTION_NOTIFY_INSTANCE = 'notify-main';
