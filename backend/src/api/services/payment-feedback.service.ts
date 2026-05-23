@@ -1,4 +1,4 @@
-import { AgentRepository } from '../../repositories/agent.repository';
+import { AgentRepository } from '../repository/core/agent.repository';
 import { OperationRepository } from '../repository/operation.repository';
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";

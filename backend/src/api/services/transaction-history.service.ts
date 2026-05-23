@@ -1,6 +1,6 @@
 import { supabase } from '../../config/supabase';
 import { FinancialContextService } from './financial-context.service';
-import ExternalService from '../../services/external.service';
+import ExternalService from './core/external.service';
 import { StellarService } from './stellar.service';
 
 function normalizeKey(value: string): string {

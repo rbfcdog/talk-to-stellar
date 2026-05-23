@@ -2,18 +2,18 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
-import { AgentRepository } from '../../repositories/agent.repository';
-import { WalletRepository } from '../../repositories/wallet.repository';
+import { AgentRepository } from '../repository/core/agent.repository';
+import { WalletRepository } from '../repository/core/wallet.repository';
 import {
   ExternalRepository,
   externalProviderAliases,
   isPhoneProvider,
   normalizeExternalProvider,
   normalizeExternalProviderUserId,
-} from '../../repositories/external.repository';
-import PasskeyService from '../../services/passkey.service';
-import { ContactRepository } from '../../api/repository/contact.repository';
-import { VaultService } from '../../services/vault.service';
+} from '../repository/core/external.repository';
+import PasskeyService from '../services/core/passkey.service';
+import { ContactRepository } from '../repository/contact.repository';
+import { VaultService } from '../services/core/vault.service';
 import { StellarService } from '../services/stellar.service';
 import { TransferNotificationService } from '../services/transfer-notification.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
@@ -29,7 +29,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service';
-import { buildOperationFingerprint } from '../../services/idempotency.service';
+import { buildOperationFingerprint } from '../services/core/idempotency.service';
 import {
   EmailConfirmationError,
   EmailConfirmationPurpose,

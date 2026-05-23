@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase';
-import { AgentRepository } from '../../repositories/agent.repository';
+import { AgentRepository } from '../repository/core/agent.repository';
 import { logger } from '../../utils/logger';
 import { TransferNotificationService } from './transfer-notification.service';
 import { EconomyEngineService } from './economy-engine.service';

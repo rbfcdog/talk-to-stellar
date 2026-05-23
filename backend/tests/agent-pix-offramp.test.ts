@@ -1,5 +1,5 @@
-import { AgentGraph } from '../src/agent/graph';
-import { ActionType, AgentState, IntentType } from '../src/agent/types';
+import { AgentGraph } from '../src/api/agent/graph';
+import { ActionType, AgentState, IntentType } from '../src/api/agent/types';
 
 describe('Agent PIX off-ramp detection', () => {
   const createRepository = () => ({

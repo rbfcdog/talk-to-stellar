@@ -1,5 +1,5 @@
 import { PinResetController } from '../src/api/controllers/pin-reset.controller';
-import { PinResetService } from '../src/services/pin-reset.service';
+import { PinResetService } from '../src/api/services/core/pin-reset.service';
 import { supabase } from '../src/config/supabase';
 
 function mockResponse() {

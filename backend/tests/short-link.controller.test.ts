@@ -1,7 +1,7 @@
 const mockShortenPublicUrl = jest.fn();
 const mockResolveShortLink = jest.fn();
 
-jest.mock('../src/services/external.service', () => ({
+jest.mock('../src/api/services/core/external.service', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
     shortenPublicUrl: mockShortenPublicUrl,

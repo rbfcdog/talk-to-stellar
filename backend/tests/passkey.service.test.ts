@@ -9,7 +9,7 @@ jest.mock('../src/config/supabase', () => ({
   },
 }));
 
-jest.mock('../src/repositories/agent.repository', () => ({
+jest.mock('../src/api/repository/core/agent.repository', () => ({
   AgentRepository: jest.fn().mockImplementation(() => ({
     getSession: mockGetSession,
   })),
@@ -70,7 +70,7 @@ describe('PasskeyService challenge generation', () => {
   }
 
   it('stores the exact registration challenge returned to the browser', async () => {
-    const { default: PasskeyService } = await import('../src/services/passkey.service');
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
     const authorization = {
       userId: 'user-123',
@@ -97,7 +97,7 @@ describe('PasskeyService challenge generation', () => {
   });
 
   it('requires a valid session token before registration', async () => {
-    const { default: PasskeyService } = await import('../src/services/passkey.service');
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
     await expect(PasskeyService.authorizeRegistration({
       userId: 'user-123',
@@ -112,7 +112,7 @@ describe('PasskeyService challenge generation', () => {
       session_token: 'session-token',
       last_activity: new Date().toISOString(),
     });
-    const { default: PasskeyService } = await import('../src/services/passkey.service');
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
     await expect(PasskeyService.authorizeRegistration({
       email: 'user@example.com',
@@ -131,7 +131,7 @@ describe('PasskeyService challenge generation', () => {
       session_token: 'session-token',
       last_activity: new Date().toISOString(),
     });
-    const { default: PasskeyService } = await import('../src/services/passkey.service');
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
     await expect(PasskeyService.authorizeRegistration({
       email: 'attacker@example.com',
@@ -151,7 +151,7 @@ describe('PasskeyService challenge generation', () => {
         transports: ['internal'],
       },
     ];
-    const { default: PasskeyService } = await import('../src/services/passkey.service');
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
     const result = await PasskeyService.generateLoginAuthentication('user-123');
 

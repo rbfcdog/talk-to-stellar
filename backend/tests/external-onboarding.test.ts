@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { ExternalService } from '../src/services/external.service';
+import { ExternalService } from '../src/api/services/core/external.service';
 
 describe('External onboarding service', () => {
   beforeEach(() => {

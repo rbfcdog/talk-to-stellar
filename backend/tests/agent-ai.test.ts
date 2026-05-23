@@ -12,7 +12,7 @@ describe('Agent AI Integration Tests', () => {
 
       try {
         // Test agent graph loading
-        const agentConfigPath = 'src/agent/graph.ts';
+        const agentConfigPath = 'src/api/agent/graph.ts';
         expect(agentConfigPath).toContain('graph');
         console.log(`✓ Agent graph module found`);
       } catch (error) {

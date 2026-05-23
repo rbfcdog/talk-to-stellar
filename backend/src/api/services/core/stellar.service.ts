@@ -3,8 +3,8 @@
  */
 
 import * as StellarSDK from '@stellar/stellar-sdk';
-import { logger } from '../utils/logger';
-import { stellarConfig } from '../config/stellar';
+import { logger } from '../../../utils/logger';
+import { stellarConfig } from '../../../config/stellar';
 
 // Server is under Horizon namespace in v14.1.1
 const { Server } = StellarSDK.Horizon;

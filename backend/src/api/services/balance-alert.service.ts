@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '../../config/supabase';
-import { WalletRepository } from '../../repositories/wallet.repository';
+import { WalletRepository } from '../repository/core/wallet.repository';
 import { StellarService } from './stellar.service';
 import { logger } from '../../utils/logger';
 

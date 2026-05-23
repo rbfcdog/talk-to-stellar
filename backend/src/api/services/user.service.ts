@@ -1,9 +1,9 @@
 import { supabase } from '../../config/supabase';
 import { StellarService } from './stellar.service';
 import { AuthService } from './auth.service';
-import { StellarService as StellarBlockchainService } from '../../services/stellar.service';
-import { WalletRepository } from '../../repositories/wallet.repository';
-import VaultService from '../../services/vault.service';
+import { StellarService as StellarBlockchainService } from './core/stellar.service';
+import { WalletRepository } from '../repository/core/wallet.repository';
+import VaultService from './core/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { ContactSeedService } from './contact-seed.service';

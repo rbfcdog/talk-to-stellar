@@ -1,4 +1,4 @@
-import { VaultService } from '../src/services/vault.service';
+import { VaultService } from '../src/api/services/core/vault.service';
 
 describe('VaultService', () => {
   it('stores secrets through the Vault RPC helper', async () => {

@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import actionsRouter from './api/routes/actions.router';
 import { supabase } from './config/supabase';
-import { AgentRepository } from './repositories/agent.repository';
-import { createAgentRoutes } from './agent/routes';
+import { AgentRepository } from './api/repository/core/agent.repository';
+import { createAgentRoutes } from './api/agent/routes';
 import { logger } from './utils/logger';
 import { runMigrations } from './utils/migrate';
 import externalRouter from './api/routes/external.router';
@@ -15,7 +15,7 @@ import evolutionRouter from './api/routes/evolution.router';
 import quotesRouter from './api/routes/quotes.router';
 import internationalTransfersRouter from './api/routes/international-transfers.router';
 import webhooksRouter from './api/routes/webhooks.router';
-import { idempotencyMiddleware } from './services/idempotency.service';
+import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import {
   buildCorsOptions,

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import { PinResetService } from '../../services/pin-reset.service';
+import { PinResetService } from '../services/core/pin-reset.service';
 import { logger } from '../../utils/logger';
 import { supabase } from '../../config/supabase';
 import { isSessionExpired } from '../../utils/session-expiry';

@@ -1,8 +1,8 @@
-import { AgentGraph } from '../src/agent/graph';
-import { ActionType, AgentState, IntentType } from '../src/agent/types';
-import { executeTool } from '../src/agent/tools';
+import { AgentGraph } from '../src/api/agent/graph';
+import { ActionType, AgentState, IntentType } from '../src/api/agent/types';
+import { executeTool } from '../src/api/agent/tools';
 
-jest.mock('../src/agent/tools', () => ({
+jest.mock('../src/api/agent/tools', () => ({
   ALL_TOOLS: [],
   executeTool: jest.fn(),
 }));

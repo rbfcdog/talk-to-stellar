@@ -64,7 +64,7 @@ jest.mock('../src/api/services/email-confirmation.service', () => {
   };
 });
 
-jest.mock('../src/services/vault.service', () => ({
+jest.mock('../src/api/services/core/vault.service', () => ({
   VaultService: jest.fn().mockImplementation(() => ({
     storeSecret: finalizeStoreSecretMock,
     getSecret: finalizeGetSecretMock,
@@ -159,7 +159,7 @@ jest.mock('../src/api/services/transfer-notification.service', () => ({
   },
 }));
 
-jest.mock('../src/repositories/agent.repository', () => ({
+jest.mock('../src/api/repository/core/agent.repository', () => ({
   AgentRepository: jest.fn().mockImplementation(() => ({
     saveSession: finalizeSaveSessionMock,
     saveMessage: finalizeSaveMessageMock,
@@ -167,7 +167,7 @@ jest.mock('../src/repositories/agent.repository', () => ({
   })),
 }));
 
-jest.mock('../src/repositories/wallet.repository', () => ({
+jest.mock('../src/api/repository/core/wallet.repository', () => ({
   WalletRepository: jest.fn().mockImplementation(() => ({
     saveWallet: finalizeSaveWalletMock,
     getWalletBySession: finalizeGetWalletBySessionMock,
@@ -175,7 +175,7 @@ jest.mock('../src/repositories/wallet.repository', () => ({
   })),
 }));
 
-jest.mock('../src/repositories/external.repository', () => ({
+jest.mock('../src/api/repository/core/external.repository', () => ({
   normalizeExternalProvider: jest.fn((provider: string) => String(provider || '').trim().toLowerCase()),
   normalizeExternalProviderUserId: jest.fn((_provider: string, providerUserId: string) => String(providerUserId || '').trim()),
   externalProviderAliases: jest.fn((provider: string) => [String(provider || '').trim().toLowerCase()]),

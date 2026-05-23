@@ -4,7 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
-import { SessionData, AgentState } from '../agent/types';
+import { SessionData, AgentState } from '../../agent/types';
 
 export class AgentRepository {
   constructor(private supabase: SupabaseClient) {}

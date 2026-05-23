@@ -5,9 +5,9 @@
 
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { supabase } from '../config/supabase';
-import { logger } from '../utils/logger';
-import { getRequiredJwtSecret } from '../config/secrets';
+import { supabase } from '../../../config/supabase';
+import { logger } from '../../../utils/logger';
+import { getRequiredJwtSecret } from '../../../config/secrets';
 
 interface PinResetToken {
   id: string;

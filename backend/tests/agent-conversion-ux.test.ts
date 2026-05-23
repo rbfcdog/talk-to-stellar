@@ -1,4 +1,4 @@
-jest.mock('../src/agent/tools', () => ({
+jest.mock('../src/api/agent/tools', () => ({
   ALL_TOOLS: [],
   executeTool: jest.fn(),
 }));
@@ -7,9 +7,9 @@ jest.mock('../src/config/supabase', () => ({
   supabase: {},
 }));
 
-import { AgentGraph } from '../src/agent/graph';
-import { executeTool } from '../src/agent/tools';
-import { ActionType, IntentType } from '../src/agent/types';
+import { AgentGraph } from '../src/api/agent/graph';
+import { executeTool } from '../src/api/agent/tools';
+import { ActionType, IntentType } from '../src/api/agent/types';
 
 const executeToolMock = executeTool as jest.Mock;
 

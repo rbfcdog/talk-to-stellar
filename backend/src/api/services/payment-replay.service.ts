@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase';
-import ExternalService from '../../services/external.service';
+import ExternalService from './core/external.service';
 import { FinancialContextService, toNumber, trackFinancialEvent } from './financial-context.service';
 import { SmartContactsService } from './smart-contacts.service';
 

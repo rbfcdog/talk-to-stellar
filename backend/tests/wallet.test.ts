@@ -4,8 +4,8 @@
  */
 
 import { UserService } from '../src/api/services/user.service';
-import { StellarService } from '../src/services/stellar.service';
-import { WalletRepository } from '../src/repositories/wallet.repository';
+import { StellarService } from '../src/api/services/core/stellar.service';
+import { WalletRepository } from '../src/api/repository/core/wallet.repository';
 import { supabase } from '../src/config/supabase';
 
 describe('Wallet Operations', () => {
