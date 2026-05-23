@@ -110,6 +110,66 @@ describe('Agent tool execution', () => {
     expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a WhatsApp savings calculator with fixed 5.15 FX and comparison fees', async () => {
+    const output = await executeTool('show_savings_calculator', {
+      brl_amount: '5000',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.usd_received).toBe(970.87);
+    expect(parsed.talktostellar_fee_brl).toBe(15);
+    expect(parsed.traditional_bank_fee_brl).toBe(175);
+    expect(parsed.wise_reference_fee_brl).toBe(90);
+    expect(parsed.savings_brl).toBe(160);
+    expect(parsed.annual_savings_brl).toBe(1920);
+    expect(parsed.message).toContain('💸 *Simulação de envio: R$ 5.000*');
+    expect(parsed.message).toContain('✅ Você recebe: *US$ 970,87*');
+    expect(parsed.message).toContain('*Você economiza: R$ 160,00*');
+    expect(parsed.message).toContain('*R$ 1.920 economizados no ano*');
+  });
+
+  it('builds the WhatsApp receipt with savings before the technical hash', async () => {
+    const ExternalService = require('../src/api/services/core/external.service').default;
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
+    const shortLinkSpy = jest
+      .spyOn(ExternalService.prototype, 'shortenPublicUrl')
+      .mockImplementation(async (input: any) => `https://app.example.com/r/${input.purpose}`);
+    const receiptSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://app.example.com/receipt/test');
+
+    try {
+      const output = await executeTool('send_receipt_with_savings', {
+        brl_sent: '5000',
+        usd_received: '970.87',
+        fee_charged: '15',
+        stellar_hash: 'a3f8b2ccccccccccccccccccccccccccccccccccccccccccd91c',
+        recipient_name: 'Ana Silva',
+        session_id: '11111111-1111-4111-8111-111111111111',
+        user_id: 'user-1',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.savings_brl).toBe(160);
+      expect(parsed.message).toContain('✅ *Transferência concluída*');
+      expect(parsed.message).toContain('💰 *Você economizou R$ 160,00*');
+      expect(parsed.message.indexOf('💰 *Você economizou')).toBeLessThan(parsed.message.indexOf('🔗 Evidência Stellar:'));
+      expect(parsed.message).toContain('a3f8b2...d91c (testnet)');
+      expect(parsed.message).toContain('📊 Ver histórico: https://app.example.com/r/savings_history');
+      expect(parsed.message).toContain('📄 Comprovante PDF: https://app.example.com/receipt/test');
+      expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: '11111111-1111-4111-8111-111111111111',
+        userId: 'user-1',
+        counterpartyLabel: 'Ana Silva',
+      }));
+    } finally {
+      shortLinkSpy.mockRestore();
+      receiptSpy.mockRestore();
+    }
+  });
+
   it('sanitizes conversion route failures before returning them to chat', async () => {
     const quoteSpy = jest
       .spyOn(apiStellarService, 'quoteStrictSendConversion')

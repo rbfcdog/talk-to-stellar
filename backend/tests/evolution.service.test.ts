@@ -308,6 +308,28 @@ describe('EvolutionService', () => {
     });
   });
 
+  it('preserves WhatsApp markdown markers in outbound text payloads', async () => {
+    const whatsappText = '✅ *Transferência concluída*\n_Taxa baixa_\nVocê economizou *R$ 160,00*';
+    const requestBodies: any[] = [];
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [, init] = args;
+      const body = JSON.parse(String((init as RequestInit).body || '{}'));
+      requestBodies.push(body);
+      return new Response(JSON.stringify({ sent: true }), { status: 200 });
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.sendText('main', '5519981808102', whatsappText, { reliable: true, attempts: 1 }))
+      .resolves.toEqual({ sent: true });
+
+    expect(requestBodies[0]).toMatchObject({
+      number: '5519981808102',
+      text: whatsappText,
+    });
+    expect(requestBodies[0].text).not.toContain('\\*');
+    expect(requestBodies[0].text).not.toContain('\\_');
+  });
+
   it('tries a WhatsApp JID outbound number candidate when plain number shapes are rejected', async () => {
     const attemptedNumbers: string[] = [];
     const fetchMock = jest.fn(async (...args: any[]) => {

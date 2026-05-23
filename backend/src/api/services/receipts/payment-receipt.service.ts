@@ -212,12 +212,13 @@ export class PaymentReceiptService {
     }
 
     const textWithLink = viewerUrl ? `${text}\nComprovante: ${viewerUrl}` : text;
+    const savingsFirstDeliveryText = await this.buildSavingsFirstWhatsappReceipt(input, viewerUrl);
     const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
-    const externalDeliveryText = externalDeliveryBase
+    const externalDeliveryText = savingsFirstDeliveryText || (externalDeliveryBase
       ? viewerUrl
         ? `${externalDeliveryBase}\nComprovante: ${viewerUrl}`
         : externalDeliveryBase
-      : textWithLink;
+      : textWithLink);
 
     try {
       await this.saveReceiptMessage({
@@ -306,6 +307,147 @@ export class PaymentReceiptService {
         })}`
       );
     }
+  }
+
+  private static whatsappCurrency(value: number, currency: 'BRL' | 'USD', decimals = 2): string {
+    const formatted = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(Number.isFinite(value) ? value : 0);
+    return formatted.replace(/\u00a0/g, ' ');
+  }
+
+  private static whatsappTimestamp(completedAt?: string | null): string {
+    const parsed = completedAt ? Date.parse(completedAt) : Date.now();
+    const date = Number.isFinite(parsed) ? new Date(parsed) : new Date();
+    const dateLabel = new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'America/Sao_Paulo',
+    }).format(date).replace(/\u00a0/g, ' ').replace(/\./g, '');
+    const timeLabel = new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'America/Sao_Paulo',
+    }).format(date);
+    return `${dateLabel} · ${timeLabel}`;
+  }
+
+  private static shortHash(hash?: string | null): string {
+    const value = String(hash || '').trim();
+    if (!value) return 'hash indisponível';
+    if (value.length <= 14) return value;
+    return `${value.slice(0, 6)}...${value.slice(-4)}`;
+  }
+
+  private static async createInternalShortUrl(input: {
+    url: string;
+    purpose: string;
+    sessionId: string;
+    userId: string;
+  }): Promise<string> {
+    const url = String(input.url || '').trim();
+    if (!url) return '';
+    const code = this.makeShortCode(`${input.purpose}:${input.sessionId}:${input.userId}:${url}`);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const tokenHash = crypto.createHash('sha256').update(`${input.purpose}:${code}:${url}`).digest('hex');
+
+    try {
+      const { error } = await supabase
+        .from('short_links')
+        .upsert({
+          code,
+          url,
+          purpose: input.purpose,
+          token_hash: tokenHash,
+          session_id: input.sessionId || null,
+          user_id: input.userId || null,
+          expires_at: expiresAt,
+          created_at: new Date().toISOString(),
+        }, { onConflict: 'code' });
+      if (error) throw error;
+      return `${this.getFrontendBaseUrl()}/r/${encodeURIComponent(code)}`;
+    } catch (error) {
+      logger.warn(`[receipt] could not create ${input.purpose} short link: ${error instanceof Error ? error.message : String(error)}`);
+      return url;
+    }
+  }
+
+  private static estimateReceiptBrlAmount(input: PaymentReceiptInput, fee: FeeBreakdown): number {
+    const sourceAmount = this.toPositiveNumber(input.sourceAmount || input.destinationAmount);
+    const destinationAmount = this.toPositiveNumber(input.destinationAmount);
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
+    if (sourceAssetCode === 'BRL') return sourceAmount;
+    if (destinationAssetCode === 'BRL') return destinationAmount;
+    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc) || 5.15;
+    if (sourceAssetCode === 'USDC' || sourceAssetCode === 'USD') return sourceAmount * rate;
+    if (destinationAssetCode === 'USDC' || destinationAssetCode === 'USD') return destinationAmount * rate;
+    return 0;
+  }
+
+  private static estimateReceiptUsdAmount(input: PaymentReceiptInput, grossBrl: number, fee: FeeBreakdown): number {
+    const sourceAmount = this.toPositiveNumber(input.sourceAmount || input.destinationAmount);
+    const destinationAmount = this.toPositiveNumber(input.destinationAmount);
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
+    if (destinationAssetCode === 'USDC' || destinationAssetCode === 'USD') return destinationAmount;
+    if (sourceAssetCode === 'USDC' || sourceAssetCode === 'USD') return sourceAmount;
+    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc) || 5.15;
+    return rate > 0 ? grossBrl / rate : 0;
+  }
+
+  private static async buildSavingsFirstWhatsappReceipt(input: PaymentReceiptInput, viewerUrl?: string): Promise<string> {
+    const type = String(input.type || '').trim();
+    if (type !== 'payment_sent' && type !== 'conversion' && type !== 'claim_redeemed') return '';
+
+    const fee = await this.resolveFeeBreakdown(input);
+    const grossBrl = this.estimateReceiptBrlAmount(input, fee);
+    const usdReceived = this.estimateReceiptUsdAmount(input, grossBrl, fee);
+    const actualFeeBrl = Number(fee.actualFeeBrl || 0) > 0
+      ? Number(fee.actualFeeBrl)
+      : grossBrl * 0.003;
+    const traditionalFeeBrl = Number(fee.traditionalFeeBrl || 0) > 0
+      ? Number(fee.traditionalFeeBrl)
+      : grossBrl * 0.035;
+    const payloadSavings = this.toPositiveNumber(input.savings?.estimatedSavings);
+    const savings = payloadSavings > 0
+      ? payloadSavings
+      : Math.max(0, traditionalFeeBrl - actualFeeBrl);
+    const historyUrl = await this.createInternalShortUrl({
+      url: `${this.getFrontendBaseUrl()}/transactions?session_id=${encodeURIComponent(input.sessionId)}`,
+      purpose: 'receipt_history',
+      sessionId: input.sessionId,
+      userId: input.userId,
+    });
+    const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
+    const evidenceNetwork = String(process.env.STELLAR_NETWORK || 'testnet').trim().toLowerCase() === 'mainnet'
+      ? 'mainnet'
+      : 'testnet';
+
+    return [
+      type === 'conversion' ? '✅ *Conversão concluída*' : '✅ *Transferência concluída*',
+      this.whatsappTimestamp(input.completedAt),
+      '',
+      `💵 Entregue: *${this.whatsappCurrency(usdReceived, 'USD')}*`,
+      `📤 Enviado: ${this.whatsappCurrency(grossBrl, 'BRL')}`,
+      `💳 Taxa paga: ${this.whatsappCurrency(actualFeeBrl, 'BRL')}`,
+      '',
+      '━━━━━━━━━━━━━━',
+      `💰 *Você economizou ${this.whatsappCurrency(savings, 'BRL')}*`,
+      `vs banco que cobraria ${this.whatsappCurrency(traditionalFeeBrl, 'BRL')}`,
+      '━━━━━━━━━━━━━━',
+      '',
+      '🔗 Evidência Stellar:',
+      `${this.shortHash(input.hash)} (${evidenceNetwork})`,
+      '',
+      `📊 Ver histórico: ${historyUrl}`,
+      `📄 Comprovante PDF: ${receiptUrl || 'indisponível'}`,
+    ].join('\n');
   }
 
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
@@ -547,7 +689,7 @@ export class PaymentReceiptService {
 
     const fallback = Number(String(process.env.USD_BRL_FALLBACK_RATE || '').replace(',', '.'));
     if (Number.isFinite(fallback) && fallback > 0) return fallback;
-    return 5;
+    return 5.15;
   }
 
   private static async resolveFeeBreakdown(input: PaymentReceiptInput): Promise<FeeBreakdown> {

@@ -37,10 +37,15 @@ import { timingSafeEqualString } from "../../utils/password";
 import { safeRedactedJson } from "../../utils/redaction";
 import { hashWalletPin } from "../../utils/pin-hash";
 import { publicErrorMessage } from "../../utils/public-error";
+import { parseHumanAmountNumber } from "../../utils/amount";
 
 const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
 const vaultService = new VaultService(supabase);
+const SAVINGS_FIXED_USD_BRL_RATE = 5.15;
+const SAVINGS_TTS_FEE_PCT = 0.003;
+const SAVINGS_TRADITIONAL_BANK_FEE_PCT = 0.035;
+const SAVINGS_WISE_REFERENCE_FEE_PCT = 0.018;
 
 function getAssetCode(value: any): string {
   if (value?.asset_type === 'native') return 'XLM';
@@ -371,6 +376,81 @@ function formatBrl(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(displayValue) ? displayValue : 0);
+}
+
+function normalizeCurrencySpacing(value: string): string {
+  return String(value || '').replace(/\u00a0/g, ' ');
+}
+
+function formatBrlInteger(value: number): string {
+  return normalizeCurrencySpacing(new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0));
+}
+
+function formatUsd(value: number): string {
+  return normalizeCurrencySpacing(new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0));
+}
+
+function parseSavingsBrlAmount(value: unknown): number {
+  const parsed = parseHumanAmountNumber(value);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 0;
+}
+
+function roundMoney(value: number): number {
+  return Number((Number.isFinite(value) ? value : 0).toFixed(2));
+}
+
+function shortStellarHash(value: unknown): string {
+  const hash = String(value || '').trim();
+  if (!hash) return 'hash indisponível';
+  if (hash.length <= 14) return hash;
+  return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
+}
+
+function formatSavingsDate(date = new Date()): string {
+  const dateLabel = normalizeCurrencySpacing(new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  }).format(date)).replace(/\./g, '');
+  const timeLabel = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Sao_Paulo',
+  }).format(date);
+  return `${dateLabel} · ${timeLabel}`;
+}
+
+function calculateSavingsSimulation(brlAmount: number) {
+  const gross = Math.max(0, Number(brlAmount || 0));
+  const ttsFee = gross * SAVINGS_TTS_FEE_PCT;
+  const bankFee = gross * SAVINGS_TRADITIONAL_BANK_FEE_PCT;
+  const wiseFee = gross * SAVINGS_WISE_REFERENCE_FEE_PCT;
+  const savings = Math.max(0, bankFee - ttsFee);
+  const annualSavings = savings * 12;
+  const usdReceived = gross / SAVINGS_FIXED_USD_BRL_RATE;
+
+  return {
+    brlAmount: roundMoney(gross),
+    usdReceived: roundMoney(usdReceived),
+    ttsFee: roundMoney(ttsFee),
+    bankFee: roundMoney(bankFee),
+    wiseFee: roundMoney(wiseFee),
+    savings: roundMoney(savings),
+    annualSavings: roundMoney(annualSavings),
+  };
 }
 
 async function fetchBrlUsdcQuote(): Promise<{
@@ -1078,6 +1158,50 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "show_savings_calculator",
+    description: "Mostra no WhatsApp uma simulação de custo/economia quando o usuário pergunta quanto custa enviar, quanto vai pagar, se vale a pena, ou compara com banco/Wise. Usa câmbio fixo R$ 5,15 por US$ até existir feed real.",
+    parameters: {
+      type: "object",
+      properties: {
+        brl_amount: {
+          type: "string",
+          description: "Valor em reais a simular. Extraia da mensagem do usuário; se não houver, peça o valor antes.",
+        },
+      },
+      required: ["brl_amount"],
+    },
+  },
+  {
+    name: "send_receipt_with_savings",
+    description: "Monta o comprovante conversacional em formato WhatsApp após pagamento ou conversão concluída, destacando economia antes do hash técnico.",
+    parameters: {
+      type: "object",
+      properties: {
+        brl_sent: { type: "string", description: "Valor bruto enviado em BRL." },
+        usd_received: { type: "string", description: "Valor entregue/recebido em USD ou USDC." },
+        fee_charged: { type: "string", description: "Taxa paga em BRL." },
+        stellar_hash: { type: "string", description: "Hash ou evidência da transação Stellar." },
+        recipient_name: { type: "string", description: "Nome do destinatário ou contraparte." },
+        session_id: { type: "string", description: "Sessão atual para criar links curtos de histórico e comprovante." },
+        user_id: { type: "string", description: "Usuário atual, quando disponível." },
+      },
+      required: ["brl_sent", "usd_received", "fee_charged", "stellar_hash", "recipient_name"],
+    },
+  },
+  {
+    name: "show_annual_savings_summary",
+    description: "Mostra resumo anual de economia no WhatsApp quando o usuário pergunta quanto economizou, histórico de economia ou resumo do ano. Usa histórico da conta e compara a taxa paga com banco tradicional a 3,5%.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: { type: "string", description: "Sessão atual do usuário." },
+        user_id: { type: "string", description: "Usuário atual, quando disponível." },
+        public_key: { type: "string", description: "Conta interna atual; prefira session_id quando disponível." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "create_invoice",
     description: "Cria cobrança/invoice simples com link de pagamento compartilhável.",
     parameters: {
@@ -1311,6 +1435,12 @@ export async function executeTool(
         return await executeGetSavingsIdentity(toolInput);
       case "get_savings_comparison":
         return await executeGetSavingsComparison(toolInput);
+      case "show_savings_calculator":
+        return await executeShowSavingsCalculator(toolInput);
+      case "send_receipt_with_savings":
+        return await executeSendReceiptWithSavings(toolInput);
+      case "show_annual_savings_summary":
+        return await executeShowAnnualSavingsSummary(toolInput);
       case "create_invoice":
         return await executeCreateInvoice(toolInput);
       case "get_or_create_global_profile":
@@ -3376,6 +3506,397 @@ async function executeGetSavingsComparison(input: any): Promise<string> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return JSON.stringify({ success: false, error: errorMessage });
   }
+}
+
+function savingsFrontendBaseUrl(): string {
+  const raw = String(
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.PAYMENT_CONFIRM_BASE ||
+    process.env.CREATE_ACCOUNT_BASE ||
+    'http://localhost:3000'
+  ).trim();
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/$/, '');
+}
+
+async function createSavingsShortLink(input: {
+  path: string;
+  purpose: string;
+  sessionId?: string;
+  userId?: string;
+  expiresInHours?: number;
+}): Promise<string> {
+  const base = savingsFrontendBaseUrl();
+  const url = new URL(input.path, base);
+  const sessionId = String(input.sessionId || '').trim();
+  const userId = String(input.userId || '').trim();
+  if (sessionId && !url.searchParams.has('session_id')) url.searchParams.set('session_id', sessionId);
+  if (userId && !url.searchParams.has('user_id')) url.searchParams.set('user_id', userId);
+
+  try {
+    const externalService = new ExternalService(supabase as any);
+    return await externalService.shortenPublicUrl({
+      url: url.toString(),
+      purpose: input.purpose,
+      sessionId: sessionId || undefined,
+      userId: userId || undefined,
+      expiresInHours: input.expiresInHours || 24 * 7,
+    });
+  } catch (error) {
+    logger.warn(`[savings-tools] failed to shorten ${input.purpose}: ${error instanceof Error ? error.message : String(error)}`);
+    return url.toString();
+  }
+}
+
+async function executeShowSavingsCalculator(input: any): Promise<string> {
+  const brlAmount = parseSavingsBrlAmount(input.brl_amount || input.amount || input.valor);
+  if (!brlAmount) {
+    return JSON.stringify({
+      success: false,
+      needs_amount: true,
+      message: 'Qual valor em reais você quer simular? Exemplo: "quanto custa enviar 5000 reais".',
+    });
+  }
+
+  const simulation = calculateSavingsSimulation(brlAmount);
+  const message = [
+    `💸 *Simulação de envio: ${formatBrlInteger(simulation.brlAmount)}*`,
+    '',
+    `✅ Você recebe: *${formatUsd(simulation.usdReceived)}*`,
+    `📉 Taxa TalkToStellar: ${normalizeCurrencySpacing(formatBrl(simulation.ttsFee))} (0,30%)`,
+    '',
+    '━━━━━━━━━━━━━━',
+    `🏦 Banco tradicional cobraria: ${normalizeCurrencySpacing(formatBrl(simulation.bankFee))}`,
+    `🔵 Wise cobraria: ${normalizeCurrencySpacing(formatBrl(simulation.wiseFee))}`,
+    `*Você economiza: ${normalizeCurrencySpacing(formatBrl(simulation.savings))}*`,
+    '━━━━━━━━━━━━━━',
+    '',
+    `📅 Em 12 envios assim: *${formatBrlInteger(simulation.annualSavings)} economizados no ano*`,
+    '',
+    'Quer enviar agora? É só confirmar 👇',
+  ].join('\n');
+
+  return JSON.stringify({
+    success: true,
+    brl_amount: simulation.brlAmount,
+    usd_received: simulation.usdReceived,
+    fixed_usd_brl_rate: SAVINGS_FIXED_USD_BRL_RATE,
+    talktostellar_fee_brl: simulation.ttsFee,
+    talktostellar_fee_pct: SAVINGS_TTS_FEE_PCT,
+    traditional_bank_fee_brl: simulation.bankFee,
+    traditional_bank_fee_pct: SAVINGS_TRADITIONAL_BANK_FEE_PCT,
+    wise_reference_fee_brl: simulation.wiseFee,
+    wise_reference_fee_pct: SAVINGS_WISE_REFERENCE_FEE_PCT,
+    savings_brl: simulation.savings,
+    annual_savings_brl: simulation.annualSavings,
+    message,
+  });
+}
+
+async function executeSendReceiptWithSavings(input: any): Promise<string> {
+  const brlSent = parseSavingsBrlAmount(input.brl_sent || input.brl_amount || input.source_amount);
+  const usdReceived = toNumber(input.usd_received || input.usdc_received || input.destination_amount);
+  const feeCharged = parseSavingsBrlAmount(input.fee_charged || input.fee_brl || input.fee);
+  const stellarHash = String(input.stellar_hash || input.hash || input.payment_hash || '').trim();
+  const recipientName = String(input.recipient_name || input.destination_name || input.counterparty || 'destinatário').trim();
+  const sessionId = String(input.session_id || input.sessionId || '').trim();
+  let userId = String(input.user_id || input.userId || '').trim();
+
+  if (!userId) {
+    try {
+      userId = await resolveToolUserId(input);
+    } catch {
+      userId = '';
+    }
+  }
+
+  const bankFee = roundMoney(brlSent * SAVINGS_TRADITIONAL_BANK_FEE_PCT);
+  const savings = roundMoney(Math.max(0, bankFee - feeCharged));
+  const dateLine = formatSavingsDate(new Date());
+  const historyLink = await createSavingsShortLink({
+    path: '/transactions',
+    purpose: 'savings_history',
+    sessionId,
+    userId,
+  });
+
+  let receiptLink = '';
+  if (sessionId && userId) {
+    try {
+      receiptLink = await PaymentReceiptService.createReceiptLink({
+        type: 'payment_sent',
+        sessionId,
+        userId,
+        counterpartyLabel: recipientName,
+        sourceAmount: String(brlSent),
+        sourceAssetCode: 'BRL',
+        destinationAmount: String(usdReceived),
+        destinationAssetCode: 'USDC',
+        feeBrl: String(feeCharged),
+        feeDisplay: normalizeCurrencySpacing(formatBrl(feeCharged)),
+        hash: stellarHash || null,
+        savings: {
+          estimatedSavings: savings,
+          savingsPercentage: bankFee > 0 ? (savings / bankFee) * 100 : 0,
+          comparisonMethod: 'traditional_bank_3_5pct',
+        },
+        completedAt: new Date().toISOString(),
+        status: 'Confirmado',
+      });
+    } catch (error) {
+      logger.warn(`[savings-tools] failed to create receipt image link: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!receiptLink) {
+    receiptLink = await createSavingsShortLink({
+      path: `/receipt/${encodeURIComponent(stellarHash || PaymentReceiptService.toPublicOperationId(`${sessionId}:${Date.now()}`) || 'pendente')}`,
+      purpose: 'savings_receipt',
+      sessionId,
+      userId,
+    });
+  }
+
+  const message = [
+    '✅ *Transferência concluída*',
+    dateLine,
+    '',
+    `💵 Entregue: *${formatUsd(usdReceived)}*`,
+    `📤 Enviado: ${normalizeCurrencySpacing(formatBrl(brlSent))}`,
+    `💳 Taxa paga: ${normalizeCurrencySpacing(formatBrl(feeCharged))}`,
+    '',
+    '━━━━━━━━━━━━━━',
+    `💰 *Você economizou ${normalizeCurrencySpacing(formatBrl(savings))}*`,
+    `vs banco que cobraria ${normalizeCurrencySpacing(formatBrl(bankFee))}`,
+    '━━━━━━━━━━━━━━',
+    '',
+    '🔗 Evidência Stellar:',
+    `${shortStellarHash(stellarHash)} (testnet)`,
+    '',
+    `📊 Ver histórico: ${historyLink}`,
+    `📄 Comprovante PDF: ${receiptLink}`,
+  ].join('\n');
+
+  return JSON.stringify({
+    success: true,
+    brl_sent: brlSent,
+    usd_received: usdReceived,
+    fee_charged: feeCharged,
+    traditional_bank_fee_brl: bankFee,
+    savings_brl: savings,
+    history_url: historyLink,
+    receipt_url: receiptLink,
+    message,
+  });
+}
+
+function estimateBrlForSavingsSummary(input: {
+  amount: unknown;
+  assetCode: unknown;
+  quote?: any;
+}): number {
+  const amount = toNumber(input.amount);
+  if (amount <= 0) return 0;
+  const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  if (assetCode === 'BRL' || assetCode === 'TESOURO') return amount;
+  if (assetCode === 'USDC' || assetCode === 'USD') return amount * SAVINGS_FIXED_USD_BRL_RATE;
+
+  const quote = input.quote || {};
+  const sourceAmount = toNumber(quote.sourceAmount);
+  const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  const destinationAmount = toNumber(quote.destinationAmount);
+  const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+  if (sourceAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) return sourceAmount;
+  if (destinationAsset === 'BRL' && destinationAmount > 0) return destinationAmount;
+  return 0;
+}
+
+function savingsSummaryFromPaymentLog(row: any, ownPublicKey?: string) {
+  const metadata = row?.metadata || {};
+  const savedSavings = metadata?.savings || {};
+  const quote = metadata?.quote || row?.quote || null;
+  const sourceAmount = row?.source_amount || metadata?.source_amount || metadata?.transferDetails?.sourceAmount || row?.destination_amount;
+  const sourceAssetCode = row?.source_asset_code || metadata?.source_asset_code || metadata?.transferDetails?.sourceAssetCode || row?.destination_asset_code || 'USDC';
+  const grossBrl = toNumber(savedSavings.gross_amount_brl || metadata.gross_amount_brl) ||
+    estimateBrlForSavingsSummary({ amount: sourceAmount, assetCode: sourceAssetCode, quote });
+  if (grossBrl <= 0) return null;
+
+  const actualFee = toNumber(savedSavings.actual_fee || metadata.actual_fee_brl || metadata.fee_brl || row.fee_brl) ||
+    grossBrl * SAVINGS_TTS_FEE_PCT;
+  const bankFee = grossBrl * SAVINGS_TRADITIONAL_BANK_FEE_PCT;
+  const savings = Math.max(0, bankFee - actualFee);
+  const usdReceived = toNumber(row?.destination_amount || metadata?.destination_amount || metadata?.transferDetails?.destinationAmount) ||
+    grossBrl / SAVINGS_FIXED_USD_BRL_RATE;
+  const completedAt = String(row?.completed_at || row?.created_at || new Date().toISOString());
+  const direction = inferDirection(row, ownPublicKey);
+
+  return {
+    grossBrl,
+    actualFee,
+    bankFee,
+    savings,
+    usdReceived,
+    completedAt,
+    direction,
+  };
+}
+
+function savingsSummaryFromOperation(op: any, ownPublicKey?: string) {
+  const asset = getAssetCode(op);
+  const amount = op.amount || op.starting_balance || op.source_amount || op.amount_in || op.amount_out;
+  const grossBrl = estimateBrlForSavingsSummary({ amount, assetCode: asset });
+  if (grossBrl <= 0) return null;
+  const from = String(op.from || op.source_account || op.funder || '').trim();
+  const to = String(op.to || op.account || op.into || '').trim();
+  const direction = ownPublicKey && from === ownPublicKey ? 'sent' : ownPublicKey && to === ownPublicKey ? 'received' : 'sent';
+  const actualFee = grossBrl * SAVINGS_TTS_FEE_PCT;
+  const bankFee = grossBrl * SAVINGS_TRADITIONAL_BANK_FEE_PCT;
+  const savings = Math.max(0, bankFee - actualFee);
+
+  return {
+    grossBrl,
+    actualFee,
+    bankFee,
+    savings,
+    usdReceived: asset === 'USDC' || asset === 'USD' ? toNumber(amount) : grossBrl / SAVINGS_FIXED_USD_BRL_RATE,
+    completedAt: String(op.created_at || new Date().toISOString()),
+    direction,
+  };
+}
+
+function formatSavingsTransferLine(item: {
+  grossBrl: number;
+  usdReceived: number;
+  savings: number;
+  completedAt: string;
+}): string {
+  const date = new Date(item.completedAt);
+  const dateLabel = Number.isFinite(date.getTime())
+    ? normalizeCurrencySpacing(new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        timeZone: 'America/Sao_Paulo',
+      }).format(date)).replace(/\./g, '')
+    : 'data';
+  return `- ${dateLabel} · ${formatBrlInteger(item.grossBrl)} → ${formatUsd(item.usdReceived).replace(/,00$/, '')} · economizou ${formatBrlInteger(item.savings)}`;
+}
+
+async function loadSavingsPaymentLogs(input: any, userId: string, sessionId: string): Promise<any[]> {
+  if (!userId && !sessionId) return [];
+  try {
+    let query = supabase
+      .from('payment_logs')
+      .select('*')
+      .eq('status', 'success')
+      .order('completed_at', { ascending: false })
+      .limit(200);
+
+    if (sessionId) query = query.eq('session_id', sessionId);
+    else if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query;
+    if (error) {
+      logger.warn(`[savings-summary] payment_logs unavailable: ${error.message}`);
+      return [];
+    }
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    logger.warn(`[savings-summary] payment_logs lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
+async function executeShowAnnualSavingsSummary(input: any): Promise<string> {
+  const sessionId = String(input.session_id || input.sessionId || '').trim();
+  let userId = String(input.user_id || input.userId || '').trim();
+  if (!userId) {
+    try {
+      userId = await resolveToolUserId(input);
+    } catch {
+      userId = '';
+    }
+  }
+
+  let ownPublicKey = '';
+  try {
+    ownPublicKey = await resolveToolPublicKey(input);
+  } catch {
+    ownPublicKey = '';
+  }
+
+  const currentYear = new Date().getFullYear();
+  let operations: any[] = [];
+  if (ownPublicKey) {
+    try {
+      operations = await stellarService.getOperationHistory(ownPublicKey, 100);
+    } catch (error) {
+      logger.warn(`[savings-summary] getOperationHistory failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const logs = await loadSavingsPaymentLogs(input, userId, sessionId);
+  const sourceRows = logs.length
+    ? logs.map((row) => savingsSummaryFromPaymentLog(row, ownPublicKey))
+    : operations.map((op) => savingsSummaryFromOperation(op, ownPublicKey));
+  const rows = sourceRows
+    .filter(Boolean)
+    .filter((row: any) => row.direction !== 'received')
+    .filter((row: any) => {
+      const date = new Date(row.completedAt);
+      return Number.isFinite(date.getTime()) && date.getFullYear() === currentYear;
+    }) as Array<{
+      grossBrl: number;
+      actualFee: number;
+      bankFee: number;
+      savings: number;
+      usdReceived: number;
+      completedAt: string;
+    }>;
+
+  const transferCount = rows.length;
+  const totalSent = rows.reduce((sum, row) => sum + row.grossBrl, 0);
+  const totalFee = rows.reduce((sum, row) => sum + row.actualFee, 0);
+  const totalSavings = rows.reduce((sum, row) => sum + row.savings, 0);
+  const avgFeePct = totalSent > 0 ? (totalFee / totalSent) * 100 : SAVINGS_TTS_FEE_PCT * 100;
+  const projection = transferCount > 0 ? (totalSavings / transferCount) * 12 : 0;
+  const latestLines = rows
+    .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))
+    .slice(0, 3)
+    .map(formatSavingsTransferLine);
+
+  const message = [
+    `📊 *Seu resumo de economia — ${currentYear}*`,
+    '',
+    `Transferências realizadas: ${transferCount}`,
+    `Total enviado: ${formatBrlInteger(totalSent)}`,
+    '',
+    `💰 *Total economizado: ${formatBrlInteger(totalSavings)}*`,
+    'vs banco tradicional (3,5%)',
+    '',
+    `Sua taxa média: ${avgFeePct.toFixed(2).replace('.', ',')}%`,
+    `Projeção até dezembro: ≈ ${formatBrlInteger(projection)}`,
+    '',
+    '━━━━━━━━━━━━━━',
+    'Últimas transferências:',
+    ...(latestLines.length ? latestLines : ['- Ainda não encontrei transferências concluídas neste ano.']),
+    '━━━━━━━━━━━━━━',
+    '',
+    'Quer fazer uma nova transferência? 👇',
+  ].join('\n');
+
+  return JSON.stringify({
+    success: true,
+    year: currentYear,
+    transfer_count: transferCount,
+    total_sent_brl: totalSent,
+    total_fee_brl: totalFee,
+    total_savings_brl: totalSavings,
+    average_fee_pct: avgFeePct,
+    projected_savings_brl: projection,
+    source: logs.length ? 'payment_logs' : 'getOperationHistory',
+    message,
+  });
 }
 
 function paymentLogToReceiptInput(row: any, input: any): PaymentReceiptInput {
