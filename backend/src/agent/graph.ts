@@ -1123,9 +1123,22 @@ export class AgentGraph {
       let resolvedRecipientLabel = String(intent.recipient_query || '').trim();
       let resolvedRecipientKey = '';
       let resolvedRecipientPublicKey = '';
-      if (intent.flow === 'fund_and_pay' && intent.recipient_query && state.session_data?.public_key) {
+      if (intent.flow === 'fund_and_pay') {
         const userId = String(state.session_data?.user_id || state.session_data?.email || '').trim();
-        const resolvedRecipient = await this.resolvePaymentRecipient(intent.recipient_query, userId);
+        const resolvedRecipient = await this.resolveOwnedPaymentContact(intent.recipient_query || '', userId);
+        if (!resolvedRecipient.destination) {
+          state.success = false;
+          state.pending_pix_ramp = undefined;
+          state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
+          state.response_message = this.text(
+            language,
+            `Não encontrei "${intent.recipient_query || 'esse destinatário'}" nos seus contatos salvos. Digite "contatos" para ver os destinatários reais disponíveis ou adicione esse contato antes de gerar o PIX.`,
+            `I could not find "${intent.recipient_query || 'that recipient'}" in your saved contacts. Type "contacts" to see available real recipients or add this contact before creating the PIX.`
+          );
+          await this.saveAssistantResponse(state);
+          await this.repository.saveState(state.session_id, state);
+          return state;
+        }
         resolvedRecipientLabel = String(resolvedRecipient.destinationName || intent.recipient_query).trim();
         resolvedRecipientKey = this.getContactDisplayKey(resolvedRecipient.contact);
         resolvedRecipientPublicKey = String(resolvedRecipient.destination || '').trim();
@@ -1736,6 +1749,85 @@ export class AgentGraph {
     const destinationName = String(contact?.contact_name || contact?.name || query).trim();
 
     return { contact, destination, destinationName };
+  }
+
+  private async resolveOwnedPaymentContact(recipientQuery: string, userId?: string): Promise<{
+    contact?: any;
+    destination: string;
+    destinationName: string;
+  }> {
+    const query = String(recipientQuery || '').trim();
+    if (!query || !userId) return { destination: '', destinationName: query };
+
+    const contacts = await this.fetchContacts(userId);
+    const normalizedQuery = this.normalizeLookup(query);
+    const queryPhone = String(query || '').replace(/\D+/g, '');
+    const isPublicKey = /^G[A-Z2-7]{55}$/i.test(query);
+    const aliasMatch = query.trim().toLowerCase().match(/^(?:contato|contact)\s*(\d{1,3})$/);
+
+    const normalizeIdentifier = (value: unknown) => String(value || '').trim().toLowerCase();
+    const contactIdentifiers = (contact: any): string[] => ([
+      contact?.pix_key,
+      contact?.email,
+      contact?.phone_number,
+      contact?.cpf,
+      contact?.contact_profile?.pix_key,
+      contact?.contact_profile?.email,
+      contact?.contact_profile?.phone_number,
+      contact?.contact_profile?.cpf,
+      contact?.identifier,
+      contact?.contact_profile?.identifier,
+    ])
+      .map(normalizeIdentifier)
+      .filter(Boolean);
+
+    let contact: any | undefined;
+    if (isPublicKey) {
+      contact = contacts.find((item: any) =>
+        String(item.stellar_public_key || item.public_key || item.destination_public_key || '').trim() === query
+      );
+    } else if (aliasMatch) {
+      const index = Number(aliasMatch[1]);
+      if (Number.isFinite(index) && index >= 1 && index <= contacts.length) {
+        contact = contacts[index - 1];
+      }
+    } else if (queryPhone.length >= 8) {
+      contact = contacts.find((item: any) => {
+        const phones = [
+          item?.phone_number,
+          item?.contact_profile?.phone_number,
+        ];
+        return phones.some((phone) => String(phone || '').replace(/\D+/g, '') === queryPhone);
+      });
+    } else {
+      contact = contacts.find((item: any) => {
+        const names = [
+          item?.contact_name,
+          item?.name,
+          item?.display_label,
+          item?.contact_profile?.name,
+        ];
+        const exactName = names.some((name) => this.normalizeLookup(String(name || '')) === normalizedQuery);
+        if (exactName) return true;
+
+        const identifiers = contactIdentifiers(item);
+        return identifiers.some((identifier) => this.normalizeLookup(String(identifier || '')) === normalizedQuery);
+      });
+    }
+
+    const destination = String(
+      contact?.destination_public_key ||
+      contact?.stellar_public_key ||
+      contact?.public_key ||
+      ''
+    ).trim();
+    if (!contact || !destination) return { destination: '', destinationName: query };
+
+    return {
+      contact,
+      destination,
+      destinationName: String(contact.contact_name || contact.name || query).trim(),
+    };
   }
 
   private getContactDisplayKey(contact: any): string {

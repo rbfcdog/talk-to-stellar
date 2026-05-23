@@ -286,10 +286,14 @@ describe('Agent PIX off-ramp detection', () => {
     const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
-    jest.spyOn(graph as any, 'getContactByPublicKeyOrName').mockResolvedValue({
-      contact_name: 'Ana Silva',
-      email: 'ana.silva@example.com',
-      stellar_public_key: anaPublicKey,
+    jest.spyOn(graph as any, 'resolveOwnedPaymentContact').mockResolvedValue({
+      contact: {
+        contact_name: 'Ana Silva',
+        email: 'ana.silva@example.com',
+        stellar_public_key: anaPublicKey,
+      },
+      destination: anaPublicKey,
+      destinationName: 'Ana Silva',
     });
     (graph as any).externalService = {
       shortenPublicUrl: jest.fn(async ({ url }) => url),
@@ -328,41 +332,31 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
-  it('does not block PIX-funded recipient link on contact enrichment before wallet is active', async () => {
+  it('blocks PIX-funded recipient link when the recipient is not a saved real contact', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
-    const contactLookup = jest.spyOn(graph as any, 'getContactByPublicKeyOrName');
+    const contactLookup = jest.spyOn(graph as any, 'resolveOwnedPaymentContact').mockResolvedValue({
+      destination: '',
+      destinationName: 'ana sillva',
+    });
     (graph as any).externalService = {
       shortenPublicUrl: jest.fn(async ({ url }) => url),
     };
 
     try {
-      const state = createState('quero mandar 10 brl em pix pra ana silva');
-      state.session_data = {
-        ...state.session_data!,
-        public_key: '',
-      };
+      const state = createState('quero mandar 10 brl em pix pra ana sillva');
 
       const result = await graph.processInput(state);
-      const url = String(result.response_message.match(/https?:\/\/\S+/)?.[0] || '');
-      const parsed = new URL(url);
 
-      expect(contactLookup).not.toHaveBeenCalled();
-      expect(result.success).toBe(true);
+      expect(contactLookup).toHaveBeenCalledWith('ana sillva', 'user-pix-offramp');
+      expect(result.success).toBe(false);
       expect(result.detected_intent).toBe(IntentType.PIX);
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
-      expect(result.response_message).toContain('ana silva');
-      expect(parsed.pathname).toBe('/pix-on');
-      expect(parsed.searchParams.get('amount')).toBe('10');
-      expect(parsed.searchParams.get('receive_amount')).toBe('10');
-      expect(parsed.searchParams.get('receive_asset')).toBe('BRL');
-      expect(parsed.searchParams.get('pay_amount')).toBe('10');
-      expect(parsed.searchParams.get('pay_asset')).toBe('BRL');
-      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
-      expect(parsed.searchParams.get('recipient')).toBe('ana silva');
-      expect(parsed.searchParams.get('recipient_public_key')).toBeNull();
+      expect(result.response_message).toContain('Não encontrei');
+      expect(result.response_message).toContain('ana sillva');
+      expect(result.response_message).not.toContain('/pix-on');
     } finally {
       contactLookup.mockRestore();
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;

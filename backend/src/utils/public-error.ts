@@ -48,6 +48,9 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) {
     return 'Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.';
   }
+  if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) {
+    return 'Esse destinatario nao existe nos seus contatos salvos. Digite "contatos" no chat e escolha um destinatario real antes de gerar o PIX.';
+  }
   if (
     /nao consegui encontrar uma rota segura|nao foi encontrado caminho|não foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)
   ) {

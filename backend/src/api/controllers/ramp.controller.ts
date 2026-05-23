@@ -231,6 +231,15 @@ export class RampController {
     }
   }
 
+  static async resolvePixFundedTransferRecipient(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.resolvePixFundedTransferRecipientForSession(requestInput(req));
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
   static async runTemporaryEtherfuseOnRampTest(req: Request, res: Response) {
     try {
       if (!requireInternalSandboxAuthorization(req, res)) return;
