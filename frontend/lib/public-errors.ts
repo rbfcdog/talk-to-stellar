@@ -96,6 +96,27 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
+  if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) {
+    return {
+      code: "recipient_not_found",
+      message: copy(language, "Esse destinatário não existe nos seus contatos salvos. Digite \"contatos\" no chat e escolha um destinatário real antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a real recipient before creating PIX."),
+    };
+  }
+
+  if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) {
+    return {
+      code: "pix_account_not_ready",
+      message: copy(language, "Sua conta PIX ainda não está pronta para esse fluxo. Entre novamente, gere uma nova estimativa e tente outra vez.", "Your PIX account is not ready for this flow yet. Sign in again, create a new estimate, and try once more."),
+    };
+  }
+
+  if (/timeout|timed out|abort|aborted|operation was aborted|fetch failed|network|econn|service unavailable|failed to fetch|gateway timeout|etimedout/.test(normalized)) {
+    return {
+      code: "service_timeout",
+      message: copy(language, "A operação demorou demais e deu timeout. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.", "The operation took too long and timed out. Try again in a few seconds; if PIX was already paid, check the status before creating another one."),
+    };
+  }
+
   if (/nao consegui encontrar uma rota segura|nao foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)) {
     return {
       code: "conversion_route_unavailable",
@@ -107,13 +128,6 @@ export function mapPublicError(error: unknown, language?: string) {
     return {
       code: "provider_unavailable",
       message: copy(language, "O provedor de pagamento não respondeu agora. Tente novamente em alguns segundos.", "The payment provider did not respond right now. Try again in a few seconds."),
-    };
-  }
-
-  if (/timeout|timed out|abort|fetch failed|network|econn|service unavailable|failed to fetch/.test(normalized)) {
-    return {
-      code: "service_unavailable",
-      message: copy(language, "Não consegui conectar ao serviço agora. Tente novamente em alguns segundos.", "I could not connect to the service right now. Try again in a few seconds."),
     };
   }
 

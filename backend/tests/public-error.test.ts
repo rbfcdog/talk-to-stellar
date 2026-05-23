@@ -26,4 +26,20 @@ describe('public-error utility', () => {
     expect(message).toBe('Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.');
     expect(message).not.toMatch(/Friendbot|createAccountAlreadyExist|Failed to fund/i);
   });
+
+  it('maps aborted operations to a timeout-specific user message', () => {
+    const message = publicErrorMessage('This operation was aborted due to timeout');
+
+    expect(message).toContain('timeout');
+    expect(message).toContain('demorou demais');
+    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
+  });
+
+  it('maps missing Etherfuse customer context to PIX account setup guidance', () => {
+    const message = publicErrorMessage('customer_id is required.');
+
+    expect(message).toContain('conta PIX');
+    expect(message).toContain('gere uma nova estimativa');
+    expect(message).not.toContain('customer_id');
+  });
 });

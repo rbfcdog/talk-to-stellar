@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import { AnchorService } from '../services/anchor.service';
 import { timingSafeEqualString } from '../../utils/password';
-import { publicErrorMessage } from '../../utils/public-error';
+import { publicErrorCode, publicErrorMessage } from '../../utils/public-error';
 
 function statusFromError(error: any): number {
+  if (publicErrorCode(error) === 'service_timeout') return 504;
   const status = Number(error?.statusCode || error?.status || 500);
   if (Number.isFinite(status) && status >= 400 && status < 600) return status;
   return 500;
@@ -14,7 +15,8 @@ function errorMessage(error: any): string {
 }
 
 function errorPayload(error: any): Record<string, unknown> {
-  const payload: Record<string, unknown> = { success: false, message: errorMessage(error) };
+  const code = publicErrorCode(error);
+  const payload: Record<string, unknown> = { success: false, code, message: errorMessage(error) };
   if (error?.kyc_url) payload.kyc_url = error.kyc_url;
   if (error?.bank_account_id) payload.bank_account_id = error.bank_account_id;
   if (error?.programmatic_onboarding) payload.programmatic_onboarding = error.programmatic_onboarding;
