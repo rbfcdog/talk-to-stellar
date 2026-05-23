@@ -351,6 +351,7 @@ async function main() {
   const sessionPrefix = process.env.TELEGRAM_SESSION_PREFIX || 'telegram';
   const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH || '/webhook/telegram';
   const notifySecret = process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '';
+  const ingestSecret = (process.env.AGENT_INGEST_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
   const webhookPublicBase = String(
     process.env.TELEGRAM_WEBHOOK_URL ||
     process.env.PUBLIC_APP_URL ||
@@ -362,9 +363,13 @@ async function main() {
     throw new Error('TELEGRAM_BOT_TOKEN is required');
   }
 
+  if (!ingestSecret) {
+    throw new Error('AGENT_INGEST_SECRET is required (must match the backend value)');
+  }
+
   await configureTelegramBotProfile({ botToken, logger: console });
 
-  const agentClient = createAgentClient({ agentUrl });
+  const agentClient = createAgentClient({ agentUrl, ingestSecret });
   const backendBaseUrl = new URL(agentUrl).origin;
   const externalCheck = async ({ provider, provider_user_id, chat_id, username }) => {
     console.log('[telegram] check-account request', JSON.stringify({

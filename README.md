@@ -106,7 +106,12 @@ Isso posiciona o TalkToStellar como produto de pagamento, conversão e confianç
 
 O usuário começa pelo WhatsApp, Telegram ou chat web.
 
-Exemplos:
+- Links assinados para onboarding e confirmação.
+- Validação de expiração e payload dos tokens.
+- Confirmação de pagamento protegida por PIN.
+- Reset de PIN com token temporário e invalidação de uso.
+- Logs de auditoria para eventos críticos.
+- `POST /api/agent/query` exige `x-agent-ingest-secret` (= `AGENT_INGEST_SECRET`) quando `source` é `telegram` ou `whatsapp`. Defina o mesmo valor em `backend/.env` e `telegram/.env`; sem isso o backend recusa a requisição.
 
 ```text
 saldo

@@ -20,13 +20,14 @@ test('createAgentClient sends a structured agent request', async () => {
     };
   };
 
-  const client = createAgentClient({ agentUrl: 'http://example.com/api', fetchImpl, timeoutMs: 1000 });
+  const client = createAgentClient({ agentUrl: 'http://example.com/api', ingestSecret: 'test-secret', fetchImpl, timeoutMs: 1000 });
   const result = await client.sendQuery({ query: 'send 10 usdc to Ana', sessionId: 'telegram-123', from: 'ana' });
 
   assert.equal(result.message, 'approved');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'http://example.com/api');
   assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.headers['x-agent-ingest-secret'], 'test-secret');
 
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.query, 'send 10 usdc to Ana');
@@ -36,4 +37,10 @@ test('createAgentClient sends a structured agent request', async () => {
   assert.equal(body.metadata.from, 'ana');
   assert.equal(body.metadata.provider, 'telegram');
   assert.equal(body.metadata.provider_user_id, null);
+});
+
+test('createAgentClient refuses to construct without ingestSecret', () => {
+  assert.throws(() => {
+    createAgentClient({ agentUrl: 'http://example.com/api', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
+  }, /ingestSecret is required/);
 });

@@ -10,13 +10,17 @@ function normalizeAgentResponse(payload) {
   );
 }
 
-function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+function createAgentClient({ agentUrl, ingestSecret = '', fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   if (!agentUrl) {
     throw new Error('agentUrl is required');
   }
 
   if (typeof fetchImpl !== 'function') {
     throw new Error('fetch implementation is required (Node.js 18+ provides global fetch)');
+  }
+
+  if (!ingestSecret) {
+    throw new Error('ingestSecret is required (set AGENT_INGEST_SECRET in the environment)');
   }
 
   async function sendQuery({ query, sessionId, source = 'telegram', from, fromId, chatId, updateId }) {
@@ -32,6 +36,7 @@ function createAgentClient({ agentUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TI
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-agent-ingest-secret': ingestSecret,
           'Idempotency-Key': updateId
             ? `telegram_update_${updateId}`
             : `telegram_${chatId || 'unknown'}_${sessionId}_${Buffer.from(query).toString('base64url').slice(0, 48)}`,
