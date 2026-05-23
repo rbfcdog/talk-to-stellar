@@ -395,6 +395,9 @@ export default function ConfirmPaymentClient({
 
   const [token, setToken] = useState(tokenFromUrl)
   const [publicKey, setPublicKey] = useState(publicKeyFromUrl)
+  const [completionProvider] = useState(() => String(searchParams.get("provider") || decodeJwtPayload(tokenFromUrl)?.provider || "").trim().toLowerCase())
+  const [completionProviderUserId] = useState(() => String(searchParams.get("provider_user_id") || decodeJwtPayload(tokenFromUrl)?.provider_user_id || "").trim())
+  const [completionSource] = useState(() => String(searchParams.get("source") || decodeJwtPayload(tokenFromUrl)?.source || completionProvider || "").trim().toLowerCase())
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
@@ -540,9 +543,12 @@ export default function ConfirmPaymentClient({
     url.searchParams.set("token", token)
     const destinationKey = String(publicKey || publicKeyFromUrl || "").trim()
     if (destinationKey) url.searchParams.set("public_key", destinationKey)
+    if (completionProvider) url.searchParams.set("provider", completionProvider)
+    if (completionProviderUserId) url.searchParams.set("provider_user_id", completionProviderUserId)
+    if (completionSource) url.searchParams.set("source", completionSource)
     url.searchParams.set("auth", "passkey")
     return url.toString()
-  }, [token, publicKey, publicKeyFromUrl])
+  }, [token, publicKey, publicKeyFromUrl, completionProvider, completionProviderUserId, completionSource])
   const qrImageUrl = useMemo(() => {
     if (!qrTargetUrl) return ""
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
@@ -618,6 +624,9 @@ export default function ConfirmPaymentClient({
           token,
           public_key: publicKey || publicKeyFromUrl || undefined,
           pin,
+          ...(completionProvider ? { provider: completionProvider, external_provider: completionProvider } : {}),
+          ...(completionProviderUserId ? { provider_user_id: completionProviderUserId, external_provider_user_id: completionProviderUserId } : {}),
+          ...(completionSource ? { source: completionSource } : {}),
         }),
       })
 
@@ -727,6 +736,9 @@ export default function ConfirmPaymentClient({
           public_key: publicKey || publicKeyFromUrl || undefined,
           passkey_challenge_id: initPayload.challengeId,
           passkey_credential: credential,
+          ...(completionProvider ? { provider: completionProvider, external_provider: completionProvider } : {}),
+          ...(completionProviderUserId ? { provider_user_id: completionProviderUserId, external_provider_user_id: completionProviderUserId } : {}),
+          ...(completionSource ? { source: completionSource } : {}),
         }),
       })
 

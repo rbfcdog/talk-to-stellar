@@ -1376,6 +1376,9 @@ export class AgentGraph {
       optimization_criteria: bestRouteResult?.optimization_criteria,
       language: this.getLanguage(state),
       memo: intent.memo,
+      provider: (state.action_params as any)?.external_provider,
+      provider_user_id: (state.action_params as any)?.external_provider_user_id,
+      source: (state.action_params as any)?.external_source,
     });
 
     let prepare: any;
@@ -3414,6 +3417,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         destination,
         destination_name: last.counterparty,
         language: this.getLanguage(state),
+        provider: (state.action_params as any)?.external_provider,
+        provider_user_id: (state.action_params as any)?.external_provider_user_id,
+        source: (state.action_params as any)?.external_source,
       });
 
       let prepare: any;

@@ -846,6 +846,18 @@ export const toolDefinitions = [
           type: "object",
           description: "Optional quote details returned by quote_asset_transfer, used to show estimated fee before confirmation.",
         },
+        provider: {
+          type: "string",
+          description: "External channel provider when the confirmation originated from WhatsApp or Telegram.",
+        },
+        provider_user_id: {
+          type: "string",
+          description: "External channel user ID for sending completion feedback after confirmation.",
+        },
+        source: {
+          type: "string",
+          description: "External source channel when available.",
+        },
       },
       required: ["amount", "destination", "session_id", "owner_id"],
     },
@@ -2563,6 +2575,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       transaction_context_message: contextMessage || null,
       memo: contextMessage || null,
       language: input.language || input.lang || input.locale || null,
+      provider: String(input.provider || input.external_provider || '').trim() || null,
+      provider_user_id: String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim() || null,
+      source: String(input.source || input.external_source || input.provider || input.external_provider || '').trim() || null,
     });
 
     return JSON.stringify({
