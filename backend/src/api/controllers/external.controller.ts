@@ -341,6 +341,13 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
       payload?.evolutionInstance ||
       ''
     ).trim();
+    const instanceId = String(
+      payload?.instance_id ||
+      payload?.instanceId ||
+      payload?.evolution_instance_id ||
+      payload?.evolutionInstanceId ||
+      ''
+    ).trim();
     const messageId = String(payload?.message_id || payload?.messageId || '').trim();
     if (phoneNumber) {
       data.phone_number = phoneNumber;
@@ -353,6 +360,10 @@ function externalDataFromPayload(payload: any): Record<string, unknown> {
     if (instance) {
       data.instance = instance;
       data.evolution_instance = instance;
+    }
+    if (instanceId) {
+      data.instance_id = instanceId;
+      data.evolution_instance_id = instanceId;
     }
     if (messageId) {
       data.last_message_id = messageId;

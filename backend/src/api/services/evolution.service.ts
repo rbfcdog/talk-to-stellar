@@ -6,6 +6,7 @@ import crypto from 'crypto';
 
 type EvolutionMessage = {
   instance: string;
+  instanceId?: string;
   remoteJid: string;
   messageId: string;
   fromMe: boolean;
@@ -113,15 +114,86 @@ function evolutionApiKey(): string {
   ).trim();
 }
 
-function configuredInstance(): string {
+function configuredInstanceName(): string {
   return String(
     process.env.EVOLUTION_INSTANCE ||
     process.env.EVOLUTION_INSTANCE_NAME ||
     process.env.EVOLUTION_NOTIFY_INSTANCE ||
     process.env.EVOLUTION_DEFAULT_INSTANCE ||
+    ''
+  ).trim();
+}
+
+function configuredInstance(): string {
+  return String(
+    configuredInstanceName() ||
     process.env.EVOLUTION_INSTANCE_ID ||
     ''
   ).trim();
+}
+
+function isLikelyEvolutionInstanceId(value: unknown): boolean {
+  const raw = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+}
+
+function firstString(values: unknown[]): string {
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function extractEvolutionInstanceId(payload: any, candidate: any): string {
+  const explicit = firstString([
+    candidate?.instanceId,
+    candidate?.instance_id,
+    candidate?.data?.instanceId,
+    candidate?.data?.instance_id,
+    payload?.instanceId,
+    payload?.instance_id,
+    payload?.data?.instanceId,
+    payload?.data?.instance_id,
+  ]);
+  if (explicit) return explicit;
+
+  const rawInstance = firstString([candidate?.instance, payload?.instance]);
+  return isLikelyEvolutionInstanceId(rawInstance) ? rawInstance : '';
+}
+
+function extractEvolutionInstanceName(payload: any, candidate: any): string {
+  const rawInstance = firstString([candidate?.instance, payload?.instance]);
+  const namedInstance = firstString([
+    candidate?.instanceName,
+    candidate?.instance_name,
+    candidate?.evolution_instance,
+    candidate?.evolutionInstance,
+    candidate?.data?.instanceName,
+    candidate?.data?.instance_name,
+    candidate?.data?.evolution_instance,
+    candidate?.data?.evolutionInstance,
+    payload?.instanceName,
+    payload?.instance_name,
+    payload?.evolution_instance,
+    payload?.evolutionInstance,
+    payload?.data?.instanceName,
+    payload?.data?.instance_name,
+    payload?.data?.evolution_instance,
+    payload?.data?.evolutionInstance,
+  ]);
+
+  if (namedInstance) return namedInstance;
+  if (rawInstance && !isLikelyEvolutionInstanceId(rawInstance)) return rawInstance;
+  return configuredInstance() || rawInstance;
+}
+
+function sendableEvolutionInstance(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (isLikelyEvolutionInstanceId(raw)) {
+    return configuredInstanceName() || raw;
+  }
+  return raw || configuredInstance();
 }
 
 function normalizeAgentResponse(payload: any): string {
@@ -372,7 +444,6 @@ function extractTextFromCandidate(candidate: any): string {
 function extractMessage(payload: any): EvolutionMessage | null {
   if (!isMessagesUpsertEvent(payload?.event || payload?.type)) return null;
 
-  const fallbackInstance = String(payload?.instance || payload?.instanceName || configuredInstance()).trim();
   for (const candidate of messageCandidates(payload)) {
     const key = candidate?.key || candidate?.message?.key || {};
     const remoteJid = String(
@@ -392,11 +463,13 @@ function extractMessage(payload: any): EvolutionMessage | null {
       ''
     ).trim();
     const fromMe = Boolean(key.fromMe || candidate?.fromMe);
-    const instance = String(candidate?.instance || candidate?.instanceName || fallbackInstance).trim();
+    const instance = extractEvolutionInstanceName(payload, candidate);
+    const instanceId = extractEvolutionInstanceId(payload, candidate);
     const text = extractTextFromCandidate(candidate);
 
     return {
       instance,
+      ...(instanceId ? { instanceId } : {}),
       remoteJid,
       messageId: messageId || `${remoteJid}:${candidate?.messageTimestamp || Date.now()}`,
       fromMe,
@@ -416,16 +489,18 @@ function numberFromRemoteJid(remoteJid: string): string {
 function assertEvolutionConfig(instance: string) {
   const baseUrl = evolutionBaseUrl();
   const apiKey = evolutionApiKey();
+  const sendInstance = sendableEvolutionInstance(instance);
   if (!baseUrl) throw new Error('EVOLUTION_API_URL is required.');
   if (!apiKey) throw new Error('EVOLUTION_API_KEY or AUTHENTICATION_API_KEY is required.');
-  if (!instance) throw new Error('EVOLUTION_INSTANCE is required.');
-  return { baseUrl, apiKey, instance };
+  if (!sendInstance) throw new Error('EVOLUTION_INSTANCE is required.');
+  return { baseUrl, apiKey, instance: sendInstance };
 }
 
 async function resolveExistingSession(input: {
   phoneNumber: string;
   remoteJid: string;
   instance: string;
+  instanceId?: string;
   messageId: string;
 }): Promise<string> {
   try {
@@ -441,6 +516,7 @@ async function resolveExistingSession(input: {
         phone_number: input.phoneNumber,
         remote_jid: input.remoteJid,
         instance: input.instance,
+        ...(input.instanceId ? { instance_id: input.instanceId } : {}),
         lookup_only: true,
       }),
     });
@@ -460,6 +536,7 @@ async function sendAgentQuery(input: {
   phoneNumber: string;
   remoteJid: string;
   instance: string;
+  instanceId?: string;
   messageId: string;
 }): Promise<AgentResponse> {
   const payload = {
@@ -474,6 +551,7 @@ async function sendAgentQuery(input: {
       whatsapp_number: input.phoneNumber,
       remote_jid: input.remoteJid,
       instance: input.instance,
+      ...(input.instanceId ? { instance_id: input.instanceId } : {}),
       message_id: input.messageId,
     },
   };
@@ -705,6 +783,8 @@ export class EvolutionService {
     }
 
     const instance = message.instance || configuredInstance();
+    const instanceIdLog = message.instanceId ? ` instance_id=${message.instanceId}` : '';
+    logger.info(`[evolution-webhook] received message from ***${recipient.slice(-4)} on instance ${instance}${instanceIdLog} message_id=${message.messageId || 'none'}`);
     const text = String(message.text || '').trim();
     if (!text) {
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
@@ -730,6 +810,7 @@ export class EvolutionService {
       recipient,
       remoteJid: message.remoteJid,
       messageId: message.messageId,
+      instanceId: message.instanceId,
       text,
     })
       .then(() => {
@@ -759,12 +840,14 @@ export class EvolutionService {
     recipient: string;
     remoteJid: string;
     messageId: string;
+    instanceId?: string;
     text: string;
   }): Promise<void> {
     const sessionId = await resolveExistingSession({
       phoneNumber: input.recipient,
       remoteJid: input.remoteJid,
       instance: input.instance,
+      instanceId: input.instanceId,
       messageId: input.messageId,
     });
     const response = await sendAgentQuery({
@@ -773,6 +856,7 @@ export class EvolutionService {
       phoneNumber: input.recipient,
       remoteJid: input.remoteJid,
       instance: input.instance,
+      instanceId: input.instanceId,
       messageId: input.messageId,
     });
     try {

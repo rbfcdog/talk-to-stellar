@@ -238,6 +238,47 @@ describe('TransferNotificationService', () => {
     expect(report.whatsapp.instances).toEqual(['talktostellar-business']);
   });
 
+  it('does not prefer the Evolution UUID over the configured sendable instance name', async () => {
+    process.env.EVOLUTION_INSTANCE = 'TalkToStellar';
+    process.env.EVOLUTION_INSTANCE_NAME = '';
+    process.env.EVOLUTION_NOTIFY_INSTANCE = '';
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [],
+      userMappings: [
+        {
+          provider: 'whatsapp',
+          provider_user_id: '5519997624114',
+          data: {
+            instance: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+            instance_id: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+            remote_jid: '5519997624114@s.whatsapp.net',
+          },
+        },
+      ],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      text: 'Pagamento confirmado. Comprovante disponivel.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'TalkToStellar',
+      '5519997624114',
+      'Pagamento confirmado. Comprovante disponivel.',
+      { reliable: true }
+    );
+    expect(report.whatsapp.instances).toEqual([
+      'TalkToStellar',
+      '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+    ]);
+  });
+
   it('can notify WhatsApp from a user_id-only callback diagnostic request', async () => {
     process.env.EVOLUTION_INSTANCE = '';
     process.env.EVOLUTION_INSTANCE_NAME = '';
