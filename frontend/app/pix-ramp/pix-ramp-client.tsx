@@ -1300,7 +1300,7 @@ export default function PixRampClient({
         const resolved = payload?.recipient || payload;
         const nextName = String(resolved?.recipient_name || resolved?.contact_name || "").trim();
         const nextKey = String(resolved?.recipient_key || resolved?.recipient_pix_key || "").trim();
-        const nextPublicKey = String(resolved?.recipient_public_key || "").trim();
+        const nextPublicKey = String(resolved?.recipient_public_key || transferRecipientPublicKey || "").trim();
         if (!nextPublicKey) {
           throw new Error(L("Esse contato não tem conta de destino ativa.", "This contact does not have an active destination account."));
         }
@@ -1315,6 +1315,28 @@ export default function PixRampClient({
       })
       .catch((requestError) => {
         if (cancelled) return;
+        const fallbackPublicKey = transferRecipientPublicKey.trim();
+        const fallbackKey = transferRecipientKey.trim();
+        if (fallbackPublicKey) {
+          setVerifiedTransferRecipient({
+            recipient_name: recipient,
+            contact_name: recipient,
+            recipient_key: fallbackKey,
+            recipient_pix_key: fallbackKey,
+            recipient_public_key: fallbackPublicKey,
+            source: "chat_link",
+          });
+          setRecipientVerificationError("");
+          addDebugLog({
+            label: "Saved recipient validation used chat-link fallback",
+            method: "POST",
+            path: "/api/ramp/etherfuse/sandbox/transfer-recipient",
+            request: { recipient, recipient_key: fallbackKey, has_recipient_public_key: true },
+            response: { recipient_name: recipient, recipient_key: fallbackKey, recipient_public_key_tail: fallbackPublicKey.slice(-8) },
+            error: requestError instanceof Error ? requestError.message : String(requestError),
+          });
+          return;
+        }
         const message = requestError instanceof Error
           ? publicRampErrorMessage(requestError, language)
           : L("Esse destinatário não existe nos seus contatos salvos.", "This recipient does not exist in your saved contacts.");
