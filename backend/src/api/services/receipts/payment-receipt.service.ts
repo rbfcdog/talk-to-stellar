@@ -191,6 +191,7 @@ export class PaymentReceiptService {
         sourceAssetCode: input.sourceAssetCode || null,
         feeDisplay: input.feeDisplay || null,
         contextMessage: input.contextMessage || null,
+        counterpartyLabel: input.counterpartyLabel || null,
         counterpartyKey: input.counterpartyKey || null,
         completedAt: input.completedAt || null,
       },
@@ -319,13 +320,6 @@ export class PaymentReceiptService {
     return `${dateLabel} · ${timeLabel}`;
   }
 
-  private static shortHash(hash?: string | null): string {
-    const value = String(hash || '').trim();
-    if (!value) return 'hash indisponível';
-    if (value.length <= 14) return value;
-    return `${value.slice(0, 6)}...${value.slice(-4)}`;
-  }
-
   private static async createInternalShortUrl(input: {
     url: string;
     purpose: string;
@@ -408,10 +402,6 @@ export class PaymentReceiptService {
       userId: input.userId,
     });
     const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
-    const evidenceNetwork = String(process.env.STELLAR_NETWORK || 'testnet').trim().toLowerCase() === 'mainnet'
-      ? 'mainnet'
-      : 'testnet';
-
     return [
       type === 'conversion' ? '✅ *Conversão concluída*' : '✅ *Transferência concluída*',
       this.whatsappTimestamp(input.completedAt),
@@ -424,9 +414,6 @@ export class PaymentReceiptService {
       `💰 *Você economizou ${this.whatsappCurrency(savings, 'BRL')}*`,
       `vs banco que cobraria ${this.whatsappCurrency(traditionalFeeBrl, 'BRL')}`,
       '━━━━━━━━━━━━━━',
-      '',
-      '🔗 Evidência Stellar:',
-      `${this.shortHash(input.hash)} (${evidenceNetwork})`,
       '',
       `📊 Ver histórico: ${historyUrl}`,
       `📄 Comprovante PDF: ${receiptUrl || 'indisponível'}`,
