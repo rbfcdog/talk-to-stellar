@@ -18,6 +18,10 @@ function normalizedMessage(error: unknown) {
 }
 
 export function publicErrorCode(error: unknown) {
+  const explicitCode = typeof error === 'object' && error && 'code' in error
+    ? String((error as { code?: unknown }).code || '').trim()
+    : '';
+  if (explicitCode) return explicitCode;
   const normalized = normalizedMessage(error);
 
   if (/(quote|cotacao).*(expired|expirad)|not active:\s*expired/.test(normalized)) return 'quote_expired';
@@ -63,7 +67,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'recipient_not_found':
       return 'Esse destinatario nao esta nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
     case 'pix_account_not_ready':
-      return 'Sua conta PIX ainda nao esta pronta para esse fluxo. Entre novamente, gere uma nova estimativa e tente outra vez.';
+      return 'Sua conta PIX esta sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
     case 'service_timeout':
       return 'A operacao demorou demais. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':

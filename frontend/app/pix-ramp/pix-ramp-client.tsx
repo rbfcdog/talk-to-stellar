@@ -485,12 +485,25 @@ function getRampCustomerId(payload: RampResponse | null | undefined) {
 }
 
 function mergeRampCustomerPayload(base: RampResponse | null | undefined, payload: RampResponse | null | undefined): RampResponse | null {
-  if (!payload?.customer && !payload?.customer_id && !payload?.customerId) return base || null;
-  const customerId = String(payload.customer_id || payload.customerId || payload.customer?.id || "").trim();
+  const customerId = String(payload?.customer_id || payload?.customerId || payload?.customer?.id || "").trim();
+  const bankAccountId = String(payload?.bank_account_id || payload?.bankAccountId || payload?.customer?.bankAccountId || "").trim();
+  const hasCustomerContext = Boolean(
+    payload?.customer ||
+    customerId ||
+    bankAccountId ||
+    payload?.kyc_url ||
+    payload?.kycUrl ||
+    payload?.programmatic_onboarding ||
+    payload?.programmaticOnboarding
+  );
+  if (!hasCustomerContext) return base || null;
   return {
     ...(base || {}),
-    ...(payload.customer ? { customer: payload.customer } : {}),
+    ...(payload?.customer ? { customer: payload.customer } : {}),
     ...(customerId ? { customer_id: customerId } : {}),
+    ...(bankAccountId ? { bank_account_id: bankAccountId } : {}),
+    ...(payload?.kyc_url || payload?.kycUrl ? { kyc_url: payload.kyc_url || payload.kycUrl } : {}),
+    ...(payload?.programmatic_onboarding || payload?.programmaticOnboarding ? { programmatic_onboarding: payload.programmatic_onboarding || payload.programmaticOnboarding } : {}),
   };
 }
 
@@ -499,11 +512,18 @@ function formatDebugJson(value: unknown) {
 }
 
 function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
-  const raw = error instanceof Error ? error.message : String(error || "");
+  const payload = (error as Error & { payload?: RampResponse })?.payload;
+  const raw = String(payload?.message || (error instanceof Error ? error.message : String(error || "")));
+  const code = String(payload?.code || "").toLowerCase();
   const normalized = raw
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+  if (code === "pix_account_not_ready" || code === "pix_account_warming_up") {
+    return language === "pt-BR"
+      ? "Sua conta PIX está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente."
+      : "Your PIX account is being prepared. Wait a few seconds and tap Generate PIX again.";
+  }
   const mapped = mapPublicError(raw, language);
   const isTechnical =
     /session_id|session_token|internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
@@ -803,6 +823,7 @@ export default function PixRampClient({
   const onRampReceiptAfter = onRampBalancesAfter.length > 0 ? formatVisibleBalance(onRampBalancesAfter, targetAsset) : L("Atualizando", "Updating");
   const onRampReceiptDelta = formatVisibleDelta(onRampBalancesBefore, onRampBalancesAfter, targetAsset, language);
   const liveSteps = useMemo<LiveStep[]>(() => {
+    const pixAccountPrepared = Boolean(programmaticOnboarding || customerPayload?.bank_account_id || customerPayload?.customer?.bankAccountId);
     if (rampMode === "offramp") {
       const hasTarget = Boolean(offRampFiatAmount.trim() || offRampAmount.trim());
       return [
@@ -866,12 +887,12 @@ export default function PixRampClient({
       },
       {
         label: L("Conta PIX", "PIX account"),
-        detail: programmaticOnboarding
+        detail: pixAccountPrepared
           ? L("Conta preparada para continuar o PIX.", "Account ready to continue with PIX.")
           : customerPayload
             ? L("Preparando conta PIX.", "Preparing PIX account.")
             : L("Aguardando preparo do PIX.", "Waiting to prepare PIX."),
-        state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
+        state: pixAccountPrepared ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
         label: L("Valor", "Amount"),
@@ -1485,6 +1506,11 @@ export default function PixRampClient({
 	      await fn();
 	    } catch (err) {
 	      const payload = (err as Error & { payload?: RampResponse })?.payload;
+	      const nextCustomerPayload = mergeRampCustomerPayload(customerPayload, payload);
+	      if (nextCustomerPayload) {
+	        setCustomerPayload(nextCustomerPayload);
+	        setProgrammaticOnboarding(nextCustomerPayload?.programmatic_onboarding || null);
+	      }
 	      if (payload?.kyc_url && debugEnabled && !launchedFromChat) {
 	        setOnboardingUrl(String(payload.kyc_url));
 	      } else {
@@ -1674,6 +1700,7 @@ export default function PixRampClient({
     }, "POST", auth);
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
     setCustomerPayload(nextCustomerPayload);
+    setProgrammaticOnboarding(nextCustomerPayload?.programmatic_onboarding || customerResult?.programmatic_onboarding || payload?.programmatic_onboarding || null);
     setQuotePayload(payload);
     setQuoteReceivedAt(Date.now());
     return { auth, customerResult: nextCustomerPayload || customerResult, quoteResult: payload };
@@ -1737,7 +1764,10 @@ export default function PixRampClient({
         setQuoteReceivedAt(Date.now());
       }
       const nextCustomerPayload = mergeRampCustomerPayload(customerForOrder, payload);
-      if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
+      if (nextCustomerPayload) {
+        setCustomerPayload(nextCustomerPayload);
+        setProgrammaticOnboarding(nextCustomerPayload?.programmatic_onboarding || null);
+      }
       setOnboardingUrl("");
       setOrderPayload(payload);
       setStatusPayload(null);
@@ -2146,7 +2176,16 @@ export default function PixRampClient({
 
         {error && (
           <section className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
-            {error}
+            <p>{error}</p>
+            {rampMode === "onramp" && !orderId && !operationLocked && /conta pix|pix account/i.test(error) && (
+              <button
+                className="mt-3 inline-flex rounded-full bg-rose-200 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-rose-950 transition hover:bg-rose-100 disabled:opacity-50"
+                disabled={Boolean(loading) || Boolean(transferRecipientBlocker)}
+                onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}
+              >
+                {loading ? L("Aguarde...", "Wait...") : L("Tentar gerar PIX novamente", "Try generating PIX again")}
+              </button>
+            )}
             {onboardingUrl && (
               <a
                 className="mt-3 inline-flex rounded-full bg-rose-400 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950"

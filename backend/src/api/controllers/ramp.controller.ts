@@ -20,6 +20,8 @@ function errorPayload(error: any): Record<string, unknown> {
   if (error?.kyc_url) payload.kyc_url = error.kyc_url;
   if (error?.bank_account_id) payload.bank_account_id = error.bank_account_id;
   if (error?.programmatic_onboarding) payload.programmatic_onboarding = error.programmatic_onboarding;
+  if (error?.customer_id) payload.customer_id = error.customer_id;
+  if (error?.retry_after_ms) payload.retry_after_ms = error.retry_after_ms;
   return payload;
 }
 
