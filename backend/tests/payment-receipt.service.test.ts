@@ -84,6 +84,49 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Cotação usada:');
   });
 
+  it('does not invent BRL savings for USDC receipts without quote or configured USD/BRL fallback', async () => {
+    delete process.env.USD_BRL_FALLBACK_RATE;
+    delete process.env.DEFAULT_USD_BRL_RATE;
+
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-no-fallback',
+      userId: 'user-no-fallback',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      feeDisplay: 'US$ 0.01',
+    });
+
+    expect(receipt).toContain('Taxa: US$ 0.01');
+    expect(receipt).not.toContain('Taxa estimada em métodos tradicionais:');
+    expect(receipt).not.toContain('Economia estimada:');
+    expect(receipt).not.toContain('5.15');
+  });
+
+  it('uses configured USD/BRL fallback for USDC receipt fee conversion instead of a hardcoded rate', async () => {
+    process.env.USD_BRL_FALLBACK_RATE = '6.25';
+
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-configured-fallback',
+      userId: 'user-configured-fallback',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      feeDisplay: 'US$ 0.01',
+    });
+
+    expect(receipt).toContain('Taxa: R$ 0.06 / US$ 0.01');
+    expect(receipt).toContain('Taxa estimada em métodos tradicionais: R$ 28.13 / US$ 4.50');
+    expect(receipt).toContain('Economia estimada: R$ 28.06 em relação a métodos tradicionais.');
+    expect(receipt).not.toContain('5.15');
+  });
+
   it('adds spread to exact fee when quote carries platform fee and shows traditional comparison', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
@@ -132,7 +175,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Retirada via PIX concluída');
   });
 
-  it('uses a short external completion callback when provided', async () => {
+  it('prefers the savings-first WhatsApp receipt over a generic external callback', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
         attempted: true,
@@ -162,9 +205,12 @@ describe('PaymentReceiptService', () => {
     expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'whatsapp',
       providerUserId: '5519997624114',
-      text: expect.stringContaining('Pagamento concluido.'),
+      text: expect.stringContaining('✅ *Transferência concluída*'),
       buttonText: 'Abrir comprovante',
     }));
+    expect(notifySpy.mock.calls[0][0].text).toContain('💰 *Você economizou');
+    expect(notifySpy.mock.calls[0][0].text).toContain('🔗 Evidência Stellar:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Pagamento concluido.');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Recibo registrado no seu histórico.');
 
     notifySpy.mockRestore();
