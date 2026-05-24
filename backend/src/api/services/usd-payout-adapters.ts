@@ -234,7 +234,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
           order_id: result.transaction?.id,
           final_status: result.final_transaction?.status,
           balance_delta: result.balance_delta,
-          note: 'Etherfuse sandbox off-ramp was executed as the proof leg. No USD bank payout claim is made.',
+          note: 'PIX withdrawal proof was executed as the proof leg. No USD bank payout claim is made.',
         },
       };
     }
@@ -257,7 +257,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
         country: input.destination.country,
         provider_label: input.destination.providerLabel,
       },
-      note: 'Etherfuse off-ramp adapter prepared the sandbox proof payload. Send session_id, session_token, wallet_pin and run_etherfuse_offramp_test=true to execute the sandbox off-ramp test.',
+      note: 'PIX withdrawal adapter prepared the proof payload. Send session_id, session_token, wallet_pin and run_etherfuse_offramp_test=true to execute the controlled withdrawal test.',
     });
   }
 

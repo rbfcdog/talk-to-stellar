@@ -810,8 +810,8 @@ export class AnchorService {
       unavailable_reason: available
         ? undefined
         : stellarNetworkId === 'PUBLIC'
-          ? 'Etherfuse PIX/TESOURO integration is intentionally disabled on Stellar Public/Mainnet.'
-          : 'Etherfuse PIX is available only with the sandbox/devnet API configuration in this project.',
+          ? 'PIX is disabled while the account is in Mainnet viewing mode.'
+          : 'PIX is not available with the current payment configuration.',
       asset: {
         code: 'TESOURO',
         issuer: this.getTesouroIssuer(),
@@ -823,7 +823,7 @@ export class AnchorService {
   static assertEtherfuseTestnetRuntime(): void {
     const runtime = this.getRuntimeInfo();
     if (runtime.stellar_network_id !== 'TESTNET') {
-      throw apiError('Etherfuse PIX/TESOURO is available only on Stellar Testnet in TalkToStellar. Switch to the Testnet rail for PIX flows.', 403);
+      throw apiError('PIX is unavailable in the current account mode. Switch back to the validation account to use PIX.', 403);
     }
   }
 
@@ -971,7 +971,7 @@ export class AnchorService {
 
     const runtime = this.getRuntimeInfo();
     if (!runtime.sandbox) {
-      throw apiError('Email wallet lookup is only enabled for Etherfuse sandbox/devnet ramp testing.', 403);
+      throw apiError('Email wallet lookup is unavailable in the current payment mode.', 403);
     }
 
     const { data: sessions, error } = await supabase
@@ -2068,7 +2068,7 @@ export class AnchorService {
   }
 
   private static buildSandboxDocumentPayload(publicKey: string, documentType: 'document' | 'selfie'): any {
-    // 1x1 PNG data URL. Etherfuse sandbox accepts fake KYC images for devnet flows.
+    // 1x1 PNG data URL accepted by the controlled KYC flow.
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
     return documentType === 'selfie'
       ? {
@@ -3046,8 +3046,8 @@ export class AnchorService {
         destinationBrl: targetBrl,
         fiatAccountId,
         upstreamError: forceSandboxMock
-          ? 'Sandbox test endpoint forced local off-ramp settlement.'
-          : 'No Etherfuse PIX fiat account is available in sandbox; using local mock settlement.',
+          ? 'Controlled test route forced local withdrawal settlement.'
+          : 'No PIX fiat account is available in the current payment mode; using local settlement.',
       });
     } else {
       try {
@@ -3346,7 +3346,7 @@ export class AnchorService {
     success: boolean;
   }> {
     if (!this.getRuntimeInfo().sandbox) {
-      throw apiError('PIX sandbox confirmation is available only in Etherfuse sandbox/devnet.', 403);
+      throw apiError('PIX confirmation is unavailable in the current payment mode.', 403);
     }
 
     const context = await this.resolveSessionWallet(input);
@@ -3421,7 +3421,7 @@ export class AnchorService {
   }> {
     const runtime = this.getRuntimeInfo();
     if (!runtime.sandbox) {
-      throw apiError('Temporary PIX on-ramp test endpoint is available only in Etherfuse sandbox/devnet.', 403);
+      throw apiError('This PIX shortcut is unavailable in the current payment mode.', 403);
     }
 
     const context = await this.resolveSessionWallet(input);
@@ -3554,7 +3554,7 @@ export class AnchorService {
   }> {
     const runtime = this.getRuntimeInfo();
     if (!runtime.sandbox) {
-      throw apiError('Temporary PIX off-ramp test endpoint is available only in Etherfuse sandbox/devnet.', 403);
+      throw apiError('This PIX withdrawal shortcut is unavailable in the current payment mode.', 403);
     }
 
     const context = await this.resolveSessionWallet(input);
@@ -3928,7 +3928,7 @@ export class AnchorService {
 
   static async submitPixFundedTransferForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
     if (!this.getRuntimeInfo().sandbox) {
-      throw apiError('PIX-funded transfer automation is available only in Etherfuse sandbox/devnet.', 403);
+      throw apiError('PIX-funded transfer automation is unavailable in the current payment mode.', 403);
     }
 
     const context = await this.resolveSessionWallet(input);
@@ -4063,7 +4063,7 @@ export class AnchorService {
     const amount = normalizeAmount(input.amount);
     const assetCode = coalesceString(input.assetCode) || 'TESOURO';
     if (assetCode.toUpperCase() !== 'TESOURO') {
-      throw apiError('Etherfuse PIX devnet on-ramp settles into TESOURO. Use assetCode=TESOURO.', 400);
+      throw apiError('PIX funding is unavailable for the selected destination asset. Use the default PIX route.', 400);
     }
 
     try {

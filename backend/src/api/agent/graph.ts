@@ -1180,10 +1180,10 @@ export class AgentGraph {
         recipient_public_key: resolvedRecipientPublicKey || undefined,
       };
       const url = await this.buildPixRampUrl(state, pixIntent);
-      const etherfuseFeeNote = this.text(
+      const pixFeeNote = this.text(
         language,
-        'Taxa Etherfuse sandbox medida: 0,20% (R$ 0,20 em uma amostra de R$ 100). A página mostra a cotação final antes do PIN.',
-        'Measured Etherfuse sandbox fee: 0.20% (R$0.20 on a R$100 sample). The page shows the final quote before the PIN.'
+        'Taxa de entrada estimada: 0,20%. A página mostra o valor final e a taxa do app antes do PIN.',
+        'Estimated PIX funding fee: 0.20%. The page shows the final amount and app fee before the PIN.'
       );
       state.success = true;
       state.pending_pix_ramp = undefined;
@@ -1192,15 +1192,15 @@ export class AgentGraph {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`,
-          `To send ${amountText} to your PIX, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nThe screen calculates the best conversion at exit and confirms the amount arriving in BRL in your PIX.`
+          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nA tela calcula a melhor conversão e confirma o valor chegando em reais no seu PIX.`,
+          `To send ${amountText} to your PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nThe screen calculates the best conversion and confirms the amount arriving in reais in your PIX.`
         );
       } else if (intent.flow === 'fund_and_pay' && resolvedRecipientLabel) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX da forma mais otimizada, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nA tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel} pela rota mais otimizada disponível.`,
-          `To send ${amountText} to ${resolvedRecipientLabel} with PIX using the most optimized route, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nThe screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel} through the most optimized available route.`
+          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nA tela mostra o valor final, pede seu PIN e envia para ${resolvedRecipientLabel} automaticamente depois da confirmação.`,
+          `To send ${amountText} to ${resolvedRecipientLabel} with PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nThe page shows the final amount, asks for your PIN, and sends it to ${resolvedRecipientLabel} automatically after confirmation.`
         );
       } else {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1209,8 +1209,8 @@ export class AgentGraph {
           : this.text(language, `colocar ${amountText} na sua conta`, `add ${amountText} to your account`);
         state.response_message = this.text(
           language,
-          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
-          `To ${actionText} with PIX, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nOn the page, use the QR and then confirm so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
+          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nNa página, use o QR e confirme com PIN para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
+          `To ${actionText} with PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nOn the page, use the QR and confirm with PIN so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
         );
       }
     }
@@ -2462,11 +2462,11 @@ export class AgentGraph {
       '- Example: "transferir 200 BRL para Carlos receber em USDC" means source_amount=200, source_asset_code=BRL, destination/dest asset=USDC. Do not send 200 USDC.',
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
       '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as BRL or real digital.',
-      '- Do not mention sandbox/testnet/devnet in chat. The PIX page handles any QR/banking disclaimer.',
+      '- Do not mention sandbox/testnet/devnet/provider/anchor/Etherfuse/infrastructure in chat. User-facing copy must sound like a banking app.',
       '- Mainnet is an advanced separate mode. Only discuss Stellar Mainnet if the user explicitly says mainnet, pubnet, rede publica, carteira mainnet, or saldo mainnet.',
       '- For Mainnet requests, say Mainnet uses real assets and is read-only by default. Never ask for or accept secret keys; only public keys beginning with G are allowed.',
       '- For explicit Mainnet balance/configuration requests, use get_mainnet_status, attach_mainnet_wallet, get_mainnet_balance, or preview_mainnet_payment instead of the normal app balance tools.',
-      '- If the user asks to toggle networks, direct them to /mainnet. Etherfuse PIX/TESOURO is Testnet-only and must not be presented as a Mainnet feature.',
+      '- If the user asks to toggle networks, direct them to /mainnet. PIX is separate from Mainnet and must not be presented as a Mainnet feature.',
       '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
       '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',

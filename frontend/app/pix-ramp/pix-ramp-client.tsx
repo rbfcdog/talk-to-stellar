@@ -515,6 +515,20 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
   return raw || mapped.message;
 }
 
+function publicLoadingLabel(value: string, language: "pt-BR" | "en") {
+  const normalized = value.toLowerCase();
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  if (!value) return "";
+  if (normalized.includes("pix") && normalized.includes("checkout")) return L("Preparando PIX", "Preparing PIX");
+  if (normalized.includes("confirming pix")) return L("Confirmando PIX", "Confirming PIX");
+  if (normalized.includes("off-ramp") || normalized.includes("retirada")) return L("Calculando retirada", "Calculating withdrawal");
+  if (normalized.includes("preview")) return L("Calculando taxa", "Calculating fee");
+  if (normalized.includes("copy")) return L("Copiando", "Copying");
+  if (normalized.includes("resolving")) return L("Localizando conta", "Finding account");
+  if (normalized.includes("running")) return L("Processando", "Processing");
+  return L("Processando", "Processing");
+}
+
 function isRecipientValidationMessage(value: unknown) {
   const normalized = String(value || "")
     .normalize("NFD")
@@ -1242,7 +1256,7 @@ export default function PixRampClient({
     const response = await fetchWithTimeout(path, init);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: path.includes("/customer") ? "Etherfuse customer + PIX setup" : path.includes("/quote") ? "Etherfuse quote" : path.includes("/onramp") ? "Etherfuse create/poll on-ramp order" : "Ramp API request",
+      label: path.includes("/customer") ? "PIX account setup" : path.includes("/quote") ? "PIX quote" : path.includes("/onramp") ? "PIX order request" : "Payment request",
       method,
       path,
       status: response.status,
@@ -1399,7 +1413,7 @@ export default function PixRampClient({
     const response = await fetchWithTimeout(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
-      label: path.includes("wallet-balances") ? "Account balances" : path.includes("/onramp/") ? "Etherfuse order status poll" : "Ramp API GET request",
+      label: path.includes("wallet-balances") ? "Account balances" : path.includes("/onramp/") ? "PIX status check" : "Payment status request",
       method: "GET",
       path,
       status: response.status,
@@ -1790,7 +1804,7 @@ export default function PixRampClient({
     await runAtomicAction("confirmar-pix", async () => {
       if (!orderId) throw new Error(L("Prepare o PIX antes de confirmar o pagamento.", "Prepare the PIX before confirming payment."));
       if (isSandboxMockOrder && !localMockFallbackAllowed) {
-        throw new Error(L("Este checkout foi criado como mock local antigo. Gere um novo PIX para usar somente Etherfuse sandbox/oficial.", "This checkout was created as an old local mock. Create a new PIX checkout to use only official Etherfuse sandbox/provider flow."));
+        throw new Error(L("Este PIX expirou. Gere um novo PIX para continuar.", "This PIX expired. Create a new PIX to continue."));
       }
       const pin = getValidatedWalletPin();
       const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
@@ -1852,7 +1866,7 @@ export default function PixRampClient({
 
   async function runTemporaryEndpointTest() {
     if (!opsMocksAllowed) {
-      throw new Error(L("Endpoint técnico de teste desativado. Use o fluxo PIX normal com Etherfuse sandbox/oficial.", "Technical test endpoint is disabled. Use the normal Etherfuse sandbox/provider PIX flow."));
+      throw new Error(L("Este atalho não está disponível agora. Use o fluxo PIX normal.", "This shortcut is not available now. Use the normal PIX flow."));
     }
     const auth = await resolveWalletFromEmail();
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-onramp", {
@@ -1896,7 +1910,7 @@ export default function PixRampClient({
   async function runTemporaryOffRampEndpointTest() {
     await runAtomicAction("confirmar-retirada", async () => {
       if (!opsMocksAllowed) {
-        throw new Error(L("Endpoint técnico de retirada mock desativado. Use a criação normal de off-ramp Etherfuse.", "Technical mock off-ramp endpoint is disabled. Use the normal Etherfuse off-ramp creation flow."));
+        throw new Error(L("Este atalho não está disponível agora. Use o fluxo PIX normal.", "This shortcut is not available now. Use the normal PIX flow."));
       }
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
@@ -2141,7 +2155,7 @@ export default function PixRampClient({
                 target="_blank"
                 rel="noreferrer"
               >
-                Abrir cadastro PIX Etherfuse
+                {L("Abrir cadastro PIX", "Open PIX setup")}
               </a>
             )}
           </section>
@@ -2150,11 +2164,10 @@ export default function PixRampClient({
         {config && !config.available && (
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
             <p className="font-black">
-              {L("PIX/Etherfuse fica disponível apenas no trilho Testnet.", "PIX/Etherfuse is available only on the Testnet rail.")}
+              {L("PIX está temporariamente indisponível.", "PIX is temporarily unavailable.")}
             </p>
             <p className="mt-2 leading-6 text-amber-100/85">
-              {config.unavailable_reason ||
-                L("Troque o runtime para STELLAR_NETWORK=TESTNET antes de usar PIX. Mainnet continua separada para leitura de carteira pública.", "Switch runtime to STELLAR_NETWORK=TESTNET before using PIX. Mainnet remains separate for public wallet reads.")}
+              {L("Tente novamente em alguns instantes. Se o problema continuar, volte ao chat e peça um novo link.", "Try again in a moment. If it keeps happening, return to chat and request a new link.")}
             </p>
             <a
               className="mt-3 inline-flex rounded-full border border-amber-200/40 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-50 transition hover:bg-amber-200/10"
@@ -2265,7 +2278,7 @@ export default function PixRampClient({
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">{L("Taxas reais da saída", "Real exit fees")}</p>
                     <p className="mt-2 text-sm font-bold leading-6 text-cyan-50/85">
-                      {L("Calcule a cotação Etherfuse do off-ramp antes do PIN. A confirmação só acontece no botão final.", "Calculate the Etherfuse off-ramp quote before PIN. Confirmation only happens on the final button.")}
+                      {L("Veja a taxa e o valor final antes do PIN. A confirmação só acontece no botão final.", "See the fee and final amount before the PIN. Confirmation only happens on the final button.")}
                     </p>
                   </div>
                   <button
@@ -2515,7 +2528,7 @@ export default function PixRampClient({
                   <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
                     <p className="font-bold">{L("Precisamos concluir o cadastro PIX desta conta.", "We need to finish this account's PIX setup.")}</p>
                     <a className="mt-3 inline-flex rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-950" href={onboardingUrl} target="_blank" rel="noreferrer">
-                      {L("Abrir cadastro PIX Etherfuse", "Open Etherfuse PIX setup")}
+                      {L("Abrir cadastro PIX", "Open PIX setup")}
                     </a>
                   </div>
                 )}
@@ -2578,21 +2591,21 @@ export default function PixRampClient({
 
                   {isSandboxMockOrder && !localMockFallbackAllowed ? (
                     <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm font-bold text-rose-50">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-rose-100">{L("Checkout antigo em mock local", "Old local mock checkout")}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-rose-100">{L("PIX expirado", "Expired PIX")}</p>
                       <p className="mt-2">
-                        {L("Mocks locais estão desativados agora. Gere um novo checkout para usar somente Etherfuse sandbox/oficial.", "Local mocks are disabled now. Create a new checkout to use only official Etherfuse sandbox/provider flow.")}
+                        {L("Esse PIX não pode mais ser confirmado. Gere um novo PIX para continuar.", "This PIX can no longer be confirmed. Create a new PIX to continue.")}
                       </p>
                     </div>
                   ) : demoPixMode ? (
                     <div className="mt-5 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-bold text-amber-50">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{L("PIX integrado em preparação", "Integrated PIX in progress")}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{L("Confirmação do PIX", "PIX confirmation")}</p>
                       <p className="mt-2">
                         {isSandboxMockOrder
-                          ? L("Este QR veio de um fallback local explicitamente habilitado para operadores.", "This QR came from a local fallback explicitly enabled for operators.")
-                          : L("Este checkout está no sandbox oficial do provider. Use o botão abaixo apenas para disparar a confirmação sandbox.", "This checkout is in the provider official sandbox. Use the button below only to trigger the sandbox confirmation.")}
+                          ? L("Depois de pagar, confirme aqui para concluir a operação.", "After paying, confirm here to complete the operation.")
+                          : L("Depois de pagar no app do seu banco, confirme aqui para continuar.", "After paying in your bank app, confirm here to continue.")}
                       </p>
                       <p className="mt-2 text-amber-100/80">
-                        {L("Sem mock local por padrão: se o provider não criar a ordem, a tela mostra erro em vez de inventar sucesso.", "No local mock by default: if the provider does not create the order, the screen shows an error instead of inventing success.")}
+                        {L("Você verá o valor final e o status da operação nesta mesma tela.", "You will see the final amount and operation status on this same page.")}
                       </p>
                     </div>
                   ) : (
@@ -2635,8 +2648,8 @@ export default function PixRampClient({
                             <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-50">{L("Depois de pagar o PIX", "After paying PIX")}</p>
                             <p className="mt-2 text-sm font-bold leading-6 text-amber-50/90">
                               {isSandboxMockOrder
-                                ? L("Digite o PIN para concluir este fallback local habilitado para operador.", "Enter the PIN to complete this operator-enabled local fallback.")
-                                : L("Digite o PIN para disparar a confirmação no sandbox oficial do provider. Em produção, a confirmação vem do webhook PIX.", "Enter the PIN to trigger confirmation in the provider official sandbox. In production, confirmation comes from the PIX webhook.")}
+                                ? L("Digite o PIN para concluir.", "Enter the PIN to complete.")
+                                : L("Digite o PIN para confirmar e continuar.", "Enter the PIN to confirm and continue.")}
                             </p>
                             <label className="mt-4 block text-sm font-bold text-amber-50">{L("PIN da conta", "Account PIN")}</label>
                             <WalletPinInput
@@ -2654,7 +2667,7 @@ export default function PixRampClient({
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
-                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : isSandboxMockOrder ? L("Concluir fallback local autorizado", "Complete authorized local fallback") : L("Confirmar no sandbox Etherfuse", "Confirm in Etherfuse sandbox")}
+                              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX received" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="amber" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar PIX", "Confirm PIX")}
                             </button>
                           </>
                         )}
@@ -2682,12 +2695,12 @@ export default function PixRampClient({
         <section className="mt-5 grid gap-5 lg:grid-cols-2">
           {rampMode === "onramp" && (
             <TemporaryEndpointCard
-              title="On-ramp temporary endpoint"
-              endpoint="POST /api/ramp/etherfuse/sandbox/test-onramp"
-              description="Runs the whole on-ramp server-side and returns the final transaction status."
+              title="Teste interno de entrada PIX"
+              endpoint="Fluxo interno de entrada PIX"
+              description="Executa a preparação completa e retorna o status final da operação."
               disabled={!canResolveWallet || Boolean(loading) || !config?.available || !opsMocksAllowed || operationLocked}
               hidden={!config?.available || !opsMocksAllowed}
-              onRun={() => run("Running on-ramp temporary endpoint", runTemporaryEndpointTest)}
+              onRun={() => run("Executando teste interno de entrada PIX", runTemporaryEndpointTest)}
               result={temporaryTestResult ? {
                 order_id: temporaryTestResult.transaction?.id,
                 final_status: temporaryTestResult.final_transaction?.status,
@@ -2697,19 +2710,19 @@ export default function PixRampClient({
 
           {rampMode === "offramp" && (
           <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">Off-ramp test endpoint</p>
-            <h2 className="mt-1 text-2xl font-black">Balance to PIX</h2>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">Teste interno de retirada</p>
+            <h2 className="mt-1 text-2xl font-black">Saldo para PIX</h2>
             <p className="mt-3 text-sm leading-6 text-stone-600">
-              Endpoint shown in frontend: <span className="font-mono font-black text-stone-950">POST /api/ramp/etherfuse/sandbox/test-offramp</span>
+              Use apenas em verificações internas para conferir status, taxa e variação de saldo.
             </p>
-            <label className="mt-5 block text-sm font-bold text-stone-600">Balance amount to off-ramp</label>
+            <label className="mt-5 block text-sm font-bold text-stone-600">Valor do saldo para retirar</label>
             <input className="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-lg font-black outline-none ring-rose-200 focus:ring-4" value={offRampAmount} inputMode="decimal" onChange={(event) => setOffRampAmount(event.target.value)} />
             {config?.available && opsMocksAllowed ? (
-              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Running off-ramp temporary endpoint", runTemporaryOffRampEndpointTest)}>
-                Test off-ramp and asset delta
+              <button className="mt-5 w-full rounded-3xl bg-rose-300 px-5 py-4 text-sm font-black text-rose-950 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked} onClick={() => run("Executando teste interno de retirada PIX", runTemporaryOffRampEndpointTest)}>
+                Testar retirada e variação de saldo
               </button>
             ) : (
-              <div className="mt-5 rounded-2xl bg-stone-100 p-4 text-sm font-bold text-stone-500">Mock/off-ramp test endpoint disabled. Use provider off-ramp flow.</div>
+              <div className="mt-5 rounded-2xl bg-stone-100 p-4 text-sm font-bold text-stone-500">Teste interno desativado. Use o fluxo normal de retirada.</div>
             )}
             {temporaryOffRampTestResult && (
               <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify({
@@ -2866,15 +2879,15 @@ function EtherfuseMeasuredFeeNotice({
     ? L("Taxa antes de gerar o PIX", "Fee before creating PIX")
     : L("Taxa antes da retirada", "Fee before withdrawal");
   const description = mode === "onramp"
-    ? L("Prévia baseada na medição real da Etherfuse sandbox/testnet. A cotação final aparece logo abaixo antes do PIN.", "Preview based on the real Etherfuse sandbox/testnet measurement. The final quote appears below before the PIN.")
-    : L("Prévia baseada na medição real da Etherfuse sandbox/testnet. Toque em Ver taxa real para substituir pela quote do provider.", "Preview based on the real Etherfuse sandbox/testnet measurement. Tap Show real fee to replace it with the provider quote.");
+    ? L("Prévia da taxa de entrada. O valor final aparece antes do PIN.", "Funding fee preview. The final amount appears before the PIN.")
+    : L("Prévia da taxa de retirada. Toque em Ver taxa real para atualizar com a cotação final.", "Withdrawal fee preview. Tap Show real fee to update with the final quote.");
 
   return (
     <div className="mt-4 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-4 text-amber-50">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{label}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl bg-black/20 p-3">
-          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">Etherfuse</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">{L("Entrada PIX", "PIX funding")}</p>
           <p className="mt-1 text-lg font-black">{formatBpsAsPercent(ETHERFUSE_TESTNET_FEE_BPS)}</p>
           <p className="mt-1 text-xs font-bold leading-5 text-amber-50/75">
             {L(
@@ -2948,9 +2961,9 @@ function RampFeeBridge({
 	  const feeTitle = mode === "onramp"
 	    ? L("O que você paga neste PIX", "What you pay in this PIX")
 	    : L("O que você paga nesta retirada", "What you pay in this withdrawal");
-	  const feeCaption = mode === "onramp"
-	    ? L("Aqui entram apenas duas cobranças: a taxa real do on-ramp/Etherfuse e a taxa de transação TalkToStellar.", "Only two charges are counted here: the real on-ramp/Etherfuse fee and the TalkToStellar transaction fee.")
-	    : L("Aqui entram apenas duas cobranças: a taxa real do off-ramp/Etherfuse e a taxa de transação TalkToStellar.", "Only two charges are counted here: the real off-ramp/Etherfuse fee and the TalkToStellar transaction fee.");
+		  const feeCaption = mode === "onramp"
+		    ? L("Aqui entram apenas duas cobranças: taxa de entrada PIX e taxa de transação TalkToStellar.", "Only two charges are counted here: PIX funding fee and TalkToStellar transaction fee.")
+		    : L("Aqui entram apenas duas cobranças: taxa de retirada PIX e taxa de transação TalkToStellar.", "Only two charges are counted here: PIX withdrawal fee and TalkToStellar transaction fee.");
 	  const showAnchorBridge = mode === "onramp" && hasFinalConversionAmount && anchorAfterRaw;
 
   return (
@@ -3001,18 +3014,18 @@ function RampFeeBridge({
       {showAnchorBridge && (
         <div className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs font-bold text-cyan-50">
           <span className="block uppercase tracking-[0.14em] text-cyan-100/70">
-            {L("Ativo ponte Etherfuse", "Etherfuse bridge asset")}
+	            {L("Conversão intermediária", "Intermediate conversion")}
           </span>
           <span className="mt-1 block text-sm font-black">
             {formatQuoteAmount(anchorAfterRaw, anchorCurrency)}
           </span>
           <span className="mt-1 block leading-5 text-cyan-50/75">
             {L(
-              `A cotação real do provider liquida primeiro em ${anchorCurrency}. O backend converte esse ativo para ${destinationCurrency} antes de pagar o destinatário.`,
-              `The real provider quote first settles as ${anchorCurrency}. The backend converts that asset to ${destinationCurrency} before paying the recipient.`,
+	              `A rota converte primeiro para ${anchorCurrency} e depois entrega ${destinationCurrency} ao destinatário.`,
+	              `The route converts first to ${anchorCurrency} and then delivers ${destinationCurrency} to the recipient.`,
             )}
             {anchorBeforeRaw && anchorBeforeRaw !== anchorAfterRaw
-              ? ` ${L("Antes da taxa do provider", "Before provider fee")}: ${formatQuoteAmount(anchorBeforeRaw, anchorCurrency)}.`
+              ? ` ${L("Antes da taxa", "Before fee")}: ${formatQuoteAmount(anchorBeforeRaw, anchorCurrency)}.`
               : ""}
           </span>
         </div>
@@ -3021,7 +3034,7 @@ function RampFeeBridge({
       <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-2">
 	        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
 	          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
-	            {mode === "onramp" ? L("1. Etherfuse / on-ramp", "1. Etherfuse / on-ramp") : L("1. Etherfuse / off-ramp", "1. Etherfuse / off-ramp")}
+		            {mode === "onramp" ? L("1. Entrada PIX", "1. PIX funding") : L("1. Retirada PIX", "1. PIX withdrawal")}
 	          </span>
 	          <span className="mt-1 block text-sm font-black">{feeValue}</span>
 	        </div>
@@ -3074,7 +3087,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-[0.14em] opacity-70">
             <span>{completed}/{steps.length} {L("etapas", "steps")}</span>
-            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading || statusLabel(status, language)}</span>
+	            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading ? publicLoadingLabel(loading, language) : statusLabel(status, language)}</span>
           </div>
         </div>
 
@@ -3126,8 +3139,8 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
     <div className="rounded-[2rem] bg-[#111b16] p-5 text-white shadow-xl shadow-emerald-950/20 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Frontend API debug</p>
-          <h2 className="mt-1 text-2xl font-black">Etherfuse request log</h2>
+	          <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-200">Debug interno</p>
+	          <h2 className="mt-1 text-2xl font-black">Registro de requisições</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
             Mostra os detalhes tecnicos enviados para `/api/ramp/...` e o que voltou. Segredos e ativos internos ficam mascarados.
           </p>
@@ -3213,7 +3226,7 @@ function AssetMovement({ title, before, after, deltas }: {
             ))}
           </>
         ) : deltas.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-400">Run a quote/order or the temporary endpoint to capture asset movement.</div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-400">Gere uma cotação ou PIX para acompanhar a movimentação de saldo.</div>
         ) : deltas.map((item) => {
           const deltaNumber = Number(item.delta || 0);
           return (

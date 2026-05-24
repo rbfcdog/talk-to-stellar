@@ -82,7 +82,7 @@ const englishDictionary: Dictionary = {
     hero_title_1: "PIX to dollars.",
     hero_title_2: "In one message.",
     hero_subtitle:
-      "A conversational sandbox for funding with PIX, converting through Stellar rails, and preparing transfers to contacts or international USD accounts.",
+      "A conversational account for funding with PIX, converting to dollars, and sending money to contacts or international USD accounts.",
     hero_card_1_title: "Start with chat",
     hero_card_1_body: "Open WhatsApp, Telegram, or the browser chat and ask for balance, PIX, payment, conversion, or history.",
     hero_card_2_title: "Review before confirming",
@@ -168,7 +168,7 @@ const portugueseDictionary: Dictionary = {
     hero_title_1: "PIX para dólares.",
     hero_title_2: "Em uma mensagem.",
     hero_subtitle:
-      "Um sandbox conversacional para entrar com PIX, converter por trilhos Stellar e preparar transferências para contatos ou contas internacionais em USD.",
+      "Uma conta conversacional para entrar com PIX, converter para dólar e enviar dinheiro para contatos ou contas internacionais em USD.",
     hero_card_1_title: "Comece pelo chat",
     hero_card_1_body: "Abra WhatsApp, Telegram ou o chat web e peça saldo, PIX, pagamento, conversão ou histórico.",
     hero_card_2_title: "Revise antes de confirmar",

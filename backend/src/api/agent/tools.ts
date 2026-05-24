@@ -4010,8 +4010,8 @@ async function buildReceiptFeeBreakdown(row: any, input: any): Promise<{
   const feeLines = [
     `- TalkToStellar: ${normalizeCurrencySpacing(formatBrl(talkToStellarFeeBrl))}`,
     `- Rede Stellar: ${normalizeCurrencySpacing(formatBrl(networkFeeBrl))}`,
-    onRampFeeBrl > 0 ? `- Etherfuse on-ramp: ${normalizeCurrencySpacing(formatBrl(onRampFeeBrl))}` : '',
-    offRampFeeBrl > 0 ? `- Etherfuse off-ramp: ${normalizeCurrencySpacing(formatBrl(offRampFeeBrl))}` : '',
+    onRampFeeBrl > 0 ? `- Entrada PIX: ${normalizeCurrencySpacing(formatBrl(onRampFeeBrl))}` : '',
+    offRampFeeBrl > 0 ? `- Retirada PIX: ${normalizeCurrencySpacing(formatBrl(offRampFeeBrl))}` : '',
   ].filter(Boolean);
 
   return {

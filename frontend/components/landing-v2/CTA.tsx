@@ -24,8 +24,8 @@ export default function CTA() {
         </h2>
         <p className="text-lg md:text-xl text-gray-300 mb-10 max-w-2xl relative z-10 leading-relaxed">
           {L(
-            "Comece pelo chat, gere um PIX sandbox e veja status, confirmação e comprovante sem expor chaves ou detalhes técnicos.",
-            "Start with chat, create a sandbox PIX flow, and see status, confirmation, and receipt without exposing keys or technical details."
+            "Comece pelo chat, gere um PIX, acompanhe status, confirmação e comprovante sem ver detalhes técnicos.",
+            "Start with chat, create a PIX flow, and follow status, confirmation, and receipt without seeing technical details."
           )}
         </p>
         

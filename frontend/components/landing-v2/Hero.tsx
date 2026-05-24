@@ -24,8 +24,8 @@ export default function Hero() {
     {
       href: "/institution-settlement",
       icon: Landmark,
-      label: L("Ver infra entre instituições", "View institution rail"),
-      detail: L("Painel técnico com logs e evidências.", "Technical panel with logs and evidence."),
+      label: L("Ver transferências entre instituições", "View institution transfers"),
+      detail: L("Acompanhe origem, taxa, rota e destino.", "Track origin, fee, route, and destination."),
     },
   ];
 
@@ -41,7 +41,7 @@ export default function Hero() {
           <section className="min-w-0 space-y-7 overflow-hidden">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-emerald-100">
               <CheckCircle2 className="h-4 w-4" />
-              {L("Demo sandbox/testnet", "Sandbox/testnet demo")}
+              {L("Produto em validação", "Product in validation")}
             </div>
 
             <div className="space-y-4">
