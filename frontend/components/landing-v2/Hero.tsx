@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, CircleDollarSign, Landmark } from 'lucide-react';
+import { ArrowRight, CircleDollarSign, Landmark } from 'lucide-react';
 import PhoneMockup from './PhoneMockup';
 import { useLanguage } from '@/lib/i18n';
 
@@ -38,11 +38,6 @@ export default function Hero() {
           className="grid min-w-0 w-full gap-8 overflow-hidden md:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] items-center"
         >
           <section className="min-w-0 space-y-7 overflow-hidden">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-emerald-100">
-              <CheckCircle2 className="h-4 w-4" />
-              {L("Produto em validação", "Product in validation")}
-            </div>
-
             <div className="space-y-4">
               <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-white md:text-[60px] leading-[1.04]">
                 {t("hero_title_1")} <br className="hidden md:block"/>
