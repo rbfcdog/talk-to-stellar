@@ -22,7 +22,7 @@ export function publicErrorCode(error: unknown) {
 
   if (/(quote|cotacao).*(expired|expirad)|not active:\s*expired/.test(normalized)) return 'quote_expired';
   if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|invalid or expired link|already used|ja foi utilizado/.test(normalized)) return 'link_expired';
-  if (/(session|sessao).*(expired|expirad)|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) return 'session_expired';
+  if (/(session|sessao).*(expired|expirad|required|obrigator)|session_id|session_token|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) return 'session_expired';
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) return 'setup_unavailable';
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) return 'account_preparing';
   if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) return 'invalid_pin';
