@@ -33,6 +33,7 @@ export function publicErrorCode(error: unknown) {
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
   if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) return 'recipient_not_found';
   if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) return 'pix_account_not_ready';
+  if (/uuid parsing|json deserialize error|accountregistration/.test(normalized)) return 'pix_account_not_ready';
   if (/timeout|timed out|abort|aborted|operation was aborted|fetch failed|network|econn|service unavailable|failed to fetch|gateway timeout|etimedout/.test(normalized)) return 'service_timeout';
   if (/nao consegui encontrar uma rota segura|nao foi encontrado caminho|não foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)) return 'conversion_route_unavailable';
   if (/etherfuse|evolution|provider|pix provider|sandbox provider/.test(normalized)) return 'provider_unavailable';

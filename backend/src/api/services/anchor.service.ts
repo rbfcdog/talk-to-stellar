@@ -474,6 +474,34 @@ function coalesceString(...values: unknown[]): string {
   return '';
 }
 
+function isUuidLike(value: unknown): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    coalesceString(value),
+  );
+}
+
+function providerFiatAccountIdFromExternalBankAccount(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  const metadata = record.metadata && typeof record.metadata === 'object'
+    ? record.metadata as Record<string, unknown>
+    : {};
+  return coalesceString(
+    record.provider_fiat_account_id,
+    record.providerFiatAccountId,
+    record.fiat_account_id,
+    record.fiatAccountId,
+    record.bank_account_id,
+    record.bankAccountId,
+    metadata.provider_fiat_account_id,
+    metadata.providerFiatAccountId,
+    metadata.fiat_account_id,
+    metadata.fiatAccountId,
+    metadata.bank_account_id,
+    metadata.bankAccountId,
+  );
+}
+
 function normalizeEtherfuseApiKey(rawValue: unknown): string {
   return String(rawValue || '')
     .trim()
@@ -3332,12 +3360,28 @@ export class AnchorService {
     const sourceAmount = coalesceString(input.source_amount, input.sourceAmount);
     const targetBrl = coalesceString(input.target_brl, input.targetBrl);
     const intentId = normalizeRampIntentId(input);
+    const externalBankAccount = input.external_bank_account || input.externalBankAccount;
+    const providerFiatAccountId = providerFiatAccountIdFromExternalBankAccount(externalBankAccount);
+    const userFacingExternalBankAccountId = externalBankAccount && typeof externalBankAccount === 'object'
+      ? coalesceString((externalBankAccount as Record<string, unknown>).id)
+      : '';
     let fiatAccountId = coalesceString(
+      providerFiatAccountId,
       input.fiat_account_id,
       input.fiatAccountId,
       input.bank_account_id,
       input.bankAccountId,
     );
+    if (
+      fiatAccountId &&
+      (
+        !isUuidLike(fiatAccountId) ||
+        (userFacingExternalBankAccountId && fiatAccountId === userFacingExternalBankAccountId && !providerFiatAccountId)
+      )
+    ) {
+      console.warn(`[ramp] Ignoring user-facing PIX destination id for Etherfuse off-ramp order: ${fiatAccountId}`);
+      fiatAccountId = '';
+    }
 
     if (!customerId) throw apiError('Conta PIX não encontrada para esta tentativa. Gere uma nova estimativa e tente novamente.', 400);
     if (!quoteId) throw apiError('quote_id is required.', 400);
@@ -3352,7 +3396,8 @@ export class AnchorService {
 
     if (!fiatAccountId) {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerId);
-      fiatAccountId = accounts[0]?.id || '';
+      const providerAccount = accounts.find((account) => isUuidLike(account.id));
+      fiatAccountId = providerAccount?.id || '';
     }
     let transaction: OffRampTransaction;
     const forceSandboxMock = this.getRuntimeInfo().sandbox && Boolean(input.force_sandbox_mock || input.forceSandboxMock);

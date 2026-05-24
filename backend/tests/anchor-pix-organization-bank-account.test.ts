@@ -155,6 +155,56 @@ describe('AnchorService PIX organization bank account routing', () => {
     });
   });
 
+  it('does not send a local PIX destination id as an Etherfuse off-ramp fiat account id', async () => {
+    mockSandboxRuntime();
+
+    const anchor = {
+      getFiatAccounts: jest.fn().mockResolvedValue([]),
+      createOffRamp: jest.fn(),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(AnchorService as any, 'findActiveRampOperationByIntent').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+
+    const result = await AnchorService.createOffRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      quote_id: 'quote-1',
+      amount: '48.6880919',
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      target_brl: '56.00',
+      fiat_account_id: 'bank-4aaa8945',
+      external_bank_account: {
+        id: 'bank-4aaa8945',
+        label: 'Seu PIX',
+        institution: 'Destino PIX vinculado',
+        pix_key: 'user@example.com',
+      },
+    });
+
+    expect(anchor.getFiatAccounts).toHaveBeenCalledWith('customer-1');
+    expect(anchor.createOffRamp).not.toHaveBeenCalled();
+    expect(result.operation_id).toBe('op-1');
+    expect(result.transaction.id).toMatch(/^sandbox-offramp-/);
+    expect(result.transaction).toMatchObject({
+      fromAmount: '48.6880919',
+      toAmount: '56.00',
+      toCurrency: 'BRL',
+    });
+    expect((result.transaction as any).sandbox_mock).toBe(true);
+  });
+
   it('does not open hosted onboarding or create a PIX bank account for regional sandbox customer setup', async () => {
     mockSandboxRuntime();
 
