@@ -2,7 +2,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, CheckCircle2, CircleDollarSign, Landmark } from 'lucide-react';
 import PhoneMockup from './PhoneMockup';
-import ChannelButtons from './ChannelButtons';
 import { useLanguage } from '@/lib/i18n';
 
 export default function Hero() {
@@ -12,20 +11,20 @@ export default function Hero() {
     {
       href: "/chat",
       icon: ArrowRight,
-      label: L("Abrir chat web", "Open web chat"),
-      detail: L("Comece por saldo, PIX ou pagamento.", "Start with balance, PIX, or payment."),
+      label: L("Testar no chat", "Try web chat"),
+      detail: L("Veja saldo, PIX, envio e histórico.", "See balance, PIX, payment, and history."),
     },
     {
       href: "/pix-on?amount=10&asset=BRL&from=landing",
       icon: CircleDollarSign,
       label: L("Simular PIX de R$10", "Simulate R$10 PIX"),
-      detail: L("Veja intent, status e confirmação.", "See intent, status, and confirmation."),
+      detail: L("Entenda o fluxo antes de pagar.", "Understand the flow before paying."),
     },
     {
       href: "/institution-settlement",
       icon: Landmark,
-      label: L("Ver transferências entre instituições", "View institution transfers"),
-      detail: L("Acompanhe origem, taxa, rota e destino.", "Track origin, fee, route, and destination."),
+      label: L("Ver infraestrutura", "View infrastructure"),
+      detail: L("Origem, taxa, rota e destino.", "Origin, fee, route, and destination."),
     },
   ];
 
@@ -54,7 +53,13 @@ export default function Hero() {
               </p>
             </div>
 
-            <ChannelButtons />
+            <button
+              onClick={() => document.getElementById('start')?.scrollIntoView({ behavior: 'smooth' })}
+              className="inline-flex w-fit items-center gap-2 rounded-full bg-[#00D2FF] px-6 py-3 text-sm font-black text-slate-950 shadow-[0_0_28px_rgba(0,210,255,0.22)] transition hover:bg-cyan-300"
+            >
+              {L("Escolher onde começar", "Choose how to start")}
+              <ArrowRight className="h-4 w-4" />
+            </button>
 
             <div className="grid min-w-0 gap-3 md:grid-cols-3">
               {firstActions.map(({ href, icon: Icon, label, detail }) => (

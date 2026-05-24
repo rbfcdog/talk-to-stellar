@@ -1,32 +1,58 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
 
-const faqs = [
+const portugueseFaqs = [
+  {
+    question: "O que é o TalkToStellar?",
+    answer: "É uma conta conversacional para pedir saldo, enviar dinheiro, converter valores, usar PIX e acompanhar comprovantes direto pelo WhatsApp, Telegram ou chat web."
+  },
+  {
+    question: "Preciso baixar um aplicativo novo?",
+    answer: "Não. Você pode começar por um canal que já usa. A página final da landing mostra as opções: WhatsApp, Telegram e chat web."
+  },
+  {
+    question: "Como eu confirmo uma operação?",
+    answer: "Antes de qualquer pagamento, a tela mostra valor, destino e taxa. A confirmação acontece com PIN e o comprovante fica no histórico."
+  },
+  {
+    question: "As taxas aparecem antes?",
+    answer: "Sim. A experiência mostra quanto você paga, quanto chega e qual taxa será cobrada antes da confirmação."
+  },
+  {
+    question: "Isso substitui meu banco internacional?",
+    answer: "Não. O foco é ser uma rota simples e eficiente antes da conta de destino, mantendo liberdade para usar o banco ou conta global de sua preferência."
+  }
+];
+
+const englishFaqs = [
   {
     question: "What is TalkToStellar?",
-    answer: "TalkToStellar is an intelligent assistant for WhatsApp and Telegram that lets you convert Brazilian reais (BRL) into digital dollars (USDC) and send money worldwide by sending messages."
-  },
-  {
-    question: "How does BRL to USDC conversion work?",
-    answer: "You tell us how much you want to convert and we find a low-cost route. You pay with PIX and the corresponding USDC is credited to your account."
-  },
-  {
-    question: "Is TalkToStellar secure?",
-    answer: "Yes. Every operation uses secure confirmation, clear receipts, and visible amounts before you approve."
-  },
-  {
-    question: "What fees do you charge?",
-    answer: "We avoid hidden spread and excessive traditional-bank fees. TalkToStellar shows the final amount before you confirm."
+    answer: "TalkToStellar is a conversational account for checking balance, sending money, converting value, using PIX, and tracking receipts through WhatsApp, Telegram, or web chat."
   },
   {
     question: "Do I need to download a new app?",
-    answer: "No. The experience runs inside messaging apps you already use, such as WhatsApp or Telegram. Start a conversation with the bot to begin."
+    answer: "No. You can start from a channel you already use. The final CTA shows WhatsApp, Telegram, and web chat options."
+  },
+  {
+    question: "How do I confirm an operation?",
+    answer: "Before any payment, the screen shows amount, destination, and fee. You confirm with PIN and the receipt stays in your history."
+  },
+  {
+    question: "Are fees shown before confirmation?",
+    answer: "Yes. The experience shows what you pay, what arrives, and which fee is charged before confirmation."
+  },
+  {
+    question: "Does this replace my international bank?",
+    answer: "No. The focus is to be a simple, efficient route before the destination account, while keeping your freedom to use the bank or global account you prefer."
   }
 ];
 
 export default function FAQSection() {
+  const { language } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const faqs = language === "pt-BR" ? portugueseFaqs : englishFaqs;
 
   const toggleFaq = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
@@ -36,7 +62,7 @@ export default function FAQSection() {
     <section id="faq" className="py-20 md:py-32 w-full max-w-4xl mx-auto px-4 sm:px-0 scroll-mt-24">
       <div className="text-center mb-16">
         <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">
-          Frequently Asked Questions
+          {language === "pt-BR" ? "Perguntas frequentes" : "Frequently Asked Questions"}
         </h2>
       </div>
 

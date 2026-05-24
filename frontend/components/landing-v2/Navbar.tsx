@@ -1,25 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { StellarLogo } from './StellarLogo';
-import ChannelButtons from './ChannelButtons';
 import { useLanguage } from '@/lib/i18n';
 
 export default function Navbar() {
-  const { t } = useLanguage();
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 300) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  const { language, t } = useLanguage();
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
 
   return (
     <motion.nav 
@@ -42,9 +28,12 @@ export default function Navbar() {
         <button onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm font-medium text-[#9BA4B5] hover:text-white transition-colors">FAQ</button>
       </div>
 
-      <div className="hidden min-h-[36px] w-full max-w-md md:mr-14 md:block md:min-h-[40px]">
-        {!isScrolled ? <ChannelButtons compact /> : null}
-      </div>
+      <button
+        onClick={() => document.getElementById('start')?.scrollIntoView({ behavior: 'smooth' })}
+        className="shrink-0 rounded-full border border-[#00D2FF]/30 bg-[#00D2FF]/10 px-4 py-2 text-sm font-black text-white transition hover:border-[#00D2FF]/60 hover:bg-[#00D2FF]/20 md:px-5"
+      >
+        {L("Começar agora", "Start now")}
+      </button>
     </motion.nav>
   );
 }
