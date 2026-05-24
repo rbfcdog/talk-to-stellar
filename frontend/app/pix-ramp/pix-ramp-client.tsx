@@ -47,6 +47,13 @@ type ExternalBankAccount = {
   branch: string;
   account_number: string;
   pix_key: string;
+  provider_fiat_account_id?: string;
+  providerFiatAccountId?: string;
+  fiat_account_id?: string;
+  fiatAccountId?: string;
+  bank_account_id?: string;
+  bankAccountId?: string;
+  metadata?: Record<string, unknown>;
 };
 type LiveStepState = "done" | "active" | "pending" | "warning";
 type LiveStep = {
@@ -395,6 +402,25 @@ function buildExternalBankAccount(seed: string, email: string) {
   };
 }
 
+function getProviderFiatAccountId(account: ExternalBankAccount | null | undefined) {
+  const metadata = account?.metadata || {};
+  return String(
+    account?.provider_fiat_account_id ||
+    account?.providerFiatAccountId ||
+    account?.fiat_account_id ||
+    account?.fiatAccountId ||
+    account?.bank_account_id ||
+    account?.bankAccountId ||
+    metadata.provider_fiat_account_id ||
+    metadata.providerFiatAccountId ||
+    metadata.fiat_account_id ||
+    metadata.fiatAccountId ||
+    metadata.bank_account_id ||
+    metadata.bankAccountId ||
+    "",
+  ).trim();
+}
+
 function WalletPinInput({
   value,
   onChange,
@@ -534,6 +560,11 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
     return language === "pt-BR"
       ? "Sua conta PIX está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente."
       : "Your PIX account is being prepared. Wait a few seconds and tap Generate PIX again.";
+  }
+  if (/uuid parsing|json deserialize error|accountregistration/.test(normalized)) {
+    return language === "pt-BR"
+      ? "Não consegui preparar seu PIX nesta tentativa. Toque em Ver valor final e tente confirmar novamente."
+      : "I could not prepare your PIX on this attempt. Tap Show final amount and try confirming again.";
   }
   const mapped = mapPublicError(raw, language);
   const isTechnical =
@@ -1983,6 +2014,7 @@ export default function PixRampClient({
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
       const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
+      const providerFiatAccountId = getProviderFiatAccountId(bankAccount);
       const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
       const balancesBefore = await fetchBalances(auth);
       assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
@@ -2018,7 +2050,7 @@ export default function PixRampClient({
             available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
             fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
             destination_currency: "BRL",
-            fiat_account_id: bankAccount.id,
+            fiat_account_id: providerFiatAccountId || undefined,
             intent_id: atomicIntentKey,
           },
           response: { ready_to_submit: true },
@@ -2035,7 +2067,7 @@ export default function PixRampClient({
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
           target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
-          fiat_account_id: bankAccount.id,
+          fiat_account_id: providerFiatAccountId || undefined,
           external_bank_account: bankAccount,
         }, "POST", auth, buildIdempotencyKey("create-offramp"));
       setOrderPayload(orderPayload);
