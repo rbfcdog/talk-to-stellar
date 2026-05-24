@@ -106,7 +106,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) {
     return {
       code: "pix_account_not_ready",
-      message: copy(language, "Sua conta PIX ainda não está pronta para esse fluxo. Entre novamente, gere uma nova estimativa e tente outra vez.", "Your PIX account is not ready for this flow yet. Sign in again, create a new estimate, and try once more."),
+      message: copy(language, "Não consegui gerar este PIX nesta tentativa. Gere uma nova estimativa e tente novamente em alguns segundos.", "I could not create this PIX on this attempt. Create a new estimate and try again in a few seconds."),
     };
   }
 

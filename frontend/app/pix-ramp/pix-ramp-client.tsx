@@ -1482,17 +1482,21 @@ export default function PixRampClient({
     return () => window.clearInterval(timer);
   }, [orderId, polling, refreshOrder]);
 
-  async function run(label: string, fn: () => Promise<void>) {
-    setLoading(label);
-    setError("");
-    try {
-      await fn();
-    } catch (err) {
-      const payload = (err as Error & { payload?: RampResponse })?.payload;
-      if (payload?.kyc_url) setOnboardingUrl(String(payload.kyc_url));
-      setError(publicRampErrorMessage(err, language));
-    } finally {
-      setLoading("");
+	  async function run(label: string, fn: () => Promise<void>) {
+	    setLoading(label);
+	    setError("");
+	    try {
+	      await fn();
+	    } catch (err) {
+	      const payload = (err as Error & { payload?: RampResponse })?.payload;
+	      if (payload?.kyc_url && debugEnabled && !launchedFromChat) {
+	        setOnboardingUrl(String(payload.kyc_url));
+	      } else {
+	        setOnboardingUrl("");
+	      }
+	      setError(publicRampErrorMessage(err, language));
+	    } finally {
+	      setLoading("");
     }
   }
 
