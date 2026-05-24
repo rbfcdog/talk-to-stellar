@@ -68,6 +68,7 @@ type DebugLogEntry = {
 };
 
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
+const RAMP_REQUEST_TIMEOUT_MS = 45000;
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -497,10 +498,26 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+  const mapped = mapPublicError(raw, language);
   const isTechnical =
-    /internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
-  if (isTechnical) return mapPublicError(raw, language).message;
-  return raw || mapPublicError(raw, language).message;
+    /session_id|session_token|internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
+  if (isTechnical || mapped.code !== "temporary_unavailable") return mapped.message;
+  return raw || mapped.message;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = RAMP_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("request timed out");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export default function PixRampClient({
@@ -884,8 +901,12 @@ export default function PixRampClient({
   useEffect(() => {
     const stored = getStoredSession();
     setSessionId(stored.sessionId);
-    getClientSession().then(({ sessionId: cookieSessionId }) => {
-      if (cookieSessionId) setSessionId(cookieSessionId);
+    getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
+      if (authenticated && cookieSessionId) {
+        setSessionId(cookieSessionId);
+      } else if (!stored.sessionId) {
+        setSessionId("");
+      }
     });
     const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
     if (storedName.includes("@")) setRampEmail(storedName);
@@ -975,7 +996,7 @@ export default function PixRampClient({
   }, [operationStorageKey]);
 
   useEffect(() => {
-    fetch("/api/ramp/etherfuse/config", { cache: "no-store" })
+    fetchWithTimeout("/api/ramp/etherfuse/config", { cache: "no-store" }, 15000)
       .then((response) => response.json())
       .then((payload) => setConfig(payload))
       .catch(() => setConfig({ sandbox: false, available: false, testnet_only: true, network: "Stellar Testnet" }));
@@ -1022,7 +1043,7 @@ export default function PixRampClient({
 
     let cancelled = false;
     setReceiveEstimateLoading(true);
-    fetch(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}`, { cache: "no-store" })
+    fetchWithTimeout(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}`, { cache: "no-store" }, 20000)
       .then((response) => response.json())
       .then((payload) => {
         const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
@@ -1084,11 +1105,11 @@ export default function PixRampClient({
     }
 
     const startedAt = performance.now();
-    const response = await fetch("/api/ramp/etherfuse/resolve-wallet", {
+    const response = await fetchWithTimeout("/api/ramp/etherfuse/resolve-wallet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
-    });
+    }, 20000);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
       label: "Resolve TalkToStellar account by email",
@@ -1122,11 +1143,11 @@ export default function PixRampClient({
     const auth = authOverride || { session_id: sessionId };
     if (!auth.session_id) return null;
     const startedAt = performance.now();
-    const response = await fetch("/api/ramp/etherfuse/external-bank-account", {
+    const response = await fetchWithTimeout("/api/ramp/etherfuse/external-bank-account", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(auth),
-    });
+    }, 25000);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
       label: "Load linked PIX destination",
@@ -1167,7 +1188,7 @@ export default function PixRampClient({
     const init: RequestInit = { method, headers };
     if (method !== "GET") init.body = JSON.stringify(requestBody);
     const startedAt = performance.now();
-    const response = await fetch(path, init);
+    const response = await fetchWithTimeout(path, init);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
       label: path.includes("/customer") ? "Etherfuse customer + PIX setup" : path.includes("/quote") ? "Etherfuse quote" : path.includes("/onramp") ? "Etherfuse create/poll on-ramp order" : "Ramp API request",
@@ -1256,7 +1277,7 @@ export default function PixRampClient({
       .catch((requestError) => {
         if (cancelled) return;
         const message = requestError instanceof Error
-          ? requestError.message
+          ? publicRampErrorMessage(requestError, language)
           : L("Esse destinatário não existe nos seus contatos salvos.", "This recipient does not exist in your saved contacts.");
         setVerifiedTransferRecipient(null);
         setRecipientVerificationError(message);
@@ -1273,6 +1294,7 @@ export default function PixRampClient({
   }, [
     L,
     callRamp,
+    language,
     queryReady,
     recipientVerificationError,
     sessionId,
@@ -1288,7 +1310,7 @@ export default function PixRampClient({
     if (!auth.session_id) throw new Error(L("Digite o email da conta TalkToStellar para localizar sua conta.", "Enter the TalkToStellar account email to find your account."));
     const search = new URLSearchParams({ ...auth, language, ...(params || {}) });
     const startedAt = performance.now();
-    const response = await fetch(`${path}?${search.toString()}`, { cache: "no-store" });
+    const response = await fetchWithTimeout(`${path}?${search.toString()}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
       label: path.includes("wallet-balances") ? "Account balances" : path.includes("/onramp/") ? "Etherfuse order status poll" : "Ramp API GET request",

@@ -61,7 +61,7 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
-  if (/(session|sessao|sessão).*(expired|expirad)|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) {
+  if (/(session|sessao|sessão).*(expired|expirad|required|obrigator)|session_id|session_token|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) {
     return {
       code: "session_expired",
       message: copy(language, "Sua sessão expirou. Entre novamente para continuar.", "Your session expired. Sign in again to continue."),
