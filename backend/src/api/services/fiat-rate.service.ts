@@ -108,6 +108,75 @@ async function fetchAwesomeApiUsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
   };
 }
 
+async function fetchOpenExchangeRateApiUsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
+  const payload = await fetchJsonWithTimeout<{ rates?: { BRL?: number } }>(
+    'https://open.er-api.com/v6/latest/USD',
+  );
+  const price = toPositiveNumber(payload?.rates?.BRL);
+  if (!isSaneUsdBrlRate(price)) return undefined;
+  return {
+    brlPerUsd: price,
+    source: 'market:open-er-api:USD-BRL',
+    fetchedAt: new Date().toISOString(),
+    fallbackApplied: false,
+  };
+}
+
+async function fetchExchangeRateApiV4UsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
+  const payload = await fetchJsonWithTimeout<{ rates?: { BRL?: number } }>(
+    'https://api.exchangerate-api.com/v4/latest/USD',
+  );
+  const price = toPositiveNumber(payload?.rates?.BRL);
+  if (!isSaneUsdBrlRate(price)) return undefined;
+  return {
+    brlPerUsd: price,
+    source: 'market:exchangerate-api-v4:USD-BRL',
+    fetchedAt: new Date().toISOString(),
+    fallbackApplied: false,
+  };
+}
+
+async function fetchCoinbaseUsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
+  const payload = await fetchJsonWithTimeout<{ data?: { rates?: { BRL?: string } } }>(
+    'https://api.coinbase.com/v2/exchange-rates?currency=USD',
+  );
+  const price = toPositiveNumber(payload?.data?.rates?.BRL);
+  if (!isSaneUsdBrlRate(price)) return undefined;
+  return {
+    brlPerUsd: price,
+    source: 'market:coinbase:USD-BRL',
+    fetchedAt: new Date().toISOString(),
+    fallbackApplied: false,
+  };
+}
+
+async function fetchFrankfurterUsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
+  const payload = await fetchJsonWithTimeout<{ rates?: { BRL?: number } }>(
+    'https://api.frankfurter.dev/v1/latest?base=USD&symbols=BRL',
+  );
+  const price = toPositiveNumber(payload?.rates?.BRL);
+  if (!isSaneUsdBrlRate(price)) return undefined;
+  return {
+    brlPerUsd: price,
+    source: 'market:frankfurter:USD-BRL',
+    fetchedAt: new Date().toISOString(),
+    fallbackApplied: false,
+  };
+}
+
+async function fetchMarketUsdBrl(): Promise<FiatUsdBrlQuote | undefined> {
+  return await fetchBinanceUsdBrl() ||
+    await fetchAwesomeApiUsdBrl() ||
+    await fetchOpenExchangeRateApiUsdBrl() ||
+    await fetchExchangeRateApiV4UsdBrl() ||
+    await fetchCoinbaseUsdBrl() ||
+    await fetchFrankfurterUsdBrl();
+}
+
+function envFallbackEnabled(): boolean {
+  return /^(1|true|yes)$/i.test(String(process.env.ALLOW_USD_BRL_ENV_FALLBACK || '').trim());
+}
+
 export class FiatRateService {
   static isSaneUsdBrlRate(rate: number): boolean {
     return isSaneUsdBrlRate(rate);
@@ -123,7 +192,7 @@ export class FiatRateService {
       return cachedUsdBrl.quote;
     }
 
-    const marketQuote = await fetchBinanceUsdBrl() || await fetchAwesomeApiUsdBrl();
+    const marketQuote = await fetchMarketUsdBrl();
     if (marketQuote) {
       const ttlMs = toPositiveNumber(process.env.USD_BRL_MARKET_CACHE_TTL_MS) || DEFAULT_CACHE_TTL_MS;
       cachedUsdBrl = { quote: marketQuote, expiresAt: now + ttlMs };
@@ -131,7 +200,7 @@ export class FiatRateService {
     }
 
     const configured = configuredPositiveNumber(['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']);
-    if (configured && isSaneUsdBrlRate(configured.value)) {
+    if (configured && envFallbackEnabled() && isSaneUsdBrlRate(configured.value)) {
       return {
         brlPerUsd: configured.value,
         source: `env:${configured.key}`,
