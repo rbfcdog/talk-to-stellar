@@ -450,7 +450,7 @@ function buildPixBrCode(input: {
     pixTlv('53', '986'),
     pixTlv('54', formatPixAmount(input.amount)),
     pixTlv('58', 'BR'),
-    pixTlv('59', sanitizePixText(input.merchantName, 25) || 'Etherfuse'),
+    pixTlv('59', sanitizePixText(input.merchantName, 25) || 'TalkToStellar'),
     pixTlv('60', sanitizePixText(input.merchantCity, 15) || 'SAO PAULO'),
     pixTlv('62', additionalData),
     '6304',
@@ -1219,12 +1219,12 @@ export class AnchorService {
   }
 
   private static buildSandboxPixInstructions(orderId: string, amount: string) {
-    const pixKey = `sandbox-${orderId.replace(/^sandbox-pix-/, '').slice(0, 8)}@etherfuse.dev`;
+    const pixKey = `pix-${orderId.replace(/^sandbox-pix-/, '').slice(0, 8)}@talktostellar.local`;
     const txid = `TS${orderId.replace(/[^a-f0-9]/gi, '').slice(0, 23)}`;
     const pixCode = buildPixBrCode({
       pixKey,
       amount,
-      merchantName: 'Etherfuse Sandbox',
+      merchantName: 'TalkToStellar',
       merchantCity: 'SAO PAULO',
       txid,
       description: `TalkToStellar ${orderId.slice(-8)}`,
@@ -1238,7 +1238,7 @@ export class AnchorService {
       pixKey,
       pixKeyType: 'email',
       pixCode,
-      beneficiary: 'Etherfuse Sandbox',
+      beneficiary: 'TalkToStellar',
     };
   }
 
@@ -2283,7 +2283,7 @@ export class AnchorService {
   }> {
     const context = await this.resolveSessionWallet(input);
     const customerId = coalesceString(input.customer_id, input.customerId);
-    if (!customerId) throw apiError('customer_id is required.', 400);
+    if (!customerId) throw apiError('Conta PIX não encontrada para esta tentativa. Gere uma nova estimativa e tente novamente.', 400);
 
     const status = await this.getEtherfuseClient().getKycStatus(customerId, context.publicKey);
     return { customer_id: customerId, status };
@@ -2305,7 +2305,7 @@ export class AnchorService {
   }> {
     await this.resolveSessionWallet(input);
     const customerId = coalesceString(input.customer_id, input.customerId);
-    if (!customerId) throw apiError('customer_id is required.', 400);
+    if (!customerId) throw apiError('Conta PIX não encontrada para esta tentativa. Gere uma nova estimativa e tente novamente.', 400);
 
     const accounts = await this.getEtherfuseClient().getFiatAccounts(customerId);
     return { customer_id: customerId, accounts };
@@ -2644,7 +2644,7 @@ export class AnchorService {
       upstreamError: debugErrorMessage(error),
     });
 
-    let transaction: OnRampTransaction;
+    let transaction: OnRampTransaction | undefined;
     try {
       transaction = await createOrderWithQuoteRetry();
     } catch (error) {
@@ -2679,22 +2679,46 @@ export class AnchorService {
         try {
           transaction = await createOrderWithQuoteRetry();
         } catch (retryError) {
-          const retryCanUseSandbox = this.isMissingEtherfuseProxyError(retryError) ||
-            this.isExpiredEtherfuseQuoteError(retryError);
-          if (this.sandboxPixFallbackEnabled() && retryCanUseSandbox) {
-            transaction = createSandboxFallback(retryError);
-          } else if (this.isMissingEtherfuseProxyError(retryError)) {
-            throw this.missingProxySetupError(
-              'Etherfuse ainda nao encontrou a conta PIX/proxy desta wallet depois do bootstrap programatico sandbox. Veja programmatic_onboarding no debug; se a API da Etherfuse ainda exigir, use o kyc_url de fallback.',
-              kycUrl,
-              bankAccountId,
-              retryProgrammatic.steps,
-            );
-          } else {
-            throw retryError;
+          let lastRetryError = retryError;
+          if (this.isMissingEtherfuseProxyError(retryError)) {
+            for (const delayMs of [1200, 2500, 4000]) {
+              await sleep(delayMs);
+              try {
+                await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
+                transaction = await createOrderWithQuoteRetry();
+                lastRetryError = undefined;
+                break;
+              } catch (propagationError) {
+                lastRetryError = propagationError;
+                const canContinueWaiting = this.isMissingEtherfuseProxyError(propagationError) ||
+                  this.isExpiredEtherfuseQuoteError(propagationError);
+                if (!canContinueWaiting) throw propagationError;
+              }
+            }
+          }
+
+          if (!transaction) {
+            const retryCanUseSandbox = this.isMissingEtherfuseProxyError(lastRetryError) ||
+              this.isExpiredEtherfuseQuoteError(lastRetryError);
+            if (this.sandboxPixFallbackEnabled() && retryCanUseSandbox) {
+              transaction = createSandboxFallback(lastRetryError);
+            } else if (this.isMissingEtherfuseProxyError(lastRetryError)) {
+              throw this.missingProxySetupError(
+                'A conta PIX ainda não ficou disponível para gerar o QR nesta tentativa. Gere uma nova estimativa e tente novamente.',
+                kycUrl,
+                bankAccountId,
+                retryProgrammatic.steps,
+              );
+            } else {
+              throw lastRetryError;
+            }
           }
         }
       }
+    }
+
+    if (!transaction) {
+      throw apiError('Não consegui gerar o PIX nesta tentativa. Gere uma nova estimativa e tente novamente.', 409);
     }
 
     const brlFeeBridge = this.estimateOnRampBrlFeeBridge(amount, orderQuote as Record<string, unknown> | undefined);
@@ -3012,7 +3036,7 @@ export class AnchorService {
       input.bankAccountId,
     );
 
-    if (!customerId) throw apiError('customer_id is required.', 400);
+    if (!customerId) throw apiError('Conta PIX não encontrada para esta tentativa. Gere uma nova estimativa e tente novamente.', 400);
     if (!quoteId) throw apiError('quote_id is required.', 400);
     const existingIntent = await this.findActiveRampOperationByIntent({
       userId: context.userId,
@@ -3031,7 +3055,7 @@ export class AnchorService {
     const forceSandboxMock = this.getRuntimeInfo().sandbox && Boolean(input.force_sandbox_mock || input.forceSandboxMock);
     if (!fiatAccountId || forceSandboxMock) {
       if (!this.sandboxPixFallbackEnabled()) {
-        throw apiError('No PIX fiat account registered. Open the Etherfuse onboarding URL and register a PIX account first.', 409);
+        throw apiError('Nenhuma conta PIX de retirada foi encontrada. Configure a chave PIX da conta e tente novamente.', 409);
       }
       fiatAccountId = fiatAccountId || crypto.randomUUID();
       transaction = this.createSandboxOffRampFallback({
@@ -3630,7 +3654,7 @@ export class AnchorService {
       fiatAccountId = accounts[0]?.id || '';
     }
     if (!fiatAccountId && !this.sandboxPixFallbackEnabled()) {
-      throw apiError('No PIX fiat account registered for off-ramp test. Open the Etherfuse KYC/PIX URL and register a PIX account first.', 409);
+      throw apiError('Nenhuma conta PIX de retirada foi encontrada para esta operação. Configure a chave PIX da conta e tente novamente.', 409);
     }
 
     if (targetBrl) {
@@ -4117,8 +4141,8 @@ export class AnchorService {
       };
     } catch (error: any) {
       const message = error instanceof AnchorError ? error.message : error?.message || String(error);
-      console.error('Erro ao iniciar on-ramp PIX Etherfuse:', message);
-      throw apiError(`Falha ao iniciar on-ramp PIX Etherfuse: ${message}`, error?.statusCode || 500);
+	      console.error('Erro ao iniciar PIX:', message);
+	      throw apiError(`Não consegui iniciar o PIX agora: ${message}`, error?.statusCode || 500);
     }
   }
 
@@ -4134,7 +4158,7 @@ export class AnchorService {
       const context = operation.context ? JSON.parse(operation.context) : {};
       const orderId = coalesceString(context.anchor_order_id, context.order_id);
       if (!orderId) {
-        throw apiError('ID do pedido Etherfuse nao encontrado no registro da operacao.', 400);
+	        throw apiError('ID do pedido PIX não encontrado no registro da operação.', 400);
       }
 
       const direction = coalesceString(context.direction) || 'onramp';
@@ -4142,22 +4166,22 @@ export class AnchorService {
         ? await this.getEtherfuseClient().getOffRampTransaction(orderId)
         : await this.getEtherfuseClient().getOnRampTransaction(orderId);
 
-      if (!transaction) throw apiError('Pedido Etherfuse nao encontrado.', 404);
+	      if (!transaction) throw apiError('Pedido PIX não encontrado.', 404);
 
       const ourStatus = mapAnchorStatusToOperationStatus(transaction.status);
       if (operation.status !== ourStatus) {
         await this.updateRampOperationStatus(operationId, ourStatus);
       }
 
-      const message = ourStatus === 'COMPLETED'
-        ? 'Ramp PIX concluido com sucesso.'
-        : `Status atual na Etherfuse: ${transaction.status}.`;
+	      const message = ourStatus === 'COMPLETED'
+	        ? 'Ramp PIX concluido com sucesso.'
+	        : `Status atual do PIX: ${transaction.status}.`;
 
       return { status: ourStatus, message, transaction };
     } catch (error: any) {
       const message = error?.message || String(error);
-      console.error('Erro ao verificar status do ramp PIX Etherfuse:', message);
-      throw apiError(`Falha ao consultar status do ramp PIX Etherfuse: ${message}`, error?.statusCode || 500);
+	      console.error('Erro ao verificar status do PIX:', message);
+	      throw apiError(`Falha ao consultar status do PIX: ${message}`, error?.statusCode || 500);
     }
   }
 }
