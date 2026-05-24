@@ -384,7 +384,8 @@ export class PaymentReceiptService {
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     if (sourceAssetCode === 'BRL') return sourceAmount;
     if (destinationAssetCode === 'BRL') return destinationAmount;
-    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc) || 5.15;
+    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc);
+    if (rate <= 0) return 0;
     if (sourceAssetCode === 'USDC' || sourceAssetCode === 'USD') return sourceAmount * rate;
     if (destinationAssetCode === 'USDC' || destinationAssetCode === 'USD') return destinationAmount * rate;
     return 0;
@@ -397,7 +398,7 @@ export class PaymentReceiptService {
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     if (destinationAssetCode === 'USDC' || destinationAssetCode === 'USD') return destinationAmount;
     if (sourceAssetCode === 'USDC' || sourceAssetCode === 'USD') return sourceAmount;
-    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc) || 5.15;
+    const rate = this.resolveUsdBrlRate(input, fee.actualFeeBrl, fee.actualFeeUsdc);
     return rate > 0 ? grossBrl / rate : 0;
   }
 
@@ -687,9 +688,8 @@ export class PaymentReceiptService {
       return destinationAmount / sourceAmount;
     }
 
-    const fallback = Number(String(process.env.USD_BRL_FALLBACK_RATE || '').replace(',', '.'));
-    if (Number.isFinite(fallback) && fallback > 0) return fallback;
-    return 5.15;
+    const fallback = Number(String(process.env.USD_BRL_FALLBACK_RATE || process.env.DEFAULT_USD_BRL_RATE || '').replace(',', '.'));
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
   }
 
   private static async resolveFeeBreakdown(input: PaymentReceiptInput): Promise<FeeBreakdown> {
@@ -734,15 +734,31 @@ export class PaymentReceiptService {
       destinationAssetCode: destinationAssetCode || null,
     });
 
-    const actualFeeBrl = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl);
-    const actualFeeUsdc = this.toPositiveNumber(unifiedFee.fee_usdc || input.feeUsdc || parsedDisplay.usdc);
-    const actualDisplay = String(unifiedFee.display || display || '').trim();
+    const actualFeeBrlFromPayload = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl);
+    const actualFeeUsdcFromPayload = this.toPositiveNumber(unifiedFee.fee_usdc || input.feeUsdc || parsedDisplay.usdc);
+    let actualDisplay = String(unifiedFee.display || display || '').trim();
     const traditionalFeePct = EconomyEngineService.traditionalFeePct();
+    const usdBrl = this.resolveUsdBrlRate(input, actualFeeBrlFromPayload, actualFeeUsdcFromPayload);
+    const actualFeeBrl = actualFeeBrlFromPayload || (actualFeeUsdcFromPayload > 0 && usdBrl > 0
+      ? actualFeeUsdcFromPayload * usdBrl
+      : 0);
+    const actualFeeUsdc = actualFeeUsdcFromPayload || (actualFeeBrl > 0 && usdBrl > 0
+      ? actualFeeBrl / usdBrl
+      : 0);
+    if (actualFeeUsdc > 0 && actualFeeBrl > 0) {
+      actualDisplay = `${this.formatSmallFiat(actualFeeBrl, 'BRL')} / ${this.formatSmallFiat(actualFeeUsdc, 'USDC')}`;
+    } else if (actualFeeUsdc > 0 && actualFeeBrl <= 0) {
+      actualDisplay = this.formatSmallFiat(actualFeeUsdc, 'USDC');
+    } else if (actualFeeBrl > 0 && actualFeeUsdc <= 0) {
+      actualDisplay = this.formatSmallFiat(actualFeeBrl, 'BRL');
+    }
 
-    const grossAmountBrl = EconomyEngineService.estimateAmountInBrl({
-      amount: sourceAmount,
-      assetCode: sourceAssetCode,
-      quote: input.quote,
+    const grossAmountBrl = this.estimateReceiptBrlAmount(input, {
+      actualDisplay,
+      actualFeeBrl,
+      actualFeeUsdc,
+      platformApplied: Boolean(unifiedFee.platform_applied),
+      traditionalFeePct,
     });
 
     const savingsFromPayload = this.toPositiveNumber(input.savings?.estimatedSavings);
@@ -750,7 +766,6 @@ export class PaymentReceiptService {
       ? actualFeeBrl + savingsFromPayload
       : (grossAmountBrl > 0 ? grossAmountBrl * traditionalFeePct : 0);
 
-    const usdBrl = this.resolveUsdBrlRate(input, actualFeeBrl, actualFeeUsdc);
     const traditionalFeeUsdc = traditionalFeeBrl > 0 && usdBrl > 0 ? traditionalFeeBrl / usdBrl : 0;
 
     return {
