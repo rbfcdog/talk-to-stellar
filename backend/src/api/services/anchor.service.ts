@@ -1228,10 +1228,18 @@ export class AnchorService {
 
     try {
       const accounts = await anchor.getOrganizationFiatAccounts();
-      const active = accounts.find((account) =>
+      const activeAccounts = accounts.filter((account) =>
         String(account.status || '').toLowerCase() === 'active' &&
         account.compliant !== false
       );
+      const active = activeAccounts.find((account) =>
+        String(account.type || '').toUpperCase() === 'PIX' &&
+        String(account.currency || '').toUpperCase() === 'BRL'
+      ) || activeAccounts.find((account) =>
+        String(account.type || '').toUpperCase() === 'PIX'
+      ) || activeAccounts.find((account) =>
+        String(account.currency || '').toUpperCase() === 'BRL'
+      ) || activeAccounts[0];
       return active?.id;
     } catch (error) {
       console.warn('[ramp] Could not list Etherfuse organization bank accounts:', debugErrorMessage(error));
@@ -2205,6 +2213,7 @@ export class AnchorService {
     bankAccountId: string;
     email?: string;
     kycUrl?: string;
+    skipBankAccount?: boolean;
   }): Promise<{
     bankAccountId: string;
     cryptoWalletId?: string;
@@ -2294,41 +2303,49 @@ export class AnchorService {
       }
     }
 
-    try {
-      steps.bank_account = await anchor.createBankAccountForCustomer(
-        input.customerId,
-        this.buildSandboxPixAccount(input.bankAccountId, input.email),
-      );
-      resolvedBankAccountId = coalesceString(
-        (steps.bank_account as any)?.bankAccountId,
-        (steps.bank_account as any)?.id,
-        input.bankAccountId,
-      );
-    } catch (error) {
-      if (isDuplicateResourceError(error)) {
-        steps.bank_account = 'already_registered';
-      } else if (input.kycUrl && typeof anchor.createBankAccountWithPresignedUrl === 'function') {
-        const pixAccount = this.buildSandboxPixAccount(input.bankAccountId, input.email);
-        try {
-          steps.bank_account = await anchor.createBankAccountWithPresignedUrl({
-            presignedUrl: input.kycUrl,
-            bankAccountId: pixAccount.bankAccountId,
-            account: pixAccount.account,
-            skipAutoApproval: false,
-            label: pixAccount.label,
-          });
-          resolvedBankAccountId = coalesceString(
-            (steps.bank_account as any)?.bankAccountId,
-            (steps.bank_account as any)?.id,
-            input.bankAccountId,
-          );
-        } catch (fallbackError) {
-          steps.bank_account = isDuplicateResourceError(fallbackError)
-            ? 'already_registered'
-            : { error: debugErrorMessage(fallbackError) };
+    if (input.skipBankAccount) {
+      steps.bank_account = {
+        status: 'active',
+        bankAccountId: input.bankAccountId,
+        source: 'organization_account',
+      };
+    } else {
+      try {
+        steps.bank_account = await anchor.createBankAccountForCustomer(
+          input.customerId,
+          this.buildSandboxPixAccount(input.bankAccountId, input.email),
+        );
+        resolvedBankAccountId = coalesceString(
+          (steps.bank_account as any)?.bankAccountId,
+          (steps.bank_account as any)?.id,
+          input.bankAccountId,
+        );
+      } catch (error) {
+        if (isDuplicateResourceError(error)) {
+          steps.bank_account = 'already_registered';
+        } else if (input.kycUrl && typeof anchor.createBankAccountWithPresignedUrl === 'function') {
+          const pixAccount = this.buildSandboxPixAccount(input.bankAccountId, input.email);
+          try {
+            steps.bank_account = await anchor.createBankAccountWithPresignedUrl({
+              presignedUrl: input.kycUrl,
+              bankAccountId: pixAccount.bankAccountId,
+              account: pixAccount.account,
+              skipAutoApproval: false,
+              label: pixAccount.label,
+            });
+            resolvedBankAccountId = coalesceString(
+              (steps.bank_account as any)?.bankAccountId,
+              (steps.bank_account as any)?.id,
+              input.bankAccountId,
+            );
+          } catch (fallbackError) {
+            steps.bank_account = isDuplicateResourceError(fallbackError)
+              ? 'already_registered'
+              : { error: debugErrorMessage(fallbackError) };
+          }
+        } else {
+          steps.bank_account = { error: debugErrorMessage(error) };
         }
-      } else {
-        steps.bank_account = { error: debugErrorMessage(error) };
       }
     }
 
@@ -2358,18 +2375,23 @@ export class AnchorService {
       publicKey: context.publicKey,
     });
 
-    const preparedProxy = await this.prepareEtherfusePixProxy({
-      customerId: customer.id,
-      publicKey: context.publicKey,
-      bankAccountId: customer.bankAccountId,
-      email: coalesceString(input.email, context.email) || undefined,
-    });
+    const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+    const useOrganizationBankAccount = Boolean(organizationBankAccountId);
+    const preparedProxy = useOrganizationBankAccount
+      ? { bankAccountId: organizationBankAccountId as string, kycUrl: undefined }
+      : await this.prepareEtherfusePixProxy({
+          customerId: customer.id,
+          publicKey: context.publicKey,
+          bankAccountId: customer.bankAccountId,
+          email: coalesceString(input.email, context.email) || undefined,
+        });
     const programmatic = await this.runSandboxProgrammaticOnboarding({
       customerId: customer.id,
       publicKey: context.publicKey,
       bankAccountId: preparedProxy.bankAccountId,
       email: coalesceString(input.email, context.email) || undefined,
       kycUrl: preparedProxy.kycUrl,
+      skipBankAccount: useOrganizationBankAccount,
     });
     customer = { ...customer, bankAccountId: programmatic.bankAccountId };
 
@@ -2684,7 +2706,11 @@ export class AnchorService {
     }
 
     const anchor = this.getEtherfuseClient();
-    let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId, preparedCustomer?.bankAccountId) || undefined;
+    const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+    let usingOrganizationBankAccount = Boolean(organizationBankAccountId);
+    let bankAccountId = organizationBankAccountId ||
+      coalesceString(input.bank_account_id, input.bankAccountId, preparedCustomer?.bankAccountId) ||
+      undefined;
     let cryptoWalletId: string | undefined;
     let kycUrl: string | undefined;
 
@@ -2698,12 +2724,14 @@ export class AnchorService {
       }
     }
 
-    const preparedProxy = await this.prepareEtherfusePixProxy({
-      customerId,
-      publicKey: context.publicKey,
-      bankAccountId,
-      email: context.email,
-    });
+    const preparedProxy = usingOrganizationBankAccount && bankAccountId
+      ? { bankAccountId, kycUrl: undefined }
+      : await this.prepareEtherfusePixProxy({
+          customerId,
+          publicKey: context.publicKey,
+          bankAccountId,
+          email: context.email,
+        });
     bankAccountId = preparedProxy.bankAccountId;
     kycUrl = preparedProxy.kycUrl;
 
@@ -2713,15 +2741,10 @@ export class AnchorService {
       bankAccountId,
       email: context.email,
       kycUrl,
+      skipBankAccount: usingOrganizationBankAccount,
     });
     bankAccountId = programmatic.bankAccountId;
     cryptoWalletId = programmatic.cryptoWalletId;
-    if (String(process.env.ETHERFUSE_USE_ORGANIZATION_BANK_ACCOUNT_FOR_ONRAMP || '').toLowerCase() === 'true') {
-      const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
-      if (organizationBankAccountId) {
-        bankAccountId = organizationBankAccountId;
-      }
-    }
 
     let orderQuote: Quote | undefined;
     let quoteRefreshReason: string | undefined;
@@ -2779,75 +2802,121 @@ export class AnchorService {
     });
 
     let transaction: OnRampTransaction | undefined;
-    try {
-      transaction = await createOrderWithQuoteRetry();
-    } catch (error) {
-      if (this.sandboxPixFallbackEnabled() && this.isExpiredEtherfuseQuoteError(error)) {
-        transaction = createSandboxFallback(error);
-      } else if (!this.isMissingEtherfuseProxyError(error)) {
-        throw error;
+    if (
+      !usingOrganizationBankAccount &&
+      this.getRuntimeInfo().sandbox &&
+      !onboardingBankAccountReady(programmatic.steps.bank_account)
+    ) {
+      if (this.sandboxPixFallbackEnabled()) {
+        transaction = createSandboxFallback(programmatic.steps.bank_account);
       } else {
-        const freshBankAccountId = crypto.randomUUID();
-        const preparedProxy = await this.prepareEtherfusePixProxy({
-          customerId,
-          publicKey: context.publicKey,
-          bankAccountId: freshBankAccountId,
-          email: context.email,
-        });
-        bankAccountId = preparedProxy.bankAccountId;
-        kycUrl = preparedProxy.kycUrl;
-        const retryProgrammatic = await this.runSandboxProgrammaticOnboarding({
-          customerId,
-          publicKey: context.publicKey,
-          bankAccountId,
-          email: context.email,
+        throw this.missingProxySetupError(
+          'A conta PIX ainda não está pronta para gerar esta ordem. Tente novamente em alguns segundos.',
           kycUrl,
-        });
-        bankAccountId = retryProgrammatic.bankAccountId;
-        cryptoWalletId = retryProgrammatic.cryptoWalletId || cryptoWalletId;
-        if (String(process.env.ETHERFUSE_USE_ORGANIZATION_BANK_ACCOUNT_FOR_ONRAMP || '').toLowerCase() === 'true') {
-          const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
-          if (organizationBankAccountId) {
-            bankAccountId = organizationBankAccountId;
-          }
-        }
+          bankAccountId,
+          programmatic.steps,
+          customerId,
+        );
+      }
+    }
 
-        try {
-          transaction = await createOrderWithQuoteRetry();
-        } catch (retryError) {
-          let lastRetryError = retryError;
-          if (this.isMissingEtherfuseProxyError(retryError)) {
-            for (const delayMs of [1200, 2500, 4000, 6500, 9000]) {
-              await sleep(delayMs);
-              try {
-                await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
-                transaction = await createOrderWithQuoteRetry();
-                lastRetryError = undefined;
-                break;
-              } catch (propagationError) {
-                lastRetryError = propagationError;
-                const canContinueWaiting = this.isMissingEtherfuseProxyError(propagationError) ||
-                  this.isExpiredEtherfuseQuoteError(propagationError);
-                if (!canContinueWaiting) throw propagationError;
-              }
-            }
+    if (!transaction) {
+      try {
+        transaction = await createOrderWithQuoteRetry();
+      } catch (error) {
+        if (this.sandboxPixFallbackEnabled() && this.isExpiredEtherfuseQuoteError(error)) {
+          transaction = createSandboxFallback(error);
+        } else if (!this.isMissingEtherfuseProxyError(error)) {
+          throw error;
+        } else if (usingOrganizationBankAccount) {
+          if (this.sandboxPixFallbackEnabled()) {
+            transaction = createSandboxFallback(error);
+          } else {
+            throw this.missingProxySetupError(
+              'A conta PIX ainda não está pronta para gerar esta ordem. Tente novamente em alguns segundos.',
+              kycUrl,
+              bankAccountId,
+              programmatic.steps,
+              customerId,
+            );
           }
+        } else {
+          const freshBankAccountId = crypto.randomUUID();
+          const preparedProxy = await this.prepareEtherfusePixProxy({
+            customerId,
+            publicKey: context.publicKey,
+            bankAccountId: freshBankAccountId,
+            email: context.email,
+          });
+          bankAccountId = preparedProxy.bankAccountId;
+          kycUrl = preparedProxy.kycUrl;
+          const retryProgrammatic = await this.runSandboxProgrammaticOnboarding({
+            customerId,
+            publicKey: context.publicKey,
+            bankAccountId,
+            email: context.email,
+            kycUrl,
+          });
+          bankAccountId = retryProgrammatic.bankAccountId;
+          cryptoWalletId = retryProgrammatic.cryptoWalletId || cryptoWalletId;
+          usingOrganizationBankAccount = false;
 
-          if (!transaction) {
-            const retryCanUseSandbox = this.isMissingEtherfuseProxyError(lastRetryError) ||
-              this.isExpiredEtherfuseQuoteError(lastRetryError);
-            if (this.sandboxPixFallbackEnabled() && retryCanUseSandbox) {
-              transaction = createSandboxFallback(lastRetryError);
-            } else if (this.isMissingEtherfuseProxyError(lastRetryError)) {
+          if (
+            this.getRuntimeInfo().sandbox &&
+            !onboardingBankAccountReady(retryProgrammatic.steps.bank_account)
+          ) {
+            if (this.sandboxPixFallbackEnabled()) {
+              transaction = createSandboxFallback(retryProgrammatic.steps.bank_account);
+            } else {
               throw this.missingProxySetupError(
-                'Ainda estou preparando seu PIX. Aguarde alguns segundos e tente gerar o PIX novamente.',
+                'A conta PIX ainda não está pronta para gerar esta ordem. Tente novamente em alguns segundos.',
                 kycUrl,
                 bankAccountId,
                 retryProgrammatic.steps,
                 customerId,
               );
-            } else {
-              throw lastRetryError;
+            }
+          }
+
+          if (!transaction) {
+            try {
+              transaction = await createOrderWithQuoteRetry();
+            } catch (retryError) {
+              let lastRetryError = retryError;
+              if (this.isMissingEtherfuseProxyError(retryError)) {
+                for (const delayMs of [1200, 2500, 4000, 6500, 9000]) {
+                  await sleep(delayMs);
+                  try {
+                    await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
+                    transaction = await createOrderWithQuoteRetry();
+                    lastRetryError = undefined;
+                    break;
+                  } catch (propagationError) {
+                    lastRetryError = propagationError;
+                    const canContinueWaiting = this.isMissingEtherfuseProxyError(propagationError) ||
+                      this.isExpiredEtherfuseQuoteError(propagationError);
+                    if (!canContinueWaiting) throw propagationError;
+                  }
+                }
+              }
+
+              if (!transaction) {
+                const retryCanUseSandbox = this.isMissingEtherfuseProxyError(lastRetryError) ||
+                  this.isExpiredEtherfuseQuoteError(lastRetryError);
+                if (this.sandboxPixFallbackEnabled() && retryCanUseSandbox) {
+                  transaction = createSandboxFallback(lastRetryError);
+                } else if (this.isMissingEtherfuseProxyError(lastRetryError)) {
+                  throw this.missingProxySetupError(
+                    'Ainda estou preparando seu PIX. Aguarde alguns segundos e tente gerar o PIX novamente.',
+                    kycUrl,
+                    bankAccountId,
+                    retryProgrammatic.steps,
+                    customerId,
+                  );
+                } else {
+                  throw lastRetryError;
+                }
+              }
             }
           }
         }
