@@ -21,7 +21,7 @@ import { mainnetWalletService } from '../services/mainnet-wallet.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
-const DEFAULT_USD_BRL_REFERENCE_RATE = 0;
+const DEFAULT_USD_BRL_REFERENCE_RATE = 5.15;
 const DEFAULT_USD_BRL_SANITY_MIN = 3;
 const DEFAULT_USD_BRL_SANITY_MAX = 10;
 
@@ -130,8 +130,14 @@ export class FinancialController {
       .replace(',', '.')
       .trim();
     const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
-    const grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(brlAmount.toFixed(7));
-    const rawBrlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
+    let grossQuote: any = null;
+    let quoteFailureReason = '';
+    try {
+      grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(brlAmount.toFixed(7));
+    } catch (error: any) {
+      quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
+    }
+    const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
     const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
     const brlPerUsdc = rate.brlPerUsdc;
     const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
@@ -152,12 +158,17 @@ export class FinancialController {
       : (spread.enabled ? spreadEstimateBrl : 0);
     const netBrl = Math.max(0, brlAmount - spreadBrl);
     const spreadUsdc = spreadBrl * usdcPerBrl;
-    const receiveQuote = netBrl > 0 && !rate.fallbackApplied
-      ? await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7))
-      : null;
+    let receiveQuote: any = null;
+    if (netBrl > 0 && !rate.fallbackApplied) {
+      try {
+        receiveQuote = await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7));
+      } catch {
+        receiveQuote = null;
+      }
+    }
     const receiveUsdc = rate.fallbackApplied
       ? netBrl * usdcPerBrl
-      : (receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : 0);
+      : (receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : netBrl * usdcPerBrl);
 
     const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
     const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
@@ -180,12 +191,13 @@ export class FinancialController {
         brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
         usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
         source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
-        symbol: grossQuote.symbol,
-        path: grossQuote.path,
-        source_asset: grossQuote.sourceAsset,
-        destination_asset: grossQuote.destinationAsset,
+        symbol: grossQuote?.symbol || 'USDC/BRL',
+        path: grossQuote?.path || [],
+        source_asset: grossQuote?.sourceAsset || { code: 'BRL', issuer: getAssetIssuer('BRL') },
+        destination_asset: grossQuote?.destinationAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
         ...(rate.fallbackApplied ? {
           fallback_reason: rate.fallbackReason,
+          quote_failure_reason: quoteFailureReason || undefined,
           raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
         } : {}),
       },
@@ -242,13 +254,19 @@ export class FinancialController {
         .replace(',', '.')
         .trim();
       const usdcAmount = Math.max(0, toPositiveNumber(rawAmount, 1));
-      const grossQuote = await BrlReferenceRateService.quoteUsdcToBrl(usdcAmount.toFixed(7));
-      const rawBrlPerUsdc = toPositiveNumber(grossQuote.brlPerUsdc, 0);
+      let grossQuote: any = null;
+      let quoteFailureReason = '';
+      try {
+        grossQuote = await BrlReferenceRateService.quoteUsdcToBrl(usdcAmount.toFixed(7));
+      } catch (error: any) {
+        quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
+      }
+      const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
       const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
       const brlPerUsdc = rate.brlPerUsdc;
       const estimatedBrl = rate.fallbackApplied
         ? usdcAmount * brlPerUsdc
-        : toPositiveNumber(grossQuote.destinationAmount, usdcAmount * brlPerUsdc);
+        : toPositiveNumber(grossQuote?.destinationAmount, usdcAmount * brlPerUsdc);
 
       const spread = PlatformFeeService.calculateSpread({
         sourceAmount: estimatedBrl.toFixed(7),
@@ -271,12 +289,13 @@ export class FinancialController {
           brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
           usdc_per_brl: Number((brlPerUsdc > 0 ? 1 / brlPerUsdc : 0).toFixed(8)),
           source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
-          symbol: grossQuote.symbol,
-          path: grossQuote.path,
-          source_asset: grossQuote.sourceAsset,
-          destination_asset: grossQuote.destinationAsset,
+          symbol: grossQuote?.symbol || 'USDC/BRL',
+          path: grossQuote?.path || [],
+          source_asset: grossQuote?.sourceAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
+          destination_asset: grossQuote?.destinationAsset || { code: 'BRL', issuer: getAssetIssuer('BRL') },
           ...(rate.fallbackApplied ? {
             fallback_reason: rate.fallbackReason,
+            quote_failure_reason: quoteFailureReason || undefined,
             raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
           } : {}),
         },

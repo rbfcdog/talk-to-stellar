@@ -1086,7 +1086,12 @@ export default function PixRampClient({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(L("Não consegui calcular o PIX pela estimativa da sua conta. Tente novamente em alguns segundos.", "I could not calculate the PIX amount from your account estimate. Try again in a few seconds."));
+          const hasPixAmountToQuote = toPositiveNumber(amountBrl, 0) > 0;
+          if (hasPixAmountToQuote) {
+            setError("");
+          } else {
+            setError(L("Não consegui calcular automaticamente o valor do PIX. Digite o valor em reais para gerar a cotação.", "I could not calculate the PIX amount automatically. Enter the amount in reais to create the quote."));
+          }
           addDebugLog({
             label: "PIX amount estimate failed",
             method: "GET",
@@ -1104,7 +1109,7 @@ export default function PixRampClient({
     return () => {
       cancelled = true;
     };
-  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, needsBrowserLoginForPix, rampMode, sessionReady]);
+  }, [addDebugLog, amountBrl, desiredReceiveAmount, desiredReceiveAsset, needsBrowserLoginForPix, rampMode, sessionReady]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
     if (sessionId) {
