@@ -1087,8 +1087,10 @@ export class AgentGraph {
     if (intent.amount) {
       const amountCurrency = intent.amount_currency || intent.asset_code;
       if (isPixFundedPayment && finalPayAmount && finalPayAsset) {
-        url.searchParams.set('amount', intent.amount);
         url.searchParams.set('currency', finalPayAsset);
+        if (finalPayAsset === 'BRL') {
+          url.searchParams.set('amount', intent.amount);
+        }
       } else if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
         url.searchParams.set('receive_amount', intent.amount);
         url.searchParams.set('receive_asset', 'USDC');

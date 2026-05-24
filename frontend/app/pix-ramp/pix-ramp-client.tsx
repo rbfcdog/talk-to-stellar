@@ -616,6 +616,7 @@ export default function PixRampClient({
   const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
   const [desiredReceiveAsset, setDesiredReceiveAsset] = useState<TargetAsset | "">("");
   const [receiveEstimateLoading, setReceiveEstimateLoading] = useState(false);
+  const [receiveEstimateReady, setReceiveEstimateReady] = useState(false);
   const [customerPayload, setCustomerPayload] = useState<RampResponse | null>(null);
   const [quotePayload, setQuotePayload] = useState<RampResponse | null>(null);
   const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
@@ -724,7 +725,12 @@ export default function PixRampClient({
   ).trim();
   const transferRecipientVerified = Boolean(!transferFlow || verifiedTransferRecipient?.recipient_public_key || pixFundedTransferResult?.recipient_public_key);
   const safeTransferRecipientLabel = transferRecipientVerified ? transferRecipientLabel : "";
-  const waitingForReceiveEstimate = Boolean(rampMode === "onramp" && desiredFinalAmount && receiveEstimateLoading);
+  const waitingForReceiveEstimate = Boolean(
+    rampMode === "onramp" &&
+      desiredFinalAmount &&
+      desiredReceiveAsset === "USDC" &&
+      (receiveEstimateLoading || !receiveEstimateReady)
+  );
 
   const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
   const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
@@ -1021,15 +1027,18 @@ export default function PixRampClient({
 
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
+    const normalizedReceiveAsset = receiveAsset === "BRL" ? "BRL" : "USDC";
     if (mode === "onramp" && receiveAmount) {
-      const normalizedReceiveAsset = receiveAsset === "BRL" ? "BRL" : "USDC";
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
       setTargetAsset(normalizedReceiveAsset);
       if (normalizedReceiveAsset === "BRL") setAmountBrl(receiveAmount);
-      if (normalizedReceiveAsset === "USDC") setReceiveEstimateLoading(true);
+      if (normalizedReceiveAsset === "USDC") {
+        setReceiveEstimateReady(false);
+        setReceiveEstimateLoading(true);
+      }
     }
-    if (amount) {
+    if (amount && !(mode === "onramp" && receiveAmount && normalizedReceiveAsset === "USDC")) {
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
     }
@@ -1115,19 +1124,17 @@ export default function PixRampClient({
   useEffect(() => {
     if (rampMode !== "onramp") return;
     if (!desiredReceiveAmount || desiredReceiveAsset !== "USDC") return;
-    if (!sessionReady || needsBrowserLoginForPix) {
-      setReceiveEstimateLoading(false);
-      return;
-    }
     const receiveUsdc = toPositiveNumber(desiredReceiveAmount, 0);
     if (!receiveUsdc) {
+      setReceiveEstimateReady(false);
       setReceiveEstimateLoading(false);
       return;
     }
 
     let cancelled = false;
     setReceiveEstimateLoading(true);
-    fetchWithTimeout(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}`, { cache: "no-store" }, 20000)
+    setReceiveEstimateReady(false);
+    fetchWithTimeout(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}&t=${Date.now()}`, { cache: "no-store" }, 20000)
       .then((response) => response.json())
       .then((payload) => {
         const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
@@ -1139,10 +1146,12 @@ export default function PixRampClient({
           (receiveUsdc * brlPerUsdc);
         if (cancelled) return;
         setAmountBrl(estimatedBrl.toFixed(2));
+        setReceiveEstimateReady(true);
         setQuotePayload(null);
         setQuoteReceivedAt(0);
         setOrderPayload(null);
         setStatusPayload(null);
+        setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
         addDebugLog({
           label: "PIX amount estimated from requested receive amount",
           method: "GET",
@@ -1153,12 +1162,8 @@ export default function PixRampClient({
       })
       .catch((err) => {
         if (!cancelled) {
-          const hasPixAmountToQuote = toPositiveNumber(amountBrl, 0) > 0;
-          if (hasPixAmountToQuote) {
-            setError("");
-          } else {
-            setError(L("Não consegui calcular automaticamente o valor do PIX. Digite o valor em reais para gerar a cotação.", "I could not calculate the PIX amount automatically. Enter the amount in reais to create the quote."));
-          }
+          setReceiveEstimateReady(false);
+          setError(L("Não consegui atualizar a cotação agora. Aguarde alguns segundos antes de gerar o PIX.", "I could not update the quote now. Wait a few seconds before generating PIX."));
           addDebugLog({
             label: "PIX amount estimate failed",
             method: "GET",
@@ -1176,7 +1181,7 @@ export default function PixRampClient({
     return () => {
       cancelled = true;
     };
-  }, [addDebugLog, amountBrl, desiredReceiveAmount, desiredReceiveAsset, needsBrowserLoginForPix, rampMode, sessionReady]);
+  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
     if (sessionId) {
