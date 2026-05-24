@@ -173,6 +173,8 @@ interface CreateOffRampForSessionInput extends RampSessionInput {
   fiatAccountId?: string;
   bank_account_id?: string;
   bankAccountId?: string;
+  external_bank_account?: Record<string, unknown>;
+  externalBankAccount?: Record<string, unknown>;
   memo?: string;
 }
 
@@ -205,6 +207,10 @@ interface SubmitOffRampForSessionInput extends RampSessionInput {
   unsignedXdr?: string;
   operation_id?: string;
   operationId?: string;
+  external_bank_account?: Record<string, unknown>;
+  externalBankAccount?: Record<string, unknown>;
+  skip_receipt?: boolean;
+  skipReceipt?: boolean;
 }
 
 interface PixFundedTransferInput extends RampSessionInput {
@@ -3366,6 +3372,7 @@ export class AnchorService {
         targetBrl,
         destinationBrl: targetBrl,
         fiatAccountId,
+        externalBankAccount: input.external_bank_account || input.externalBankAccount,
         upstreamError: forceSandboxMock
           ? 'Controlled test route forced local withdrawal settlement.'
           : 'No PIX fiat account is available in the current payment mode; using local settlement.',
@@ -3394,11 +3401,12 @@ export class AnchorService {
           sourceAmount,
           sourceAssetCode: sourceAsset.code,
           sourceAssetIssuer: sourceAsset.issuer,
-          targetBrl,
-          destinationBrl: targetBrl,
-          fiatAccountId,
-          upstreamError: debugErrorMessage(error),
-        });
+        targetBrl,
+        destinationBrl: targetBrl,
+        fiatAccountId,
+        externalBankAccount: input.external_bank_account || input.externalBankAccount,
+        upstreamError: debugErrorMessage(error),
+      });
       }
     }
 
@@ -3422,6 +3430,7 @@ export class AnchorService {
         source_asset_code: sourceAsset.code,
         source_asset_issuer: sourceAsset.issuer,
         target_brl: targetBrl,
+        external_bank_account: input.external_bank_account || input.externalBankAccount || undefined,
         sandbox_mock: Boolean((transaction as OffRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
         upstream_error: (transaction as OffRampTransaction & { upstream_error?: string }).upstream_error,
       },
@@ -3611,49 +3620,122 @@ export class AnchorService {
     hash?: string;
     error?: string;
     order_id: string;
+    receipt_url?: string;
   }> {
     const context = await this.resolveSessionWallet(input);
     this.requireWalletPin(input, context);
     const orderId = coalesceString(input.order_id, input.orderId);
     if (!orderId) throw apiError('order_id is required.', 400);
     const mockRecord = this.sandboxMockOffRampOrders.get(orderId);
+    let result: { success: boolean; hash?: string; error?: string; order_id: string };
+    let transaction: OffRampTransaction | undefined = mockRecord?.transaction;
     if (mockRecord) {
-      return this.submitSandboxOffRamp({
+      result = await this.submitSandboxOffRamp({
         context,
         orderId,
         operationId: coalesceString(input.operation_id, input.operationId),
       });
-    }
-    if (!context.vaultSecretId) {
-      throw apiError('Wallet private key is not available in Vault; cannot sign off-ramp transaction.', 409);
+    } else {
+      if (!context.vaultSecretId) {
+        throw apiError('Wallet private key is not available in Vault; cannot sign off-ramp transaction.', 409);
+      }
+
+      transaction = await this.getEtherfuseClient().getOffRampTransaction(orderId) || undefined;
+      if (!transaction) {
+        throw apiError('Retirada PIX não encontrada. Gere uma nova solicitação e tente novamente.', 404);
+      }
+      const unsignedXdr = coalesceString(input.unsigned_xdr, input.unsignedXdr, transaction?.signableTransaction);
+      if (!unsignedXdr) {
+        throw apiError('Etherfuse has not prepared the off-ramp burn transaction yet. Poll status and retry when ready_to_sign=true.', 409);
+      }
+
+      const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
+      const submitResult = await StellarService.signAndSubmitXdr(context.userId, secret, unsignedXdr, {
+        user_id: context.userId,
+        type: 'PAYMENT' as any,
+        asset_code: 'TESOURO',
+        amount: transaction?.fromAmount,
+        context: JSON.stringify({
+          provider: 'etherfuse',
+          rail: 'pix',
+          direction: 'offramp',
+          anchor_order_id: orderId,
+          source_public_key: context.publicKey,
+        }),
+      } as any);
+      result = { ...submitResult, order_id: orderId };
+
+      if (result.success) {
+        await this.updateRampOperationStatus(coalesceString(input.operation_id, input.operationId), 'PROCESSING');
+      }
     }
 
-    const transaction = await this.getEtherfuseClient().getOffRampTransaction(orderId);
-    const unsignedXdr = coalesceString(input.unsigned_xdr, input.unsignedXdr, transaction?.signableTransaction);
-    if (!unsignedXdr) {
-      throw apiError('Etherfuse has not prepared the off-ramp burn transaction yet. Poll status and retry when ready_to_sign=true.', 409);
+    let receiptUrl = '';
+    if (result.success && !Boolean(input.skip_receipt || input.skipReceipt)) {
+      try {
+        const operationId = coalesceString(input.operation_id, input.operationId, mockRecord?.operationId);
+        const operation = operationId ? await OperationRepository.findById(operationId).catch(() => null) : null;
+        const operationContext = parseOperationContext(operation?.context);
+        const externalBank = (input.external_bank_account || input.externalBankAccount || operationContext.external_bank_account || mockRecord?.externalBankAccount || {}) as Record<string, unknown>;
+        const bankLabel = coalesceString(
+          externalBank.label,
+          externalBank.institution,
+          'Seu PIX',
+        );
+        const sourceAmount = coalesceString(
+          operationContext.source_amount,
+          mockRecord?.sourceAmount,
+          transaction?.fromAmount,
+        );
+        const sourceAssetCode = normalizeAssetCode(coalesceString(
+          operationContext.source_asset_code,
+          mockRecord?.sourceAssetCode,
+          'TESOURO',
+        ));
+        const sourceAsset = sourceAssetCode === 'TESOURO'
+          ? { code: 'TESOURO', issuer: this.getTesouroIssuer() }
+          : resolveConfiguredAsset(sourceAssetCode, coalesceString(operationContext.source_asset_issuer, mockRecord?.sourceAssetIssuer));
+        const destinationAmount = coalesceString(
+          operationContext.target_brl,
+          mockRecord?.destinationBrl,
+          transaction?.toAmount,
+        );
+
+        receiptUrl = await PaymentReceiptService.sendReceipt({
+          type: 'payment_sent',
+          sessionId: context.sessionId,
+          userId: context.userId,
+          provider: externalChannelProvider(input) || undefined,
+          providerUserId: externalChannelProviderUserId(input) || undefined,
+          counterpartyLabel: bankLabel,
+          sourceAmount: sourceAmount || transaction?.fromAmount || '',
+          sourceAssetCode: sourceAsset.code,
+          destinationAmount: destinationAmount || '',
+          destinationAssetCode: 'BRL',
+          hash: result.hash || orderId,
+          status: 'completed',
+          contextMessage: 'PIX enviado ao seu PIX.',
+        });
+
+        if (receiptUrl && operationId) {
+          await OperationRepository.update(operationId, {
+            context: JSON.stringify({
+              ...operationContext,
+              receipt_url: receiptUrl,
+              submit_hash: result.hash || '',
+              destination_amount: destinationAmount || '',
+              destination_asset_code: 'BRL',
+            }),
+          } as any).catch((error) => {
+            console.warn('[ramp] Could not persist PIX off-ramp receipt URL:', debugErrorMessage(error));
+          });
+        }
+      } catch (error) {
+        console.warn('[ramp] Could not send PIX off-ramp receipt:', debugErrorMessage(error));
+      }
     }
 
-    const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    const result = await StellarService.signAndSubmitXdr(context.userId, secret, unsignedXdr, {
-      user_id: context.userId,
-      type: 'PAYMENT' as any,
-      asset_code: 'TESOURO',
-      amount: transaction?.fromAmount,
-      context: JSON.stringify({
-        provider: 'etherfuse',
-        rail: 'pix',
-        direction: 'offramp',
-        anchor_order_id: orderId,
-        source_public_key: context.publicKey,
-      }),
-    } as any);
-
-    if (result.success) {
-      await this.updateRampOperationStatus(coalesceString(input.operation_id, input.operationId), 'PROCESSING');
-    }
-
-    return { ...result, order_id: orderId };
+    return { ...result, order_id: orderId, ...(receiptUrl ? { receipt_url: receiptUrl } : {}) };
   }
 
   static async simulateFiatReceivedForSession(input: RampSessionInput & {
@@ -4029,6 +4111,7 @@ export class AnchorService {
         operation_id: orderResult.operation_id,
         pin: walletPin,
         wallet_pin: walletPin,
+        skip_receipt: true,
       });
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
