@@ -359,13 +359,18 @@ export class ExternalService {
     }
   }
 
-  async resolveShortLink(code: string): Promise<string | null> {
+  async resolveShortLinkRecord(code: string): Promise<{
+    url: string;
+    purpose?: string | null;
+    session_id?: string | null;
+    user_id?: string | null;
+  } | null> {
     const normalized = String(code || '').trim();
     if (!normalized) return null;
 
     const { data, error } = await this.supabase
       .from('short_links')
-      .select('url, expires_at')
+      .select('url, purpose, session_id, user_id, expires_at')
       .eq('code', normalized)
       .maybeSingle();
 
@@ -376,7 +381,17 @@ export class ExternalService {
     if (!data?.url) return null;
     const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
     if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
-    return String(data.url);
+    return {
+      url: String(data.url),
+      purpose: data.purpose || null,
+      session_id: data.session_id || null,
+      user_id: data.user_id || null,
+    };
+  }
+
+  async resolveShortLink(code: string): Promise<string | null> {
+    const record = await this.resolveShortLinkRecord(code);
+    return record?.url || null;
   }
 
   // Check if provider user exists; return account info or null

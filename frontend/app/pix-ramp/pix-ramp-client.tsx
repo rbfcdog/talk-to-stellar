@@ -729,7 +729,7 @@ export default function PixRampClient({
     ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
     : L("valor que entra na sua conta", "value credited to your account");
   const pixLoginRequiredMessage = needsBrowserLoginForChatLink
-    ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
+    ? L("Não consegui carregar a sessão do chat neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link.", "I could not load the chat session in this browser. Return to WhatsApp and open the link again, or request a new link.")
     : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.");
   const transferRecipientBlocker = transferFlow && !transferRecipientVerified
     ? needsBrowserLoginForPix
@@ -745,6 +745,7 @@ export default function PixRampClient({
     : "";
   const loginHref = useMemo(() => {
     if (!needsBrowserLoginForPix) return "";
+    if (needsBrowserLoginForChatLink) return "";
     const params = new URLSearchParams();
     if (externalProvider) params.set("provider", externalProvider);
     if (externalProviderUserId) params.set("provider_user_id", externalProviderUserId);
@@ -753,7 +754,7 @@ export default function PixRampClient({
     params.set("next", `${rampMode === "offramp" ? "/pix-off" : "/pix-on"}?${queryString}`);
     params.set("lang", language);
     return `/login?${params.toString()}`;
-  }, [externalProvider, externalProviderUserId, externalSource, language, needsBrowserLoginForPix, queryString, rampEmail, rampMode]);
+  }, [externalProvider, externalProviderUserId, externalSource, language, needsBrowserLoginForChatLink, needsBrowserLoginForPix, queryString, rampEmail, rampMode]);
   const operationStorageKey = intentId ? `talk-to-stellar.pix-ramp.completed:${intentId}` : "";
   const buildIdempotencyKey = useCallback((action: string) => (
     `pix-ramp:${atomicIntentKey}:${action}`
@@ -771,7 +772,9 @@ export default function PixRampClient({
           detail: walletPublicKey
             ? L("Conta localizada.", "Account found.")
             : needsBrowserLoginForPix
-              ? L("Entre com PIN para continuar com sua conta.", "Sign in with PIN to continue with your account.")
+              ? needsBrowserLoginForChatLink
+                ? L("Sessão do chat não carregada. Reabra o link pelo WhatsApp ou peça um novo link.", "Chat session was not loaded. Reopen the link from WhatsApp or request a new link.")
+                : L("Entre com PIN para continuar com sua conta.", "Sign in with PIN to continue with your account.")
               : hasSession
                 ? L("Sessão detectada. Preparando sua conta PIX.", "Session detected. Preparing your PIX account.")
               : L("Digite o email para localizar sua conta.", "Enter the email to find your account."),
@@ -815,7 +818,7 @@ export default function PixRampClient({
             ? L("Conta localizada.", "Account found.")
             : needsBrowserLoginForPix
               ? needsBrowserLoginForChatLink
-                ? L("A sessão deste navegador não foi detectada. Entre com PIN para continuar este PIX aberto pelo chat.", "This browser session was not detected. Sign in with PIN to continue this PIX opened from chat.")
+                ? L("Sessão do chat não carregada. Reabra o link pelo WhatsApp ou peça um novo link.", "Chat session was not loaded. Reopen the link from WhatsApp or request a new link.")
                 : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
               : hasSession
                 ? L("Sessão detectada. Preparando sua conta PIX.", "Session detected. Preparing your PIX account.")
@@ -1109,7 +1112,7 @@ export default function PixRampClient({
     }
     if (needsBrowserLoginForPix) {
       throw new Error(needsBrowserLoginForChatLink
-        ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
+        ? L("A sessão do chat não foi carregada neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link.", "The chat session was not loaded in this browser. Return to WhatsApp and open the link again, or request a new link.")
         : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account."));
     }
 
@@ -1994,7 +1997,9 @@ export default function PixRampClient({
 	                            </div>
 	                          ) : needsBrowserLoginForPix ? (
 	                            <div>
-	                              <p className="font-black uppercase tracking-[0.14em] text-amber-100">{L("Login necessário", "Sign-in required")}</p>
+	                              <p className="font-black uppercase tracking-[0.14em] text-amber-100">
+	                                {needsBrowserLoginForChatLink ? L("Sessão do chat não carregada", "Chat session not loaded") : L("Login necessário", "Sign-in required")}
+	                              </p>
 	                              <p className="mt-2 text-amber-50/85">{pixLoginRequiredMessage}</p>
 	                              {loginHref && (
 	                                <a
@@ -2052,7 +2057,7 @@ export default function PixRampClient({
           <section className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
             {needsBrowserLoginForPix
               ? needsBrowserLoginForChatLink
-                ? L("Este PIX veio do chat, mas este navegador ainda não tem uma sessão ativa. Entre com PIN aqui para preparar o pagamento na mesma conta.", "This PIX came from chat, but this browser does not have an active session yet. Sign in with PIN here to prepare the payment on the same account.")
+                ? L("Este PIX veio do chat, mas a sessão não foi carregada neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link. O PIN será pedido somente na confirmação final.", "This PIX came from chat, but the session was not loaded in this browser. Return to WhatsApp and open the link again, or request a new link. The PIN will be requested only at final confirmation.")
                 : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
               : t("pix_need_email")}
             {loginHref && (
