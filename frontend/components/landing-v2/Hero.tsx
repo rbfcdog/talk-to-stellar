@@ -1,30 +1,42 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, CircleDollarSign, Landmark } from 'lucide-react';
+import { ArrowRight, MessageCircle, Monitor, Send } from 'lucide-react';
 import PhoneMockup from './PhoneMockup';
 import { useLanguage } from '@/lib/i18n';
+
+const WHATSAPP_NUMBER = "5519981808102";
+const WHATSAPP_MESSAGE = "Oi, quero usar o TalkToStellar.";
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
 
 export default function Hero() {
   const { language, t } = useLanguage();
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const firstActions = [
     {
+      href: WHATSAPP_URL,
+      external: true,
+      icon: MessageCircle,
+      label: "WhatsApp",
+      detail: L("Comece por mensagem no WhatsApp.", "Start by messaging on WhatsApp."),
+      iconClassName: "text-[#25D366]",
+      hoverClassName: "hover:border-[#25D366]/45",
+    },
+    {
+      href: "https://t.me/TalkToStellarTelegramBot",
+      external: true,
+      icon: Send,
+      label: "Telegram",
+      detail: L("Use o bot direto no Telegram.", "Use the bot directly on Telegram."),
+      iconClassName: "text-[#229ED9]",
+      hoverClassName: "hover:border-[#229ED9]/45",
+    },
+    {
       href: "/chat",
-      icon: ArrowRight,
-      label: L("Testar no chat", "Try web chat"),
-      detail: L("Veja saldo, PIX, envio e histórico.", "See balance, PIX, payment, and history."),
-    },
-    {
-      href: "/pix-on?amount=10&asset=BRL&from=landing",
-      icon: CircleDollarSign,
-      label: L("Simular PIX de R$10", "Simulate R$10 PIX"),
-      detail: L("Entenda o fluxo antes de pagar.", "Understand the flow before paying."),
-    },
-    {
-      href: "/institution-settlement",
-      icon: Landmark,
-      label: L("Ver infraestrutura", "View infrastructure"),
-      detail: L("Origem, taxa, rota e destino.", "Origin, fee, route, and destination."),
+      icon: Monitor,
+      label: L("Chat web", "Web chat"),
+      detail: L("Teste pelo navegador agora.", "Try it in the browser now."),
+      iconClassName: "text-[#00D2FF]",
+      hoverClassName: "hover:border-[#00D2FF]/45",
     },
   ];
 
@@ -57,14 +69,16 @@ export default function Hero() {
             </button>
 
             <div className="grid min-w-0 gap-3 md:grid-cols-3">
-              {firstActions.map(({ href, icon: Icon, label, detail }) => (
+              {firstActions.map(({ href, external, icon: Icon, label, detail, iconClassName, hoverClassName }) => (
                 <a
                   key={href}
                   href={href}
-                  className="group min-w-0 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-[#00D2FF]/40 hover:bg-white/[0.07]"
+                  target={external ? "_blank" : undefined}
+                  rel={external ? "noopener noreferrer" : undefined}
+                  className={`group min-w-0 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:bg-white/[0.07] ${hoverClassName}`}
                 >
                   <div className="flex items-center gap-2 text-sm font-black text-white">
-                    <Icon className="h-4 w-4 text-[#00D2FF]" />
+                    <Icon className={`h-4 w-4 ${iconClassName}`} />
                     <span className="truncate">{label}</span>
                   </div>
                   <p className="mt-2 text-xs leading-5 text-[#9BA4B5]">{detail}</p>
