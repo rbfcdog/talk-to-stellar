@@ -485,9 +485,19 @@ function getRampCustomerId(payload: RampResponse | null | undefined) {
   ).trim();
 }
 
+function getRampBankAccountId(payload: RampResponse | null | undefined) {
+  return String(
+    payload?.bank_account_id ||
+    payload?.bankAccountId ||
+    payload?.customer?.bankAccountId ||
+    payload?.customer?.bank_account_id ||
+    "",
+  ).trim();
+}
+
 function mergeRampCustomerPayload(base: RampResponse | null | undefined, payload: RampResponse | null | undefined): RampResponse | null {
   const customerId = String(payload?.customer_id || payload?.customerId || payload?.customer?.id || "").trim();
-  const bankAccountId = String(payload?.bank_account_id || payload?.bankAccountId || payload?.customer?.bankAccountId || "").trim();
+  const bankAccountId = getRampBankAccountId(payload);
   const hasCustomerContext = Boolean(
     payload?.customer ||
     customerId ||
@@ -1709,7 +1719,7 @@ export default function PixRampClient({
     const auth = await resolveWalletFromEmail();
     const requestedFinalAmount = transferFlow ? "" : desiredFinalAmount;
     const requestedFinalAsset = requestedFinalAmount ? desiredFinalAsset : "";
-    const customerResult = getRampCustomerId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
+    const customerResult = getRampCustomerId(customerPayload) && getRampBankAccountId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
       email: rampEmail.trim().toLowerCase() || undefined,
     }, "POST", auth);
@@ -1763,11 +1773,12 @@ export default function PixRampClient({
           label: "Continuing PIX creation without client-side quote id",
           method: "POST",
           path: "/api/ramp/etherfuse/onramp",
-          request: { amount: amountBrl, targetAsset },
+          request: { amount: amountBrl, targetAsset, bank_account_id: getRampBankAccountId(customerForOrder) || undefined },
           response: { reason: "backend_will_create_fresh_quote" },
         });
       }
       const orderCustomerId = getRampCustomerId(customerForOrder);
+      const orderBankAccountId = getRampBankAccountId(customerForOrder);
       authForOrder = authForOrder || await resolveWalletFromEmail();
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
@@ -1775,6 +1786,7 @@ export default function PixRampClient({
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
         customer_id: orderCustomerId || undefined,
+        bank_account_id: orderBankAccountId || undefined,
         quote_id: quoteForOrder?.id || undefined,
         amount: amountBrl,
         expected_to_amount: quoteForOrder?.toAmount || undefined,

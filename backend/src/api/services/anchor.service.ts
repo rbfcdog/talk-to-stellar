@@ -2684,9 +2684,19 @@ export class AnchorService {
     }
 
     const anchor = this.getEtherfuseClient();
-    let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId) || undefined;
+    let bankAccountId = coalesceString(input.bank_account_id, input.bankAccountId, preparedCustomer?.bankAccountId) || undefined;
     let cryptoWalletId: string | undefined;
     let kycUrl: string | undefined;
+
+    if (!bankAccountId) {
+      try {
+        const accounts = await anchor.getFiatAccounts(customerId);
+        const pixAccount = accounts.find((account) => String(account.type || '').toUpperCase() === 'PIX') || accounts[0];
+        bankAccountId = pixAccount?.id || undefined;
+      } catch (error) {
+        console.warn('[ramp] Could not reuse existing PIX account before on-ramp:', debugErrorMessage(error));
+      }
+    }
 
     const preparedProxy = await this.prepareEtherfusePixProxy({
       customerId,
