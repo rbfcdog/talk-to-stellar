@@ -54,26 +54,27 @@ Investigacao feita contra `https://api.sand.etherfuse.com` e a especificacao ofi
 - `POST /ramp/wallet` e usado no sandbox com `claimOwnership=true` para registrar a wallet na organizacao Etherfuse aprovada.
 - `POST /ramp/customer/{customerId}/kyc` funciona e auto-aprova no sandbox.
 - `POST /ramp/quote` funciona para `BRL -> TESOURO` e `TESOURO -> BRL`.
-- `POST /ramp/customer/{customerId}/bank-account` rejeita o payload PIX do regional starter pack com `AccountRegistration`.
+- `POST /ramp/customer/{customerId}/bank-account` rejeita o payload PIX do regional starter pack com `AccountRegistration`; por isso o backend nao deve chamar esse endpoint para PIX/BRL quando estiver operando o fallback regional.
 - Sem uma conta PIX/proxy criada pela Etherfuse, `POST /ramp/order` retorna `Proxy account not found`.
 
 Por isso o backend faz:
 
 1. Tenta o fluxo real Etherfuse primeiro.
-2. Se a Etherfuse negar a ordem com `Proxy account not found` em sandbox/devnet, usa fallback local explicito `sandbox_mock=true`.
-3. On-ramp sandbox: gera checkout PIX sandbox e, ao simular pagamento, liquida via `TESOURO` e entrega o asset final escolhido on-chain na Stellar Testnet usando a liquidez local.
-4. Off-ramp sandbox: cria uma ordem mockada e assina uma transferencia real de `TESOURO` da wallet TalkToStellar para o coletor sandbox.
+2. Se a Etherfuse nao tiver uma conta organizacional PIX/BRL ativa, o backend usa o fallback regional de testnet diretamente, sem tentar cadastrar uma conta PIX de cliente com o schema mexicano `AccountRegistration`.
+3. Se a Etherfuse negar a ordem com `Proxy account not found` em sandbox/devnet, usa fallback local explicito `sandbox_mock=true`.
+4. On-ramp sandbox: gera checkout PIX sandbox e, ao simular pagamento, liquida via `TESOURO` e entrega o asset final escolhido on-chain na Stellar Testnet usando a liquidez local.
+5. Off-ramp sandbox: cria uma ordem mockada e assina uma transferencia real de `TESOURO` da wallet TalkToStellar para o coletor sandbox.
 
-Esse fallback e controlado por:
-
-```bash
-ETHERFUSE_SANDBOX_PIX_FALLBACK=true
-```
-
-Para desativar e exigir somente ordem Etherfuse real:
+Esse fallback fica ligado por padrao em testnet/sandbox. Para desligar e exigir somente uma ordem Etherfuse real com conta PIX/BRL ativa, configure:
 
 ```bash
 ETHERFUSE_SANDBOX_PIX_FALLBACK=false
+```
+
+Para manter explicito:
+
+```bash
+ETHERFUSE_SANDBOX_PIX_FALLBACK=true
 ```
 
 ## Tela Web

@@ -8,7 +8,7 @@ import type {
 } from '../../integrations/regional-starter-pack/anchors/types';
 import { AnchorError } from '../../integrations/regional-starter-pack/anchors/types';
 import { supabase } from '../../config/supabase';
-import { mockPolicySnapshot, specificMockAllowed } from '../../config/mock-policy';
+import { mockPolicySnapshot } from '../../config/mock-policy';
 import {
   assetMatchesConfiguredIssuer,
   ETHERFUSE_TESOURO_ISSUER,
@@ -515,6 +515,12 @@ function isRampSandboxEnvironment(apiKey: string, baseUrl: string): boolean {
   return apiKey.startsWith('api_sand:') || baseUrl.includes('.sand.') || baseUrl.includes('sandbox');
 }
 
+function envFlag(name: string, fallback = false): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+}
+
 function isTerminalRampStatus(status: string): boolean {
   return ['completed', 'failed', 'expired', 'cancelled', 'canceled', 'refunded'].includes(
     String(status || '').toLowerCase(),
@@ -851,7 +857,9 @@ export class AnchorService {
       base_url: baseUrl.replace(/\/$/, ''),
       user_facing_mocks_allowed: mockPolicy.user_facing_mocks_allowed,
       ops_mocks_allowed: mockPolicy.ops_mocks_allowed,
-      local_mock_fallback_allowed: mockPolicy.local_pix_fallback_allowed,
+      local_mock_fallback_allowed: stellarNetworkId === 'TESTNET' &&
+        sandbox &&
+        envFlag('ETHERFUSE_SANDBOX_PIX_FALLBACK', true),
       unavailable_reason: available
         ? undefined
         : stellarNetworkId === 'PUBLIC'
@@ -1275,7 +1283,7 @@ export class AnchorService {
     const runtime = this.getRuntimeInfo();
     return runtime.stellar_network_id === 'TESTNET' &&
       runtime.sandbox &&
-      specificMockAllowed('ETHERFUSE_SANDBOX_PIX_FALLBACK', 'user');
+      envFlag('ETHERFUSE_SANDBOX_PIX_FALLBACK', true);
   }
 
   private static buildSandboxPixInstructions(orderId: string, amount: string) {
@@ -2377,22 +2385,37 @@ export class AnchorService {
 
     const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
     const useOrganizationBankAccount = Boolean(organizationBankAccountId);
+    const useRegionalSandboxFallback = !useOrganizationBankAccount && this.sandboxPixFallbackEnabled();
     const preparedProxy = useOrganizationBankAccount
       ? { bankAccountId: organizationBankAccountId as string, kycUrl: undefined }
+      : useRegionalSandboxFallback
+        ? { bankAccountId: customer.bankAccountId || crypto.randomUUID(), kycUrl: undefined }
       : await this.prepareEtherfusePixProxy({
           customerId: customer.id,
           publicKey: context.publicKey,
           bankAccountId: customer.bankAccountId,
           email: coalesceString(input.email, context.email) || undefined,
         });
-    const programmatic = await this.runSandboxProgrammaticOnboarding({
-      customerId: customer.id,
-      publicKey: context.publicKey,
-      bankAccountId: preparedProxy.bankAccountId,
-      email: coalesceString(input.email, context.email) || undefined,
-      kycUrl: preparedProxy.kycUrl,
-      skipBankAccount: useOrganizationBankAccount,
-    });
+    const programmatic = useRegionalSandboxFallback
+      ? {
+          bankAccountId: preparedProxy.bankAccountId,
+          cryptoWalletId: undefined,
+          steps: {
+            bank_account: {
+              status: 'skipped',
+              source: 'regional_sandbox_fallback',
+              reason: 'no_active_brl_pix_organization_account',
+            },
+          },
+        }
+      : await this.runSandboxProgrammaticOnboarding({
+          customerId: customer.id,
+          publicKey: context.publicKey,
+          bankAccountId: preparedProxy.bankAccountId,
+          email: coalesceString(input.email, context.email) || undefined,
+          kycUrl: preparedProxy.kycUrl,
+          skipBankAccount: useOrganizationBankAccount,
+        });
     customer = { ...customer, bankAccountId: programmatic.bankAccountId };
 
     return {
@@ -2708,13 +2731,15 @@ export class AnchorService {
     const anchor = this.getEtherfuseClient();
     const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
     let usingOrganizationBankAccount = Boolean(organizationBankAccountId);
+    const usingRegionalSandboxFallback = !usingOrganizationBankAccount && this.sandboxPixFallbackEnabled();
     let bankAccountId = organizationBankAccountId ||
       coalesceString(input.bank_account_id, input.bankAccountId, preparedCustomer?.bankAccountId) ||
+      (usingRegionalSandboxFallback ? crypto.randomUUID() : undefined) ||
       undefined;
     let cryptoWalletId: string | undefined;
     let kycUrl: string | undefined;
 
-    if (!bankAccountId) {
+    if (!bankAccountId && !usingRegionalSandboxFallback) {
       try {
         const accounts = await anchor.getFiatAccounts(customerId);
         const pixAccount = accounts.find((account) => String(account.type || '').toUpperCase() === 'PIX') || accounts[0];
@@ -2726,6 +2751,8 @@ export class AnchorService {
 
     const preparedProxy = usingOrganizationBankAccount && bankAccountId
       ? { bankAccountId, kycUrl: undefined }
+      : usingRegionalSandboxFallback && bankAccountId
+        ? { bankAccountId, kycUrl: undefined }
       : await this.prepareEtherfusePixProxy({
           customerId,
           publicKey: context.publicKey,
@@ -2735,14 +2762,26 @@ export class AnchorService {
     bankAccountId = preparedProxy.bankAccountId;
     kycUrl = preparedProxy.kycUrl;
 
-    const programmatic = await this.runSandboxProgrammaticOnboarding({
-      customerId,
-      publicKey: context.publicKey,
-      bankAccountId,
-      email: context.email,
-      kycUrl,
-      skipBankAccount: usingOrganizationBankAccount,
-    });
+    const programmatic = usingRegionalSandboxFallback
+      ? {
+          bankAccountId,
+          cryptoWalletId: undefined,
+          steps: {
+            bank_account: {
+              status: 'skipped',
+              source: 'regional_sandbox_fallback',
+              reason: 'no_active_brl_pix_organization_account',
+            },
+          },
+        }
+      : await this.runSandboxProgrammaticOnboarding({
+          customerId,
+          publicKey: context.publicKey,
+          bankAccountId,
+          email: context.email,
+          kycUrl,
+          skipBankAccount: usingOrganizationBankAccount,
+        });
     bankAccountId = programmatic.bankAccountId;
     cryptoWalletId = programmatic.cryptoWalletId;
 
@@ -2802,7 +2841,14 @@ export class AnchorService {
     });
 
     let transaction: OnRampTransaction | undefined;
+    if (usingRegionalSandboxFallback) {
+      transaction = createSandboxFallback({
+        reason: 'no_active_brl_pix_organization_account',
+      });
+    }
+
     if (
+      !transaction &&
       !usingOrganizationBankAccount &&
       this.getRuntimeInfo().sandbox &&
       !onboardingBankAccountReady(programmatic.steps.bank_account)
