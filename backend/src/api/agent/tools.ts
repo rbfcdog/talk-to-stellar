@@ -337,7 +337,7 @@ function formatNoPathFallbackMessage(errorMessage: string): string {
   const mentionsQuoteExpired =
     /(quote|cotacao|cotação).*(expired|expirad)|not active:\s*expired/.test(normalized);
   if (mentionsQuoteExpired) {
-    return 'A cotação expirou. Gere uma nova cotação para continuar.';
+    return 'A estimativa expirou. Gere uma nova estimativa para continuar.';
   }
 
   const mentionsNoPath =
@@ -900,7 +900,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_best_route",
-    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando cotação real. Sempre informe explicitamente source_asset_code como moeda de origem/gasto e dest_asset_code como moeda de destino/recebimento. Ex.: 'transferir 200 BRL para Carlos receber em USDC' => source_asset_code=BRL, dest_asset_code=USDC, source_amount=200. Retorna taxa estimada, critério de otimização e validade da cotação sem expor detalhes técnicos.",
+    description: "Calcula e explica a melhor rota de envio/conversão para um par de moedas usando estimativa atual. Sempre informe explicitamente source_asset_code como moeda de origem/gasto e dest_asset_code como moeda de destino/recebimento. Ex.: 'transferir 200 BRL para Carlos receber em USDC' => source_asset_code=BRL, dest_asset_code=USDC, source_amount=200. Retorna taxa estimada, critério de otimização e validade da estimativa sem expor detalhes internos.",
     parameters: {
       type: "object",
       properties: {
@@ -1307,7 +1307,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_conversion_preview",
-    description: "Preview real BRL -> USDC usando a cotação configurada no backend, taxa TalkToStellar ativa, taxa de rede Stellar e comparação com banco tradicional. Use antes de falar de custo, câmbio, valor líquido ou economia.",
+    description: "Estimativa BRL -> USDC usando a configuração atual da conta, taxa TalkToStellar ativa, custo de rede e comparação simples com banco comum. Use antes de falar de custo, câmbio, valor final ou economia.",
     parameters: {
       type: "object",
       properties: {
@@ -1321,7 +1321,7 @@ export const toolDefinitions = [
   },
   {
     name: "show_savings_calculator",
-    description: "Mostra no WhatsApp uma simulação de custo/economia quando o usuário pergunta quanto custa enviar, quanto vai pagar, se vale a pena, ou compara com banco/Wise. Usa get_conversion_preview e dados reais do backend; não use câmbio fixo.",
+    description: "Mostra no WhatsApp uma simulação de custo/economia quando o usuário pergunta quanto custa enviar, quanto vai pagar, se vale a pena, ou compara com banco/Wise. Usa get_conversion_preview e informações da conta; não use câmbio fixo.",
     parameters: {
       type: "object",
       properties: {
@@ -1352,7 +1352,7 @@ export const toolDefinitions = [
   },
   {
     name: "show_annual_savings_summary",
-    description: "Mostra resumo anual de economia no WhatsApp quando o usuário pergunta quanto economizou, histórico de economia ou resumo do ano. Usa histórico da conta e compara a taxa paga com banco tradicional a 3,5%.",
+    description: "Mostra resumo anual de economia no WhatsApp quando o usuário pergunta quanto economizou, histórico de economia ou resumo do ano. Usa histórico da conta e compara as taxas pagas com uma transferência bancária comum.",
     parameters: {
       type: "object",
       properties: {
@@ -3792,21 +3792,21 @@ async function executeShowSavingsCalculator(input: any): Promise<string> {
   } catch (error) {
     return JSON.stringify({
       success: false,
-      error: publicErrorMessage(error, 'Não consegui carregar a cotação real agora. Tente novamente em alguns segundos.'),
-      message: 'Não consegui carregar a cotação real agora. Tente novamente em alguns segundos.',
+      error: publicErrorMessage(error, 'Não consegui carregar a estimativa agora. Tente novamente em alguns segundos.'),
+      message: 'Não consegui carregar a estimativa agora. Tente novamente em alguns segundos.',
     });
   }
   const message = [
     `💸 *Simulação de envio: ${formatBrlInteger(preview.brlAmount)}*`,
     '',
     `✅ Você recebe líquido: *${formatUsd(preview.receiveUsdc)}*`,
-    `💱 Câmbio agora: *1 US$ = R$ ${preview.brlPerUsdc.toFixed(4).replace('.', ',')}*`,
+    `💱 Dólar agora: *R$ ${preview.brlPerUsdc.toFixed(4).replace('.', ',')}*`,
     `📉 Taxa TalkToStellar: ${normalizeCurrencySpacing(formatBrl(preview.talkToStellarFeeBrl))}`,
-    `🔗 Taxa de rede Stellar: ${normalizeCurrencySpacing(formatBrl(preview.stellarNetworkFeeBrl))}`,
-    `💳 Taxa total real: ${normalizeCurrencySpacing(formatBrl(preview.totalFeeBrl))} (${preview.totalFeePct.toFixed(4).replace('.', ',')}%)`,
+    `🔗 Custo da rede: ${normalizeCurrencySpacing(formatBrl(preview.stellarNetworkFeeBrl))}`,
+    `💳 Taxa total: ${normalizeCurrencySpacing(formatBrl(preview.totalFeeBrl))}`,
     '',
     '━━━━━━━━━━━━━━',
-    `🏦 Banco tradicional cobraria: ${normalizeCurrencySpacing(formatBrl(preview.bankFeeBrl))}`,
+    `🏦 Banco comum poderia cobrar: ${normalizeCurrencySpacing(formatBrl(preview.bankFeeBrl))}`,
     `🔵 Wise cobraria: ${normalizeCurrencySpacing(formatBrl(preview.wiseFeeBrl))}`,
     `*Você economiza: ${normalizeCurrencySpacing(formatBrl(preview.savingsBrl))}*`,
     '━━━━━━━━━━━━━━',
@@ -3888,14 +3888,14 @@ async function executeGetConversionPreview(input: any): Promise<string> {
         savings_brl: preview.savingsBrl,
       },
       message:
-        `Preview real: ${formatBrlInteger(preview.brlAmount)} -> ${formatUsd(preview.receiveUsdc)} líquido. ` +
-        `Câmbio agora: 1 US$ = R$ ${preview.brlPerUsdc.toFixed(4).replace('.', ',')}. ` +
+        `Estimativa: ${formatBrlInteger(preview.brlAmount)} -> ${formatUsd(preview.receiveUsdc)} líquido. ` +
+        `Dólar agora: R$ ${preview.brlPerUsdc.toFixed(4).replace('.', ',')}. ` +
         `Taxa total: ${normalizeCurrencySpacing(formatBrl(preview.totalFeeBrl))}.`,
     });
   } catch (error) {
     return JSON.stringify({
       success: false,
-      error: publicErrorMessage(error, 'Não consegui carregar a cotação real agora. Tente novamente em alguns segundos.'),
+      error: publicErrorMessage(error, 'Não consegui carregar a estimativa agora. Tente novamente em alguns segundos.'),
     });
   }
 }
@@ -4009,7 +4009,7 @@ async function buildReceiptFeeBreakdown(row: any, input: any): Promise<{
   const totalFeeBrl = explicitTotalFee || componentTotal;
   const feeLines = [
     `- TalkToStellar: ${normalizeCurrencySpacing(formatBrl(talkToStellarFeeBrl))}`,
-    `- Rede Stellar: ${normalizeCurrencySpacing(formatBrl(networkFeeBrl))}`,
+    `- Rede: ${normalizeCurrencySpacing(formatBrl(networkFeeBrl))}`,
     onRampFeeBrl > 0 ? `- Entrada PIX: ${normalizeCurrencySpacing(formatBrl(onRampFeeBrl))}` : '',
     offRampFeeBrl > 0 ? `- Retirada PIX: ${normalizeCurrencySpacing(formatBrl(offRampFeeBrl))}` : '',
   ].filter(Boolean);
@@ -4134,8 +4134,8 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     `vs banco que cobraria ${normalizeCurrencySpacing(formatBrl(bankFee))}`,
     '━━━━━━━━━━━━━━',
     '',
-    '🔗 Evidência Stellar:',
-    `${shortStellarHash(stellarHash)} (${stellarExpertNetworkLabel()})`,
+    '🔗 Comprovação:',
+    `${shortStellarHash(stellarHash)}`,
     ...(stellarUrl ? [stellarUrl] : []),
     '',
     `📊 Ver histórico: ${historyLink}`,
@@ -4350,9 +4350,9 @@ async function executeShowAnnualSavingsSummary(input: any): Promise<string> {
     `Total enviado: ${formatBrlInteger(totalSent)}`,
     '',
     `💰 *Total economizado: ${formatBrlInteger(totalSavings)}*`,
-    'vs banco tradicional (3,5%)',
+    'comparado com uma transferência bancária comum',
     '',
-    `Sua taxa média: ${avgFeePct.toFixed(2).replace('.', ',')}%`,
+    `Taxas pagas no ano: ${normalizeCurrencySpacing(formatBrl(totalFee))}`,
     `Projeção até dezembro: ≈ ${formatBrlInteger(projection)}`,
     '',
     '━━━━━━━━━━━━━━',

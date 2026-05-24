@@ -47,7 +47,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
 
   switch (publicErrorCode(error)) {
     case 'quote_expired':
-      return 'A cotacao expirou. Gere uma nova cotacao para continuar.';
+      return 'A estimativa expirou. Gere uma nova estimativa para continuar.';
     case 'link_expired':
       return 'Esse link expirou ou ja foi usado. Peca um novo link no chat.';
     case 'session_expired':
@@ -61,11 +61,11 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'insufficient_balance':
       return 'Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.';
     case 'recipient_not_found':
-      return 'Esse destinatario nao existe nos seus contatos salvos. Digite "contatos" no chat e escolha um destinatario real antes de gerar o PIX.';
+      return 'Esse destinatario nao esta nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
     case 'pix_account_not_ready':
       return 'Sua conta PIX ainda nao esta pronta para esse fluxo. Entre novamente, gere uma nova estimativa e tente outra vez.';
     case 'service_timeout':
-      return 'A operacao demorou demais e deu timeout. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
+      return 'A operacao demorou demais. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':
       return 'Nao consegui encontrar uma rota segura para essa conversao agora. Tente novamente em alguns segundos ou escolha outro valor.';
     case 'provider_unavailable':

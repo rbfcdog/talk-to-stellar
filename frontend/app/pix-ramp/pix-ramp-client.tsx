@@ -78,10 +78,6 @@ function clientTtsTransactionFeeBps() {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : DEFAULT_TTS_TRANSACTION_FEE_BPS;
 }
 
-function formatBpsAsPercent(bps: number) {
-  return `${(bps / 100).toFixed(2)}%`;
-}
-
 function getStoredSession() {
   if (typeof window === "undefined") return { sessionId: "" };
   return {
@@ -139,12 +135,12 @@ function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC
   const normalized = String(value || "").trim().toUpperCase().split(":")[0];
   if (normalized === "USDC") return "USDC";
   if (normalized === "BRL") return "BRL";
-  if (normalized === "TESOURO") return "TESOURO";
+  if (normalized === "TESOURO") return "BRL";
   return fallback;
 }
 
 function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" | "TESOURO" = "BRL") {
-  if (currency === "TESOURO") return formatAsset(value, "TESOURO");
+  if (currency === "TESOURO") return formatMoney(value, "BRL");
   return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
 }
 
@@ -255,8 +251,8 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
 
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
-  if (displayCode === "USDC") return "digital dollar";
-  return "digital real";
+  if (displayCode === "USDC") return "US$";
+  return language === "pt-BR" ? "R$" : "BRL";
 }
 
 function formatCountdown(ms: number, language: "pt-BR" | "en" = "pt-BR") {
@@ -769,8 +765,8 @@ export default function PixRampClient({
         : "Calculated automatically on confirmation";
   const quoteGrossLabel = quote ? formatMoney(quote.fromAmount || amountBrl) : formatMoney(amountBrl);
   const quoteCostContext = transferFlow && transferRecipientLabel
-    ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
-    : L("valor que entra na sua conta", "value credited to your account");
+    ? L("valor que será enviado", "amount that will be sent")
+    : L("valor que entra na sua conta", "amount added to your account");
   const pixLoginRequiredMessage = needsBrowserLoginForChatLink
     ? L("Não consegui carregar a sessão do chat neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link.", "I could not load the chat session in this browser. Return to WhatsApp and open the link again, or request a new link.")
     : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.");
@@ -811,7 +807,7 @@ export default function PixRampClient({
       const hasTarget = Boolean(offRampFiatAmount.trim() || offRampAmount.trim());
       return [
         {
-          label: "Conta TalkToStellar",
+          label: L("Sua conta", "Your account"),
           detail: walletPublicKey
             ? L("Conta localizada.", "Account found.")
             : needsBrowserLoginForPix
@@ -831,18 +827,18 @@ export default function PixRampClient({
           state: hasTarget ? "done" : "pending",
         },
         {
-          label: L("Conversão para BRL", "Conversion to BRL"),
+          label: L("Valor em reais", "Amount in BRL"),
           detail: offRampPixTargetAmount
             ? L(`Saldo convertido para chegar em ${offRampPixTargetDisplay}.`, `Balance converted to arrive as ${offRampPixTargetDisplay}.`)
             : L("A tela converte automaticamente para BRL quando você confirma.", "The screen automatically converts to BRL when you confirm."),
-          state: offRampQuote ? "done" : loading === "Previewing PIX off-ramp fees" || loading === "Confirming PIX off-ramp" ? "active" : "pending",
+          state: offRampQuote ? "done" : loading === "Previewing PIX withdrawal" || loading === "Confirming PIX withdrawal" ? "active" : "pending",
         },
         {
           label: L("Confirmação e saída", "Confirmation and withdrawal"),
           detail: temporaryOffRampTestResult?.submitted
             ? L("Saldo enviado para retirada.", "Balance sent for withdrawal.")
             : L("Aguardando seu PIN para mostrar o saldo saindo.", "Waiting for your PIN to move the balance out."),
-          state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX off-ramp" ? "active" : "pending",
+          state: temporaryOffRampTestResult?.submitted ? "done" : loading === "Confirming PIX withdrawal" ? "active" : "pending",
         },
         {
           label: L("Seu PIX", "Your PIX"),
@@ -856,7 +852,7 @@ export default function PixRampClient({
 
     return [
       {
-        label: "TalkToStellar account",
+        label: L("Sua conta", "Your account"),
           detail: walletPublicKey
             ? L("Conta localizada.", "Account found.")
             : needsBrowserLoginForPix
@@ -878,7 +874,7 @@ export default function PixRampClient({
         state: programmaticOnboarding ? "done" : (loading.includes("Preparing") || loading.includes("quote")) ? "active" : "pending",
       },
       {
-        label: L("Estimativa", "Estimate"),
+        label: L("Valor", "Amount"),
         detail: quote
           ? transferFlow && transferRecipientLabel
             ? L(`${formatMoney(quote.fromAmount || amountBrl)} via PIX para enviar a ${transferRecipientLabel}.`, `${formatMoney(quote.fromAmount || amountBrl)} via PIX to send to ${transferRecipientLabel}.`)
@@ -2042,7 +2038,7 @@ export default function PixRampClient({
 	                        className="rounded-full border border-emerald-300/35 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-300/10"
 	                        onClick={() => setRecipientDetailsOpen((current) => !current)}
 	                      >
-	                        {recipientDetailsOpen ? L("Ocultar dados reais", "Hide real details") : L("Ver dados reais", "See real details")}
+		                        {recipientDetailsOpen ? L("Ocultar contato", "Hide contact") : L("Ver contato", "See contact")}
 	                      </button>
 	                      <div className="mt-2 min-h-5 text-xs font-bold">
 	                        {!sessionReady ? (
@@ -2070,7 +2066,7 @@ export default function PixRampClient({
 	                              <InlineSpinner />
 	                              <div>
 	                                <p className="font-black uppercase tracking-[0.14em] text-slate-200">{L("Verificando sessão", "Checking session")}</p>
-	                                <p className="mt-2 text-slate-200/80">{L("Antes de mostrar dados reais do contato, preciso confirmar se este navegador está conectado à sua conta.", "Before showing real contact details, I need to confirm this browser is connected to your account.")}</p>
+		                                <p className="mt-2 text-slate-200/80">{L("Antes de mostrar o contato, preciso confirmar se este navegador está conectado à sua conta.", "Before showing the contact, I need to confirm this browser is connected to your account.")}</p>
 	                              </div>
 	                            </div>
 	                          ) : needsBrowserLoginForPix ? (
@@ -2093,7 +2089,7 @@ export default function PixRampClient({
 	                              <InlineSpinner />
 	                              <div>
 	                                <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Validando destinatário", "Validating recipient")}</p>
-	                                <p className="mt-2 text-emerald-100/80">{L("Estou conferindo se esse nome pertence a um contato real salvo na sua conta.", "Checking whether this name belongs to a real saved contact in your account.")}</p>
+		                                <p className="mt-2 text-emerald-100/80">{L("Estou conferindo se esse nome está salvo na sua conta.", "Checking whether this name is saved in your account.")}</p>
 	                              </div>
 	                            </div>
 	                          ) : recipientVerificationError ? (
@@ -2115,12 +2111,11 @@ export default function PixRampClient({
 	                          ) : transferRecipientVerified ? (
 	                            <div>
 	                              <p className="font-black uppercase tracking-[0.14em] text-emerald-200">{L("Contato salvo validado", "Saved contact verified")}</p>
-	                              <p className="mt-2"><span className="text-emerald-100/70">{L("Nome real", "Real name")}:</span> {transferRecipientLabel}</p>
+	                              <p className="mt-2"><span className="text-emerald-100/70">{L("Nome", "Name")}:</span> {transferRecipientLabel}</p>
 	                              {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-emerald-100/70">{L("Chave PIX/e-mail", "PIX/email key")}:</span> {transferRecipientDisplayKey}</p>}
-	                              {verifiedRecipientPublicKey && <p className="mt-1 break-all font-mono text-[11px]"><span className="font-sans text-emerald-100/70">{L("Conta Stellar", "Stellar account")}:</span> {verifiedRecipientPublicKey}</p>}
 	                            </div>
 	                          ) : (
-	                            <p className="text-slate-200">{L("Ainda não há dados reais para mostrar. Volte ao chat e digite \"contatos\" para escolher um destinatário salvo.", "No real details are available yet. Return to chat and type \"contacts\" to choose a saved recipient.")}</p>
+	                            <p className="text-slate-200">{L("Ainda não há contato para mostrar. Volte ao chat e digite \"contatos\" para escolher um destinatário salvo.", "No contact is available yet. Return to chat and type \"contacts\" to choose a saved recipient.")}</p>
 	                          )}
 	                        </div>
 	                      )}
@@ -2280,17 +2275,17 @@ export default function PixRampClient({
               <div className="mt-5 rounded-3xl border border-cyan-300/20 bg-cyan-300/10 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">{L("Taxas reais da saída", "Real exit fees")}</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">{L("Antes de retirar", "Before withdrawal")}</p>
                     <p className="mt-2 text-sm font-bold leading-6 text-cyan-50/85">
-                      {L("Veja a taxa e o valor final antes do PIN. A confirmação só acontece no botão final.", "See the fee and final amount before the PIN. Confirmation only happens on the final button.")}
+                      {L("Veja quanto sai da conta e quanto chega no seu PIX antes do PIN.", "See how much leaves the account and how much arrives in your PIX before the PIN.")}
                     </p>
                   </div>
                   <button
                     className="w-fit rounded-2xl bg-cyan-300 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-950 transition hover:bg-cyan-200 disabled:opacity-50"
                     disabled={!canResolveWallet || Boolean(loading) || operationLocked}
-                    onClick={() => run("Previewing PIX off-ramp fees", previewOffRampFees)}
+                    onClick={() => run("Previewing PIX withdrawal", previewOffRampFees)}
                   >
-                    {loading === "Previewing PIX off-ramp fees" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Ver taxa real", "Show real fee")}
+                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Ver valor final", "Show final amount")}
                   </button>
                 </div>
                 {offRampQuote ? (
@@ -2299,8 +2294,8 @@ export default function PixRampClient({
                     quote={offRampQuote}
                     language={language}
                     sourceLabel={offRampDisplayAmount}
-                    sourceCaption={L("saldo que sai antes do off-ramp", "balance leaving before off-ramp")}
-                    destinationCaption={L("valor líquido que chega no PIX", "net amount arriving in PIX")}
+                    sourceCaption={L("valor inicial", "starting amount")}
+                    destinationCaption={L("chega no seu PIX", "arrives in your PIX")}
                   />
                 ) : (
                   <EtherfuseMeasuredFeeNotice
@@ -2331,9 +2326,9 @@ export default function PixRampClient({
               <button
                 className="mt-4 w-full rounded-3xl bg-cyan-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200 disabled:opacity-50"
                 disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
-                onClick={() => run("Confirming PIX off-ramp", runTemporaryOffRampEndpointTest)}
+                onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
               >
-                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX off-ramp" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
+                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
               </button>
             </div>
 
@@ -2487,7 +2482,7 @@ export default function PixRampClient({
                 {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-emerald-100/75">{transferRecipientDisplayKey}</p>}
                 {transferRecipientVerified ? (
                   <p className="mt-2 text-xs text-emerald-100/80">
-                    {L("Destinatário validado nos seus contatos salvos. Use o botão no topo para conferir os dados reais.", "Recipient verified in your saved contacts. Use the top button to inspect the real details.")}
+                    {L("Destinatário confirmado nos seus contatos. Use o botão no topo para conferir.", "Recipient confirmed in your contacts. Use the top button to inspect.")}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-rose-100">
@@ -2520,7 +2515,7 @@ export default function PixRampClient({
                   quote={quote}
                   language={language}
                   sourceLabel={quoteGrossLabel}
-                  sourceCaption={L("valor que sai no PIX", "source PIX amount")}
+                  sourceCaption={L("valor inicial", "starting amount")}
                   destinationCaption={quoteCostContext}
                 />
                 {quoteExpired && (
@@ -2631,12 +2626,12 @@ export default function PixRampClient({
                   {orderFailed && (
                     <div className="mt-5 rounded-3xl border border-rose-300/30 bg-rose-400/10 p-4 text-rose-100">
                       <p className="text-sm font-black">{L("Não foi possível concluir este PIX.", "This PIX could not be completed.")}</p>
-                      <p className="mt-2 text-sm font-bold text-rose-100/80">{L("Gere um novo checkout para renovar a estimativa e tentar novamente.", "Generate a new checkout to refresh the estimate and try again.")}</p>
+                      <p className="mt-2 text-sm font-bold text-rose-100/80">{L("Gere um novo PIX e tente novamente.", "Create a new PIX and try again.")}</p>
                       <button
                         className="mt-4 rounded-2xl bg-rose-300 px-4 py-3 text-xs font-black text-rose-950"
                         onClick={clearQuoteState}
                       >
-                        {L("Gerar novo checkout", "Generate new checkout")}
+                        {L("Gerar novo PIX", "Create new PIX")}
                       </button>
                     </div>
                   )}
@@ -2879,32 +2874,34 @@ function EtherfuseMeasuredFeeNotice({
     ? numericAmount * (ETHERFUSE_TESTNET_FEE_BPS / 10000)
     : ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL;
   const ttsFeeBps = clientTtsTransactionFeeBps();
+  const estimatedTtsFee = Number.isFinite(numericAmount) && numericAmount > 0
+    ? numericAmount * (ttsFeeBps / 10000)
+    : 0;
   const label = mode === "onramp"
-    ? L("Taxa antes de gerar o PIX", "Fee before creating PIX")
-    : L("Taxa antes da retirada", "Fee before withdrawal");
+    ? L("Antes de gerar o PIX", "Before creating PIX")
+    : L("Antes de retirar", "Before withdrawal");
   const description = mode === "onramp"
-    ? L("Prévia da taxa de entrada. O valor final aparece antes do PIN.", "Funding fee preview. The final amount appears before the PIN.")
-    : L("Prévia da taxa de retirada. Toque em Ver taxa real para atualizar com a cotação final.", "Withdrawal fee preview. Tap Show real fee to update with the final quote.");
+    ? L("Você verá quanto sai no PIX, a taxa do app e quanto será enviado antes de digitar o PIN.", "You will see how much leaves through PIX, the app fee, and how much will be sent before entering the PIN.")
+    : L("Você verá quanto sai da conta, a taxa do app e quanto chega no PIX antes de digitar o PIN.", "You will see how much leaves the account, the app fee, and how much arrives in PIX before entering the PIN.");
 
   return (
     <div className="mt-4 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-4 text-amber-50">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{label}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl bg-black/20 p-3">
-          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">{L("Entrada PIX", "PIX funding")}</p>
-          <p className="mt-1 text-lg font-black">{formatBpsAsPercent(ETHERFUSE_TESTNET_FEE_BPS)}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">
+            {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada", "Withdrawal fee")}
+          </p>
+          <p className="mt-1 text-lg font-black">{formatMoney(estimatedProviderFee)}</p>
           <p className="mt-1 text-xs font-bold leading-5 text-amber-50/75">
-            {L(
-              `${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL)} em uma amostra de ${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_BRL)}. Para este valor: ${formatMoney(estimatedProviderFee)}.`,
-              `${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL)} on a ${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_BRL)} sample. For this amount: ${formatMoney(estimatedProviderFee)}.`,
-            )}
+            {L("Valor aproximado para este PIX.", "Approximate amount for this PIX.")}
           </p>
         </div>
         <div className="rounded-2xl bg-black/20 p-3">
-          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">TalkToStellar</p>
-          <p className="mt-1 text-lg font-black">{formatBpsAsPercent(ttsFeeBps)}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">{L("Taxa do app", "App fee")}</p>
+          <p className="mt-1 text-lg font-black">{formatMoney(estimatedTtsFee)}</p>
           <p className="mt-1 text-xs font-bold leading-5 text-amber-50/75">
-            {L("Taxa de transação do app. Não inclui benchmark de banco, IOF ou taxa opcional.", "App transaction fee. Does not include bank benchmark, IOF, or optional fees.")}
+            {L("Mostrada antes da confirmação.", "Shown before confirmation.")}
           </p>
         </div>
       </div>
@@ -2935,124 +2932,88 @@ function RampFeeBridge({
   if (!estimate) return null;
 
   const sourceCurrency = estimate.sourceCurrency;
-  const hasFinalConversionAmount = Boolean(quote.finalAmountAfterFee || quote.userFacingToAmount);
   const destinationCurrency = estimate.destinationCurrency;
-  const destinationBeforeRaw = estimate.destinationBeforeRaw;
   const destinationAfterRaw = estimate.destinationAfterRaw;
-  const anchorCurrency = quoteCurrencyCode(quote.anchorCurrency || quote.toCurrency, "TESOURO");
-  const anchorAfterRaw = quote.anchorAmountAfterFee || quote.destinationAmountAfterFee || quote.toAmount || "";
-  const anchorBeforeRaw = quote.anchorAmountBeforeFee || quote.destinationAmountBeforeFee || quote.destinationAmount || "";
   const feeAmount = estimate.providerFeeAmount;
-  const feePct = estimate.providerFeePct;
   const feeCurrency = estimate.providerFeeCurrency;
-  const ttsTransactionFeePct = estimate.ttsTransactionFeePct;
   const ttsTransactionFeeAmount = estimate.ttsTransactionFeeAmount;
   const ttsTransactionFeeCurrency = estimate.ttsTransactionFeeCurrency;
-  const retainedPct = estimate.retainedPct;
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
-  const beforeValue = destinationBeforeRaw ? formatQuoteAmount(destinationBeforeRaw, destinationCurrency) : L("Não retornado", "Not returned");
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
-	  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}${
-	    Number.isFinite(feePct) ? ` (${feePct.toFixed(2)}%)` : ""
-	  }`;
-	  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)} (${ttsTransactionFeePct.toFixed(2)}%)`;
-	  const sameFeeCurrency = feeCurrency === ttsTransactionFeeCurrency;
-	  const totalFeeDisplay = sameFeeCurrency
-	    ? `${formatQuoteAmount((feeAmount + ttsTransactionFeeAmount).toFixed(7), feeCurrency)}${
-	        Number.isFinite(estimate.totalRouteFeePct) ? ` (${estimate.totalRouteFeePct.toFixed(2)}%)` : ""
-	      }`
-	    : `${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)} + ${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
-	  const feeTitle = mode === "onramp"
-	    ? L("O que você paga neste PIX", "What you pay in this PIX")
-	    : L("O que você paga nesta retirada", "What you pay in this withdrawal");
-		  const feeCaption = mode === "onramp"
-		    ? L("Aqui entram apenas duas cobranças: taxa de entrada PIX e taxa de transação TalkToStellar.", "Only two charges are counted here: PIX funding fee and TalkToStellar transaction fee.")
-		    : L("Aqui entram apenas duas cobranças: taxa de retirada PIX e taxa de transação TalkToStellar.", "Only two charges are counted here: PIX withdrawal fee and TalkToStellar transaction fee.");
-	  const showAnchorBridge = mode === "onramp" && hasFinalConversionAmount && anchorAfterRaw;
+  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}`;
+  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
+  const sameFeeCurrency = feeCurrency === ttsTransactionFeeCurrency;
+  const totalFeeDisplay = sameFeeCurrency
+    ? `${formatQuoteAmount((feeAmount + ttsTransactionFeeAmount).toFixed(7), feeCurrency)}`
+    : `${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)} + ${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
+  const feeTitle = mode === "onramp"
+    ? L("Resumo do PIX", "PIX summary")
+    : L("Resumo da retirada", "Withdrawal summary");
+  const feeCaption = mode === "onramp"
+    ? L("Veja quanto sai no PIX, a taxa do app e quanto será enviado.", "See how much leaves through PIX, the app fee, and how much will be sent.")
+    : L("Veja quanto sai da conta, a taxa do app e quanto chega no PIX.", "See how much leaves the account, the app fee, and how much arrives in PIX.");
+  const destinationLabel = mode === "onramp"
+    ? L("Será enviado", "Will be sent")
+    : L("Chega no PIX", "Arrives in PIX");
 
   return (
     <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-	          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{L("Taxas cobradas agora", "Fees charged now")}</p>
-	          <h3 className="mt-1 text-xl font-black text-white">{feeTitle}</h3>
-	          <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{feeCaption}</p>
-	        </div>
-        {Number.isFinite(retainedPct) && (
-          <span className="w-fit rounded-full bg-emerald-300 px-3 py-1 text-xs font-black text-slate-950">
-            {retainedPct.toFixed(2)}% {L("retido", "retained")}
-          </span>
-        )}
-      </div>
-
-	      <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4">
-	        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-	          <div>
-	            <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">{L("Total de taxa deste fluxo", "Total fee in this flow")}</p>
-	            <p className="mt-1 text-2xl font-black text-emerald-50">{totalFeeDisplay}</p>
-	          </div>
-	          <p className="max-w-sm text-xs font-bold leading-5 text-emerald-50/75">
-	            {L("Benchmark de 3,5%, IOF/imposto e taxas opcionais são comparação ou configuração externa. Eles não são somados neste total.", "The 3.5% benchmark, tax/IOF and optional fees are comparison or external configuration. They are not added to this total.")}
-	          </p>
-	        </div>
-	      </div>
-
-	      <div className="mt-3 grid gap-3 md:grid-cols-3">
-	        <div className="rounded-2xl bg-white/5 p-3">
-	          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{mode === "onramp" ? L("Você paga no PIX", "You pay with PIX") : L("Sai do saldo", "Leaves balance")}</p>
-	          <p className="mt-2 text-lg font-black text-white">{sourceValue}</p>
-	          <p className="mt-1 text-xs font-bold text-slate-400">{sourceCaption || L("valor bruto antes das taxas cobradas neste fluxo", "gross value before fees charged in this flow")}</p>
-	        </div>
-	        <div className="rounded-2xl bg-white/5 p-3">
-	          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Base da cotação", "Quote base")}</p>
-	          <p className="mt-2 text-lg font-black text-white">{beforeValue}</p>
-	          <p className="mt-1 text-xs font-bold text-slate-400">{L("valor bruto retornado pela cotação antes de descontar as taxas mapeadas", "gross value returned by the quote before mapped fees are deducted")}</p>
-	        </div>
-	        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
-	          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{mode === "onramp" ? L("Valor líquido usado", "Net value used") : L("Valor líquido enviado", "Net value sent")}</p>
-	          <p className="mt-2 text-lg font-black text-emerald-50">{afterValue}</p>
-	          <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("valor líquido da instrução", "net value in the instruction")}</p>
-	        </div>
-      </div>
-
-      {showAnchorBridge && (
-        <div className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs font-bold text-cyan-50">
-          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">
-	            {L("Conversão intermediária", "Intermediate conversion")}
-          </span>
-          <span className="mt-1 block text-sm font-black">
-            {formatQuoteAmount(anchorAfterRaw, anchorCurrency)}
-          </span>
-          <span className="mt-1 block leading-5 text-cyan-50/75">
-            {L(
-	              `A rota converte primeiro para ${anchorCurrency} e depois entrega ${destinationCurrency} ao destinatário.`,
-	              `The route converts first to ${anchorCurrency} and then delivers ${destinationCurrency} to the recipient.`,
-            )}
-            {anchorBeforeRaw && anchorBeforeRaw !== anchorAfterRaw
-              ? ` ${L("Antes da taxa", "Before fee")}: ${formatQuoteAmount(anchorBeforeRaw, anchorCurrency)}.`
-              : ""}
-          </span>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{L("Antes de confirmar", "Before confirming")}</p>
+          <h3 className="mt-1 text-xl font-black text-white">{feeTitle}</h3>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{feeCaption}</p>
         </div>
-      )}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">{L("Taxa total", "Total fee")}</p>
+            <p className="mt-1 text-2xl font-black text-emerald-50">{totalFeeDisplay}</p>
+          </div>
+          <p className="max-w-sm text-xs font-bold leading-5 text-emerald-50/75">
+            {L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl bg-white/5 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{mode === "onramp" ? L("Você paga", "You pay") : L("Sai da conta", "Leaves account")}</p>
+          <p className="mt-2 text-lg font-black text-white">{sourceValue}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">{sourceCaption || L("valor inicial", "starting amount")}</p>
+        </div>
+        <div className="rounded-2xl bg-white/5 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{L("Taxa", "Fee")}</p>
+          <p className="mt-2 text-lg font-black text-white">{totalFeeDisplay}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">{L("descontada nesta operação", "deducted in this operation")}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">{destinationLabel}</p>
+          <p className="mt-2 text-lg font-black text-emerald-50">{afterValue}</p>
+          <p className="mt-1 text-xs font-bold text-emerald-100/70">{destinationCaption || L("depois da taxa", "after the fee")}</p>
+        </div>
+      </div>
 
       <div className="mt-3 grid gap-2 text-xs font-bold text-slate-300 lg:grid-cols-2">
-	        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
-	          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
-		            {mode === "onramp" ? L("1. Entrada PIX", "1. PIX funding") : L("1. Retirada PIX", "1. PIX withdrawal")}
-	          </span>
-	          <span className="mt-1 block text-sm font-black">{feeValue}</span>
-	        </div>
-	        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-50">
-	          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("2. TalkToStellar", "2. TalkToStellar")}</span>
-	          <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
-	        </div>
-	      </div>
-	      <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
-	        {L(
-	          "Leitura rápida: o usuário paga o valor do PIX/saldo, o sistema desconta somente as duas taxas listadas acima e usa o valor líquido para entregar saldo ou enviar ao destinatário.",
-	          "Quick read: the user pays the PIX/balance amount, the system deducts only the two fees listed above, and uses the net value to deliver balance or pay the recipient.",
-	        )}
-	      </p>
+        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-50">
+          <span className="block uppercase tracking-[0.14em] text-amber-100/70">
+            {mode === "onramp" ? L("PIX", "PIX") : L("Retirada", "Withdrawal")}
+          </span>
+          <span className="mt-1 block text-sm font-black">{feeValue}</span>
+        </div>
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-50">
+          <span className="block uppercase tracking-[0.14em] text-cyan-100/70">{L("App", "App")}</span>
+          <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
+        </div>
+      </div>
+      <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
+        {L(
+          "Você vê tudo antes do PIN. Se não estiver de acordo, basta voltar sem confirmar.",
+          "You see everything before the PIN. If you do not agree, just go back without confirming.",
+        )}
+      </p>
     </div>
   );
 }
@@ -3074,14 +3035,14 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
     <section className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
       <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
         <div className={`${mode === "onramp" ? "bg-emerald-400/15 text-emerald-50" : "bg-cyan-400/15 text-cyan-50"} p-5 sm:p-6`}>
-          <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">{L("Fluxo PIX em tempo real", "Real-time PIX flow")}</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">{L("Acompanhe seu PIX", "Follow your PIX")}</p>
           <h2 className="mt-2 text-3xl font-black">
             {mode === "onramp" ? L("PIX entra e vira saldo na conta", "PIX comes in and becomes account balance") : L("Saldo sai e chega no seu PIX", "Balance goes out and arrives in your PIX")}
           </h2>
           <p className="mt-3 text-sm font-bold opacity-75">
             {launchedFromChat
-              ? L("Aberto pelo chat. Acompanhe cada etapa sem detalhes técnicos.", "Opened from chat. Follow each step without technical details.")
-              : L("Acompanhe estimativa, confirmação e saldo antes/depois em uma tela só.", "Track estimate, confirmation, and balance before/after in one screen.")}
+              ? L("Aberto pelo chat. Acompanhe cada etapa até concluir.", "Opened from chat. Follow each step until it is done.")
+              : L("Acompanhe valor, confirmação e saldo em uma tela só.", "Track amount, confirmation, and balance in one screen.")}
           </p>
           <div className="mt-5 rounded-full bg-black/30 p-1">
             <div
@@ -3230,7 +3191,7 @@ function AssetMovement({ title, before, after, deltas }: {
             ))}
           </>
         ) : deltas.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-400">Gere uma cotação ou PIX para acompanhar a movimentação de saldo.</div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-400">Gere um PIX para acompanhar seu saldo.</div>
         ) : deltas.map((item) => {
           const deltaNumber = Number(item.delta || 0);
           return (

@@ -50,7 +50,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/(quote|cotacao|cotação).*(expired|expirad)|not active:\s*expired/.test(normalized)) {
     return {
       code: "quote_expired",
-      message: copy(language, "A cotação expirou. Gere uma nova cotação para continuar.", "The quote expired. Create a new quote to continue."),
+      message: copy(language, "A estimativa expirou. Gere uma nova estimativa para continuar.", "The estimate expired. Create a new estimate to continue."),
     };
   }
 
@@ -99,7 +99,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) {
     return {
       code: "recipient_not_found",
-      message: copy(language, "Esse destinatário não existe nos seus contatos salvos. Digite \"contatos\" no chat e escolha um destinatário real antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a real recipient before creating PIX."),
+      message: copy(language, "Esse destinatário não está nos seus contatos salvos. Digite \"contatos\" no chat e escolha uma pessoa salva antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a saved person before creating PIX."),
     };
   }
 
@@ -113,7 +113,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/timeout|timed out|abort|aborted|operation was aborted|fetch failed|network|econn|service unavailable|failed to fetch|gateway timeout|etimedout/.test(normalized)) {
     return {
       code: "service_timeout",
-      message: copy(language, "A operação demorou demais e deu timeout. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.", "The operation took too long and timed out. Try again in a few seconds; if PIX was already paid, check the status before creating another one."),
+      message: copy(language, "A operação demorou demais. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.", "The operation took too long. Try again in a few seconds; if PIX was already paid, check the status before creating another one."),
     };
   }
 
