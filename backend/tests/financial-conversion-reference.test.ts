@@ -107,4 +107,18 @@ describe('Financial conversion preview BRL reference', () => {
     expect(payload.output.gross_receive_usdc).toBeCloseTo(17.8571, 4);
     expect(payload.output.receive_usdc).toBeCloseTo(17.8571, 4);
   });
+
+  it('does not invent a fallback rate when the quote is unsafe and no USD/BRL env fallback exists', async () => {
+    quoteBrlToUsdcMock.mockImplementation((amount: string | number) => Promise.resolve(mockBrlQuote(amount, 1.157)));
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+
+    await FinancialController.getConversionPreview(
+      { query: { brl_amount: '100' }, body: {}, params: {} } as any,
+      { status } as any,
+    );
+
+    expect(status).toHaveBeenCalledWith(400);
+    expect(json.mock.calls[0][0]).toMatchObject({ success: false });
+  });
 });

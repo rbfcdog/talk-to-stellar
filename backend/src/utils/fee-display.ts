@@ -50,9 +50,17 @@ function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   return `${currency} ${(Math.trunc(value * factor) / factor).toFixed(decimals)}`;
 }
 
-function fallbackPositiveNumber(value: string | undefined, fallback: number): number {
+function configuredPositiveNumber(value: string | undefined): number {
   const parsed = Number(String(value || '').replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function buildFeeDisplay(feeBrl: number, feeUsdc: number): string {
+  const parts = [
+    feeBrl > 0 ? formatSmallCurrency(feeBrl, 'R$') : '',
+    feeUsdc > 0 ? formatSmallCurrency(feeUsdc, 'US$') : '',
+  ].filter(Boolean);
+  return parts.join(' / ');
 }
 
 export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeDisplay> {
@@ -68,19 +76,27 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
   const brlSymbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
   const usdBrlQuote = await fetchFirstBinancePrice([brlSymbol, 'USDCBRL', 'USDTBRL']);
 
-  const xlmUsd = xlmUsdQuote.price || fallbackPositiveNumber(process.env.XLM_USDC_FALLBACK_RATE, 0.1);
-  const usdBrl = usdBrlQuote.price || fallbackPositiveNumber(process.env.USD_BRL_FALLBACK_RATE, 5);
+  const xlmUsd = xlmUsdQuote.price || configuredPositiveNumber(process.env.XLM_USDC_FALLBACK_RATE);
+  const usdBrl = usdBrlQuote.price || configuredPositiveNumber(process.env.USD_BRL_FALLBACK_RATE);
+  if (xlmUsd <= 0) {
+    return {
+      display: '',
+      source: 'unavailable',
+    };
+  }
   const feeUsdc = fee * xlmUsd;
-  const feeBrl = feeUsdc * usdBrl;
+  const feeBrl = usdBrl > 0 ? feeUsdc * usdBrl : 0;
   const sourceParts = [
     xlmUsdQuote.symbol ? `binance:${xlmUsdQuote.symbol}` : 'fallback:XLMUSDC',
-    usdBrlQuote.symbol ? `binance:${usdBrlQuote.symbol}` : 'fallback:USDBRL',
+    usdBrl > 0
+      ? (usdBrlQuote.symbol ? `binance:${usdBrlQuote.symbol}` : 'fallback:USDBRL')
+      : 'unavailable:USDBRL',
   ];
 
   return {
-    display: `${formatSmallCurrency(feeBrl, 'R$')} / ${formatSmallCurrency(feeUsdc, 'US$')}`,
+    display: buildFeeDisplay(feeBrl, feeUsdc),
     fee_usdc: feeUsdc.toFixed(8),
-    fee_brl: feeBrl.toFixed(8),
+    fee_brl: feeBrl > 0 ? feeBrl.toFixed(8) : undefined,
     source: sourceParts.join('/'),
   };
 }
@@ -119,23 +135,23 @@ export function buildUnifiedFeeDisplay(input: {
   const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAsset === 'BRL');
 
   const impliedRate = totalUsdc > 0 && totalBrl > 0 ? totalBrl / totalUsdc : undefined;
-  const fallbackRate = fallbackPositiveNumber(process.env.USD_BRL_FALLBACK_RATE, 5);
+  const fallbackRate = configuredPositiveNumber(process.env.USD_BRL_FALLBACK_RATE);
   const usdBrlRate = impliedRate && Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : fallbackRate;
 
   if (platformApplied) {
     if (platformAsset === 'USDC') {
       totalUsdc += platformAmount;
-      totalBrl += platformAmount * usdBrlRate;
+      if (usdBrlRate > 0) totalBrl += platformAmount * usdBrlRate;
     } else if (platformAsset === 'BRL') {
       totalBrl += platformAmount;
-      totalUsdc += platformAmount / usdBrlRate;
+      if (usdBrlRate > 0) totalUsdc += platformAmount / usdBrlRate;
     }
   }
 
   return {
-    display: `${formatSmallCurrency(totalBrl, 'R$')} / ${formatSmallCurrency(totalUsdc, 'US$')}`,
-    fee_usdc: totalUsdc.toFixed(8),
-    fee_brl: totalBrl.toFixed(8),
+    display: buildFeeDisplay(totalBrl, totalUsdc),
+    fee_usdc: totalUsdc > 0 ? totalUsdc.toFixed(8) : undefined,
+    fee_brl: totalBrl > 0 ? totalBrl.toFixed(8) : undefined,
     source: input.networkFee?.source || 'unavailable',
     platform_applied: platformApplied,
   };
