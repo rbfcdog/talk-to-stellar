@@ -1980,19 +1980,36 @@ export default function PixRampClient({
 
   async function runTemporaryOffRampEndpointTest() {
     await runAtomicAction("confirmar-retirada", async () => {
-      if (!opsMocksAllowed) {
-        throw new Error(L("Este atalho não está disponível agora. Use o fluxo PIX normal.", "This shortcut is not available now. Use the normal PIX flow."));
-      }
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
       const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
       const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
       const balancesBefore = await fetchBalances(auth);
       assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
+      let previewPayload = offRampPreviewPayload;
+      if (!previewPayload?.quote?.id || !getRampCustomerId(previewPayload)) {
+        previewPayload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
+          intent_id: atomicIntentKey,
+          amount: sourceAmount,
+          source_amount: sourceAmount,
+          source_asset_code: offRampInputAsset,
+          amount_currency: offRampInputAsset,
+          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          target_currency: "BRL",
+        }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
+        setOffRampPreviewPayload(previewPayload);
+        const nextCustomerPayload = mergeRampCustomerPayload(customerPayload, previewPayload);
+        if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
+      }
+      const customerId = getRampCustomerId(previewPayload);
+      const quoteId = String(previewPayload?.quote?.id || "").trim();
+      if (!customerId || !quoteId) {
+        throw new Error(L("Não consegui preparar a retirada agora. Gere uma nova estimativa e tente novamente.", "I could not prepare the withdrawal now. Generate a new estimate and try again."));
+      }
         addDebugLog({
           label: "PIX off-ramp client validation",
           method: "POST",
-          path: "/api/ramp/etherfuse/sandbox/test-offramp",
+          path: "/api/ramp/etherfuse/offramp",
           request: {
             has_pin: true,
             pin_digits: pin.length,
@@ -2006,25 +2023,78 @@ export default function PixRampClient({
           },
           response: { ready_to_submit: true },
         });
-        const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-offramp", {
+        const orderPayload = await callRamp("/api/ramp/etherfuse/offramp", {
           intent_id: atomicIntentKey,
-          amount: sourceAmount,
+          customer_id: customerId,
+          quote_id: quoteId,
+          amount: previewPayload?.amount_tesouro || sourceAmount,
           source_amount: sourceAmount,
           source_asset_code: offRampInputAsset,
+          source_asset_issuer: previewPayload?.source_asset_issuer || undefined,
           amount_currency: offRampInputAsset,
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
           fiat_account_id: bankAccount.id,
           external_bank_account: bankAccount,
-          pin,
-          wallet_pin: pin,
-          walletPin: pin,
-        }, "POST", auth, buildIdempotencyKey("submit-offramp"));
+        }, "POST", auth, buildIdempotencyKey("create-offramp"));
+      setOrderPayload(orderPayload);
+      setStatusPayload(null);
+      const nextOrderId = String(orderPayload?.transaction?.id || "").trim();
+      const nextOperationId = String(orderPayload?.operation_id || "").trim();
+      if (!nextOrderId) {
+        throw new Error(L("Não consegui criar a retirada agora. Tente novamente em alguns segundos.", "I could not create the withdrawal now. Try again in a few seconds."));
+      }
+      let statusPayload: RampResponse = orderPayload;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        statusPayload = await callRampGet(`/api/ramp/etherfuse/offramp/${encodeURIComponent(nextOrderId)}`, {
+          operation_id: nextOperationId,
+        }, auth);
+        setStatusPayload(statusPayload);
+        if (statusPayload?.ready_to_sign || isTerminalStatus(normalizeStatus(statusPayload?.transaction?.status))) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
+      if (!statusPayload?.ready_to_sign) {
+        throw new Error(L("A retirada ainda está sendo preparada. Tente confirmar novamente em alguns segundos.", "The withdrawal is still being prepared. Try confirming again in a few seconds."));
+      }
+      const submitPayload = await callRamp(`/api/ramp/etherfuse/offramp/${encodeURIComponent(nextOrderId)}/submit`, {
+        order_id: nextOrderId,
+        operation_id: nextOperationId,
+        external_bank_account: bankAccount,
+        pin,
+        wallet_pin: pin,
+        walletPin: pin,
+      }, "POST", auth, buildIdempotencyKey("submit-offramp"));
+      let finalStatusPayload: RampResponse = statusPayload;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        finalStatusPayload = await callRampGet(`/api/ramp/etherfuse/offramp/${encodeURIComponent(nextOrderId)}`, {
+          operation_id: nextOperationId,
+        }, auth);
+        setStatusPayload(finalStatusPayload);
+        if (isTerminalStatus(normalizeStatus(finalStatusPayload?.transaction?.status))) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
+      const payload = {
+        ...previewPayload,
+        ...orderPayload,
+        ready_to_sign: Boolean(statusPayload?.ready_to_sign),
+        submitted: Boolean(submitPayload?.success),
+        submit_result: submitPayload,
+        receipt_url: submitPayload?.receipt_url,
+        final_transaction: finalStatusPayload?.transaction || statusPayload?.transaction || orderPayload?.transaction,
+        source_amount: sourceAmount,
+        source_asset_code: offRampInputAsset,
+        target_brl: previewPayload?.target_brl || previewPayload?.destination_amount,
+        destination_amount: previewPayload?.destination_amount || previewPayload?.target_brl,
+        destination_asset_code: "BRL",
+        balances_before: balancesBefore,
+      };
       setTemporaryOffRampTestResult(payload);
-      setWalletPublicKey(String(payload.wallet_public_key || ""));
+      setWalletPublicKey(String(payload.wallet_public_key || resolvedWallet?.public_key || ""));
       setOffRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : balancesBefore);
-      setOffRampBalancesAfter(Array.isArray(payload.balances_after) ? payload.balances_after : []);
-      if (payload?.submitted || payload?.success) {
+      const balancesAfter = await fetchBalances(auth);
+      setOffRampBalancesAfter(balancesAfter);
+      if (payload?.submitted || submitPayload?.success) {
         markOperationCompleted();
         notifyChatAfterPixCompletion({ kind: "offramp", offRampPayload: payload });
         setStep("success");
