@@ -68,11 +68,18 @@ type DebugLogEntry = {
 };
 
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
+const ETHERFUSE_TESTNET_FEE_BPS = 20;
+const ETHERFUSE_TESTNET_FEE_SAMPLE_BRL = 100;
+const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 45000;
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : DEFAULT_TTS_TRANSACTION_FEE_BPS;
+}
+
+function formatBpsAsPercent(bps: number) {
+  return `${(bps / 100).toFixed(2)}%`;
 }
 
 function getStoredSession() {
@@ -165,11 +172,12 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
   const destinationBefore = parseHumanAmount(destinationBeforeRaw);
   const destinationAfter = parseHumanAmount(destinationAfterRaw);
   const providerFeeRaw = quote.anchorProviderFeeAmount || quote.feeAmount || quote.fee || "";
+  const explicitProviderFeeCurrency = quoteCurrencyCode(quote.anchorProviderFeeCurrency || quote.providerFeeCurrency || quote.feeCurrency, "BRL");
   const backendTotalFee = parseHumanAmount(quote.totalFeeAmount);
   const backendTtsFee = parseHumanAmount(quote.talkToStellarFeeAmount);
   const backendTtsFeeCurrency = quoteCurrencyCode(quote.talkToStellarFeeCurrency, sourceCurrency);
   const providerFee = parseHumanAmount(providerFeeRaw);
-  const feeBps = parseHumanAmount(quote.feeBps);
+  const feeBps = parseHumanAmount(quote.feeBps || ETHERFUSE_TESTNET_FEE_BPS);
   const hasBackendFeeBridge = Number.isFinite(backendTotalFee) && backendTotalFee >= 0 && Number.isFinite(destinationAfter);
   const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
     ? Math.max(destinationBefore - destinationAfter, 0)
@@ -184,9 +192,11 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     : Number.isFinite(providerFee) && providerFee > 0
       ? providerFee
       : providerFeeFromBps;
-  const providerFeeCurrency = Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
-    ? destinationCurrency
-    : sourceCurrency;
+  const providerFeeCurrency = Number.isFinite(providerFee) && providerFee > 0
+    ? explicitProviderFeeCurrency
+    : Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
+      ? destinationCurrency
+      : explicitProviderFeeCurrency;
   const providerFeePct = Number.isFinite(feeBps) && feeBps > 0
     ? feeBps / 100
     : Number.isFinite(destinationBefore) && destinationBefore > 0
@@ -2231,9 +2241,11 @@ export default function PixRampClient({
                     destinationCaption={L("valor líquido que chega no PIX", "net amount arriving in PIX")}
                   />
                 ) : (
-                  <p className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs font-semibold leading-5 text-cyan-50/70">
-                    {L("Nenhuma taxa é estimada localmente aqui. Toque em Ver taxa real para buscar a cotação do provider.", "No fee is estimated locally here. Tap Show real fee to fetch the provider quote.")}
-                  </p>
+                  <EtherfuseMeasuredFeeNotice
+                    mode="offramp"
+                    amount={offRampInputAsset === "BRL" ? offRampFiatAmount : offRampAmount}
+                    language={language}
+                  />
                 )}
               </div>
               <label className="mt-6 block text-sm font-bold text-slate-200">{L("PIN da conta", "Account PIN")}</label>
@@ -2396,6 +2408,13 @@ export default function PixRampClient({
                 </button>
               ))}
             </div>
+            {!quote && (
+              <EtherfuseMeasuredFeeNotice
+                mode="onramp"
+                amount={amountBrl}
+                language={language}
+              />
+            )}
             {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-50">
                 <p>
@@ -2779,6 +2798,55 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
       {result && (
         <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-stone-950 p-4 text-xs text-lime-100">{JSON.stringify(result, null, 2)}</pre>
       )}
+    </div>
+  );
+}
+
+function EtherfuseMeasuredFeeNotice({
+  mode,
+  amount,
+  language,
+}: {
+  mode: RampMode;
+  amount: unknown;
+  language: "pt-BR" | "en";
+}) {
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  const numericAmount = parseHumanAmount(amount);
+  const estimatedProviderFee = Number.isFinite(numericAmount) && numericAmount > 0
+    ? numericAmount * (ETHERFUSE_TESTNET_FEE_BPS / 10000)
+    : ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL;
+  const ttsFeeBps = clientTtsTransactionFeeBps();
+  const label = mode === "onramp"
+    ? L("Taxa antes de gerar o PIX", "Fee before creating PIX")
+    : L("Taxa antes da retirada", "Fee before withdrawal");
+  const description = mode === "onramp"
+    ? L("Prévia baseada na medição real da Etherfuse sandbox/testnet. A cotação final aparece logo abaixo antes do PIN.", "Preview based on the real Etherfuse sandbox/testnet measurement. The final quote appears below before the PIN.")
+    : L("Prévia baseada na medição real da Etherfuse sandbox/testnet. Toque em Ver taxa real para substituir pela quote do provider.", "Preview based on the real Etherfuse sandbox/testnet measurement. Tap Show real fee to replace it with the provider quote.");
+
+  return (
+    <div className="mt-4 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-4 text-amber-50">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100">{label}</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl bg-black/20 p-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">Etherfuse</p>
+          <p className="mt-1 text-lg font-black">{formatBpsAsPercent(ETHERFUSE_TESTNET_FEE_BPS)}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-amber-50/75">
+            {L(
+              `${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL)} em uma amostra de ${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_BRL)}. Para este valor: ${formatMoney(estimatedProviderFee)}.`,
+              `${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL)} on a ${formatMoney(ETHERFUSE_TESTNET_FEE_SAMPLE_BRL)} sample. For this amount: ${formatMoney(estimatedProviderFee)}.`,
+            )}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-black/20 p-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100/70">TalkToStellar</p>
+          <p className="mt-1 text-lg font-black">{formatBpsAsPercent(ttsFeeBps)}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-amber-50/75">
+            {L("Taxa de transação do app. Não inclui benchmark de banco, IOF ou taxa opcional.", "App transaction fee. Does not include bank benchmark, IOF, or optional fees.")}
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs font-semibold leading-5 text-amber-50/75">{description}</p>
     </div>
   );
 }
