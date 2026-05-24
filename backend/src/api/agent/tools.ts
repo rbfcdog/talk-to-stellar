@@ -29,7 +29,7 @@ import { EconomyEngineService } from "../services/economy-engine.service";
 import { PlatformFeeService } from "../services/platform-fee.service";
 import { InvoiceService } from "../services/invoice.service";
 import { GlobalProfileService } from "../services/global-profile.service";
-import { BrlReferenceRateService } from "../services/brl-reference-rate.service";
+import { FiatRateService } from "../services/fiat-rate.service";
 import { brlUsdQuoteService } from "../services/brl-usd-quote.service";
 import { internationalTransferService } from "../services/international-transfer.service";
 import { mainnetWalletService } from "../services/mainnet-wallet.service";
@@ -524,13 +524,13 @@ async function buildRealConversionPreview(brlAmount: number): Promise<RealConver
   const gross = Math.max(0, Number(brlAmount || 0));
   if (gross <= 0) throw new Error('brl_amount must be positive');
 
-  const grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(gross.toFixed(7));
-  const brlPerUsdc = toNumber(grossQuote.brlPerUsdc);
+  const grossQuote = await FiatRateService.getUsdBrlRate();
+  const brlPerUsdc = toNumber(grossQuote.brlPerUsd);
   if (brlPerUsdc <= 0) {
     throw new Error('Cotação BRL/USDC indisponível agora.');
   }
   const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
-  const grossUsdc = toNumber(grossQuote.destinationAmount) || (gross * usdcPerBrl);
+  const grossUsdc = gross * usdcPerBrl;
 
   const spread = PlatformFeeService.calculateSpread({
     sourceAmount: gross.toFixed(7),
@@ -541,12 +541,7 @@ async function buildRealConversionPreview(brlAmount: number): Promise<RealConver
   const spreadEstimateBrl = toNumber(spread.feeAmount);
   const talkToStellarFeeBrl = spread.enabled ? spreadEstimateBrl : 0;
   const netBrl = Math.max(0, gross - talkToStellarFeeBrl);
-  const receiveQuote = netBrl > 0
-    ? await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7))
-    : null;
-  const receiveUsdc = receiveQuote
-    ? toNumber(receiveQuote.destinationAmount)
-    : Math.max(0, grossUsdc - (talkToStellarFeeBrl * usdcPerBrl));
+  const receiveUsdc = Math.max(0, netBrl * usdcPerBrl);
 
   const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
   const stellarNetworkFeeBrl = toNumber(networkFee.fee_brl);
@@ -568,7 +563,7 @@ async function buildRealConversionPreview(brlAmount: number): Promise<RealConver
         source: grossQuote.source,
         observed_at: grossQuote.fetchedAt || new Date().toISOString(),
         metadata: {
-          symbol: grossQuote.symbol,
+          symbol: 'USD/BRL',
           usdc_per_brl: usdcPerBrl.toFixed(8),
           preview_amount_brl: gross,
         },
@@ -608,12 +603,13 @@ async function fetchBrlUsdcQuote(): Promise<{
   usdcPerBrl: string;
   fetchedAt: string;
 }> {
-  const quote = await BrlReferenceRateService.getReferenceRate();
+  const quote = await FiatRateService.getUsdBrlRate();
+  const usdcPerBrl = quote.brlPerUsd > 0 ? 1 / quote.brlPerUsd : 0;
   return {
     source: quote.source,
-    symbol: quote.symbol,
-    brlPerUsdc: quote.brlPerUsdc,
-    usdcPerBrl: quote.usdcPerBrl,
+    symbol: 'USD/BRL',
+    brlPerUsdc: quote.brlPerUsd.toFixed(8),
+    usdcPerBrl: usdcPerBrl.toFixed(8),
     fetchedAt: quote.fetchedAt,
   };
 }
