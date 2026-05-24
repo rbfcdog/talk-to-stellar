@@ -7,6 +7,9 @@ import {
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
+export const maxDuration = 120;
+export const runtime = "nodejs";
+
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
   if (fromBackend) return fromBackend.replace(/\/$/, "");

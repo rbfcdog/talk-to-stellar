@@ -71,7 +71,8 @@ const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
 const ETHERFUSE_TESTNET_FEE_BPS = 20;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_BRL = 100;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
-const RAMP_REQUEST_TIMEOUT_MS = 45000;
+const RAMP_REQUEST_TIMEOUT_MS = 120000;
+const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 150000;
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -529,6 +530,12 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
     /session_id|session_token|internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
   if (isTechnical || mapped.code !== "temporary_unavailable") return mapped.message;
   return raw || mapped.message;
+}
+
+function publicPixPreparationTimeoutMessage(language: "pt-BR" | "en") {
+  return language === "pt-BR"
+    ? "Ainda estou preparando seu PIX. Aguarde alguns segundos e toque em Gerar PIX novamente."
+    : "I am still preparing your PIX. Wait a few seconds and tap Generate PIX again.";
 }
 
 function publicLoadingLabel(value: string, language: "pt-BR" | "en") {
@@ -1270,7 +1277,10 @@ export default function PixRampClient({
     const init: RequestInit = { method, headers };
     if (method !== "GET") init.body = JSON.stringify(requestBody);
     const startedAt = performance.now();
-    const response = await fetchWithTimeout(path, init);
+    const timeoutMs = path.includes("/etherfuse/onramp")
+      ? RAMP_ONRAMP_REQUEST_TIMEOUT_MS
+      : RAMP_REQUEST_TIMEOUT_MS;
+    const response = await fetchWithTimeout(path, init, timeoutMs);
     const payload = await response.json().catch(() => ({}));
     addDebugLog({
       label: path.includes("/customer") ? "PIX account setup" : path.includes("/quote") ? "PIX quote" : path.includes("/onramp") ? "PIX order request" : "Payment request",
@@ -1516,7 +1526,9 @@ export default function PixRampClient({
 	      } else {
 	        setOnboardingUrl("");
 	      }
-	      setError(publicRampErrorMessage(err, language));
+	      const rawMessage = err instanceof Error ? err.message : String(err || "");
+	      const isPreparingPixTimeout = label === "Preparing PIX checkout" && /timed out|timeout|abort/i.test(rawMessage);
+	      setError(isPreparingPixTimeout ? publicPixPreparationTimeoutMessage(language) : publicRampErrorMessage(err, language));
 	    } finally {
 	      setLoading("");
     }
