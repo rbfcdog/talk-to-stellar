@@ -3823,6 +3823,8 @@ export class AnchorService {
     const normalizePhone = (value: unknown) => String(value || '').replace(/\D+/g, '');
     const normalizedQuery = normalizeLookup(query);
     const queryPhone = normalizePhone(query);
+    const normalizedPreferredKey = normalizeLookup(preferredKey);
+    const preferredKeyPhone = normalizePhone(preferredKey);
     const requestedPublicKey = /^G[A-Z2-7]{55}$/i.test(query) ? query : preferredPublicKey;
     const isValidPublicKey = (value: unknown) => /^G[A-Z2-7]{55}$/i.test(coalesceString(value));
     const contactDestinationPublicKey = (item: any) => coalesceString(
@@ -3848,11 +3850,14 @@ export class AnchorService {
       if (Number.isFinite(index) && index >= 1 && index <= contacts.length) contact = contacts[index - 1];
     }
 
-    if (!contact && queryPhone.length >= 8) {
+    if (!contact && (queryPhone.length >= 8 || preferredKeyPhone.length >= 8)) {
       contact = contacts.find((item) => {
         const phone = normalizePhone(item?.phone_number);
         const pixKey = normalizePhone(item?.pix_key);
-        return phone === queryPhone || pixKey === queryPhone;
+        return Boolean(
+          (queryPhone.length >= 8 && (phone === queryPhone || pixKey === queryPhone)) ||
+          (preferredKeyPhone.length >= 8 && (phone === preferredKeyPhone || pixKey === preferredKeyPhone))
+        );
       });
     }
 
@@ -3861,7 +3866,12 @@ export class AnchorService {
         const normalizedName = normalizeLookup(item?.contact_name);
         if (normalizedName === normalizedQuery) return true;
         const normalizedPix = normalizeLookup(item?.pix_key);
-        return normalizedPix && normalizedPix === normalizedQuery;
+        const normalizedPhone = normalizeLookup(item?.phone_number);
+        return Boolean(
+          (normalizedPix && normalizedPix === normalizedQuery) ||
+          (normalizedPreferredKey && normalizedPix && normalizedPix === normalizedPreferredKey) ||
+          (normalizedPreferredKey && normalizedPhone && normalizedPhone === normalizedPreferredKey)
+        );
       });
     }
 

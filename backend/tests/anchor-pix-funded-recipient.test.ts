@@ -99,4 +99,45 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       statusCode: 409,
     });
   });
+
+  it('uses the PIX key carried by the chat link when the typed recipient name has a typo', async () => {
+    jest.spyOn(supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'contacts') {
+        return createContactsBuilder([
+          {
+            id: 421,
+            contact_name: 'Ana Silva',
+            stellar_public_key: anaPublicKey,
+            pix_key: '5595280606751',
+            phone_number: null,
+          },
+        ]) as any;
+      }
+      if (table === 'wallets') {
+        return createWalletsBuilder({
+          session_id: 'recipient-session',
+          user_id: 'ana-user',
+          public_key: anaPublicKey,
+          vault_secret_id: 'recipient-vault',
+        }) as any;
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const recipient = await (AnchorService as any).resolveTransferRecipient(
+      'owner-user',
+      'ana sillva',
+      {
+        preferredKey: '5595280606751',
+      }
+    );
+
+    expect(recipient).toMatchObject({
+      publicKey: anaPublicKey,
+      displayName: 'Ana Silva',
+      pixKey: '5595280606751',
+      recipientKey: '5595280606751',
+      sessionId: 'recipient-session',
+    });
+  });
 });
