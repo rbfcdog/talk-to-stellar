@@ -130,6 +130,7 @@ describe('Agent production evals', () => {
     expect(source).toContain('Deterministic/tool-first policy');
     expect(source).toContain('Contact validation is strict');
     expect(source).toContain('Never answer fee comparison only with free text');
+    expect(source).toContain('get_conversion_preview');
     expect(source).toContain('show_savings_calculator');
     expect(source).toContain('send_receipt_with_savings');
     expect(source).toContain('show_annual_savings_summary');

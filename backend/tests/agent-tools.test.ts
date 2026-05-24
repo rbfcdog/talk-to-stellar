@@ -17,6 +17,22 @@ const mockGetReferenceRate = jest.fn().mockResolvedValue({
   usdcPerBrl: '0.19493177',
   fetchedAt: '2026-05-15T12:00:00.000Z',
 });
+const mockQuoteBrlToUsdc = jest.fn(async (amountBrl: string) => {
+  const sourceAmount = Number(String(amountBrl).replace(',', '.'));
+  const brlPerUsdc = 5.13;
+  return {
+    source: 'configured_brl_asset',
+    symbol: 'USDC/BRL',
+    brlPerUsdc: brlPerUsdc.toFixed(8),
+    usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
+    fetchedAt: '2026-05-15T12:00:00.000Z',
+    sourceAmount: sourceAmount.toFixed(7),
+    destinationAmount: (sourceAmount / brlPerUsdc).toFixed(7),
+    sourceAsset: { code: 'BRL' },
+    destinationAsset: { code: 'USDC' },
+    path: [],
+  };
+});
 
 jest.mock('../src/api/services/balance-alert.service', () => ({
   BalanceAlertService: {
@@ -34,6 +50,7 @@ jest.mock('../src/api/services/auto-conversion.service', () => ({
 jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   BrlReferenceRateService: {
     getReferenceRate: mockGetReferenceRate,
+    quoteBrlToUsdc: mockQuoteBrlToUsdc,
   },
 }));
 
@@ -50,6 +67,16 @@ describe('Agent tool execution', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(global, 'fetch' as any).mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    } as any);
+    process.env.USD_BRL_FALLBACK_RATE = '5.13';
+    process.env.XLM_USDC_FALLBACK_RATE = '0.1';
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('executes set_alert_threshold with mock data', async () => {
@@ -110,23 +137,39 @@ describe('Agent tool execution', () => {
     expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a WhatsApp savings calculator with fixed 5.15 FX and comparison fees', async () => {
+  it('executes get_conversion_preview with live backend quote data and real fee fields', async () => {
+    const output = await executeTool('get_conversion_preview', {
+      brl_amount: '5000',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.quote.brl_per_usdc).toBe(5.13);
+    expect(parsed.output.receive_usdc).toBeCloseTo(974.66, 2);
+    expect(parsed.fees.total_fee_brl).toBeGreaterThanOrEqual(0);
+    expect(parsed.comparison.traditional_fee_brl).toBe(175);
+    expect(parsed.message).toContain('Preview real');
+    expect(mockQuoteBrlToUsdc).toHaveBeenCalled();
+  });
+
+  it('shows a WhatsApp savings calculator with real conversion preview data and comparison fees', async () => {
     const output = await executeTool('show_savings_calculator', {
       brl_amount: '5000',
     });
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.usd_received).toBe(970.87);
-    expect(parsed.talktostellar_fee_brl).toBe(15);
+    expect(parsed.usd_received).toBeCloseTo(974.66, 2);
+    expect(parsed.brl_per_usdc).toBe(5.13);
+    expect(parsed.talktostellar_fee_brl).toBe(0);
     expect(parsed.traditional_bank_fee_brl).toBe(175);
     expect(parsed.wise_reference_fee_brl).toBe(90);
-    expect(parsed.savings_brl).toBe(160);
-    expect(parsed.annual_savings_brl).toBe(1920);
+    expect(parsed.savings_brl).toBeGreaterThan(174.99);
+    expect(parsed.annual_savings_brl).toBeGreaterThan(2099);
     expect(parsed.message).toContain('💸 *Simulação de envio: R$ 5.000*');
-    expect(parsed.message).toContain('✅ Você recebe: *US$ 970,87*');
-    expect(parsed.message).toContain('*Você economiza: R$ 160,00*');
-    expect(parsed.message).toContain('*R$ 1.920 economizados no ano*');
+    expect(parsed.message).toContain('✅ Você recebe líquido: *US$ 974,66*');
+    expect(parsed.message).toContain('💱 Câmbio agora: *1 US$ = R$ 5,1300*');
+    expect(parsed.message).toContain('Taxa total real');
   });
 
   it('builds the WhatsApp receipt with savings before the technical hash', async () => {
@@ -153,10 +196,13 @@ describe('Agent tool execution', () => {
 
       expect(parsed.success).toBe(true);
       expect(parsed.savings_brl).toBe(160);
+      expect(parsed.recipient_name).toBe('Ana Silva');
       expect(parsed.message).toContain('✅ *Transferência concluída*');
+      expect(parsed.message).toContain('👤 Destinatário: *Ana Silva*');
       expect(parsed.message).toContain('💰 *Você economizou R$ 160,00*');
       expect(parsed.message.indexOf('💰 *Você economizou')).toBeLessThan(parsed.message.indexOf('🔗 Evidência Stellar:'));
       expect(parsed.message).toContain('a3f8b2...d91c (testnet)');
+      expect(parsed.message).toContain('https://stellar.expert/explorer/testnet/tx/a3f8b2');
       expect(parsed.message).toContain('📊 Ver histórico: https://app.example.com/r/savings_history');
       expect(parsed.message).toContain('📄 Comprovante PDF: https://app.example.com/receipt/test');
       expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({

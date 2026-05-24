@@ -1411,6 +1411,8 @@ async function logPaymentDetails(
         destination_asset_code: destinationAssetCode,
         destination_asset_issuer: destinationAssetIssuer,
         fee_xlm: feeXlm,
+        fee_brl: metadata?.transferDetails?.feeBrl ?? metadata?.fee_brl ?? metadata?.actual_fee_brl ?? metadata?.savings?.actual_fee ?? null,
+        fee_usdc: metadata?.transferDetails?.feeUsdc ?? metadata?.fee_usdc ?? null,
         payment_hash: paymentHash,
         operation_fingerprint: operationFingerprint,
         operation_type: operationType,
