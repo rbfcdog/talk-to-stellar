@@ -79,13 +79,13 @@ const stateRank = new Map(states.map((state, index) => [state.key, index]));
 
 const nextActionByState: Partial<Record<TransferState, string>> = {
   QUOTE_CREATED: "Create the institution funding intent and attach the funding reference to the settlement record.",
-  PIX_PENDING: "Wait for source-institution funding confirmation or simulate the funding webhook in sandbox.",
+  PIX_PENDING: "Wait for source-institution funding confirmation.",
   PIX_RECEIVED: "Trigger blockchain settlement so USDC evidence can be attached.",
   BRL_TO_USDC_PENDING: "Backend is moving from BRL exposure into USDC settlement preparation.",
-  USDC_SETTLEMENT_PENDING: "Backend is submitting or mocking the Stellar blockchain transaction.",
+  USDC_SETTLEMENT_PENDING: "Backend is submitting or preparing the Stellar blockchain transaction.",
   USDC_SETTLED: "Create the destination-institution USD instruction through the selected adapter.",
   PAYOUT_INSTRUCTION_CREATED: "Move the destination instruction into pending or completed state.",
-  PAYOUT_PENDING: "Poll destination provider status and inspect reconciliation evidence.",
+  PAYOUT_PENDING: "Poll destination status and inspect reconciliation evidence.",
   PAYOUT_COMPLETED: "Capture reconciliation output, screenshots and delta evidence.",
   FAILED: "Open the latest API log and error logs on the settlement record.",
   REFUNDED: "Capture refund evidence and close the settlement record.",
@@ -96,10 +96,10 @@ const phaseDescriptions: Record<TransferState, string> = {
   PIX_PENDING: "A funding reference exists. The system is waiting for the source institution event before value moves forward.",
   PIX_RECEIVED: "Source funding is confirmed. The route can now move into USDC settlement.",
   BRL_TO_USDC_PENDING: "The backend is representing the BRL exposure as USDC for the Stellar leg.",
-  USDC_SETTLEMENT_PENDING: "The Stellar blockchain transaction is being prepared, submitted, or mocked depending on env configuration.",
+  USDC_SETTLEMENT_PENDING: "The Stellar blockchain transaction is being prepared or submitted depending on environment configuration.",
   USDC_SETTLED: "Blockchain settlement evidence is attached to the institution settlement record.",
   PAYOUT_INSTRUCTION_CREATED: "The USD adapter has created an instruction object for the destination institution.",
-  PAYOUT_PENDING: "The destination provider has a pending instruction. Live providers would be polled or reconciled by webhook.",
+  PAYOUT_PENDING: "The destination has a pending instruction. Live routes would be polled or reconciled by webhook.",
   PAYOUT_COMPLETED: "The institution settlement reached terminal success in the orchestration layer.",
   FAILED: "The flow failed and the settlement error log should be inspected.",
   REFUNDED: "The flow ended in refund state.",
@@ -147,12 +147,12 @@ function formatPercent(value: number) {
 
 function feeSourceLabel(value: unknown) {
   const raw = text(value);
-  if (!raw) return "pending provider quote";
-  if (/not_returned|no_fee_returned/i.test(raw)) return "not returned by provider";
-  if (/pending/i.test(raw)) return "pending provider quote";
-  if (/order_context/i.test(raw)) return "from Etherfuse order context";
-  if (/metadata/i.test(raw)) return "from provider metadata";
-  if (/quote/i.test(raw)) return "from provider quote";
+  if (!raw) return "pending quote";
+  if (/not_returned|no_fee_returned/i.test(raw)) return "not returned by quote";
+  if (/pending/i.test(raw)) return "pending quote";
+  if (/order_context/i.test(raw)) return "from payment order";
+  if (/metadata/i.test(raw)) return "from route metadata";
+  if (/quote/i.test(raw)) return "from quote";
   if (/configured/i.test(raw)) return "configured product fee";
   return raw.replace(/_/g, " ");
 }
@@ -345,7 +345,7 @@ export default function InternationalTransferClient() {
       id: "initial",
       at: new Date().toISOString(),
       title: "Ready",
-      detail: "Create an institution route quote or run the full sandbox flow to start recording blockchain settlement events.",
+      detail: "Create an institution route quote or run the full controlled flow to start recording settlement events.",
       state: "info",
     },
   ]);
@@ -568,7 +568,7 @@ export default function InternationalTransferClient() {
       { label: "Blockchain hash", value: transfer?.stellar_tx_hash, ready: Boolean(transfer?.stellar_tx_hash) },
       { label: "Blockchain memo", value: transfer?.stellar_memo, ready: Boolean(transfer?.stellar_memo) },
       { label: "Destination instruction", value: transfer?.payout_instruction_id, ready: Boolean(transfer?.payout_instruction_id) },
-      { label: "Destination provider ID", value: transfer?.provider_payout_id, ready: Boolean(transfer?.provider_payout_id) },
+      { label: "Destination reference ID", value: transfer?.provider_payout_id, ready: Boolean(transfer?.provider_payout_id) },
       { label: "Reconciliation", value: reconciliation?.transfer_id, ready: Boolean(reconciliation?.transfer_id) },
       { label: "Same-name check", value: transfer?.same_name_match_status, ready: Boolean(transfer?.same_name_match_status) },
     ],
@@ -767,11 +767,11 @@ export default function InternationalTransferClient() {
     }
   }
 
-  async function createPixIntent(currentTransfer = transfer, useMock = mockPix) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
-    if (useMock && !opsMocksAllowed) {
-      throw new Error("Mock Pix funding is disabled. Configure Etherfuse session credentials and create a provider-backed Pix intent.");
-    }
+	  async function createPixIntent(currentTransfer = transfer, useMock = mockPix) {
+	    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+	    if (useMock && !opsMocksAllowed) {
+	      throw new Error("Local PIX funding is disabled. Configure session credentials and create a payment-backed PIX intent.");
+	    }
     const payload = await callApi("Create funding intent", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/pix-intent`, {
       mock_pix_intent: useMock,
       session_id: manualSessionId || undefined,
@@ -782,12 +782,12 @@ export default function InternationalTransferClient() {
     return payload.transfer;
   }
 
-  async function simulatePixReceived(currentTransfer = transfer) {
-    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
-    if (!opsMocksAllowed) {
-      throw new Error("Sandbox funding confirmation is an internal mock helper and is disabled. Wait for the provider webhook instead.");
-    }
-    const payload = await callApi("Confirm sandbox funding", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/funding-confirmation`, {
+	  async function simulatePixReceived(currentTransfer = transfer) {
+	    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+	    if (!opsMocksAllowed) {
+	      throw new Error("Internal funding confirmation is disabled. Wait for the payment confirmation event instead.");
+	    }
+	    const payload = await callApi("Confirm funding", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/funding-confirmation`, {
       status: "completed",
       event: "pix.received",
     });
@@ -824,13 +824,13 @@ export default function InternationalTransferClient() {
   }
 
   async function runSandboxFlow() {
-    pushEvent("Provider-backed route started", "Running quote, institution route creation and Etherfuse Pix funding intent without local mock confirmation.", "info");
+	    pushEvent("Payment-backed route started", "Running quote, institution route creation and PIX funding intent without local confirmation.", "info");
     try {
       const q = await createQuote();
       const t = await createTransfer(q);
       const pix = await createPixIntent(t, false);
       if (!opsMocksAllowed) {
-        pushEvent("Provider funding pending", "Mock funding confirmation is disabled. The next transition must come from the provider webhook or a real sandbox callback.", "info");
+	        pushEvent("Funding pending", "Local funding confirmation is disabled. The next transition must come from a payment confirmation event.", "info");
         await loadReconciliation(pix).catch(() => null);
         return;
       }
@@ -838,10 +838,10 @@ export default function InternationalTransferClient() {
       const settled = await settleStellar(funded);
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
-      pushEvent("Ops sandbox route complete", "The ops-only mock confirmation path completed. Keep this out of user-facing demos.", "ok");
-    } catch (flowError: any) {
-      pushEvent("Provider-backed route stopped", flowError?.message || String(flowError), "error");
-    }
+	      pushEvent("Ops route complete", "The ops-only confirmation path completed. Keep this out of user-facing demos.", "ok");
+	    } catch (flowError: any) {
+	      pushEvent("Payment-backed route stopped", flowError?.message || String(flowError), "error");
+	    }
   }
 
   const guidedSteps = [
@@ -1018,7 +1018,7 @@ export default function InternationalTransferClient() {
               </span>
             </div>
             <p className="text-sm font-semibold leading-6 text-slate-200">
-              Show only charged route fees: provider on-ramp, TalkToStellar transaction fee and provider off-ramp.
+              Show only charged route fees: PIX entry, TalkToStellar transaction fee and PIX withdrawal.
             </p>
             <div className="grid gap-2 text-xs font-semibold text-slate-400">
               <div className="rounded-md border border-neutral-800 p-2">
@@ -1042,7 +1042,7 @@ export default function InternationalTransferClient() {
                 { value: "business", label: "Business" },
               ]}
             />
-            <Field label="Destination provider" value={bankName} onChange={setBankName} />
+            <Field label="Destination bank/account" value={bankName} onChange={setBankName} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Routing" value={routingNumber} onChange={setRoutingNumber} />
               <Field label="Account" value={accountNumber} onChange={setAccountNumber} />
@@ -1065,7 +1065,7 @@ export default function InternationalTransferClient() {
               onChange={setProviderLabel}
               options={[
                 { value: "other", label: "Other" },
-                { value: "wise", label: "USD account provider" },
+                { value: "wise", label: "USD account" },
                 { value: "mercury", label: "Mercury" },
                 { value: "revolut", label: "Revolut" },
               ]}
@@ -1075,8 +1075,8 @@ export default function InternationalTransferClient() {
               value={payoutProvider}
               onChange={(value) => setPayoutProvider(value as "mock" | "etherfuse" | "circle" | "bridge")}
               options={[
-                { value: "etherfuse", label: "Etherfuse off-ramp proof" },
-                ...(opsMocksAllowed ? [{ value: "mock", label: "Mock USD instruction" }] : []),
+                { value: "etherfuse", label: "PIX withdrawal proof" },
+                ...(opsMocksAllowed ? [{ value: "mock", label: "USD instruction" }] : []),
                 { value: "circle", label: "Circle compatibility" },
                 { value: "bridge", label: "Bridge compatibility" },
               ]}
@@ -1089,11 +1089,11 @@ export default function InternationalTransferClient() {
                   onChange={(event) => setMockPix(event.target.checked)}
                   className="h-4 w-4 rounded border-slate-300"
                 />
-                Use mock PIX funding intent
+                Use local PIX funding intent
               </label>
             ) : (
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-sm font-semibold text-emerald-100">
-                Mock funding is disabled. This route creates only provider-backed Etherfuse Pix intents.
+                Local funding is disabled. This route creates only payment-backed PIX intents.
               </div>
             )}
             <details className="rounded-lg border border-neutral-800 bg-black p-3">
@@ -1101,7 +1101,7 @@ export default function InternationalTransferClient() {
                 Advanced execution credentials
               </summary>
               <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                Keep this closed for normal demos. Open only when you intentionally want to execute provider-specific sandbox helpers.
+                Keep this closed for normal demos. Open only when you intentionally want to execute advanced internal helpers.
               </p>
               <div className="mt-3 grid gap-3">
                 {payoutProvider === "etherfuse" ? (
@@ -1112,7 +1112,7 @@ export default function InternationalTransferClient() {
                       onChange={(event) => setRunEtherfuseOffRamp(event.target.checked)}
                       className="h-4 w-4 rounded border-slate-300"
                     />
-                    Execute Etherfuse off-ramp sandbox proof
+                    Execute PIX withdrawal proof
                   </label>
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
@@ -1120,7 +1120,7 @@ export default function InternationalTransferClient() {
                   <Field label="Session token" value={manualSessionToken} onChange={setManualSessionToken} placeholder="cookie" />
                 </div>
                 {payoutProvider === "etherfuse" && runEtherfuseOffRamp ? (
-                  <Field label="Wallet PIN for off-ramp" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute Etherfuse off-ramp" />
+                  <Field label="Wallet PIN for withdrawal" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute PIX withdrawal" />
                 ) : null}
               </div>
             </details>
@@ -1129,9 +1129,9 @@ export default function InternationalTransferClient() {
           <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
             <ActionButton onClick={runSandboxFlow} disabled={Boolean(busy)} variant="dark" full>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-              Run provider-backed route
+              Run payment-backed route
             </ActionButton>
-            <p className="mt-2 text-xs font-semibold text-slate-500">Creates quote, route record and Etherfuse funding intent. Later steps require provider webhook/settlement evidence instead of local mock success.</p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">Creates quote, route record and PIX funding intent. Later steps require payment confirmation and settlement evidence.</p>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1280,7 +1280,7 @@ export default function InternationalTransferClient() {
                   Use this panel to explain that the app does not hide charged fees inside a final number. The reviewer sees the value before fees, on-ramp fee, TalkToStellar fee, off-ramp fee and the final destination amount before the payout instruction is created.
                 </p>
                 <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-xs font-semibold leading-5 text-amber-100">
-                  Optional taxes, bank fees, benchmarks and unallocated deltas are not counted here. If a real provider starts charging them, they must be mapped as either on-ramp, TalkToStellar transaction fee, or off-ramp before appearing in this panel.
+	                  Optional taxes, bank fees, benchmarks and unallocated deltas are not counted here. If a real route starts charging them, they must be mapped as either PIX entry, TalkToStellar transaction fee, or PIX withdrawal before appearing in this panel.
                 </p>
               </div>
             </div>
@@ -1429,22 +1429,22 @@ export default function InternationalTransferClient() {
                 <h2 className="text-base font-bold text-slate-950">On/off ramp proof</h2>
               </div>
               <div className="grid gap-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">On-ramp</p>
-                  <p className="mt-1 text-sm font-bold text-slate-950">Etherfuse PIX funding</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-600">{mockPix ? "Sandbox mock intent enabled" : "Real Etherfuse intent mode"}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Off-ramp</p>
-                  <p className="mt-1 text-sm font-bold text-slate-950">{payoutProvider === "etherfuse" ? "Etherfuse off-ramp proof" : `${payoutProvider} destination adapter`}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-600">
-                    {payoutProvider === "etherfuse"
-                      ? runEtherfuseOffRamp
-                        ? "Will execute sandbox proof when credentials and PIN are present."
-                        : "Will prepare an Etherfuse off-ramp payload without signing."
-                      : "USD bank payout remains sandbox/provider-compatible."}
-                  </p>
-                </div>
+	                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+	                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">On-ramp</p>
+	                  <p className="mt-1 text-sm font-bold text-slate-950">PIX funding</p>
+	                  <p className="mt-1 text-xs font-semibold text-slate-600">{mockPix ? "Validation intent enabled" : "Real payment intent mode"}</p>
+	                </div>
+	                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+	                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Off-ramp</p>
+	                  <p className="mt-1 text-sm font-bold text-slate-950">{payoutProvider === "etherfuse" ? "PIX withdrawal proof" : `${payoutProvider} destination adapter`}</p>
+	                  <p className="mt-1 text-xs font-semibold text-slate-600">
+	                    {payoutProvider === "etherfuse"
+	                      ? runEtherfuseOffRamp
+	                        ? "Will execute the withdrawal proof when credentials and PIN are present."
+	                        : "Will prepare the withdrawal payload without signing."
+	                      : "USD bank payout remains compatible with the selected destination flow."}
+	                  </p>
+	                </div>
               </div>
             </div>
 

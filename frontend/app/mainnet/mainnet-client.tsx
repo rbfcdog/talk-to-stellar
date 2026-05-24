@@ -132,7 +132,7 @@ async function rampConfigApi(): Promise<RampConfig> {
   const response = await fetch("/api/ramp/etherfuse/config", { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || "Could not load Etherfuse status.");
+    throw new Error(payload?.message || "Could not load PIX status.");
   }
   return payload;
 }
@@ -162,7 +162,7 @@ export default function MainnetClient() {
   const hasWallet = Boolean(wallet?.public_key);
   const canAttach = isValidPublicKey(publicKey);
   const etherfuseAvailable = Boolean(rampConfig?.available);
-  const currentNetworkLabel = networkMode === "testnet" ? "Stellar Testnet" : "Stellar Mainnet";
+  const currentNetworkLabel = networkMode === "testnet" ? "Conta de validação" : "Mainnet";
 
   async function refreshAll() {
     setApiState({ loading: true, message: "", error: "" });
@@ -302,14 +302,14 @@ export default function MainnetClient() {
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-amber-200">
               <ShieldCheck className="h-4 w-4" />
-              Network toggle
+              Ambiente da conta
             </div>
             <h1 className="text-3xl font-black tracking-tight text-white md:text-5xl">
-              Stellar network console
+              Carteira e saldo
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
-              Switch between the Testnet product rail and the guarded Mainnet wallet view. Etherfuse PIX stays Testnet-only;
-              Mainnet is opt-in, public-key based and read-only unless operational gates are explicitly enabled.
+              Alterne entre a conta de validação do produto e a visualização Mainnet. PIX fica separado do saldo real;
+              Mainnet é opt-in, usa apenas chave pública e permanece em leitura até liberações operacionais.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:min-w-[320px]">
@@ -319,7 +319,7 @@ export default function MainnetClient() {
                 onClick={() => setNetworkMode("testnet")}
                 className={`min-h-11 px-3 text-sm font-black ${networkMode === "testnet" ? "bg-white text-black" : "text-slate-300 hover:bg-white/10"}`}
               >
-                Testnet
+                Validação
               </button>
               <button
                 type="button"
@@ -357,10 +357,10 @@ export default function MainnetClient() {
         ) : null}
 
         <section className="grid gap-4 lg:grid-cols-4">
-          <Metric label="Selected rail" value={networkMode === "testnet" ? "Testnet" : "Mainnet"} detail={currentNetworkLabel} />
-          <Metric label="Etherfuse PIX" value={etherfuseAvailable ? "Testnet on" : "Off"} detail={rampConfig?.testnet_only ? "Testnet-only rail" : "Provider status"} />
-          <Metric label="Mainnet mutations" value={status?.controls?.mutations_available ? "Guarded" : "Off"} detail="Read-only unless gated" />
-          <Metric label="Runtime" value={status?.controls?.runtime_network || "-"} detail="Default product runtime" />
+          <Metric label="Modo selecionado" value={networkMode === "testnet" ? "Validação" : "Mainnet"} detail={currentNetworkLabel} />
+          <Metric label="PIX" value={etherfuseAvailable ? "Ativo" : "Indisponível"} detail={rampConfig?.testnet_only ? "Somente validação" : "Status do pagamento"} />
+          <Metric label="Envios Mainnet" value={status?.controls?.mutations_available ? "Protegido" : "Desligado"} detail="Leitura até liberação" />
+          <Metric label="Ambiente padrão" value={status?.controls?.runtime_network || "-"} detail="Conta usada no produto" />
         </section>
 
         {networkMode === "testnet" ? (
@@ -466,7 +466,7 @@ export default function MainnetClient() {
                     </div>
                   ) : (
                     <p className="mt-2 text-sm text-slate-400">
-                      No Mainnet wallet attached yet. Every new TalkToStellar account can attach one here without changing the testnet product wallet.
+                      Nenhuma carteira Mainnet anexada ainda. Cada conta TalkToStellar pode anexar uma chave pública aqui sem alterar a conta de validação do produto.
                     </p>
                   )}
                 </div>
@@ -480,7 +480,7 @@ export default function MainnetClient() {
               Mainnet balance
             </h2>
             <p className="mt-2 text-sm text-slate-400">
-              Live read from Stellar Public Network Horizon. This can show real XLM and issued assets held by the attached wallet.
+              Leitura pública da rede Stellar. Esta tela mostra saldos reais da carteira anexada sem mover fundos.
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -611,11 +611,11 @@ export default function MainnetClient() {
         )}
 
         <section className="border border-white/10 bg-white/[0.03] p-5">
-          <h2 className="text-lg font-black text-white">Network policy</h2>
+          <h2 className="text-lg font-black text-white">Política de uso</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <InfoBlock title="Default remains Testnet" body="Existing TalkToStellar wallet, PIX, quote and chat flows stay on the configured testnet runtime." />
-            <InfoBlock title="Etherfuse is Testnet-only" body="PIX/TESOURO routes use Etherfuse only on the Testnet rail. Mainnet never runs Etherfuse PIX helpers." />
-            <InfoBlock title="Mainnet is opt-in" body="Users can attach a public Mainnet wallet after login. Transaction submission remains gated by backend signer and approval settings." />
+            <InfoBlock title="Conta principal protegida" body="PIX, cotações e chat continuam no ambiente controlado do produto." />
+            <InfoBlock title="PIX separado da Mainnet" body="Operações PIX não usam a carteira Mainnet anexada nesta tela." />
+            <InfoBlock title="Mainnet é opcional" body="Usuários podem anexar uma carteira pública após login. Envio de transações continua bloqueado até liberação operacional." />
           </div>
         </section>
       </section>
@@ -639,10 +639,10 @@ function TestnetRailPanel({
           <div>
             <h2 className="flex items-center gap-2 text-lg font-black text-white">
               <QrCode className="h-5 w-5 text-emerald-200" />
-              Testnet PIX rail
+              PIX da conta de validação
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              This is the active TalkToStellar product rail for PIX, Etherfuse sandbox, BRL/TESOURO settlement and testnet wallet flows.
+              Este é o ambiente usado para PIX, cotações, pagamentos por chat e conferência de saldo antes de operações reais.
             </p>
           </div>
           <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${etherfuseAvailable ? "border-emerald-300/30 text-emerald-200" : "border-amber-300/30 text-amber-200"}`}>
@@ -651,24 +651,24 @@ function TestnetRailPanel({
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <MiniStat label="Provider" value={rampConfig?.provider || "etherfuse"} />
-          <MiniStat label="Network" value={rampConfig?.network || "Stellar Testnet"} />
-          <MiniStat label="Mode" value={rampConfig?.sandbox ? "Sandbox/devnet" : "Unavailable"} />
-          <MiniStat label="Asset" value={rampConfig?.asset?.code || "TESOURO"} />
+          <MiniStat label="Pagamento" value={etherfuseAvailable ? "Ativo" : "Indisponível"} />
+          <MiniStat label="Ambiente" value={rampConfig?.network ? "Validação" : "Pendente"} />
+          <MiniStat label="Modo" value={rampConfig?.sandbox ? "Teste controlado" : "Indisponível"} />
+          <MiniStat label="Saldo" value={rampConfig?.asset?.code || "BRL"} />
         </div>
 
         {!etherfuseAvailable ? (
           <div className="mt-5 border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-            <p className="font-black">Etherfuse is intentionally Testnet-only here.</p>
+            <p className="font-black">PIX está separado da Mainnet.</p>
             <p className="mt-2 leading-6">
-              {rampConfig?.unavailable_reason || "Use STELLAR_NETWORK=TESTNET with Etherfuse sandbox credentials for PIX flows."}
+              Confira as configurações do serviço de pagamento para usar PIX.
             </p>
           </div>
         ) : (
           <div className="mt-5 border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">
-            <p className="font-black">Etherfuse PIX is available on the Testnet rail.</p>
+            <p className="font-black">PIX está disponível na conta de validação.</p>
             <p className="mt-2 leading-6">
-              Mainnet wallet viewing stays separate and never routes through Etherfuse.
+              A visualização Mainnet fica separada e não interfere nos pagamentos por PIX.
             </p>
           </div>
         )}
@@ -694,21 +694,21 @@ function TestnetRailPanel({
         </h2>
         <div className="mt-5 space-y-3">
           <InfoBlock
-            title="Testnet is operational"
-            body="Use this mode for PIX, Etherfuse sandbox, chat payments, quotes, conversions and demo flows that move through the current TalkToStellar app wallet."
+            title="Conta de validação ativa"
+            body="Use este modo para PIX, pagamentos por chat, cotações e conversões na conta atual do TalkToStellar."
           />
           <InfoBlock
             title="Mainnet is isolated"
-            body="Switch to Mainnet only to attach a public wallet, read real balances and preview guarded interactions. It does not enable Etherfuse."
+            body="Use Mainnet apenas para anexar uma carteira pública, ler saldos reais e pré-visualizar interações protegidas."
           />
           <InfoBlock
-            title="No accidental real rail"
-            body="If the backend runtime is changed to Stellar Public, Etherfuse endpoints refuse PIX/TESOURO operations instead of silently using a real-value network."
+            title="Sem mistura de saldos"
+            body="PIX e carteira Mainnet ficam isolados para evitar operações no ambiente errado."
           />
         </div>
         {!sessionAuthenticated ? (
           <div className="mt-5 border border-white/10 bg-black p-4 text-sm text-slate-300">
-            Sign in to use authenticated Testnet flows and attach a Mainnet public wallet.
+            Entre na conta para usar PIX e anexar uma carteira pública Mainnet.
           </div>
         ) : null}
       </div>

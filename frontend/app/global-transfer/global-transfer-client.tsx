@@ -72,7 +72,7 @@ const providerProfiles: Record<ProviderKey, { label: string; settlement: string;
     note: "Maps cleanly to USDC account -> USD account -> external bank withdrawal.",
   },
   anchor: {
-    label: "Own Stellar anchor",
+    label: "Own settlement rail",
     settlement: "Pilot dependent",
     note: "Long-term control path, with higher licensing, ops and banking complexity.",
   },
@@ -80,17 +80,17 @@ const providerProfiles: Record<ProviderKey, { label: string; settlement: string;
 
 const anchorProfiles: Record<AnchorProvider, { label: string; rail: string; note: string }> = {
   etherfuse_sandbox: {
-    label: "Etherfuse sandbox anchor",
-    rail: "PIX sandbox",
-    note: "Good for the current testnet demo. The PIX received event is simulated by the anchor sandbox.",
+    label: "PIX validation rail",
+    rail: "PIX validation",
+    note: "Good for controlled product demos. The PIX received event is confirmed in the validation environment.",
   },
   pix_psp: {
-    label: "PIX PSP plus internal anchor",
-    rail: "Real PIX provider",
+    label: "PIX account plus internal settlement",
+    rail: "Real PIX account",
     note: "Production-like split where the PIX PSP confirms BRL and your backend performs the Stellar leg.",
   },
   bank_partner: {
-    label: "Banking partner anchor",
+    label: "Banking partner settlement",
     rail: "Bank-owned PIX and FX",
     note: "Lower operational burden, but more partner dependency and stricter approval flow.",
   },
@@ -378,20 +378,20 @@ export default function GlobalTransferClient() {
         status: "complete",
       },
       {
-        label: "Anchor customer ready",
+        label: "PIX customer ready",
         detail: `${anchorProfiles[anchorProvider].label} receives the customer, wallet and KYC reference.`,
         icon: ShieldCheck,
         status: anchorStatusRank[anchorStatus] >= 1 ? "complete" : "ready",
       },
       {
         label: "PIX charge created",
-        detail: "Anchor returns a PIX copia e cola, order ID, expiry and webhook reference.",
+        detail: "The PIX account returns a PIX copia e cola, order ID, expiry and confirmation reference.",
         icon: QrCode,
         status: anchorStatusRank[anchorStatus] >= 2 ? "complete" : anchorStatusRank[anchorStatus] === 1 ? "ready" : "waiting",
       },
       {
         label: "PIX received",
-        detail: "PIX partner or sandbox webhook confirms settled BRL before any value leaves treasury.",
+        detail: "PIX confirmation marks BRL as settled before any value leaves treasury.",
         icon: Banknote,
         status: anchorStatusRank[anchorStatus] >= 3 ? "complete" : anchorStatusRank[anchorStatus] === 2 ? "ready" : "waiting",
       },
@@ -426,7 +426,7 @@ export default function GlobalTransferClient() {
   const riskFlags = useMemo(() => {
     const flags = [
       "IOF and FX purpose classification must be confirmed by counsel and a regulated FX partner.",
-      "Every provider webhook needs signature validation and idempotent replay protection.",
+      "Every payment confirmation event needs signature validation and idempotent replay protection.",
     ]
 
     if (recipientType === "third_party") {
@@ -438,7 +438,7 @@ export default function GlobalTransferClient() {
     }
 
     if (anchorProvider === "etherfuse_sandbox") {
-      flags.push("Etherfuse sandbox can prove the anchor flow, but it is not a production PIX settlement account.")
+      flags.push("The validation PIX rail can prove the route, but it is not a production settlement account.")
     }
 
     if (provider === "circle") {
@@ -446,7 +446,7 @@ export default function GlobalTransferClient() {
     }
 
     if (provider === "anchor") {
-      flags.push("Running an own anchor increases compliance, liquidity, support and banking relationship burden.")
+      flags.push("Running an own settlement rail increases compliance, liquidity, support and banking relationship burden.")
     }
 
     if (payoutRail === "wire" && quote.grossUsd < 2000) {
@@ -575,17 +575,17 @@ export default function GlobalTransferClient() {
     () => [
       {
         label: "PIX PSP fee",
-        paidTo: "PIX provider or banking partner",
+        paidTo: "PIX account or banking partner",
         when: "When BRL is received",
         amount: `${brlFormatter.format(quote.pixFeeBrl)} / ${usdFormatter.format(quote.pixFeeUsd)}`,
         note: "Configurable because PSP pricing is commercial.",
       },
       {
-        label: "Anchor/on-ramp fee",
-        paidTo: "Anchor or internal ramp desk",
+        label: "PIX entry fee",
+        paidTo: "Internal settlement desk",
         when: "When the PIX order settles",
         amount: `${brlFormatter.format(quote.anchorFeeBrl)} / ${usdFormatter.format(quote.anchorFeeUsd)}`,
-        note: "Covers anchor orchestration, customer, quote and order handling.",
+        note: "Covers customer, quote and order handling.",
       },
       {
         label: "IOF/tax estimate",
@@ -620,11 +620,11 @@ export default function GlobalTransferClient() {
         paidTo: providerProfiles[provider].label,
         when: "When USDC becomes bank USD",
         amount: usdFormatter.format(quote.offrampFeeUsd),
-        note: "Provider-specific fee or spread.",
+        note: "Route-specific fee or spread.",
       },
       {
         label: `${railLabels[payoutRail]} payout fee`,
-        paidTo: "Banking or payout provider",
+        paidTo: "Banking payout partner",
         when: "When USD leaves the off-ramp balance",
         amount: usdFormatter.format(quote.bankFeeUsd),
         note: "Fixed rail cost estimate.",
@@ -695,7 +695,7 @@ export default function GlobalTransferClient() {
             </Link>
           </div>
           <div className="min-w-0 text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Mock sandbox</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Controlled demo</p>
             <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">BRL to USD transfer lab</h1>
           </div>
         </div>
@@ -721,15 +721,15 @@ export default function GlobalTransferClient() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="PIX fee" value={pixFeeBps} step="1" suffix="bps" onChange={setPixFeeBps} />
               <Field label="PIX fixed" value={pixFixedFeeBrl} step="0.01" suffix="BRL" onChange={setPixFixedFeeBrl} />
-              <Field label="Anchor" value={anchorFeeBps} step="5" suffix="bps" onChange={setAnchorFeeBps} />
-              <Field label="Anchor fixed" value={anchorFixedFeeBrl} step="0.01" suffix="BRL" onChange={setAnchorFixedFeeBrl} />
+              <Field label="PIX rail" value={anchorFeeBps} step="5" suffix="bps" onChange={setAnchorFeeBps} />
+              <Field label="PIX rail fixed" value={anchorFixedFeeBrl} step="0.01" suffix="BRL" onChange={setAnchorFixedFeeBrl} />
               <Field label="Platform" value={platformFeeBps} step="5" suffix="bps" onChange={setPlatformFeeBps} />
               <Field label="Liquidity" value={liquiditySpreadBps} step="5" suffix="bps" onChange={setLiquiditySpreadBps} />
               <Field label="Off-ramp" value={offrampFeeBps} step="5" suffix="bps" onChange={setOfframpFeeBps} />
               <Field label="IOF estimate" value={iofBps} step="1" suffix="bps" onChange={setIofBps} />
             </div>
             <SelectField
-              label="PIX anchor"
+              label="PIX rail"
               value={anchorProvider}
               onChange={setAnchorProvider}
               options={[
@@ -805,7 +805,7 @@ export default function GlobalTransferClient() {
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
             >
               <QrCode className="h-4 w-4" aria-hidden="true" />
-              PIX anchor
+              PIX rail
             </button>
             <button
               type="button"
@@ -830,7 +830,7 @@ export default function GlobalTransferClient() {
             className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-500"
           >
             <Route className="h-4 w-4" aria-hidden="true" />
-            Run full mock flow
+            Run full demo flow
           </button>
         </section>
 
@@ -843,7 +843,7 @@ export default function GlobalTransferClient() {
                   {brlFormatter.format(quote.safeAmountBrl)}{" to "}{usdFormatter.format(quote.netUsd)}
                 </h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  This is a mock quote for PIX in, Stellar USDC settlement and {railLabels[payoutRail]} payout into
+                  This is a controlled quote for PIX in, Stellar USDC settlement and {railLabels[payoutRail]} payout into
                   Wise-compatible or international USD details.
                 </p>
               </div>
@@ -876,14 +876,14 @@ export default function GlobalTransferClient() {
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <QrCode className="h-5 w-5 text-emerald-700" aria-hidden="true" />
-                <h2 className="text-base font-bold text-slate-950">PIX anchor order</h2>
+                <h2 className="text-base font-bold text-slate-950">PIX order</h2>
               </div>
               <div className="space-y-2 text-sm leading-6 text-slate-700">
                 <p>
                   <span className="font-bold text-slate-950">Order:</span> {quote.anchorOrderId}
                 </p>
                 <p>
-                  <span className="font-bold text-slate-950">Provider:</span> {anchorProfiles[anchorProvider].label}
+                  <span className="font-bold text-slate-950">Rail:</span> {anchorProfiles[anchorProvider].label}
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Status:</span> {anchorStatus.replace("_", " ")}
@@ -983,7 +983,7 @@ export default function GlobalTransferClient() {
                                   : "bg-slate-100 text-slate-600"
                             }`}
                           >
-                            {item.status === "complete" ? "mocked complete" : item.status}
+                            {item.status === "complete" ? "complete" : item.status}
                           </span>
                         </div>
                         <p className="mt-1 text-sm leading-6 text-slate-600">{item.detail}</p>
@@ -1024,7 +1024,7 @@ export default function GlobalTransferClient() {
                 {[
                   ["Gross USD before costs", usdFormatter.format(quote.grossUsd)],
                   [`PIX PSP fee (${pctFromBps(quote.safePixFeeBps)} + fixed)`, `${brlFormatter.format(quote.pixFeeBrl)} / ${usdFormatter.format(quote.pixFeeUsd)}`],
-                  [`Anchor fee (${pctFromBps(quote.safeAnchorFeeBps)} + fixed)`, `${brlFormatter.format(quote.anchorFeeBrl)} / ${usdFormatter.format(quote.anchorFeeUsd)}`],
+                  [`PIX rail fee (${pctFromBps(quote.safeAnchorFeeBps)} + fixed)`, `${brlFormatter.format(quote.anchorFeeBrl)} / ${usdFormatter.format(quote.anchorFeeUsd)}`],
                   [`Platform fee (${pctFromBps(quote.safePlatformFeeBps)})`, usdFormatter.format(quote.platformFeeUsd)],
                   [`Liquidity spread (${pctFromBps(quote.safeLiquiditySpreadBps)})`, usdFormatter.format(quote.liquidityFeeUsd)],
                   [`Off-ramp fee (${pctFromBps(quote.safeOfframpFeeBps)})`, usdFormatter.format(quote.offrampFeeUsd)],

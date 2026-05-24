@@ -127,7 +127,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/etherfuse|evolution|provider|pix provider|sandbox provider/.test(normalized)) {
     return {
       code: "provider_unavailable",
-      message: copy(language, "O provedor de pagamento não respondeu agora. Tente novamente em alguns segundos.", "The payment provider did not respond right now. Try again in a few seconds."),
+      message: copy(language, "O serviço de pagamento não respondeu agora. Tente novamente em alguns segundos.", "The payment service did not respond right now. Try again in a few seconds."),
     };
   }
 
