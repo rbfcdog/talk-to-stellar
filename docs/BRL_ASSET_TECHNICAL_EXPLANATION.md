@@ -4,7 +4,21 @@
 
 O BRL no TalkToStellar nao e uma stablecoin propria do projeto.
 
-No fluxo PIX, o valor em reais e representado tecnicamente por um asset ancorado usado pela integracao em ambiente de testnet/sandbox. Esse asset serve para conectar:
+Hoje existem duas representacoes tecnicas diferentes que podem aparecer no codigo:
+
+```text
+1. TESOURO
+   Asset ancorado usado no fluxo PIX/Etherfuse.
+   O issuer e o issuer configurado da integracao, nao uma conta criada pelo TalkToStellar.
+
+2. BRL
+   Asset de testnet criado/configurado pelo proprio projeto para testes de liquidez,
+   pathfinding e demonstracoes on-chain.
+```
+
+Nenhum dos dois deve ser apresentado ao usuario como "stablecoin BRL" do TalkToStellar.
+
+No fluxo PIX, o valor em reais e representado tecnicamente pelo asset ancorado da integracao. Esse asset serve para conectar:
 
 ```text
 PIX em BRL
@@ -67,12 +81,70 @@ O asset usado aqui tem outro papel:
 - nao deve ser vendido como moeda estavel propria
 ```
 
+## Quem e o issuer?
+
+Depende de qual asset estamos falando.
+
+### 1. Asset do fluxo PIX
+
+No fluxo PIX atual, o backend usa o asset `TESOURO`.
+
+Esse asset vem da configuracao:
+
+```text
+TESOURO_ISSUER
+```
+
+Se essa variavel nao estiver definida, o codigo usa o issuer padrao da integracao Etherfuse configurado em:
+
+```text
+ETHERFUSE_TESOURO_ISSUER
+```
+
+Ou seja: para o fluxo PIX, o issuer do asset ancorado nao e uma conta criada por nos para emitir uma stablecoin BRL. Ele representa o asset do trilho de integracao usado para on-ramp/off-ramp em testnet/sandbox.
+
+### 2. Asset BRL criado pelo projeto
+
+O projeto tambem tem scripts para criar um asset `BRL` em testnet:
+
+```text
+backend/scripts/setup-testnet-brl-liquidity.ts
+```
+
+Esse script cria/configura:
+
+```text
+BRL_ISSUER_TESTNET
+BRL_ISSUER_SECRET
+BRL_DISTRIBUTOR_PUBLIC
+BRL_DISTRIBUTOR_SECRET
+BRL_MARKET_MAKER_PUBLIC
+BRL_MARKET_MAKER_SECRET
+```
+
+Esse `BRL` e um asset sintetico de testnet usado para testes de liquidez e pathfinding. Ele pode ter sido criado por nos, mas isso nao transforma ele em real tokenizado, stablecoin regulada ou ativo com lastro.
+
+Ele serve para demonstrar rotas on-chain como:
+
+```text
+BRL -> XLM -> USDC
+USDC -> XLM -> BRL
+```
+
+mas continua sendo um asset tecnico de testnet.
+
+## Frase correta para explicar ao avaliador
+
+```text
+No fluxo PIX, o TalkToStellar usa o asset ancorado da integracao para representar o valor em reais dentro da rota. Separadamente, o projeto tambem tem um asset BRL de testnet criado por nos para testes de liquidez e pathfinding. Nenhum dos dois e uma stablecoin BRL propria ou um real tokenizado de producao.
+```
+
 ## Como explicar em demo tecnica
 
 Use esta frase:
 
 ```text
-O TalkToStellar nao criou uma stablecoin BRL. O sistema usa um asset ancorado como representacao tecnica do real dentro do fluxo PIX-Stellar. O usuario ve apenas R$, mas internamente o backend usa esse asset para registrar, cotar, converter e liquidar o valor antes de entregar saldo ou enviar para outro destinatario.
+O TalkToStellar nao criou uma stablecoin BRL. No fluxo PIX, o sistema usa um asset ancorado da integracao como representacao tecnica do valor em reais. Separadamente, existe um asset BRL de testnet criado pelo projeto apenas para testes de liquidez e pathfinding. Para o usuario, tudo aparece como R$; internamente, o backend usa esses assets para cotar, converter, registrar e liquidar operacoes em ambiente de teste.
 ```
 
 ## Fluxo tecnico simplificado
