@@ -580,6 +580,7 @@ export default function PixRampClient({
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
   const [offRampPreviewPayload, setOffRampPreviewPayload] = useState<RampResponse | null>(null);
   const [queryReady, setQueryReady] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [transferFlow, setTransferFlow] = useState(false);
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferRecipientKey, setTransferRecipientKey] = useState("");
@@ -663,12 +664,12 @@ export default function PixRampClient({
   const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
   const externalProviderUserId = String(queryParams.get("provider_user_id") || "").trim();
   const externalSource = String(queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
-  const hasSession = Boolean(sessionId);
+  const hasSession = Boolean(sessionReady && sessionId);
   const allowEmailAccountLookup = Boolean(debugEnabled && !launchedFromChat);
   const etherfuseRailUnavailable = Boolean(config && !config.available);
-  const needsBrowserLoginForPix = Boolean(!hasSession && !allowEmailAccountLookup);
+  const needsBrowserLoginForPix = Boolean(sessionReady && !hasSession && !allowEmailAccountLookup);
   const needsBrowserLoginForChatLink = Boolean(launchedFromChat && !hasSession);
-  const canResolveWallet = Boolean(!etherfuseRailUnavailable && (hasSession || (allowEmailAccountLookup && rampEmail.trim())));
+  const canResolveWallet = Boolean(sessionReady && !etherfuseRailUnavailable && (hasSession || (allowEmailAccountLookup && rampEmail.trim())));
   const quote = quotePayload?.quote;
   const activeOnRampQuote = orderPayload?.quote || quote;
   const onRampFeeEstimate = buildRampFeeBridgeEstimate("onramp", activeOnRampQuote);
@@ -727,10 +728,15 @@ export default function PixRampClient({
   const quoteCostContext = transferFlow && transferRecipientLabel
     ? L("valor que sera usado para pagar o destinatario", "value used to pay the recipient")
     : L("valor que entra na sua conta", "value credited to your account");
+  const pixLoginRequiredMessage = needsBrowserLoginForChatLink
+    ? L("Entre com PIN para continuar este PIX aberto pelo chat.", "Sign in with PIN to continue this PIX opened from chat.")
+    : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.");
   const transferRecipientBlocker = transferFlow && !transferRecipientVerified
-    ? recipientVerificationLoading
-      ? L("Validando destinatário salvo...", "Validating saved recipient...")
-      : recipientVerificationError || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX.")
+    ? needsBrowserLoginForPix
+      ? pixLoginRequiredMessage
+      : recipientVerificationLoading
+        ? L("Validando destinatário salvo...", "Validating saved recipient...")
+        : recipientVerificationError || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX.")
     : "";
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
@@ -901,13 +907,17 @@ export default function PixRampClient({
   useEffect(() => {
     const stored = getStoredSession();
     setSessionId(stored.sessionId);
-    getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
-      if (authenticated && cookieSessionId) {
-        setSessionId(cookieSessionId);
-      } else if (!stored.sessionId) {
-        setSessionId("");
-      }
-    });
+    setSessionReady(false);
+    getClientSession()
+      .then(({ sessionId: cookieSessionId, authenticated }) => {
+        if (authenticated && cookieSessionId) {
+          setSessionId(cookieSessionId);
+        } else {
+          setSessionId("");
+        }
+      })
+      .catch(() => setSessionId(""))
+      .finally(() => setSessionReady(true));
     const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
     if (storedName.includes("@")) setRampEmail(storedName);
   }, []);
@@ -1035,6 +1045,10 @@ export default function PixRampClient({
   useEffect(() => {
     if (rampMode !== "onramp") return;
     if (!desiredReceiveAmount || desiredReceiveAsset !== "USDC") return;
+    if (!sessionReady || needsBrowserLoginForPix) {
+      setReceiveEstimateLoading(false);
+      return;
+    }
     const receiveUsdc = toPositiveNumber(desiredReceiveAmount, 0);
     if (!receiveUsdc) {
       setReceiveEstimateLoading(false);
@@ -1087,7 +1101,7 @@ export default function PixRampClient({
     return () => {
       cancelled = true;
     };
-  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
+  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, needsBrowserLoginForPix, rampMode, sessionReady]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
     if (sessionId) {
@@ -1218,9 +1232,16 @@ export default function PixRampClient({
     }
 
     const recipient = transferRecipient.trim();
-    if (!recipient || !sessionId) {
+    if (!sessionReady) {
       setVerifiedTransferRecipient(null);
-      setRecipientVerificationError(recipient ? "" : L("Destinatário não informado.", "Recipient missing."));
+      setRecipientVerificationError("");
+      setRecipientVerificationLoading(false);
+      recipientValidationKeyRef.current = "";
+      return;
+    }
+    if (!recipient || !hasSession) {
+      setVerifiedTransferRecipient(null);
+      setRecipientVerificationError(recipient ? pixLoginRequiredMessage : L("Destinatário não informado.", "Recipient missing."));
       setRecipientVerificationLoading(false);
       recipientValidationKeyRef.current = "";
       return;
@@ -1294,10 +1315,13 @@ export default function PixRampClient({
   }, [
     L,
     callRamp,
+    hasSession,
     language,
+    pixLoginRequiredMessage,
     queryReady,
     recipientVerificationError,
     sessionId,
+    sessionReady,
     transferFlow,
     transferRecipient,
     transferRecipientKey,
