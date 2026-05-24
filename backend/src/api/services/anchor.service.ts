@@ -2807,7 +2807,7 @@ export class AnchorService {
         } catch (retryError) {
           let lastRetryError = retryError;
           if (this.isMissingEtherfuseProxyError(retryError)) {
-            for (const delayMs of [1200, 2500, 4000, 6500, 9000, 13000, 18000, 24000]) {
+            for (const delayMs of [1200, 2500, 4000, 6500, 9000]) {
               await sleep(delayMs);
               try {
                 await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
