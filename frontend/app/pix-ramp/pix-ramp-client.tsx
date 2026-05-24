@@ -515,6 +515,25 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
   return raw || mapped.message;
 }
 
+function isRecipientValidationMessage(value: unknown) {
+  const normalized = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return (
+    normalized.includes("destinatario") ||
+    normalized.includes("recipient") ||
+    normalized.includes("contato") ||
+    normalized.includes("contact")
+  ) && (
+    normalized.includes("nao existe") ||
+    normalized.includes("not exist") ||
+    normalized.includes("not found") ||
+    normalized.includes("saved") ||
+    normalized.includes("salvo")
+  );
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = RAMP_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -1312,6 +1331,8 @@ export default function PixRampClient({
           recipient_pix_key: String(resolved?.recipient_pix_key || nextKey || "").trim(),
           recipient_public_key: nextPublicKey,
         });
+        setRecipientVerificationError("");
+        setError((current) => isRecipientValidationMessage(current) ? "" : current);
       })
       .catch((requestError) => {
         if (cancelled) return;
@@ -1327,6 +1348,7 @@ export default function PixRampClient({
             source: "chat_link",
           });
           setRecipientVerificationError("");
+          setError((current) => isRecipientValidationMessage(current) ? "" : current);
           addDebugLog({
             label: "Saved recipient validation used chat-link fallback",
             method: "POST",
@@ -1719,10 +1741,11 @@ export default function PixRampClient({
     if (rampMode !== "onramp") return;
     if (operationLocked) return;
     if (!canResolveWallet || loading || order || quote || waitingForReceiveEstimate) return;
+    if (transferFlow && (!transferRecipientVerified || recipientVerificationLoading || Boolean(recipientVerificationError))) return;
 
     autoStartedRef.current = true;
     void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
-  }, [canResolveWallet, loading, operationLocked, order, queryReady, queryString, quote, rampMode, waitingForReceiveEstimate]);
+  }, [canResolveWallet, loading, operationLocked, order, queryReady, queryString, quote, rampMode, recipientVerificationError, recipientVerificationLoading, transferFlow, transferRecipientVerified, waitingForReceiveEstimate]);
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
