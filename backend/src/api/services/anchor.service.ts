@@ -3824,6 +3824,12 @@ export class AnchorService {
     const normalizedQuery = normalizeLookup(query);
     const queryPhone = normalizePhone(query);
     const requestedPublicKey = /^G[A-Z2-7]{55}$/i.test(query) ? query : preferredPublicKey;
+    const isValidPublicKey = (value: unknown) => /^G[A-Z2-7]{55}$/i.test(coalesceString(value));
+    const contactDestinationPublicKey = (item: any) => coalesceString(
+      item?.stellar_public_key,
+      item?.public_key,
+      item?.destination_public_key,
+    );
 
     const contactsResult = await supabase
       .from('contacts')
@@ -3834,7 +3840,7 @@ export class AnchorService {
     const contacts = (contactsResult.data || []) as any[];
     const aliasMatch = query.toLowerCase().match(/^(?:contato|contact)\s*(\d{1,3})$/);
     let contact = requestedPublicKey
-      ? contacts.find((item) => coalesceString(item?.stellar_public_key) === requestedPublicKey)
+      ? contacts.find((item) => contactDestinationPublicKey(item) === requestedPublicKey)
       : null;
 
     if (!contact && aliasMatch) {
@@ -3843,7 +3849,11 @@ export class AnchorService {
     }
 
     if (!contact && queryPhone.length >= 8) {
-      contact = contacts.find((item) => normalizePhone(item?.phone_number) === queryPhone);
+      contact = contacts.find((item) => {
+        const phone = normalizePhone(item?.phone_number);
+        const pixKey = normalizePhone(item?.pix_key);
+        return phone === queryPhone || pixKey === queryPhone;
+      });
     }
 
     if (!contact) {
@@ -3859,15 +3869,16 @@ export class AnchorService {
       throw apiError(`Recipient "${query}" was not found in your saved contacts. Open contacts and choose a real recipient before creating a PIX-funded transfer.`, 404);
     }
 
-    const contactPublicKey = coalesceString(contact?.stellar_public_key);
-    if (preferredPublicKey && contactPublicKey !== preferredPublicKey) {
+    const contactPublicKey = contactDestinationPublicKey(contact);
+    if (preferredPublicKey && contactPublicKey && contactPublicKey !== preferredPublicKey) {
       throw apiError('Recipient data does not match the saved contact. Open contacts and choose the recipient again.', 409);
     }
-    if (contactPublicKey) {
+    const effectivePublicKey = contactPublicKey || preferredPublicKey;
+    if (isValidPublicKey(effectivePublicKey)) {
       const walletRepository = new WalletRepository(supabase);
-      const destinationWallet = await walletRepository.getWalletByPublicKey(contactPublicKey).catch(() => null);
+      const destinationWallet = await walletRepository.getWalletByPublicKey(effectivePublicKey).catch(() => null);
       return {
-        publicKey: contactPublicKey,
+        publicKey: effectivePublicKey,
         displayName: coalesceString(contact?.contact_name) || query,
         pixKey: coalesceString(contact?.pix_key) || preferredKey || undefined,
         recipientKey: coalesceString(contact?.pix_key) || preferredKey || undefined,
