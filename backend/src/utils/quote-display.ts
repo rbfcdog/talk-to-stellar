@@ -33,10 +33,10 @@ export function buildUsedQuoteLabel(input: {
   destinationAssetCode?: string | null;
 }): string {
   const quote = input.quote || {};
-  const sourceAmountRaw = quote.sourceAmount || input.sourceAmount;
-  const destinationAmountRaw = quote.destinationAmount || input.destinationAmount;
-  const sourceAsset = normalizeAssetCode(quote.sourceAsset?.code || input.sourceAssetCode);
-  const destinationAsset = normalizeAssetCode(quote.destinationAsset?.code || input.destinationAssetCode);
+  const sourceAmountRaw = input.sourceAmount || quote.sourceAmount;
+  const destinationAmountRaw = input.destinationAmount || quote.destinationAmount;
+  const sourceAsset = normalizeAssetCode(input.sourceAssetCode || quote.sourceAsset?.code);
+  const destinationAsset = normalizeAssetCode(input.destinationAssetCode || quote.destinationAsset?.code);
   const sourceAmount = toNumber(sourceAmountRaw);
   const destinationAmount = toNumber(destinationAmountRaw);
 

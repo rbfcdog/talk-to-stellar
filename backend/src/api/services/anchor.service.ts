@@ -1159,6 +1159,10 @@ export class AnchorService {
 
   private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<string> {
     try {
+      if (Boolean(record.operationContext?.auto_pay_after_ramp)) {
+        console.info('[ramp] skipped intermediate PIX funding receipt because auto-pay will send the final receipt');
+        return '';
+      }
       const userFacingFinalAsset = normalizeAssetCode(record.finalAssetCode) === 'TESOURO'
         ? 'BRL'
         : (record.finalAssetCode || 'BRL');
@@ -1584,6 +1588,11 @@ export class AnchorService {
     destinationAmount?: string;
     hash?: string;
   }): Promise<string> {
+    if (Boolean(input.context.auto_pay_after_ramp)) {
+      console.info('[ramp] skipped completed PIX funding receipt because auto-pay will send the final receipt');
+      return '';
+    }
+
     const existingReceiptUrl = coalesceString(input.context.receipt_url);
     if (existingReceiptUrl) return existingReceiptUrl;
 

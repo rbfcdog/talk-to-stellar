@@ -412,10 +412,10 @@ export class ReceiptImageService {
     contextMessage?: string | null;
   }): ReceiptImageInput {
     const opId = PaymentReceiptService.toPublicOperationId(input.hash);
-    const quoteSource = String(input.quote?.sourceAmount || input.sourceAmount || '').trim();
-    const quoteSourceAsset = String(input.quote?.sourceAsset?.code || input.sourceAssetCode || '').trim().toUpperCase();
-    const quoteDest = String(input.quote?.destinationAmount || input.destinationAmount || '').trim();
-    const quoteDestAsset = String(input.quote?.destinationAsset?.code || input.destinationAssetCode || '').trim().toUpperCase();
+    const quoteSource = String(input.sourceAmount || input.quote?.sourceAmount || '').trim();
+    const quoteSourceAsset = String(input.sourceAssetCode || input.quote?.sourceAsset?.code || '').trim().toUpperCase();
+    const quoteDest = String(input.destinationAmount || input.quote?.destinationAmount || '').trim();
+    const quoteDestAsset = String(input.destinationAssetCode || input.quote?.destinationAsset?.code || '').trim().toUpperCase();
     const estimatedSavings = Number(String(input.savings?.estimatedSavings || '').replace(',', '.'));
     const savingsPercentage = Number(String(input.savings?.savingsPercentage || '').replace(',', '.'));
 
@@ -436,7 +436,6 @@ export class ReceiptImageService {
       convertedCurrency: displaySymbol(quoteSourceAsset || 'BRL'),
       feeLabel: sanitizeFeeLabel(input.feeDisplay),
       quoteLabel: sanitizeQuoteLabel(buildUsedQuoteLabel({
-        quote: input.quote,
         sourceAmount: input.sourceAmount,
         sourceAssetCode: input.sourceAssetCode,
         destinationAmount: input.destinationAmount,

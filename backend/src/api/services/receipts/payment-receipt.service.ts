@@ -263,24 +263,6 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
     }
 
-    if (cumulativeSavingsText) {
-      try {
-        const delivery = await TransferNotificationService.notifyExternalChannelMessage({
-          sessionId: input.sessionId,
-          userId: input.userId,
-          provider: input.provider,
-          providerUserId: input.providerUserId,
-          text: cumulativeSavingsText,
-          buttonText: null,
-          buttonUrl: null,
-        });
-        this.logExternalDelivery('cumulative-savings', delivery);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`[receipt] failed to deliver cumulative savings: ${message}`);
-      }
-    }
-
     return viewerUrl || '';
   }
 
@@ -490,7 +472,6 @@ export class PaymentReceiptService {
     const hasConversion = sourceAssetCode !== destinationAssetCode;
     const quoteLine = hasConversion
       ? buildUsedQuoteLabel({
-          quote: input.quote,
           sourceAmount,
           sourceAssetCode,
           destinationAmount,
@@ -664,6 +645,21 @@ export class PaymentReceiptService {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
 
+  private static receiptUsdBrlRate(input: PaymentReceiptInput): number {
+    const sourceAmount = this.toPositiveNumber(input.sourceAmount || input.destinationAmount);
+    const destinationAmount = this.toPositiveNumber(input.destinationAmount);
+    const sourceAsset = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAsset = this.userFacingAssetCode(input.destinationAssetCode || input.sourceAssetCode);
+
+    if (sourceAsset === 'BRL' && destinationAsset === 'USDC' && sourceAmount > 0 && destinationAmount > 0) {
+      return sourceAmount / destinationAmount;
+    }
+    if (sourceAsset === 'USDC' && destinationAsset === 'BRL' && sourceAmount > 0 && destinationAmount > 0) {
+      return destinationAmount / sourceAmount;
+    }
+    return 0;
+  }
+
   private static formatSmallFiat(value: number, asset: 'BRL' | 'USDC'): string {
     const symbol = asset === 'BRL' ? 'R$' : 'US$';
     const decimals = value > 0 && value < 0.01 ? 6 : 2;
@@ -671,6 +667,9 @@ export class PaymentReceiptService {
   }
 
   private static resolveUsdBrlRate(input: PaymentReceiptInput, feeBrl?: number, feeUsdc?: number): number {
+    const receiptRate = this.receiptUsdBrlRate(input);
+    if (receiptRate > 0) return receiptRate;
+
     if (Number.isFinite(feeBrl) && Number.isFinite(feeUsdc) && Number(feeBrl) > 0 && Number(feeUsdc) > 0) {
       return Number(feeBrl) / Number(feeUsdc);
     }
