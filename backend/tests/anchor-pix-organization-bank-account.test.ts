@@ -1,8 +1,19 @@
 import { AnchorService } from '../src/api/services/anchor.service';
 
 describe('AnchorService PIX organization bank account routing', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      STELLAR_NETWORK: 'TESTNET',
+      ETHERFUSE_SANDBOX_PIX_FALLBACK: 'true',
+    };
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
+    process.env = { ...originalEnv };
   });
 
   function mockSandboxRuntime() {
@@ -78,6 +89,120 @@ describe('AnchorService PIX organization bank account routing', () => {
           bankAccountId: 'pix-brl',
           source: 'organization_account',
         },
+      },
+    });
+  });
+
+  it('uses the regional sandbox fallback when no active BRL PIX organization account exists', async () => {
+    mockSandboxRuntime();
+
+    const anchor = {
+      getQuote: jest.fn().mockResolvedValue({
+        id: 'quote-1',
+        fromCurrency: 'BRL',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        fromAmount: '10',
+        toAmount: '8.65',
+        exchangeRate: '0.865',
+        fee: '0.02',
+        feeAmount: '0.02',
+        feeBps: '20',
+        provider: 'etherfuse',
+      }),
+      createOnRamp: jest.fn(),
+      getFiatAccounts: jest.fn(),
+      createBankAccountForCustomer: jest.fn(),
+      createBankAccountWithPresignedUrl: jest.fn(),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'getActiveEtherfuseOrganizationBankAccountId').mockResolvedValue(undefined);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(AnchorService as any, 'findActiveRampOperationByIntent').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'TESOURO',
+      asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    });
+    jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+
+    const result = await AnchorService.createOnRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      amount: '10',
+      final_asset: 'BRL',
+    });
+
+    expect(anchor.createOnRamp).not.toHaveBeenCalled();
+    expect(anchor.getFiatAccounts).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountForCustomer).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountWithPresignedUrl).not.toHaveBeenCalled();
+    expect(result.transaction.id).toMatch(/^sandbox-pix-/);
+    expect(result.transaction).toMatchObject({
+      sandbox_mock: true,
+      fromAmount: '10',
+      fromCurrency: 'BRL',
+    });
+  });
+
+  it('does not open hosted onboarding or create a PIX bank account for regional sandbox customer setup', async () => {
+    mockSandboxRuntime();
+
+    const anchor = {
+      createCustomer: jest.fn().mockResolvedValue({
+        id: 'customer-1',
+        email: 'user@example.com',
+        country: 'BR',
+        kycStatus: 'approved',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      getOrganizationFiatAccounts: jest.fn().mockResolvedValue([
+        {
+          id: 'mxn-inactive',
+          type: 'SPEI',
+          currency: 'mxn',
+          status: 'inactive',
+          compliant: true,
+        },
+      ]),
+      getKycUrl: jest.fn(),
+      createBankAccountForCustomer: jest.fn(),
+      createBankAccountWithPresignedUrl: jest.fn(),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+    });
+
+    const result = await AnchorService.createCustomerForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      email: 'user@example.com',
+      country: 'BR',
+    });
+
+    expect(anchor.getKycUrl).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountForCustomer).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountWithPresignedUrl).not.toHaveBeenCalled();
+    expect(result.programmatic_onboarding).toMatchObject({
+      bank_account: {
+        status: 'skipped',
+        source: 'regional_sandbox_fallback',
       },
     });
   });
