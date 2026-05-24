@@ -1199,15 +1199,22 @@ export class AnchorService {
     kycUrl?: string,
     bankAccountId?: string,
     programmaticOnboarding?: Record<string, unknown>,
+    customerId?: string,
   ): Error {
     const error = apiError(message, 409) as Error & {
+      code?: string;
       kyc_url?: string;
       bank_account_id?: string;
       programmatic_onboarding?: Record<string, unknown>;
+      customer_id?: string;
+      retry_after_ms?: number;
     };
+    error.code = 'pix_account_not_ready';
     if (kycUrl) error.kyc_url = kycUrl;
     if (bankAccountId) error.bank_account_id = bankAccountId;
     if (programmaticOnboarding) error.programmatic_onboarding = programmaticOnboarding;
+    if (customerId) error.customer_id = customerId;
+    error.retry_after_ms = 5000;
     return error;
   }
 
@@ -2318,12 +2325,17 @@ export class AnchorService {
     to_currency: string;
     customer?: Customer;
     customer_id?: string;
+    bank_account_id?: string;
+    kyc_url?: string;
+    programmatic_onboarding?: Record<string, unknown>;
     final_asset?: { code: string; issuer?: string; identifier: string };
     anchor_asset?: { code: 'TESOURO'; issuer: string; identifier: string };
   }> {
     const context = await this.resolveSessionWallet(input);
     let customerId = coalesceString(input.customer_id, input.customerId);
     let preparedCustomer: Customer | undefined;
+    let preparedKycUrl: string | undefined;
+    let preparedProgrammatic: Record<string, unknown> | undefined;
     if (!customerId) {
       const customerResult = await this.createCustomerForSession({
         session_id: context.sessionId,
@@ -2333,6 +2345,8 @@ export class AnchorService {
       });
       customerId = customerResult.customer.id;
       preparedCustomer = customerResult.customer;
+      preparedKycUrl = customerResult.kyc_url;
+      preparedProgrammatic = customerResult.programmatic_onboarding;
     }
     if (!customerId) {
       throw apiError('Não consegui preparar a conta PIX para cotação. Entre novamente e tente gerar o PIX outra vez.', 409);
@@ -2379,6 +2393,9 @@ export class AnchorService {
       to_currency: anchorToCurrency,
       customer_id: customerId,
       ...(preparedCustomer ? { customer: preparedCustomer } : {}),
+      ...(preparedCustomer?.bankAccountId ? { bank_account_id: preparedCustomer.bankAccountId } : {}),
+      ...(preparedKycUrl ? { kyc_url: preparedKycUrl } : {}),
+      ...(preparedProgrammatic ? { programmatic_onboarding: preparedProgrammatic } : {}),
       ...(finalAsset ? {
         final_asset: {
           ...finalAsset,
@@ -2681,7 +2698,7 @@ export class AnchorService {
         } catch (retryError) {
           let lastRetryError = retryError;
           if (this.isMissingEtherfuseProxyError(retryError)) {
-            for (const delayMs of [1200, 2500, 4000]) {
+            for (const delayMs of [1200, 2500, 4000, 6500, 9000]) {
               await sleep(delayMs);
               try {
                 await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
@@ -2708,6 +2725,7 @@ export class AnchorService {
                 kycUrl,
                 bankAccountId,
                 retryProgrammatic.steps,
+                customerId,
               );
             } else {
               throw lastRetryError;
