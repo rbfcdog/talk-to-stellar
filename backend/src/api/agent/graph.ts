@@ -1180,6 +1180,11 @@ export class AgentGraph {
         recipient_public_key: resolvedRecipientPublicKey || undefined,
       };
       const url = await this.buildPixRampUrl(state, pixIntent);
+      const etherfuseFeeNote = this.text(
+        language,
+        'Taxa Etherfuse sandbox medida: 0,20% (R$ 0,20 em uma amostra de R$ 100). A página mostra a cotação final antes do PIN.',
+        'Measured Etherfuse sandbox fee: 0.20% (R$0.20 on a R$100 sample). The page shows the final quote before the PIN.'
+      );
       state.success = true;
       state.pending_pix_ramp = undefined;
       state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
@@ -1187,15 +1192,15 @@ export class AgentGraph {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`,
-          `To send ${amountText} to your PIX, open:\n\n${url}\n\nThe screen calculates the best conversion at exit and confirms the amount arriving in BRL in your PIX.`
+          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nA tela calcula a melhor conversão na saída e confirma o valor chegando em BRL no seu PIX.`,
+          `To send ${amountText} to your PIX, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nThe screen calculates the best conversion at exit and confirms the amount arriving in BRL in your PIX.`
         );
       } else if (intent.flow === 'fund_and_pay' && resolvedRecipientLabel) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX da forma mais otimizada, abra:\n\n${url}\n\nA tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel} pela rota mais otimizada disponível.`,
-          `To send ${amountText} to ${resolvedRecipientLabel} with PIX using the most optimized route, open:\n\n${url}\n\nThe screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel} through the most optimized available route.`
+          `Para mandar ${amountText} para ${resolvedRecipientLabel} via PIX da forma mais otimizada, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nA tela confirma o PIX, converte quando preciso e envia para ${resolvedRecipientLabel} pela rota mais otimizada disponível.`,
+          `To send ${amountText} to ${resolvedRecipientLabel} with PIX using the most optimized route, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nThe screen confirms the PIX, converts when needed, and sends it to ${resolvedRecipientLabel} through the most optimized available route.`
         );
       } else {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1204,8 +1209,8 @@ export class AgentGraph {
           : this.text(language, `colocar ${amountText} na sua conta`, `add ${amountText} to your account`);
         state.response_message = this.text(
           language,
-          `Para ${actionText} via PIX, abra:\n\n${url}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
-          `To ${actionText} with PIX, open:\n\n${url}\n\nOn the page, use the QR and then confirm so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
+          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${etherfuseFeeNote}\n\nNa página, use o QR e depois confirme para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
+          `To ${actionText} with PIX, open:\n\n${url}\n\n${etherfuseFeeNote}\n\nOn the page, use the QR and then confirm so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
         );
       }
     }
