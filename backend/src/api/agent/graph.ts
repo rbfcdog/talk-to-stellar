@@ -1182,8 +1182,8 @@ export class AgentGraph {
       const url = await this.buildPixRampUrl(state, pixIntent);
       const pixFeeNote = this.text(
         language,
-        'Taxa de entrada estimada: 0,20%. A página mostra o valor final e a taxa do app antes do PIN.',
-        'Estimated PIX funding fee: 0.20%. The page shows the final amount and app fee before the PIN.'
+        'A página mostra quanto sai no PIX, a taxa do app e quanto será enviado antes do PIN.',
+        'The page shows how much leaves through PIX, the app fee, and how much will be sent before the PIN.'
       );
       state.success = true;
       state.pending_pix_ramp = undefined;
@@ -1565,8 +1565,8 @@ export class AgentGraph {
 
   private formatUserFacingAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const upper = this.toUserFacingAssetCode(assetCode);
-    if (upper === 'USDC' || upper === 'USD') return this.text(language, 'dólar digital', 'digital dollar');
-    if (upper === 'BRL') return this.text(language, 'real digital', 'digital real');
+    if (upper === 'USDC' || upper === 'USD') return 'US$';
+    if (upper === 'BRL') return 'R$';
     return upper || this.text(language, 'saldo', 'balance');
   }
 
@@ -1915,7 +1915,7 @@ export class AgentGraph {
       return this.text(language, `PIX para completar: ${this.formatMoneyByAsset(amount, 'BRL')}.`, `PIX needed: ${this.formatMoneyByAsset(amount, 'BRL')}.`);
     }
     if (normalizedAsset !== 'USDC' || numeric <= 0) {
-      return this.text(language, 'A tela calcula o valor do PIX e separa taxa do ramp e taxa TalkToStellar antes de confirmar.', 'The screen calculates the PIX amount and separates the ramp fee and TalkToStellar fee before confirmation.');
+      return this.text(language, 'A tela mostra quanto sai no PIX, a taxa do app e quanto será enviado antes de confirmar.', 'The screen shows how much leaves through PIX, the app fee, and how much will be sent before confirmation.');
     }
 
     try {
@@ -1926,15 +1926,15 @@ export class AgentGraph {
         const estimatedBrl = numeric * brlPerUsdc;
         return this.text(
           language,
-          `PIX estimado pela rota mais otimizada: cerca de ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela atualiza o valor e separa taxa do ramp e taxa TalkToStellar antes de confirmar.`,
-          `Estimated PIX with the most optimized route: about ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen refreshes the amount and separates the ramp fee and TalkToStellar fee before confirmation.`
+          `Valor aproximado do PIX: ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. A tela mostra a taxa do app e quanto será enviado antes de confirmar.`,
+          `Approximate PIX amount: ${this.formatMoneyByAsset(estimatedBrl.toFixed(2), 'BRL')}. The screen shows the app fee and how much will be sent before confirmation.`
         );
       }
     } catch (error) {
       logger.warn(`[pix-funding-estimate] failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    return this.text(language, 'A tela calcula o valor do PIX e separa taxa do ramp e taxa TalkToStellar antes de confirmar.', 'The screen calculates the PIX amount and separates the ramp fee and TalkToStellar fee before confirmation.');
+    return this.text(language, 'A tela mostra quanto sai no PIX, a taxa do app e quanto será enviado antes de confirmar.', 'The screen shows how much leaves through PIX, the app fee, and how much will be sent before confirmation.');
   }
 
   private async buildPixFundedPaymentMessage(state: AgentState, input: {
@@ -2461,7 +2461,7 @@ export class AgentGraph {
       '- In payment and conversion tools, source/origin asset is what the sender spends; destination asset is what the recipient receives.',
       '- Example: "transferir 200 BRL para Carlos receber em USDC" means source_amount=200, source_asset_code=BRL, destination/dest asset=USDC. Do not send 200 USDC.',
       '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
-      '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as BRL or real digital.',
+      '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as reais or R$.',
       '- Do not mention sandbox/testnet/devnet/provider/anchor/Etherfuse/infrastructure in chat. User-facing copy must sound like a banking app.',
       '- Mainnet is an advanced separate mode. Only discuss Stellar Mainnet if the user explicitly says mainnet, pubnet, rede publica, carteira mainnet, or saldo mainnet.',
       '- For Mainnet requests, say Mainnet uses real assets and is read-only by default. Never ask for or accept secret keys; only public keys beginning with G are allowed.',
