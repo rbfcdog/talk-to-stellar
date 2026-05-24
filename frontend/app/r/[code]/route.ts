@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setSessionCookies } from "@/lib/server-session";
 
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
@@ -22,14 +23,20 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
   const encodedCode = encodeURIComponent(code);
 
-  // Prefer same-origin proxy route to keep resolution behavior aligned with the app deployment.
-  let response = await fetch(`${req.nextUrl.origin}/api/external/short-links/${encodedCode}`, {
+  const internalSecret = process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "";
+
+  // Resolve directly from the backend so this route can install an HttpOnly
+  // session cookie before redirecting to PIX/chat flows.
+  let response = await fetch(`${getBackendBaseUrl()}/api/external/short-links/${encodedCode}?include_session=1`, {
     cache: "no-store",
+    headers: {
+      ...(internalSecret ? { "x-internal-api-secret": internalSecret } : {}),
+    },
   }).catch(() => null as any);
 
-  // Fallback: direct backend call if proxy is unavailable.
+  // Fallback: same-origin proxy without session installation.
   if (!response || !response.ok) {
-    response = await fetch(`${getBackendBaseUrl()}/api/external/short-links/${encodedCode}`, {
+    response = await fetch(`${req.nextUrl.origin}/api/external/short-links/${encodedCode}`, {
       cache: "no-store",
     }).catch(() => null as any);
   }
@@ -40,5 +47,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
     return NextResponse.redirect(new URL("/chat", req.url));
   }
 
-  return NextResponse.redirect(String(payload.url));
+  const redirect = NextResponse.redirect(String(payload.url));
+  setSessionCookies(redirect, {
+    sessionId: String(payload.session_id || payload.sessionId || "").trim(),
+    sessionToken: String(payload.session_token || payload.sessionToken || "").trim(),
+  });
+  return redirect;
 }

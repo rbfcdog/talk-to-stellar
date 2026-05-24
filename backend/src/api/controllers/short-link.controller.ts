@@ -3,6 +3,7 @@ import { supabase } from '../../config/supabase';
 import ExternalService from '../services/core/external.service';
 import { isProductionLikeEnvironment } from '../../config/runtime';
 import { timingSafeEqualString } from '../../utils/password';
+import { isSessionExpired } from '../../utils/session-expiry';
 
 const externalService = new ExternalService(supabase as any);
 
@@ -140,11 +141,37 @@ export class ShortLinkController {
   static async resolve(req: Request, res: Response) {
     try {
       const code = String(req.params.code || req.query.code || '').trim();
-      const url = await externalService.resolveShortLink(code);
-      if (!url) {
+      const record = await externalService.resolveShortLinkRecord(code);
+      if (!record?.url) {
         return res.status(404).json({ success: false, message: 'Link não encontrado ou expirado.' });
       }
-      return res.status(200).json({ success: true, url });
+
+      const includeSession = String(req.query.include_session || req.query.includeSession || '').trim() === '1';
+      const canAttachSession = includeSession &&
+        hasTrustedProxySecret(req) &&
+        ['pix_onramp', 'pix_offramp'].includes(String(record.purpose || '').trim().toLowerCase()) &&
+        Boolean(record.session_id);
+
+      if (!canAttachSession) {
+        return res.status(200).json({ success: true, url: record.url });
+      }
+
+      const { data: session, error } = await supabase
+        .from('agent_sessions')
+        .select('session_id, session_token, user_id, last_activity, updated_at, created_at')
+        .eq('session_id', record.session_id)
+        .maybeSingle();
+
+      if (error || !session?.session_token || isSessionExpired(session)) {
+        return res.status(200).json({ success: true, url: record.url });
+      }
+
+      return res.status(200).json({
+        success: true,
+        url: record.url,
+        session_id: String(session.session_id || record.session_id || ''),
+        session_token: String(session.session_token || ''),
+      });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
     }
