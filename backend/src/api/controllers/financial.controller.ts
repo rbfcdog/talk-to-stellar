@@ -18,10 +18,10 @@ import { BrlReferenceRateService } from '../services/brl-reference-rate.service'
 import { timingSafeEqualString } from '../../utils/password';
 import { publicErrorMessage } from '../../utils/public-error';
 import { mainnetWalletService } from '../services/mainnet-wallet.service';
+import { FiatRateService, FiatUsdBrlQuote } from '../services/fiat-rate.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
-const DEFAULT_USD_BRL_REFERENCE_RATE = 5.15;
 const DEFAULT_USD_BRL_SANITY_MIN = 3;
 const DEFAULT_USD_BRL_SANITY_MAX = 10;
 
@@ -38,15 +38,21 @@ function configuredPositiveNumber(keys: string[], fallback: number): number {
   return fallback;
 }
 
-function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number): {
+function configuredUsdBrlFallback(): { value: number; source: string } {
+  for (const key of ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']) {
+    const value = toPositiveNumber(process.env[key], 0);
+    if (value > 0) return { value, source: `env:${key}` };
+  }
+  return { value: 0, source: '' };
+}
+
+function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBrlQuote | null): {
   brlPerUsdc: number;
   fallbackApplied: boolean;
   fallbackReason?: string;
+  source?: string;
 } {
-  const fallbackRate = configuredPositiveNumber(
-    ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE'],
-    DEFAULT_USD_BRL_REFERENCE_RATE,
-  );
+  const fallbackRate = configuredUsdBrlFallback();
   const minRate = configuredPositiveNumber(
     ['USD_BRL_SANITY_MIN', 'DEFAULT_USD_BRL_SANITY_MIN'],
     DEFAULT_USD_BRL_SANITY_MIN,
@@ -57,30 +63,49 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number): {
   );
 
   if (!Number.isFinite(rawBrlPerUsdc) || rawBrlPerUsdc <= 0) {
-    if (fallbackRate <= 0) {
-      throw new Error('Cotação BRL/USDC indisponível e USD_BRL_FALLBACK_RATE não configurado.');
+    if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
+      return {
+        brlPerUsdc: marketQuote.brlPerUsd,
+        fallbackApplied: true,
+        fallbackReason: 'missing_or_invalid_brl_usdc_quote_market_reference',
+        source: marketQuote.source,
+      };
+    }
+    if (fallbackRate.value <= 0) {
+      throw new Error('Cotação USD/BRL indisponível no momento.');
     }
     return {
-      brlPerUsdc: fallbackRate,
+      brlPerUsdc: fallbackRate.value,
       fallbackApplied: true,
       fallbackReason: 'missing_or_invalid_brl_usdc_quote',
+      source: fallbackRate.source,
     };
   }
 
   if (rawBrlPerUsdc < minRate || rawBrlPerUsdc > maxRate) {
-    if (fallbackRate <= 0) {
-      throw new Error('Cotação BRL/USDC fora dos limites de segurança e USD_BRL_FALLBACK_RATE não configurado.');
+    if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
+      return {
+        brlPerUsdc: marketQuote.brlPerUsd,
+        fallbackApplied: true,
+        fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds_market_reference',
+        source: marketQuote.source,
+      };
+    }
+    if (fallbackRate.value <= 0) {
+      throw new Error('Cotação USD/BRL indisponível no momento.');
     }
     return {
-      brlPerUsdc: fallbackRate,
+      brlPerUsdc: fallbackRate.value,
       fallbackApplied: true,
       fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds',
+      source: fallbackRate.source,
     };
   }
 
   return {
     brlPerUsdc: rawBrlPerUsdc,
     fallbackApplied: false,
+    source: 'configured_brl_asset',
   };
 }
 
@@ -138,7 +163,8 @@ export class FinancialController {
       quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
     }
     const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
-    const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
+    const marketQuote = await FiatRateService.getUsdBrlRate().catch(() => null);
+    const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc, marketQuote);
     const brlPerUsdc = rate.brlPerUsdc;
     const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
     const grossUsdc = brlPerUsdc > 0
@@ -190,7 +216,7 @@ export class FinancialController {
       quote: {
         brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
         usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
-        source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
+        source: rate.fallbackApplied ? (rate.source || 'usd_brl_sanity_fallback') : grossQuote.source,
         symbol: grossQuote?.symbol || 'USDC/BRL',
         path: grossQuote?.path || [],
         source_asset: grossQuote?.sourceAsset || { code: 'BRL', issuer: getAssetIssuer('BRL') },
@@ -199,6 +225,7 @@ export class FinancialController {
           fallback_reason: rate.fallbackReason,
           quote_failure_reason: quoteFailureReason || undefined,
           raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+          market_fetched_at: marketQuote?.fetchedAt,
         } : {}),
       },
       output: {
@@ -262,7 +289,8 @@ export class FinancialController {
         quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
       }
       const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
-      const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc);
+      const marketQuote = await FiatRateService.getUsdBrlRate().catch(() => null);
+      const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc, marketQuote);
       const brlPerUsdc = rate.brlPerUsdc;
       const estimatedBrl = rate.fallbackApplied
         ? usdcAmount * brlPerUsdc
@@ -288,7 +316,7 @@ export class FinancialController {
         quote: {
           brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
           usdc_per_brl: Number((brlPerUsdc > 0 ? 1 / brlPerUsdc : 0).toFixed(8)),
-          source: rate.fallbackApplied ? 'usd_brl_sanity_fallback' : grossQuote.source,
+          source: rate.fallbackApplied ? (rate.source || 'usd_brl_sanity_fallback') : grossQuote.source,
           symbol: grossQuote?.symbol || 'USDC/BRL',
           path: grossQuote?.path || [],
           source_asset: grossQuote?.sourceAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
@@ -297,6 +325,7 @@ export class FinancialController {
             fallback_reason: rate.fallbackReason,
             quote_failure_reason: quoteFailureReason || undefined,
             raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+            market_fetched_at: marketQuote?.fetchedAt,
           } : {}),
         },
         output: {
