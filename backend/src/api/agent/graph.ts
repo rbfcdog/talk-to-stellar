@@ -2478,6 +2478,7 @@ export class AgentGraph {
       '- When a quote or payment result has a fee, say it before confirmation in R$ and US$ only.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
+      '- For BRL -> US$ net value, exchange-rate, fee, or received-amount questions, call get_conversion_preview or a quote tool. Never use a hardcoded exchange rate.',
       '- If the user asks "quanto custa enviar", "quanto vou pagar", "vale a pena", "comparado com o banco", "banco", or "Wise" with a transfer amount, call show_savings_calculator before asking for confirmation. Never answer fee comparison only with free text.',
       '- After any payment or conversion is completed inside the agent flow, call send_receipt_with_savings instead of only confirming with free text. The receipt must put the user savings before the Stellar evidence/hash.',
       '- If the user asks "quanto eu economizei", "resumo do ano", or "histórico de economia", call show_annual_savings_summary.',
@@ -3278,12 +3279,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         }
         const exactBalances = ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
+        const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();
+        const savingsLine = monthlySavingsMessage ? `\n\n💰 ${monthlySavingsMessage}` : '';
 
         state.success = true;
         state.response_message = this.text(
           language,
-          `Saldo da sua conta TalkToStellar:\n${formattedBalances}\n\nO PIX entrega R$ ou US$ conforme você escolher no checkout.`,
-          `Your TalkToStellar account balance:\n${formattedBalances}\n\nPIX delivers R$ or US$ depending on what you choose at checkout.`
+          `Saldo da sua conta TalkToStellar:\n${formattedBalances}${savingsLine}\n\nO PIX entrega R$ ou US$ conforme você escolher no checkout.`,
+          `Your TalkToStellar account balance:\n${formattedBalances}${savingsLine}\n\nPIX delivers R$ or US$ depending on what you choose at checkout.`
         );
       }
     }

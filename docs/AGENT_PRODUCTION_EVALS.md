@@ -10,6 +10,7 @@ Deixar o agente mais previsivel em producao:
 
 - tool-first para saldo, contatos, PIX, pagamento, conversao, taxa, historico e recibo;
 - sem confirmacao financeira em texto livre;
+- cambio e valor liquido sempre por `get_conversion_preview`/quote real, sem taxa fixa no prompt;
 - sem vazamento de SQL, provider, issuer, trustline, XDR, Horizon ou erro tecnico;
 - mensagens de taxa/economia sempre calculadas por tool;
 - recibo financeiro com economia enviado por tool depois de pagamento/conversao;
@@ -28,6 +29,7 @@ A secao `PRODUCTION AGENT CONTRACT` define as regras duras:
 - usar ferramentas para qualquer dado de conta ou dinheiro;
 - perguntar no maximo uma clarificacao;
 - validar contato real antes de pagamento para pessoa;
+- usar `get_conversion_preview` antes de responder cambio, valor liquido ou fee BRL -> US$;
 - usar `show_savings_calculator` para comparacao de custo;
 - usar `send_receipt_with_savings` depois de pagamento/conversao;
 - usar `show_annual_savings_summary` para resumo de economia;
