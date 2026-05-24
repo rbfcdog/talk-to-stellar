@@ -725,12 +725,13 @@ export default function PixRampClient({
   ).trim();
   const transferRecipientVerified = Boolean(!transferFlow || verifiedTransferRecipient?.recipient_public_key || pixFundedTransferResult?.recipient_public_key);
   const safeTransferRecipientLabel = transferRecipientVerified ? transferRecipientLabel : "";
-  const waitingForReceiveEstimate = Boolean(
+  const receiveEstimateRequired = Boolean(
     rampMode === "onramp" &&
       desiredFinalAmount &&
-      desiredReceiveAsset === "USDC" &&
-      (receiveEstimateLoading || !receiveEstimateReady)
+      desiredReceiveAsset === "USDC"
   );
+  const receiveEstimateMissing = Boolean(receiveEstimateRequired && !receiveEstimateReady);
+  const waitingForReceiveEstimate = Boolean(receiveEstimateRequired && receiveEstimateLoading);
 
   const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
   const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
@@ -913,10 +914,18 @@ export default function PixRampClient({
           ? transferFlow && transferRecipientLabel
             ? L(`${formatMoney(quote.fromAmount || amountBrl)} via PIX para enviar a ${transferRecipientLabel}.`, `${formatMoney(quote.fromAmount || amountBrl)} via PIX to send to ${transferRecipientLabel}.`)
             : L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
+          : receiveEstimateRequired && !receiveEstimateReady
+            ? receiveEstimateLoading
+              ? L("Calculando a cotação atual.", "Calculating the current quote.")
+              : L("Aguardando cotação atual antes de gerar o PIX.", "Waiting for the current quote before creating PIX.")
           : transferFlow && transferRecipientLabel
             ? L(`Alvo: mandar ${formatMoney(amountBrl)} para ${transferRecipientLabel}.`, `Target: send ${formatMoney(amountBrl)} to ${transferRecipientLabel}.`)
             : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
-        state: quote ? quoteExpired ? "warning" : "done" : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
+        state: quote
+          ? quoteExpired ? "warning" : "done"
+          : receiveEstimateRequired
+            ? receiveEstimateLoading ? "active" : receiveEstimateReady ? "done" : "warning"
+            : (loading.includes("quote") || loading.includes("Preparing")) ? "active" : "pending",
       },
       {
         label: L("Checkout PIX", "PIX checkout"),
@@ -972,6 +981,9 @@ export default function PixRampClient({
     autoPayAmount,
     autoPayAsset,
     pixFundedTransferResult,
+    receiveEstimateLoading,
+    receiveEstimateReady,
+    receiveEstimateRequired,
     walletPublicKey,
     hasSession,
     needsBrowserLoginForPix,
@@ -1801,12 +1813,12 @@ export default function PixRampClient({
     if (autoStartedRef.current) return;
     if (rampMode !== "onramp") return;
     if (operationLocked) return;
-    if (!canResolveWallet || loading || order || quote || waitingForReceiveEstimate) return;
+    if (!canResolveWallet || loading || order || quote || receiveEstimateMissing) return;
     if (transferFlow && (!transferRecipientVerified || recipientVerificationLoading || Boolean(recipientVerificationError))) return;
 
     autoStartedRef.current = true;
     void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
-  }, [canResolveWallet, loading, operationLocked, order, queryReady, queryString, quote, rampMode, recipientVerificationError, recipientVerificationLoading, transferFlow, transferRecipientVerified, waitingForReceiveEstimate]);
+  }, [canResolveWallet, loading, operationLocked, order, queryReady, queryString, quote, rampMode, receiveEstimateMissing, recipientVerificationError, recipientVerificationLoading, transferFlow, transferRecipientVerified]);
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
@@ -2548,8 +2560,16 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-3xl bg-emerald-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || waitingForReceiveEstimate || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Preparing PIX checkout" || waitingForReceiveEstimate ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando PIX...", "Preparing PIX...")}</span> : L("Gerar PIX pela rota mais otimizada", "Generate PIX with the most optimized route")}
+            <button className="mt-6 w-full rounded-3xl bg-emerald-300 px-5 py-5 text-base font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+              {operationLocked
+                ? L("PIX concluído", "PIX complete")
+                : loading === "Preparing PIX checkout"
+                  ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
+                  : waitingForReceiveEstimate
+                    ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
+                    : receiveEstimateMissing
+                      ? L("Aguardando cotação atual", "Waiting for current quote")
+                      : L("Gerar PIX pela rota mais otimizada", "Generate PIX with the most optimized route")}
             </button>
             {transferRecipientBlocker && (
               <p className="mt-3 text-sm font-bold text-rose-100">{transferRecipientBlocker}</p>

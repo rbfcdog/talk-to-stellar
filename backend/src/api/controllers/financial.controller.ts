@@ -39,6 +39,9 @@ function configuredPositiveNumber(keys: string[], fallback: number): number {
 }
 
 function configuredUsdBrlFallback(): { value: number; source: string } {
+  if (!/^(1|true|yes)$/i.test(String(process.env.ALLOW_USD_BRL_ENV_FALLBACK || '').trim())) {
+    return { value: 0, source: '' };
+  }
   for (const key of ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']) {
     const value = toPositiveNumber(process.env[key], 0);
     if (value > 0) return { value, source: `env:${key}` };
