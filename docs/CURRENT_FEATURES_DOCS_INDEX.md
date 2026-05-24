@@ -36,6 +36,18 @@ O que uma IA/reviewer deveria avaliar?
 
 ## Posicionamento e produto
 
+### `README.md`
+
+Documento principal do GitHub, agora organizado com produto primeiro e tecnico depois:
+
+- proposta de valor;
+- URL do produto ao vivo;
+- console Mainnet;
+- materiais de apresentacao;
+- tabela para 5 usuarios reais Mainnet;
+- estrategia de BRL/asset;
+- arquitetura e operacao.
+
 ### `docs/STRATEGIC_POSITIONING_TALKTOSTELLAR.md`
 
 Melhor documento para explicar a tese de negocio:
@@ -53,6 +65,14 @@ Descricao mais antiga e mais geral do produto. Ainda e util, mas menos atual que
 ### `docs/PROJECT_TECHNICAL_DESCRIPTION.md`
 
 Descricao tecnica geral da arquitetura.
+
+### `docs/PITCH_DECK_7_SLIDES_INITIAL.md`
+
+Rascunho textual do pitch deck de 7 slides:
+
+```text
+problema / solucao / como funciona / mercado / modelo de negocio / tracao / equipe
+```
 
 ## Demo e avaliacao
 
@@ -106,6 +126,15 @@ Runbook para quando o WhatsApp recebe mensagens mas nao recebe callback depois d
 Guia de deploy da Evolution API no Railway.
 
 ## Mainnet e Stellar
+
+### `docs/BRL_ASSET_STRATEGY_STELLAR.md`
+
+Documento de decisao sobre como representar BRL/real no produto:
+
+- recomendacao de BRL off-chain + USDC on-chain;
+- quando usar asset BRL fixo em Testnet;
+- por que evitar stablecoin BRL dinamica;
+- quando um parceiro/anchor regulado faria sentido.
 
 ### `docs/STELLAR_MAINNET_INFRASTRUCTURE.md`
 
@@ -190,10 +219,10 @@ SOW adaptado ao estado atual anterior do projeto.
 Para mandar para outra IA avaliar o projeto, envie estes 4 primeiro:
 
 ```text
+README.md
 docs/PROJECT_FEATURE_STATE_FOR_AI_REVIEW_20260523.md
 docs/STRATEGIC_POSITIONING_TALKTOSTELLAR.md
-docs/SISTEMA_DE_TAXAS_RESUMO.md
-docs/MOCKED_SURFACES_FULL_REPO_SCAN_20260523.md
+docs/BRL_ASSET_STRATEGY_STELLAR.md
 ```
 
 Para avaliador de demo tecnica, envie:
@@ -203,4 +232,3 @@ docs/ANCHOR_TESTNET_VIDEO_WALKTHROUGH.md
 docs/INSTITUTION_SETTLEMENT_INTERFACE_GUIDE.md
 docs/WHATSAPP_EVOLUTION_CALLBACK_TROUBLESHOOTING.md
 ```
-
