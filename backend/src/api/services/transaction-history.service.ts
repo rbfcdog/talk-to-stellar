@@ -41,6 +41,18 @@ function humanIdentifier(profile: {
   return 'indisponível';
 }
 
+function missingOptionalTable(error: unknown, tableName: string): boolean {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return message.includes(tableName.toLowerCase()) ||
+    message.includes('schema cache') ||
+    message.includes('does not exist') ||
+    message.includes('not found');
+}
+
+function receiptUrl(code: string): string {
+  return `${appBaseUrl()}/receipt/${encodeURIComponent(code)}`;
+}
+
 type CounterpartyProfile = {
   public_key: string;
   name?: string | null;
@@ -55,6 +67,49 @@ type CounterpartyProfile = {
 };
 
 export class TransactionHistoryService {
+  private static async listReceiptRows(input: {
+    sessionId: string;
+    userId: string;
+    month: number;
+    year: number;
+    limit: number;
+  }): Promise<any[]> {
+    const filters = [
+      { column: 'session_id', value: input.sessionId },
+      { column: 'user_id', value: input.userId },
+    ].filter((item) => item.value);
+    const byCode = new Map<string, any>();
+
+    for (const filter of filters) {
+      let query = supabase
+        .from('receipt_images')
+        .select('code, operation_id, tx_hash, session_id, user_id, receipt_type, metadata, created_at')
+        .eq(filter.column, filter.value)
+        .order('created_at', { ascending: false })
+        .limit(input.limit);
+
+      if (Number.isFinite(input.month) && Number.isFinite(input.year) && input.month >= 1 && input.month <= 12 && input.year >= 2000) {
+        const start = new Date(Date.UTC(input.year, input.month - 1, 1, 0, 0, 0, 0)).toISOString();
+        const end = new Date(Date.UTC(input.year, input.month, 1, 0, 0, 0, 0)).toISOString();
+        query = query.gte('created_at', start).lt('created_at', end);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (missingOptionalTable(error, 'receipt_images')) continue;
+        throw new Error(`Falha ao carregar recibos: ${error.message}`);
+      }
+
+      for (const row of data || []) {
+        const code = normalizeKey((row as any)?.code);
+        if (!code || byCode.has(code)) continue;
+        byCode.set(code, row);
+      }
+    }
+
+    return Array.from(byCode.values());
+  }
+
   private static async resolveCounterpartyProfiles(publicKeys: string[], sessionId: string, userId: string): Promise<Map<string, CounterpartyProfile>> {
     const keys = Array.from(new Set(publicKeys.map((value) => normalizeKey(value)).filter((value) => hasPublicKey(value))));
     const result = new Map<string, CounterpartyProfile>();
@@ -232,10 +287,24 @@ export class TransactionHistoryService {
       throw new Error(`Falha ao carregar histórico de pagamentos: ${error.message}`);
     }
 
-    const destinationKeys = (rows || []).map((row: any) => normalizeKey(row?.destination_public_key));
+    const receiptRows = await this.listReceiptRows({
+      sessionId: ctx.sessionId,
+      userId: ctx.userId,
+      month,
+      year,
+      limit,
+    });
+
+    const destinationKeys = [
+      ...(rows || []).map((row: any) => normalizeKey(row?.destination_public_key)),
+      ...receiptRows.map((row: any) => {
+        const metadata = (row?.metadata || {}) as Record<string, any>;
+        return normalizeKey(metadata.destinationPublicKey || metadata.destination_public_key || metadata.counterpartyPublicKey || metadata.counterparty_public_key || metadata.counterpartyKey);
+      }),
+    ];
     const profiles = await this.resolveCounterpartyProfiles(destinationKeys, ctx.sessionId, ctx.userId);
 
-    const transactions = (rows || []).map((row: any) => {
+    const paymentTransactions = (rows || []).map((row: any) => {
       const metadata = (row?.metadata || {}) as Record<string, any>;
       const key = normalizeKey(row?.destination_public_key);
       const profile = profiles.get(key);
@@ -274,6 +343,68 @@ export class TransactionHistoryService {
         },
       };
     });
+
+    const loggedHashes = new Set(
+      paymentTransactions
+        .map((item: any) => normalizeKey(item.payment_hash || ''))
+        .filter(Boolean)
+    );
+
+    const receiptTransactions = receiptRows
+      .filter((row: any) => {
+        const hash = normalizeKey(row?.tx_hash);
+        return !hash || !loggedHashes.has(hash);
+      })
+      .map((row: any) => {
+        const metadata = (row?.metadata || {}) as Record<string, any>;
+        const key = normalizeKey(metadata.destinationPublicKey || metadata.destination_public_key || metadata.counterpartyPublicKey || metadata.counterparty_public_key || metadata.counterpartyKey);
+        const profile = profiles.get(key);
+        const counterpartyLabel = normalizeKey(metadata.counterpartyLabel || metadata.counterparty_name || metadata.recipient_name || profile?.name || '');
+        const rawIdentifier = normalizeKey(metadata.counterpartyKey || metadata.counterparty_key || '');
+        const identifier = rawIdentifier && !hasPublicKey(rawIdentifier)
+          ? rawIdentifier
+          : humanIdentifier({
+              email: profile?.email,
+              phone_number: profile?.phone_number,
+              cpf: profile?.cpf,
+              pix_key: profile?.pix_key,
+            });
+        const code = normalizeKey(row?.code);
+        const url = code ? receiptUrl(code) : '';
+
+        return {
+          id: code ? `receipt:${code}` : `receipt:${row?.operation_id || row?.tx_hash || row?.created_at}`,
+          payment_hash: row?.tx_hash || null,
+          receipt_url: url || null,
+          status: 'success',
+          operation_type: row?.receipt_type || 'receipt',
+          source_amount: metadata.sourceAmount || metadata.source_amount || null,
+          source_asset_code: metadata.sourceAssetCode || metadata.source_asset_code || null,
+          destination_amount: metadata.destinationAmount || metadata.destination_amount || null,
+          destination_asset_code: metadata.destinationAssetCode || metadata.destination_asset_code || null,
+          destination_public_key: hasPublicKey(key) ? key : null,
+          error_message: null,
+          context_message: normalizeKey(metadata.contextMessage || metadata.context_message || ''),
+          created_at: row?.created_at || null,
+          completed_at: metadata.completedAt || metadata.completed_at || row?.created_at || null,
+          counterparty: {
+            name: counterpartyLabel || (row?.receipt_type === 'payment_received' ? 'TalkToStellar' : 'Destinatário'),
+            identifier: identifier || (url ? 'comprovante disponível' : 'indisponível'),
+            public_key: hasPublicKey(key) ? key : null,
+            user_id: profile?.user_id || null,
+            profile_url: profile?.profile_url || url || null,
+            short_profile_url: profile?.short_profile_url || profile?.profile_url || url || null,
+          },
+        };
+      });
+
+    const transactions = [...paymentTransactions, ...receiptTransactions]
+      .sort((a: any, b: any) => {
+        const aTime = Date.parse(a.completed_at || a.created_at || '');
+        const bTime = Date.parse(b.completed_at || b.created_at || '');
+        return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+      })
+      .slice(0, limit);
 
     return {
       session_id: ctx.sessionId,
@@ -341,4 +472,3 @@ export class TransactionHistoryService {
     };
   }
 }
-

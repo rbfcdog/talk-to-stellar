@@ -233,7 +233,8 @@ describe('PaymentReceiptService', () => {
       buttonText: 'Abrir comprovante',
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain('💰 *Você economizou');
-    expect(notifySpy.mock.calls[0][0].text).toContain('🔗 Evidência Stellar:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('🔗 Evidência Stellar:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('tx-callback-1');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Pagamento concluido.');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Recibo registrado no seu histórico.');
 
