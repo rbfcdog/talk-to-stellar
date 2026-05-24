@@ -79,13 +79,13 @@ const englishDictionary: Dictionary = {
     login_back_to_channel: "Go back to {{provider}} and send your next message.",
     login_done: "Sign-in complete.",
     login_opening_operation: "Opening the operation shortly.",
-    hero_title_1: "PIX to dollars.",
-    hero_title_2: "In one message.",
+    hero_title_1: "Send to World.",
+    hero_title_2: "In One Message.",
     hero_subtitle:
-      "A conversational account for funding with PIX, converting to dollars, and sending money to contacts or international USD accounts.",
-    hero_card_1_title: "Start with chat",
-    hero_card_1_body: "Open WhatsApp, Telegram, or the browser chat and ask for balance, PIX, payment, conversion, or history.",
-    hero_card_2_title: "Review before confirming",
+      "A conversational account for sending, converting, and receiving money through the channels people already use every day.",
+    hero_card_1_title: "Start from chat",
+    hero_card_1_body: "Ask for balance, PIX, payment, conversion, or history without downloading a new app.",
+    hero_card_2_title: "Confirm with clarity",
     hero_card_2_body:
       "The platform compares routes in real time to use the most optimized path, reduce effective cost in BRL and USDC, and show fees before confirmation.",
     nav_solution: "Solution",
@@ -165,13 +165,13 @@ const portugueseDictionary: Dictionary = {
     login_back_to_channel: "Volte ao {{provider}} e envie sua próxima mensagem.",
     login_done: "Entrada concluída.",
     login_opening_operation: "Abrindo a operação em instantes.",
-    hero_title_1: "PIX para dólares.",
+    hero_title_1: "Envie para o mundo.",
     hero_title_2: "Em uma mensagem.",
     hero_subtitle:
-      "Uma conta conversacional para entrar com PIX, converter para dólar e enviar dinheiro para contatos ou contas internacionais em USD.",
+      "Uma conta conversacional para enviar, converter e receber dinheiro pelos canais que a pessoa já usa todos os dias.",
     hero_card_1_title: "Comece pelo chat",
-    hero_card_1_body: "Abra WhatsApp, Telegram ou o chat web e peça saldo, PIX, pagamento, conversão ou histórico.",
-    hero_card_2_title: "Revise antes de confirmar",
+    hero_card_1_body: "Peça saldo, PIX, pagamento, conversão ou histórico sem baixar um novo app.",
+    hero_card_2_title: "Confirme com clareza",
     hero_card_2_body:
       "A plataforma compara rotas em tempo real para usar a forma mais otimizada, reduzir o custo efetivo em BRL e USDC e mostrar a taxa antes da confirmação.",
     nav_solution: "Solução",
@@ -205,12 +205,12 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function readStoredLanguage(): AppLanguage {
-  if (typeof window === "undefined") return "en";
+  if (typeof window === "undefined") return "pt-BR";
   const stored = window.localStorage.getItem(STORAGE_KEY);
   if (stored) return normalizeLanguage(stored);
   const cookieMatch = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_KEY}=([^;]*)`));
   if (cookieMatch?.[1]) return normalizeLanguage(decodeURIComponent(cookieMatch[1]));
-  return "en";
+  return normalizeLanguage(window.navigator?.language || "pt-BR");
 }
 
 function persistLanguage(language: AppLanguage) {
@@ -222,7 +222,7 @@ function persistLanguage(language: AppLanguage) {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
-  const [language, setLanguageState] = useState<AppLanguage>("en");
+  const [language, setLanguageState] = useState<AppLanguage>("pt-BR");
   const appliedQueryLanguageRef = useRef("");
   const queryLanguage = useMemo(
     () => searchParams.get("lang") || searchParams.get("language") || "",

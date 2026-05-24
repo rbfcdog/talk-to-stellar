@@ -1,8 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { BrainCircuit, ArrowRight, Zap, Clock, DollarSign, CheckCheck } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
 
 export default function Pathfinding() {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+
   return (
     <section className="py-16 md:py-24 w-full flex flex-col items-center text-center relative px-4 sm:px-0">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#4CA1EF]/5 blur-[120px] rounded-full pointer-events-none" />
@@ -14,13 +18,13 @@ export default function Pathfinding() {
         className="max-w-3xl mb-12 md:mb-16"
       >
         <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-[#4CA1EF]/10 border border-[#4CA1EF]/20 text-[#4CA1EF] font-semibold text-sm tracking-wide uppercase">
-          The Low-Fee Advantage
+          {L("Menos custo, mais clareza", "The Low-Fee Advantage")}
         </div>
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6">
-          The Cheapest Route. <br className="block md:hidden" /><span className="text-gradient">Every Time.</span>
+          {L("A melhor rota aparece", "The Cheapest Route.")} <br className="block md:hidden" /><span className="text-gradient">{L("antes de confirmar.", "Every Time.")}</span>
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-          Forget hidden fees. TalkToStellar finds a fast, low-cost route and shows fees and final value before confirmation.
+          {L("O TalkToStellar mostra taxa e valor final antes do PIN, para a pessoa saber exatamente o que está fazendo.", "Forget hidden fees. TalkToStellar finds a fast, low-cost route and shows fees and final value before confirmation.")}
         </p>
       </motion.div>
 
@@ -33,7 +37,7 @@ export default function Pathfinding() {
           viewport={{ once: true }}
           className="bg-[#00D87A] text-[#e9edef] px-4 py-2 md:px-5 md:py-3 rounded-2xl rounded-br-sm shadow-[0_4px_24px_rgba(0,0,0,0.2)] mb-8 relative flex items-end gap-3 z-10"
         >
-          <p className="text-base md:text-lg leading-snug pb-1 text-left">Convert R$250 and pay with PIX.</p>
+          <p className="text-base md:text-lg leading-snug pb-1 text-left">{L("Converta R$250 e pague com PIX.", "Convert R$250 and pay with PIX.")}</p>
           <div className="flex items-center gap-1 shrink-0 mb-1">
             <span className="text-xs text-[#9BA4B5]">14:42</span>
             <CheckCheck className="text-[#4CA1EF] w-4 h-4" />
@@ -65,7 +69,7 @@ export default function Pathfinding() {
             className="bg-white/5 backdrop-blur-md border border-red-500/10 rounded-2xl p-6 flex flex-col items-center relative overflow-hidden opacity-60 hover:opacity-100 transition-opacity duration-300 order-2 md:order-1"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-red-500/30" />
-            <h3 className="text-gray-500 font-medium mb-4">Banks & Exchanges</h3>
+            <h3 className="text-gray-500 font-medium mb-4">{L("Bancos e câmbio", "Banks & Exchanges")}</h3>
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-6 font-mono">
               <span>BRL</span> <ArrowRight size={14} /> <span>SWIFT</span> <ArrowRight size={14} /> <span>USD</span>
             </div>
@@ -76,7 +80,7 @@ export default function Pathfinding() {
               </div>
               <div className="flex items-center gap-1 text-gray-600">
                 <Clock size={16} />
-                <span>~2 days</span>
+                <span>{L("~2 dias", "~2 days")}</span>
               </div>
             </div>
           </motion.div>
@@ -90,7 +94,7 @@ export default function Pathfinding() {
             className="border-gradient-card p-6 flex flex-col items-center relative transform md:-translate-y-4 glow-gradient z-20 shadow-[0_0_50px_rgba(143,0,255,0.15)] order-1 md:order-2"
           >
             <div className="absolute -top-3 bg-gradient-custom text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-              Best Route
+              {L("Melhor rota", "Best Route")}
             </div>
             <h3 className="text-white font-bold mb-4 mt-2 text-lg">TalkToStellar</h3>
             

@@ -2,8 +2,12 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Smartphone, BadgeDollarSign, Zap, MessageCircle, ArrowRightLeft, Timer, CheckCheck } from 'lucide-react';
 import { StellarLogo } from './StellarLogo';
+import { useLanguage } from '@/lib/i18n';
 
 export default function ProblemSection() {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+
   return (
     <section className="py-24 md:py-32 w-full mx-auto max-w-7xl px-4 md:px-8 relative bg-transparent flex flex-col items-center">
       
@@ -15,7 +19,7 @@ export default function ProblemSection() {
           viewport={{ once: true }}
           className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-white leading-tight tracking-tight"
         >
-          International conversion with smart routing and transparent fees.
+          {L("Conversão internacional com rota inteligente e taxa clara.", "International conversion with smart routing and transparent fees.")}
         </motion.h2>
         
         <motion.p 
@@ -25,7 +29,7 @@ export default function ProblemSection() {
           transition={{ delay: 0.1 }}
           className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light max-w-2xl mx-auto"
         >
-          In traditional flows, the real cost and timing are often only clear at the end. Here, the final amount is predictable before confirmation, with fee transparency and guided execution at every step.
+          {L("Em fluxos tradicionais, o custo real costuma aparecer tarde. Aqui, você vê o valor final antes de confirmar, com orientação simples em cada etapa.", "In traditional flows, the real cost and timing are often only clear at the end. Here, the final amount is predictable before confirmation, with fee transparency and guided execution at every step.")}
         </motion.p>
       </div>
 
@@ -39,9 +43,9 @@ export default function ProblemSection() {
           className="w-full bg-[#162032]/40 backdrop-blur-md border border-white/[0.03] rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-[#162032]/60 hover:border-white/[0.03] transition-all duration-500"
         >
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Financial decisions with context.</h3>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Decisão financeira com contexto.", "Financial decisions with context.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              Instead of confusing screens and technical terms, you get clear guidance for every operation: how much you pay, how much arrives, and the next step to finish safely.
+              {L("Em vez de telas confusas e termos técnicos, você vê o essencial: quanto paga, quanto chega e qual é o próximo passo.", "Instead of confusing screens and technical terms, you get clear guidance for every operation: how much you pay, how much arrives, and the next step to finish safely.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -63,7 +67,7 @@ export default function ProblemSection() {
                   {/* Chat Body */}
                   <div className="p-4 bg-[#0C1421] flex flex-col gap-3 min-h-[200px] relative [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/cubes.png")', opacity: 0.95 }}>
                     <div className="self-start bg-[#162032] text-[#e9edef] px-3 py-2.5 rounded-xl rounded-tl-sm text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.1)] max-w-[90%] leading-relaxed border border-white/[0.03] mt-2 relative z-10">
-                      How can I help with your money today?
+                      {L("Como posso ajudar com seu dinheiro hoje?", "How can I help with your money today?")}
                       <div className="text-[9px] text-[#9BA4B5] text-right mt-1 opacity-80">09:41</div>
                     </div>
                     <motion.div 
@@ -72,7 +76,7 @@ export default function ProblemSection() {
                       transition={{ delay: 0.5 }}
                       className="self-end bg-[#005c4b] text-[#e9edef] px-3 py-2.5 rounded-xl rounded-tr-sm text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.1)] max-w-[90%] leading-relaxed border border-[#005c4b] relative z-10"
                     >
-                      Convert R$5,000 to dollars and send it to my Nomad account.
+                      {L("Converta R$5.000 para dólares e envie para minha conta global.", "Convert R$5,000 to dollars and send it to my Nomad account.")}
                       <div className="flex items-center justify-end gap-1 mt-1 opacity-80">
                         <span className="text-[9px] text-white/70">09:42</span>
                         <CheckCheck className="w-3 h-3 text-[#4CA1EF]" />
@@ -92,9 +96,9 @@ export default function ProblemSection() {
           className="w-full bg-[#162032]/40 backdrop-blur-md border border-white/[0.03] rounded-2xl overflow-hidden flex flex-col md:flex-row-reverse group hover:bg-[#162032]/60 hover:border-white/[0.03] transition-all duration-500"
         >
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Real cost, no fine print.</h3>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Custo claro, sem surpresa.", "Real cost, no fine print.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              In traditional institutions, part of the cost is hidden in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the BRL/USDC route transparent.
+              {L("Antes de confirmar, o TalkToStellar mostra taxa, valor de saída e valor que chega. A comparação fica simples e o usuário não precisa interpretar infraestrutura.", "In traditional institutions, part of the cost is hidden in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the BRL/USDC route transparent.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -108,7 +112,7 @@ export default function ProblemSection() {
                   transition={{ duration: 0.3 }}
                 >
                   <div>
-                    <div className="text-[#9BA4B5] text-xs uppercase tracking-widest font-medium mb-1">You send with PIX</div>
+                    <div className="text-[#9BA4B5] text-xs uppercase tracking-widest font-medium mb-1">{L("Você paga com PIX", "You send with PIX")}</div>
                     <div className="text-2xl font-bold text-white tracking-tight">R$ 5.000,00</div>
                   </div>
                   <div className="w-10 h-10 rounded-full border border-white/[0.03] bg-[#162032] flex items-center justify-center">
@@ -132,7 +136,7 @@ export default function ProblemSection() {
                   transition={{ duration: 0.3 }}
                 >
                   <div>
-                    <div className="text-[#00D2FF]/80 text-xs uppercase tracking-widest font-medium mb-1">You receive (exact)</div>
+                    <div className="text-[#00D2FF]/80 text-xs uppercase tracking-widest font-medium mb-1">{L("Você recebe", "You receive")}</div>
                     <div className="text-2xl font-bold text-[#00D2FF] tracking-tight">994.50 USDC</div>
                   </div>
                   <div className="w-10 h-10 rounded-full bg-[#4CA1EF] flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -147,7 +151,7 @@ export default function ProblemSection() {
                   transition={{ delay: 0.8 }}
                   className="mx-auto mt-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-full font-medium flex items-center justify-center gap-2"
                  >
-                   Around R$150.00 saved vs banks
+                   {L("Economia estimada: R$ 150,00", "Around R$150.00 saved vs banks")}
                  </motion.div>
              </div>
           </div>
@@ -161,9 +165,9 @@ export default function ProblemSection() {
           className="w-full bg-[#162032]/40 backdrop-blur-md border border-white/[0.03] rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-[#162032]/60 hover:border-white/[0.03] transition-all duration-500"
         >
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">Fast settlement.</h3>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Liquidação rápida.", "Fast settlement.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              Traditional international transfers often depend on business hours and can take days. With TalkToStellar, funds can move globally and settle in the destination account in seconds, 24/7.
+              {L("A operação acompanha o status do início ao fim e registra comprovantes para o usuário entender quando o valor saiu, chegou e foi confirmado.", "Traditional international transfers often depend on business hours and can take days. With TalkToStellar, funds can move globally and settle in the destination account in seconds, 24/7.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -174,7 +178,7 @@ export default function ProblemSection() {
                 
                 {/* Node A */}
                 <div className="w-20 h-20 rounded-full bg-[#162032] border border-white/[0.03] flex items-center justify-center z-10 relative shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                  <div className="absolute -top-8 text-[11px] text-[#9BA4B5] font-medium tracking-widest uppercase">Origin</div>
+                  <div className="absolute -top-8 text-[11px] text-[#9BA4B5] font-medium tracking-widest uppercase">{L("Origem", "Origin")}</div>
                   <div className="absolute inset-2 rounded-full border border-dashed border-[#00D2FF]/30 animate-[spin_10s_linear_infinite]" />
                   <div className="w-5 h-5 rounded-full bg-[#00D2FF] shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
                 </div>
@@ -195,7 +199,7 @@ export default function ProblemSection() {
 
                 {/* Node B */}
                 <div className="w-20 h-20 rounded-full bg-[#162032] border border-white/[0.03] flex items-center justify-center z-10 relative shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                  <div className="absolute -top-8 text-[11px] text-[#9BA4B5] font-medium tracking-widest uppercase">Destination (US)</div>
+                  <div className="absolute -top-8 text-[11px] text-[#9BA4B5] font-medium tracking-widest uppercase">{L("Destino", "Destination (US)")}</div>
                   <div className="absolute inset-2 rounded-full border border-dashed border-[#4CA1EF]/30 animate-[spin_10s_linear_infinite_reverse]" />
                   <motion.div 
                     className="w-5 h-5 rounded-full bg-[#4CA1EF] shadow-[0_0_15px_rgba(129,140,248,0.5)]"
