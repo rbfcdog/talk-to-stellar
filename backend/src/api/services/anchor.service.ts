@@ -530,6 +530,24 @@ function debugErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
+function onboardingStepHasError(value: unknown): boolean {
+  return Boolean(value && typeof value === 'object' && 'error' in (value as Record<string, unknown>));
+}
+
+function onboardingBankAccountReady(value: unknown): boolean {
+  if (!value) return false;
+  if (typeof value === 'string') return /already|registered|created|approved|ok/i.test(value);
+  if (onboardingStepHasError(value)) return false;
+  if (typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  const status = String(record.status || record.complianceStatus || record.state || '').toLowerCase();
+  return Boolean(
+    coalesceString(record.bankAccountId, record.id, record.fiatAccountId) ||
+      !status ||
+      ['approved', 'active', 'created', 'compliant', 'pending', 'verified'].includes(status),
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -2209,6 +2227,7 @@ export class AnchorService {
     const anchor = this.getEtherfuseClient() as any;
     const steps: Record<string, unknown> = {};
     let cryptoWalletId: string | undefined;
+    let resolvedBankAccountId = input.bankAccountId;
 
     try {
       steps.wallet = await anchor.registerCustomerWallet(input.customerId, input.publicKey, false);
@@ -2280,6 +2299,11 @@ export class AnchorService {
         input.customerId,
         this.buildSandboxPixAccount(input.bankAccountId, input.email),
       );
+      resolvedBankAccountId = coalesceString(
+        (steps.bank_account as any)?.bankAccountId,
+        (steps.bank_account as any)?.id,
+        input.bankAccountId,
+      );
     } catch (error) {
       if (isDuplicateResourceError(error)) {
         steps.bank_account = 'already_registered';
@@ -2288,10 +2312,16 @@ export class AnchorService {
         try {
           steps.bank_account = await anchor.createBankAccountWithPresignedUrl({
             presignedUrl: input.kycUrl,
+            bankAccountId: pixAccount.bankAccountId,
             account: pixAccount.account,
             skipAutoApproval: false,
             label: pixAccount.label,
           });
+          resolvedBankAccountId = coalesceString(
+            (steps.bank_account as any)?.bankAccountId,
+            (steps.bank_account as any)?.id,
+            input.bankAccountId,
+          );
         } catch (fallbackError) {
           steps.bank_account = isDuplicateResourceError(fallbackError)
             ? 'already_registered'
@@ -2302,8 +2332,12 @@ export class AnchorService {
       }
     }
 
-    this.programmaticOnboardingCache.set(cacheKey, { cryptoWalletId });
-    return { bankAccountId: input.bankAccountId, cryptoWalletId, steps };
+    if (onboardingBankAccountReady(steps.bank_account)) {
+      this.programmaticOnboardingCache.set(cacheKey, { cryptoWalletId });
+    } else {
+      console.warn('[ramp] PIX bank account onboarding did not complete; not caching failed setup:', debugErrorMessage((steps.bank_account as any)?.error || 'bank account not ready'));
+    }
+    return { bankAccountId: resolvedBankAccountId, cryptoWalletId, steps };
   }
 
   static async createCustomerForSession(input: CustomerForSessionInput): Promise<{
@@ -2672,9 +2706,11 @@ export class AnchorService {
     });
     bankAccountId = programmatic.bankAccountId;
     cryptoWalletId = programmatic.cryptoWalletId;
-    const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
-    if (organizationBankAccountId) {
-      bankAccountId = organizationBankAccountId;
+    if (String(process.env.ETHERFUSE_USE_ORGANIZATION_BANK_ACCOUNT_FOR_ONRAMP || '').toLowerCase() === 'true') {
+      const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+      if (organizationBankAccountId) {
+        bankAccountId = organizationBankAccountId;
+      }
     }
 
     let orderQuote: Quote | undefined;
@@ -2759,9 +2795,11 @@ export class AnchorService {
         });
         bankAccountId = retryProgrammatic.bankAccountId;
         cryptoWalletId = retryProgrammatic.cryptoWalletId || cryptoWalletId;
-        const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
-        if (organizationBankAccountId) {
-          bankAccountId = organizationBankAccountId;
+        if (String(process.env.ETHERFUSE_USE_ORGANIZATION_BANK_ACCOUNT_FOR_ONRAMP || '').toLowerCase() === 'true') {
+          const organizationBankAccountId = await this.getActiveEtherfuseOrganizationBankAccountId();
+          if (organizationBankAccountId) {
+            bankAccountId = organizationBankAccountId;
+          }
         }
 
         try {
@@ -2769,7 +2807,7 @@ export class AnchorService {
         } catch (retryError) {
           let lastRetryError = retryError;
           if (this.isMissingEtherfuseProxyError(retryError)) {
-            for (const delayMs of [1200, 2500, 4000, 6500, 9000]) {
+            for (const delayMs of [1200, 2500, 4000, 6500, 9000, 13000, 18000, 24000]) {
               await sleep(delayMs);
               try {
                 await refreshQuoteForOrder(`retry_after_pix_account_propagation_${delayMs}`);
@@ -2792,7 +2830,7 @@ export class AnchorService {
               transaction = createSandboxFallback(lastRetryError);
             } else if (this.isMissingEtherfuseProxyError(lastRetryError)) {
               throw this.missingProxySetupError(
-                'A conta PIX ainda não ficou disponível para gerar o QR nesta tentativa. Gere uma nova estimativa e tente novamente.',
+                'Ainda estou preparando seu PIX. Aguarde alguns segundos e tente gerar o PIX novamente.',
                 kycUrl,
                 bankAccountId,
                 retryProgrammatic.steps,

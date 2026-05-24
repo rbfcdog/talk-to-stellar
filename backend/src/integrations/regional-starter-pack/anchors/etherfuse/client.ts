@@ -892,7 +892,7 @@ export class EtherfuseClient implements Anchor {
      * the hosted UI. Useful as a compatibility fallback in sandbox.
      */
     async createBankAccountWithPresignedUrl(
-        input: EtherfuseBankAccountRequest & { skipAutoApproval?: boolean; label?: string },
+        input: EtherfuseBankAccountRequest & { bankAccountId?: string; skipAutoApproval?: boolean; label?: string },
     ): Promise<EtherfuseBankAccountResponse> {
         return this.request<EtherfuseBankAccountResponse>('POST', '/ramp/bank-account', input);
     }
