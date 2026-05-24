@@ -12,8 +12,8 @@ Hoje existem duas representacoes tecnicas diferentes que podem aparecer no codig
    O issuer e o issuer configurado da integracao, nao uma conta criada pelo TalkToStellar.
 
 2. BRL
-   Asset de testnet criado/configurado pelo proprio projeto para testes de liquidez,
-   pathfinding e demonstracoes on-chain.
+   Abstracao fiduciaria da aplicacao. Por padrao, nao exige issuer Stellar.
+   O asset BRL de testnet criado pelo projeto fica como modo legado/experimental.
 ```
 
 Nenhum dos dois deve ser apresentado ao usuario como "stablecoin BRL" do TalkToStellar.
@@ -105,7 +105,7 @@ Ou seja: para o fluxo PIX, o issuer do asset ancorado nao e uma conta criada por
 
 ### 2. Asset BRL criado pelo projeto
 
-O projeto tambem tem scripts para criar um asset `BRL` em testnet:
+O projeto tambem tem scripts para criar um asset `BRL` em testnet, mas isso agora deve ser tratado como legado/experimental:
 
 ```text
 backend/scripts/setup-testnet-brl-liquidity.ts
@@ -124,6 +124,12 @@ BRL_MARKET_MAKER_SECRET
 
 Esse `BRL` e um asset sintetico de testnet usado para testes de liquidez e pathfinding. Ele pode ter sido criado por nos, mas isso nao transforma ele em real tokenizado, stablecoin regulada ou ativo com lastro.
 
+Por padrao, o backend nao deve criar trustline automatica para esse asset nem usar esse issuer para representar saldo em reais. Para ligar esse modo explicitamente em laboratorio, use:
+
+```text
+ENABLE_STELLAR_BRL_ASSET=true
+```
+
 Ele serve para demonstrar rotas on-chain como:
 
 ```text
@@ -139,12 +145,29 @@ mas continua sendo um asset tecnico de testnet.
 No fluxo PIX, o TalkToStellar usa o asset ancorado da integracao para representar o valor em reais dentro da rota. Separadamente, o projeto tambem tem um asset BRL de testnet criado por nos para testes de liquidez e pathfinding. Nenhum dos dois e uma stablecoin BRL propria ou um real tokenizado de producao.
 ```
 
+## Decisao atual de arquitetura
+
+```text
+UX = reais
+Core = ledger/abstracao fiduciaria
+Settlement = asset tecnico temporario quando necessario
+```
+
+Ou seja:
+
+```text
+BRL != Stellar Asset
+BRL == unidade de conta da aplicacao
+```
+
+O asset tecnico so entra quando a operacao precisa passar por uma infraestrutura de settlement.
+
 ## Como explicar em demo tecnica
 
 Use esta frase:
 
 ```text
-O TalkToStellar nao criou uma stablecoin BRL. No fluxo PIX, o sistema usa um asset ancorado da integracao como representacao tecnica do valor em reais. Separadamente, existe um asset BRL de testnet criado pelo projeto apenas para testes de liquidez e pathfinding. Para o usuario, tudo aparece como R$; internamente, o backend usa esses assets para cotar, converter, registrar e liquidar operacoes em ambiente de teste.
+O TalkToStellar trata BRL como uma abstracao fiduciaria da aplicacao. Quando necessario, o backend usa assets tecnicos temporarios da infraestrutura Stellar apenas para settlement, liquidacao e roteamento, sem expor esses ativos ao usuario e sem caracteriza-los como stablecoins BRL proprias.
 ```
 
 ## Fluxo tecnico simplificado

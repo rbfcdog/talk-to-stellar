@@ -10,6 +10,12 @@ export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT
 export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
 export const ETHERFUSE_TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
 
+function envFlag(name: string, fallback: boolean): boolean {
+  const raw = String(process.env[name] || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(raw);
+}
+
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
     ? 'PUBLIC'
@@ -65,9 +71,8 @@ export function assetMatchesConfiguredIssuer(assetCode: unknown, assetIssuer?: u
 }
 
 export function getUserFacingAssetCodes(): string[] {
-  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
-  return [...(includeBrl ? ['BRL'] : []), 'USDC', ...(includeTesouro ? ['TESOURO'] : [])];
+  const exposeInternalSettlementAssets = envFlag('EXPOSE_INTERNAL_SETTLEMENT_ASSETS', false);
+  return ['BRL', 'USDC', ...(exposeInternalSettlementAssets ? ['TESOURO'] : [])];
 }
 
 export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string {
@@ -80,8 +85,8 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 }
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
-  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
+  const includeBrl = envFlag('ENABLE_STELLAR_BRL_ASSET', false);
+  const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
   const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
@@ -89,7 +94,7 @@ export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string 
 }
 
 export function getTrustedPathAssetCodes(): string[] {
-  const includeBrl = String(process.env.ENABLE_BRL_ASSET || 'true').trim().toLowerCase() === 'true';
-  const includeTesouro = String(process.env.ENABLE_TESOURO_ASSET || 'true').trim().toLowerCase() === 'true';
+  const includeBrl = envFlag('ENABLE_STELLAR_BRL_ASSET', false);
+  const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
   return ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
 }

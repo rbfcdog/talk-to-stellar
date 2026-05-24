@@ -1,6 +1,9 @@
 import {
   assetMatchesConfiguredIssuer,
+  getDefaultTrustedAssets,
   getAssetIssuer,
+  getTrustedPathAssetCodes,
+  getUserFacingAssetCodes,
   normalizeAssetCode,
   PUBLIC_BRL_ISSUER_NTOKENS,
   PUBLIC_USDC_ISSUER,
@@ -57,5 +60,25 @@ describe('asset config', () => {
 
   it('keeps unknown asset aliases unchanged', () => {
     expect(normalizeAssetCode('foo')).toBe('FOO');
+  });
+
+  it('keeps BRL user-facing but does not trust the Stellar BRL asset by default', () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.USDC_ISSUER = TESTNET_USDC_ISSUER;
+    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+    delete process.env.ENABLE_STELLAR_BRL_ASSET;
+
+    expect(getUserFacingAssetCodes()).toContain('BRL');
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('BRL');
+    expect(getTrustedPathAssetCodes()).not.toContain('BRL');
+  });
+
+  it('allows the configured Stellar BRL asset only when explicitly enabled', () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+    process.env.ENABLE_STELLAR_BRL_ASSET = 'true';
+
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toContain('BRL');
+    expect(getTrustedPathAssetCodes()).toContain('BRL');
   });
 });
