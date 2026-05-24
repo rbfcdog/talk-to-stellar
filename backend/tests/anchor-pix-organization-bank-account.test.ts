@@ -1,4 +1,5 @@
 import { AnchorService } from '../src/api/services/anchor.service';
+import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 
 describe('AnchorService PIX organization bank account routing', () => {
   const originalEnv = { ...process.env };
@@ -205,5 +206,35 @@ describe('AnchorService PIX organization bank account routing', () => {
         source: 'regional_sandbox_fallback',
       },
     });
+  });
+
+  it('does not send an intermediate PIX funding receipt when auto-pay will send the final receipt', async () => {
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://example.test/receipt');
+
+    const result = await (AnchorService as any).notifySandboxOnRampCompleted({
+      transaction: {
+        id: 'sandbox-pix-auto-pay',
+        status: 'completed',
+        fromAmount: '56',
+        fromCurrency: 'BRL',
+        toAmount: '10',
+        toCurrency: 'USDC',
+        updatedAt: new Date().toISOString(),
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '56',
+      destinationAmount: '10',
+      finalAssetCode: 'USDC',
+      operationContext: {
+        auto_pay_after_ramp: true,
+        external_provider: 'whatsapp',
+        external_provider_user_id: '5519997624114',
+      },
+    });
+
+    expect(result).toBe('');
+    expect(receiptSpy).not.toHaveBeenCalled();
   });
 });

@@ -65,6 +65,30 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('blockchain');
   });
 
+  it('uses the settled source and destination amounts as the receipt quote source of truth', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-source-of-truth',
+      userId: 'user-source-of-truth',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '56',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '10',
+      destinationAssetCode: 'USDC',
+      feeDisplay: 'R$ 0.17',
+      hash: 'tx-source-of-truth',
+      quote: {
+        sourceAmount: '56',
+        sourceAsset: { code: 'BRL' },
+        destinationAmount: '11.373',
+        destinationAsset: { code: 'USDC' },
+      },
+    });
+
+    expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.6');
+    expect(receipt).not.toContain('4.923897');
+  });
+
   it('hides quote line when payment uses the same asset', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
