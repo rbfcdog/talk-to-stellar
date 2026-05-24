@@ -145,7 +145,7 @@ No sandbox/testnet usado aqui:
 - O pagamento e simulado via `POST /api/ramp/etherfuse/sandbox/simulate-fiat`.
 - O mock `sandbox-pix-*` e recuperado pelo `operation_id` salvo no banco. Assim, polling e simulacao continuam funcionando depois de reload/restart/deploy.
 - O ativo recebido e `TESOURO` em rede Stellar testnet/devnet. Quando a ordem Etherfuse real falha por proxy PIX, o fallback sandbox faz a entrega on-chain local.
-- Para ordem Etherfuse real, a API exige wallet aprovada e bank account ativa da organizacao. O backend registra a wallet em `/ramp/wallet` e tenta usar automaticamente uma conta ativa retornada por `/ramp/bank-accounts` antes de cair no fallback.
+- Para ordem Etherfuse real, a API exige wallet aprovada e bank account ativa da organizacao. O backend registra a wallet em `/ramp/wallet`, prefere automaticamente uma conta PIX/BRL ativa retornada por `/ramp/bank-accounts` e nao tenta criar uma conta PIX de cliente quando essa conta organizacional existe, porque o schema oficial de `AccountRegistration` nao aceita o payload PIX usado pelo sandbox brasileiro.
 - Esses tokens nao representam saldo financeiro real.
 
 Resumo: no ambiente atual, PIX e fake/simulado; a blockchain tambem esta em testnet/devnet. Dinheiro real so deve entrar quando trocar para ambiente de producao da anchor, com API key de producao, compliance/KYC aprovados e rails reais ativados.
