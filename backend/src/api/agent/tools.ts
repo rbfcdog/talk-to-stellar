@@ -449,9 +449,9 @@ function configuredUsdBrlFallbackRate(): number {
   const parsed = Number(String(
     process.env.USD_BRL_FALLBACK_RATE ||
     process.env.DEFAULT_USD_BRL_RATE ||
-    '5'
+    '0'
   ).replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 async function getSavingsUsdBrlRate(): Promise<{ rate: number; source: string; observedAt: string }> {
@@ -492,7 +492,7 @@ async function getSavingsUsdBrlRate(): Promise<{ rate: number; source: string; o
 
   return {
     rate: configuredUsdBrlFallbackRate(),
-    source: 'configured_env_fallback',
+    source: configuredUsdBrlFallbackRate() > 0 ? 'configured_env_fallback' : 'unavailable',
     observedAt: new Date().toISOString(),
   };
 }

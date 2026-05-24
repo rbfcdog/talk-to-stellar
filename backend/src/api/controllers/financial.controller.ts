@@ -21,7 +21,7 @@ import { mainnetWalletService } from '../services/mainnet-wallet.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
-const DEFAULT_USD_BRL_REFERENCE_RATE = 5;
+const DEFAULT_USD_BRL_REFERENCE_RATE = 0;
 const DEFAULT_USD_BRL_SANITY_MIN = 3;
 const DEFAULT_USD_BRL_SANITY_MAX = 10;
 
@@ -57,6 +57,9 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number): {
   );
 
   if (!Number.isFinite(rawBrlPerUsdc) || rawBrlPerUsdc <= 0) {
+    if (fallbackRate <= 0) {
+      throw new Error('Cotação BRL/USDC indisponível e USD_BRL_FALLBACK_RATE não configurado.');
+    }
     return {
       brlPerUsdc: fallbackRate,
       fallbackApplied: true,
@@ -65,6 +68,9 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number): {
   }
 
   if (rawBrlPerUsdc < minRate || rawBrlPerUsdc > maxRate) {
+    if (fallbackRate <= 0) {
+      throw new Error('Cotação BRL/USDC fora dos limites de segurança e USD_BRL_FALLBACK_RATE não configurado.');
+    }
     return {
       brlPerUsdc: fallbackRate,
       fallbackApplied: true,
