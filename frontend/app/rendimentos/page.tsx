@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function RendimentosPage() {
-  return <RendimentosClient />;
+  return <RendimentosClient initialLanguage="pt-BR" />;
 }

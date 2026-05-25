@@ -1,10 +1,10 @@
-import RendimentosClient from "../rendimentos/rendimentos-client";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Rendimentos e saldos",
-  description: "Tela simples para acompanhar saldos e preparar rendimentos.",
+  title: "Yield and balances",
+  description: "A simple screen to track balances and prepare yield.",
 };
 
 export default function MainnetPage() {
-  return <RendimentosClient />;
+  redirect("/yield");
 }
