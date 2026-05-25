@@ -13,7 +13,7 @@ import { supabase } from "../../config/supabase";
 import { WalletRepository } from "../repository/core/wallet.repository";
 import VaultService from "../services/core/vault.service";
 import ExternalService from "../services/core/external.service";
-import { assetMatchesConfiguredIssuer, getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../services/contact-seed.service";
 import { BalanceAlertService } from "../services/balance-alert.service";
 import { AutoConversionService } from "../services/auto-conversion.service";
@@ -332,6 +332,8 @@ function normalizeYieldAssetInput(value: unknown): string {
   if (!raw || raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
   if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS' || raw === 'R$') return 'TESOURO';
   if (raw === 'EUR' || raw === 'EURO' || raw === 'EUROS' || raw === 'EURC') return 'EURC';
+  if (raw === 'POUND' || raw === 'POUNDS' || raw === 'LIBRA' || raw === 'LIBRAS') return 'GBP';
+  if (raw === 'PESO' || raw === 'PESOS') return 'MXN';
   return normalizeAssetCode(raw);
 }
 
@@ -376,6 +378,95 @@ function sanitizeYieldToolError(error: unknown, language: 'pt-BR' | 'en' = 'pt-B
     .replace(/wallet/gi, language === 'en' ? 'account' : 'conta')
     .replace(/asset/gi, language === 'en' ? 'currency' : 'moeda')
     .replace(/XDR/gi, 'operation');
+}
+
+function frontendAssetCode(assetCode: unknown): string {
+  return userFacingAssetCode(normalizeYieldAssetInput(assetCode));
+}
+
+function buildFrontendInterfaceUrl(input: {
+  path: string;
+  params?: Record<string, unknown>;
+}): string {
+  const url = new URL(input.path, savingsFrontendBaseUrl());
+  for (const [key, value] of Object.entries(input.params || {})) {
+    const text = String(value ?? '').trim();
+    if (text) url.searchParams.set(key, text);
+  }
+  return url.toString();
+}
+
+function buildYieldFrontendUrl(input: {
+  action?: 'deposit' | 'withdraw';
+  amount?: unknown;
+  assetCode?: unknown;
+  language?: 'pt-BR' | 'en';
+}): string {
+  return buildFrontendInterfaceUrl({
+    path: '/yield',
+    params: {
+      action: input.action || 'deposit',
+      amount: input.amount,
+      asset: frontendAssetCode(input.assetCode || 'USDC'),
+      advanced: '1',
+      from: 'chat',
+      lang: input.language || 'pt-BR',
+    },
+  });
+}
+
+function normalizeMoneyInterfaceAction(value: unknown): 'bring' | 'keep' | 'send_out' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['keep', 'hold', 'yield', 'earn', 'rendimento', 'manter', 'guardar', 'render'].includes(normalized)) return 'keep';
+  if (['send_out', 'send-out', 'sendout', 'withdraw', 'cash_out', 'cash-out', 'mandar', 'retirar', 'sacar', 'mandar embora'].includes(normalized)) return 'send_out';
+  return 'bring';
+}
+
+function buildMoneyInterfaceUrl(input: {
+  action?: unknown;
+  amount?: unknown;
+  assetCode?: unknown;
+  destinationPixKey?: unknown;
+  language?: 'pt-BR' | 'en';
+}): string {
+  const action = normalizeMoneyInterfaceAction(input.action);
+  const asset = frontendAssetCode(input.assetCode || (action === 'bring' ? 'USDC' : 'BRL'));
+  const amount = String(input.amount || '').trim();
+  const language = input.language || 'pt-BR';
+
+  if (action === 'keep') {
+    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language });
+  }
+
+  if (action === 'send_out') {
+    return buildFrontendInterfaceUrl({
+      path: '/pix-off',
+      params: {
+        mode: 'offramp',
+        asset,
+        source_asset: asset,
+        amount,
+        source_amount: amount,
+        destination_pix_key: input.destinationPixKey,
+        from: 'chat',
+        autostart: amount ? '1' : '',
+        lang: language,
+      },
+    });
+  }
+
+  return buildFrontendInterfaceUrl({
+    path: '/pix-on',
+    params: {
+      mode: 'onramp',
+      asset,
+      amount,
+      currency: 'BRL',
+      from: 'chat',
+      autostart: amount ? '1' : '',
+      lang: language,
+    },
+  });
 }
 
 function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unknown): boolean {
@@ -708,6 +799,42 @@ export const toolDefinitions = [
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "open_asset_interface",
+    description: "Return the frontend interface URL for the user's money action: bring money in, keep money earning, or send money out to PIX. Use for broad multi-asset navigation intents such as trazer, manter, mandar embora, add money, keep earning, or withdraw to PIX.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["bring", "keep", "send_out"],
+          description: "bring opens PIX add-money, keep opens yield, send_out opens PIX withdrawal.",
+        },
+        amount: {
+          type: "string",
+          description: "Optional amount to prefill.",
+        },
+        asset_code: {
+          type: "string",
+          description: "User-facing currency, such as BRL, USDC, USD, EUR, GBP, MXN, or another configured asset.",
+        },
+        destination_pix_key: {
+          type: "string",
+          description: "Optional PIX key typed by the user for send_out. Never invent it.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: ["action"],
     },
   },
   {
@@ -1693,6 +1820,8 @@ export async function executeTool(
         return await executeGetBrlUsdcQuote();
       case "get_yield_options":
         return await executeGetYieldOptions(toolInput);
+      case "open_asset_interface":
+        return await executeOpenAssetInterface(toolInput);
       case "get_yield_balance":
         return await executeGetYieldBalance(toolInput);
       case "prepare_yield_action":
@@ -2000,6 +2129,7 @@ async function executeGetYieldOptions(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
     const status = await AnchorService.getDefindexYieldStatus();
+    const frontendUrl = buildYieldFrontendUrl({ language });
     const options = (Array.isArray(status.vaults) ? status.vaults : []).map((option: any) => {
       const internalAssetCode = normalizeYieldAssetInput(option.asset_code || option.display_asset_code);
       const currency = yieldCurrencyCode(internalAssetCode);
@@ -2015,18 +2145,62 @@ async function executeGetYieldOptions(input: any): Promise<string> {
     const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
     const message = language === 'en'
       ? options.length
-        ? `Available yield options: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} per year)` : ''}`).join(', ')}.`
-        : 'Yield options are not configured yet.'
+        ? `Available yield options: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} per year)` : ''}`).join(', ')}.\n\nOpen the yield screen:\n${frontendUrl}`
+        : `Yield options are not configured yet.\n\nOpen the yield screen:\n${frontendUrl}`
       : options.length
-        ? `Opções de rendimento disponíveis: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} ao ano)` : ''}`).join(', ')}.`
-        : 'As opções de rendimento ainda não foram configuradas.';
+        ? `Opções de rendimento disponíveis: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} ao ano)` : ''}`).join(', ')}.\n\nAbrir tela de rendimento:\n${frontendUrl}`
+        : `As opções de rendimento ainda não foram configuradas.\n\nAbrir tela de rendimento:\n${frontendUrl}`;
 
     return JSON.stringify({
       success: true,
       configured,
       confirmation_available: confirmationAvailable,
       options,
+      frontend_url: frontendUrl,
       message,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executeOpenAssetInterface(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const action = normalizeMoneyInterfaceAction(input.action || input.intent || input.mode);
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || (action === 'bring' ? 'USDC' : 'BRL'));
+    const frontendUrl = buildMoneyInterfaceUrl({
+      action,
+      amount: input.amount,
+      assetCode,
+      destinationPixKey: input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey,
+      language,
+    });
+    const displayAsset = frontendAssetCode(assetCode);
+    const actionLabel = language === 'en'
+      ? action === 'bring'
+        ? 'Add money'
+        : action === 'send_out'
+          ? 'Send to PIX'
+          : 'Keep earning'
+      : action === 'bring'
+        ? 'Trazer dinheiro'
+        : action === 'send_out'
+          ? 'Mandar para PIX'
+          : 'Manter rendendo';
+
+    return JSON.stringify({
+      success: true,
+      action,
+      asset_code: displayAsset,
+      amount: String(input.amount || '').trim() || null,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
+        : `${actionLabel} está pronto para ${displayAsset}.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2040,6 +2214,7 @@ async function executeGetYieldBalance(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
     const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
+    const frontendUrl = buildYieldFrontendUrl({ assetCode, language });
     const result: any = await AnchorService.getDefindexYieldBalanceForSession({
       ...input,
       asset_code: assetCode,
@@ -2053,9 +2228,10 @@ async function executeGetYieldBalance(input: any): Promise<string> {
       currency,
       amount,
       balance: amount,
+      frontend_url: frontendUrl,
       message: language === 'en'
-        ? `You currently have ${amount} ${name} in yield.`
-        : `Você tem ${amount} ${name} rendendo agora.`,
+        ? `You currently have ${amount} ${name} in yield.\n\nOpen the yield screen:\n${frontendUrl}`
+        : `Você tem ${amount} ${name} rendendo agora.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2079,6 +2255,7 @@ async function executePrepareYieldAction(input: any): Promise<string> {
     const amount = String(result?.amount || input.amount || '').trim();
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
     const actionText = yieldActionLabel(action, language);
+    const frontendUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
 
     return JSON.stringify({
       success: true,
@@ -2088,6 +2265,7 @@ async function executePrepareYieldAction(input: any): Promise<string> {
       action,
       currency,
       amount,
+      frontend_url: frontendUrl,
       review: {
         action: actionText,
         amount,
@@ -2095,8 +2273,8 @@ async function executePrepareYieldAction(input: any): Promise<string> {
         name,
       },
       message: language === 'en'
-        ? `Review ready: ${actionText} ${amount} ${name}. Confirm only after checking the amount.`
-        : `Revisão pronta: ${actionText} ${amount} ${name}. Confirme apenas depois de conferir o valor.`,
+        ? `Review ready: ${actionText} ${amount} ${name}. Confirm only after checking the amount.\n\nOpen the yield screen:\n${frontendUrl}`
+        : `Revisão pronta: ${actionText} ${amount} ${name}. Confirme apenas depois de conferir o valor.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2123,6 +2301,7 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
     const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
     const amount = String(result?.amount || input.amount || '').trim();
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
+    const frontendUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
 
     return JSON.stringify({
       success: Boolean(result?.success),
@@ -2130,9 +2309,10 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       action,
       currency,
       amount,
+      frontend_url: frontendUrl,
       message: language === 'en'
-        ? `Yield request confirmed for ${amount} ${name}. Your balances will update shortly.`
-        : `Pedido de rendimento confirmado para ${amount} ${name}. Seus saldos serão atualizados em instantes.`,
+        ? `Yield request confirmed for ${amount} ${name}. Your balances will update shortly.\n\nOpen the yield screen:\n${frontendUrl}`
+        : `Pedido de rendimento confirmado para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2544,7 +2724,9 @@ async function executeGetBalance(input: any): Promise<string> {
     }
     let account = accountLookup.account;
 
-    const visibleAssets = ['BRL', 'USDC', 'EUR'];
+    const visibleAssets = getUserFacingAssetCodes()
+      .map((asset) => userFacingAssetCode(asset))
+      .filter((asset, index, all) => asset && all.indexOf(asset) === index);
     let balances = account.balances.map(normalizeBalanceLine);
 
     const initialFundingRepair = await maybeRepairInitialFundingSweep(input, publicKey, balances);

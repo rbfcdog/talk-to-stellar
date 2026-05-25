@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  WalletCards,
 } from "lucide-react";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -104,7 +105,79 @@ const MONEY_PROFILES: Record<string, MoneyProfile> = {
     descriptionEn: "For holding money in dollars.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
   },
+  USD: {
+    namePt: "Dólares",
+    nameEn: "Dollars",
+    short: "USD",
+    descriptionPt: "Para guardar em moeda forte.",
+    descriptionEn: "For holding money in dollars.",
+    tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
+  },
+  GBP: {
+    namePt: "Libras",
+    nameEn: "Pounds",
+    short: "GBP",
+    descriptionPt: "Para objetivos no Reino Unido.",
+    descriptionEn: "For goals linked to the UK.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
+  MXN: {
+    namePt: "Pesos mexicanos",
+    nameEn: "Mexican pesos",
+    short: "MXN",
+    descriptionPt: "Para saldos e objetivos no México.",
+    descriptionEn: "For balances and goals in Mexico.",
+    tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
+  },
+  ARS: {
+    namePt: "Pesos argentinos",
+    nameEn: "Argentine pesos",
+    short: "ARS",
+    descriptionPt: "Para saldos e objetivos na Argentina.",
+    descriptionEn: "For balances and goals in Argentina.",
+    tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
+  },
+  CAD: {
+    namePt: "Dólares canadenses",
+    nameEn: "Canadian dollars",
+    short: "CAD",
+    descriptionPt: "Para objetivos no Canadá.",
+    descriptionEn: "For goals linked to Canada.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
+  AUD: {
+    namePt: "Dólares australianos",
+    nameEn: "Australian dollars",
+    short: "AUD",
+    descriptionPt: "Para objetivos na Austrália.",
+    descriptionEn: "For goals linked to Australia.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
+  CHF: {
+    namePt: "Francos suíços",
+    nameEn: "Swiss francs",
+    short: "CHF",
+    descriptionPt: "Para objetivos na Suíça.",
+    descriptionEn: "For goals linked to Switzerland.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
+  JPY: {
+    namePt: "Ienes",
+    nameEn: "Yen",
+    short: "JPY",
+    descriptionPt: "Para objetivos no Japão.",
+    descriptionEn: "For goals linked to Japan.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
   EURC: {
+    namePt: "Euros",
+    nameEn: "Euros",
+    short: "EUR",
+    descriptionPt: "Para objetivos ligados à Europa.",
+    descriptionEn: "For goals linked to Europe.",
+    tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
+  },
+  EUR: {
     namePt: "Euros",
     nameEn: "Euros",
     short: "EUR",
@@ -219,6 +292,25 @@ function normalizeDecimal(value: unknown) {
   return parsed;
 }
 
+function normalizeUiAssetCode(value: unknown) {
+  const code = String(value || "").trim().toUpperCase().split(":")[0];
+  if (!code) return "";
+  if (code === "USD" || code === "DOLLAR" || code === "DOLLARS") return "USDC";
+  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR";
+  if (code === "TESOURO" || code === "REAL" || code === "REAIS" || code === "R$") return "BRL";
+  return code;
+}
+
+function buildMoneyUrl(path: string, params: Record<string, unknown>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const text = String(value ?? "").trim();
+    if (text) search.set(key, text);
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 function buildProjectionData(amount: string, annualRate: number | null, language: AppLanguage) {
   const principal = normalizeDecimal(amount);
   const monthlyRate = annualRate === null ? 0 : annualRate / 12;
@@ -293,10 +385,11 @@ async function yieldApi(path: string, init?: RequestInit) {
   return payload;
 }
 
-export default function RendimentosClient({ initialLanguage }: { initialLanguage?: AppLanguage } = {}) {
+export default function RendimentosClient({ initialLanguage, initialQuery }: { initialLanguage?: AppLanguage; initialQuery?: string } = {}) {
   const { language, setLanguage } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const appliedInitialLanguageRef = useRef(false);
+  const appliedInitialQueryRef = useRef(false);
   const loadedInitialDataRef = useRef(false);
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
@@ -328,6 +421,29 @@ export default function RendimentosClient({ initialLanguage }: { initialLanguage
     () => buildProjectionData(amount, optionAnnualRate(selectedOption), language),
     [amount, selectedOption, language]
   );
+  const addMoneyUrl = useMemo(() => buildMoneyUrl("/pix-on", {
+    mode: "onramp",
+    asset: safeSelectedCode,
+    amount,
+    currency: "BRL",
+    from: "yield",
+    lang: language,
+  }), [amount, safeSelectedCode, language]);
+  const keepMoneyUrl = useMemo(() => buildMoneyUrl("/yield", {
+    action,
+    asset: safeSelectedCode,
+    amount,
+    advanced: advancedOpen ? "1" : "",
+    lang: language,
+  }), [action, amount, advancedOpen, safeSelectedCode, language]);
+  const sendMoneyUrl = useMemo(() => buildMoneyUrl("/pix-off", {
+    mode: "offramp",
+    asset: safeSelectedCode,
+    source_asset: safeSelectedCode,
+    source_amount: amount,
+    from: "yield",
+    lang: language,
+  }), [amount, safeSelectedCode, language]);
 
   useEffect(() => {
     if (initialLanguage && !appliedInitialLanguageRef.current) {
@@ -335,6 +451,31 @@ export default function RendimentosClient({ initialLanguage }: { initialLanguage
       setLanguage(initialLanguage);
     }
   }, [initialLanguage, setLanguage]);
+
+  useEffect(() => {
+    if (appliedInitialQueryRef.current) return;
+    appliedInitialQueryRef.current = true;
+    const params = new URLSearchParams(initialQuery || (typeof window !== "undefined" ? window.location.search : ""));
+    const queryAsset = normalizeUiAssetCode(
+      params.get("asset") ||
+      params.get("asset_code") ||
+      params.get("currency") ||
+      params.get("source_asset") ||
+      params.get("source_asset_code")
+    );
+    const queryAmount = normalizeDecimal(
+      params.get("amount") ||
+      params.get("source_amount") ||
+      params.get("yield_amount") ||
+      ""
+    );
+    const queryAction = String(params.get("action") || params.get("mode") || "").trim().toLowerCase();
+    if (queryAsset) setSelectedCode(queryAsset);
+    if (queryAmount > 0) setAmount(String(queryAmount));
+    if (queryAction === "withdraw" || queryAction === "resgatar") setAction("withdraw");
+    if (queryAction === "deposit" || queryAction === "guardar") setAction("deposit");
+    if (params.get("advanced") === "1" || params.get("advanced") === "true") setAdvancedOpen(true);
+  }, [initialQuery]);
 
   async function refreshDashboard() {
     setApiState({ loading: true, message: "", error: "" });
@@ -513,6 +654,31 @@ export default function RendimentosClient({ initialLanguage }: { initialLanguage
           <Metric label={L("Opções rendendo", "Yield options")} value={String(options.length)} detail={configured ? L("Prontas para simular", "Ready to preview") : L("Aguardando configuração", "Waiting for setup")} />
           <Metric label="PIX" value={pixAvailable ? L("Disponível", "Available") : L("Pendente", "Pending")} detail={L("Entrada e retirada em reais", "Add and withdraw in reais")} />
           <Metric label={L("Confirmação", "Confirmation")} value={confirmationEnabled ? L("Ativa", "Active") : L("Em preparo", "In setup")} detail={confirmationEnabled ? L("PIN habilitado", "PIN enabled") : L("Somente revisão", "Review only")} />
+        </section>
+
+        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Ações com dinheiro", "Money actions")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+                <WalletCards className="h-5 w-5 text-tts-gold" aria-hidden="true" />
+                {L("Trazer, manter ou mandar embora", "Add, keep, or send out")}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
+                {L(
+                  "Use a mesma moeda selecionada para entrar por PIX, deixar rendendo ou retirar para uma chave PIX informada por você.",
+                  "Use the selected currency to add by PIX, keep earning, or withdraw to a PIX key you enter."
+                )}
+              </p>
+            </div>
+            <span className="inline-flex w-fit border border-tts-border bg-tts-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
+              {selectedProfile.short} · {profileName(selectedProfile, language)}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <ActionLink href={addMoneyUrl} icon={<ArrowDownToLine className="h-4 w-4" aria-hidden="true" />} title={L("Trazer dinheiro", "Add money")} body={L("Abra PIX já com a moeda e o valor preenchidos.", "Open PIX with currency and amount prefilled.")} />
+            <ActionLink href={keepMoneyUrl} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} title={L("Manter rendendo", "Keep earning")} body={L("Continue nesta tela para revisar taxa, valor e confirmação.", "Stay on this screen to review rate, amount, and confirmation.")} />
+            <ActionLink href={sendMoneyUrl} icon={<ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />} title={L("Mandar para PIX", "Send to PIX")} body={L("A retirada pede a chave PIX dinamicamente antes do PIN.", "Withdrawal asks for the PIX key dynamically before PIN.")} />
+          </div>
         </section>
 
         <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -729,10 +895,15 @@ function BalancePanel({
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const balanceItems: BalanceLine[] = balances.length
     ? balances
-    : options.map((option) => ({
+    : options.length
+      ? options.map((option) => ({
       asset_code: optionCode(option),
       balance: "0",
-    }));
+    }))
+      : [{
+        asset_code: selectedCode,
+        balance: "0",
+      }];
 
   return (
     <section className="border border-tts-border bg-tts-surface p-5">

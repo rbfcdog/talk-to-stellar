@@ -360,6 +360,9 @@ describe('Agent tool execution', () => {
       currency: 'BRL',
       name: 'reais',
     });
+    expect(parsed.frontend_url).toContain('/yield?');
+    expect(parsed.frontend_url).toContain('asset=BRL');
+    expect(parsed.frontend_url).toContain('amount=100');
     expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
       session_id: '11111111-1111-4111-8111-111111111111',
       action: 'deposit',
@@ -370,6 +373,35 @@ describe('Agent tool execution', () => {
     expect(parsed).not.toHaveProperty('raw');
     expect(parsed).not.toHaveProperty('public_key');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|UNSIGNED_OPERATION/i);
+  });
+
+  it('opens frontend interfaces for broad multi-asset money intents', async () => {
+    const keepOutput = await executeTool('open_asset_interface', {
+      action: 'keep',
+      amount: '50',
+      asset_code: 'GBP',
+      language: 'en',
+    });
+    const keep = JSON.parse(keepOutput);
+
+    expect(keep.success).toBe(true);
+    expect(keep.frontend_url).toContain('/yield?');
+    expect(keep.frontend_url).toContain('asset=GBP');
+    expect(keep.frontend_url).toContain('amount=50');
+
+    const sendOutOutput = await executeTool('open_asset_interface', {
+      action: 'send_out',
+      amount: '120',
+      asset_code: 'BRL',
+      destination_pix_key: 'user@example.com',
+      language: 'pt-BR',
+    });
+    const sendOut = JSON.parse(sendOutOutput);
+
+    expect(sendOut.success).toBe(true);
+    expect(sendOut.frontend_url).toContain('/pix-off?');
+    expect(sendOut.frontend_url).toContain('destination_pix_key=user%40example.com');
+    expect(sendOut.message).toContain('Mandar para PIX');
   });
 
   it('sanitizes yield confirmation setup errors before returning them to chat', async () => {

@@ -217,6 +217,52 @@ describe('Agent production evals', () => {
     expect(executeToolMock).not.toHaveBeenCalledWith('confirm_yield_action', expect.anything());
   });
 
+  it('routes broad keep-asset navigation to open_asset_interface', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Manter rendendo está pronto para GBP.\n\nAbra:\nhttps://app.example.com/yield?asset=GBP',
+    }));
+
+    const result = await graph.processInput(createState('manter 50 libras'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
+      session_id: 'eval-session',
+      action: 'keep',
+      amount: '50',
+      asset_code: 'GBP',
+      destination_pix_key: '',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('/yield?asset=GBP');
+  });
+
+  it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Mandar para PIX está pronto para BRL.\n\nAbra:\nhttps://app.example.com/pix-off?destination_pix_key=user%40example.com',
+    }));
+
+    const result = await graph.processInput(createState('mandar embora 100 reais para user@example.com'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
+      session_id: 'eval-session',
+      action: 'send_out',
+      amount: '100',
+      asset_code: 'BRL',
+      destination_pix_key: 'user@example.com',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('destination_pix_key');
+  });
+
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 

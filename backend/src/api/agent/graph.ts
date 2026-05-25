@@ -548,6 +548,13 @@ export class AgentGraph {
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
     if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') return 'EUR';
+    if (token === 'gbp' || token === 'pound' || token === 'pounds' || token === 'libra' || token === 'libras' || token === '£') return 'GBP';
+    if (token === 'mxn' || token === 'peso' || token === 'pesos') return 'MXN';
+    if (token === 'ars' || token === 'peso argentino' || token === 'pesos argentinos') return 'ARS';
+    if (token === 'cad') return 'CAD';
+    if (token === 'aud') return 'AUD';
+    if (token === 'chf') return 'CHF';
+    if (token === 'jpy' || token === 'yen') return 'JPY';
     if (token === 'xlm' || token === 'lumen' || token === 'lumens') return '';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
@@ -2516,6 +2523,7 @@ export class AgentGraph {
       '- For rendimento, rendimentos, render, rentabilidade, yield, earning, guardar rendendo, or resgatar rendimento, use yield tools instead of free text.',
       '- User-facing yield copy must say rendimento, yield, money, dollars, euros, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
       '- Use get_yield_options for available currencies/rates, get_yield_balance for current earning balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
+      '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "keep earning", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- Do not promise guaranteed returns. Say rates may vary and the user reviews before confirming.',
       '- In English, route users to /yield for the visual yield page. Do not route users to /rendimentos.',
       '',
@@ -3547,7 +3555,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
     const amountNumber = parseHumanAmountNumber(rawWithoutPin);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
     const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
     const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
     const confirms =
@@ -3656,6 +3664,74 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       );
     }
 
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private extractAssetInterfaceIntentFromText(message: string): {
+    is_asset_interface: boolean;
+    action: 'bring' | 'keep' | 'send_out';
+    amount: string;
+    asset_code: string;
+    destination_pix_key?: string;
+  } {
+    const raw = String(message || '');
+    const normalized = this.normalizeTextForIntent(raw);
+    const wantsBring =
+      /\b(trazer|adicionar|colocar|depositar|entrada|add money|top up|bring)\b/.test(normalized);
+    const wantsKeep =
+      /\b(manter|guardar|deixar parado|deixar rendendo|keep|hold|earning|yield)\b/.test(normalized);
+    const wantsSendOut =
+      normalized.includes('mandar embora') ||
+      /\b(retirar|sacar|saque|mandar para pix|mandar pro pix|send out|cash out|withdraw)\b/.test(normalized);
+
+    if (!wantsBring && !wantsKeep && !wantsSendOut) {
+      return { is_asset_interface: false, action: 'bring', amount: '', asset_code: '' };
+    }
+
+    const amountNumber = parseHumanAmountNumber(raw);
+    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
+      raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
+      '';
+
+    return {
+      is_asset_interface: true,
+      action: wantsSendOut ? 'send_out' : wantsKeep ? 'keep' : 'bring',
+      amount,
+      asset_code: this.assetCodeFromTextToken(assetMatch?.[1]) || '',
+      destination_pix_key: destinationPixKey,
+    };
+  }
+
+  private async handleAssetInterfaceRequest(state: AgentState, intent: ReturnType<AgentGraph['extractAssetInterfaceIntentFromText']>): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const resultRaw = await executeTool('open_asset_interface', {
+      session_id: state.session_id,
+      action: intent.action,
+      amount: intent.amount,
+      asset_code: intent.asset_code || (intent.action === 'bring' ? 'USDC' : 'BRL'),
+      destination_pix_key: intent.destination_pix_key,
+      language,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Failed to parse interface tool response' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = result.success
+      ? result.message
+      : this.text(
+          language,
+          `Não consegui abrir a interface agora: ${result.error || 'erro desconhecido'}`,
+          `I could not open the interface right now: ${result.error || 'unknown error'}`
+        );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -4189,6 +4265,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const deterministicYield = this.extractYieldIntentFromText(state.current_input);
+      const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -4215,11 +4292,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                           ? IntentType.PIX
                           : deterministicYield.is_yield
                             ? IntentType.YIELD
-                            : fixedSavings
-                              ? IntentType.FINANCIAL_MEMORY
-                              : deterministicFinancialMemory
+                            : deterministicAssetInterface.is_asset_interface
+                              ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
+                              : fixedSavings
                                 ? IntentType.FINANCIAL_MEMORY
-                                : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                                : deterministicFinancialMemory
+                                  ? IntentType.FINANCIAL_MEMORY
+                                  : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -4282,14 +4361,22 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleRampHistoryRequest(state);
       }
 
-      if (state.action_type === ActionType.INITIATE_PIX) {
+      if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
         return await this.handlePixRampRequest(state);
       }
 
-      if (state.action_type === ActionType.MANAGE_YIELD) {
+      if (state.action_type === ActionType.MANAGE_YIELD && deterministicYield.is_yield) {
         return await this.handleYieldRequest(state, deterministicYield.is_yield
           ? deterministicYield
           : { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
+      }
+
+      if (deterministicAssetInterface.is_asset_interface) {
+        return await this.handleAssetInterfaceRequest(state, deterministicAssetInterface);
+      }
+
+      if (state.action_type === ActionType.MANAGE_YIELD) {
+        return await this.handleYieldRequest(state, { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
       }
 
       if (deterministicExternalWallet.is_external_wallet) {
