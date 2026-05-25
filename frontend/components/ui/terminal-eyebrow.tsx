@@ -37,8 +37,8 @@ export function TerminalEyebrow({
       {showCursor && (
         <span
           className={cn(
-            'inline-block h-[10px] w-[6px] align-middle animate-pulse',
-            dark ? 'bg-tts-gold-lt' : 'bg-tts-gold',
+            'inline-block h-[12px] w-[1.5px] align-middle animate-caret',
+            dark ? 'bg-tts-gold-lt' : 'bg-tts-deep',
           )}
           aria-hidden
         />
