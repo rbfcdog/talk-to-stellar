@@ -120,4 +120,20 @@ export default class PasskeyController {
       return res.status(400).json({ success: false, message: error?.message || String(error) });
     }
   }
+
+  static async smartAccountStatus(req: Request, res: Response) {
+    try {
+      const authorization = await PasskeyService.authorizeRegistration({
+        userId: req.body?.user_id ? String(req.body.user_id) : undefined,
+        email: req.body?.email ? String(req.body.email) : undefined,
+        sessionId: readSessionId(req),
+        sessionToken: readSessionToken(req),
+      });
+
+      const result = await PasskeyService.getSmartAccountStatus(authorization.userId);
+      return res.status(200).json({ success: true, userId: authorization.userId, ...result });
+    } catch (error: any) {
+      return res.status(passkeyErrorStatus(error)).json({ success: false, message: error?.message || String(error) });
+    }
+  }
 }

@@ -130,6 +130,235 @@ function getPasskeyUserVerification(): UserVerificationRequirement {
     : 'preferred';
 }
 
+function envFlag(name: string, defaultValue = false): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === '') return defaultValue;
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+}
+
+function getSmartAccountNetwork() {
+  return String(
+    process.env.PASSKEY_SMART_ACCOUNT_NETWORK ||
+    process.env.STELLAR_NETWORK ||
+    'TESTNET'
+  ).trim().toLowerCase();
+}
+
+function getSmartAccountP256VerifierAddress() {
+  return String(process.env.PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS || '').trim() || undefined;
+}
+
+function getSmartAccountDefaultContextRuleId(): number | undefined {
+  const raw = String(process.env.PASSKEY_SMART_ACCOUNT_DEFAULT_CONTEXT_RULE_ID || '').trim();
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+type CborMapKey = number | string;
+type CborValue = number | string | Uint8Array | CborValue[] | Map<CborMapKey, CborValue> | boolean | null;
+
+function readCborLength(input: Uint8Array, offset: number, additionalInfo: number): { value: number; offset: number } {
+  if (additionalInfo < 24) return { value: additionalInfo, offset };
+
+  const requiredBytes = additionalInfo === 24 ? 1 : additionalInfo === 25 ? 2 : additionalInfo === 26 ? 4 : additionalInfo === 27 ? 8 : 0;
+  if (!requiredBytes || offset + requiredBytes > input.length) {
+    throw new Error('Unsupported or truncated CBOR length');
+  }
+
+  let value = 0n;
+  for (let i = 0; i < requiredBytes; i += 1) {
+    value = (value << 8n) + BigInt(input[offset + i]);
+  }
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('CBOR length exceeds safe integer range');
+  }
+
+  return { value: Number(value), offset: offset + requiredBytes };
+}
+
+function readCborItem(input: Uint8Array, offset = 0): { value: CborValue; offset: number } {
+  const initialByte = input[offset];
+  if (initialByte === undefined) {
+    throw new Error('Unexpected end of CBOR data');
+  }
+
+  const majorType = initialByte >> 5;
+  const additionalInfo = initialByte & 0x1f;
+  const length = readCborLength(input, offset + 1, additionalInfo);
+
+  if (majorType === 0) {
+    return { value: length.value, offset: length.offset };
+  }
+
+  if (majorType === 1) {
+    return { value: -1 - length.value, offset: length.offset };
+  }
+
+  if (majorType === 2) {
+    const end = length.offset + length.value;
+    if (end > input.length) throw new Error('Truncated CBOR byte string');
+    return { value: input.slice(length.offset, end), offset: end };
+  }
+
+  if (majorType === 3) {
+    const end = length.offset + length.value;
+    if (end > input.length) throw new Error('Truncated CBOR text string');
+    return { value: Buffer.from(input.slice(length.offset, end)).toString('utf8'), offset: end };
+  }
+
+  if (majorType === 4) {
+    const items: CborValue[] = [];
+    let cursor = length.offset;
+    for (let i = 0; i < length.value; i += 1) {
+      const item = readCborItem(input, cursor);
+      items.push(item.value);
+      cursor = item.offset;
+    }
+    return { value: items, offset: cursor };
+  }
+
+  if (majorType === 5) {
+    const map = new Map<CborMapKey, CborValue>();
+    let cursor = length.offset;
+    for (let i = 0; i < length.value; i += 1) {
+      const key = readCborItem(input, cursor);
+      cursor = key.offset;
+      if (typeof key.value !== 'number' && typeof key.value !== 'string') {
+        throw new Error('Unsupported CBOR map key type');
+      }
+      const value = readCborItem(input, cursor);
+      cursor = value.offset;
+      map.set(key.value, value.value);
+    }
+    return { value: map, offset: cursor };
+  }
+
+  if (majorType === 7) {
+    if (additionalInfo === 20) return { value: false, offset: offset + 1 };
+    if (additionalInfo === 21) return { value: true, offset: offset + 1 };
+    if (additionalInfo === 22) return { value: null, offset: offset + 1 };
+  }
+
+  throw new Error(`Unsupported CBOR major type ${majorType}`);
+}
+
+export type PasskeySmartAccountCredentialPublicKey = {
+  kty: 'EC';
+  crv: 'P-256';
+  alg: 'ES256';
+  cose_kty: 2;
+  cose_alg: -7;
+  cose_crv: 1;
+  x: string;
+  y: string;
+  public_key_uncompressed: string;
+  cose_public_key: string;
+};
+
+function decodeCoseP256PublicKey(publicKey: Uint8Array): PasskeySmartAccountCredentialPublicKey {
+  const parsed = readCborItem(publicKey);
+  if (parsed.offset !== publicKey.length) {
+    throw new Error('COSE key has trailing bytes');
+  }
+  if (!(parsed.value instanceof Map)) {
+    throw new Error('COSE key must be a CBOR map');
+  }
+
+  const kty = parsed.value.get(1);
+  const alg = parsed.value.get(3);
+  const crv = parsed.value.get(-1);
+  const x = parsed.value.get(-2);
+  const y = parsed.value.get(-3);
+
+  if (kty !== 2 || alg !== -7 || crv !== 1) {
+    throw new Error('Credential public key is not a COSE EC2 P-256 ES256 key');
+  }
+  if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array) || x.length !== 32 || y.length !== 32) {
+    throw new Error('COSE P-256 key must include 32-byte x and y coordinates');
+  }
+
+  const uncompressed = Buffer.concat([Buffer.from([0x04]), Buffer.from(x), Buffer.from(y)]);
+  return {
+    kty: 'EC',
+    crv: 'P-256',
+    alg: 'ES256',
+    cose_kty: 2,
+    cose_alg: -7,
+    cose_crv: 1,
+    x: toBase64Url(x),
+    y: toBase64Url(y),
+    public_key_uncompressed: uncompressed.toString('base64url'),
+    cose_public_key: toBase64Url(publicKey),
+  };
+}
+
+function smartAccountCredentialPublicKeyMetadata(publicKey: Uint8Array): Record<string, unknown> {
+  try {
+    return decodeCoseP256PublicKey(publicKey);
+  } catch (error: any) {
+    return {
+      cose_public_key: toBase64Url(publicKey),
+      parse_error: error?.message || String(error),
+    };
+  }
+}
+
+function buildSmartAccountPasskeyFields(credential: WebAuthnCredential): Record<string, unknown> {
+  const publicKeyP256 = smartAccountCredentialPublicKeyMetadata(credential.publicKey);
+  const verifierAddress = getSmartAccountP256VerifierAddress();
+  const contextRuleId = getSmartAccountDefaultContextRuleId();
+  const network = getSmartAccountNetwork();
+  const enabled = envFlag('PASSKEY_SMART_ACCOUNT_ENABLED', false);
+
+  return {
+    credential_public_key_p256: publicKeyP256,
+    smart_account_address: null,
+    smart_account_signer: 'external_webauthn_p256',
+    smart_account_verifier_address: verifierAddress || null,
+    smart_account_network: network,
+    smart_account_type: 'openzeppelin_stellar_smart_account',
+    smart_account_enabled: enabled,
+    smart_account_context_rule_id: contextRuleId ?? null,
+    smart_account_metadata: {
+      standard: 'openzeppelin-stellar-contracts/accounts',
+      account_type: 'smart_account',
+      signer_variant: 'External',
+      signer_model: 'Signer::External(Address, Bytes)',
+      verifier_address: verifierAddress || null,
+      key_data_format: 'cose_ec2_p256_public_key',
+      auth_payload: {
+        signers: 'Map<Signer, Bytes>',
+        context_rule_ids: contextRuleId === undefined ? [] : [contextRuleId],
+      },
+      deployment_status: 'metadata_only',
+      deployment_note: 'Repository stores the WebAuthn P-256 signer metadata; Soroban smart-account deployment must be run by the contract deploy workflow.',
+      network,
+      enabled,
+    },
+  };
+}
+
+function isMissingSmartAccountColumnError(error: any): boolean {
+  const message = String(error?.message || error?.details || error?.hint || '').toLowerCase();
+  return message.includes('smart_account_') ||
+    message.includes('credential_public_key_p256') ||
+    message.includes('schema cache');
+}
+
+function smartAccountPublicResponse(fields: Record<string, unknown>) {
+  const metadata = fields.smart_account_metadata as Record<string, unknown> | undefined;
+  return {
+    enabled: Boolean(fields.smart_account_enabled),
+    network: fields.smart_account_network,
+    signer: fields.smart_account_signer,
+    verifierAddress: fields.smart_account_verifier_address || null,
+    contextRuleId: fields.smart_account_context_rule_id || null,
+    deploymentStatus: metadata?.deployment_status || 'metadata_only',
+    credentialPublicKeyP256: fields.credential_public_key_p256,
+  };
+}
+
 type StoredPasskey = {
   id: string;
   user_id: string;
@@ -139,6 +368,15 @@ type StoredPasskey = {
   transports?: AuthenticatorTransportFuture[];
   device_type?: string;
   backed_up?: boolean;
+  credential_public_key_p256?: Record<string, unknown> | null;
+  smart_account_address?: string | null;
+  smart_account_signer?: string | null;
+  smart_account_verifier_address?: string | null;
+  smart_account_network?: string | null;
+  smart_account_type?: string | null;
+  smart_account_enabled?: boolean | null;
+  smart_account_context_rule_id?: number | null;
+  smart_account_metadata?: Record<string, unknown> | null;
 };
 
 type ChallengeRow = {
@@ -167,6 +405,10 @@ function toWebAuthnCredential(passkey: StoredPasskey): WebAuthnCredential {
 }
 
 export class PasskeyService {
+  static decodeCredentialPublicKeyForSmartAccount(publicKey: Uint8Array): PasskeySmartAccountCredentialPublicKey {
+    return decodeCoseP256PublicKey(publicKey);
+  }
+
   static async getUserPasskeys(userId: string): Promise<StoredPasskey[]> {
     const { data, error } = await supabase
       .from('user_passkeys')
@@ -434,25 +676,118 @@ export class PasskeyService {
     }
 
     const credential = verification.registrationInfo.credential;
+    const basePasskeyRow = {
+      user_id: userId,
+      credential_id: credential.id,
+      public_key: toBase64Url(credential.publicKey),
+      counter: credential.counter,
+      transports: credential.transports || [],
+      device_type: verification.registrationInfo.credentialDeviceType,
+      backed_up: verification.registrationInfo.credentialBackedUp,
+      updated_at: new Date().toISOString(),
+    };
+    const smartAccountFields = buildSmartAccountPasskeyFields(credential);
     const { error } = await supabase
       .from('user_passkeys')
-      .upsert({
-        user_id: userId,
-        credential_id: credential.id,
-        public_key: toBase64Url(credential.publicKey),
-        counter: credential.counter,
-        transports: credential.transports || [],
-        device_type: verification.registrationInfo.credentialDeviceType,
-        backed_up: verification.registrationInfo.credentialBackedUp,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'credential_id' });
+      .upsert({ ...basePasskeyRow, ...smartAccountFields }, { onConflict: 'credential_id' });
 
     if (error) {
-      throw new Error(`Failed to save passkey: ${error.message}`);
+      if (isMissingSmartAccountColumnError(error)) {
+        console.warn('[passkey] smart-account columns are not migrated yet; saving passkey without smart-account metadata');
+        const retry = await supabase
+          .from('user_passkeys')
+          .upsert(basePasskeyRow, { onConflict: 'credential_id' });
+        if (retry.error) {
+          throw new Error(`Failed to save passkey: ${retry.error.message}`);
+        }
+      } else {
+        throw new Error(`Failed to save passkey: ${error.message}`);
+      }
     }
 
     await this.markChallengeUsed(challenge.id);
-    return { verified: true };
+    return { verified: true, smartAccount: smartAccountPublicResponse(smartAccountFields) };
+  }
+
+  static async getSmartAccountStatus(userId: string) {
+    const config = {
+      standard: 'openzeppelin-stellar-contracts/accounts',
+      enabled: envFlag('PASSKEY_SMART_ACCOUNT_ENABLED', false),
+      network: getSmartAccountNetwork(),
+      signer: 'external_webauthn_p256',
+      verifierAddress: getSmartAccountP256VerifierAddress() || null,
+      contextRuleId: getSmartAccountDefaultContextRuleId() ?? null,
+      deploymentStatus: 'metadata_only',
+    };
+
+    const selectedColumns = [
+      'credential_id',
+      'created_at',
+      'updated_at',
+      'credential_public_key_p256',
+      'smart_account_address',
+      'smart_account_signer',
+      'smart_account_verifier_address',
+      'smart_account_network',
+      'smart_account_type',
+      'smart_account_enabled',
+      'smart_account_context_rule_id',
+      'smart_account_metadata',
+    ].join(', ');
+
+    const { data, error } = await supabase
+      .from('user_passkeys')
+      .select(selectedColumns)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      if (!isMissingSmartAccountColumnError(error)) {
+        throw new Error(`Failed to load passkey smart accounts: ${error.message}`);
+      }
+
+      const fallback = await supabase
+        .from('user_passkeys')
+        .select('credential_id, created_at, updated_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (fallback.error) {
+        throw new Error(`Failed to load passkeys: ${fallback.error.message}`);
+      }
+
+      return {
+        config,
+        migrated: false,
+        passkeys: (fallback.data || []).map((passkey: any) => ({
+          credentialId: passkey.credential_id,
+          createdAt: passkey.created_at,
+          updatedAt: passkey.updated_at,
+          smartAccount: null,
+        })),
+      };
+    }
+
+    return {
+      config,
+      migrated: true,
+      passkeys: (data || []).map((passkey: any) => ({
+        credentialId: passkey.credential_id,
+        createdAt: passkey.created_at,
+        updatedAt: passkey.updated_at,
+        smartAccount: {
+          address: passkey.smart_account_address || null,
+          signer: passkey.smart_account_signer || config.signer,
+          verifierAddress: passkey.smart_account_verifier_address || null,
+          network: passkey.smart_account_network || config.network,
+          type: passkey.smart_account_type || 'openzeppelin_stellar_smart_account',
+          enabled: Boolean(passkey.smart_account_enabled),
+          contextRuleId: passkey.smart_account_context_rule_id ?? null,
+          credentialPublicKeyP256: passkey.credential_public_key_p256 || null,
+          metadata: passkey.smart_account_metadata || {},
+        },
+      })),
+    };
   }
 
   static async verifyLoginAuthentication(userId: string, challengeId: string, response: AuthenticationResponseJSON) {
