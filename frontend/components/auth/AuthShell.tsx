@@ -1,6 +1,6 @@
 import * as React from 'react'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/shared/logo'
 
 interface AuthShellProps {
   title: string
@@ -38,15 +38,8 @@ export function AuthShell({
           className,
         )}
       >
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <Image
-            src="/talktostellar.png"
-            alt="TalkToStellar"
-            width={40}
-            height={40}
-            priority
-            className="rounded-md object-contain"
-          />
+        <div className="mb-8 flex flex-col items-center gap-2 text-tts-deep">
+          <Logo size={40} />
           <span className="text-sm font-extrabold tracking-[-0.018em] text-tts-deep">
             TalkToStellar
           </span>
