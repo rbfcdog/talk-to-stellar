@@ -113,6 +113,110 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('💰 *Total economizado');
   });
 
+  it('routes public yield questions to yield tools even before login', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Available yield options: dollars, euros, reais.',
+    }));
+
+    const result = await graph.processInput(createState('show yield options', false));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_yield_options', {
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Available yield options');
+  });
+
+  it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Revisão pronta: guardar rendendo 250 reais.',
+    }));
+
+    const result = await graph.processInput(createState('guardar 250 reais rendendo'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_yield_action', {
+      session_id: 'eval-session',
+      action: 'deposit',
+      amount: '250',
+      asset_code: 'BRL',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Revisão pronta');
+  });
+
+  it('routes yield balance checks to get_yield_balance for euro', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Você tem 40 euros rendendo agora.',
+    }));
+
+    const result = await graph.processInput(createState('quanto tenho rendendo em euro?'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_yield_balance', {
+      session_id: 'eval-session',
+      asset_code: 'EUR',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('40 euros');
+  });
+
+  it('routes explicit yield confirmations with PIN to confirm_yield_action', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Pedido de rendimento confirmado para 100 reais.',
+    }));
+
+    const result = await graph.processInput(createState('confirmar rendimento de 100 reais PIN 1234'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('confirm_yield_action', {
+      session_id: 'eval-session',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'BRL',
+      pin: '1234',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('confirmado');
+  });
+
+  it('does not execute yield confirmation without a PIN', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Revisão pronta: guardar rendendo 100 reais.',
+    }));
+
+    await graph.processInput(createState('confirmar rendimento de 100 reais'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_yield_action', {
+      session_id: 'eval-session',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'BRL',
+      language: 'pt-BR',
+    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('confirm_yield_action', expect.anything());
+  });
+
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 

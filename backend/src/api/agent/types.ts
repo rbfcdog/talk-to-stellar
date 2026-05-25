@@ -97,6 +97,7 @@ export enum IntentType {
   CONVERSION = "conversion",
   PRICE_QUOTE = "price_quote",
   PIX = "pix",
+  YIELD = "yield",
   GENERAL = "general",
 }
 
@@ -112,6 +113,7 @@ export enum ActionType {
   GET_FINANCIAL_MEMORY = "get_financial_memory",
   CONVERT_ASSETS = "convert_assets",
   GET_PRICE_QUOTE = "get_price_quote",
+  MANAGE_YIELD = "manage_yield",
   LOOKUP_CONTACT = "lookup_contact",
   BUILD_PAYMENT = "build_payment_xdr",
   CREATE_PAYMENT_LINK = "create_payment_link",
