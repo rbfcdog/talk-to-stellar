@@ -190,19 +190,19 @@ export default function PayAnyoneClient() {
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
 
   return (
-    <main className="min-h-screen bg-[#07111f] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 md:grid-cols-[0.95fr_1.05fr]">
         <section className="min-w-0 space-y-6 overflow-hidden">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-emerald-200">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
             Pay Anyone
           </div>
           <div className="space-y-4">
-            <p className="text-lg font-semibold text-emerald-200">Welcome, {userName}</p>
-            <h1 className="max-w-xl text-4xl font-semibold text-white md:text-6xl">
+            <p className="text-lg font-semibold text-tts-confirm">Welcome, {userName}</p>
+            <h1 className="max-w-xl text-4xl font-semibold text-tts-surface md:text-6xl">
               {isReceiveMode ? "Receive money through your global link" : "Send money to someone who does not have an account yet"}
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
+            <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
               {isReceiveMode
                 ? "Share your link with customers. They open it, enter the amount, and pay directly to your account."
                 : "Your PIN authorizes link creation. The recipient must sign in or create their own global account to receive the amount."}
@@ -211,9 +211,9 @@ export default function PayAnyoneClient() {
 
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
             {(isReceiveMode ? ["Create", "Share", "Receive"] : ["Create", "Share", "Receive"]).map((label, index) => (
-              <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{index + 1}. {label}</p>
-                <p className="mt-2 text-sm text-slate-200">
+              <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-surface p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-tts-muted">{index + 1}. {label}</p>
+                <p className="mt-2 text-sm text-tts-deep">
                   {index === 0 && (isReceiveMode ? "Generate your public receive link." : "Enter amount, recipient, and PIN.")}
                   {index === 1 && "Send the link through your preferred channel."}
                   {index === 2 && (isReceiveMode ? "The payment lands in your account." : "The recipient receives it in their own account.")}
@@ -223,7 +223,7 @@ export default function PayAnyoneClient() {
           </div>
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 p-5 shadow-2xl md:p-6">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl md:p-6">
           {booting && (
             <div className="mb-5 space-y-3">
               <Shimmer className="h-12 w-full rounded-xl" />
@@ -231,15 +231,15 @@ export default function PayAnyoneClient() {
             </div>
           )}
           {!loggedIn && (
-            <div className="mb-5 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
+            <div className="mb-5 rounded-lg border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
               Sign in before creating a payment link.
-              <Link href="/login?next=/pay-anyone" className="ml-2 font-semibold text-white underline">
+              <Link href="/login?next=/pay-anyone" className="ml-2 font-semibold text-tts-surface underline">
                 Sign in
               </Link>
             </div>
           )}
 
-          <div className="mb-5 grid rounded-lg border border-white/10 bg-white/5 p-1 text-sm sm:grid-cols-2">
+          <div className="mb-5 grid rounded-lg border border-tts-border bg-tts-surface p-1 text-sm sm:grid-cols-2">
             <button
               type="button"
               onClick={() => {
@@ -249,7 +249,7 @@ export default function PayAnyoneClient() {
                 setResult(null)
                 setCopied(false)
               }}
-              className={`rounded-md px-4 py-2 font-semibold transition ${!isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
+              className={`rounded-md px-4 py-2 font-semibold transition ${!isReceiveMode ? "bg-tts-confirm text-tts-deep" : "text-tts-deep hover:bg-tts-surface"}`}
             >
               Send
             </button>
@@ -262,7 +262,7 @@ export default function PayAnyoneClient() {
                 setResult(null)
                 setCopied(false)
               }}
-              className={`rounded-md px-4 py-2 font-semibold transition ${isReceiveMode ? "bg-emerald-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}
+              className={`rounded-md px-4 py-2 font-semibold transition ${isReceiveMode ? "bg-tts-confirm text-tts-deep" : "text-tts-deep hover:bg-tts-surface"}`}
             >
               Receive
             </button>
@@ -271,75 +271,75 @@ export default function PayAnyoneClient() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Recipient name</span>
+                <span className="text-sm font-medium text-tts-deep">Recipient name</span>
                 <input
                   value={recipientName}
                   onChange={(event) => setRecipientName(event.target.value)}
                   placeholder="John"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
             )}
 
             {!isReceiveMode && <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Amount</span>
+                <span className="text-sm font-medium text-tts-deep">Amount</span>
                 <input
                   value={amount}
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
                   inputMode="decimal"
                   placeholder="15"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">You pay</span>
+                <span className="text-sm font-medium text-tts-deep">You pay</span>
                 <select
                   value={assetCode}
                   onChange={(event) => setAssetCode(event.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none focus:border-tts-confirm"
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
                 </select>
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Receives in</span>
+                <span className="text-sm font-medium text-tts-deep">Receives in</span>
                 <select
                   value={destinationAssetCode}
                   onChange={(event) => setDestinationAssetCode(event.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none focus:border-tts-confirm"
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
                 </select>
               </label>
               <label className="block space-y-2 sm:col-span-3">
-                <span className="text-sm font-medium text-slate-200">Expires at (optional)</span>
+                <span className="text-sm font-medium text-tts-deep">Expires at (optional)</span>
                 <input
                   value={expiresAtLocal}
                   onChange={(event) => setExpiresAtLocal(event.target.value)}
                   type="datetime-local"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none focus:border-tts-confirm"
                 />
               </label>
             </div>}
 
             {isReceiveMode && (
-              <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+              <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
                 Your receive link is fixed. The customer chooses the amount on the public page and the payment is identified as an incoming payment for you.
               </div>
             )}
 
             {!isReceiveMode && destinationAssetCode !== assetCode && (
-              <p className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-50">
+              <p className="rounded-lg border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
                 The link debits {amount || "0"} {displayAsset(assetCode)} from your account and the recipient receives it in {displayAsset(destinationAssetCode)} when they sign in.
               </p>
             )}
 
             {!isReceiveMode && (
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">Your PIN</span>
+                <span className="text-sm font-medium text-tts-deep">Your PIN</span>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
@@ -347,7 +347,7 @@ export default function PayAnyoneClient() {
                   inputMode="numeric"
                   maxLength={8}
                   placeholder="Authorize link creation"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
             )}
@@ -355,7 +355,7 @@ export default function PayAnyoneClient() {
             <button
               type="submit"
               disabled={!loggedIn || submitLocked || (!isReceiveMode && (!amount.trim() || !pin.trim()))}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Link2 className="h-4 w-4" />
               {status === "submitting"
@@ -364,20 +364,20 @@ export default function PayAnyoneClient() {
             </button>
           </form>
 
-          <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4 text-sm">
-            <p className="font-medium text-white">Link</p>
-            {status === "idle" && <p className="mt-2 text-slate-400">The link appears here after authorization.</p>}
-            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-slate-300"><TypingDots />Generating secure link...</div>}
-            {status === "error" && <p className="mt-2 text-rose-300">{result?.message || "Could not create the link."}</p>}
+          <div className="mt-5 rounded-lg border border-tts-border bg-tts-deep/20 p-4 text-sm">
+            <p className="font-medium text-tts-surface">Link</p>
+            {status === "idle" && <p className="mt-2 text-tts-muted">The link appears here after authorization.</p>}
+            {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-tts-deep"><TypingDots />Generating secure link...</div>}
+            {status === "error" && <p className="mt-2 text-tts-error">{result?.message || "Could not create the link."}</p>}
             <AnimatePresence mode="wait">
             {status === "done" && result?.url && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
-                <p className="break-all rounded-lg bg-white/5 p-3 font-mono text-xs text-slate-200">{result.url}</p>
+                <p className="break-all rounded-lg bg-tts-surface p-3 font-mono text-xs text-tts-deep">{result.url}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={copyLink}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 font-semibold text-white transition hover:bg-white/10"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-2 font-semibold text-tts-surface transition hover:bg-tts-surface"
                   >
                     <Copy className="h-4 w-4" />
                     {copied ? "Copied" : "Copy"}
@@ -386,14 +386,14 @@ export default function PayAnyoneClient() {
                     href={whatsappUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 font-semibold text-slate-950 transition hover:bg-[#35e176]"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-tts-gold px-4 py-2 font-semibold text-tts-deep transition hover:bg-tts-confirm"
                   >
                     <Send className="h-4 w-4" />
                     Send
                   </a>
                 </div>
-                <p className="text-slate-300">{result.message}</p>
-                <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                <p className="text-tts-deep">{result.message}</p>
+                <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
               </motion.div>
             )}
             </AnimatePresence>

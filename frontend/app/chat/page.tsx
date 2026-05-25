@@ -9,8 +9,8 @@ export default function ChatPage() {
   const [selectedChat, setSelectedChat] = useState<string | null>("agent")
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#111b21] text-white md:flex-row">
-      <div className={`w-full md:h-screen md:w-96 md:flex-shrink-0 md:overflow-hidden ${selectedChat ? "hidden md:block" : "block"}`}>
+    <div className="flex h-screen flex-col overflow-hidden bg-tts-bg text-tts-deep md:flex-row">
+      <div className={`w-full md:h-screen md:w-[260px] md:flex-shrink-0 md:overflow-hidden ${selectedChat ? "hidden md:block" : "block"}`}>
         <div className="h-full min-h-0 md:sticky md:top-0">
           <ChatSidebar selectedChat={selectedChat} onSelectChat={setSelectedChat} />
         </div>

@@ -14,15 +14,15 @@ function inferFileName(imageUrl: string) {
 
 function ReceiptFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-      <section className="max-w-lg rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
-        <h1 className="text-2xl font-semibold text-white">Receipt not found</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
+    <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+      <section className="max-w-lg rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur">
+        <h1 className="text-2xl font-semibold text-tts-surface">Receipt not found</h1>
+        <p className="mt-3 text-sm leading-6 text-tts-deep">
           This link may have expired. Open the receipt from the web chat conversation.
         </p>
         <Link
           href="/chat"
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
         >
           <ExternalLink className="h-4 w-4" />
           Back to chat
@@ -70,8 +70,8 @@ export default function ReceiptByCodePage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <p className="text-sm text-slate-300">Loading receipt...</p>
+      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+        <p className="text-sm text-tts-deep">Loading receipt...</p>
       </main>
     )
   }
@@ -79,26 +79,26 @@ export default function ReceiptByCodePage() {
   if (!imageUrl) return <ReceiptFallback />
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] px-4 py-8 text-slate-100">
+    <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center">
-        <section className="w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur md:p-6">
+        <section className="w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-4 shadow-2xl backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-emerald-200">Receipt</p>
-              <h1 className="mt-2 text-3xl font-semibold text-white">View and download receipt</h1>
+              <p className="text-xs uppercase tracking-[0.24em] text-tts-confirm">Receipt</p>
+              <h1 className="mt-2 text-3xl font-semibold text-tts-surface">View and download receipt</h1>
             </div>
             <div className="flex flex-wrap gap-3">
               <a
                 href={imageUrl}
                 download={downloadName}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                className="inline-flex items-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
               >
                 <Download className="h-4 w-4" />
                 Download image
               </a>
               <Link
                 href="/chat"
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
               >
                 <ExternalLink className="h-4 w-4" />
                 Back to chat
@@ -106,7 +106,7 @@ export default function ReceiptByCodePage() {
             </div>
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-xl">
+          <div className="mt-6 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/40 p-3 shadow-xl">
             <img
               src={imageUrl}
               alt="TalkToStellar receipt"

@@ -296,35 +296,35 @@ export default function MainnetClient() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-black text-tts-surface">
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+        <header className="flex flex-col gap-5 border-b border-tts-border pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-amber-200">
+            <div className="mb-4 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-tts-gold">
               <ShieldCheck className="h-4 w-4" />
               Ambiente da conta
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-white md:text-5xl">
+            <h1 className="text-3xl font-black tracking-tight text-tts-surface md:text-5xl">
               Carteira e saldo
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-deep md:text-base">
               Alterne entre a conta de validação do produto e a visualização Mainnet. PIX fica separado do saldo real;
               Mainnet é opt-in, usa apenas chave pública e permanece em leitura até liberações operacionais.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:min-w-[320px]">
-            <div className="grid grid-cols-2 border border-white/10 bg-white/[0.03] p-1">
+            <div className="grid grid-cols-2 border border-tts-border bg-tts-surface/[0.03] p-1">
               <button
                 type="button"
                 onClick={() => setNetworkMode("testnet")}
-                className={`min-h-11 px-3 text-sm font-black ${networkMode === "testnet" ? "bg-white text-black" : "text-slate-300 hover:bg-white/10"}`}
+                className={`min-h-11 px-3 text-sm font-black ${networkMode === "testnet" ? "bg-tts-surface text-tts-deep" : "text-tts-deep hover:bg-tts-surface"}`}
               >
                 Validação
               </button>
               <button
                 type="button"
                 onClick={() => setNetworkMode("mainnet")}
-                className={`min-h-11 px-3 text-sm font-black ${networkMode === "mainnet" ? "bg-amber-200 text-black" : "text-slate-300 hover:bg-white/10"}`}
+                className={`min-h-11 px-3 text-sm font-black ${networkMode === "mainnet" ? "bg-tts-gold text-tts-deep" : "text-tts-deep hover:bg-tts-surface"}`}
               >
                 Mainnet
               </button>
@@ -332,7 +332,7 @@ export default function MainnetClient() {
             <button
               type="button"
               onClick={refreshAll}
-              className="inline-flex min-h-11 items-center justify-center gap-2 border border-white/15 bg-white px-4 py-2 text-sm font-black text-black hover:bg-slate-200"
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep hover:bg-tts-surface"
             >
               {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Refresh {currentNetworkLabel}
@@ -341,17 +341,17 @@ export default function MainnetClient() {
         </header>
 
         {apiState.error ? (
-          <div className="flex items-start gap-3 border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+          <div className="flex items-start gap-3 border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
               <p className="font-black">Needs attention</p>
-              <p className="mt-1 text-red-100/85">{apiState.error}</p>
+              <p className="mt-1 text-tts-error">{apiState.error}</p>
             </div>
           </div>
         ) : null}
 
         {apiState.message ? (
-          <div className="border border-emerald-400/25 bg-emerald-400/10 p-4 text-sm font-semibold text-emerald-100">
+          <div className="border border-tts-confirm bg-tts-confirm/10 p-4 text-sm font-semibold text-tts-confirm">
             {apiState.message}
           </div>
         ) : null}
@@ -372,30 +372,30 @@ export default function MainnetClient() {
         ) : (
           <>
         <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <div className="border border-white/10 bg-white/[0.03] p-5">
+          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="flex items-center gap-2 text-lg font-black text-white">
-                  <Wallet2 className="h-5 w-5 text-cyan-200" />
+                <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+                  <Wallet2 className="h-5 w-5 text-tts-gold" />
                   Mainnet wallet
                 </h2>
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-sm text-tts-muted">
                   Attach only a public key. Secret keys, seed phrases and signing credentials must never be pasted here.
                 </p>
               </div>
-              <span className="border border-white/10 px-2 py-1 text-xs font-black uppercase tracking-[0.16em] text-slate-300">
+              <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] text-tts-deep">
                 Read only
               </span>
             </div>
 
             {!session.authenticated ? (
-              <div className="mt-5 border border-white/10 bg-black p-4 text-sm text-slate-300">
+              <div className="mt-5 border border-tts-border bg-black p-4 text-sm text-tts-deep">
                 Browser login is required before attaching a Mainnet wallet.
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <a href="/chat" className="inline-flex min-h-10 items-center justify-center bg-white px-4 py-2 text-sm font-black text-black">
+                  <a href="/chat" className="inline-flex min-h-10 items-center justify-center bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep">
                     Open chat
                   </a>
-                  <a href="/login" className="inline-flex min-h-10 items-center justify-center border border-white/15 px-4 py-2 text-sm font-black text-white">
+                  <a href="/login" className="inline-flex min-h-10 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
                     Browser login
                   </a>
                 </div>
@@ -403,50 +403,50 @@ export default function MainnetClient() {
             ) : (
               <>
                 <div className="mt-5 space-y-3">
-                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
                     Public Mainnet key
                   </label>
                   <input
                     value={publicKey}
                     onChange={(event) => setPublicKey(event.target.value.trim())}
                     placeholder="G..."
-                    className="min-h-12 w-full border border-white/10 bg-black px-3 font-mono text-sm text-white outline-none focus:border-cyan-300"
+                    className="min-h-12 w-full border border-tts-border bg-black px-3 font-mono text-sm text-tts-surface outline-none focus:border-tts-gold"
                   />
-                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
                     Wallet label
                   </label>
                   <input
                     value={walletLabel}
                     onChange={(event) => setWalletLabel(event.target.value)}
-                    className="min-h-12 w-full border border-white/10 bg-black px-3 text-sm text-white outline-none focus:border-cyan-300"
+                    className="min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
                   />
                   <button
                     type="button"
                     onClick={attachWallet}
                     disabled={!canAttach || apiState.loading}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-cyan-200 px-4 py-2 text-sm font-black text-black disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-surface/40"
                   >
                     {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                     Attach read-only wallet
                   </button>
                   {!canAttach && publicKey ? (
-                    <p className="text-xs font-semibold text-amber-200">
+                    <p className="text-xs font-semibold text-tts-gold">
                       The key must be a Stellar public key beginning with G and 56 characters long.
                     </p>
                   ) : null}
                 </div>
 
-                <div className="mt-6 border border-white/10 bg-black p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Attached wallet</p>
+                <div className="mt-6 border border-tts-border bg-black p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Attached wallet</p>
                   {hasWallet ? (
                     <div className="mt-3 space-y-3">
-                      <p className="text-lg font-black text-white">{wallet?.label || "Mainnet wallet"}</p>
-                      <p className="break-all font-mono text-xs text-slate-300">{wallet?.public_key}</p>
+                      <p className="text-lg font-black text-tts-surface">{wallet?.label || "Mainnet wallet"}</p>
+                      <p className="break-all font-mono text-xs text-tts-deep">{wallet?.public_key}</p>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={refreshBalance}
-                          className="inline-flex min-h-10 items-center gap-2 border border-white/15 px-3 py-2 text-sm font-black text-white"
+                          className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface"
                         >
                           <RefreshCw className="h-4 w-4" />
                           Sync balance
@@ -456,7 +456,7 @@ export default function MainnetClient() {
                             href={wallet.explorer_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex min-h-10 items-center gap-2 border border-white/15 px-3 py-2 text-sm font-black text-white"
+                            className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface"
                           >
                             <ExternalLink className="h-4 w-4" />
                             Explorer
@@ -465,7 +465,7 @@ export default function MainnetClient() {
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-400">
+                    <p className="mt-2 text-sm text-tts-muted">
                       Nenhuma carteira Mainnet anexada ainda. Cada conta TalkToStellar pode anexar uma chave pública aqui sem alterar a conta de validação do produto.
                     </p>
                   )}
@@ -474,40 +474,40 @@ export default function MainnetClient() {
             )}
           </div>
 
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="flex items-center gap-2 text-lg font-black text-white">
-              <Activity className="h-5 w-5 text-emerald-200" />
+          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+              <Activity className="h-5 w-5 text-tts-confirm" />
               Mainnet balance
             </h2>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-tts-muted">
               Leitura pública da rede Stellar. Esta tela mostra saldos reais da carteira anexada sem mover fundos.
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {balances.length ? balances.map((item) => (
-                <div key={`${item.asset_code}-${item.asset_issuer || "native"}`} className="border border-white/10 bg-black p-4">
+                <div key={`${item.asset_code}-${item.asset_issuer || "native"}`} className="border border-tts-border bg-black p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">{item.asset_code}</p>
-                      <p className="mt-2 text-2xl font-black text-white">{formatAmount(item.balance)}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{item.asset_code}</p>
+                      <p className="mt-2 text-2xl font-black text-tts-surface">{formatAmount(item.balance)}</p>
                     </div>
-                    <span className="border border-white/10 px-2 py-1 text-xs font-bold text-slate-300">
+                    <span className="border border-tts-border px-2 py-1 text-xs font-bold text-tts-deep">
                       {item.asset_type === "native" ? "native" : "issued"}
                     </span>
                   </div>
                   {item.asset_issuer ? (
-                    <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{item.asset_issuer}</p>
+                    <p className="mt-3 break-all font-mono text-[11px] text-tts-muted">{item.asset_issuer}</p>
                   ) : null}
                 </div>
               )) : (
-                <div className="border border-white/10 bg-black p-4 text-sm text-slate-400 sm:col-span-2">
+                <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted sm:col-span-2">
                   {hasWallet ? "No funded Mainnet balance found yet." : "Attach a public Mainnet wallet to show balances."}
                 </div>
               )}
             </div>
 
-            <div className="mt-5 border border-white/10 bg-black p-4">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Account status</p>
+            <div className="mt-5 border border-tts-border bg-black p-4">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Account status</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <MiniStat label="Funded" value={balance?.funded === false ? "No" : balance?.funded ? "Yes" : "-"} />
                 <MiniStat label="Sequence" value={balance?.sequence ? compactKey(balance.sequence) : "-"} />
@@ -518,12 +518,12 @@ export default function MainnetClient() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="flex items-center gap-2 text-lg font-black text-white">
-              <Send className="h-5 w-5 text-violet-200" />
+          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+              <Send className="h-5 w-5 text-tts-gold" />
               Guarded interaction preview
             </h2>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-tts-muted">
               Validate a Mainnet payment shape without submitting. Real submission stays disabled unless signer, limits and manual approval are configured.
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_120px]">
@@ -531,18 +531,18 @@ export default function MainnetClient() {
                 value={destination}
                 onChange={(event) => setDestination(event.target.value.trim())}
                 placeholder="Destination G..."
-                className="min-h-12 border border-white/10 bg-black px-3 font-mono text-sm text-white outline-none focus:border-violet-300"
+                className="min-h-12 border border-tts-border bg-black px-3 font-mono text-sm text-tts-surface outline-none focus:border-tts-gold"
               />
               <input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 placeholder="1"
-                className="min-h-12 border border-white/10 bg-black px-3 text-sm text-white outline-none focus:border-violet-300"
+                className="min-h-12 border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
               />
               <select
                 value={assetCode}
                 onChange={(event) => setAssetCode(event.target.value)}
-                className="min-h-12 border border-white/10 bg-black px-3 text-sm font-black text-white outline-none focus:border-violet-300"
+                className="min-h-12 border border-tts-border bg-black px-3 text-sm font-black text-tts-surface outline-none focus:border-tts-gold"
               >
                 <option value="USDC">USDC</option>
                 <option value="XLM">XLM</option>
@@ -551,47 +551,47 @@ export default function MainnetClient() {
                 type="button"
                 onClick={previewPayment}
                 disabled={!hasWallet || !isValidPublicKey(destination) || apiState.loading}
-                className="inline-flex min-h-12 items-center justify-center gap-2 bg-violet-200 px-4 py-2 text-sm font-black text-black disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-surface/40"
               >
                 Preview
               </button>
             </div>
             {preview ? (
-              <div className="mt-5 border border-white/10 bg-black p-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Preview result</p>
+              <div className="mt-5 border border-tts-border bg-black p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Preview result</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <MiniStat label="Mode" value={preview.preview?.mode || preview.mode || "-"} />
                   <MiniStat label="Can submit" value={preview.preview?.can_submit ? "Yes" : "No"} />
                   <MiniStat label="Amount" value={`${preview.preview?.amount || "-"} ${preview.preview?.asset_code || ""}`} />
                   <MiniStat label="Destination" value={compactKey(preview.preview?.destination_public_key)} />
                 </div>
-                <p className="mt-3 text-sm text-slate-400">{preview.preview?.warning || preview.message}</p>
+                <p className="mt-3 text-sm text-tts-muted">{preview.preview?.warning || preview.message}</p>
               </div>
             ) : null}
           </div>
 
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="text-lg font-black text-white">Recent public operations</h2>
-            <p className="mt-2 text-sm text-slate-400">
+          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+            <h2 className="text-lg font-black text-tts-surface">Recent public operations</h2>
+            <p className="mt-2 text-sm text-tts-muted">
               Public Mainnet activity from the attached wallet. Nothing here changes the account.
             </p>
             <div className="mt-5 space-y-3">
               {operations.length ? operations.map((operation) => (
-                <div key={operation.id} className="border border-white/10 bg-black p-4">
+                <div key={operation.id} className="border border-tts-border bg-black p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-black text-white">{operation.type || "operation"}</p>
-                      <p className="mt-1 text-sm text-slate-400">
+                      <p className="font-black text-tts-surface">{operation.type || "operation"}</p>
+                      <p className="mt-1 text-sm text-tts-muted">
                         {operation.amount ? `${formatAmount(operation.amount)} ${operation.asset_code || ""}` : "No amount"}
                       </p>
                     </div>
                     {operation.explorer_tx_url ? (
-                      <a href={operation.explorer_tx_url} target="_blank" rel="noreferrer" className="text-cyan-200">
+                      <a href={operation.explorer_tx_url} target="_blank" rel="noreferrer" className="text-tts-gold">
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     ) : null}
                   </div>
-                  <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-2 text-xs text-tts-muted sm:grid-cols-2">
                     <p>From: <span className="font-mono">{compactKey(operation.from)}</span></p>
                     <p>To: <span className="font-mono">{compactKey(operation.to)}</span></p>
                     <p>Tx: <span className="font-mono">{compactKey(operation.transaction_hash)}</span></p>
@@ -599,7 +599,7 @@ export default function MainnetClient() {
                   </div>
                 </div>
               )) : (
-                <div className="border border-white/10 bg-black p-4 text-sm text-slate-400">
+                <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted">
                   {hasWallet ? "No recent Mainnet operations found." : "Attach a wallet to inspect operations."}
                 </div>
               )}
@@ -610,8 +610,8 @@ export default function MainnetClient() {
           </>
         )}
 
-        <section className="border border-white/10 bg-white/[0.03] p-5">
-          <h2 className="text-lg font-black text-white">Política de uso</h2>
+        <section className="border border-tts-border bg-tts-surface/[0.03] p-5">
+          <h2 className="text-lg font-black text-tts-surface">Política de uso</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <InfoBlock title="Conta principal protegida" body="PIX, cotações e chat continuam no ambiente controlado do produto." />
             <InfoBlock title="PIX separado da Mainnet" body="Operações PIX não usam a carteira Mainnet anexada nesta tela." />
@@ -634,18 +634,18 @@ function TestnetRailPanel({
 }) {
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="border border-white/10 bg-white/[0.03] p-5">
+      <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-black text-white">
-              <QrCode className="h-5 w-5 text-emerald-200" />
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+              <QrCode className="h-5 w-5 text-tts-confirm" />
               PIX da conta de validação
             </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <p className="mt-2 text-sm leading-6 text-tts-muted">
               Este é o ambiente usado para PIX, cotações, pagamentos por chat e conferência de saldo antes de operações reais.
             </p>
           </div>
-          <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${etherfuseAvailable ? "border-emerald-300/30 text-emerald-200" : "border-amber-300/30 text-amber-200"}`}>
+          <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${etherfuseAvailable ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
             {etherfuseAvailable ? "Ready" : "Check env"}
           </span>
         </div>
@@ -658,14 +658,14 @@ function TestnetRailPanel({
         </div>
 
         {!etherfuseAvailable ? (
-          <div className="mt-5 border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+          <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
             <p className="font-black">PIX está separado da Mainnet.</p>
             <p className="mt-2 leading-6">
               Confira as configurações do serviço de pagamento para usar PIX.
             </p>
           </div>
         ) : (
-          <div className="mt-5 border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">
+          <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
             <p className="font-black">PIX está disponível na conta de validação.</p>
             <p className="mt-2 leading-6">
               A visualização Mainnet fica separada e não interfere nos pagamentos por PIX.
@@ -674,22 +674,22 @@ function TestnetRailPanel({
         )}
 
         <div className="mt-5 flex flex-wrap gap-3">
-          <a href="/pix-on" className="inline-flex min-h-11 items-center justify-center gap-2 bg-emerald-200 px-4 py-2 text-sm font-black text-black">
+          <a href="/pix-on" className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep">
             <QrCode className="h-4 w-4" />
             PIX in
           </a>
-          <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-white/15 px-4 py-2 text-sm font-black text-white">
+          <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
             PIX out
           </a>
-          <a href="/chat" className="inline-flex min-h-11 items-center justify-center border border-white/15 px-4 py-2 text-sm font-black text-white">
+          <a href="/chat" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
             Chat
           </a>
         </div>
       </div>
 
-      <div className="border border-white/10 bg-white/[0.03] p-5">
-        <h2 className="flex items-center gap-2 text-lg font-black text-white">
-          <Landmark className="h-5 w-5 text-cyan-200" />
+      <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+        <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+          <Landmark className="h-5 w-5 text-tts-gold" />
           What the toggle means
         </h2>
         <div className="mt-5 space-y-3">
@@ -707,7 +707,7 @@ function TestnetRailPanel({
           />
         </div>
         {!sessionAuthenticated ? (
-          <div className="mt-5 border border-white/10 bg-black p-4 text-sm text-slate-300">
+          <div className="mt-5 border border-tts-border bg-black p-4 text-sm text-tts-deep">
             Entre na conta para usar PIX e anexar uma carteira pública Mainnet.
           </div>
         ) : null}
@@ -718,28 +718,28 @@ function TestnetRailPanel({
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-xl font-black text-white">{value}</p>
-      <p className="mt-1 text-sm text-slate-400">{detail}</p>
+    <div className="border border-tts-border bg-tts-surface/[0.03] p-4">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{label}</p>
+      <p className="mt-2 text-xl font-black text-tts-surface">{value}</p>
+      <p className="mt-1 text-sm text-tts-muted">{detail}</p>
     </div>
   );
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-white/10 bg-white/[0.03] p-3">
-      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-white" title={value}>{value}</p>
+    <div className="border border-tts-border bg-tts-surface/[0.03] p-3">
+      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-tts-surface" title={value}>{value}</p>
     </div>
   );
 }
 
 function InfoBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border border-white/10 bg-black p-4">
-      <p className="font-black text-white">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
+    <div className="border border-tts-border bg-black p-4">
+      <p className="font-black text-tts-surface">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-tts-muted">{body}</p>
     </div>
   );
 }

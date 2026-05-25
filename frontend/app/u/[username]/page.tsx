@@ -89,54 +89,54 @@ export default function PublicReceivePage() {
 
   if (status === "loading") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <p className="text-sm text-slate-300">Loading payment link...</p>
+      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+        <p className="text-sm text-tts-deep">Loading payment link...</p>
       </main>
     )
   }
 
   if (status === "error") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-slate-100">
-        <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 p-6">
-          <h1 className="text-2xl font-semibold text-white">Link not found</h1>
-          <p className="mt-3 text-sm text-slate-300">Check the address or ask the recipient for a new link.</p>
+      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+        <section className="w-full max-w-md rounded-lg border border-tts-border bg-tts-surface p-6">
+          <h1 className="text-2xl font-semibold text-tts-surface">Link not found</h1>
+          <p className="mt-3 text-sm text-tts-deep">Check the address or ask the recipient for a new link.</p>
         </section>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-[#07111f] px-4 py-10 text-slate-100">
+    <main className="min-h-screen bg-tts-bg px-4 py-10 text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-xl items-center">
-        <section className="w-full rounded-lg border border-white/10 bg-slate-950/85 p-5 shadow-2xl sm:p-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
+        <section className="w-full rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl sm:p-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
             <WalletCards className="h-4 w-4" />
             Payment link
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-white">Pay {name}</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
+          <h1 className="mt-5 text-3xl font-semibold text-tts-surface">Pay {name}</h1>
+          <p className="mt-3 text-sm leading-6 text-tts-deep">
             Enter the amount and continue to authorize the payment from your TalkToStellar account.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px]">
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Amount</span>
+              <span className="text-sm font-medium text-tts-deep">Amount</span>
               <input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
                 inputMode="decimal"
                 placeholder="500"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none placeholder:text-tts-muted focus:border-tts-confirm"
               />
             </label>
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-200">Currency</span>
+              <span className="text-sm font-medium text-tts-deep">Currency</span>
               <select
                 value={asset}
                 onChange={(event) => setAsset(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none focus:border-tts-confirm"
               >
                 <option value="USDC">US$</option>
                 <option value="BRL">R$</option>
@@ -148,7 +148,7 @@ export default function PublicReceivePage() {
             type="button"
             onClick={handlePayNow}
             disabled={submitStatus === "submitting" || submitLockRef.current}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitStatus === "submitting" ? (
               <>
@@ -163,7 +163,7 @@ export default function PublicReceivePage() {
             )}
           </button>
           {submitStatus === "error" && submitMessage && (
-            <p className="mt-3 text-sm text-rose-300">{submitMessage}</p>
+            <p className="mt-3 text-sm text-tts-error">{submitMessage}</p>
           )}
         </section>
       </div>

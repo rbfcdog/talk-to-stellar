@@ -251,51 +251,51 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   }
 
   return (
-    <main className="min-h-screen bg-[#07111f] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10 sm:px-6">
-        <section className="min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-950/85 p-5 shadow-2xl sm:p-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-200">
+        <section className="min-w-0 w-full overflow-hidden rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl sm:p-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
             Receive Payment
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-white md:text-5xl">
+          <h1 className="mt-5 text-3xl font-semibold text-tts-surface md:text-5xl">
             {senderName} created a {sourceAmountLabel} link for {recipientName}
           </h1>
-          <p className="mt-4 text-sm leading-6 text-slate-300 md:text-base">
+          <p className="mt-4 text-sm leading-6 text-tts-deep md:text-base">
             You will receive {isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} with final credit in ${destinationAssetCode}.` : sourceAmountLabel}. To receive it, sign in or create your global account.
             This process takes about 2 minutes.
             {isCrossAsset ? ` You receive in ${destinationAssetCode}.` : " The money is sent to the account authenticated on this page."}
             {loggedIn && !isSenderSession ? " As soon as the login is valid, the credit will be processed automatically." : ""}
           </p>
 
-          <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm">
-            <p className="text-slate-400">Link status</p>
+          <div className="mt-6 rounded-lg border border-tts-border bg-tts-surface p-4 text-sm">
+            <p className="text-tts-muted">Link status</p>
             {validation.valid === false ? (
-              <p className="mt-1 text-rose-300">
+              <p className="mt-1 text-tts-error">
                 {isExpiredLink
                   ? `Expired link. ${validation.message || "Request a new link."}`
                   : (validation.message || "Invalid link.")}
               </p>
             ) : (
-              <p className="mt-1 text-emerald-300">Link ready. Next step: sign in or create an account to receive this amount.</p>
+              <p className="mt-1 text-tts-confirm">Link ready. Next step: sign in or create an account to receive this amount.</p>
             )}
           </div>
 
           {(!loggedIn || isSenderSession) && !isExpiredLink && (
             <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
               {hasSessionCredentials && sessionReady === "checking" && (
-                <p className="sm:col-span-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-slate-200">
+                <p className="sm:col-span-2 rounded-lg border border-tts-border bg-tts-surface p-3 text-sm text-tts-deep">
                   Validating your account for receipt...
                 </p>
               )}
               {loginNotice && (
-                <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+                <p className="sm:col-span-2 rounded-lg border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
                   {loginNotice}
                 </p>
               )}
               {isSenderSession && (
-                <p className="sm:col-span-2 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+                <p className="sm:col-span-2 rounded-lg border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
                   This browser is signed in to the account that created the link. To receive it, sign in or create the recipient account.
                 </p>
               )}
@@ -303,21 +303,21 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 <button
                   type="button"
                   onClick={leaveSenderSession}
-                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
                 >
                   Use another account to receive
                 </button>
               )}
               <Link
                 href={`/login?next=${encodeURIComponent(nextPath)}`}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold"
               >
                 <LogIn className="h-4 w-4" />
                 1) Sign in to receive
               </Link>
               <Link
                 href={createAccountPath}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
               >
                 <UserPlus className="h-4 w-4" />
                 2) Create account to receive
@@ -327,35 +327,35 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
           {loggedIn && !isSenderSession && !isExpiredLink && (
             <div className="mt-5 space-y-3">
-              <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+              <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-3 text-sm text-tts-confirm">
                 Account validated. Processing automatic receipt of {receiveLabel}.
               </div>
               <button
                 type="button"
                 onClick={leaveSenderSession}
-                className="inline-flex w-full items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex w-full items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
               >
                 Use another account to receive
               </button>
             </div>
           )}
 
-          {status === "claiming" && <div className="mt-5 inline-flex items-center gap-2 text-sm text-slate-300"><TypingDots />Validating and crediting payment...</div>}
+          {status === "claiming" && <div className="mt-5 inline-flex items-center gap-2 text-sm text-tts-deep"><TypingDots />Validating and crediting payment...</div>}
           <AnimatePresence mode="wait">
           {status === "done" && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-              <p className="text-base font-semibold text-emerald-300">{T(language, "Pagamento recebido com sucesso", "Payment received successfully")}</p>
-              <div className="space-y-2 rounded-lg border border-emerald-400/20 bg-slate-950/50 p-4">
-                <p><span className="text-slate-300">{T(language, "Valor", "Amount")}: </span>{formatAmount(successAmount, successAsset)}</p>
-                <p><span className="text-slate-300">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
-                <p><span className="text-slate-300">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
+              <p className="text-base font-semibold text-tts-confirm">{T(language, "Pagamento recebido com sucesso", "Payment received successfully")}</p>
+              <div className="space-y-2 rounded-lg border border-tts-confirm bg-tts-deep/40 p-4">
+                <p><span className="text-tts-deep">{T(language, "Valor", "Amount")}: </span>{formatAmount(successAmount, successAsset)}</p>
+                <p><span className="text-tts-deep">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
+                <p><span className="text-tts-deep">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>
               </div>
               {successReceiptUrl && (
                 <a
                   href={successReceiptUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
                 >
                   View receipt
                 </a>
@@ -363,11 +363,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               {successAutoConversionMessage && (
                 <p>{successAutoConversionMessage}</p>
               )}
-              <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+              <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
             </motion.div>
           )}
           {status === "error" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
               {result?.error || result?.message || "Could not receive this payment."}
             </motion.div>
           )}

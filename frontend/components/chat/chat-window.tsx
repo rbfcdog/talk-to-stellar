@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, MoreVertical, Phone, Send, Smile, Paperclip, Mic, Video, Search, ExternalLink } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Send, Video, Search, ExternalLink } from "lucide-react";
 import { clearClientSession, getClientSession, isClientSessionExpired, touchClientSessionActivity } from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
 import { publicErrorPayload } from "@/lib/public-errors";
@@ -733,15 +733,15 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                 href={part}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="my-2 flex max-w-full items-center gap-3 rounded-lg border border-[#2a3942] bg-[#182229] px-3 py-2 text-[#e9edef] no-underline shadow-sm transition hover:bg-[#1f2c34]"
+                className="my-2 flex max-w-full items-center gap-3 rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-tts-deep no-underline shadow-sm transition hover:bg-tts-surface"
                 title={part}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-[#06261d]">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold">
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1 overflow-hidden">
                   <span className="block truncate text-sm font-medium">{getFriendlyLinkLabel(part, t)}</span>
-                  <span className="block truncate text-xs text-[#8696a0]">{getFriendlyLinkMeta(part)}</span>
+                  <span className="block truncate text-xs text-tts-muted">{getFriendlyLinkMeta(part)}</span>
                 </span>
               </a>
             );
@@ -753,33 +753,33 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-[#0b141a]">
-       <div className="flex-shrink-0 flex items-center justify-between gap-3 border-l border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
+    <div className="relative flex h-full min-h-0 flex-col bg-tts-bg">
+       <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-tts-border bg-tts-surface px-3 py-3 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#aebac1] hover:bg-white/5 md:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-tts-muted hover:bg-tts-bg md:hidden"
             aria-label="Back to contacts list"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <Avatar className="h-10 w-10">
             <AvatarImage src={selectedMeta.avatar} />
-            <AvatarFallback className="bg-[#00a884] text-white">●</AvatarFallback>
+            <AvatarFallback className="bg-tts-gold-bg text-tts-gold">●</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1 overflow-hidden">
-            <h2 className="truncate text-[17px] font-normal text-[#e9edef]">{selectedMeta.title}</h2>
-            <p className="truncate text-xs text-[#8696a0]">
+            <h2 className="truncate text-sm font-bold tracking-tight text-tts-deep">{selectedMeta.title}</h2>
+            <p className="truncate font-mono text-[10px] text-tts-muted">
               {isLoading
-                ? <TypingDots className="text-[#8ea4b1]" />
+                ? <TypingDots className="text-tts-muted" />
                 : browserSessionExpired
                   ? L("Sessão expirada; envie mensagem para novo link", "Session expired; send a message for a new link")
                   : t("chat_online")}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 text-[#aebac1] sm:gap-3">
+        <div className="flex shrink-0 items-center gap-2 text-tts-muted sm:gap-3">
           {[
             { Icon: Video, label: L("Chamada de vídeo indisponível nesta demo", "Video call unavailable in this demo") },
             { Icon: Phone, label: L("Chamada indisponível nesta demo", "Call unavailable in this demo") },
@@ -792,7 +792,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
               aria-label={label}
               title={label}
               disabled
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#aebac1] opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-tts-muted opacity-60"
             >
               <Icon className="h-5 w-5" />
             </button>
@@ -802,10 +802,9 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
 
       <div
         ref={scrollAreaViewportRef}
-        className="flex-1 min-h-0 overflow-y-auto"
-        style={{ backgroundImage: `url('/bg-chat-tile-light.png')`, backgroundRepeat: "repeat" }}
+        className="flex-1 min-h-0 overflow-y-auto bg-tts-bg"
       >
-        <div className="space-y-2 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 px-4 py-4">
           {messages.length === 0 && (
             <div className="space-y-3 py-2">
               <Shimmer className="h-16 w-[72%] rounded-2xl" />
@@ -823,9 +822,23 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <div className={`min-w-0 max-w-[84%] overflow-hidden rounded-2xl px-3 py-2 text-[14.2px] shadow-md transition-transform duration-150 hover:-translate-y-0.5 sm:max-w-[65%] ${m.role === "user" ? "bg-[#005c4b] text-white" : "bg-[#202c33] text-white"}`}>
+                <div
+                  className={
+                    m.role === "user"
+                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm text-tts-surface shadow-sm"
+                      : "min-w-0 max-w-[80%] overflow-hidden rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-2.5 text-sm text-tts-deep shadow-sm"
+                  }
+                >
                   {renderMessageContent(m.content)}
-                  <div className="mt-1 text-right text-[11px] text-[#ffffff99]">{formatTime(m.createdAt)}</div>
+                  <div
+                    className={
+                      m.role === "user"
+                        ? "mt-1 text-right font-mono text-[10px] text-tts-surface/60"
+                        : "mt-1 text-right font-mono text-[10px] text-tts-muted"
+                    }
+                  >
+                    {formatTime(m.createdAt)}
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -838,7 +851,7 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
                 exit={{ opacity: 0, y: -4 }}
                 className="flex justify-start"
               >
-                <div className="rounded-2xl bg-[#202c33] px-4 py-3 text-[#9cb4c1] shadow-md">
+                <div className="rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-3 text-tts-muted shadow-sm">
                   <TypingDots />
                 </div>
               </motion.div>
@@ -847,40 +860,42 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
         </div>
       </div>
 
-      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#313d45] bg-[#202c33] px-3 py-3 sm:px-4">
+      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-tts-border bg-tts-surface px-4 py-3">
         {retryText && !isLoading && chatId === "agent" && (
-          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100">
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-semibold text-tts-deep">
             <span>{L("A última mensagem não concluiu.", "The last message did not complete.")}</span>
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
               onClick={() => {
                 setInput(retryText);
                 setRetryText("");
                 window.setTimeout(() => inputRef.current?.focus(), 0);
               }}
-              className="shrink-0 rounded-full bg-amber-200 px-3 py-1 font-black text-amber-950 transition hover:bg-amber-100"
+              className="shrink-0"
             >
               {L("Tentar novamente", "Try again")}
-            </button>
+            </Button>
           </div>
         )}
-        <form onSubmit={handleSubmit} className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Smile className="hidden h-6 w-6 text-[#8696a0] sm:block" />
-          <Paperclip className="hidden h-6 w-6 text-[#8696a0] sm:block" />
+        <form onSubmit={handleSubmit} className="flex min-w-0 items-center gap-2">
           <Input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={browserSessionExpired ? L("Digite login para receber um novo link", "Type login to receive a new link") : t("chat_input_placeholder")}
-            className="h-11 min-w-0 flex-1 truncate rounded-xl border-none bg-[#2a3942] px-4 text-[#e9edef] placeholder:text-[#8696a0] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+            className="h-10 min-w-0 flex-1"
           />
-          {input.trim() ? (
-            <Button type="submit" size="icon" className="h-10 w-10 rounded-full bg-transparent text-[#8696a0] hover:bg-transparent" disabled={isLoading}>
-              <Send className="h-6 w-6" />
-            </Button>
-          ) : (
-            <Mic className="h-6 w-6 shrink-0 text-[#8696a0]" />
-          )}
+          <Button
+            type="submit"
+            size="icon"
+            className="h-10 w-10 shrink-0 bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+            disabled={isLoading || !input.trim()}
+            aria-label={L("Enviar mensagem", "Send message")}
+          >
+            <Send className="h-4 w-4" />
+          </Button>
         </form>
       </div>
     </div>
