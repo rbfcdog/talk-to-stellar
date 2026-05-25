@@ -2512,6 +2512,13 @@ export class AgentGraph {
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
       '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',
+      '## YIELD UX',
+      '- For rendimento, rendimentos, render, rentabilidade, yield, earning, guardar rendendo, or resgatar rendimento, use yield tools instead of free text.',
+      '- User-facing yield copy must say rendimento, yield, money, dollars, euros, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
+      '- Use get_yield_options for available currencies/rates, get_yield_balance for current earning balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
+      '- Do not promise guaranteed returns. Say rates may vary and the user reviews before confirming.',
+      '- In English, route users to /yield for the visual yield page. Do not route users to /rendimentos.',
+      '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
       '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or € according to the asset involved.',
@@ -2620,7 +2627,7 @@ export class AgentGraph {
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 Analyze the user message and classify it into ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, or general
+login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, or general
 
 Respond ONLY with the intent name. Examples:
 - "Check my balance" -> balance
@@ -2631,6 +2638,10 @@ Respond ONLY with the intent name. Examples:
 - "listar transações" -> history
 - "show transaction history" -> history
 - "see transactions list" -> history
+- "quanto rende?" -> yield
+- "show yield options" -> yield
+- "guardar 100 reais rendendo" -> yield
+- "withdraw my yield" -> yield
 - "manda pro João de novo" -> financial_memory
 - "usa o mesmo pagamento de ontem" -> financial_memory
 - "quanto eu já converti esse mês?" -> financial_memory
@@ -2701,6 +2712,7 @@ Prefer 'contacts' when the user asks about contact list, account contacts, favor
         conversion: IntentType.CONVERSION,
         price_quote: IntentType.PRICE_QUOTE,
         pix: IntentType.PIX,
+        yield: IntentType.YIELD,
         general: IntentType.GENERAL,
       };
 
@@ -3509,6 +3521,146 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     return { period, view };
   }
 
+  private extractYieldIntentFromText(message: string): {
+    is_yield: boolean;
+    mode: 'options' | 'balance' | 'prepare' | 'confirm';
+    action: 'deposit' | 'withdraw';
+    amount: string;
+    asset_code: string;
+    pin?: string;
+  } {
+    const raw = String(message || '');
+    const normalized = this.normalizeTextForIntent(raw);
+    const hasYieldKeyword =
+      /\b(yield|earning|earnings|apy|income|interest)\b/.test(normalized) ||
+      /\b(rendimento|rendimentos|render|rendendo|rentabilidade|juros|renda)\b/.test(normalized);
+
+    const hasYieldAction =
+      /\b(guardar|aplicar|investir|deixar|poupar|save|deposit|put|resgatar|retirar|sacar|withdraw|redeem)\b/.test(normalized) &&
+      /\b(rendendo|rendimento|yield|earn|earning|interest)\b/.test(normalized);
+
+    if (!hasYieldKeyword && !hasYieldAction) {
+      return { is_yield: false, mode: 'options', action: 'deposit', amount: '', asset_code: '' };
+    }
+
+    const action = /\b(resgatar|retirar|sacar|withdraw|redeem)\b/.test(normalized) ? 'withdraw' : 'deposit';
+    const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
+    const amountNumber = parseHumanAmountNumber(rawWithoutPin);
+    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
+    const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
+    const confirms =
+      /\b(confirmo|confirmar|confirma|pode confirmar|ok pode|pode fazer|confirm|confirmed|go ahead)\b/.test(normalized);
+
+    const asksBalance =
+      normalized.includes('quanto tenho rendendo') ||
+      normalized.includes('saldo rendendo') ||
+      normalized.includes('saldo de rendimento') ||
+      normalized.includes('yield balance') ||
+      normalized.includes('earning balance') ||
+      (normalized.includes('meu rendimento') && !amount);
+    const asksOptions =
+      normalized.includes('opcoes') ||
+      normalized.includes('opcao') ||
+      normalized.includes('disponiveis') ||
+      normalized.includes('available') ||
+      normalized.includes('quanto rende') ||
+      normalized.includes('taxa de rendimento') ||
+      normalized.includes('yield rate') ||
+      normalized.includes('apy');
+
+    const mode = confirms && pinMatch?.[1] && amount
+      ? 'confirm'
+      : amount
+        ? 'prepare'
+        : asksBalance
+          ? 'balance'
+          : asksOptions
+            ? 'options'
+            : 'options';
+
+    return {
+      is_yield: true,
+      mode,
+      action,
+      amount,
+      asset_code: assetCode,
+      pin: pinMatch?.[1],
+    };
+  }
+
+  private async handleYieldRequest(state: AgentState, intent: ReturnType<AgentGraph['extractYieldIntentFromText']>): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
+    const assetCode = intent.asset_code || 'USDC';
+
+    if (!hasActiveWallet && intent.mode !== 'options') {
+      state.success = false;
+      state.response_message = await this.getOnboardingOrLoginMessage(state, true);
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    let toolName: string;
+    let toolInput: Record<string, any>;
+
+    if (intent.mode === 'balance') {
+      toolName = 'get_yield_balance';
+      toolInput = { session_id: state.session_id, asset_code: assetCode, language };
+    } else if (intent.mode === 'prepare') {
+      toolName = 'prepare_yield_action';
+      toolInput = {
+        session_id: state.session_id,
+        action: intent.action,
+        amount: intent.amount,
+        asset_code: assetCode,
+        language,
+      };
+    } else if (intent.mode === 'confirm' && intent.pin) {
+      toolName = 'confirm_yield_action';
+      toolInput = {
+        session_id: state.session_id,
+        action: intent.action,
+        amount: intent.amount,
+        asset_code: assetCode,
+        pin: intent.pin,
+        language,
+      };
+    } else {
+      toolName = 'get_yield_options';
+      toolInput = { language };
+    }
+
+    const resultRaw = await executeTool(toolName, toolInput);
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Failed to parse yield tool response' };
+    }
+
+    state.success = Boolean(result.success);
+    if (result.success) {
+      state.response_message = result.message || this.text(
+        language,
+        'Rendimento consultado.',
+        'Yield checked.'
+      );
+    } else {
+      state.response_message = this.text(
+        language,
+        `Não consegui consultar rendimento agora: ${result.error || 'erro desconhecido'}`,
+        `I could not check yield right now: ${result.error || 'unknown error'}`
+      );
+    }
+
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private savingsCalculatorIntent(message: string): null | { brlAmount: string } {
     const raw = String(message || '');
     const normalized = this.normalizeTextForIntent(raw);
@@ -4036,6 +4188,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const deterministicPixRamp = resumedPixRamp || extractedPixRamp;
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
+      const deterministicYield = this.extractYieldIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -4060,11 +4213,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                         ? IntentType.PAYMENT
                         : deterministicPixRamp.is_pix_ramp
                           ? IntentType.PIX
-                          : fixedSavings
-                            ? IntentType.FINANCIAL_MEMORY
-                            : deterministicFinancialMemory
+                          : deterministicYield.is_yield
+                            ? IntentType.YIELD
+                            : fixedSavings
                               ? IntentType.FINANCIAL_MEMORY
-                              : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                              : deterministicFinancialMemory
+                                ? IntentType.FINANCIAL_MEMORY
+                                : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -4084,6 +4239,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         IntentType.LOGIN,
         IntentType.PRICE_QUOTE,
         IntentType.PIX,
+        IntentType.YIELD,
       ]);
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {
@@ -4128,6 +4284,12 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (state.action_type === ActionType.INITIATE_PIX) {
         return await this.handlePixRampRequest(state);
+      }
+
+      if (state.action_type === ActionType.MANAGE_YIELD) {
+        return await this.handleYieldRequest(state, deterministicYield.is_yield
+          ? deterministicYield
+          : { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
       }
 
       if (deterministicExternalWallet.is_external_wallet) {
@@ -4294,6 +4456,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       [IntentType.CONVERSION]: ActionType.CONVERT_ASSETS,
       [IntentType.PRICE_QUOTE]: ActionType.GET_PRICE_QUOTE,
       [IntentType.PIX]: ActionType.INITIATE_PIX,
+      [IntentType.YIELD]: ActionType.MANAGE_YIELD,
       [IntentType.GENERAL]: ActionType.NONE,
     };
 

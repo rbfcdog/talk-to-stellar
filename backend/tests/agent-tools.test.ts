@@ -298,6 +298,101 @@ describe('Agent tool execution', () => {
     }
   });
 
+  it('lists yield options with user-facing currencies and no provider internals', async () => {
+    const { AnchorService } = require('../src/api/services/anchor.service');
+    const statusSpy = jest.spyOn(AnchorService, 'getDefindexYieldStatus').mockResolvedValueOnce({
+      success: true,
+      runtime: {
+        configured: true,
+        execution_enabled: false,
+      },
+      vaults: [
+        { asset_code: 'TESOURO', display_asset_code: 'BRL', apy_percent: '12.5' },
+        { asset_code: 'EURC', display_asset_code: 'EUR', apy: { apyPercent: '4.2' } },
+      ],
+    } as any);
+
+    const output = await executeTool('get_yield_options', { language: 'en' });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.options).toEqual([
+      { currency: 'BRL', name: 'reais', annual_rate: '12.5%', available: true },
+      { currency: 'EUR', name: 'euros', annual_rate: '4.2%', available: true },
+    ]);
+    expect(parsed.message).toContain('Available yield options');
+    expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|TESOURO|XDR/i);
+    expect(statusSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('prepares yield through the tool layer without exposing unsigned operation payloads', async () => {
+    const { AnchorService } = require('../src/api/services/anchor.service');
+    const prepareSpy = jest.spyOn(AnchorService, 'prepareDefindexYieldForSession').mockResolvedValueOnce({
+      success: true,
+      prepared: true,
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      action: 'deposit',
+      amount: '100',
+      amount_units: 1000000000,
+      vault: { asset_code: 'TESOURO', display_asset_code: 'BRL' },
+      xdr: 'UNSIGNED_OPERATION_SHOULD_NOT_LEAK',
+      raw: { provider: 'defindex' },
+    } as any);
+    jest.spyOn(AnchorService, 'getDefindexYieldStatus').mockResolvedValueOnce({
+      success: true,
+      runtime: { configured: true, execution_enabled: true },
+      vaults: [],
+    } as any);
+
+    const output = await executeTool('prepare_yield_action', {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'BRL',
+      language: 'en',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.review).toMatchObject({
+      action: 'save for yield',
+      amount: '100',
+      currency: 'BRL',
+      name: 'reais',
+    });
+    expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: '11111111-1111-4111-8111-111111111111',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'TESOURO',
+    }));
+    expect(parsed).not.toHaveProperty('xdr');
+    expect(parsed).not.toHaveProperty('raw');
+    expect(parsed).not.toHaveProperty('public_key');
+    expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|UNSIGNED_OPERATION/i);
+  });
+
+  it('sanitizes yield confirmation setup errors before returning them to chat', async () => {
+    const { AnchorService } = require('../src/api/services/anchor.service');
+    jest.spyOn(AnchorService, 'executeDefindexYieldForSession').mockRejectedValueOnce(
+      new Error('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar XDR.')
+    );
+
+    const output = await executeTool('confirm_yield_action', {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'BRL',
+      pin: '1234',
+      language: 'en',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Yield is not available right now');
+    expect(parsed.error).not.toMatch(/Defindex|DEFINDEX|XDR|vault/i);
+  });
+
   it('adds an existing TalkToStellar user by email directly from the database', async () => {
     const teamPublicKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     const tableResults: Record<string, Array<{ data: any; error: any }>> = {

@@ -13,7 +13,7 @@ import { supabase } from "../../config/supabase";
 import { WalletRepository } from "../repository/core/wallet.repository";
 import VaultService from "../services/core/vault.service";
 import ExternalService from "../services/core/external.service";
-import { assetMatchesConfiguredIssuer, getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from "../../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../services/contact-seed.service";
 import { BalanceAlertService } from "../services/balance-alert.service";
 import { AutoConversionService } from "../services/auto-conversion.service";
@@ -33,6 +33,7 @@ import { FiatRateService } from "../services/fiat-rate.service";
 import { brlUsdQuoteService } from "../services/brl-usd-quote.service";
 import { internationalTransferService } from "../services/international-transfer.service";
 import { mainnetWalletService } from "../services/mainnet-wallet.service";
+import { AnchorService } from "../services/anchor.service";
 import { timingSafeEqualString } from "../../utils/password";
 import { safeRedactedJson } from "../../utils/redaction";
 import { hashWalletPin } from "../../utils/pin-hash";
@@ -324,6 +325,57 @@ async function executeSetLanguage(input: Record<string, any>): Promise<string> {
       ? 'Done. I will answer in English.'
       : 'Pronto. Vou responder em português.',
   });
+}
+
+function normalizeYieldAssetInput(value: unknown): string {
+  const raw = String(value || 'USDC').trim().toUpperCase();
+  if (!raw || raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
+  if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS' || raw === 'R$') return 'TESOURO';
+  if (raw === 'EUR' || raw === 'EURO' || raw === 'EUROS' || raw === 'EURC') return 'EURC';
+  return normalizeAssetCode(raw);
+}
+
+function formatYieldAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  const displayCode = userFacingAssetCode(normalizeYieldAssetInput(assetCode));
+  if (displayCode === 'BRL') return language === 'en' ? 'reais' : 'reais';
+  if (displayCode === 'EUR') return language === 'en' ? 'euros' : 'euros';
+  if (displayCode === 'USDC') return language === 'en' ? 'dollars' : 'dólares';
+  return displayCode;
+}
+
+function formatYieldAction(action: unknown): 'deposit' | 'withdraw' {
+  const normalized = String(action || '').trim().toLowerCase();
+  if (['withdraw', 'redeem', 'resgatar', 'retirar', 'sacar', 'saque'].includes(normalized)) {
+    return 'withdraw';
+  }
+  return 'deposit';
+}
+
+function yieldActionLabel(action: 'deposit' | 'withdraw', language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  if (language === 'en') return action === 'withdraw' ? 'withdraw' : 'save for yield';
+  return action === 'withdraw' ? 'resgatar' : 'guardar rendendo';
+}
+
+function sanitizeYieldToolError(error: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const fallback = language === 'en'
+    ? 'Yield is not available right now. Check the service setup and try again.'
+    : 'Rendimento indisponível agora. Confira a configuração do serviço e tente novamente.';
+  if (!raw.trim()) return fallback;
+  if (/session|wallet|login|unauthor|auth|token|pin/i.test(raw)) {
+    return language === 'en'
+      ? 'Sign in and confirm your PIN before using yield.'
+      : 'Entre na sua conta e confirme seu PIN antes de usar rendimento.';
+  }
+  if (/defindex|vault|xdr|horizon|stellar|issuer|trustline|private key|secret|api key|network|contract/i.test(raw)) {
+    return fallback;
+  }
+  return raw
+    .replace(/Defindex/gi, 'yield service')
+    .replace(/vault/gi, 'option')
+    .replace(/wallet/gi, language === 'en' ? 'account' : 'conta')
+    .replace(/asset/gi, language === 'en' ? 'currency' : 'moeda')
+    .replace(/XDR/gi, 'operation');
 }
 
 function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unknown): boolean {
@@ -641,6 +693,120 @@ export const toolDefinitions = [
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "get_yield_options",
+    description: "List available user-facing yield options and current annual rates. Use this for any question about rendimento, yield, income, savings growth, rentabilidade, APY, or available currencies for earning.",
+    parameters: {
+      type: "object",
+      properties: {
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_yield_balance",
+    description: "Check how much the signed-in user currently has in a yield option. Use for questions like 'quanto tenho rendendo', 'my yield balance', or balance in an earning option.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Required to resolve the user's account.",
+        },
+        asset_code: {
+          type: "string",
+          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "prepare_yield_action",
+    description: "Prepare a yield action for review without submitting money movement. Use before any confirmation for saving into yield or withdrawing from yield.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Required to resolve the user's account.",
+        },
+        action: {
+          type: "string",
+          enum: ["deposit", "withdraw"],
+          description: "deposit means save into yield; withdraw means take money out of yield.",
+        },
+        amount: {
+          type: "string",
+          description: "Human amount to prepare.",
+        },
+        asset_code: {
+          type: "string",
+          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+        },
+        slippage_bps: {
+          type: "number",
+          description: "Advanced safety margin in basis points. Default 100.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: ["session_id", "action", "amount"],
+    },
+  },
+  {
+    name: "confirm_yield_action",
+    description: "Confirm and submit a previously reviewed yield action. Only use after the user clearly confirms and provides PIN; otherwise call prepare_yield_action first.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID. Required to resolve the user's account.",
+        },
+        action: {
+          type: "string",
+          enum: ["deposit", "withdraw"],
+          description: "deposit means save into yield; withdraw means take money out of yield.",
+        },
+        amount: {
+          type: "string",
+          description: "Human amount to confirm.",
+        },
+        asset_code: {
+          type: "string",
+          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+        },
+        pin: {
+          type: "string",
+          description: "User PIN. Never repeat this back in chat.",
+        },
+        slippage_bps: {
+          type: "number",
+          description: "Advanced safety margin in basis points. Default 100.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: ["session_id", "action", "amount", "pin"],
     },
   },
   {
@@ -1525,6 +1691,14 @@ export async function executeTool(
         return executeGetIntentHelp();
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
+      case "get_yield_options":
+        return await executeGetYieldOptions(toolInput);
+      case "get_yield_balance":
+        return await executeGetYieldBalance(toolInput);
+      case "prepare_yield_action":
+        return await executePrepareYieldAction(toolInput);
+      case "confirm_yield_action":
+        return await executeConfirmYieldAction(toolInput);
       case "create_brl_usd_quote":
         return await executeCreateBrlUsdQuote(toolInput);
       case "create_usd_bank_transfer_intent":
@@ -1660,6 +1834,12 @@ function executeGetIntentHelp(): string {
       examples: ["melhor estimativa para converter reais"],
     },
     {
+      command: "rendimento",
+      intent: "yield",
+      description: "Mostra opções de rendimento, saldo rendendo e prepara guardar/resgatar com revisão.",
+      examples: ["guardar 100 reais rendendo", "quanto tenho rendendo em euro?"],
+    },
+    {
       command: "melhor rota",
       intent: "best_route",
       description: "Mostra automaticamente a melhor rota para enviar ou converter com menor custo efetivo.",
@@ -1713,10 +1893,11 @@ function executeGetIntentHelp(): string {
       "3) enviar: fazer pagamento com confirmação segura da forma mais otimizada.",
       "4) converter: trocar R$ e US$ pela rota mais otimizada.",
       "5) PIX: colocar dinheiro via PIX, retirar para seu PIX ou pagar um contato direto usando PIX.",
-      "6) melhor rota: descobrir o caminho mais otimizado para enviar/converter.",
-      "7) histórico: revisar operações recentes.",
-      "8) link de pagamento: gerar link para cobrar/receber.",
-      "9) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
+      "6) rendimento: ver opções, saldo rendendo e preparar guardar/resgatar.",
+      "7) melhor rota: descobrir o caminho mais otimizado para enviar/converter.",
+      "8) histórico: revisar operações recentes.",
+      "9) link de pagamento: gerar link para cobrar/receber.",
+      "10) comparativo de economia: ver quanto já economizou vs métodos tradicionais.",
       "",
       "Comandos disponíveis:",
       ...commands.map((item, index) =>
@@ -1729,6 +1910,7 @@ function executeGetIntentHelp(): string {
       "- \"colocar 100 reais via PIX\"",
       "- \"pagar Ana Silva com 100 reais via PIX\"",
       "- \"sacar 50 reais por PIX\"",
+      "- \"guardar 100 reais rendendo\"",
       "- \"converter 50 reais para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
@@ -1778,6 +1960,184 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
     return JSON.stringify({
       success: false,
       error: errorMessage,
+    });
+  }
+}
+
+function yieldCurrencyCode(assetCode: unknown): string {
+  const display = userFacingAssetCode(normalizeYieldAssetInput(assetCode));
+  return display === 'USDC' ? 'USD' : display;
+}
+
+function yieldRateFromOption(option: any): string | null {
+  const raw =
+    option?.apy_percent ||
+    option?.apy?.apyPercent ||
+    option?.apy?.apy_percent ||
+    option?.apy?.apy;
+  const text = Array.isArray(raw) ? String(raw[0] || '').trim() : String(raw || '').trim();
+  if (!text) return null;
+  return text.endsWith('%') ? text : `${text}%`;
+}
+
+function extractYieldBalanceAmount(value: any): string {
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  const candidates = [
+    value?.balance,
+    value?.amount,
+    value?.total,
+    value?.underlying_balance,
+    value?.underlyingBalance,
+    value?.asset_balance,
+    value?.assetBalance,
+    value?.shares,
+  ];
+  const found = candidates.find((candidate) => String(candidate || '').trim());
+  return String(found || '0');
+}
+
+async function executeGetYieldOptions(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const status = await AnchorService.getDefindexYieldStatus();
+    const options = (Array.isArray(status.vaults) ? status.vaults : []).map((option: any) => {
+      const internalAssetCode = normalizeYieldAssetInput(option.asset_code || option.display_asset_code);
+      const currency = yieldCurrencyCode(internalAssetCode);
+      return {
+        currency,
+        name: formatYieldAssetName(internalAssetCode, language),
+        annual_rate: yieldRateFromOption(option),
+        available: !option.apy_error,
+      };
+    });
+
+    const configured = Boolean((status as any)?.runtime?.configured);
+    const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
+    const message = language === 'en'
+      ? options.length
+        ? `Available yield options: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} per year)` : ''}`).join(', ')}.`
+        : 'Yield options are not configured yet.'
+      : options.length
+        ? `Opções de rendimento disponíveis: ${options.map((option) => `${option.name}${option.annual_rate ? ` (${option.annual_rate} ao ano)` : ''}`).join(', ')}.`
+        : 'As opções de rendimento ainda não foram configuradas.';
+
+    return JSON.stringify({
+      success: true,
+      configured,
+      confirmation_available: confirmationAvailable,
+      options,
+      message,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executeGetYieldBalance(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
+    const result: any = await AnchorService.getDefindexYieldBalanceForSession({
+      ...input,
+      asset_code: assetCode,
+    });
+    const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
+    const amount = extractYieldBalanceAmount(result?.balance);
+    const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
+
+    return JSON.stringify({
+      success: true,
+      currency,
+      amount,
+      balance: amount,
+      message: language === 'en'
+        ? `You currently have ${amount} ${name} in yield.`
+        : `Você tem ${amount} ${name} rendendo agora.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executePrepareYieldAction(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const action = formatYieldAction(input.action);
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
+    const result: any = await AnchorService.prepareDefindexYieldForSession({
+      ...input,
+      action,
+      asset_code: assetCode,
+    });
+    const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
+    const amount = String(result?.amount || input.amount || '').trim();
+    const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
+    const actionText = yieldActionLabel(action, language);
+
+    return JSON.stringify({
+      success: true,
+      prepared: true,
+      confirmation_required: true,
+      confirmation_available: Boolean((await AnchorService.getDefindexYieldStatus()).runtime.execution_enabled),
+      action,
+      currency,
+      amount,
+      review: {
+        action: actionText,
+        amount,
+        currency,
+        name,
+      },
+      message: language === 'en'
+        ? `Review ready: ${actionText} ${amount} ${name}. Confirm only after checking the amount.`
+        : `Revisão pronta: ${actionText} ${amount} ${name}. Confirme apenas depois de conferir o valor.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executeConfirmYieldAction(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const action = formatYieldAction(input.action);
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
+    const result: any = await AnchorService.executeDefindexYieldForSession({
+      ...input,
+      action,
+      asset_code: assetCode,
+      wallet_pin: input.wallet_pin || input.walletPin || input.pin,
+    });
+    if (!result?.success) {
+      throw new Error(result?.error || 'Yield confirmation was not accepted.');
+    }
+    const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
+    const amount = String(result?.amount || input.amount || '').trim();
+    const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
+
+    return JSON.stringify({
+      success: Boolean(result?.success),
+      submitted: Boolean(result?.submitted),
+      action,
+      currency,
+      amount,
+      message: language === 'en'
+        ? `Yield request confirmed for ${amount} ${name}. Your balances will update shortly.`
+        : `Pedido de rendimento confirmado para ${amount} ${name}. Seus saldos serão atualizados em instantes.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
     });
   }
 }
