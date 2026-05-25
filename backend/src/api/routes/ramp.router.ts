@@ -8,6 +8,10 @@ router.post('/etherfuse/resolve-wallet', RampController.resolveEtherfuseWalletBy
 router.post('/etherfuse/customer', RampController.createEtherfuseCustomer);
 router.get('/etherfuse/kyc-status', RampController.getEtherfuseKycStatus);
 router.get('/etherfuse/assets', RampController.getEtherfuseAssets);
+router.get('/defindex/yield/status', RampController.getDefindexYieldStatus);
+router.get('/defindex/yield/balance', RampController.getDefindexYieldBalance);
+router.post('/defindex/yield/prepare', RampController.prepareDefindexYield);
+router.post('/defindex/yield/execute', RampController.executeDefindexYield);
 router.get('/etherfuse/wallet-balances', RampController.getEtherfuseWalletBalances);
 router.get('/etherfuse/fiat-accounts', RampController.listEtherfuseFiatAccounts);
 router.post('/etherfuse/external-bank-account', RampController.getExternalBankAccount);

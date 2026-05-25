@@ -16,6 +16,7 @@ import {
   getUserFacingAssetCodes,
   normalizeAssetCode,
   resolveConfiguredAsset,
+  userFacingAssetCode,
 } from '../../config/assets';
 import { AgentRepository } from '../repository/core/agent.repository';
 import { WalletInfo, WalletRepository } from '../repository/core/wallet.repository';
@@ -28,6 +29,7 @@ import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
 import { isVirtualFiatAsset, resolveBrlSettlementRoute } from './money-rail.service';
+import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
 import crypto from 'crypto';
@@ -3773,6 +3775,209 @@ export class AnchorService {
     return {
       public_key: context.publicKey,
       balances: normalizeBalances(balances),
+    };
+  }
+
+  static async getDefindexYieldStatus(): Promise<{
+    success: true;
+    runtime: ReturnType<typeof DefindexYieldService.getRuntimeInfo>;
+    vaults: Array<Record<string, unknown>>;
+  }> {
+    const runtime = DefindexYieldService.getRuntimeInfo();
+    const vaults = await Promise.all(runtime.vaults.map(async (vault) => {
+      const enriched: Record<string, unknown> = {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      };
+      if (!runtime.api_key_configured) return enriched;
+      try {
+        const apy = await DefindexYieldService.getVaultAPY(vault.vault_address, runtime.network);
+        enriched.apy = apy;
+        enriched.apy_percent = coalesceString(apy?.apyPercent, apy?.apy_percent, apy?.apy);
+        enriched.apy_period = coalesceString(apy?.period, apy?.calculationPeriod);
+      } catch (error) {
+        enriched.apy_error = debugErrorMessage(error);
+      }
+      return enriched;
+    }));
+    return { success: true, runtime, vaults };
+  }
+
+  static async getDefindexYieldBalanceForSession(input: RampSessionInput & {
+    asset_code?: string;
+    assetCode?: string;
+    vault_address?: string;
+    vaultAddress?: string;
+  }): Promise<{
+    success: true;
+    public_key: string;
+    vault: Record<string, unknown>;
+    balance: unknown;
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    const vault = DefindexYieldService.requireVault(
+      coalesceString(input.asset_code, input.assetCode),
+      coalesceString(input.vault_address, input.vaultAddress),
+    );
+    const balance = await DefindexYieldService.getVaultBalance(vault.vault_address, context.publicKey, vault.network);
+    return {
+      success: true,
+      public_key: context.publicKey,
+      vault: {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      },
+      balance,
+    };
+  }
+
+  static async prepareDefindexYieldForSession(input: RampSessionInput & {
+    action?: string;
+    amount?: string;
+    asset_code?: string;
+    assetCode?: string;
+    vault_address?: string;
+    vaultAddress?: string;
+    invest?: boolean;
+    slippage_bps?: string | number;
+    slippageBps?: string | number;
+  }): Promise<{
+    success: true;
+    prepared: true;
+    public_key: string;
+    action: DefindexYieldAction;
+    amount: string;
+    amount_units: number;
+    vault: Record<string, unknown>;
+    xdr: string;
+    raw: unknown;
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    const action = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
+      ? 'withdraw'
+      : 'deposit';
+    const amount = normalizeAmount(input.amount, 'amount');
+    const vault = DefindexYieldService.requireVault(
+      coalesceString(input.asset_code, input.assetCode),
+      coalesceString(input.vault_address, input.vaultAddress),
+    );
+    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
+    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
+    const prepared = await DefindexYieldService.buildVaultAction({
+      action,
+      vaultAddress: vault.vault_address,
+      caller: context.publicKey,
+      amountUnits,
+      network: vault.network,
+      invest: input.invest !== false,
+      slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
+    });
+    return {
+      success: true,
+      prepared: true,
+      public_key: context.publicKey,
+      action,
+      amount,
+      amount_units: amountUnits,
+      vault: {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      },
+      xdr: prepared.xdr,
+      raw: prepared.raw,
+    };
+  }
+
+  static async executeDefindexYieldForSession(input: RampSessionInput & {
+    action?: string;
+    amount?: string;
+    asset_code?: string;
+    assetCode?: string;
+    vault_address?: string;
+    vaultAddress?: string;
+    invest?: boolean;
+    slippage_bps?: string | number;
+    slippageBps?: string | number;
+    unsigned_xdr?: string;
+    unsignedXdr?: string;
+  }): Promise<{
+    success: boolean;
+    submitted: boolean;
+    public_key: string;
+    action: DefindexYieldAction;
+    amount: string;
+    amount_units: number;
+    vault: Record<string, unknown>;
+    hash?: string;
+    raw?: unknown;
+  }> {
+    const runtime = DefindexYieldService.getRuntimeInfo();
+    if (!runtime.execution_enabled) {
+      throw apiError('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.', 403);
+    }
+    const context = await this.resolveSessionWallet(input);
+    const walletPin = this.requireWalletPin(input, context);
+    if (!walletPin) throw apiError('PIN da wallet é obrigatório para Defindex yield.', 400);
+    if (!context.vaultSecretId) {
+      throw apiError('Wallet private key is not available in Vault for Defindex yield.', 409);
+    }
+    const prepared = coalesceString(input.unsigned_xdr, input.unsignedXdr)
+      ? null
+      : await this.prepareDefindexYieldForSession(input);
+    const action = (prepared?.action || (String(input.action || 'deposit').trim().toLowerCase() === 'withdraw' ? 'withdraw' : 'deposit')) as DefindexYieldAction;
+    const amount = prepared?.amount || normalizeAmount(input.amount, 'amount');
+    const amountUnits = prepared?.amount_units || DefindexYieldService.amountToContractUnits(amount);
+    const vault = DefindexYieldService.requireVault(
+      coalesceString(input.asset_code, input.assetCode),
+      coalesceString(input.vault_address, input.vaultAddress),
+    );
+    const unsignedXdr = prepared?.xdr || coalesceString(input.unsigned_xdr, input.unsignedXdr);
+    if (!unsignedXdr) throw apiError('Defindex unsigned XDR is required.', 400);
+
+    const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
+    const signedXdr = DefindexYieldService.signXdr(unsignedXdr, secret);
+    const sent = await DefindexYieldService.sendVaultTransaction({
+      vaultAddress: vault.vault_address,
+      signedXdr,
+      network: vault.network,
+    });
+    await OperationRepository.create({
+      user_id: context.userId,
+      type: `DEFINDEX_YIELD_${action.toUpperCase()}`,
+      status: 'COMPLETED',
+      amount: Number(amount),
+      asset_code: vault.asset_code,
+      stellar_transaction_hash: sent.hash || undefined,
+      source_public_key: context.publicKey,
+      source_session_id: context.sessionId,
+      context: JSON.stringify({
+        provider: 'defindex',
+        action,
+        amount,
+        amount_units: amountUnits,
+        vault_address: vault.vault_address,
+        vault_asset_code: vault.asset_code,
+        vault_asset_issuer: vault.asset_issuer,
+        network: vault.network,
+        raw_result: sent.raw,
+      }),
+    } as any).catch((error) => {
+      console.warn('[defindex] Could not persist yield operation:', debugErrorMessage(error));
+      return null;
+    });
+    return {
+      success: true,
+      submitted: true,
+      public_key: context.publicKey,
+      action,
+      amount,
+      amount_units: amountUnits,
+      vault: {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      },
+      hash: sent.hash || undefined,
+      raw: sent.raw,
     };
   }
 

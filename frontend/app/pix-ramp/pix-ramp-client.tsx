@@ -8,7 +8,7 @@ import { getClientSession } from "@/lib/session";
 import { mapPublicError } from "@/lib/public-errors";
 
 type Step = "quote" | "checkout" | "success";
-type TargetAsset = "BRL" | "USDC";
+type TargetAsset = "BRL" | "USDC" | "EUR";
 type RampMode = "onramp" | "offramp";
 
 type RampConfig = {
@@ -80,6 +80,8 @@ const ETHERFUSE_TESTNET_FEE_BPS = 20;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
+const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
+const ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR"];
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -121,9 +123,18 @@ function parseHumanAmount(value: unknown) {
   return Number.isFinite(numeric) ? numeric : NaN;
 }
 
-function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" = "BRL") {
+function normalizeTargetAsset(value: unknown, fallback: TargetAsset = "BRL"): TargetAsset {
+  const normalized = String(value || "").trim().toUpperCase().split(":")[0];
+  if (normalized === "USDC" || normalized === "USD") return "USDC";
+  if (normalized === "EUR" || normalized === "EURC" || normalized === "EURO" || normalized === "EUROS") return "EUR";
+  if (normalized === "BRL" || normalized === "TESOURO" || normalized === "REAL" || normalized === "REAIS") return "BRL";
+  return fallback;
+}
+
+function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" | "EUR" = "BRL") {
   const normalized = String(code || "").trim().toUpperCase().split(":")[0];
   if (normalized === "USDC") return "USDC";
+  if (normalized === "EUR" || normalized === "EURC") return "EUR";
   if (normalized === "BRL" || normalized === "TESOURO") return fallback === "USDC" ? "USDC" : "BRL";
   return fallback;
 }
@@ -136,19 +147,23 @@ function formatAsset(value: unknown, code = "BRL") {
 
 function formatRampAsset(value: unknown, code = "BRL") {
   const displayCode = userFacingAssetCode(code);
-  return displayCode === "BRL" ? formatMoney(value, "BRL") : formatAsset(value, displayCode);
+  if (displayCode === "BRL") return formatMoney(value, "BRL");
+  if (displayCode === "EUR") return formatMoney(value, "EUR");
+  return formatAsset(value, displayCode);
 }
 
-function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" | "TESOURO" = "BRL") {
+function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" | "EUR" | "TESOURO" = "BRL") {
   const normalized = String(value || "").trim().toUpperCase().split(":")[0];
   if (normalized === "USDC") return "USDC";
+  if (normalized === "EUR" || normalized === "EURC") return "EUR";
   if (normalized === "BRL") return "BRL";
   if (normalized === "TESOURO") return "BRL";
   return fallback;
 }
 
-function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" | "TESOURO" = "BRL") {
+function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" | "EUR" | "TESOURO" = "BRL") {
   if (currency === "TESOURO") return formatMoney(value, "BRL");
+  if (currency === "EUR") return formatMoney(value, "EUR");
   return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
 }
 
@@ -260,6 +275,7 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
   if (displayCode === "USDC") return "US$";
+  if (displayCode === "EUR") return "€";
   return language === "pt-BR" ? "R$" : "BRL";
 }
 
@@ -691,6 +707,7 @@ export default function PixRampClient({
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("BRL");
   const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
   const [desiredReceiveAsset, setDesiredReceiveAsset] = useState<TargetAsset | "">("");
+  const [advancedAssetMode, setAdvancedAssetMode] = useState(false);
   const [receiveEstimateLoading, setReceiveEstimateLoading] = useState(false);
   const [receiveEstimateReady, setReceiveEstimateReady] = useState(false);
   const [customerPayload, setCustomerPayload] = useState<RampResponse | null>(null);
@@ -1125,7 +1142,8 @@ export default function PixRampClient({
 
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
-    const normalizedReceiveAsset = receiveAsset === "BRL" ? "BRL" : "USDC";
+    const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
+    if (normalizedReceiveAsset === "EUR") setAdvancedAssetMode(true);
     if (mode === "onramp" && receiveAmount) {
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
@@ -1149,9 +1167,9 @@ export default function PixRampClient({
       setOffRampAmountLocked(true);
     }
     if (!(mode === "onramp" && receiveAmount)) {
-      if (asset === "BRL" || asset === "USDC") setTargetAsset(asset);
-      else if (asset === "TESOURO") setTargetAsset("BRL");
-      else setTargetAsset(mode === "onramp" ? "USDC" : "BRL");
+      const normalizedAsset = normalizeTargetAsset(asset, mode === "onramp" ? "USDC" : "BRL");
+      if (normalizedAsset === "EUR") setAdvancedAssetMode(true);
+      setTargetAsset(normalizedAsset);
     }
     if (email.includes("@")) setRampEmail(email);
     if (flow === "fund_and_pay" || params.get("auto_pay_after_ramp") === "1") setTransferFlow(true);
@@ -1160,7 +1178,11 @@ export default function PixRampClient({
     if (recipientPublicKey) setTransferRecipientPublicKey(recipientPublicKey);
     if (destinationPixKey) setOffRampPixKey(destinationPixKey);
     if (payAmount) setAutoPayAmount(payAmount);
-    if (payAsset === "BRL" || payAsset === "USDC") setAutoPayAsset(payAsset);
+    if (payAsset) {
+      const normalizedPayAsset = normalizeTargetAsset(payAsset, "USDC");
+      if (normalizedPayAsset === "EUR") setAdvancedAssetMode(true);
+      setAutoPayAsset(normalizedPayAsset);
+    }
     setQueryReady(true);
   }, [lockedMode, queryString]);
 
@@ -2648,7 +2670,7 @@ export default function PixRampClient({
               <>
                 <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Você quer receber", "You want to receive")}</label>
                 <div className="mt-2 flex overflow-hidden rounded-3xl border border-tts-border bg-tts-surface">
-                  <span className="flex items-center bg-tts-surface px-4 text-sm font-black text-tts-deep">{desiredFinalAsset === "USDC" ? "US$" : "R$"}</span>
+                  <span className="flex items-center bg-tts-surface px-4 text-sm font-black text-tts-deep">{friendlyAssetName(desiredFinalAsset, language)}</span>
                   <div className="w-full px-4 py-4 text-3xl font-black text-tts-surface">{desiredFinalAmount}</div>
                   <span className="flex items-center px-4 text-sm font-black text-tts-deep">{desiredFinalAsset}</span>
                 </div>
@@ -2675,9 +2697,27 @@ export default function PixRampClient({
               </>
             )}
 
-            <label className="mt-5 block text-sm font-bold text-tts-deep">{transferFlow ? L("Enviar como", "Send as") : L("Receber como", "Receive as")}</label>
-            <div className="mt-2 grid grid-cols-2 gap-2 rounded-3xl border border-tts-border bg-tts-deep/20 p-2">
-              {(["BRL", "USDC"] as TargetAsset[]).map((asset) => (
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <label className="block text-sm font-bold text-tts-deep">{transferFlow ? L("Enviar como", "Send as") : L("Receber como", "Receive as")}</label>
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs font-black uppercase tracking-[0.12em] transition ${advancedAssetMode ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-border text-tts-muted hover:bg-tts-surface"}`}
+                onClick={() => setAdvancedAssetMode((current) => {
+                  const next = !current;
+                  if (!next && targetAsset === "EUR") {
+                    setTargetAsset("USDC");
+                    setDesiredReceiveAmount("");
+                    setDesiredReceiveAsset("");
+                    clearQuoteState();
+                  }
+                  return next;
+                })}
+              >
+                {L("Avançado", "Advanced")}
+              </button>
+            </div>
+            <div className={`mt-2 grid gap-2 rounded-3xl border border-tts-border bg-tts-deep/20 p-2 ${advancedAssetMode ? "grid-cols-3" : "grid-cols-2"}`}>
+              {(advancedAssetMode ? ADVANCED_TARGET_ASSETS : BASIC_TARGET_ASSETS).map((asset) => (
                 <button
                   key={asset}
                     className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-lg" : "text-tts-muted hover:bg-tts-surface"}`}
