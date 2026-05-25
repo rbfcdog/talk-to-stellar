@@ -15,13 +15,17 @@ const NAV_LINKS = [
 ]
 
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
+// Expanded link region width — wide enough to fit all links + a divider
+// without clipping. A plain pixel value because CSS doesn't interpolate
+// from `0px` to a `min()`/`calc()` expression.
+const EXPANDED_MAX_WIDTH = '720px'
 
 export function Navbar() {
   const [expanded, setExpanded] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
 
-  // Click-outside to collapse desktop expand
+  // Click-outside / Escape collapse desktop expand
   useEffect(() => {
     if (!expanded) return
     const onPointerDown = (e: MouseEvent) => {
@@ -47,7 +51,7 @@ export function Navbar() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Lock body scroll while mobile menu is open
+  // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileOpen) {
       document.body.style.overflow = 'hidden'
@@ -68,7 +72,7 @@ export function Navbar() {
         className="fixed left-1/2 top-4 z-50 -translate-x-1/2"
       >
         <div className="flex items-center rounded-full border border-tts-deep bg-tts-deep px-2 py-1.5 text-tts-surface shadow-lg shadow-tts-deep/15 backdrop-blur-sm">
-          {/* Logo + wordmark always visible */}
+          {/* Brand */}
           <a
             href="#top"
             onClick={() => setExpanded(false)}
@@ -83,26 +87,26 @@ export function Navbar() {
 
           {/* Desktop nav links — expand horizontally via max-width */}
           <div
-            className="hidden overflow-hidden md:block"
+            className="hidden shrink-0 overflow-hidden md:block"
             style={{
-              maxWidth: expanded ? '700px' : '0px',
+              maxWidth: expanded ? EXPANDED_MAX_WIDTH : '0px',
               transition: expanded
                 ? `max-width 700ms ${EASE}`
                 : `max-width 400ms ${EASE}`,
             }}
           >
-            <div className="flex items-center whitespace-nowrap">
+            <div className="flex items-center whitespace-nowrap px-1">
               <span className="mx-2 h-5 w-px shrink-0 bg-white/15" aria-hidden />
               {NAV_LINKS.map((link, i) => (
                 <a
                   key={link.href}
                   href={link.href}
                   onClick={() => setExpanded(false)}
-                  className="shrink-0 rounded-full px-3 py-1 text-[12px] font-medium text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface"
+                  className="shrink-0 rounded-full px-3.5 py-1 text-[13px] font-medium text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface"
                   style={{
                     opacity: expanded ? 1 : 0,
                     transition: expanded
-                      ? `opacity 200ms ${EASE} ${80 + i * 70}ms`
+                      ? `opacity 220ms ${EASE} ${100 + i * 75}ms`
                       : 'opacity 120ms ease-out',
                   }}
                 >
@@ -135,11 +139,7 @@ export function Navbar() {
             aria-expanded={mobileOpen}
             className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface md:hidden"
           >
-            {mobileOpen ? (
-              <X className="h-4 w-4" />
-            ) : (
-              <Menu className="h-4 w-4" />
-            )}
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
 
           {/* Divider */}
@@ -148,14 +148,14 @@ export function Navbar() {
           {/* Right-side controls — always visible */}
           <a
             href="/login"
-            className="hidden h-7 shrink-0 items-center rounded-full px-3 text-[12px] font-medium text-tts-surface/80 transition-colors hover:bg-white/10 hover:text-tts-surface sm:inline-flex"
+            className="hidden h-7 shrink-0 items-center rounded-full px-3 text-[13px] font-medium text-tts-surface/80 transition-colors hover:bg-white/10 hover:text-tts-surface sm:inline-flex"
           >
             Entrar
           </a>
           <Button
             asChild
             size="sm"
-            className="ml-1 h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[12px] text-tts-deep hover:bg-tts-gold-lt"
+            className="ml-1 h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[13px] text-tts-deep hover:bg-tts-gold-lt"
           >
             <a href="#comecar">Falar com o time</a>
           </Button>
