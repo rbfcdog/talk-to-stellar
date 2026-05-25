@@ -1,0 +1,293 @@
+import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { stellarConfig } from '../../config/stellar';
+import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
+
+export type DefindexNetwork = 'testnet' | 'mainnet';
+export type DefindexYieldAction = 'deposit' | 'withdraw';
+
+export type DefindexVaultConfig = {
+  asset_code: string;
+  asset_issuer?: string;
+  vault_address: string;
+  label: string;
+  network: DefindexNetwork;
+  enabled: boolean;
+};
+
+export type DefindexRuntimeInfo = {
+  provider: 'defindex';
+  configured: boolean;
+  api_key_configured: boolean;
+  base_url: string;
+  network: DefindexNetwork;
+  execution_enabled: boolean;
+  vaults: DefindexVaultConfig[];
+  unavailable_reason?: string;
+};
+
+function coalesceString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function envFlag(name: string, fallback = false): boolean {
+  const raw = String(process.env[name] || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(raw);
+}
+
+function cleanBaseUrl(value: unknown): string {
+  return coalesceString(value, 'https://api.defindex.io').replace(/\/+$/, '');
+}
+
+function defaultNetwork(): DefindexNetwork {
+  const explicit = coalesceString(process.env.DEFINDEX_NETWORK).toLowerCase();
+  if (explicit === 'mainnet' || explicit === 'public') return 'mainnet';
+  if (explicit === 'testnet') return 'testnet';
+  return getStellarNetworkName() === 'PUBLIC' ? 'mainnet' : 'testnet';
+}
+
+function normalizeVaultAsset(value: unknown): string {
+  const normalized = normalizeAssetCode(value);
+  if (normalized === 'EUR') return 'EURC';
+  if (normalized === 'BRL' || normalized === 'TESOURO') return 'TESOURO';
+  return normalized;
+}
+
+function parseVaultEntry(value: any, fallbackNetwork: DefindexNetwork): DefindexVaultConfig | null {
+  const vaultAddress = coalesceString(value?.vault_address, value?.vaultAddress, value?.address, value?.contract_id, value?.contractId);
+  const assetCode = normalizeVaultAsset(coalesceString(value?.asset_code, value?.assetCode, value?.asset, value?.code));
+  if (!vaultAddress || !assetCode) return null;
+  const networkRaw = coalesceString(value?.network).toLowerCase();
+  const network: DefindexNetwork = networkRaw === 'mainnet' || networkRaw === 'public' ? 'mainnet' : networkRaw === 'testnet' ? 'testnet' : fallbackNetwork;
+  return {
+    asset_code: assetCode,
+    asset_issuer: coalesceString(value?.asset_issuer, value?.assetIssuer) || getAssetIssuer(assetCode),
+    vault_address: vaultAddress,
+    label: coalesceString(value?.label, value?.name, `${userFacingAssetCode(assetCode)} Yield Vault`),
+    network,
+    enabled: value?.enabled === undefined ? true : Boolean(value.enabled),
+  };
+}
+
+function parseVaultsFromJson(fallbackNetwork: DefindexNetwork): DefindexVaultConfig[] {
+  const raw = coalesceString(process.env.DEFINDEX_VAULTS_JSON);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([asset, config]) => ({
+      asset,
+      ...(config && typeof config === 'object' ? config as Record<string, unknown> : { vault_address: config }),
+    }));
+    return entries
+      .map((entry) => parseVaultEntry(entry, fallbackNetwork))
+      .filter((entry): entry is DefindexVaultConfig => Boolean(entry));
+  } catch (error) {
+    console.warn('[defindex] Could not parse DEFINDEX_VAULTS_JSON:', error instanceof Error ? error.message : String(error));
+    return [];
+  }
+}
+
+function parseVaultsFromEnv(fallbackNetwork: DefindexNetwork): DefindexVaultConfig[] {
+  const candidates: Array<{ asset: string; env: string; label: string }> = [
+    { asset: 'USDC', env: 'DEFINDEX_USDC_VAULT', label: 'USDC Yield Vault' },
+    { asset: 'EURC', env: 'DEFINDEX_EURC_VAULT', label: 'EUR Yield Vault' },
+    { asset: 'XLM', env: 'DEFINDEX_XLM_VAULT', label: 'XLM Yield Vault' },
+    { asset: 'TESOURO', env: 'DEFINDEX_TESOURO_VAULT', label: 'Real Yield Vault' },
+  ];
+  return candidates
+    .map((candidate) => parseVaultEntry({
+      asset_code: candidate.asset,
+      vault_address: process.env[candidate.env],
+      label: candidate.label,
+    }, fallbackNetwork))
+    .filter((entry): entry is DefindexVaultConfig => Boolean(entry));
+}
+
+function parseAmountToContractUnits(value: unknown, decimals = 7): number {
+  const raw = coalesceString(value).replace(/\s+/g, '').replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(raw)) {
+    throw new Error('amount must be a positive decimal amount.');
+  }
+  const [whole, fraction = ''] = raw.split('.');
+  const paddedFraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+  const units = BigInt(whole || '0') * (BigInt(10) ** BigInt(decimals)) + BigInt(paddedFraction || '0');
+  if (units <= BigInt(0)) throw new Error('amount must be greater than zero.');
+  if (units > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('amount is too large for Defindex API numeric payload.');
+  }
+  return Number(units);
+}
+
+function extractXdr(payload: any): string {
+  return coalesceString(
+    payload?.xdr,
+    payload?.transactionXDR,
+    payload?.transaction_xdr,
+    payload?.unsigned_xdr,
+    payload?.unsignedXdr,
+  );
+}
+
+function extractHash(payload: any): string {
+  return coalesceString(payload?.hash, payload?.transaction_hash, payload?.transactionHash, payload?.id);
+}
+
+export class DefindexYieldService {
+  static getRuntimeInfo(): DefindexRuntimeInfo {
+    const network = defaultNetwork();
+    const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
+    const vaults = [
+      ...parseVaultsFromJson(network),
+      ...parseVaultsFromEnv(network),
+    ].filter((vault, index, all) => (
+      vault.enabled &&
+      vault.network === network &&
+      all.findIndex((candidate) => candidate.asset_code === vault.asset_code && candidate.vault_address === vault.vault_address) === index
+    ));
+    const configured = Boolean(apiKey && vaults.length);
+    return {
+      provider: 'defindex',
+      configured,
+      api_key_configured: Boolean(apiKey),
+      base_url: cleanBaseUrl(process.env.DEFINDEX_BASE_URL),
+      network,
+      execution_enabled: envFlag('DEFINDEX_ENABLE_EXECUTION', false),
+      vaults,
+      unavailable_reason: configured
+        ? undefined
+        : !apiKey
+          ? 'DEFINDEX_API_KEY is not configured.'
+          : 'No Defindex vault address is configured for the active network.',
+    };
+  }
+
+  static amountToContractUnits(value: unknown, decimals = 7): number {
+    return parseAmountToContractUnits(value, decimals);
+  }
+
+  static resolveVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig | undefined {
+    const runtime = this.getRuntimeInfo();
+    const wantedVault = coalesceString(vaultAddress);
+    const wantedAsset = normalizeVaultAsset(assetCode || 'USDC');
+    return runtime.vaults.find((vault) => (
+      wantedVault
+        ? vault.vault_address === wantedVault
+        : vault.asset_code === wantedAsset || userFacingAssetCode(vault.asset_code) === userFacingAssetCode(wantedAsset)
+    ));
+  }
+
+  static requireVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig {
+    const runtime = this.getRuntimeInfo();
+    if (!runtime.api_key_configured) {
+      throw new Error('DEFINDEX_API_KEY is required for Defindex yield operations.');
+    }
+    const vault = this.resolveVault(assetCode, vaultAddress);
+    if (!vault) {
+      throw new Error(`No Defindex vault configured for ${userFacingAssetCode(assetCode || 'USDC')} on ${runtime.network}.`);
+    }
+    return vault;
+  }
+
+  private static async request(path: string, init?: RequestInit): Promise<any> {
+    const runtime = this.getRuntimeInfo();
+    const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
+    if (!apiKey) throw new Error('DEFINDEX_API_KEY is required for Defindex API calls.');
+    const url = `${runtime.base_url}${path}`;
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.DEFINDEX_TIMEOUT_MS || 30000);
+    const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000);
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+          ...((init?.headers || {}) as Record<string, string>),
+        },
+      });
+      const payload: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || `Defindex API request failed with HTTP ${response.status}.`);
+      }
+      return payload;
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        throw new Error('Defindex API request timed out.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  static async healthCheck(): Promise<any> {
+    return this.request('/health', { method: 'GET' }).catch((error) => ({
+      reachable: false,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
+
+  static async getVaultInfo(vaultAddress: string, network = defaultNetwork()): Promise<any> {
+    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/info?network=${encodeURIComponent(network)}`, { method: 'GET' });
+  }
+
+  static async getVaultAPY(vaultAddress: string, network = defaultNetwork()): Promise<any> {
+    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/apy?network=${encodeURIComponent(network)}`, { method: 'GET' });
+  }
+
+  static async getVaultBalance(vaultAddress: string, caller: string, network = defaultNetwork()): Promise<any> {
+    const params = new URLSearchParams({ network, from: caller, caller });
+    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/balance?${params.toString()}`, { method: 'GET' });
+  }
+
+  static async buildVaultAction(input: {
+    action: DefindexYieldAction;
+    vaultAddress: string;
+    caller: string;
+    amountUnits: number;
+    network?: DefindexNetwork;
+    invest?: boolean;
+    slippageBps?: number;
+  }): Promise<{ xdr: string; raw: any }> {
+    const network = input.network || defaultNetwork();
+    const endpoint = input.action === 'deposit' ? 'deposit' : 'withdraw';
+    const body = {
+      amounts: [input.amountUnits],
+      caller: input.caller,
+      from: input.caller,
+      ...(input.action === 'deposit' ? { invest: input.invest !== false } : {}),
+      slippageBps: Number.isFinite(input.slippageBps) ? input.slippageBps : 100,
+    };
+    const raw = await this.request(`/vault/${encodeURIComponent(input.vaultAddress)}/${endpoint}?network=${encodeURIComponent(network)}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    const xdr = extractXdr(raw);
+    if (!xdr) throw new Error('Defindex did not return an unsigned transaction XDR.');
+    return { xdr, raw };
+  }
+
+  static signXdr(unsignedXdr: string, secretKey: string): string {
+    const transaction = TransactionBuilder.fromXDR(unsignedXdr, stellarConfig.network);
+    transaction.sign(Keypair.fromSecret(secretKey));
+    return transaction.toXDR();
+  }
+
+  static async sendVaultTransaction(input: {
+    vaultAddress: string;
+    signedXdr: string;
+    network?: DefindexNetwork;
+  }): Promise<{ hash: string; raw: any }> {
+    const network = input.network || defaultNetwork();
+    const raw = await this.request(`/vault/${encodeURIComponent(input.vaultAddress)}/send?network=${encodeURIComponent(network)}`, {
+      method: 'POST',
+      body: JSON.stringify({ xdr: input.signedXdr }),
+    });
+    return { hash: extractHash(raw), raw };
+  }
+}

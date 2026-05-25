@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  BadgeDollarSign,
   ExternalLink,
   Landmark,
   Loader2,
@@ -94,6 +95,31 @@ type RampConfig = {
   };
 };
 
+type DefindexVault = {
+  asset_code: string;
+  asset_issuer?: string;
+  display_asset_code?: string;
+  vault_address: string;
+  label: string;
+  network: string;
+  apy?: Record<string, unknown>;
+  apy_percent?: string;
+  apy_period?: string;
+  apy_error?: string;
+};
+
+type DefindexStatus = {
+  success?: boolean;
+  runtime?: {
+    configured?: boolean;
+    api_key_configured?: boolean;
+    network?: string;
+    execution_enabled?: boolean;
+    unavailable_reason?: string;
+  };
+  vaults?: DefindexVault[];
+};
+
 function compactKey(value?: string | null) {
   const key = String(value || "").trim();
   if (key.length <= 16) return key || "-";
@@ -137,11 +163,45 @@ async function rampConfigApi(): Promise<RampConfig> {
   return payload;
 }
 
+async function rampApi(path: string, init?: RequestInit) {
+  const response = await fetch(`/api/ramp/${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.message || "Ramp request failed.");
+  }
+  return payload;
+}
+
+function formatYieldApy(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(String(raw || "").replace("%", ""));
+  if (!Number.isFinite(parsed)) return "-";
+  return `${parsed.toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+
+function compactJson(value: unknown) {
+  if (!value) return "-";
+  try {
+    const text = JSON.stringify(value);
+    return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+  } catch {
+    return String(value);
+  }
+}
+
 export default function MainnetClient() {
   const [networkMode, setNetworkMode] = useState<NetworkMode>("testnet");
   const [session, setSession] = useState({ authenticated: false, sessionId: "" });
   const [status, setStatus] = useState<MainnetStatus | null>(null);
   const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
+  const [defindexStatus, setDefindexStatus] = useState<DefindexStatus | null>(null);
   const [wallet, setWallet] = useState<MainnetWallet | null>(null);
   const [balance, setBalance] = useState<any | null>(null);
   const [operations, setOperations] = useState<OperationLine[]>([]);
@@ -151,6 +211,14 @@ export default function MainnetClient() {
   const [amount, setAmount] = useState("1");
   const [assetCode, setAssetCode] = useState("USDC");
   const [preview, setPreview] = useState<any | null>(null);
+  const [yieldAdvancedOpen, setYieldAdvancedOpen] = useState(false);
+  const [yieldAction, setYieldAction] = useState<"deposit" | "withdraw">("deposit");
+  const [yieldAssetCode, setYieldAssetCode] = useState("USDC");
+  const [yieldAmount, setYieldAmount] = useState("1");
+  const [yieldSlippageBps, setYieldSlippageBps] = useState("100");
+  const [yieldPin, setYieldPin] = useState("");
+  const [yieldBalance, setYieldBalance] = useState<any | null>(null);
+  const [yieldResult, setYieldResult] = useState<any | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
   const balances: BalanceLine[] = useMemo(() => {
@@ -163,11 +231,13 @@ export default function MainnetClient() {
   const canAttach = isValidPublicKey(publicKey);
   const etherfuseAvailable = Boolean(rampConfig?.available);
   const currentNetworkLabel = networkMode === "testnet" ? "Conta de validação" : "Mainnet";
+  const defindexVaults = Array.isArray(defindexStatus?.vaults) ? defindexStatus.vaults : [];
+  const selectedYieldVault = defindexVaults.find((vault) => vault.asset_code === yieldAssetCode || vault.display_asset_code === yieldAssetCode) || defindexVaults[0] || null;
 
   async function refreshAll() {
     setApiState({ loading: true, message: "", error: "" });
     try {
-      const [sessionPayload, statusPayload, rampPayload] = await Promise.all([
+      const [sessionPayload, statusPayload, rampPayload, defindexPayload] = await Promise.all([
         getClientSession(),
         financialApi("status"),
         rampConfigApi().catch((error) => ({
@@ -178,11 +248,26 @@ export default function MainnetClient() {
           stellar_network_id: "TESTNET" as const,
           unavailable_reason: error instanceof Error ? error.message : String(error),
         })),
+        rampApi("defindex/yield/status").catch((error) => ({
+          success: false,
+          runtime: {
+            configured: false,
+            api_key_configured: false,
+            execution_enabled: false,
+            unavailable_reason: error instanceof Error ? error.message : String(error),
+          },
+          vaults: [],
+        })),
       ]);
 
       setSession(sessionPayload);
       setStatus(statusPayload);
       setRampConfig(rampPayload);
+      setDefindexStatus(defindexPayload);
+      const firstYieldVault = Array.isArray(defindexPayload?.vaults) ? defindexPayload.vaults[0] : null;
+      if (firstYieldVault && !defindexPayload.vaults.some((vault: DefindexVault) => vault.asset_code === yieldAssetCode || vault.display_asset_code === yieldAssetCode)) {
+        setYieldAssetCode(firstYieldVault.asset_code || firstYieldVault.display_asset_code || "USDC");
+      }
 
       if (!sessionPayload.authenticated) {
         setWallet(null);
@@ -291,6 +376,65 @@ export default function MainnetClient() {
     }
   }
 
+  async function refreshYieldBalance() {
+    if (!selectedYieldVault) return;
+    setApiState({ loading: true, message: "", error: "" });
+    try {
+      const payload = await rampApi(`defindex/yield/balance?asset_code=${encodeURIComponent(selectedYieldVault.asset_code)}&vault_address=${encodeURIComponent(selectedYieldVault.vault_address)}`);
+      setYieldBalance(payload);
+      setApiState({ loading: false, message: "Defindex balance refreshed.", error: "" });
+    } catch (error) {
+      setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function prepareYield() {
+    if (!selectedYieldVault) return;
+    setApiState({ loading: true, message: "", error: "" });
+    setYieldResult(null);
+    try {
+      const payload = await rampApi("defindex/yield/prepare", {
+        method: "POST",
+        body: JSON.stringify({
+          action: yieldAction,
+          amount: yieldAmount,
+          asset_code: selectedYieldVault.asset_code,
+          vault_address: selectedYieldVault.vault_address,
+          slippage_bps: yieldSlippageBps,
+        }),
+      });
+      setYieldResult(payload);
+      setApiState({ loading: false, message: "Defindex XDR prepared for signing.", error: "" });
+    } catch (error) {
+      setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function executeYield() {
+    if (!selectedYieldVault) return;
+    setApiState({ loading: true, message: "", error: "" });
+    setYieldResult(null);
+    try {
+      const payload = await rampApi("defindex/yield/execute", {
+        method: "POST",
+        body: JSON.stringify({
+          action: yieldAction,
+          amount: yieldAmount,
+          asset_code: selectedYieldVault.asset_code,
+          vault_address: selectedYieldVault.vault_address,
+          slippage_bps: yieldSlippageBps,
+          pin: yieldPin,
+          wallet_pin: yieldPin,
+        }),
+      });
+      setYieldResult(payload);
+      setYieldPin("");
+      setApiState({ loading: false, message: "Defindex yield transaction submitted.", error: "" });
+    } catch (error) {
+      setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   useEffect(() => {
     refreshAll();
   }, []);
@@ -364,11 +508,41 @@ export default function MainnetClient() {
         </section>
 
         {networkMode === "testnet" ? (
-          <TestnetRailPanel
-            sessionAuthenticated={session.authenticated}
-            rampConfig={rampConfig}
-            etherfuseAvailable={etherfuseAvailable}
-          />
+          <>
+            <TestnetRailPanel
+              sessionAuthenticated={session.authenticated}
+              rampConfig={rampConfig}
+              etherfuseAvailable={etherfuseAvailable}
+            />
+            <DefindexYieldPanel
+              sessionAuthenticated={session.authenticated}
+              status={defindexStatus}
+              vaults={defindexVaults}
+              selectedVault={selectedYieldVault}
+              advancedOpen={yieldAdvancedOpen}
+              setAdvancedOpen={setYieldAdvancedOpen}
+              action={yieldAction}
+              setAction={setYieldAction}
+              assetCode={yieldAssetCode}
+              setAssetCode={(value) => {
+                setYieldAssetCode(value);
+                setYieldBalance(null);
+                setYieldResult(null);
+              }}
+              amount={yieldAmount}
+              setAmount={setYieldAmount}
+              slippageBps={yieldSlippageBps}
+              setSlippageBps={setYieldSlippageBps}
+              pin={yieldPin}
+              setPin={(value) => setYieldPin(value.replace(/\D/g, "").slice(0, 8))}
+              balance={yieldBalance}
+              result={yieldResult}
+              loading={apiState.loading}
+              onRefreshBalance={refreshYieldBalance}
+              onPrepare={prepareYield}
+              onExecute={executeYield}
+            />
+          </>
         ) : (
           <>
         <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -713,6 +887,210 @@ function TestnetRailPanel({
           </div>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+function DefindexYieldPanel({
+  sessionAuthenticated,
+  status,
+  vaults,
+  selectedVault,
+  advancedOpen,
+  setAdvancedOpen,
+  action,
+  setAction,
+  assetCode,
+  setAssetCode,
+  amount,
+  setAmount,
+  slippageBps,
+  setSlippageBps,
+  pin,
+  setPin,
+  balance,
+  result,
+  loading,
+  onRefreshBalance,
+  onPrepare,
+  onExecute,
+}: {
+  sessionAuthenticated: boolean;
+  status: DefindexStatus | null;
+  vaults: DefindexVault[];
+  selectedVault: DefindexVault | null;
+  advancedOpen: boolean;
+  setAdvancedOpen: (value: boolean) => void;
+  action: "deposit" | "withdraw";
+  setAction: (value: "deposit" | "withdraw") => void;
+  assetCode: string;
+  setAssetCode: (value: string) => void;
+  amount: string;
+  setAmount: (value: string) => void;
+  slippageBps: string;
+  setSlippageBps: (value: string) => void;
+  pin: string;
+  setPin: (value: string) => void;
+  balance: any | null;
+  result: any | null;
+  loading: boolean;
+  onRefreshBalance: () => void;
+  onPrepare: () => void;
+  onExecute: () => void;
+}) {
+  const configured = Boolean(status?.runtime?.configured);
+  const executionEnabled = Boolean(status?.runtime?.execution_enabled);
+  const canUseVault = Boolean(sessionAuthenticated && selectedVault && configured);
+  const selectedApy = selectedVault?.apy_percent || selectedVault?.apy?.apyPercent || selectedVault?.apy?.apy_percent || selectedVault?.apy?.apy;
+
+  return (
+    <section className="border border-tts-border bg-tts-surface/[0.03] p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+            <BadgeDollarSign className="h-5 w-5 text-tts-confirm" />
+            Defindex yield
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${configured ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
+              {configured ? "Configured" : "Needs vault"}
+            </span>
+            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${executionEnabled ? "border-tts-confirm text-tts-confirm" : "border-tts-border text-tts-muted"}`}>
+              {executionEnabled ? "Execution on" : "Prepare only"}
+            </span>
+            <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
+              {status?.runtime?.network || "testnet"}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-surface"
+        >
+          {advancedOpen ? "Fechar modo avançado" : "Modo avançado"}
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {vaults.length ? vaults.slice(0, 3).map((vault) => (
+          <div key={`${vault.asset_code}-${vault.vault_address}`} className="border border-tts-border bg-black p-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{vault.display_asset_code || vault.asset_code}</p>
+            <p className="mt-2 text-lg font-black text-tts-surface">{formatYieldApy(vault.apy_percent || vault.apy?.apyPercent || vault.apy?.apy)}</p>
+            <p className="mt-1 truncate text-xs text-tts-muted" title={vault.vault_address}>{vault.label || compactKey(vault.vault_address)}</p>
+          </div>
+        )) : (
+          <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted md:col-span-3">
+            {status?.runtime?.unavailable_reason || "Configure DEFINDEX_API_KEY and at least one DEFINDEX_*_VAULT."}
+          </div>
+        )}
+      </div>
+
+      {advancedOpen ? (
+        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="border border-tts-border bg-black p-4">
+            <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface/[0.03] p-1">
+              <button
+                type="button"
+                onClick={() => setAction("deposit")}
+                className={`min-h-10 text-sm font-black ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
+              >
+                Depositar
+              </button>
+              <button
+                type="button"
+                onClick={() => setAction("withdraw")}
+                className={`min-h-10 text-sm font-black ${action === "withdraw" ? "bg-tts-gold text-tts-deep" : "text-tts-muted"}`}
+              >
+                Retirar
+              </button>
+            </div>
+
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Asset</label>
+            <select
+              value={assetCode}
+              onChange={(event) => setAssetCode(event.target.value)}
+              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm font-black text-tts-surface outline-none focus:border-tts-gold"
+            >
+              {vaults.map((vault) => (
+                <option key={`${vault.asset_code}-${vault.vault_address}`} value={vault.asset_code}>
+                  {vault.display_asset_code || vault.asset_code}
+                </option>
+              ))}
+            </select>
+
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Amount</label>
+            <input
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              inputMode="decimal"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+            />
+
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Slippage bps</label>
+            <input
+              value={slippageBps}
+              onChange={(event) => setSlippageBps(event.target.value.replace(/\D/g, "").slice(0, 5))}
+              inputMode="numeric"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+            />
+
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">PIN</label>
+            <input
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              inputMode="numeric"
+              type="password"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+            />
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={onRefreshBalance}
+                disabled={!canUseVault || loading}
+                className="min-h-11 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:text-tts-muted"
+              >
+                Saldo
+              </button>
+              <button
+                type="button"
+                onClick={onPrepare}
+                disabled={!canUseVault || loading}
+                className="min-h-11 bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface/30"
+              >
+                Preparar
+              </button>
+              <button
+                type="button"
+                onClick={onExecute}
+                disabled={!canUseVault || !executionEnabled || pin.length < 4 || loading}
+                className="min-h-11 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface/30"
+              >
+                Executar
+              </button>
+            </div>
+          </div>
+
+          <div className="border border-tts-border bg-black p-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MiniStat label="Vault" value={selectedVault ? compactKey(selectedVault.vault_address) : "-"} />
+              <MiniStat label="APY" value={formatYieldApy(selectedApy)} />
+              <MiniStat label="Asset" value={selectedVault?.display_asset_code || selectedVault?.asset_code || "-"} />
+            </div>
+            <div className="mt-4 border border-tts-border bg-tts-surface/[0.03] p-3">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Balance</p>
+              <p className="mt-2 break-all font-mono text-xs text-tts-surface">{compactJson(balance?.balance || balance)}</p>
+            </div>
+            <div className="mt-4 border border-tts-border bg-tts-surface/[0.03] p-3">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Result</p>
+              <p className="mt-2 break-all font-mono text-xs text-tts-surface">
+                {result?.hash ? `hash=${result.hash}` : result?.xdr ? `xdr=${compactKey(result.xdr)}` : compactJson(result)}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

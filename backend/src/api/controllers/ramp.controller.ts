@@ -111,6 +111,42 @@ export class RampController {
     }
   }
 
+  static async getDefindexYieldStatus(_req: Request, res: Response) {
+    try {
+      const result = await AnchorService.getDefindexYieldStatus();
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
+  static async getDefindexYieldBalance(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.getDefindexYieldBalanceForSession(requestInput(req));
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
+  static async prepareDefindexYield(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.prepareDefindexYieldForSession(requestInput(req));
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
+  static async executeDefindexYield(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.executeDefindexYieldForSession(requestInput(req));
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+    }
+  }
+
   static async listEtherfuseFiatAccounts(req: Request, res: Response) {
     try {
       const result = await AnchorService.listFiatAccountsForSession(requestInput(req));
