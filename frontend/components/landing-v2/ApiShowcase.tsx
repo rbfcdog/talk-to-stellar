@@ -42,14 +42,14 @@ export function ApiShowcase() {
               asChild
               className="h-11 bg-tts-deep px-5 text-sm text-tts-surface hover:bg-tts-deep/90"
             >
-              <a href="#empresa">Acessar a API</a>
+              <a href="#comecar">Acessar a API</a>
             </Button>
             <Button
               asChild
               variant="outline"
               className="h-11 border-tts-border bg-tts-surface px-5 text-sm text-tts-deep hover:bg-tts-bg"
             >
-              <a href="#empresa">
+              <a href="#comecar">
                 Ler a referência
                 <ArrowRight className="ml-1 h-4 w-4" />
               </a>

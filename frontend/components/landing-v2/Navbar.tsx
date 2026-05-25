@@ -224,7 +224,7 @@ function MobileNav() {
               size="sm"
               className="bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
             >
-              <a href="#empresa" onClick={close}>
+              <a href="#comecar" onClick={close}>
                 Falar com o time
               </a>
             </Button>
@@ -270,7 +270,7 @@ function BarBody({
           size="sm"
           className="bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
         >
-          <a href="#empresa" onClick={onLinkClick}>
+          <a href="#comecar" onClick={onLinkClick}>
             Falar com o time
           </a>
         </Button>

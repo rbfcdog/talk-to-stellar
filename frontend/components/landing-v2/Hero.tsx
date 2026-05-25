@@ -54,7 +54,7 @@ export function Hero() {
               asChild
               className="h-11 bg-tts-deep px-5 text-sm text-tts-surface hover:bg-tts-deep/90"
             >
-              <a href="#empresa">Falar com o time</a>
+              <a href="#comecar">Falar com o time</a>
             </Button>
             <Button
               asChild
