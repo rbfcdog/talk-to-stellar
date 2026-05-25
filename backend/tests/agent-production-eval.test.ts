@@ -263,6 +263,28 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('destination_pix_key');
   });
 
+  it('routes full money-cycle requests to open_money_cycle', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'O ciclo completo está pronto para BRL.\n\nAbra:\nhttps://app.example.com/money-cycle?asset=BRL&destination_pix_key=user%40example.com',
+    }));
+
+    const result = await graph.processInput(createState('quero injetar 500 reais, deixar render e depois sair para user@example.com'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('open_money_cycle', {
+      session_id: 'eval-session',
+      amount: '500',
+      asset_code: 'BRL',
+      destination_pix_key: 'user@example.com',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('/money-cycle?asset=BRL');
+  });
+
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 

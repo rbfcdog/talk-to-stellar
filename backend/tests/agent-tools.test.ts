@@ -385,7 +385,7 @@ describe('Agent tool execution', () => {
     const keep = JSON.parse(keepOutput);
 
     expect(keep.success).toBe(true);
-    expect(keep.frontend_url).toContain('/yield?');
+    expect(keep.frontend_url).toContain('/money-cycle?');
     expect(keep.frontend_url).toContain('asset=GBP');
     expect(keep.frontend_url).toContain('amount=50');
 
@@ -402,6 +402,25 @@ describe('Agent tool execution', () => {
     expect(sendOut.frontend_url).toContain('/pix-off?');
     expect(sendOut.frontend_url).toContain('destination_pix_key=user%40example.com');
     expect(sendOut.message).toContain('Mandar para PIX');
+  });
+
+  it('opens the consolidated money cycle interface', async () => {
+    const output = await executeTool('open_money_cycle', {
+      amount: '500',
+      asset_code: 'BRL',
+      destination_pix_key: 'user@example.com',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.frontend_url).toContain('/money-cycle?');
+    expect(parsed.frontend_url).toContain('cycle=1');
+    expect(parsed.frontend_url).toContain('asset=BRL');
+    expect(parsed.frontend_url).toContain('amount=500');
+    expect(parsed.frontend_url).toContain('destination_pix_key=user%40example.com');
+    expect(parsed.steps).toEqual(['pix_on', 'yield', 'pix_off']);
+    expect(parsed.message).toContain('ciclo completo');
   });
 
   it('sanitizes yield confirmation setup errors before returning them to chat', async () => {

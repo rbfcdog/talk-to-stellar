@@ -282,6 +282,15 @@ function optionAnnualRate(option?: YieldOption | null) {
   return parseRate(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy);
 }
 
+function sortYieldOptionsByRate(options: YieldOption[]) {
+  return [...options].sort((left, right) => {
+    const leftRate = optionAnnualRate(left) ?? -1;
+    const rightRate = optionAnnualRate(right) ?? -1;
+    if (rightRate !== leftRate) return rightRate - leftRate;
+    return optionCode(left).localeCompare(optionCode(right));
+  });
+}
+
 function normalizeDecimal(value: unknown) {
   const raw = String(value || "0").trim();
   const normalized = raw.includes(",")
@@ -391,6 +400,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const appliedInitialLanguageRef = useRef(false);
   const appliedInitialQueryRef = useRef(false);
   const loadedInitialDataRef = useRef(false);
+  const requestedAssetRef = useRef("");
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
@@ -399,6 +409,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [amount, setAmount] = useState("100");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [cycleMode, setCycleMode] = useState(false);
+  const [cycleDestinationPixKey, setCycleDestinationPixKey] = useState("");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
   const [yieldBalance, setYieldBalance] = useState<any | null>(null);
@@ -406,8 +418,10 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
+  const sortedOptions = useMemo(() => sortYieldOptionsByRate(options), [options]);
+  const bestOption = sortedOptions[0] || null;
   const selectedOption = useMemo(() => {
-    return options.find((item) => optionCode(item) === selectedCode) || options[0] || null;
+    return options.find((item) => optionCode(item) === selectedCode) || null;
   }, [options, selectedCode]);
   const configured = Boolean(yieldStatus?.runtime?.configured);
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
@@ -415,6 +429,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const totalBalances = balances.length;
   const safeSelectedCode = optionCode(selectedOption) || selectedCode;
   const selectedProfile = moneyProfile(safeSelectedCode);
+  const bestOptionCode = optionCode(bestOption);
+  const bestProfile = moneyProfile(bestOptionCode || safeSelectedCode);
+  const selectedHasYield = Boolean(selectedOption);
   const canPrepare = Boolean(session.authenticated && configured && selectedOption && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => String(item.asset_code || "").toUpperCase() === safeSelectedCode);
   const projectionData = useMemo(
@@ -429,21 +446,33 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     from: "yield",
     lang: language,
   }), [amount, safeSelectedCode, language]);
-  const keepMoneyUrl = useMemo(() => buildMoneyUrl("/yield", {
+  const keepMoneyUrl = useMemo(() => buildMoneyUrl(cycleMode ? "/money-cycle" : "/yield", {
     action,
     asset: safeSelectedCode,
     amount,
     advanced: advancedOpen ? "1" : "",
+    cycle: cycleMode ? "1" : "",
+    destination_pix_key: cycleDestinationPixKey,
     lang: language,
-  }), [action, amount, advancedOpen, safeSelectedCode, language]);
+  }), [action, amount, advancedOpen, cycleDestinationPixKey, cycleMode, safeSelectedCode, language]);
+  const cycleMoneyUrl = useMemo(() => buildMoneyUrl("/money-cycle", {
+    cycle: "1",
+    action: "deposit",
+    asset: safeSelectedCode,
+    amount,
+    destination_pix_key: cycleDestinationPixKey,
+    advanced: "1",
+    lang: language,
+  }), [amount, cycleDestinationPixKey, safeSelectedCode, language]);
   const sendMoneyUrl = useMemo(() => buildMoneyUrl("/pix-off", {
     mode: "offramp",
     asset: safeSelectedCode,
     source_asset: safeSelectedCode,
     source_amount: amount,
+    destination_pix_key: cycleDestinationPixKey,
     from: "yield",
     lang: language,
-  }), [amount, safeSelectedCode, language]);
+  }), [amount, cycleDestinationPixKey, safeSelectedCode, language]);
 
   useEffect(() => {
     if (initialLanguage && !appliedInitialLanguageRef.current) {
@@ -456,6 +485,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (appliedInitialQueryRef.current) return;
     appliedInitialQueryRef.current = true;
     const params = new URLSearchParams(initialQuery || (typeof window !== "undefined" ? window.location.search : ""));
+    const path = typeof window !== "undefined" ? window.location.pathname : "";
     const queryAsset = normalizeUiAssetCode(
       params.get("asset") ||
       params.get("asset_code") ||
@@ -470,10 +500,23 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       ""
     );
     const queryAction = String(params.get("action") || params.get("mode") || "").trim().toLowerCase();
-    if (queryAsset) setSelectedCode(queryAsset);
+    const queryDestinationPixKey = String(
+      params.get("destination_pix_key") ||
+      params.get("pix_key") ||
+      params.get("destination_pix") ||
+      params.get("to_pix") ||
+      ""
+    ).trim();
+    const queryCycleMode = params.get("cycle") === "1" || params.get("cycle") === "true" || path === "/money-cycle";
+    if (queryCycleMode) setCycleMode(true);
+    if (queryAsset) {
+      requestedAssetRef.current = queryAsset;
+      setSelectedCode(queryAsset);
+    }
     if (queryAmount > 0) setAmount(String(queryAmount));
     if (queryAction === "withdraw" || queryAction === "resgatar") setAction("withdraw");
     if (queryAction === "deposit" || queryAction === "guardar") setAction("deposit");
+    if (queryDestinationPixKey) setCycleDestinationPixKey(queryDestinationPixKey);
     if (params.get("advanced") === "1" || params.get("advanced") === "true") setAdvancedOpen(true);
   }, [initialQuery]);
 
@@ -503,9 +546,10 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       setRampConfig(rampPayload);
       setYieldStatus(statusPayload);
 
-      const firstOption = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults[0] : null;
-      if (firstOption && !statusPayload.vaults.some((item: YieldOption) => optionCode(item) === selectedCode)) {
-        setSelectedCode(optionCode(firstOption));
+      const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
+      const bestAvailable = sortYieldOptionsByRate(vaults)[0] || null;
+      if (!requestedAssetRef.current && bestAvailable && !vaults.some((item: YieldOption) => optionCode(item) === selectedCode)) {
+        setSelectedCode(optionCode(bestAvailable));
       }
 
       if (!sessionPayload.authenticated) {
@@ -656,23 +700,76 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           <Metric label={L("Confirmação", "Confirmation")} value={confirmationEnabled ? L("Ativa", "Active") : L("Em preparo", "In setup")} detail={confirmationEnabled ? L("PIN habilitado", "PIN enabled") : L("Somente revisão", "Review only")} />
         </section>
 
-        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Ações com dinheiro", "Money actions")}>
+        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Ciclo do dinheiro", "Money cycle")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                 <WalletCards className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                {L("Trazer, manter ou mandar embora", "Add, keep, or send out")}
+                {cycleMode ? L("Ciclo completo consolidado", "Consolidated money cycle") : L("Entrar, render e sair", "Add, earn, and send out")}
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                 {L(
-                  "Use a mesma moeda selecionada para entrar por PIX, deixar rendendo ou retirar para uma chave PIX informada por você.",
-                  "Use the selected currency to add by PIX, keep earning, or withdraw to a PIX key you enter."
+                  "O dinheiro entra por PIX, fica na melhor opção de rendimento disponível para você revisar, e sai por PIX com a chave informada na hora.",
+                  "Money comes in by PIX, moves into the best available earning option for review, and goes out by PIX with the key entered at the moment."
                 )}
               </p>
             </div>
             <span className="inline-flex w-fit border border-tts-border bg-tts-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
               {selectedProfile.short} · {profileName(selectedProfile, language)}
             </span>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <CycleStep
+              index="1"
+              title={L("Injetar por PIX", "Add by PIX")}
+              detail={L("Use o PIX de entrada para criar saldo na moeda escolhida.", "Use PIX in to create balance in the selected currency.")}
+              href={addMoneyUrl}
+              action={L("Abrir entrada", "Open add money")}
+            />
+            <CycleStep
+              index="2"
+              title={L("Render melhor", "Earn best available")}
+              detail={bestOption
+                ? L(
+                    `Melhor opção atual: ${profileName(bestProfile, language)} com ${optionRate(bestOption, language)} ao ano.`,
+                    `Current best option: ${profileName(bestProfile, language)} at ${optionRate(bestOption, language)} per year.`
+                  )
+                : L("Aguardando configuração das opções de rendimento.", "Waiting for earning options to be configured.")}
+              href={bestOption ? buildMoneyUrl(cycleMode ? "/money-cycle" : "/yield", { cycle: cycleMode ? "1" : "", asset: bestOptionCode, amount, destination_pix_key: cycleDestinationPixKey, advanced: "1", lang: language }) : keepMoneyUrl}
+              action={bestOption ? L("Usar melhor opção", "Use best option") : L("Abrir revisão", "Open review")}
+            />
+            <CycleStep
+              index="3"
+              title={L("Sair para PIX", "Send out to PIX")}
+              detail={cycleDestinationPixKey
+                ? L(`Saída preparada para ${cycleDestinationPixKey}. Você ainda revisa antes do PIN.`, `Exit prepared for ${cycleDestinationPixKey}. You still review before PIN.`)
+                : L("A retirada pergunta a chave PIX dinamicamente antes do PIN.", "Withdrawal asks for the PIX key dynamically before PIN.")}
+              href={sendMoneyUrl}
+              action={L("Abrir saída", "Open withdrawal")}
+            />
+          </div>
+
+          <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-black text-tts-confirm">{L("Ambiente consolidado", "Consolidated environment")}</p>
+                <p className="mt-1 text-sm leading-6 text-tts-muted">
+                  {selectedHasYield
+                    ? L("A moeda selecionada já tem uma opção de rendimento para revisão.", "The selected currency already has an earning option ready for review.")
+                    : bestOption
+                      ? L("A moeda selecionada ainda não tem rendimento configurado aqui; use a melhor opção disponível ou troque a moeda.", "The selected currency does not have earning configured here yet; use the best available option or switch currency.")
+                      : L("Configure uma opção de rendimento para completar o ciclo interno.", "Configure an earning option to complete the internal cycle.")}
+                </p>
+              </div>
+              <a
+                href={cycleMoneyUrl}
+                className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+              >
+                <WalletCards className="h-4 w-4" aria-hidden="true" />
+                {L("Abrir ciclo", "Open cycle")}
+              </a>
+            </div>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <ActionLink href={addMoneyUrl} icon={<ArrowDownToLine className="h-4 w-4" aria-hidden="true" />} title={L("Trazer dinheiro", "Add money")} body={L("Abra PIX já com a moeda e o valor preenchidos.", "Open PIX with currency and amount prefilled.")} />
@@ -711,6 +808,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
                 const code = optionCode(option);
                 const profile = moneyProfile(code);
                 const selected = code === safeSelectedCode;
+                const recommended = code === bestOptionCode;
                 return (
                   <button
                     key={`${option.asset_code}-${option.vault_address}`}
@@ -727,6 +825,11 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
                     <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
                       {profile.short}
                     </span>
+                    {recommended ? (
+                      <span className="ml-2 inline-flex border border-tts-confirm bg-tts-confirm/10 px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-tts-confirm">
+                        {L("Melhor", "Best")}
+                      </span>
+                    ) : null}
                     <span className="mt-3 block text-lg font-black text-tts-deep">{optionTitle(option, language)}</span>
                     <span className="mt-1 block text-sm text-tts-muted">{profileDescription(profile, language)}</span>
                     <span className="mt-3 inline-flex items-center gap-2 text-sm font-black text-tts-confirm">
@@ -1092,6 +1195,21 @@ function ActionLink({ href, icon, title, body }: { href: string; icon: ReactNode
       </span>
       <span className="mt-4 block text-lg font-black text-tts-deep">{title}</span>
       <span className="mt-2 block text-sm leading-6 text-tts-muted">{body}</span>
+    </a>
+  );
+}
+
+function CycleStep({ index, title, detail, href, action }: { index: string; title: string; detail: string; href: string; action: string }) {
+  return (
+    <a href={href} className="group flex min-h-[172px] flex-col justify-between border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm hover:bg-tts-confirm/5">
+      <span>
+        <span className="inline-flex h-8 w-8 items-center justify-center bg-tts-deep text-sm font-black text-tts-surface">
+          {index}
+        </span>
+        <span className="mt-4 block text-lg font-black text-tts-deep">{title}</span>
+        <span className="mt-2 block text-sm leading-6 text-tts-muted">{detail}</span>
+      </span>
+      <span className="mt-4 text-sm font-black text-tts-confirm">{action}</span>
     </a>
   );
 }
