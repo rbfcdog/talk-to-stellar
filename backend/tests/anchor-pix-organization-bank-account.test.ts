@@ -155,11 +155,12 @@ describe('AnchorService PIX organization bank account routing', () => {
     });
   });
 
-  it('does not send a local PIX destination id as an Etherfuse off-ramp fiat account id', async () => {
+  it('keeps a dynamic PIX destination while ignoring local destination ids', async () => {
     mockSandboxRuntime();
 
     const anchor = {
       getFiatAccounts: jest.fn().mockResolvedValue([]),
+      createBankAccountForCustomer: jest.fn().mockRejectedValue(new Error('unsupported in this sandbox')),
       createOffRamp: jest.fn(),
     };
 
@@ -193,7 +194,16 @@ describe('AnchorService PIX organization bank account routing', () => {
       },
     });
 
-    expect(anchor.getFiatAccounts).toHaveBeenCalledWith('customer-1');
+    expect(anchor.getFiatAccounts).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountForCustomer).toHaveBeenCalledWith(
+      'customer-1',
+      expect.objectContaining({
+        account: expect.objectContaining({
+          pixKey: 'user@example.com',
+          pixKeyType: 'email',
+        }),
+      }),
+    );
     expect(anchor.createOffRamp).not.toHaveBeenCalled();
     expect(result.operation_id).toBe('op-1');
     expect(result.transaction.id).toMatch(/^sandbox-offramp-/);
@@ -201,8 +211,79 @@ describe('AnchorService PIX organization bank account routing', () => {
       fromAmount: '48.6880919',
       toAmount: '56.00',
       toCurrency: 'BRL',
+      fiatAccount: {
+        label: 'PIX user@example.com',
+      },
     });
     expect((result.transaction as any).sandbox_mock).toBe(true);
+  });
+
+  it('registers a dynamic PIX destination before creating a sandbox off-ramp', async () => {
+    mockSandboxRuntime();
+
+    const anchor = {
+      getFiatAccounts: jest.fn(),
+      createBankAccountForCustomer: jest.fn().mockResolvedValue({ bankAccountId: 'registered-pix-id' }),
+      createOffRamp: jest.fn().mockResolvedValue({
+        id: 'provider-offramp-1',
+        status: 'pending',
+        fromAmount: '48.6880919',
+        fromCurrency: 'TESOURO',
+        toAmount: '56.00',
+        toCurrency: 'BRL',
+        signableTransaction: 'mock-xdr',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(AnchorService as any, 'findActiveRampOperationByIntent').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+
+    const result = await AnchorService.createOffRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      quote_id: 'quote-1',
+      amount: '48.6880919',
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      target_brl: '56.00',
+      destination_pix_key: '5511999999999',
+      pix_key_type: 'phone',
+      fiat_account_id: 'pix-destination-local-id',
+      external_bank_account: {
+        id: 'pix-destination-local-id',
+        label: 'PIX informado',
+      },
+    });
+
+    expect(anchor.getFiatAccounts).not.toHaveBeenCalled();
+    expect(anchor.createBankAccountForCustomer).toHaveBeenCalledWith(
+      'customer-1',
+      expect.objectContaining({
+        account: expect.objectContaining({
+          pixKey: '5511999999999',
+          pixKeyType: 'phone',
+        }),
+      }),
+    );
+    expect(anchor.createOffRamp).toHaveBeenCalledWith(expect.objectContaining({
+      customerId: 'customer-1',
+      quoteId: 'quote-1',
+      fiatAccountId: 'registered-pix-id',
+    }));
+    expect(result.operation_id).toBe('op-1');
+    expect(result.transaction.id).toBe('provider-offramp-1');
   });
 
   it('does not open hosted onboarding or create a PIX bank account for regional sandbox customer setup', async () => {

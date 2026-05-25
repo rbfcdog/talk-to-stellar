@@ -47,6 +47,7 @@ type ExternalBankAccount = {
   branch: string;
   account_number: string;
   pix_key: string;
+  pix_key_type?: string;
   provider_fiat_account_id?: string;
   providerFiatAccountId?: string;
   fiat_account_id?: string;
@@ -385,7 +386,7 @@ function stableHash(value: string) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function buildExternalBankAccount(seed: string, email: string) {
+function buildExternalBankAccount(seed: string, email: string): ExternalBankAccount {
   const hash = stableHash(`${seed || "talktostellar"}:${email || "account"}`);
   const digits = String(parseInt(hash.slice(0, 6), 16)).padStart(8, "0");
   const account = `${digits.slice(0, 5)}-${digits.slice(5, 6)}`;
@@ -398,6 +399,41 @@ function buildExternalBankAccount(seed: string, email: string) {
     branch,
     account_number: account,
     pix_key: pixAlias,
+  };
+}
+
+function normalizePixKeyInput(value: string) {
+  return String(value || "").trim();
+}
+
+function inferPixKeyType(value: string) {
+  const pixKey = normalizePixKeyInput(value);
+  const digits = pixKey.replace(/\D+/g, "");
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pixKey)) return "email";
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pixKey)) return "evp";
+  if (digits.length === 11 && (/^\d{11}$/.test(pixKey) || /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(pixKey))) return "cpf";
+  if (digits.length === 14 && (/^\d{14}$/.test(pixKey) || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(pixKey))) return "cnpj";
+  if (/^\+?\d[\d\s().-]{7,}$/.test(pixKey)) return "phone";
+  return "evp";
+}
+
+function buildDynamicExternalBankAccount(seed: string, email: string, pixKey: string): ExternalBankAccount {
+  const normalizedPixKey = normalizePixKeyInput(pixKey);
+  const fallback = buildExternalBankAccount(seed, email);
+  const hash = stableHash(`${seed || "talktostellar"}:${normalizedPixKey}`);
+  const pixKeyType = inferPixKeyType(normalizedPixKey);
+  return {
+    ...fallback,
+    id: `pix-destination-${hash}`,
+    label: "PIX informado",
+    institution: "Destino PIX informado",
+    pix_key: normalizedPixKey,
+    pix_key_type: pixKeyType,
+    metadata: {
+      ...(fallback.metadata || {}),
+      pix_key_type: pixKeyType,
+      user_entered_pix_key: true,
+    },
   };
 }
 
@@ -669,6 +705,7 @@ export default function PixRampClient({
   const [offRampAmount, setOffRampAmount] = useState("1");
   const [offRampFiatAmount, setOffRampFiatAmount] = useState("");
   const [offRampAmountLocked, setOffRampAmountLocked] = useState(false);
+  const [offRampPixKey, setOffRampPixKey] = useState("");
   const [intentId, setIntentId] = useState("");
   const [operationLocked, setOperationLocked] = useState(false);
   const [walletPublicKey, setWalletPublicKey] = useState("");
@@ -699,13 +736,14 @@ export default function PixRampClient({
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
-  const fallbackExternalBankAccount = useMemo(
-    () => buildExternalBankAccount(walletPublicKey || sessionId || rampEmail, rampEmail),
-    [walletPublicKey, sessionId, rampEmail]
+  const normalizedOffRampPixKey = normalizePixKeyInput(offRampPixKey);
+  const offRampDestinationBankAccount = useMemo(
+    () => normalizedOffRampPixKey
+      ? buildDynamicExternalBankAccount(walletPublicKey || sessionId || rampEmail, rampEmail, normalizedOffRampPixKey)
+      : null,
+    [normalizedOffRampPixKey, walletPublicKey, sessionId, rampEmail]
   );
-  const [externalBankAccount, setExternalBankAccount] = useState<ExternalBankAccount | null>(null);
-  const displayedExternalBankAccount = externalBankAccount || fallbackExternalBankAccount;
-  const externalPixDestination = `PIX ${displayedExternalBankAccount.pix_key}`;
+  const externalPixDestination = normalizedOffRampPixKey ? `PIX ${normalizedOffRampPixKey}` : L("PIX de destino", "Destination PIX");
   const atomicIntentKey = intentId || `local-${stableHash([
     queryString,
     sessionId,
@@ -713,6 +751,7 @@ export default function PixRampClient({
     amountBrl,
     offRampAmount,
     offRampFiatAmount,
+    normalizedOffRampPixKey,
     targetAsset,
     desiredReceiveAmount,
     desiredReceiveAsset,
@@ -1070,6 +1109,13 @@ export default function PixRampClient({
     const recipient = String(params.get("recipient") || "").trim();
     const recipientKey = String(params.get("recipient_key") || params.get("recipient_email") || "").trim();
     const recipientPublicKey = String(params.get("recipient_public_key") || "").trim();
+    const destinationPixKey = normalizePixKeyInput(
+      params.get("pix_key") ||
+      params.get("destination_pix_key") ||
+      params.get("destination_pix") ||
+      params.get("to_pix") ||
+      ""
+    );
     const payAmount = normalizeHumanAmount(params.get("pay_amount") || "");
     const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
@@ -1112,6 +1158,7 @@ export default function PixRampClient({
     if (recipient) setTransferRecipient(recipient);
     if (recipientKey) setTransferRecipientKey(recipientKey);
     if (recipientPublicKey) setTransferRecipientPublicKey(recipientPublicKey);
+    if (destinationPixKey) setOffRampPixKey(destinationPixKey);
     if (payAmount) setAutoPayAmount(payAmount);
     if (payAsset === "BRL" || payAsset === "USDC") setAutoPayAsset(payAsset);
     setQueryReady(true);
@@ -1146,9 +1193,7 @@ export default function PixRampClient({
   useEffect(() => {
     if (rampMode !== "offramp") return;
     if (!sessionId) return;
-    loadExternalBankAccount({ session_id: sessionId }).catch((err) => {
-      setError(err instanceof Error ? err.message : String(err));
-    });
+    loadExternalBankAccount({ session_id: sessionId }).catch(() => undefined);
   }, [rampMode, sessionId]);
 
   useEffect(() => {
@@ -1159,7 +1204,7 @@ export default function PixRampClient({
     offRampAutoResolvedRef.current = true;
     void run("Resolving account", async () => {
       const auth = await resolveWalletFromEmail();
-      await loadExternalBankAccount(auth);
+      await loadExternalBankAccount(auth).catch(() => undefined);
     });
   }, [allowEmailAccountLookup, hasSession, loading, rampEmail, rampMode]);
 
@@ -1309,7 +1354,6 @@ export default function PixRampClient({
       throw new Error(payload?.message || payload?.error || L("Não consegui carregar seu PIX vinculado.", "I could not load your linked PIX destination."));
     }
     if (payload?.external_bank_account) {
-      setExternalBankAccount(payload.external_bank_account);
       return payload.external_bank_account as ExternalBankAccount;
     }
     return null;
@@ -1706,7 +1750,6 @@ export default function PixRampClient({
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
     setOffRampPreviewPayload(null);
-    setExternalBankAccount(null);
     setOffRampAmountLocked(false);
     setOnboardingUrl("");
     setProgrammaticOnboarding(null);
@@ -2012,7 +2055,10 @@ export default function PixRampClient({
     await runAtomicAction("confirmar-retirada", async () => {
       const pin = getValidatedWalletPin();
       const auth = await resolveWalletFromEmail();
-      const bankAccount = await loadExternalBankAccount(auth) || displayedExternalBankAccount;
+      if (!offRampDestinationBankAccount) {
+        throw new Error(L("Informe a chave PIX de destino antes de confirmar a retirada.", "Enter the destination PIX key before confirming the withdrawal."));
+      }
+      const bankAccount = offRampDestinationBankAccount;
       const providerFiatAccountId = getProviderFiatAccountId(bankAccount);
       const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
       const balancesBefore = await fetchBalances(auth);
@@ -2049,6 +2095,8 @@ export default function PixRampClient({
             available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
             fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
             destination_currency: "BRL",
+            destination_pix_key: bankAccount.pix_key,
+            pix_key_type: bankAccount.pix_key_type,
             fiat_account_id: providerFiatAccountId || undefined,
             intent_id: atomicIntentKey,
           },
@@ -2066,6 +2114,8 @@ export default function PixRampClient({
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
           target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
+          destination_pix_key: bankAccount.pix_key,
+          pix_key_type: bankAccount.pix_key_type,
           fiat_account_id: providerFiatAccountId || undefined,
           external_bank_account: bankAccount,
         }, "POST", auth, buildIdempotencyKey("create-offramp"));
@@ -2432,21 +2482,25 @@ export default function PixRampClient({
                 <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
               )}
               <label className="mt-6 block text-sm font-bold text-tts-deep">{L("PIX de destino", "Destination PIX")}</label>
-              <div className="mt-2 overflow-hidden rounded-3xl border border-tts-border bg-tts-surface p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-black text-tts-surface">{L("Seu PIX", "Your PIX")}</p>
-                    <p className="mt-1 text-xs font-bold text-tts-gold">{L("Destino vinculado à sua conta", "Destination linked to your account")}</p>
-                  </div>
-                  <span className="rounded-full bg-tts-gold-bg px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-tts-gold">{L("vinculada", "linked")}</span>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm">
-                  <div className="rounded-2xl bg-tts-deep/20 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-tts-muted">{L("Chave PIX", "PIX key")}</p>
-                    <p className="mt-1 truncate font-black text-tts-surface">{displayedExternalBankAccount.pix_key}</p>
-                  </div>
-                </div>
+              <div className="mt-2 overflow-hidden rounded-3xl border border-tts-border bg-tts-surface focus-within:border-tts-gold">
+                <input
+                  className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-surface outline-none placeholder:text-tts-muted"
+                  value={offRampPixKey}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder={L("Email, CPF, telefone ou chave aleatória", "Email, CPF, phone, or random key")}
+                  aria-label={L("Chave PIX de destino", "Destination PIX key")}
+                  onChange={(event) => {
+                    setOffRampPixKey(event.target.value);
+                    setTemporaryOffRampTestResult(null);
+                  }}
+                />
               </div>
+              <p className="mt-2 text-xs font-bold text-tts-gold">
+                {normalizedOffRampPixKey
+                  ? L(`Destino: PIX ${normalizedOffRampPixKey}`, `Destination: PIX ${normalizedOffRampPixKey}`)
+                  : L("Digite a chave PIX que receberá a retirada.", "Enter the PIX key that will receive the withdrawal.")}
+              </p>
               <div className="mt-5 rounded-3xl border border-tts-gold bg-tts-gold-bg p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -2500,7 +2554,7 @@ export default function PixRampClient({
 
               <button
                 className="mt-4 w-full rounded-3xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-lg shadow-cyan-950/30 transition hover:bg-tts-gold disabled:opacity-50"
-                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || operationLocked}
+                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || !normalizedOffRampPixKey || operationLocked}
                 onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
               >
                 {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}

@@ -173,6 +173,12 @@ interface CreateOffRampForSessionInput extends RampSessionInput {
   fiatAccountId?: string;
   bank_account_id?: string;
   bankAccountId?: string;
+  destination_pix_key?: string;
+  destinationPixKey?: string;
+  pix_key?: string;
+  pixKey?: string;
+  pix_key_type?: string;
+  pixKeyType?: string;
   external_bank_account?: Record<string, unknown>;
   externalBankAccount?: Record<string, unknown>;
   memo?: string;
@@ -500,6 +506,70 @@ function providerFiatAccountIdFromExternalBankAccount(value: unknown): string {
     metadata.bank_account_id,
     metadata.bankAccountId,
   );
+}
+
+function pixKeyFromExternalBankAccount(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  const metadata = record.metadata && typeof record.metadata === 'object'
+    ? record.metadata as Record<string, unknown>
+    : {};
+  return coalesceString(
+    record.pix_key,
+    record.pixKey,
+    metadata.pix_key,
+    metadata.pixKey,
+  );
+}
+
+function pixKeyTypeFromValue(value: unknown, fallback?: unknown): string {
+  const explicit = coalesceString(fallback).toLowerCase();
+  if (explicit) return explicit;
+  const pixKey = coalesceString(value);
+  const digits = pixKey.replace(/\D+/g, '');
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pixKey)) return 'email';
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pixKey)) return 'evp';
+  if (digits.length === 11 && (/^\d{11}$/.test(pixKey) || /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(pixKey))) return 'cpf';
+  if (digits.length === 14 && (/^\d{14}$/.test(pixKey) || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(pixKey))) return 'cnpj';
+  if (/^\+?\d[\d\s().-]{7,}$/.test(pixKey)) return 'phone';
+  return 'evp';
+}
+
+function pixDestinationFromRampInput(input: Record<string, unknown>, externalBankAccount: unknown): {
+  pixKey: string;
+  pixKeyType: string;
+  externalBankAccount?: Record<string, unknown>;
+} {
+  const externalRecord = externalBankAccount && typeof externalBankAccount === 'object'
+    ? externalBankAccount as Record<string, unknown>
+    : undefined;
+  const pixKey = coalesceString(
+    input.destination_pix_key,
+    input.destinationPixKey,
+    input.pix_key,
+    input.pixKey,
+    pixKeyFromExternalBankAccount(externalRecord),
+  );
+  const pixKeyType = pixKeyTypeFromValue(
+    pixKey,
+    coalesceString(
+      input.pix_key_type,
+      input.pixKeyType,
+      externalRecord?.pix_key_type,
+      externalRecord?.pixKeyType,
+    ),
+  );
+  return {
+    pixKey,
+    pixKeyType,
+    externalBankAccount: pixKey
+      ? {
+          ...(externalRecord || {}),
+          pix_key: pixKey,
+          pix_key_type: pixKeyType,
+        }
+      : externalRecord,
+  };
 }
 
 function normalizeEtherfuseApiKey(rawValue: unknown): string {
@@ -1936,6 +2006,7 @@ export class AnchorService {
   }): OffRampTransaction {
     const orderId = `sandbox-offramp-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
+    const destinationPixKey = pixKeyFromExternalBankAccount(input.externalBankAccount);
     const transaction = {
       id: orderId,
       customerId: input.customerId,
@@ -1949,7 +2020,7 @@ export class AnchorService {
       fiatAccount: {
         id: input.fiatAccountId || `sandbox-pix-${crypto.randomUUID()}`,
         type: 'pix',
-        label: 'Etherfuse Sandbox PIX',
+        label: destinationPixKey ? `PIX ${destinationPixKey}` : 'Etherfuse Sandbox PIX',
       },
       signableTransaction: `sandbox-mock-xdr:${orderId}`,
       createdAt: now,
@@ -2085,9 +2156,10 @@ export class AnchorService {
         };
   }
 
-  private static buildSandboxPixAccount(bankAccountId: string, email?: string): any {
-    const pixKey = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : crypto.randomUUID();
-    const pixKeyType = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? 'email' : 'evp';
+  private static buildSandboxPixAccount(bankAccountId: string, email?: string, pixKeyInput?: string, pixKeyTypeInput?: string): any {
+    const fallbackPixKey = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : crypto.randomUUID();
+    const pixKey = coalesceString(pixKeyInput, fallbackPixKey);
+    const pixKeyType = pixKeyTypeFromValue(pixKey, pixKeyTypeInput || (pixKey === email ? 'email' : ''));
     return {
       bankAccountId,
       label: 'TalkToStellar PIX sandbox',
@@ -3204,8 +3276,12 @@ export class AnchorService {
     const sourceAmount = coalesceString(input.source_amount, input.sourceAmount);
     const targetBrl = coalesceString(input.target_brl, input.targetBrl);
     const intentId = normalizeRampIntentId(input);
-    const externalBankAccount = input.external_bank_account || input.externalBankAccount;
+    const rawExternalBankAccount = input.external_bank_account || input.externalBankAccount;
+    const pixDestination = pixDestinationFromRampInput(input as Record<string, unknown>, rawExternalBankAccount);
+    const externalBankAccount = pixDestination.externalBankAccount;
     const providerFiatAccountId = providerFiatAccountIdFromExternalBankAccount(externalBankAccount);
+    const dynamicPixKey = pixDestination.pixKey;
+    const dynamicPixKeyType = pixDestination.pixKeyType;
     const userFacingExternalBankAccountId = externalBankAccount && typeof externalBankAccount === 'object'
       ? coalesceString((externalBankAccount as Record<string, unknown>).id)
       : '';
@@ -3238,7 +3314,23 @@ export class AnchorService {
       throw apiError('Esta retirada via PIX já foi criada. Use o link aberto ou gere uma nova solicitação no chat.', 409);
     }
 
-    if (!fiatAccountId) {
+    if (!fiatAccountId && dynamicPixKey && this.getRuntimeInfo().sandbox) {
+      try {
+        const createdPixAccount = await this.getEtherfuseClient().createBankAccountForCustomer(
+          customerId,
+          this.buildSandboxPixAccount(crypto.randomUUID(), context.email, dynamicPixKey, dynamicPixKeyType),
+        );
+        fiatAccountId = coalesceString(createdPixAccount.bankAccountId, (createdPixAccount as any).id);
+      } catch (error) {
+        console.warn(`[ramp] Could not register dynamic PIX destination with Etherfuse sandbox: ${debugErrorMessage(error)}`);
+      }
+    }
+
+    if (!fiatAccountId && dynamicPixKey && !this.getRuntimeInfo().sandbox) {
+      throw apiError('Não consegui validar essa chave PIX para retirada agora. Tente novamente ou use uma chave PIX já cadastrada.', 409);
+    }
+
+    if (!fiatAccountId && !dynamicPixKey) {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerId);
       const providerAccount = accounts.find((account) => isUuidLike(account.id));
       fiatAccountId = providerAccount?.id || '';
@@ -3261,7 +3353,7 @@ export class AnchorService {
         targetBrl,
         destinationBrl: targetBrl,
         fiatAccountId,
-        externalBankAccount: input.external_bank_account || input.externalBankAccount,
+        externalBankAccount,
         upstreamError: forceSandboxMock
           ? 'Controlled test route forced local withdrawal settlement.'
           : 'No PIX fiat account is available in the current payment mode; using local settlement.',
@@ -3290,12 +3382,12 @@ export class AnchorService {
           sourceAmount,
           sourceAssetCode: sourceAsset.code,
           sourceAssetIssuer: sourceAsset.issuer,
-        targetBrl,
-        destinationBrl: targetBrl,
-        fiatAccountId,
-        externalBankAccount: input.external_bank_account || input.externalBankAccount,
-        upstreamError: debugErrorMessage(error),
-      });
+          targetBrl,
+          destinationBrl: targetBrl,
+          fiatAccountId,
+          externalBankAccount,
+          upstreamError: debugErrorMessage(error),
+        });
       }
     }
 
@@ -3319,7 +3411,7 @@ export class AnchorService {
         source_asset_code: sourceAsset.code,
         source_asset_issuer: sourceAsset.issuer,
         target_brl: targetBrl,
-        external_bank_account: input.external_bank_account || input.externalBankAccount || undefined,
+        external_bank_account: externalBankAccount || undefined,
         sandbox_mock: Boolean((transaction as OffRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
         upstream_error: (transaction as OffRampTransaction & { upstream_error?: string }).upstream_error,
       },
@@ -3817,6 +3909,12 @@ export class AnchorService {
     customerId?: string;
     fiat_account_id?: string;
     fiatAccountId?: string;
+    destination_pix_key?: string;
+    destinationPixKey?: string;
+    pix_key?: string;
+    pixKey?: string;
+    pix_key_type?: string;
+    pixKeyType?: string;
     external_bank_account?: Record<string, unknown>;
     externalBankAccount?: Record<string, unknown>;
   }): Promise<{
@@ -3899,6 +3997,10 @@ export class AnchorService {
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
     assertSufficientBalance(balancesBefore, sourceAsset, requestedSourceAmount);
+    const rawExternalBankAccount = input.external_bank_account || input.externalBankAccount;
+    const pixDestination = pixDestinationFromRampInput(input as Record<string, unknown>, rawExternalBankAccount);
+    const externalBankAccount = pixDestination.externalBankAccount;
+    const hasDynamicPixDestination = Boolean(pixDestination.pixKey);
 
     const customerIdInput = coalesceString(input.customer_id, input.customerId);
     const customerResult = customerIdInput
@@ -3917,11 +4019,11 @@ export class AnchorService {
         });
 
     let fiatAccountId = coalesceString(input.fiat_account_id, input.fiatAccountId);
-    if (!fiatAccountId) {
+    if (!fiatAccountId && !hasDynamicPixDestination) {
       const accounts = await this.getEtherfuseClient().getFiatAccounts(customerResult.customer.id);
       fiatAccountId = accounts[0]?.id || '';
     }
-    if (!fiatAccountId && !this.sandboxPixFallbackEnabled()) {
+    if (!fiatAccountId && !hasDynamicPixDestination && !this.sandboxPixFallbackEnabled()) {
       throw apiError('Nenhuma conta PIX de retirada foi encontrada para esta operação. Configure a chave PIX da conta e tente novamente.', 409);
     }
 
@@ -3980,7 +4082,10 @@ export class AnchorService {
       source_asset_code: sourceAsset.code,
       source_asset_issuer: sourceAsset.issuer,
       target_brl: targetBrl,
-      fiat_account_id: fiatAccountId,
+      destination_pix_key: pixDestination.pixKey || undefined,
+      pix_key_type: pixDestination.pixKey ? pixDestination.pixKeyType : undefined,
+      fiat_account_id: fiatAccountId || undefined,
+      external_bank_account: externalBankAccount,
       force_sandbox_mock: true,
     });
 
@@ -3998,6 +4103,7 @@ export class AnchorService {
         session_token: context.sessionToken,
         order_id: orderResult.transaction.id,
         operation_id: orderResult.operation_id,
+        external_bank_account: externalBankAccount,
         pin: walletPin,
         wallet_pin: walletPin,
         skip_receipt: true,
@@ -4017,7 +4123,7 @@ export class AnchorService {
     const balancesAfter = normalizeBalances(afterRaw);
     const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, estimatedTargetBrl, requestedSourceAmount);
     const destinationAssetCode = 'BRL';
-    const externalBank = (input.external_bank_account || input.externalBankAccount || {}) as Record<string, unknown>;
+    const externalBank = (externalBankAccount || {}) as Record<string, unknown>;
     const bankLabel = coalesceString(
       externalBank.label,
       externalBank.institution,
