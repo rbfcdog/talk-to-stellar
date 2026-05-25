@@ -27,7 +27,7 @@ describe('money rail service', () => {
     });
   });
 
-  it('maps BRL settlement to a temporary technical asset when needed', () => {
+  it('maps BRL settlement to TESOURO on Stellar', () => {
     process.env.TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
 
     const route = resolveBrlSettlementRoute();
@@ -41,9 +41,9 @@ describe('money rail service', () => {
       code: 'TESOURO',
       issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
       rail: 'STELLAR',
-      temporary: true,
+      temporary: false,
     });
-    expect(route.settlementMode).toBe('temporary_stellar_asset');
+    expect(route.settlementMode).toBe('stellar_asset');
   });
 
   it('uses off-chain ledger mode for fiat currencies without an explicit settlement bridge', () => {

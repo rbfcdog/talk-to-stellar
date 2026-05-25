@@ -13,13 +13,13 @@ const strictSendPathsMock = server.strictSendPaths as jest.Mock;
 describe('BrlReferenceRateService', () => {
   const originalEnv = { ...process.env };
   const usdcIssuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-  const brlIssuer = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+  const tesouroIssuer = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
 
   beforeEach(() => {
     process.env = { ...originalEnv };
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = usdcIssuer;
-    process.env.BRL_ISSUER_TESTNET = brlIssuer;
+    process.env.TESOURO_ISSUER = tesouroIssuer;
     process.env.BRL_USDC_REFERENCE_SAMPLE_USDC = '100';
     strictSendPathsMock.mockReset();
   });
@@ -28,7 +28,7 @@ describe('BrlReferenceRateService', () => {
     process.env = originalEnv;
   });
 
-  it('quotes the BRL reference from the configured on-chain BRL asset, not an external USD/BRL fallback', async () => {
+  it('quotes the BRL reference from the configured TESOURO asset, not an external USD/BRL fallback', async () => {
     strictSendPathsMock.mockReturnValue({
       call: jest.fn().mockResolvedValue({
         records: [{ destination_amount: '520.0000000', path: [] }],
@@ -41,11 +41,11 @@ describe('BrlReferenceRateService', () => {
     expect(sourceAsset.getCode()).toBe('USDC');
     expect(sourceAsset.getIssuer()).toBe(usdcIssuer);
     expect(sourceAmount).toBe('100.0000000');
-    expect(destinationAssets[0].getCode()).toBe('BRL');
-    expect(destinationAssets[0].getIssuer()).toBe(brlIssuer);
+    expect(destinationAssets[0].getCode()).toBe('TESOURO');
+    expect(destinationAssets[0].getIssuer()).toBe(tesouroIssuer);
     expect(quote.brlPerUsdc).toBe('5.20000000');
     expect(quote.usdcPerBrl).toBe('0.19230769');
-    expect(quote.source).toBe('configured_brl_asset');
+    expect(quote.source).toBe('configured_tesouro_asset');
   });
 
   it('keeps USDC -> BRL and BRL -> USDC conversions aligned to the same on-chain reference', async () => {

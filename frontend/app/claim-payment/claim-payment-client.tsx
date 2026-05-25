@@ -31,7 +31,10 @@ function decodeJwtPayload(token: string): any {
 }
 
 function normalizeAssetCode(value?: string) {
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (code === "TESOURO") return "BRL"
+  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR"
+  return code
 }
 
 function formatAmount(amount?: string, assetCode?: string) {
@@ -40,6 +43,7 @@ function formatAmount(amount?: string, assetCode?: string) {
   if (!Number.isFinite(n)) return `${amount || ""} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
+  if (code === "EUR") return `€ ${n.toFixed(2)}`
   if (code === "XLM") return "saldo da conta TalkToStellar"
   return `${n.toFixed(2)} ${code}`
 }

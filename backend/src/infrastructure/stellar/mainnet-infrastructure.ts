@@ -2,7 +2,6 @@ import { Keypair } from '@stellar/stellar-sdk';
 
 import {
   ETHERFUSE_TESOURO_ISSUER,
-  PUBLIC_BRL_ISSUER_NTOKENS,
   PUBLIC_USDC_ISSUER,
 } from '../../config/assets';
 import {
@@ -17,8 +16,8 @@ export type ReadinessStatus = 'pass' | 'warn' | 'fail';
 
 export interface MainnetAssetIssuers {
   USDC: string;
-  BRL: string;
   TESOURO: string;
+  EURC?: string;
 }
 
 export interface MainnetSignerConfig {
@@ -90,8 +89,8 @@ export function loadStellarMainnetInfrastructureConfig(
     accidentalFriendbotUrl: readString(env.STELLAR_MAINNET_FRIENDBOT_URL),
     assets: {
       USDC: readString(env.STELLAR_MAINNET_USDC_ISSUER) || PUBLIC_USDC_ISSUER,
-      BRL: readString(env.STELLAR_MAINNET_BRL_ISSUER) || PUBLIC_BRL_ISSUER_NTOKENS,
       TESOURO: readString(env.STELLAR_MAINNET_TESOURO_ISSUER) || ETHERFUSE_TESOURO_ISSUER,
+      EURC: readString(env.STELLAR_MAINNET_EURC_ISSUER) || readString(env.STELLAR_MAINNET_EUR_ISSUER),
     },
     feeTreasuryPublicKey: readString(env.STELLAR_MAINNET_FEE_TREASURY_PUBLIC_KEY),
     distributionPublicKey: readString(env.STELLAR_MAINNET_DISTRIBUTION_PUBLIC_KEY),

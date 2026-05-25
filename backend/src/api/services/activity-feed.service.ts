@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase';
-import { getAssetIssuer } from '../../config/assets';
+import { getAssetIssuer, resolveConfiguredAsset } from '../../config/assets';
 import { EconomyEngineService } from './economy-engine.service';
 import { FinancialContextService, formatMoney, startOfMonth, toNumber, trackFinancialEvent } from './financial-context.service';
 import { StellarService } from './stellar.service';
@@ -61,6 +61,7 @@ function userFacingAsset(code: unknown): string {
   const normalized = String(code || '').trim().toUpperCase();
   if (!normalized || normalized === 'TESOURO') return 'BRL';
   if (normalized === 'USD') return 'USDC';
+  if (normalized === 'EURC') return 'EUR';
   return normalized;
 }
 
@@ -68,6 +69,7 @@ function formatAmountForFeed(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return `0 ${currency}`;
   if (currency === 'BRL') return `R$ ${amount.toFixed(2).replace('.', ',')}`;
   if (currency === 'USDC') return `US$ ${amount.toFixed(2)}`;
+  if (currency === 'EUR') return `€ ${amount.toFixed(2)}`;
   return `${amount.toFixed(2)} ${currency}`;
 }
 
@@ -98,11 +100,12 @@ function metadataContext(row: Record<string, unknown>): Record<string, unknown> 
 }
 
 function balanceForConfiguredAsset(balances: any[], assetCode: 'BRL' | 'USDC'): number {
-  const issuer = getAssetIssuer(assetCode);
+  const configuredAsset = resolveConfiguredAsset(assetCode);
+  const issuer = configuredAsset.issuer || getAssetIssuer(configuredAsset.code);
   return balances
     .filter((balance) => {
       const code = String(balance?.asset_code || balance?.asset || '').toUpperCase();
-      if (code !== assetCode) return false;
+      if (code !== configuredAsset.code) return false;
       if (!issuer) return true;
       return String(balance?.asset_issuer || '') === issuer;
     })
@@ -131,9 +134,9 @@ export class ActivityFeedService {
       const status = String(row.status || '').toLowerCase();
       const metadata = (row.metadata || {}) as Record<string, unknown>;
       const destinationAmount = toNumber(row.destination_amount);
-      const destinationCurrency = String(row.destination_asset_code || 'USD').toUpperCase();
+      const destinationCurrency = userFacingAsset(row.destination_asset_code || 'USD');
       const sourceAmount = toNumber(row.source_amount);
-      const sourceCurrency = String(row.source_asset_code || '').toUpperCase();
+      const sourceCurrency = userFacingAsset(row.source_asset_code || '');
       const hash = String(row.payment_hash || row.id || '');
       const createdAt = String(row.completed_at || row.created_at || new Date().toISOString());
 

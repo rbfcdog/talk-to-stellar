@@ -47,7 +47,7 @@ describe('ReceiptImageService', () => {
       feeDisplay: 'US$ 0.03 + 0.00002 XLM',
       quote: {
         sourceAmount: '61.239',
-        sourceAsset: { code: 'BRL' },
+        sourceAsset: { code: 'TESOURO' },
         destinationAmount: '10.999',
         destinationAsset: { code: 'USDC' },
       },

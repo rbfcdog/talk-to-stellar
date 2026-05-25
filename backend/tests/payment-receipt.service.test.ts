@@ -43,7 +43,7 @@ describe('PaymentReceiptService', () => {
       completedAt: '2026-05-12T12:00:00.000Z',
       quote: {
         sourceAmount: '500',
-        sourceAsset: { code: 'BRL' },
+        sourceAsset: { code: 'TESOURO' },
         destinationAmount: '89.12',
         destinationAsset: { code: 'USDC' },
       },
@@ -79,7 +79,7 @@ describe('PaymentReceiptService', () => {
       hash: 'tx-source-of-truth',
       quote: {
         sourceAmount: '56',
-        sourceAsset: { code: 'BRL' },
+        sourceAsset: { code: 'TESOURO' },
         destinationAmount: '11.373',
         destinationAsset: { code: 'USDC' },
       },
@@ -166,7 +166,7 @@ describe('PaymentReceiptService', () => {
       feeUsdc: '0.000001',
       quote: {
         sourceAmount: '500',
-        sourceAsset: { code: 'BRL' },
+        sourceAsset: { code: 'TESOURO' },
         destinationAmount: '89.12',
         destinationAsset: { code: 'USDC' },
         platformFee: {

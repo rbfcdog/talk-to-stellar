@@ -2,7 +2,7 @@ import PixRampClient from "../pix-ramp/pix-ramp-client";
 
 export const metadata = {
   title: "PIX On-Ramp",
-  description: "Add money with PIX and receive BRL or USDC in your TalkToStellar account.",
+  description: "Add money with PIX and receive R$ or US$ in your TalkToStellar account.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

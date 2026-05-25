@@ -2,7 +2,7 @@ import { Keypair, Operation, Asset, Memo, Networks, TransactionBuilder } from '@
 import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
-import { getAssetIssuer, getStellarNetworkName, PUBLIC_BRL_ISSUER_NTOKENS, getTrustedPathAssetCodes } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, getTrustedPathAssetCodes } from '../../config/assets';
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
 import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
@@ -189,12 +189,12 @@ function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extra
     if (destCode === 'USDC' && !getAssetIssuer('USDC')) {
         hints.push('USDC_ISSUER não configurado no backend');
     }
-    if (destCode === 'BRL' && !getAssetIssuer('BRL')) {
-        hints.push('BRL issuer não configurado no backend (use BRL_ISSUER_PUBLIC para PUBLIC ou BRL_ISSUER_TESTNET para TESTNET)');
+    if ((destCode === 'BRL' || destCode === 'TESOURO') && !getAssetIssuer('TESOURO')) {
+        hints.push('TESOURO_ISSUER não configurado no backend');
     }
     hints.push('Sem rota de liquidez na DEX para esse par/valor neste momento');
     hints.push('Confirme trustline do ativo de destino na wallet');
-    if (!(sourceCode === 'BRL' || destCode === 'BRL')) {
+    if (!(sourceCode === 'BRL' || sourceCode === 'TESOURO' || destCode === 'BRL' || destCode === 'TESOURO')) {
         hints.push('Se estiver em testnet, confirme a liquidez XLM/USDC no issuer configurado');
     }
     for (const hint of extraHints) {
@@ -253,10 +253,10 @@ async function buildNoPathExtraHints(sourceAssetObj: Asset, destAssetObj: Asset)
         }
     }
 
-    if (network === 'TESTNET' && (sourceCode === 'BRL' || destCode === 'BRL')) {
-        const configuredBrlIssuer = String(getAssetIssuer('BRL') || '').trim();
-        if (configuredBrlIssuer === PUBLIC_BRL_ISSUER_NTOKENS) {
-            hints.push('BRL está apontando para o issuer nTokens; confirme se esse issuer/mercado está ativo na TESTNET.');
+    if (network === 'TESTNET' && (sourceCode === 'TESOURO' || destCode === 'TESOURO')) {
+        const configuredTesouroIssuer = String(getAssetIssuer('TESOURO') || '').trim();
+        if (!configuredTesouroIssuer) {
+            hints.push('TESOURO_ISSUER não está configurado para TESTNET.');
         }
     }
 

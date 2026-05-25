@@ -107,8 +107,9 @@ export function formatCustomerAssetAmount(amount?: string, assetCode?: string): 
 
   if (!Number.isFinite(value)) return 'valor indisponivel';
   const truncated = Math.trunc(value * 100) / 100;
-  if (code === 'BRL') return `R$ ${truncated.toFixed(2)}`;
+  if (code === 'BRL' || code === 'TESOURO') return `R$ ${truncated.toFixed(2)}`;
   if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;
+  if (code === 'EURC' || code === 'EUR') return `€ ${truncated.toFixed(2)}`;
   if (code === 'XLM') return 'saldo da carteira TalkToStellar';
 
   return `${truncated.toFixed(2)} ${code}`;
@@ -123,7 +124,9 @@ export function buildUnifiedFeeDisplay(input: {
 }): FeeDisplay & { platform_applied: boolean } {
   const source = String(input.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const destination = String(input.destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-  const isUsdcBrlPair = (source === 'USDC' && destination === 'BRL') || (source === 'BRL' && destination === 'USDC');
+  const sourceIsReal = source === 'BRL' || source === 'TESOURO';
+  const destinationIsReal = destination === 'BRL' || destination === 'TESOURO';
+  const isUsdcBrlPair = (source === 'USDC' && destinationIsReal) || (sourceIsReal && destination === 'USDC');
 
   const networkUsdc = Number(String(input.networkFee?.fee_usdc || '').replace(',', '.'));
   const networkBrl = Number(String(input.networkFee?.fee_brl || '').replace(',', '.'));
@@ -132,7 +135,8 @@ export function buildUnifiedFeeDisplay(input: {
 
   const platformAmount = Number(String(input.platformFeeAmount || '').replace(',', '.'));
   const platformAsset = String(input.platformFeeAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-  const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAsset === 'BRL');
+  const platformAssetIsReal = platformAsset === 'BRL' || platformAsset === 'TESOURO';
+  const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAssetIsReal);
 
   const impliedRate = totalUsdc > 0 && totalBrl > 0 ? totalBrl / totalUsdc : undefined;
   const fallbackRate = configuredPositiveNumber(process.env.USD_BRL_FALLBACK_RATE);
@@ -142,7 +146,7 @@ export function buildUnifiedFeeDisplay(input: {
     if (platformAsset === 'USDC') {
       totalUsdc += platformAmount;
       if (usdBrlRate > 0) totalBrl += platformAmount * usdBrlRate;
-    } else if (platformAsset === 'BRL') {
+    } else if (platformAssetIsReal) {
       totalBrl += platformAmount;
       if (usdBrlRate > 0) totalUsdc += platformAmount / usdBrlRate;
     }

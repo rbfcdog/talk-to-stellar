@@ -11,7 +11,7 @@ const mockGetWalletConversionRules = jest.fn().mockResolvedValue([
 ]);
 const mockDisableConversionRule = jest.fn().mockResolvedValue(true);
 const mockGetReferenceRate = jest.fn().mockResolvedValue({
-  source: 'configured_brl_asset',
+  source: 'configured_tesouro_asset',
   symbol: 'USDC/BRL',
   brlPerUsdc: '5.13000000',
   usdcPerBrl: '0.19493177',
@@ -21,17 +21,23 @@ const mockQuoteBrlToUsdc = jest.fn(async (amountBrl: string) => {
   const sourceAmount = Number(String(amountBrl).replace(',', '.'));
   const brlPerUsdc = 5.13;
   return {
-    source: 'configured_brl_asset',
+    source: 'configured_tesouro_asset',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
     fetchedAt: '2026-05-15T12:00:00.000Z',
     sourceAmount: sourceAmount.toFixed(7),
     destinationAmount: (sourceAmount / brlPerUsdc).toFixed(7),
-    sourceAsset: { code: 'BRL' },
+    sourceAsset: { code: 'TESOURO' },
     destinationAsset: { code: 'USDC' },
     path: [],
   };
+});
+const mockGetUsdBrlRate = jest.fn().mockResolvedValue({
+  brlPerUsd: 5.13,
+  source: 'configured_tesouro_asset',
+  fetchedAt: '2026-05-15T12:00:00.000Z',
+  fallbackApplied: false,
 });
 
 jest.mock('../src/api/services/balance-alert.service', () => ({
@@ -51,6 +57,14 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   BrlReferenceRateService: {
     getReferenceRate: mockGetReferenceRate,
     quoteBrlToUsdc: mockQuoteBrlToUsdc,
+  },
+}));
+
+jest.mock('../src/api/services/fiat-rate.service', () => ({
+  FiatRateService: {
+    getUsdBrlRate: mockGetUsdBrlRate,
+    isSaneUsdBrlRate: jest.fn(() => true),
+    clearCacheForTests: jest.fn(),
   },
 }));
 
@@ -130,11 +144,11 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.source).toBe('configured_brl_asset');
+    expect(parsed.source).toBe('configured_tesouro_asset');
     expect(parsed.brl_per_usdc).toBe('5.13000000');
     expect(parsed.usdc_per_brl).toBe('0.19493177');
     expect(parsed.message).toContain('BRL da sua conta');
-    expect(mockGetReferenceRate).toHaveBeenCalledTimes(1);
+    expect(mockGetUsdBrlRate).toHaveBeenCalledTimes(1);
   });
 
   it('executes get_conversion_preview with live backend quote data and real fee fields', async () => {
@@ -148,8 +162,8 @@ describe('Agent tool execution', () => {
     expect(parsed.output.receive_usdc).toBeCloseTo(974.66, 2);
     expect(parsed.fees.total_fee_brl).toBeGreaterThanOrEqual(0);
     expect(parsed.comparison.traditional_fee_brl).toBe(175);
-    expect(parsed.message).toContain('Preview real');
-    expect(mockQuoteBrlToUsdc).toHaveBeenCalled();
+    expect(parsed.message).toContain('Estimativa: R$ 5.000 -> US$ 974,66 líquido.');
+    expect(mockGetUsdBrlRate).toHaveBeenCalled();
   });
 
   it('shows a WhatsApp savings calculator with real conversion preview data and comparison fees', async () => {
@@ -168,8 +182,8 @@ describe('Agent tool execution', () => {
     expect(parsed.annual_savings_brl).toBeGreaterThan(2099);
     expect(parsed.message).toContain('💸 *Simulação de envio: R$ 5.000*');
     expect(parsed.message).toContain('✅ Você recebe líquido: *US$ 974,66*');
-    expect(parsed.message).toContain('💱 Câmbio agora: *1 US$ = R$ 5,1300*');
-    expect(parsed.message).toContain('Taxa total real');
+    expect(parsed.message).toContain('💱 Dólar agora: *R$ 5,1300*');
+    expect(parsed.message).toContain('Taxa total');
   });
 
   it('builds the WhatsApp receipt with savings before the technical hash', async () => {
@@ -200,9 +214,7 @@ describe('Agent tool execution', () => {
       expect(parsed.message).toContain('✅ *Transferência concluída*');
       expect(parsed.message).toContain('👤 Destinatário: *Ana Silva*');
       expect(parsed.message).toContain('💰 *Você economizou R$ 160,00*');
-      expect(parsed.message.indexOf('💰 *Você economizou')).toBeLessThan(parsed.message.indexOf('🔗 Evidência Stellar:'));
-      expect(parsed.message).toContain('a3f8b2...d91c (testnet)');
-      expect(parsed.message).toContain('https://stellar.expert/explorer/testnet/tx/a3f8b2');
+      expect(parsed.message.indexOf('💰 *Você economizou')).toBeLessThan(parsed.message.indexOf('📄 Comprovante PDF:'));
       expect(parsed.message).toContain('📊 Ver histórico: https://app.example.com/r/savings_history');
       expect(parsed.message).toContain('📄 Comprovante PDF: https://app.example.com/receipt/test');
       expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({

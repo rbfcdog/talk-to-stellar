@@ -61,7 +61,7 @@ export class EconomyEngineService {
     const amount = toNumber(input.amount);
     const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     if (amount <= 0) return 0;
-    if (assetCode === 'BRL') return amount;
+    if (assetCode === 'BRL' || assetCode === 'TESOURO') return amount;
 
     const quote = input.quote || {};
     const sourceAmount = toNumber(quote.sourceAmount);
@@ -69,10 +69,13 @@ export class EconomyEngineService {
     const destinationAmount = toNumber(quote.destinationAmount);
     const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
 
-    if (assetCode === sourceAsset && destinationAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) {
+    const sourceIsReal = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
+    const destinationIsReal = destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
+
+    if (assetCode === sourceAsset && destinationIsReal && destinationAmount > 0 && sourceAmount > 0) {
       return amount * (destinationAmount / sourceAmount);
     }
-    if (assetCode === destinationAsset && sourceAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) {
+    if (assetCode === destinationAsset && sourceIsReal && destinationAmount > 0 && sourceAmount > 0) {
       return amount * (sourceAmount / destinationAmount);
     }
 
@@ -171,14 +174,16 @@ export class EconomyEngineService {
     const destinationAmount = toNumber(quote.destinationAmount);
     const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const sourceIsReal = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
+    const destinationIsReal = destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
 
     let fxSpreadBrl = 0;
     if (midMarketRate > 0 && sourceAmount > 0 && destinationAmount > 0) {
-      if (sourceAsset === 'BRL' && (destinationAsset === 'USDC' || destinationAsset === 'USD')) {
+      if (sourceIsReal && (destinationAsset === 'USDC' || destinationAsset === 'USD')) {
         const expectedDestination = sourceAmount / midMarketRate;
         const destinationLoss = Math.max(0, expectedDestination - destinationAmount);
         fxSpreadBrl = destinationLoss * midMarketRate;
-      } else if ((sourceAsset === 'USDC' || sourceAsset === 'USD') && destinationAsset === 'BRL') {
+      } else if ((sourceAsset === 'USDC' || sourceAsset === 'USD') && destinationIsReal) {
         const expectedDestination = sourceAmount * midMarketRate;
         fxSpreadBrl = Math.max(0, expectedDestination - destinationAmount);
       }
@@ -219,7 +224,7 @@ export class EconomyEngineService {
       const savedGrossBrl = toNumber((metadata?.savings as any)?.gross_amount_brl || metadata?.gross_amount_brl);
       if (savedGrossBrl > 0) {
         grossBrl += savedGrossBrl;
-      } else if (sourceAsset === 'BRL') {
+      } else if (sourceAsset === 'BRL' || sourceAsset === 'TESOURO') {
         grossBrl += sourceAmount;
       }
 
@@ -285,7 +290,7 @@ export class EconomyEngineService {
       const sourceAmount = toNumber((row as Record<string, unknown>).source_amount);
       const sourceAsset = String((row as Record<string, unknown>).source_asset_code || '').toUpperCase();
       const grossBrl = toNumber(savedSavings.gross_amount_brl || metadata.gross_amount_brl) ||
-        (sourceAsset === 'BRL' ? sourceAmount : 0);
+        (sourceAsset === 'BRL' || sourceAsset === 'TESOURO' ? sourceAmount : 0);
       const rowActualFee = toNumber(savedSavings.actual_fee || metadata.actual_fee_brl || metadata.fee_brl);
       const rowTraditionalFee = toNumber(savedSavings.estimated_traditional_fee) ||
         (grossBrl > 0 ? grossBrl * DEFAULT_TRADITIONAL_FEE_PCT : 0);

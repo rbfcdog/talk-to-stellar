@@ -1,4 +1,4 @@
-export type AssetCode = 'XLM' | 'USDC' | 'BRL' | string;
+export type AssetCode = 'XLM' | 'USDC' | 'TESOURO' | 'EURC' | string;
 
 export interface AssetConfig {
   code: AssetCode;
@@ -7,7 +7,6 @@ export interface AssetConfig {
 
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-export const PUBLIC_BRL_ISSUER_NTOKENS = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
 export const ETHERFUSE_TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -26,11 +25,26 @@ export function normalizeAssetCode(value: unknown): string {
   const code = String(value || 'XLM').trim().toUpperCase();
   if (!code || code === 'NATIVE') return 'XLM';
   if (code === 'USD') return 'USDC';
+  if (['EUR', 'EURO', 'EUROS'].includes(code)) return 'EURC';
+  return code;
+}
+
+export function settlementAssetCode(value: unknown): string {
+  const code = normalizeAssetCode(value);
+  return code === 'BRL' || code === 'REAL' || code === 'REAIS' || code === 'R$'
+    ? 'TESOURO'
+    : code;
+}
+
+export function userFacingAssetCode(value: unknown): string {
+  const code = normalizeAssetCode(value);
+  if (code === 'TESOURO') return 'BRL';
+  if (code === 'EURC') return 'EUR';
   return code;
 }
 
 export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string | undefined {
-  const code = normalizeAssetCode(assetCode);
+  const code = settlementAssetCode(assetCode);
   const provided = String(providedIssuer || '').trim();
   const network = getStellarNetworkName();
   if (code === 'XLM') return undefined;
@@ -40,39 +54,39 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     if (configured) return configured;
     return network === 'PUBLIC' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
   }
-  if (code === 'BRL') {
-    const configuredPublic = String(process.env.BRL_ISSUER_PUBLIC || '').trim();
-    if (network === 'PUBLIC') {
-      return configuredPublic || PUBLIC_BRL_ISSUER_NTOKENS;
-    }
-    const configuredTestnet = String(process.env.BRL_ISSUER_TESTNET || '').trim();
-    return configuredTestnet || undefined;
-  }
   if (code === 'TESOURO') {
     return String(process.env.TESOURO_ISSUER || '').trim() || ETHERFUSE_TESOURO_ISSUER;
+  }
+  if (code === 'EURC') {
+    const configured = String(process.env.EURC_ISSUER || process.env.EUR_ISSUER || '').trim();
+    if (configured) return configured;
+    return String(
+      network === 'PUBLIC'
+        ? process.env.EURC_ISSUER_PUBLIC || process.env.EUR_ISSUER_PUBLIC || ''
+        : process.env.EURC_ISSUER_TESTNET || process.env.EUR_ISSUER_TESTNET || ''
+    ).trim() || undefined;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
 
 export function resolveConfiguredAsset(assetCode: unknown, providedIssuer?: unknown): AssetConfig {
-  const code = normalizeAssetCode(assetCode);
+  const code = settlementAssetCode(assetCode);
   const issuer = getAssetIssuer(code, providedIssuer);
   return code === 'XLM' ? { code } : { code, issuer };
 }
 
 export function assetMatchesConfiguredIssuer(assetCode: unknown, assetIssuer?: unknown): boolean {
-  const code = normalizeAssetCode(assetCode);
-  if (code === 'XLM') return true;
+  const expected = resolveConfiguredAsset(assetCode);
+  if (expected.code === 'XLM') return true;
 
-  const expectedIssuer = getAssetIssuer(code);
+  const expectedIssuer = expected.issuer || getAssetIssuer(expected.code);
   const actualIssuer = String(assetIssuer || '').trim();
   if (!expectedIssuer || !actualIssuer) return false;
   return actualIssuer === expectedIssuer;
 }
 
 export function getUserFacingAssetCodes(): string[] {
-  const exposeInternalSettlementAssets = envFlag('EXPOSE_INTERNAL_SETTLEMENT_ASSETS', false);
-  return ['BRL', 'USDC', ...(exposeInternalSettlementAssets ? ['TESOURO'] : [])];
+  return ['TESOURO', 'USDC', 'EURC'];
 }
 
 export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string {
@@ -85,16 +99,16 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 }
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
-  const includeBrl = envFlag('ENABLE_STELLAR_BRL_ASSET', false);
   const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
-  const assetCodes = ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
+  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
+  const assetCodes = ['USDC', ...(includeTesouro ? ['TESOURO'] : []), ...(includeEurc ? ['EURC'] : [])];
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
 }
 
 export function getTrustedPathAssetCodes(): string[] {
-  const includeBrl = envFlag('ENABLE_STELLAR_BRL_ASSET', false);
   const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
-  return ['USDC', ...(includeBrl ? ['BRL'] : []), ...(includeTesouro ? ['TESOURO'] : [])];
+  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
+  return ['USDC', ...(includeTesouro ? ['TESOURO'] : []), ...(includeEurc ? ['EURC'] : [])];
 }

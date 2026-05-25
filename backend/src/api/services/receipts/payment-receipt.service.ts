@@ -56,7 +56,9 @@ export class PaymentReceiptService {
 
   private static userFacingAssetCode(assetCode?: string | null): string {
     const normalized = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-    return normalized === 'TESOURO' ? 'BRL' : normalized;
+    if (normalized === 'TESOURO') return 'BRL';
+    if (normalized === 'EURC') return 'EUR';
+    return normalized;
   }
 
   static buildHostedReceiptUrl(txHash?: string | null): string {
@@ -666,11 +668,13 @@ export class PaymentReceiptService {
     const destinationAmount = this.toPositiveNumber(quote.destinationAmount);
     const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const sourceIsReal = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
+    const destinationIsReal = destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
 
-    if (sourceAsset === 'BRL' && destinationAsset === 'USDC' && sourceAmount > 0 && destinationAmount > 0) {
+    if (sourceIsReal && destinationAsset === 'USDC' && sourceAmount > 0 && destinationAmount > 0) {
       return sourceAmount / destinationAmount;
     }
-    if (sourceAsset === 'USDC' && destinationAsset === 'BRL' && sourceAmount > 0 && destinationAmount > 0) {
+    if (sourceAsset === 'USDC' && destinationIsReal && sourceAmount > 0 && destinationAmount > 0) {
       return destinationAmount / sourceAmount;
     }
 

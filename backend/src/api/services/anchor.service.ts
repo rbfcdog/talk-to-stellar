@@ -697,13 +697,11 @@ function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: s
   const raw = coalesceString(...values) || 'TESOURO';
   const parsed = parseIssuedAssetIdentifier(raw);
   const code = normalizeAssetCode(parsed.code || 'TESOURO');
-  if (code !== 'TESOURO' && !getUserFacingAssetCodes().includes(code)) {
-    throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC ou TESOURO.`, 400);
+  const settlementCode = code === 'BRL' ? 'TESOURO' : code;
+  if (settlementCode !== 'TESOURO' && !getUserFacingAssetCodes().includes(settlementCode)) {
+    throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC, EUR ou TESOURO.`, 400);
   }
-  if (code === 'BRL') {
-    return { code: 'BRL' };
-  }
-  return resolveConfiguredAsset(code, parsed.issuer);
+  return resolveConfiguredAsset(settlementCode, parsed.issuer);
 }
 
 export class AnchorService {
@@ -1349,7 +1347,7 @@ export class AnchorService {
   }
 
   private static async getSandboxTesouroTreasuryBalance(): Promise<string | undefined> {
-    const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
+    const publicKey = coalesceString(process.env.TESOURO_DISTRIBUTOR_PUBLIC);
     if (!publicKey) return undefined;
 
     try {
@@ -1737,47 +1735,14 @@ export class AnchorService {
         });
       }
 
-      const brlIssuer = getAssetIssuer('BRL');
-      if (!brlIssuer) {
-        return this.failSandboxOnRamp(record, `BRL issuer is required for sandbox PIX path settlement. Direct TESOURO settlement failed: ${directTesouroResult.error || 'unknown error'}.`);
-      }
-
-      const sourceMax = toStellarAmount(Math.max(
-        Number(record.sourceAmountBrl) * 2,
-        Number(record.sourceAmountBrl) + 1,
-      ));
-      const result = await StellarService.submitStrictReceivePaymentFromSecret({
-        sourceSecret,
-        destination: record.publicKey,
-        sourceAsset: { code: 'BRL', issuer: brlIssuer },
-        destinationAsset: tesouroAsset,
-        destinationAmount: destinationAmountTesouro,
-        sourceMax,
-        memoText: 'PIX ONRAMP SANDBOX',
-      });
-
-      if (!result.success) {
-        const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
-        const liquidityDetail = treasuryTesouroBalance !== undefined
-          ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmountTesouro}.`
-          : '';
-        return this.failSandboxOnRamp(
-          record,
-          result.error
-            ? `${result.error}. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`
-            : `Sandbox TESOURO delivery failed. Direct TESOURO settlement also failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`,
-        );
-      }
-
-      record.finalAmount = destinationAmountTesouro;
-      record.deliverySourceAmount = result.sourceAmount;
-      (record.transaction as any).toAmount = destinationAmountTesouro;
-      (record.transaction as any).toCurrency = this.getTesouroIdentifier();
-      (record.transaction as any).finalAmount = destinationAmountTesouro;
-      (record.transaction as any).auto_conversion = { required: false };
-      return this.completeSandboxOnRamp(record, result.hash, {
-        delivery_source_amount: result.sourceAmount,
-      });
+      const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
+      const liquidityDetail = treasuryTesouroBalance !== undefined
+        ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmountTesouro}.`
+        : '';
+      return this.failSandboxOnRamp(
+        record,
+        `Sandbox TESOURO delivery failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`,
+      );
     }
 
     const finalTrustline = await this.ensureIssuedAssetTrustline({
@@ -1794,27 +1759,28 @@ export class AnchorService {
     const desiredFinalAmount = record.desiredFinalAmount ? toStellarAmount(record.desiredFinalAmount) : '';
     const desiredFinalAssetCode = normalizeAssetCode(record.desiredFinalAssetCode || record.finalAssetCode);
 
-    if (finalAsset.code === 'BRL' && finalAsset.issuer) {
-      const exactBrl = desiredFinalAmount && desiredFinalAssetCode === 'BRL'
-        ? desiredFinalAmount
-        : toStellarAmount(record.finalAmount || record.sourceAmountBrl);
-      const exactBrlConversion = await StellarService.submitStrictReceivePaymentFromSecret({
+    if (desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code) && finalAsset.issuer) {
+      const sourceMax = toStellarAmount(Math.max(
+        Number(destinationAmountTesouro) * 1.2,
+        Number(destinationAmountTesouro) + 1,
+      ));
+      const exactFinalConversion = await StellarService.submitStrictReceivePaymentFromSecret({
         sourceSecret,
         destination: record.publicKey,
         sourceAsset: tesouroAsset,
         destinationAsset: finalAsset,
-        destinationAmount: exactBrl,
-        sourceMax: toStellarAmount(Math.max(Number(destinationAmountTesouro) * 1.2, Number(destinationAmountTesouro) + 1)),
-        memoText: 'PIX ONRAMP BRL',
+        destinationAmount: desiredFinalAmount,
+        sourceMax,
+        memoText: `PIX ONRAMP ${finalAsset.code}`,
       });
 
-      if (exactBrlConversion.success) {
-        record.finalAmount = exactBrl;
-        record.finalConversionHash = exactBrlConversion.hash;
-        record.finalConversionSourceAmount = exactBrlConversion.sourceAmount || destinationAmountTesouro;
-        (record.transaction as any).toAmount = exactBrl;
+      if (exactFinalConversion.success) {
+        record.finalAmount = desiredFinalAmount;
+        record.finalConversionHash = exactFinalConversion.hash;
+        record.finalConversionSourceAmount = exactFinalConversion.sourceAmount || destinationAmountTesouro;
+        (record.transaction as any).toAmount = desiredFinalAmount;
         (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
-        (record.transaction as any).finalAmount = exactBrl;
+        (record.transaction as any).finalAmount = desiredFinalAmount;
         (record.transaction as any).auto_conversion = {
           required: true,
           status: 'completed',
@@ -1822,65 +1788,20 @@ export class AnchorService {
           source_amount: record.finalConversionSourceAmount,
           destination_asset_code: finalAsset.code,
           destination_asset_issuer: finalAsset.issuer,
-          destination_amount: exactBrl,
-          hash: exactBrlConversion.hash,
-          mode: 'strict_receive_exact_brl',
+          destination_amount: desiredFinalAmount,
+          hash: exactFinalConversion.hash,
+          mode: 'strict_receive_exact_final_asset',
         };
-        return this.completeSandboxOnRamp(record, exactBrlConversion.hash, {
+        return this.completeSandboxOnRamp(record, exactFinalConversion.hash, {
           final_conversion_status: 'completed',
-          final_conversion_hash: exactBrlConversion.hash,
+          final_conversion_hash: exactFinalConversion.hash,
           final_conversion_source_amount: record.finalConversionSourceAmount,
-          final_conversion_mode: 'strict_receive_exact_brl',
+          final_conversion_mode: 'strict_receive_exact_final_asset',
+          final_amount: desiredFinalAmount,
         });
       }
-    }
 
-    if (desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code) && finalAsset.issuer) {
-      const brlIssuer = getAssetIssuer('BRL');
-      if (brlIssuer) {
-        const sourceMax = toStellarAmount(Math.max(
-          Number(record.sourceAmountBrl) * 1.08,
-          Number(record.sourceAmountBrl) + 1,
-        ));
-        const exactFinalConversion = await StellarService.submitStrictReceivePaymentFromSecret({
-          sourceSecret,
-          destination: record.publicKey,
-          sourceAsset: { code: 'BRL', issuer: brlIssuer },
-          destinationAsset: finalAsset,
-          destinationAmount: desiredFinalAmount,
-          sourceMax,
-          memoText: `PIX ONRAMP ${finalAsset.code}`,
-        });
-
-        if (exactFinalConversion.success) {
-          record.finalAmount = desiredFinalAmount;
-          record.finalConversionHash = exactFinalConversion.hash;
-          record.finalConversionSourceAmount = exactFinalConversion.sourceAmount || toStellarAmount(record.sourceAmountBrl);
-          (record.transaction as any).toAmount = desiredFinalAmount;
-          (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
-          (record.transaction as any).finalAmount = desiredFinalAmount;
-          (record.transaction as any).auto_conversion = {
-            required: true,
-            status: 'completed',
-            source_asset_code: 'BRL',
-            source_amount: record.finalConversionSourceAmount,
-            destination_asset_code: finalAsset.code,
-            destination_asset_issuer: finalAsset.issuer,
-            destination_amount: desiredFinalAmount,
-            hash: exactFinalConversion.hash,
-            mode: 'strict_receive_exact_final_asset',
-          };
-          return this.completeSandboxOnRamp(record, exactFinalConversion.hash, {
-            final_conversion_status: 'completed',
-            final_conversion_hash: exactFinalConversion.hash,
-            final_conversion_source_amount: record.finalConversionSourceAmount,
-            final_conversion_mode: 'strict_receive_exact_final_asset',
-            final_amount: desiredFinalAmount,
-          });
-        }
-
-        record.finalConversionError = `Exact ${finalAsset.code} delivery failed: ${exactFinalConversion.error || 'unknown error'}`;
-      }
+      record.finalConversionError = `Exact ${finalAsset.code} delivery failed: ${exactFinalConversion.error || 'unknown error'}`;
     }
 
     const converted = await StellarService.submitStrictSendPaymentFromSecret({
@@ -1916,84 +1837,7 @@ export class AnchorService {
       });
     }
 
-    if (finalAsset.code === 'USDC' && finalAsset.issuer) {
-      const brlIssuer = getAssetIssuer('BRL');
-      if (brlIssuer) {
-        const brlToUsdc = await StellarService.submitStrictSendPaymentFromSecret({
-          sourceSecret,
-          destination: record.publicKey,
-          sourceAsset: { code: 'BRL', issuer: brlIssuer },
-          sourceAmount: toStellarAmount(record.sourceAmountBrl),
-          destinationAsset: finalAsset,
-          memoText: 'PIX ONRAMP USDC',
-        });
-        if (brlToUsdc.success) {
-          record.finalAmount = brlToUsdc.destinationAmount || '0';
-          record.finalConversionHash = brlToUsdc.hash;
-          record.finalConversionSourceAmount = toStellarAmount(record.sourceAmountBrl);
-          (record.transaction as any).toAmount = record.finalAmount;
-          (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
-          (record.transaction as any).finalAmount = record.finalAmount;
-          (record.transaction as any).auto_conversion = {
-            required: true,
-            status: 'completed',
-            source_asset_code: 'BRL',
-            source_amount: record.finalConversionSourceAmount,
-            destination_asset_code: finalAsset.code,
-            destination_asset_issuer: finalAsset.issuer,
-            destination_amount: record.finalAmount,
-            hash: brlToUsdc.hash,
-            fallback: 'configured_brl_to_usdc_treasury_path',
-          };
-          return this.completeSandboxOnRamp(record, brlToUsdc.hash, {
-            final_conversion_status: 'completed',
-            final_conversion_hash: brlToUsdc.hash,
-            final_conversion_source_amount: record.finalConversionSourceAmount,
-            final_conversion_fallback: 'configured_brl_to_usdc_treasury_path',
-          });
-        }
-        record.finalConversionError = `${converted.error || 'TESOURO conversion path failed'}; BRL -> USDC fallback failed: ${brlToUsdc.error || 'unknown error'}`;
-      }
-    }
-
-    if (finalAsset.code === 'BRL' && finalAsset.issuer) {
-      const directBrl = await StellarService.submitAssetPaymentFromSecret({
-        sourceSecret,
-        destination: record.publicKey,
-        amount: toStellarAmount(record.sourceAmountBrl),
-        assetCode: 'BRL',
-        assetIssuer: finalAsset.issuer,
-        memoText: 'PIX ONRAMP BRL',
-      });
-      if (directBrl.success) {
-        record.finalAmount = toStellarAmount(record.sourceAmountBrl);
-        record.finalConversionHash = directBrl.hash;
-        record.finalConversionSourceAmount = destinationAmountTesouro;
-        (record.transaction as any).toAmount = record.finalAmount;
-        (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
-        (record.transaction as any).finalAmount = record.finalAmount;
-        (record.transaction as any).auto_conversion = {
-          required: true,
-          status: 'completed',
-          source_asset_code: 'TESOURO',
-          source_amount: destinationAmountTesouro,
-          destination_asset_code: finalAsset.code,
-          destination_asset_issuer: finalAsset.issuer,
-          destination_amount: record.finalAmount,
-          hash: directBrl.hash,
-          fallback: 'direct_configured_brl_treasury_payment',
-        };
-        return this.completeSandboxOnRamp(record, directBrl.hash, {
-          final_conversion_status: 'completed',
-          final_conversion_hash: directBrl.hash,
-          final_conversion_source_amount: destinationAmountTesouro,
-          final_conversion_fallback: 'direct_configured_brl_treasury_payment',
-        });
-      }
-      record.finalConversionError = `${converted.error || 'TESOURO conversion path failed'}; direct BRL fallback failed: ${directBrl.error || 'unknown error'}`;
-    } else {
-      record.finalConversionError = converted.error || `Could not convert TESOURO to ${finalAsset.code}.`;
-    }
+    record.finalConversionError = converted.error || `Could not convert TESOURO to ${finalAsset.code}.`;
 
     (record.transaction as any).auto_conversion = {
       required: true,
@@ -2042,9 +1886,9 @@ export class AnchorService {
       });
     }
 
-    const sourceSecret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
+    const sourceSecret = coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
     if (!sourceSecret) {
-      return this.failSandboxOnRamp(record, 'BRL_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.');
+      return this.failSandboxOnRamp(record, 'TESOURO_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.');
     }
 
     const destinationAmount = toStellarAmount(record.destinationAmount);
@@ -2052,13 +1896,13 @@ export class AnchorService {
   }
 
   private static async ensureSandboxCollectorTrustline(asset: { code: string; issuer?: string }): Promise<{ publicKey: string; success: boolean; error?: string }> {
-    const publicKey = coalesceString(process.env.BRL_DISTRIBUTOR_PUBLIC);
-    const secret = coalesceString(process.env.BRL_DISTRIBUTOR_SECRET);
+    const publicKey = coalesceString(process.env.TESOURO_DISTRIBUTOR_PUBLIC);
+    const secret = coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
     if (!publicKey || !secret) {
       return {
         publicKey,
         success: false,
-        error: 'BRL_DISTRIBUTOR_PUBLIC and BRL_DISTRIBUTOR_SECRET are required for sandbox PIX settlement.',
+        error: 'TESOURO_DISTRIBUTOR_PUBLIC and TESOURO_DISTRIBUTOR_SECRET are required for sandbox PIX settlement.',
       };
     }
 

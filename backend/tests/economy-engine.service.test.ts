@@ -20,7 +20,7 @@ describe('EconomyEngineService', () => {
       networkFeeBrl: 0.5,
       quote: {
         sourceAmount: '5000',
-        sourceAsset: { code: 'BRL' },
+        sourceAsset: { code: 'TESOURO' },
         destinationAmount: String(5000 / 5.62 - 10),
         destinationAsset: { code: 'USDC' },
         midMarketRate: 5.62,

@@ -108,7 +108,7 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBr
   return {
     brlPerUsdc: rawBrlPerUsdc,
     fallbackApplied: false,
-    source: 'configured_brl_asset',
+    source: 'configured_tesouro_asset',
   };
 }
 
@@ -222,7 +222,7 @@ export class FinancialController {
         source: rate.fallbackApplied ? (rate.source || 'usd_brl_sanity_fallback') : grossQuote.source,
         symbol: grossQuote?.symbol || 'USDC/BRL',
         path: grossQuote?.path || [],
-        source_asset: grossQuote?.sourceAsset || { code: 'BRL', issuer: getAssetIssuer('BRL') },
+        source_asset: grossQuote?.sourceAsset || { code: 'TESOURO', issuer: getAssetIssuer('TESOURO') },
         destination_asset: grossQuote?.destinationAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
         ...(rate.fallbackApplied ? {
           fallback_reason: rate.fallbackReason,
@@ -323,7 +323,7 @@ export class FinancialController {
           symbol: grossQuote?.symbol || 'USDC/BRL',
           path: grossQuote?.path || [],
           source_asset: grossQuote?.sourceAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
-          destination_asset: grossQuote?.destinationAsset || { code: 'BRL', issuer: getAssetIssuer('BRL') },
+          destination_asset: grossQuote?.destinationAsset || { code: 'TESOURO', issuer: getAssetIssuer('TESOURO') },
           ...(rate.fallbackApplied ? {
             fallback_reason: rate.fallbackReason,
             quote_failure_reason: quoteFailureReason || undefined,

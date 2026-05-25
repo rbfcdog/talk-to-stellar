@@ -38,7 +38,7 @@ function configuredMinimumFeeForAsset(assetCode: string): number {
     const parsed = raw === undefined ? DEFAULT_MIN_FEE_USDC : Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MIN_FEE_USDC;
   }
-  if (normalized === 'BRL') {
+  if (normalized === 'BRL' || normalized === 'TESOURO') {
     const raw = process.env.TALKTOSTELLAR_SPREAD_MIN_BRL || process.env.TTS_SPREAD_MIN_BRL;
     const parsed = raw === undefined ? DEFAULT_MIN_FEE_BRL : Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MIN_FEE_BRL;
@@ -51,7 +51,9 @@ export class PlatformFeeService {
     const source = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     const destination = String(destinationAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     if (!source || !destination) return false;
-    return (source === 'USDC' && destination === 'BRL') || (source === 'BRL' && destination === 'USDC');
+    const sourceIsReal = source === 'BRL' || source === 'TESOURO';
+    const destinationIsReal = destination === 'BRL' || destination === 'TESOURO';
+    return (source === 'USDC' && destinationIsReal) || (sourceIsReal && destination === 'USDC');
   }
 
   static getTreasuryPublicKey(): string | undefined {

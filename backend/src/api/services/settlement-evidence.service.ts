@@ -36,7 +36,7 @@ function firstPositiveNumber(...values: unknown[]): number {
 
 function normalizeCurrency(value: unknown, fallback: 'BRL' | 'USD' | 'USDC' = 'USD'): 'BRL' | 'USD' | 'USDC' {
   const normalized = String(value || '').trim().toUpperCase().replace(/^USD$/, 'USD');
-  if (normalized === 'BRL') return 'BRL';
+  if (normalized === 'BRL' || normalized === 'TESOURO') return 'BRL';
   if (normalized === 'USDC') return 'USDC';
   if (normalized === 'USD') return 'USD';
   return fallback;

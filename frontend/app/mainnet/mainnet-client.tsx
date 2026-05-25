@@ -545,6 +545,7 @@ export default function MainnetClient() {
                 className="min-h-12 border border-tts-border bg-black px-3 text-sm font-black text-tts-surface outline-none focus:border-tts-gold"
               >
                 <option value="USDC">USDC</option>
+                <option value="EURC">EURC</option>
                 <option value="XLM">XLM</option>
               </select>
               <button
