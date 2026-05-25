@@ -4,6 +4,7 @@ import { Faq } from '@/components/landing-v2/Faq'
 import { Features } from '@/components/landing-v2/Features'
 import { FinalCta } from '@/components/landing-v2/FinalCta'
 import { Footer } from '@/components/landing-v2/Footer'
+import { ForWho } from '@/components/landing-v2/ForWho'
 import { Hero } from '@/components/landing-v2/Hero'
 import { HowItWorks } from '@/components/landing-v2/HowItWorks'
 import { Navbar } from '@/components/landing-v2/Navbar'
@@ -15,6 +16,7 @@ export default function HomePage() {
       <Navbar />
       <main>
         <Hero />
+        <ForWho />
         <Problem />
         <Features />
         <HowItWorks />
