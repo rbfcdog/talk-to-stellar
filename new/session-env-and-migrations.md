@@ -121,9 +121,10 @@ backend/migrations/20260523_01_agent_messages_intro_dedupe.sql
 
 ## Checklist de deploy
 
-1. `/yield` é a URL pública; `/rendimentos` e `/rendimento` só redirecionam.
+1. `/yield` é a URL pública de rendimento; `/money-cycle` é a URL pública do ciclo consolidado PIX entrada -> rendimento -> PIX saída. `/rendimentos` e `/rendimento` só redirecionam.
 2. A LLM usa tool calls para abrir interfaces:
    - `open_asset_interface` para trazer/manter/mandar para PIX.
+   - `open_money_cycle` para o ciclo completo de injetar dinheiro, render e sair.
    - `get_yield_options`, `get_yield_balance`, `prepare_yield_action`, `confirm_yield_action` para rendimento.
 3. PIX off-ramp aceita `destination_pix_key`/`pix_key` na URL e também permite a pessoa digitar a chave na tela.
 4. `TTS_VISIBLE_ASSET_CODES` controla os assets mostrados em saldo e UX multi-asset.

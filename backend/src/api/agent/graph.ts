@@ -2524,6 +2524,7 @@ export class AgentGraph {
       '- User-facing yield copy must say rendimento, yield, money, dollars, euros, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
       '- Use get_yield_options for available currencies/rates, get_yield_balance for current earning balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "keep earning", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
+      '- For complete lifecycle requests like "injetar dinheiro, render e sair", "ciclo completo", or "add, earn, withdraw", use open_money_cycle so the user gets one consolidated interface.',
       '- Do not promise guaranteed returns. Say rates may vary and the user reviews before confirming.',
       '- In English, route users to /yield for the visual yield page. Do not route users to /rendimentos.',
       '',
@@ -3706,6 +3707,74 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     };
   }
 
+  private extractMoneyCycleIntentFromText(message: string): {
+    is_money_cycle: boolean;
+    amount: string;
+    asset_code: string;
+    destination_pix_key?: string;
+  } {
+    const raw = String(message || '');
+    const normalized = this.normalizeTextForIntent(raw);
+    const mentionsCycle =
+      normalized.includes('ciclo completo') ||
+      normalized.includes('ciclo do dinheiro') ||
+      normalized.includes('ciclo de dinheiro') ||
+      normalized.includes('fluxo completo') ||
+      normalized.includes('jornada completa') ||
+      normalized.includes('entrada rendimento saida') ||
+      normalized.includes('entrada render saida') ||
+      /\b(injetar|entrar|trazer|adicionar|colocar|add)\b.*\b(render|rendendo|rendimento|yield|earning|earn)\b.*\b(sair|saida|retirar|sacar|withdraw|pix)\b/.test(normalized) ||
+      /\b(add|bring)\b.*\b(earn|earning|yield)\b.*\b(withdraw|send out|cash out|pix)\b/.test(normalized);
+
+    if (!mentionsCycle) {
+      return { is_money_cycle: false, amount: '', asset_code: '' };
+    }
+
+    const amountNumber = parseHumanAmountNumber(raw);
+    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
+      raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
+      '';
+
+    return {
+      is_money_cycle: true,
+      amount,
+      asset_code: this.assetCodeFromTextToken(assetMatch?.[1]) || '',
+      destination_pix_key: destinationPixKey,
+    };
+  }
+
+  private async handleMoneyCycleRequest(state: AgentState, intent: ReturnType<AgentGraph['extractMoneyCycleIntentFromText']>): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const resultRaw = await executeTool('open_money_cycle', {
+      session_id: state.session_id,
+      amount: intent.amount,
+      asset_code: intent.asset_code || 'BRL',
+      destination_pix_key: intent.destination_pix_key,
+      language,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Failed to parse money cycle tool response' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = result.success
+      ? result.message
+      : this.text(
+          language,
+          `Não consegui abrir o ciclo completo agora: ${result.error || 'erro desconhecido'}`,
+          `I could not open the full money cycle right now: ${result.error || 'unknown error'}`
+        );
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async handleAssetInterfaceRequest(state: AgentState, intent: ReturnType<AgentGraph['extractAssetInterfaceIntentFromText']>): Promise<AgentState> {
     const language = this.getLanguage(state);
     const resultRaw = await executeTool('open_asset_interface', {
@@ -4265,6 +4334,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const deterministicYield = this.extractYieldIntentFromText(state.current_input);
+      const deterministicMoneyCycle = this.extractMoneyCycleIntentFromText(state.current_input);
       const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
@@ -4290,6 +4360,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                         ? IntentType.PAYMENT
                         : deterministicPixRamp.is_pix_ramp
                           ? IntentType.PIX
+                          : deterministicMoneyCycle.is_money_cycle
+                            ? IntentType.YIELD
                           : deterministicYield.is_yield
                             ? IntentType.YIELD
                             : deterministicAssetInterface.is_asset_interface
@@ -4363,6 +4435,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
         return await this.handlePixRampRequest(state);
+      }
+
+      if (deterministicMoneyCycle.is_money_cycle) {
+        return await this.handleMoneyCycleRequest(state, deterministicMoneyCycle);
       }
 
       if (state.action_type === ActionType.MANAGE_YIELD && deterministicYield.is_yield) {

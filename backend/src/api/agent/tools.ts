@@ -401,13 +401,38 @@ function buildYieldFrontendUrl(input: {
   amount?: unknown;
   assetCode?: unknown;
   language?: 'pt-BR' | 'en';
+  cycle?: boolean;
 }): string {
   return buildFrontendInterfaceUrl({
-    path: '/yield',
+    path: input.cycle ? '/money-cycle' : '/yield',
     params: {
       action: input.action || 'deposit',
       amount: input.amount,
       asset: frontendAssetCode(input.assetCode || 'USDC'),
+      advanced: '1',
+      cycle: input.cycle ? '1' : '',
+      from: 'chat',
+      lang: input.language || 'pt-BR',
+    },
+  });
+}
+
+function buildMoneyCycleFrontendUrl(input: {
+  amount?: unknown;
+  assetCode?: unknown;
+  destinationPixKey?: unknown;
+  language?: 'pt-BR' | 'en';
+}): string {
+  const asset = frontendAssetCode(input.assetCode || 'BRL');
+  const amount = String(input.amount || '').trim();
+  return buildFrontendInterfaceUrl({
+    path: '/money-cycle',
+    params: {
+      cycle: '1',
+      action: 'deposit',
+      asset,
+      amount,
+      destination_pix_key: input.destinationPixKey,
       advanced: '1',
       from: 'chat',
       lang: input.language || 'pt-BR',
@@ -435,7 +460,7 @@ function buildMoneyInterfaceUrl(input: {
   const language = input.language || 'pt-BR';
 
   if (action === 'keep') {
-    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language });
+    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language, cycle: true });
   }
 
   if (action === 'send_out') {
@@ -835,6 +860,37 @@ export const toolDefinitions = [
         },
       },
       required: ["action"],
+    },
+  },
+  {
+    name: "open_money_cycle",
+    description: "Return the consolidated frontend URL for the full money cycle: add money by PIX, keep it earning through the best available yield option, then send it out to PIX. Use when the user asks to consolidate the complete in-yield-out lifecycle.",
+    parameters: {
+      type: "object",
+      properties: {
+        amount: {
+          type: "string",
+          description: "Optional amount to prefill across the cycle.",
+        },
+        asset_code: {
+          type: "string",
+          description: "User-facing currency, such as BRL, USDC, USD, EUR, GBP, MXN, or another configured asset.",
+        },
+        destination_pix_key: {
+          type: "string",
+          description: "Optional PIX key typed by the user for the exit step. Never invent it.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
     },
   },
   {
@@ -1822,6 +1878,8 @@ export async function executeTool(
         return await executeGetYieldOptions(toolInput);
       case "open_asset_interface":
         return await executeOpenAssetInterface(toolInput);
+      case "open_money_cycle":
+        return await executeOpenMoneyCycle(toolInput);
       case "get_yield_balance":
         return await executeGetYieldBalance(toolInput);
       case "prepare_yield_action":
@@ -2201,6 +2259,40 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       message: language === 'en'
         ? `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
         : `${actionLabel} está pronto para ${displayAsset}.\n\nAbra:\n${frontendUrl}`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executeOpenMoneyCycle(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'BRL');
+    const destinationPixKey = input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey;
+    const frontendUrl = buildMoneyCycleFrontendUrl({
+      amount: input.amount,
+      assetCode,
+      destinationPixKey,
+      language,
+    });
+    const displayAsset = frontendAssetCode(assetCode);
+    const amount = String(input.amount || '').trim();
+
+    return JSON.stringify({
+      success: true,
+      action: 'money_cycle',
+      asset_code: displayAsset,
+      amount: amount || null,
+      destination_pix_key: String(destinationPixKey || '').trim() || null,
+      frontend_url: frontendUrl,
+      steps: ['pix_on', 'yield', 'pix_off'],
+      message: language === 'en'
+        ? `The full money cycle is ready for ${displayAsset}: add by PIX, keep earning with the best available option, then send out to PIX.\n\nOpen:\n${frontendUrl}`
+        : `O ciclo completo está pronto para ${displayAsset}: entrar por PIX, manter rendendo na melhor opção disponível e sair por PIX.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
