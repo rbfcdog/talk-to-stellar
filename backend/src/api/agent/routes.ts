@@ -542,6 +542,21 @@ export function createAgentRoutes(
       const normalizedProvider = normalizeSourceProvider(normalizedSource);
       let runtimeExternalContext: Record<string, string> = {};
       if (normalizedProvider === "telegram" || normalizedProvider === "whatsapp") {
+        // Hard gate: external channels are backend-to-backend integrations
+        // (the Telegram/WhatsApp bot calling this backend). Require a shared
+        // secret so an unauthenticated client cannot set `source: "telegram"`
+        // and impersonate any user by passing a victim's external user id in
+        // `metadata`. Without this gate, the channel-identity override below
+        // would adopt the victim's session_id with no other credential.
+        const ingestSecret = String(process.env.AGENT_INGEST_SECRET || '').trim();
+        const presentedSecret = String(req.headers['x-agent-ingest-secret'] || '').trim();
+        if (!ingestSecret || !presentedSecret || !timingSafeEqualString(ingestSecret, presentedSecret)) {
+          return res.status(401).json({
+            success: false,
+            error: 'Unauthorized channel ingest',
+          });
+        }
+
         const rawProviderUserId = extractProviderUserId(normalizedProvider, metadata);
         const channelProviderUserId = normalizeExternalProviderUserId(normalizedProvider, rawProviderUserId);
         const channelLabel = providerLabel(normalizedProvider);
@@ -700,7 +715,18 @@ export function createAgentRoutes(
                 linkedSessionHasWallet ||
                 !requestedSessionHasWallet;
 
-              if (shouldUseLinkedSession) {
+              // Require the caller to present the linked session's token before
+              // adopting it. A bare `browser_id` is not a credential — without
+              // this check, anyone who guesses a victim's browser_id could ride
+              // their session.
+              const linkedSessionToken = String((externalSession as any)?.session_token || '').trim();
+              const callerHoldsLinkedToken = Boolean(
+                requestSessionToken &&
+                  linkedSessionToken &&
+                  timingSafeEqualString(linkedSessionToken, requestSessionToken)
+              );
+
+              if (shouldUseLinkedSession && callerHoldsLinkedToken) {
                 req.body.session_id = String(existing.session_id);
               }
             }
