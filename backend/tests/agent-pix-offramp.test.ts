@@ -133,7 +133,7 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.response_message).toContain('/pix-off?');
       expect(result.response_message).toContain('source_asset=USDC');
       expect(result.response_message).toContain('source_amount=10');
-      expect(result.response_message).toContain('BRL no seu PIX');
+      expect(result.response_message).toContain('reais no seu PIX');
       expect(result.response_message).not.toContain('Para quem você deseja enviar');
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;

@@ -10,6 +10,15 @@ function normalizeAgentResponse(payload) {
   );
 }
 
+function readAgentIngestSecret(env = process.env) {
+  const names = ['AGENT_INGEST_SECRET', 'INTERNAL_API_SECRET', 'TELEGRAM_NOTIFY_SECRET'];
+  for (const name of names) {
+    const value = String(env?.[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 function createAgentClient({ agentUrl, ingestSecret = '', fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   if (!agentUrl) {
     throw new Error('agentUrl is required');
@@ -92,4 +101,5 @@ function createAgentClient({ agentUrl, ingestSecret = '', fetchImpl = fetch, tim
 module.exports = {
   createAgentClient,
   normalizeAgentResponse,
+  readAgentIngestSecret,
 };

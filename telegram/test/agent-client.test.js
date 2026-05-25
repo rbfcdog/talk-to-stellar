@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createAgentClient, normalizeAgentResponse } = require('../src/agent-client');
+const { createAgentClient, normalizeAgentResponse, readAgentIngestSecret } = require('../src/agent-client');
 
 test('normalizeAgentResponse picks the first supported message field', () => {
   assert.equal(normalizeAgentResponse({ message: 'hello' }), 'hello');
@@ -43,4 +43,11 @@ test('createAgentClient refuses to construct without ingestSecret', () => {
   assert.throws(() => {
     createAgentClient({ agentUrl: 'http://example.com/api', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
   }, /ingestSecret is required/);
+});
+
+test('readAgentIngestSecret keeps AGENT_INGEST_SECRET preferred but supports deployed fallbacks', () => {
+  assert.equal(readAgentIngestSecret({ AGENT_INGEST_SECRET: ' agent ', INTERNAL_API_SECRET: 'internal' }), 'agent');
+  assert.equal(readAgentIngestSecret({ INTERNAL_API_SECRET: ' internal ' }), 'internal');
+  assert.equal(readAgentIngestSecret({ TELEGRAM_NOTIFY_SECRET: ' notify ' }), 'notify');
+  assert.equal(readAgentIngestSecret({}), '');
 });

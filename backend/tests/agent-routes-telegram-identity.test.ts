@@ -90,12 +90,18 @@ async function withAgentServer(repository: any, run: (baseUrl: string) => Promis
 }
 
 describe('agent Telegram identity binding', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     processInputMock.mockReset();
     checkExternalAccountMock.mockReset();
     createOnboardUrlWithShortLinkMock.mockReset();
     createLoginUrlWithShortLinkMock.mockReset();
     getWalletBySessionMock.mockReset();
+    process.env = {
+      ...originalEnv,
+      AGENT_INGEST_SECRET: 'test-agent-ingest-secret',
+    };
     processInputMock.mockImplementation(async (state: any) => ({
       ...state,
       response_message: `processed:${state.session_id}`,
@@ -104,6 +110,10 @@ describe('agent Telegram identity binding', () => {
     createOnboardUrlWithShortLinkMock.mockResolvedValue({ url: 'https://app.example.com/create-account' });
     createLoginUrlWithShortLinkMock.mockResolvedValue({ url: 'https://app.example.com/login' });
     getWalletBySessionMock.mockResolvedValue({ public_key: 'G'.padEnd(56, 'A') });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   it('uses the Telegram external account session instead of a stale incoming session_id', async () => {
@@ -134,7 +144,7 @@ describe('agent Telegram identity binding', () => {
     await withAgentServer(repository, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
         body: JSON.stringify({
           query: 'balance',
           session_id: staleSessionId,
@@ -191,7 +201,7 @@ describe('agent Telegram identity binding', () => {
     await withAgentServer(repository, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
         body: JSON.stringify({
           query: 'balance',
           session_id: staleSessionId,

@@ -111,7 +111,7 @@ O usuário começa pelo WhatsApp, Telegram ou chat web.
 - Confirmação de pagamento protegida por PIN.
 - Reset de PIN com token temporário e invalidação de uso.
 - Logs de auditoria para eventos críticos.
-- `POST /api/agent/query` exige `x-agent-ingest-secret` (= `AGENT_INGEST_SECRET`) quando `source` é `telegram` ou `whatsapp`. Defina o mesmo valor em `backend/.env` e `telegram/.env`; sem isso o backend recusa a requisição.
+- `POST /api/agent/query` exige `x-agent-ingest-secret` quando `source` é `telegram` ou `whatsapp`. Prefira `AGENT_INGEST_SECRET` com o mesmo valor em backend e adapters. Para compatibilidade, o backend e o Telegram tambem aceitam `INTERNAL_API_SECRET` ou `TELEGRAM_NOTIFY_SECRET` como fallback resolvido; sem um segredo compartilhado, o backend recusa a requisicao.
 
 ```text
 saldo

@@ -52,7 +52,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
 
   switch (publicErrorCode(error)) {
     case 'quote_expired':
-      return 'A estimativa expirou. Gere uma nova estimativa para continuar.';
+      return 'A estimativa expirou. Atualize o valor ou peca uma nova estimativa no chat.';
     case 'link_expired':
       return 'Esse link expirou ou ja foi usado. Peca um novo link no chat.';
     case 'session_expired':
@@ -68,13 +68,13 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'recipient_not_found':
       return 'Esse destinatario nao esta nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
     case 'pix_account_not_ready':
-      return 'Sua conta PIX esta sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
+      return 'Sua conta PIX ainda esta sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
     case 'service_timeout':
       return 'A operacao demorou demais. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':
       return 'Nao consegui encontrar uma rota segura para essa conversao agora. Tente novamente em alguns segundos ou escolha outro valor.';
     case 'provider_unavailable':
-      return 'O servico de pagamento nao respondeu agora. Tente novamente em alguns segundos.';
+      return 'O servico de pagamento nao respondeu agora. Tente novamente em alguns segundos; se ja confirmou algo, consulte o status antes de repetir.';
   }
 
   return fallback || raw || 'Nao consegui concluir agora. Tente novamente em alguns segundos.';

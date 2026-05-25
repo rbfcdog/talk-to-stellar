@@ -95,6 +95,15 @@ function agentQueryUrl(): string {
   return `${internalBackendBaseUrl()}/api/agent/query`;
 }
 
+function readAgentIngestSecret(): string {
+  const names = ['AGENT_INGEST_SECRET', 'INTERNAL_API_SECRET', 'TELEGRAM_NOTIFY_SECRET'];
+  for (const name of names) {
+    const value = String(process.env[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 function evolutionBaseUrl(): string {
   return normalizeBaseUrl(
     process.env.EVOLUTION_API_URL ||
@@ -634,11 +643,13 @@ async function sendAgentQuery(input: {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 120000));
+  const ingestSecret = readAgentIngestSecret();
   try {
     const response = await fetch(agentQueryUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(ingestSecret ? { 'x-agent-ingest-secret': ingestSecret } : {}),
         'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(payload),
