@@ -8,7 +8,7 @@ import { getClientSession } from "@/lib/session";
 import { mapPublicError } from "@/lib/public-errors";
 
 type Step = "quote" | "checkout" | "success";
-type TargetAsset = "BRL" | "USDC" | "EUR";
+type TargetAsset = string;
 type RampMode = "onramp" | "offramp";
 
 type RampConfig = {
@@ -81,7 +81,75 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
 const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
-const ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR"];
+const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR", "GBP", "MXN", "ARS", "CAD", "AUD", "CHF", "JPY"];
+const FIAT_FORMAT_ASSETS = new Set(["BRL", "EUR", "GBP", "MXN", "ARS", "CAD", "AUD", "CHF", "JPY", "USD"]);
+const ASSET_SYMBOLS: Record<string, string> = {
+  BRL: "R$",
+  USDC: "US$",
+  USD: "US$",
+  EUR: "€",
+  GBP: "£",
+  MXN: "MX$",
+  ARS: "AR$",
+  CAD: "CA$",
+  AUD: "A$",
+  CHF: "CHF",
+  JPY: "¥",
+};
+const ASSET_ALIASES: Record<string, TargetAsset> = {
+  TESOURO: "BRL",
+  REAL: "BRL",
+  REAIS: "BRL",
+  R$: "BRL",
+  USD: "USDC",
+  DOLAR: "USDC",
+  DOLARES: "USDC",
+  DOLLAR: "USDC",
+  DOLLARS: "USDC",
+  EURC: "EUR",
+  EURO: "EUR",
+  EUROS: "EUR",
+  POUND: "GBP",
+  POUNDS: "GBP",
+  LIBRA: "GBP",
+  LIBRAS: "GBP",
+  PESO: "MXN",
+  PESOS: "MXN",
+  YEN: "JPY",
+};
+
+function canonicalAssetCode(value: unknown, fallback = ""): TargetAsset {
+  const normalized = String(value || "").trim().toUpperCase().split(":")[0];
+  if (!normalized) return fallback;
+  return ASSET_ALIASES[normalized] || normalized;
+}
+
+function parseConfiguredAssetList(value: unknown): TargetAsset[] {
+  return String(value || "")
+    .split(/[,\s]+/)
+    .map((item) => canonicalAssetCode(item))
+    .filter((item) => item && item !== "XLM");
+}
+
+function uniqueAssets(values: TargetAsset[]) {
+  return Array.from(new Set(values.map((asset) => canonicalAssetCode(asset)).filter(Boolean)));
+}
+
+const CONFIGURED_TARGET_ASSETS = parseConfiguredAssetList(
+  process.env.NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES ||
+  process.env.NEXT_PUBLIC_VISIBLE_ASSET_CODES ||
+  process.env.NEXT_PUBLIC_SUPPORTED_ASSET_CODES ||
+  ""
+);
+const ADVANCED_TARGET_ASSETS: TargetAsset[] = uniqueAssets([...DEFAULT_ADVANCED_TARGET_ASSETS, ...CONFIGURED_TARGET_ASSETS]);
+
+function isBasicAsset(asset: TargetAsset) {
+  return BASIC_TARGET_ASSETS.includes(canonicalAssetCode(asset));
+}
+
+function isAdvancedAsset(asset: TargetAsset) {
+  return !isBasicAsset(asset);
+}
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -124,19 +192,11 @@ function parseHumanAmount(value: unknown) {
 }
 
 function normalizeTargetAsset(value: unknown, fallback: TargetAsset = "BRL"): TargetAsset {
-  const normalized = String(value || "").trim().toUpperCase().split(":")[0];
-  if (normalized === "USDC" || normalized === "USD") return "USDC";
-  if (normalized === "EUR" || normalized === "EURC" || normalized === "EURO" || normalized === "EUROS") return "EUR";
-  if (normalized === "BRL" || normalized === "TESOURO" || normalized === "REAL" || normalized === "REAIS") return "BRL";
-  return fallback;
+  return canonicalAssetCode(value, fallback);
 }
 
-function userFacingAssetCode(code: unknown, fallback: TargetAsset | "BRL" | "USDC" | "EUR" = "BRL") {
-  const normalized = String(code || "").trim().toUpperCase().split(":")[0];
-  if (normalized === "USDC") return "USDC";
-  if (normalized === "EUR" || normalized === "EURC") return "EUR";
-  if (normalized === "BRL" || normalized === "TESOURO") return fallback === "USDC" ? "USDC" : "BRL";
-  return fallback;
+function userFacingAssetCode(code: unknown, fallback: TargetAsset = "BRL") {
+  return canonicalAssetCode(code, fallback);
 }
 
 function formatAsset(value: unknown, code = "BRL") {
@@ -147,24 +207,16 @@ function formatAsset(value: unknown, code = "BRL") {
 
 function formatRampAsset(value: unknown, code = "BRL") {
   const displayCode = userFacingAssetCode(code);
-  if (displayCode === "BRL") return formatMoney(value, "BRL");
-  if (displayCode === "EUR") return formatMoney(value, "EUR");
+  if (FIAT_FORMAT_ASSETS.has(displayCode)) return formatMoney(value, displayCode === "USD" ? "USD" : displayCode);
   return formatAsset(value, displayCode);
 }
 
-function quoteCurrencyCode(value: unknown, fallback: TargetAsset | "BRL" | "USDC" | "EUR" | "TESOURO" = "BRL") {
-  const normalized = String(value || "").trim().toUpperCase().split(":")[0];
-  if (normalized === "USDC") return "USDC";
-  if (normalized === "EUR" || normalized === "EURC") return "EUR";
-  if (normalized === "BRL") return "BRL";
-  if (normalized === "TESOURO") return "BRL";
-  return fallback;
+function quoteCurrencyCode(value: unknown, fallback: TargetAsset = "BRL") {
+  return canonicalAssetCode(value, fallback);
 }
 
-function formatQuoteAmount(value: unknown, currency: TargetAsset | "BRL" | "USDC" | "EUR" | "TESOURO" = "BRL") {
-  if (currency === "TESOURO") return formatMoney(value, "BRL");
-  if (currency === "EUR") return formatMoney(value, "EUR");
-  return currency === "BRL" ? formatMoney(value, "BRL") : formatRampAsset(value, currency);
+function formatQuoteAmount(value: unknown, currency: TargetAsset = "BRL") {
+  return formatRampAsset(value, currency);
 }
 
 function formatApiAmount(value: unknown) {
@@ -274,9 +326,7 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
 
 function friendlyAssetName(code: unknown, language: "pt-BR" | "en" = "pt-BR") {
   const displayCode = userFacingAssetCode(code);
-  if (displayCode === "USDC") return "US$";
-  if (displayCode === "EUR") return "€";
-  return language === "pt-BR" ? "R$" : "BRL";
+  return ASSET_SYMBOLS[displayCode] || displayCode || (language === "pt-BR" ? "R$" : "BRL");
 }
 
 function formatCountdown(ms: number, language: "pt-BR" | "en" = "pt-BR") {
@@ -783,7 +833,7 @@ export default function PixRampClient({
   const offRampDisplayAmount = offRampInputAsset === "BRL"
     ? formatMoney(offRampInputValue || "0")
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
-  const offRampInputPrefix = offRampInputAsset === "USDC" ? "US$" : "R$";
+  const offRampInputPrefix = friendlyAssetName(offRampInputAsset, language);
   const offRampPixTargetAmount = String(
     temporaryOffRampTestResult?.target_brl ||
     temporaryOffRampTestResult?.destination_amount ||
@@ -1143,7 +1193,7 @@ export default function PixRampClient({
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
     const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
-    if (normalizedReceiveAsset === "EUR") setAdvancedAssetMode(true);
+    if (isAdvancedAsset(normalizedReceiveAsset)) setAdvancedAssetMode(true);
     if (mode === "onramp" && receiveAmount) {
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
@@ -1168,7 +1218,7 @@ export default function PixRampClient({
     }
     if (!(mode === "onramp" && receiveAmount)) {
       const normalizedAsset = normalizeTargetAsset(asset, mode === "onramp" ? "USDC" : "BRL");
-      if (normalizedAsset === "EUR") setAdvancedAssetMode(true);
+      if (isAdvancedAsset(normalizedAsset)) setAdvancedAssetMode(true);
       setTargetAsset(normalizedAsset);
     }
     if (email.includes("@")) setRampEmail(email);
@@ -1180,7 +1230,7 @@ export default function PixRampClient({
     if (payAmount) setAutoPayAmount(payAmount);
     if (payAsset) {
       const normalizedPayAsset = normalizeTargetAsset(payAsset, "USDC");
-      if (normalizedPayAsset === "EUR") setAdvancedAssetMode(true);
+      if (isAdvancedAsset(normalizedPayAsset)) setAdvancedAssetMode(true);
       setAutoPayAsset(normalizedPayAsset);
     }
     setQueryReady(true);
@@ -2256,12 +2306,16 @@ export default function PixRampClient({
                     : t("pix_off_subtitle")}
                 </p>
             </div>
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-3">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
                 </p>
+              </div>
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{L("Moeda", "Currency")}</p>
+                <p className="mt-2 text-sm font-black text-tts-deep">{friendlyAssetName(targetAsset, language)} {targetAsset}</p>
               </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
                   <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_destination")}</p>
@@ -2704,7 +2758,7 @@ export default function PixRampClient({
                 className={`rounded-2xl border px-3 py-2 text-xs font-black uppercase tracking-[0.12em] transition ${advancedAssetMode ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-border text-tts-muted hover:bg-tts-surface"}`}
                 onClick={() => setAdvancedAssetMode((current) => {
                   const next = !current;
-                  if (!next && targetAsset === "EUR") {
+                  if (!next && isAdvancedAsset(targetAsset)) {
                     setTargetAsset("USDC");
                     setDesiredReceiveAmount("");
                     setDesiredReceiveAsset("");
@@ -2716,7 +2770,7 @@ export default function PixRampClient({
                 {L("Avançado", "Advanced")}
               </button>
             </div>
-            <div className={`mt-2 grid gap-2 rounded-3xl border border-tts-border bg-tts-deep/20 p-2 ${advancedAssetMode ? "grid-cols-3" : "grid-cols-2"}`}>
+            <div className={`mt-2 grid gap-2 rounded-3xl border border-tts-border bg-tts-deep/20 p-2 ${advancedAssetMode ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2"}`}>
               {(advancedAssetMode ? ADVANCED_TARGET_ASSETS : BASIC_TARGET_ASSETS).map((asset) => (
                 <button
                   key={asset}

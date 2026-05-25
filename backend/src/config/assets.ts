@@ -15,6 +15,17 @@ function envFlag(name: string, fallback: boolean): boolean {
   return ['1', 'true', 'yes', 'on'].includes(raw);
 }
 
+function parseAssetCodeList(value: unknown): string[] {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map((item) => settlementAssetCode(item))
+    .filter((item) => item && item !== 'XLM');
+}
+
+function uniqueAssetCodes(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => settlementAssetCode(value)).filter(Boolean)));
+}
+
 export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
   return String(process.env.STELLAR_NETWORK || 'TESTNET').trim().toUpperCase() === 'PUBLIC'
     ? 'PUBLIC'
@@ -86,7 +97,19 @@ export function assetMatchesConfiguredIssuer(assetCode: unknown, assetIssuer?: u
 }
 
 export function getUserFacingAssetCodes(): string[] {
-  return ['TESOURO', 'USDC', 'EURC'];
+  const configured = parseAssetCodeList(
+    process.env.TTS_VISIBLE_ASSET_CODES ||
+    process.env.VISIBLE_ASSET_CODES ||
+    process.env.SUPPORTED_ASSET_CODES
+  );
+  const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
+  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
+  return uniqueAssetCodes([
+    ...(includeTesouro ? ['TESOURO'] : []),
+    'USDC',
+    ...(includeEurc ? ['EURC'] : []),
+    ...configured,
+  ]);
 }
 
 export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown): string {
@@ -99,16 +122,12 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 }
 
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
-  const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
-  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
-  const assetCodes = ['USDC', ...(includeTesouro ? ['TESOURO'] : []), ...(includeEurc ? ['EURC'] : [])];
+  const assetCodes = getUserFacingAssetCodes();
   return assetCodes
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
 }
 
 export function getTrustedPathAssetCodes(): string[] {
-  const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
-  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
-  return ['USDC', ...(includeTesouro ? ['TESOURO'] : []), ...(includeEurc ? ['EURC'] : [])];
+  return getUserFacingAssetCodes();
 }
