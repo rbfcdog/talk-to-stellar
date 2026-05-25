@@ -47,6 +47,12 @@ export function Navbar() {
     ? { duration: 0 }
     : { type: 'spring' as const, stiffness: 380, damping: 32 }
 
+  // Sequenced timings: content exit is fast so the container never has to
+  // squeeze around still-visible content. Enter waits for the layout spring
+  // to mostly settle before fading the new content in.
+  const exitDuration = reduceMotion ? 0 : 0.08
+  const enterDelay = reduceMotion ? 0 : 0.28
+
   const close = () => {
     setExpanded(false)
     triggerRef.current?.focus()
@@ -80,9 +86,17 @@ export function Navbar() {
               aria-expanded={false}
               aria-controls={EXPANDED_PANEL_ID}
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.12 }}
+              animate={{
+                opacity: 1,
+                transition: {
+                  duration: reduceMotion ? 0 : 0.14,
+                  delay: enterDelay,
+                },
+              }}
+              exit={{
+                opacity: 0,
+                transition: { duration: exitDuration },
+              }}
               className="flex h-full items-center gap-2 rounded-full px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-tts-gold focus-visible:ring-offset-2 focus-visible:ring-offset-tts-bg"
             >
               <Logo size={20} />
@@ -95,9 +109,17 @@ export function Navbar() {
             <motion.div
               key="expanded"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15, delay: 0.05 }}
+              animate={{
+                opacity: 1,
+                transition: {
+                  duration: reduceMotion ? 0 : 0.14,
+                  delay: enterDelay,
+                },
+              }}
+              exit={{
+                opacity: 0,
+                transition: { duration: exitDuration },
+              }}
               className="flex h-full w-full items-center gap-2"
             >
               <a
