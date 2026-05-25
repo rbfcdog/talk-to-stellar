@@ -1,11 +1,5 @@
 import { z } from 'zod';
 
-export const loginSchema = z.object({
-  body: z.object({
-    email: z.string().min(1, 'Email is required').email('Not a valid email'),
-  }),
-});
-
 export const onboardUserSchema = z.object({
   body: z.object({
     name: z.string().optional(),

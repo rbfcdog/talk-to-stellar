@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { StellarService } from '../services/stellar.service';
 import { UserService } from '../services/user.service';
 import { OperationService } from '../services/operation.service';
-import { AuthService } from '../services/auth.service';
 import { AnchorService } from '../services/anchor.service';
 
 interface AuthenticatedRequest extends Request {
@@ -12,27 +11,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 export class ActionsController {
-  
-  static async login(req: Request, res: Response) {
-    try {
-      const { email } = req.body;
-      const result = await AuthService.login(email);
-      
-      res.status(200).json({ 
-        success: true, 
-        sessionToken: result.sessionToken,
-        userId: result.userId,
-        publicKey: result.publicKey
-      });
 
-    } catch (error: any) {
-      if (error.message.includes('não foi encontrado')) {
-        return res.status(404).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
-  
   static async onboardUser(req: Request, res: Response) {
     try {
       const result = await UserService.onboardUser(req.body);
