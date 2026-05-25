@@ -1,6 +1,6 @@
 import { Asset } from '@stellar/stellar-sdk';
 import { server } from '../../config/stellar';
-import { getAssetIssuer, getTrustedPathAssetCodes, normalizeAssetCode } from '../../config/assets';
+import { getAssetIssuer, getTrustedPathAssetCodes, normalizeAssetCode, resolveConfiguredAsset } from '../../config/assets';
 import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
 
 type AssetInput = {
@@ -15,7 +15,7 @@ type PathAsset = {
 };
 
 export type BrlReferenceQuote = {
-  source: 'configured_brl_asset';
+  source: 'configured_tesouro_asset';
   symbol: 'USDC/BRL';
   brlPerUsdc: string;
   usdcPerBrl: string;
@@ -41,11 +41,12 @@ function toStellarAmount(value: unknown): string {
 }
 
 function createConfiguredAsset(code: 'BRL' | 'USDC'): AssetInput {
-  const issuer = getAssetIssuer(code);
+  const asset = resolveConfiguredAsset(code);
+  const issuer = asset.issuer || getAssetIssuer(asset.code);
   if (!issuer) {
-    throw new Error(`${code}_ISSUER is not configured for the current Stellar network.`);
+    throw new Error(`${asset.code}_ISSUER is not configured for the current Stellar network.`);
   }
-  return { code, issuer };
+  return { code: asset.code, issuer };
 }
 
 function toSdkAsset(asset: AssetInput): Asset {
@@ -134,7 +135,7 @@ export class BrlReferenceRateService {
     const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
 
     return {
-      source: 'configured_brl_asset',
+      source: 'configured_tesouro_asset',
       symbol: 'USDC/BRL',
       brlPerUsdc: brlPerUsdc.toFixed(8),
       usdcPerBrl: usdcPerBrl.toFixed(8),

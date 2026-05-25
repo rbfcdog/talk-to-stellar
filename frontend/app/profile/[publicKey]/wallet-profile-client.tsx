@@ -14,7 +14,10 @@ type BalanceItem = {
 
 function normalizeAssetCode(value?: string, type?: string) {
   if (String(type || "").toLowerCase() === "native") return ""
-  return String(value || "").toUpperCase().replace(/^USD$/, "USDC")
+  const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
+  if (code === "TESOURO") return "BRL"
+  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR"
+  return code
 }
 
 function formatAssetBalance(item: BalanceItem) {
@@ -23,7 +26,15 @@ function formatAssetBalance(item: BalanceItem) {
   if (!Number.isFinite(raw)) return `${item.balance || "0"} ${code}`
   if (code === "USDC") return `US$ ${raw.toFixed(2)}`
   if (code === "BRL") return `R$ ${raw.toFixed(2)}`
+  if (code === "EUR") return `€ ${raw.toFixed(2)}`
   return code ? `${raw.toFixed(2)} ${code}` : ""
+}
+
+function displayAssetCode(code: string) {
+  if (code === "BRL") return "R$"
+  if (code === "USDC") return "US$"
+  if (code === "EUR") return "€"
+  return code
 }
 
 export default function WalletProfileClient({ publicKey }: { publicKey: string }) {
@@ -117,7 +128,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                   <ul className="divide-y divide-white/5">
                     {visibleBalances.map((item: BalanceItem, index: number) => (
                       <li key={`${item.asset_code || item.asset_type || "asset"}-${index}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-sm text-tts-deep">{normalizeAssetCode(item.asset_code, item.asset_type)}</span>
+                        <span className="text-sm text-tts-deep">{displayAssetCode(normalizeAssetCode(item.asset_code, item.asset_type))}</span>
                         <span className="text-sm font-semibold text-tts-surface">{formatAssetBalance(item)}</span>
                       </li>
                     ))}

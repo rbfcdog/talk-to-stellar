@@ -84,7 +84,7 @@ async function main(): Promise<void> {
 
   console.log(`Horizon URL: ${horizonUrl}`);
   console.log(`USDC issuer: ${getAssetIssuer('USDC') || 'not configured'}`);
-  console.log(`BRL issuer: ${getAssetIssuer('BRL') || 'not configured'}`);
+  console.log(`TESOURO issuer: ${getAssetIssuer('TESOURO') || 'not configured'}`);
 
   await debugStrictReceive(sourceCode, destinationCode, destinationAmount);
   await debugStrictSend(sourceCode, destinationCode, sourceAmount);

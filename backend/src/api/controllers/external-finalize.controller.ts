@@ -23,7 +23,7 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { GlobalProfileService } from '../services/global-profile.service';
 import { logger } from '../../utils/logger';
-import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { Keypair } from '@stellar/stellar-sdk';
 import { v4 as uuidv4 } from 'uuid';
@@ -596,9 +596,9 @@ function pickContactTransferKey(contact?: any): string {
 }
 
 function resolveAssetIssuer(assetCode: string, provided?: string): string | undefined {
-  const normalized = normalizeAssetCode(assetCode);
-  if (normalized === 'XLM') return undefined;
-  return getAssetIssuer(normalized, provided);
+  const asset = resolveConfiguredAsset(assetCode, provided);
+  if (asset.code === 'XLM') return undefined;
+  return asset.issuer || getAssetIssuer(asset.code, provided);
 }
 
 async function configureWalletAssetsAndContacts(input: {
@@ -1503,10 +1503,12 @@ export default class ExternalFinalizeController {
           return res.status(400).json({ success: false, message: 'token missing conversion data' });
         }
 
-        const sourceAssetCode = normalizeAssetCode(source_asset_code);
-        const destAssetCode = normalizeAssetCode(dest_asset_code);
-        const sourceAssetIssuer = resolveAssetIssuer(sourceAssetCode, source_asset_issuer);
-        const destAssetIssuer = resolveAssetIssuer(destAssetCode, dest_asset_issuer);
+        const sourceAsset = resolveConfiguredAsset(source_asset_code, source_asset_issuer);
+        const destAsset = resolveConfiguredAsset(dest_asset_code, dest_asset_issuer);
+        const sourceAssetCode = sourceAsset.code;
+        const destAssetCode = destAsset.code;
+        const sourceAssetIssuer = sourceAsset.issuer;
+        const destAssetIssuer = destAsset.issuer;
 
         if (sourceAssetCode !== 'XLM' && !sourceAssetIssuer) {
           return res.status(400).json({
@@ -1865,13 +1867,15 @@ export default class ExternalFinalizeController {
         const { amount, destination, destination_name, destination_contact, session_id, owner_id } = payload as any;
         const contextMessageRaw = String((payload as any)?.transaction_context_message || (payload as any)?.memo || '').trim();
         const contextMessage = contextMessageRaw ? contextMessageRaw.slice(0, 120) : '';
-        const assetCode = normalizeAssetCode((payload as any)?.asset_code || 'XLM');
-        const assetIssuer = resolveAssetIssuer(assetCode, (payload as any)?.asset_issuer);
+        const requestedDestinationAsset = resolveConfiguredAsset((payload as any)?.asset_code || 'XLM', (payload as any)?.asset_issuer);
+        const assetCode = requestedDestinationAsset.code;
+        const assetIssuer = requestedDestinationAsset.issuer;
         const requestedSourceAmount = String((payload as any)?.source_amount || '').trim();
-        const requestedSourceAssetCode = normalizeAssetCode((payload as any)?.source_asset_code || '');
-        const requestedSourceAssetIssuer = requestedSourceAssetCode
-          ? resolveAssetIssuer(requestedSourceAssetCode, (payload as any)?.source_asset_issuer)
-          : undefined;
+        const requestedSourceAsset = (payload as any)?.source_asset_code
+          ? resolveConfiguredAsset((payload as any)?.source_asset_code, (payload as any)?.source_asset_issuer)
+          : null;
+        const requestedSourceAssetCode = requestedSourceAsset?.code || '';
+        const requestedSourceAssetIssuer = requestedSourceAsset?.issuer;
         const isStrictSendPayment = Boolean(
           requestedSourceAmount &&
           requestedSourceAssetCode &&

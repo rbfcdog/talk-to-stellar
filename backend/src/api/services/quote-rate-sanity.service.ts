@@ -21,7 +21,8 @@ function isUsdLike(code: string): boolean {
 }
 
 function isBrlLike(code: string): boolean {
-  return normalizeAssetCode(code) === 'BRL';
+  const normalized = normalizeAssetCode(code);
+  return normalized === 'BRL' || normalized === 'TESOURO';
 }
 
 export function getUsdBrlSanityRange(): { min: number; max: number } {

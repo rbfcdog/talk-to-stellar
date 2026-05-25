@@ -68,7 +68,8 @@ function normalizeAssetInput(code: any, issuer: any) {
 
 function balanceMatchesConfiguredAsset(balance: any, assetCode: string): boolean {
   const code = normalizeAssetCode(balance?.asset || balance?.asset_code || balance?.code);
-  const expectedCode = normalizeAssetCode(assetCode);
+  const expectedAsset = resolveConfiguredAsset(assetCode);
+  const expectedCode = normalizeAssetCode(expectedAsset.code);
   if (code !== expectedCode) return false;
   if (expectedCode === 'XLM') return true;
   return assetMatchesConfiguredIssuer(expectedCode, balance?.asset_issuer);
@@ -448,7 +449,7 @@ async function getSavingsUsdBrlRate(): Promise<{ rate: number; source: string; o
     if (rate > 0) {
       return {
         rate,
-        source: quote.source || 'configured_brl_asset',
+        source: quote.source || 'configured_tesouro_asset',
         observedAt: quote.fetchedAt || new Date().toISOString(),
       };
     }
@@ -635,7 +636,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_brl_usdc_quote",
-    description: "Get the current BRL-USDC quote from the configured on-chain BRL asset. Returns both BRL per 1 USDC and USDC per 1 BRL.",
+    description: "Get the current BRL-USDC quote from the configured TESOURO settlement asset. Returns both BRL per 1 USDC and USDC per 1 BRL.",
     parameters: {
       type: "object",
       properties: {},
@@ -825,7 +826,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code to send. For user-facing flows use BRL or USDC.",
+          description: "Asset code to send. For user-facing flows use BRL, USDC or EUR.",
         },
         asset_issuer: {
           type: "string",
@@ -863,7 +864,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code for user-facing flows, e.g. USDC or BRL",
+          description: "Destination asset code for user-facing flows, e.g. USDC, BRL or EUR",
         },
         dest_asset_issuer: {
           type: "string",
@@ -871,7 +872,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code for user-facing flows, e.g. USDC or BRL",
+          description: "Source asset code for user-facing flows, e.g. USDC, BRL or EUR",
         },
         source_asset_issuer: {
           type: "string",
@@ -905,7 +906,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Moeda de origem (BRL ou USDC).",
+          description: "Moeda de origem (BRL, USDC ou EUR).",
         },
         source_asset_issuer: {
           type: "string",
@@ -913,7 +914,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Moeda de destino (BRL ou USDC).",
+          description: "Moeda de destino (BRL, USDC ou EUR).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -947,7 +948,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. USDC or BRL",
+          description: "Destination asset code, e.g. USDC, BRL or EUR",
         },
         dest_asset_issuer: {
           type: "string",
@@ -955,7 +956,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. USDC or BRL",
+          description: "Source asset code, e.g. USDC, BRL or EUR",
         },
         source_asset_issuer: {
           type: "string",
@@ -985,7 +986,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code, e.g. USDC or BRL",
+          description: "Asset code, e.g. USDC, BRL or EUR",
         },
         asset_issuer: {
           type: "string",
@@ -1007,7 +1008,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code the recipient receives. For user-facing flows use BRL or USDC.",
+          description: "Asset code the recipient receives. For user-facing flows use BRL, USDC or EUR.",
         },
         asset_issuer: {
           type: "string",
@@ -1019,7 +1020,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Origin/source asset the sender spends (BRL or USDC). Must not be confused with destination_asset_code.",
+          description: "Origin/source asset the sender spends (BRL, USDC or EUR). Must not be confused with destination_asset_code.",
         },
         source_asset_issuer: {
           type: "string",
@@ -1031,7 +1032,7 @@ export const toolDefinitions = [
         },
         destination_asset_code: {
           type: "string",
-          description: "Destination asset the recipient receives (BRL or USDC).",
+          description: "Destination asset the recipient receives (BRL, USDC or EUR).",
         },
         destination_asset_issuer: {
           type: "string",
@@ -1093,7 +1094,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code (USDC or BRL).",
+          description: "Source asset code (USDC, BRL or EUR).",
         },
         source_asset_issuer: {
           type: "string",
@@ -1105,7 +1106,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code (USDC or BRL).",
+          description: "Destination asset code (USDC, BRL or EUR).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -2183,7 +2184,7 @@ async function executeGetBalance(input: any): Promise<string> {
     }
     let account = accountLookup.account;
 
-    const visibleAssets = ['BRL', 'USDC'];
+    const visibleAssets = ['BRL', 'USDC', 'EUR'];
     let balances = account.balances.map(normalizeBalanceLine);
 
     const initialFundingRepair = await maybeRepairInitialFundingSweep(input, publicKey, balances);
@@ -2192,9 +2193,15 @@ async function executeGetBalance(input: any): Promise<string> {
       balances = account.balances.map(normalizeBalanceLine);
     }
 
-    const filteredBalances = visibleAssets.map((asset) => balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset)) || {
-      asset,
-      balance: '0.0000000',
+    const filteredBalances = visibleAssets.map((asset) => {
+      const matched = balances.find((balance: any) => balanceMatchesConfiguredAsset(balance, asset));
+      return matched
+        ? { ...matched, asset, asset_code: asset }
+        : {
+            asset,
+            asset_code: asset,
+            balance: '0.0000000',
+          };
     });
     const monthlySavings = await buildMonthlySavingsSummaryForBalance(input, publicKey);
     return JSON.stringify({
@@ -2280,7 +2287,7 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       asset_issuer: balance.asset_issuer,
     }));
 
-    const technicalAssets = ['XLM', 'BRL', 'USDC'].map((assetCode) => {
+    const technicalAssets = ['XLM', 'TESOURO', 'USDC', 'EURC'].map((assetCode) => {
       const existing = mappedBalances.find((balance: any) => balanceMatchesConfiguredAsset(balance, assetCode));
       if (existing) return existing;
       return {
@@ -4034,7 +4041,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     input.source_amount,
     metadata?.savings?.gross_amount_brl,
     metadata?.gross_amount_brl,
-    paymentLog?.source_asset_code === 'BRL' ? paymentLog?.source_amount : '',
+    paymentLog?.source_asset_code === 'BRL' || paymentLog?.source_asset_code === 'TESOURO' ? paymentLog?.source_amount : '',
   ]);
   const sourceAsset = String(paymentLog?.source_asset_code || metadata?.source_asset_code || transferDetails?.sourceAssetCode || 'BRL').toUpperCase();
   const brlSent = sourceAmount > 0
@@ -4159,8 +4166,8 @@ function estimateBrlForSavingsSummary(input: {
   const sourceAsset = String(quote.sourceAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const destinationAmount = toNumber(quote.destinationAmount);
   const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-  if (sourceAsset === 'BRL' && destinationAmount > 0 && sourceAmount > 0) return sourceAmount;
-  if (destinationAsset === 'BRL' && destinationAmount > 0) return destinationAmount;
+  if ((sourceAsset === 'BRL' || sourceAsset === 'TESOURO') && destinationAmount > 0 && sourceAmount > 0) return sourceAmount;
+  if ((destinationAsset === 'BRL' || destinationAsset === 'TESOURO') && destinationAmount > 0) return destinationAmount;
   const usdBrlRate = Number(input.usdBrlRate || configuredUsdBrlFallbackRate());
   if ((assetCode === 'USDC' || assetCode === 'USD') && Number.isFinite(usdBrlRate) && usdBrlRate > 0) {
     return amount * usdBrlRate;
@@ -4682,7 +4689,7 @@ async function getWalletFiatBalances(sessionId?: string): Promise<{ brl: number;
   for (const row of balances) {
     const code = String(row?.asset_code || row?.asset || '').toUpperCase();
     const value = toNumber(row?.balance || row?.amount);
-    if (code === 'BRL') brl = value;
+    if (code === 'BRL' || code === 'TESOURO') brl = value;
     if (code === 'USDC' || code === 'USD') usd = value;
   }
   return { brl, usd };
@@ -4749,7 +4756,7 @@ function classifyTreasuryBehavior(rows: any[], ownPublicKey?: string): {
     }
     if (direction === 'sent') {
       spendsTotal += 1;
-      if (srcAsset === 'BRL' || dstAsset === 'BRL') spendsBrlCount += 1;
+      if (srcAsset === 'BRL' || srcAsset === 'TESOURO' || dstAsset === 'BRL' || dstAsset === 'TESOURO') spendsBrlCount += 1;
     }
   }
   return {

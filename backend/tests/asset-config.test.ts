@@ -4,8 +4,11 @@ import {
   getAssetIssuer,
   getTrustedPathAssetCodes,
   getUserFacingAssetCodes,
+  resolveConfiguredAsset,
   normalizeAssetCode,
-  PUBLIC_BRL_ISSUER_NTOKENS,
+  settlementAssetCode,
+  userFacingAssetCode,
+  ETHERFUSE_TESOURO_ISSUER,
   PUBLIC_USDC_ISSUER,
   TESTNET_USDC_ISSUER,
 } from '../src/config/assets';
@@ -21,6 +24,7 @@ describe('asset config', () => {
     expect(normalizeAssetCode('usd')).toBe('USDC');
     expect(normalizeAssetCode('native')).toBe('XLM');
     expect(normalizeAssetCode('brl')).toBe('BRL');
+    expect(normalizeAssetCode('euro')).toBe('EURC');
   });
 
   it('uses Circle testnet USDC issuer by default on testnet', () => {
@@ -35,24 +39,27 @@ describe('asset config', () => {
     expect(getAssetIssuer('USDC')).toBe(PUBLIC_USDC_ISSUER);
   });
 
-  it('uses nTokens BRL issuer by default on public network', () => {
-    delete process.env.BRL_ISSUER_PUBLIC;
+  it('settles user-facing reais as TESOURO', () => {
+    expect(settlementAssetCode('BRL')).toBe('TESOURO');
+    expect(settlementAssetCode('real')).toBe('TESOURO');
+    expect(resolveConfiguredAsset('BRL')).toEqual({
+      code: 'TESOURO',
+      issuer: ETHERFUSE_TESOURO_ISSUER,
+    });
+    expect(userFacingAssetCode('TESOURO')).toBe('BRL');
+  });
+
+  it('uses TESOURO issuer for user-facing BRL on any network', () => {
+    process.env.TESOURO_ISSUER = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    expect(getAssetIssuer('BRL')).toBe('GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF');
     process.env.STELLAR_NETWORK = 'PUBLIC';
-    expect(getAssetIssuer('BRL')).toBe(PUBLIC_BRL_ISSUER_NTOKENS);
+    expect(getAssetIssuer('BRL')).toBe('GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF');
   });
 
-  it('uses testnet BRL issuer only when configured on testnet', () => {
-    process.env.BRL_ISSUER_PUBLIC = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-    delete process.env.BRL_ISSUER_TESTNET;
+  it('matches BRL only against the configured TESOURO issuer', () => {
     process.env.STELLAR_NETWORK = 'TESTNET';
-    expect(getAssetIssuer('BRL')).toBeUndefined();
-    process.env.BRL_ISSUER_TESTNET = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-    expect(getAssetIssuer('BRL')).toBe('GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
-  });
-
-  it('matches BRL only for the configured issuer', () => {
-    process.env.STELLAR_NETWORK = 'TESTNET';
-    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+    process.env.TESOURO_ISSUER = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
 
     expect(assetMatchesConfiguredIssuer('BRL', 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF')).toBe(true);
     expect(assetMatchesConfiguredIssuer('BRL', 'GDYAZKZBGC2NNI2FYVPJW5FNAGKUVJIIB3WO3JZFCGURG6TDU3JZNLTQ')).toBe(false);
@@ -62,23 +69,17 @@ describe('asset config', () => {
     expect(normalizeAssetCode('foo')).toBe('FOO');
   });
 
-  it('keeps BRL user-facing but does not trust the Stellar BRL asset by default', () => {
+  it('uses TESOURO and EURC as configured settlement assets', () => {
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = TESTNET_USDC_ISSUER;
-    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
-    delete process.env.ENABLE_STELLAR_BRL_ASSET;
+    process.env.TESOURO_ISSUER = ETHERFUSE_TESOURO_ISSUER;
+    process.env.EURC_ISSUER = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
 
-    expect(getUserFacingAssetCodes()).toContain('BRL');
+    expect(getUserFacingAssetCodes()).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('BRL');
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
+    expect(getTrustedPathAssetCodes()).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
     expect(getTrustedPathAssetCodes()).not.toContain('BRL');
-  });
-
-  it('allows the configured Stellar BRL asset only when explicitly enabled', () => {
-    process.env.STELLAR_NETWORK = 'TESTNET';
-    process.env.BRL_ISSUER_TESTNET = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
-    process.env.ENABLE_STELLAR_BRL_ASSET = 'true';
-
-    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toContain('BRL');
-    expect(getTrustedPathAssetCodes()).toContain('BRL');
+    expect(userFacingAssetCode('EURC')).toBe('EUR');
   });
 });

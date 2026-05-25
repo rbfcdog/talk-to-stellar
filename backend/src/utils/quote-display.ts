@@ -21,7 +21,8 @@ function normalizeAssetCode(value: unknown): string {
 function displaySymbol(assetCode: string): string {
   const code = normalizeAssetCode(assetCode);
   if (code === 'USDC') return 'US$';
-  if (code === 'BRL') return 'R$';
+  if (code === 'BRL' || code === 'TESOURO') return 'R$';
+  if (code === 'EURC' || code === 'EUR') return '€';
   return code;
 }
 
@@ -44,11 +45,14 @@ export function buildUsedQuoteLabel(input: {
     return 'Cotação usada: não aplicável';
   }
 
-  if (sourceAsset === 'BRL' && destinationAsset === 'USDC') {
+  const sourceIsReal = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
+  const destinationIsReal = destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
+
+  if (sourceIsReal && destinationAsset === 'USDC') {
     return `Cotação usada: 1 US$ = R$ ${trimFixed(sourceAmount / destinationAmount, 6)}`;
   }
 
-  if (sourceAsset === 'USDC' && destinationAsset === 'BRL') {
+  if (sourceAsset === 'USDC' && destinationIsReal) {
     return `Cotação usada: 1 US$ = R$ ${trimFixed(destinationAmount / sourceAmount, 6)}`;
   }
 

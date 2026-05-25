@@ -63,7 +63,7 @@ export class FinancialInsightsService {
       const completedAt = String(log.completed_at || '');
 
       if (completedAt && new Date(completedAt) >= monthStart) {
-        if (operationType.includes('CONVERSION') && sourceAsset === 'BRL') {
+        if (operationType.includes('CONVERSION') && (sourceAsset === 'BRL' || sourceAsset === 'TESOURO')) {
           monthlyConvertedBrl += sourceAmount;
         }
 

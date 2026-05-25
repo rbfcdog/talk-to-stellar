@@ -12,7 +12,7 @@ import { ALL_TOOLS, executeTool } from "./tools";
 import { logger } from "../../utils/logger";
 import ExternalService from '../services/core/external.service';
 import { supabase } from '../../config/supabase';
-import { getAssetIssuer } from '../../config/assets';
+import { getAssetIssuer, resolveConfiguredAsset } from '../../config/assets';
 import { WalletRepository } from '../repository/core/wallet.repository';
 import { ActivityFeedService } from '../services/activity-feed.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
@@ -451,7 +451,9 @@ export class AgentGraph {
     const hinted = String(hintedAsset || '').trim().toUpperCase();
     const normalizedAsset = hinted === 'USD'
       ? 'USDC'
-      : (hinted || undefined);
+      : (hinted === 'EURC' || hinted === 'EUR' || hinted === 'EURO' || hinted === 'EUROS')
+        ? 'EUR'
+        : (hinted || undefined);
     const normalizedAmount = normalizeHumanAmountText(amountText);
     const cleanedAmount = Number.isFinite(Number(normalizedAmount)) ? normalizedAmount : amountText;
 
@@ -545,9 +547,24 @@ export class AgentGraph {
       .trim();
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
+    if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') return 'EUR';
     if (token === 'xlm' || token === 'lumen' || token === 'lumens') return '';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
+  }
+
+  private normalizeAgentAssetCode(value: unknown): string {
+    const code = String(value || '').trim().toUpperCase();
+    if (!code) return '';
+    if (code === 'USD') return 'USDC';
+    if (code === 'EURO' || code === 'EUROS') return 'EUR';
+    return code;
+  }
+
+  private toSettlementAssetCode(value: unknown): string {
+    const code = this.normalizeAgentAssetCode(value);
+    if (!code) return '';
+    return String(resolveConfiguredAsset(code).code || code).toUpperCase();
   }
 
   private inferPaymentAssetFromText(normalized: string, amountMatch?: RegExpMatchArray | null): string {
@@ -560,18 +577,18 @@ export class AgentGraph {
       }
 
       const afterAmount = normalized.slice(amountIndex + matchedText.length);
-      const afterToken = afterAmount.match(/^\s*(brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
       const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
       if (assetAfterAmount) return assetAfterAmount;
 
       const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
-      const beforeToken = beforeAmount.match(/\b(brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
       const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
       if (assetBeforeAmount) return assetBeforeAmount;
     }
 
-    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
-    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
     return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
   }
 
@@ -604,7 +621,7 @@ export class AgentGraph {
 
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)/);
+    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|xlm|lumens?)/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -644,7 +661,7 @@ export class AgentGraph {
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
 
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
+    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -1237,8 +1254,8 @@ export class AgentGraph {
         llmParsed.asset_code
       );
       const amount = String(amountInfo.amount || '').trim();
-      const assetCode = String(amountInfo.assetCode || 'USDC').trim().toUpperCase().replace(/^USD$/, 'USDC');
-      const receiveAssetCode = String(llmParsed.receive_asset_code || assetCode).trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const assetCode = this.normalizeAgentAssetCode(amountInfo.assetCode || 'USDC') || 'USDC';
+      const receiveAssetCode = this.normalizeAgentAssetCode(llmParsed.receive_asset_code || assetCode) || assetCode;
       const recipientName = String(llmParsed.recipient_query || '').trim();
       const expiresAt = this.parsePaymentLinkExpiryFromText(state.current_input);
       const numericAmount = parseHumanAmountNumber(amount);
@@ -1260,7 +1277,7 @@ export class AgentGraph {
         state.pending_payment = undefined;
         state.success = true;
         const receiveText = receiveAssetCode && receiveAssetCode !== assetCode
-          ? ` A pessoa recebe em ${receiveAssetCode}.`
+          ? ` A pessoa recebe em ${this.formatUserFacingAssetName(receiveAssetCode, this.getLanguage(state))}.`
           : '';
         const expiryText = expiresAt
           ? ` O link ficará válido até ${expiresAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`
@@ -1340,11 +1357,10 @@ export class AgentGraph {
       intent.asset_code
     );
     const amount = String(amountInfo.amount || '').trim();
-    const assetCode = String(amountInfo.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-    const receiveAssetCode = String(intent.receive_asset_code || assetCode)
-      .trim()
-      .toUpperCase()
-      .replace(/^USD$/, 'USDC');
+    const assetCode = this.normalizeAgentAssetCode(amountInfo.assetCode);
+    const receiveAssetCode = this.normalizeAgentAssetCode(intent.receive_asset_code || assetCode);
+    const settlementAssetCode = this.toSettlementAssetCode(assetCode) || assetCode;
+    const settlementReceiveAssetCode = this.toSettlementAssetCode(receiveAssetCode) || receiveAssetCode;
 
     if (!recipientQuery || !amount || !assetCode) {
       return { success: false, error: 'context_incomplete' };
@@ -1364,14 +1380,16 @@ export class AgentGraph {
     let sourceAssetCodeForConfirmation: string | undefined;
     let sourceAssetIssuerForConfirmation: string | undefined;
 
-    if (receiveAssetCode && receiveAssetCode !== assetCode) {
-      const sourceIssuer = getAssetIssuer(assetCode) || await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), assetCode);
-      let destIssuer = getAssetIssuer(receiveAssetCode) || await this.resolveWalletAssetIssuer(destination, receiveAssetCode);
-      if (receiveAssetCode !== 'XLM' && !destIssuer) {
+    confirmationAssetCode = settlementAssetCode;
+
+    if (settlementReceiveAssetCode && settlementReceiveAssetCode !== settlementAssetCode) {
+      const sourceIssuer = getAssetIssuer(settlementAssetCode) || await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), settlementAssetCode);
+      let destIssuer = await this.resolveWalletAssetIssuer(destination, settlementReceiveAssetCode);
+      if (settlementReceiveAssetCode !== 'XLM' && !destIssuer) {
         const trustlineResultRaw = await executeTool('ensure_trustline', {
           session_id: contact?.session_id,
           public_key: destination,
-          asset_code: receiveAssetCode,
+          asset_code: settlementReceiveAssetCode,
         });
         try {
           const trustlineResult = JSON.parse(trustlineResultRaw);
@@ -1382,14 +1400,15 @@ export class AgentGraph {
           // ignore, quote will fail with a clearer error if issuer is missing
         }
       }
+      destIssuer = destIssuer || getAssetIssuer(settlementReceiveAssetCode);
 
       const quoteRaw = await executeTool('get_best_route', {
         source_public_key: state.session_data?.public_key,
         destination,
         source_amount: amount,
-        source_asset_code: assetCode,
+        source_asset_code: settlementAssetCode,
         source_asset_issuer: sourceIssuer,
-        dest_asset_code: receiveAssetCode,
+        dest_asset_code: settlementReceiveAssetCode,
         dest_asset_issuer: destIssuer,
       });
       const parsedBestRoute = JSON.parse(quoteRaw);
@@ -1400,9 +1419,9 @@ export class AgentGraph {
       bestRouteResult = parsedBestRoute;
       quote = parsedBestRoute.quote;
       confirmationAmount = String(quote.destinationAmount || '').trim();
-      confirmationAssetCode = receiveAssetCode;
+      confirmationAssetCode = settlementReceiveAssetCode;
       sourceAmountForConfirmation = amount;
-      sourceAssetCodeForConfirmation = assetCode;
+      sourceAssetCodeForConfirmation = settlementAssetCode;
       sourceAssetIssuerForConfirmation = sourceIssuer;
     }
 
@@ -1440,7 +1459,7 @@ export class AgentGraph {
       return { success: false, error: prepare.error || 'prepare_payment_confirmation_failed' };
     }
 
-    if (receiveAssetCode !== assetCode) {
+    if (settlementReceiveAssetCode !== settlementAssetCode) {
       const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
       const message = [
         `Estimativa antes de confirmar pela rota mais otimizada: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
@@ -1559,6 +1578,7 @@ export class AgentGraph {
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
+    if (upper === 'EUR') return `€ ${n.toFixed(2)}`;
     if (upper === 'XLM') return 'saldo da conta TalkToStellar';
     return `${n.toFixed(2)} ${upper || 'saldo'}`;
   }
@@ -1567,17 +1587,21 @@ export class AgentGraph {
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'USDC' || upper === 'USD') return 'US$';
     if (upper === 'BRL') return 'R$';
+    if (upper === 'EUR') return '€';
     return upper || this.text(language, 'saldo', 'balance');
   }
 
   private toUserFacingAssetCode(assetCode: unknown): string {
     const upper = String(assetCode || '').trim().toUpperCase();
-    return upper === 'TESOURO' ? 'BRL' : upper;
+    if (upper === 'TESOURO') return 'BRL';
+    if (upper === 'EURC') return 'EUR';
+    return upper;
   }
 
   private maskInternalAssetNames(value: unknown): string {
     const raw = String(value || '')
       .replace(/TESOURO:[A-Z2-7]{56}/g, 'BRL')
+      .replace(/EURC:[A-Z2-7]{56}/g, 'EUR')
       .replace(/\bTESOURO\b/g, 'BRL');
 
     const parts = raw
@@ -1588,6 +1612,7 @@ export class AgentGraph {
         if (part === 'XLM' || part === 'NATIVE') return '';
         if (part === 'USDC' || part === 'USD') return 'US$';
         if (part === 'BRL') return 'R$';
+        if (part === 'EURC' || part === 'EUR') return '€';
         return part;
       })
       .filter(Boolean)
@@ -1598,6 +1623,7 @@ export class AgentGraph {
 
     return raw
       .replace(/\bXLM\b/g, '')
+      .replace(/\bEURC\b/g, 'EUR')
       .replace(/\s*->\s*->\s*/g, ' -> ')
       .replace(/^\s*->\s*|\s*->\s*$/g, '')
       .trim();
@@ -1668,7 +1694,7 @@ export class AgentGraph {
     if (!/\b(enviar|mandar|transferir|pagar|chegar|receber)\b/.test(normalized)) return null;
 
     const amountPattern = '((?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,8})?|\\d+(?:[.,]\\d{1,8})?))';
-    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|usd|usdc|dolar|dolares)?\\b`));
+    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares)?\\b`));
     const genericRecipient = this.isGenericRecipientReference(parsed?.recipient_query || text);
     if (!receiveMatch && !genericRecipient) return null;
 
@@ -1679,7 +1705,7 @@ export class AgentGraph {
       this.assetCodeFromTextToken(receiveMatch?.[2]) ||
       String(parsed?.receive_asset_code || parsed?.asset_code || 'BRL')
     ).toUpperCase().replace(/^USD$/, 'USDC');
-    const safeDestAssetCode = destAssetCode === 'BRL' || destAssetCode === 'USDC' ? destAssetCode : 'BRL';
+    const safeDestAssetCode = ['BRL', 'USDC', 'EUR'].includes(destAssetCode) ? destAssetCode : 'BRL';
     const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
 
     return {
@@ -1694,10 +1720,12 @@ export class AgentGraph {
     destAssetCode: string;
     sourceAssetCode: string;
   }): Promise<AgentState> {
-    const sourceIssuer = getAssetIssuer(estimate.sourceAssetCode) ||
-      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), estimate.sourceAssetCode);
-    const destIssuer = getAssetIssuer(estimate.destAssetCode) ||
-      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), estimate.destAssetCode);
+    const routeSourceAssetCode = this.toSettlementAssetCode(estimate.sourceAssetCode) || estimate.sourceAssetCode;
+    const routeDestAssetCode = this.toSettlementAssetCode(estimate.destAssetCode) || estimate.destAssetCode;
+    const sourceIssuer = getAssetIssuer(routeSourceAssetCode) ||
+      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), routeSourceAssetCode);
+    const destIssuer = getAssetIssuer(routeDestAssetCode) ||
+      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), routeDestAssetCode);
     let sourceAmount = '';
     let destinationAmount = estimate.amount;
     let feeDisplay = 'R$ 0,01';
@@ -1708,9 +1736,9 @@ export class AgentGraph {
         source_public_key: state.session_data?.public_key,
         destination: state.session_data?.public_key,
         dest_amount: estimate.amount,
-        source_asset_code: estimate.sourceAssetCode,
+        source_asset_code: routeSourceAssetCode,
         source_asset_issuer: sourceIssuer,
-        dest_asset_code: estimate.destAssetCode,
+        dest_asset_code: routeDestAssetCode,
         dest_asset_issuer: destIssuer,
       });
       const result = JSON.parse(raw);
@@ -2046,8 +2074,8 @@ export class AgentGraph {
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem identificador técnico.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC ou BRL) quando houver moeda explícita; se o usuário disser USD, normalize para USDC.',
-        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC". Isso também vale para links de pagamento.',
+        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou EUR) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser euro/EUR/EURC, normalize para EUR.',
+        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/EUR". Isso também vale para links de pagamento.',
         '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
@@ -2059,6 +2087,7 @@ export class AgentGraph {
         '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero transferir 200 brl pra Carlos Souza pra ele receber em usdc" => {"recipient_query":"Carlos Souza","amount":"200","asset_code":"BRL","receive_asset_code":"USDC","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "quero mandar 20 euros pra Ana" => {"recipient_query":"Ana","amount":"20","asset_code":"EUR","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc pra pessoa receber em brl" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "gerar link de pagamento de 15 dólares" => {"recipient_query":"","amount":"15","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
@@ -2208,9 +2237,10 @@ export class AgentGraph {
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
-        '- sourceAssetCode deve ser o ativo de origem (USDC ou BRL). Não use XLM em respostas ou JSON de usuário.',
+        '- sourceAssetCode deve ser o ativo de origem (USDC, BRL ou EUR). Não use XLM em respostas ou JSON de usuário.',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
+        '- Se o usuário usar euro/EUR/EURC, normalize para EUR.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
         '',
@@ -2233,11 +2263,11 @@ export class AgentGraph {
       return {
         sourceAmount: parsed.sourceAmount || parsed.amount,
         sourceAssetCode: String(parsed.sourceAssetCode || parsed.source_asset_code || parsed.asset_code || parsed.asset || '')
-          .toUpperCase()
-          .replace(/^USD$/, 'USDC') || undefined,
+          ? this.normalizeAgentAssetCode(parsed.sourceAssetCode || parsed.source_asset_code || parsed.asset_code || parsed.asset)
+          : undefined,
         destAssetCode: String(parsed.destAssetCode || parsed.dest_asset_code || parsed.to_asset_code || parsed.destination_asset || '')
-          .toUpperCase()
-          .replace(/^USD$/, 'USDC') || undefined,
+          ? this.normalizeAgentAssetCode(parsed.destAssetCode || parsed.dest_asset_code || parsed.to_asset_code || parsed.destination_asset)
+          : undefined,
         needs_clarification: Boolean(parsed.needs_clarification),
         clarification_question: parsed.clarification_question || '',
       };
@@ -2265,12 +2295,14 @@ export class AgentGraph {
       .toLowerCase()
       .replace(/\busd\b/g, 'usdc')
       .replace(/\bdolares?\b/g, 'usdc')
+      .replace(/\beuros?\b/g, 'eur')
+      .replace(/\beurc\b/g, 'eur')
       .replace(/\breais?\b/g, 'brl');
 
-    const assets = ['USDC', 'BRL'];
+    const assets = ['USDC', 'BRL', 'EUR'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
-    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl)\b/);
-    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl)\b/);
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur)\b/);
 
     const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
     const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
@@ -2288,7 +2320,8 @@ export class AgentGraph {
     keptReserve?: string;
     error?: string;
   }> {
-    const normalizedAsset = String(sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+    const displayAsset = this.normalizeAgentAssetCode(sourceAssetCode);
+    const normalizedAsset = this.toSettlementAssetCode(displayAsset) || displayAsset;
     if (!normalizedAsset || !state.session_data?.public_key) {
       return { success: false, error: 'Não consegui identificar a moeda de origem.' };
     }
@@ -2310,11 +2343,11 @@ export class AgentGraph {
     }
 
     const balances = Array.isArray(result.balances) ? result.balances : [];
-    const balance = balances.find((item: any) => String(item.asset || item.asset_code || '').toUpperCase() === normalizedAsset);
+    const balance = balances.find((item: any) => this.toSettlementAssetCode(item.asset || item.asset_code || '') === normalizedAsset);
     const balanceText = String(balance?.balance || '0').replace(',', '.');
     const total = Number(balanceText);
     if (!Number.isFinite(total) || total <= 0) {
-      return { success: false, error: `Você não tem saldo disponível em ${normalizedAsset}.` };
+      return { success: false, error: `Você não tem saldo disponível em ${this.toUserFacingAssetCode(normalizedAsset)}.` };
     }
 
     const keptReserve = normalizedAsset === 'XLM' ? 1.6 : 0;
@@ -2334,7 +2367,7 @@ export class AgentGraph {
         keptReserve: keptReserve ? keptReserve.toFixed(7) : undefined,
         error: normalizedAsset === 'XLM'
           ? 'Esse saldo fica reservado para manter sua conta operacional.'
-          : `Você não tem saldo disponível em ${normalizedAsset}.`,
+          : `Você não tem saldo disponível em ${this.toUserFacingAssetCode(normalizedAsset)}.`,
       };
     }
 
@@ -2481,7 +2514,7 @@ export class AgentGraph {
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
-      '- When a quote or payment result has a fee, say it before confirmation in R$ and US$ only.',
+      '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or € according to the asset involved.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
       '- For BRL -> US$ net value, exchange-rate, fee, or received-amount questions, call get_conversion_preview or a quote tool. Never use a hardcoded exchange rate.',
@@ -3232,8 +3265,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
   private formatAssetLine(balance: any, index: number): string {
     const asset = this.toUserFacingAssetCode(balance.asset || balance.asset_code || 'UNKNOWN');
+    const label = asset === 'BRL' ? 'R$' : asset === 'USDC' ? 'US$' : asset === 'EUR' ? '€' : asset;
     const amount = balance.balance || '0';
-    return `${index + 1}. ${asset}: ${amount}`;
+    return `${index + 1}. ${label}: ${amount}`;
   }
 
   private formatTransactionLine(transaction: any, index: number): string {
@@ -3281,9 +3315,12 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
         const byAsset = new Map<string, any>();
         for (const balance of balances) {
-          byAsset.set(String(balance.asset || balance.asset_code || '').toUpperCase(), balance);
+          const asset = this.toUserFacingAssetCode(balance.asset || balance.asset_code || '').replace(/^USD$/, 'USDC');
+          if (asset) {
+            byAsset.set(asset, { ...balance, asset });
+          }
         }
-        const exactBalances = ['BRL', 'USDC'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+        const exactBalances = ['BRL', 'USDC', 'EUR'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
         const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();
         const savingsLine = monthlySavingsMessage ? `\n\n💰 ${monthlySavingsMessage}` : '';
@@ -3697,7 +3734,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
   }
 
   private async resolveWalletAssetIssuer(publicKey: string, assetCode: string): Promise<string | undefined> {
-    const normalizedAssetCode = assetCode.toUpperCase();
+    const normalizedAssetCode = this.toSettlementAssetCode(assetCode) || this.normalizeAgentAssetCode(assetCode);
     if (normalizedAssetCode === 'XLM') {
       return undefined;
     }
@@ -3705,7 +3742,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const toolResultRaw = await executeTool('get_saldo_tecnico', { public_key: publicKey });
     const toolResult = JSON.parse(toolResultRaw);
     const balances = Array.isArray(toolResult?.balances) ? toolResult.balances : [];
-    const balance = balances.find((item: any) => String(item.asset || item.asset_code || '').toUpperCase() === normalizedAssetCode);
+    const balance = balances.find((item: any) => this.toSettlementAssetCode(item.asset || item.asset_code || '') === normalizedAssetCode);
 
     return balance?.asset_issuer;
   }
@@ -3768,15 +3805,17 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
       let finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
-      const finalSourceAssetCode = String(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-      const finalDestAssetCode = String(llmParsed.destAssetCode || inferredAssets.destAssetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
+      const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '');
+      const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || inferredAssets.destAssetCode || '');
+      const finalSourceAssetCode = this.toSettlementAssetCode(requestedSourceAssetCode) || requestedSourceAssetCode;
+      const finalDestAssetCode = this.toSettlementAssetCode(requestedDestAssetCode) || requestedDestAssetCode;
 
       let fullBalanceConversion: { availableBalance?: string; keptReserve?: string } | null = null;
       if (!finalSourceAmount && finalSourceAssetCode && this.isFullBalanceConversionRequest(state.current_input)) {
         const fullBalance = await this.resolveFullBalanceConversionAmount(state, finalSourceAssetCode);
         if (!fullBalance.success || !fullBalance.amount) {
           state.success = false;
-          state.response_message = fullBalance.error || `Não consegui calcular o saldo disponível em ${finalSourceAssetCode}.`;
+          state.response_message = fullBalance.error || `Não consegui calcular o saldo disponível em ${this.toUserFacingAssetCode(finalSourceAssetCode)}.`;
           await this.saveAssistantResponse(state);
           await this.repository.saveState(state.session_id, state);
           return state;
@@ -3799,7 +3838,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
         if (finalSourceAssetCode !== 'XLM' && !sourceIssuer) {
           state.success = false;
-          state.response_message = `Não encontrei ${finalSourceAssetCode} na sua conta para usar como moeda de origem.`;
+          state.response_message = `Não encontrei ${this.toUserFacingAssetCode(finalSourceAssetCode)} na sua conta para usar como moeda de origem.`;
         } else {
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             const trustlineResultRaw = await executeTool('ensure_trustline', {
@@ -3822,13 +3861,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
               }
             } catch {
               state.success = false;
-              state.response_message = `Não consegui ativar recebimento em ${finalDestAssetCode} agora.`;
+              state.response_message = `Não consegui ativar recebimento em ${this.toUserFacingAssetCode(finalDestAssetCode)} agora.`;
               await this.saveAssistantResponse(state);
               await this.repository.saveState(state.session_id, state);
               return state;
             }
           }
 
+          destIssuer = destIssuer || getAssetIssuer(finalDestAssetCode);
           if (finalDestAssetCode !== 'XLM' && !destIssuer) {
             state.success = false;
             state.response_message = 'Sua conta ainda está sendo preparada para receber essa moeda. Tente novamente em alguns segundos.';

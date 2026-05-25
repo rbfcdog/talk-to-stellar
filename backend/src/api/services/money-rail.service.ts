@@ -32,7 +32,7 @@ export type SettlementRoute = {
   publicCurrency: FiatCurrency;
   publicAsset: VirtualAsset;
   settlementAsset?: SettlementAsset;
-  settlementMode: 'off_chain_ledger' | 'temporary_stellar_asset';
+  settlementMode: 'off_chain_ledger' | 'stellar_asset';
 };
 
 export function isFiatCurrency(value: unknown): value is FiatCurrency {
@@ -75,9 +75,9 @@ export function resolveBrlSettlementRoute(): SettlementRoute {
       code: 'TESOURO',
       issuer,
       rail: 'STELLAR',
-      temporary: true,
+      temporary: false,
     },
-    settlementMode: 'temporary_stellar_asset',
+    settlementMode: 'stellar_asset',
   };
 }
 

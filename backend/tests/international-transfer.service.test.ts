@@ -77,12 +77,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const quoteService = new BrlUsdQuoteService({
       repository,
       quoteBrlToUsdc: async () => ({
-        source: 'configured_brl_asset',
+        source: 'configured_tesouro_asset',
         symbol: 'USDC/BRL',
         brlPerUsdc: '5.60000000',
         usdcPerBrl: '0.17857143',
         fetchedAt: new Date().toISOString(),
-        sourceAsset: { code: 'BRL', issuer: 'GBRL' },
+        sourceAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
         destinationAsset: { code: 'USDC', issuer: 'GUSDC' },
         sourceAmount: '560.0000000',
         destinationAmount: '100.0000000',
@@ -136,12 +136,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const quoteService = new BrlUsdQuoteService({
       repository,
       quoteBrlToUsdc: async () => ({
-        source: 'configured_brl_asset',
+        source: 'configured_tesouro_asset',
         symbol: 'USDC/BRL',
         brlPerUsdc: '5.60000000',
         usdcPerBrl: '0.17857143',
         fetchedAt: new Date().toISOString(),
-        sourceAsset: { code: 'BRL', issuer: 'GBRL' },
+        sourceAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
         destinationAsset: { code: 'USDC', issuer: 'GUSDC' },
         sourceAmount: '560.0000000',
         destinationAmount: '100.0000000',

@@ -8,7 +8,7 @@ dotenv.config();
 const server = new Horizon.Server('https://horizon-testnet.stellar.org');
 assertTestnetOnlyScript('test-usdc-issuer', 'https://horizon-testnet.stellar.org');
 const USDC_ISSUER = String(getAssetIssuer('USDC') || '').trim();
-const BRL_ISSUER = String(getAssetIssuer('BRL') || '').trim();
+const TESOURO_ISSUER = String(getAssetIssuer('TESOURO') || '').trim();
 
 async function testIssuer(issuer: string, code: string) {
   console.log(`\nTesting ${code} issuer: ${issuer}`);
@@ -59,8 +59,10 @@ async function testAssetCreation() {
   }
 
   try {
-    const brl = new Asset('BRL', BRL_ISSUER);
-    console.log(`✓ Asset('BRL', '${BRL_ISSUER}') created successfully`);
+    const tesouro = new Asset('TESOURO', TESOURO_ISSUER);
+    console.log(`✓ Asset('TESOURO', '${TESOURO_ISSUER}') created successfully`);
+    console.log(`  Code: ${tesouro.getCode()}`);
+    console.log(`  Issuer: ${tesouro.getIssuer()}`);
   } catch (error: any) {
     console.log(`✗ Asset creation failed: ${error.message}`);
   }
@@ -68,18 +70,18 @@ async function testAssetCreation() {
 
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('Testing USDC and BRL Issuer Configuration');
+  console.log('Testing USDC and TESOURO Issuer Configuration');
   console.log('='.repeat(60));
   
   if (!USDC_ISSUER) {
     throw new Error('USDC_ISSUER not configured');
   }
-  if (!BRL_ISSUER) {
-    throw new Error('BRL issuer not configured (BRL_ISSUER_PUBLIC/BRL_ISSUER_TESTNET)');
+  if (!TESOURO_ISSUER) {
+    throw new Error('TESOURO_ISSUER not configured');
   }
 
   await testIssuer(USDC_ISSUER, 'USDC');
-  await testIssuer(BRL_ISSUER, 'BRL');
+  await testIssuer(TESOURO_ISSUER, 'TESOURO');
   await testAssetCreation();
   
   console.log('\n' + '='.repeat(60));

@@ -34,12 +34,12 @@ const getUsdBrlRateMock = FiatRateService.getUsdBrlRate as jest.Mock;
 function mockBrlQuote(amount: string | number, brlPerUsdc = 5) {
   const numeric = Number(amount);
   return {
-    source: 'configured_brl_asset',
+    source: 'configured_tesouro_asset',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
     fetchedAt: '2026-05-15T12:00:00.000Z',
-    sourceAsset: { code: 'BRL', issuer: 'GCONFIGUREDBRLISSUER' },
+    sourceAsset: { code: 'TESOURO', issuer: 'GCONFIGUREDTESOUROISSUER' },
     destinationAsset: { code: 'USDC', issuer: 'GCONFIGUREDUSDCISSUER' },
     sourceAmount: numeric.toFixed(7),
     destinationAmount: (numeric / brlPerUsdc).toFixed(7),
@@ -50,13 +50,13 @@ function mockBrlQuote(amount: string | number, brlPerUsdc = 5) {
 function mockUsdcToBrlQuote(amount: string | number, brlPerUsdc = 5) {
   const numeric = Number(amount);
   return {
-    source: 'configured_brl_asset',
+    source: 'configured_tesouro_asset',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
     fetchedAt: '2026-05-15T12:00:00.000Z',
     sourceAsset: { code: 'USDC', issuer: 'GCONFIGUREDUSDCISSUER' },
-    destinationAsset: { code: 'BRL', issuer: 'GCONFIGUREDBRLISSUER' },
+    destinationAsset: { code: 'TESOURO', issuer: 'GCONFIGUREDTESOUROISSUER' },
     sourceAmount: numeric.toFixed(7),
     destinationAmount: (numeric * brlPerUsdc).toFixed(7),
     path: [],
@@ -84,7 +84,7 @@ describe('Financial conversion preview BRL reference', () => {
     });
   });
 
-  it('uses the configured on-chain BRL asset quote for the public conversion preview', async () => {
+  it('uses the configured TESOURO settlement asset quote for the public conversion preview', async () => {
     const json = jest.fn();
     const status = jest.fn(() => ({ json }));
 
@@ -96,7 +96,7 @@ describe('Financial conversion preview BRL reference', () => {
     const payload = json.mock.calls[0][0];
     expect(status).toHaveBeenCalledWith(200);
     expect(quoteBrlToUsdcMock).toHaveBeenCalledWith('1000.0000000');
-    expect(payload.quote.source).toBe('configured_brl_asset');
+    expect(payload.quote.source).toBe('configured_tesouro_asset');
     expect(payload.quote.brl_per_usdc).toBe(5);
     expect(payload.output.gross_receive_usdc).toBe(200);
     expect(payload.output.receive_usdc).toBe(200);
