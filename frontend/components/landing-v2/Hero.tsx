@@ -2,14 +2,25 @@
 
 import { useEffect, useState } from 'react'
 import { useReducedMotion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 import { Logo } from '@/components/shared/logo'
 
 const HERO_COMMAND = 'tts convert --from BRL --to USDC --channel whatsapp'
 const TYPE_INTERVAL_MS = 28
+
+// Three value-focused phrases. Each one frames an outcome the customer
+// gets, not what the platform does internally.
+const PHRASES = [
+  'Real vira dólar em segundos.',
+  'Receba do mundo, direto no Pix.',
+  'Cross-border sem wire bancário.',
+]
+
+const PHRASE_TYPE_MS = 38 // per char while typing
+const PHRASE_ERASE_MS = 18 // per char while erasing
+const PHRASE_HOLD_MS = 2200 // hold a fully-typed phrase
+const PHRASE_GAP_MS = 300 // pause after erase before next phrase
 
 const DOT_GRID_STYLE: React.CSSProperties = {
   backgroundImage:
@@ -20,39 +31,97 @@ const DOT_GRID_STYLE: React.CSSProperties = {
 
 export function Hero() {
   const reduceMotion = useReducedMotion()
-  const [typed, setTyped] = useState(reduceMotion ? HERO_COMMAND : '')
+  const [commandTyped, setCommandTyped] = useState(
+    reduceMotion ? HERO_COMMAND : '',
+  )
+  const [phraseIndex, setPhraseIndex] = useState(0)
+  const [phraseTyped, setPhraseTyped] = useState(
+    reduceMotion ? PHRASES[0] : '',
+  )
 
+  // Terminal eyebrow typewriter
   useEffect(() => {
     if (reduceMotion) {
-      setTyped(HERO_COMMAND)
+      setCommandTyped(HERO_COMMAND)
       return
     }
-
     let cancelled = false
     let i = 0
-
     const tick = () => {
       if (cancelled) return
       i += 1
-      setTyped(HERO_COMMAND.slice(0, i))
+      setCommandTyped(HERO_COMMAND.slice(0, i))
       if (i < HERO_COMMAND.length) {
         window.setTimeout(tick, TYPE_INTERVAL_MS)
       }
     }
-
-    setTyped('')
+    setCommandTyped('')
     const start = window.setTimeout(tick, 250)
-
     return () => {
       cancelled = true
       window.clearTimeout(start)
     }
   }, [reduceMotion])
 
+  // Rotating phrase typewriter — types, holds, erases, advances
+  useEffect(() => {
+    if (reduceMotion) {
+      setPhraseTyped(PHRASES[phraseIndex])
+      return
+    }
+
+    let cancelled = false
+    const timers: number[] = []
+
+    const target = PHRASES[phraseIndex]
+
+    // Phase 1: type out
+    const type = (i: number) => {
+      if (cancelled) return
+      setPhraseTyped(target.slice(0, i))
+      if (i < target.length) {
+        timers.push(window.setTimeout(() => type(i + 1), PHRASE_TYPE_MS))
+      } else {
+        // Phase 2: hold
+        timers.push(window.setTimeout(() => erase(target.length), PHRASE_HOLD_MS))
+      }
+    }
+
+    // Phase 3: erase
+    const erase = (i: number) => {
+      if (cancelled) return
+      setPhraseTyped(target.slice(0, i))
+      if (i > 0) {
+        timers.push(window.setTimeout(() => erase(i - 1), PHRASE_ERASE_MS))
+      } else {
+        // Phase 4: advance
+        timers.push(
+          window.setTimeout(
+            () => setPhraseIndex((prev) => (prev + 1) % PHRASES.length),
+            PHRASE_GAP_MS,
+          ),
+        )
+      }
+    }
+
+    type(0)
+
+    return () => {
+      cancelled = true
+      timers.forEach(window.clearTimeout)
+    }
+  }, [phraseIndex, reduceMotion])
+
+  // Reserve height of longest phrase to prevent vertical jump while cycling
+  const tallestPhrase = PHRASES.reduce(
+    (best, current) => (current.length > best.length ? current : best),
+    '',
+  )
+
   return (
     <section
       id="produto"
-      className="relative overflow-hidden bg-tts-bg pt-20 pb-16 md:pt-28 md:pb-24"
+      className="relative flex min-h-svh flex-col justify-center overflow-hidden bg-tts-bg px-4 py-24 md:px-8"
     >
       {/* dot grid */}
       <div
@@ -63,7 +132,7 @@ export function Hero() {
 
       {/* ambient gold orb */}
       <div
-        className="pointer-events-none absolute left-1/2 top-[38%] h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
         style={{
           background:
             'radial-gradient(circle, var(--tts-gold-bg) 0%, transparent 65%)',
@@ -73,7 +142,7 @@ export function Hero() {
         aria-hidden
       />
 
-      {/* giant faint Stellar mark, bottom-right */}
+      {/* giant faint Stellar mark */}
       <div
         className="pointer-events-none absolute -bottom-32 -right-32 text-tts-deep md:-bottom-40 md:-right-20"
         style={{ opacity: 0.05 }}
@@ -84,7 +153,7 @@ export function Hero() {
 
       {/* mono coordinate ticks — top-left */}
       <div
-        className="pointer-events-none absolute left-6 top-24 hidden font-mono-financial text-[10px] uppercase tracking-[0.18em] text-tts-muted md:block"
+        className="pointer-events-none absolute left-6 top-28 hidden font-mono-financial text-[10px] uppercase tracking-[0.18em] text-tts-muted md:block"
         aria-hidden
       >
         <span className="block opacity-50">stellar:mainnet</span>
@@ -100,39 +169,24 @@ export function Hero() {
         <span className="block opacity-30">lat 847ms</span>
       </div>
 
-      <div className="relative mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 text-center md:gap-8 md:px-8">
-        <TerminalEyebrow command={typed || ' '} showCursor />
+      <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-10 text-center">
+        <TerminalEyebrow command={commandTyped || ' '} showCursor />
 
-        <h1 className="text-[40px] font-extrabold leading-[1.04] tracking-[-0.025em] text-tts-deep md:text-[64px]">
-          Pix <span className="text-tts-gold">/</span> USDC.
-          <br />
-          Via API ou mensagem.
+        <h1
+          className="relative text-[44px] font-extrabold leading-[1.04] tracking-[-0.028em] text-tts-deep md:text-[72px] lg:text-[80px]"
+          aria-label={PHRASES[phraseIndex]}
+        >
+          {/* invisible sizer keeps the headline area stable across cycles */}
+          <span aria-hidden className="invisible block whitespace-pre-wrap">
+            {tallestPhrase}
+          </span>
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="block">
+              {phraseTyped}
+              <span className="ml-1 inline-block h-[0.85em] w-[3px] translate-y-[0.05em] animate-caret bg-tts-gold align-middle" />
+            </span>
+          </span>
         </h1>
-
-        <p className="max-w-xl text-sm leading-[1.65] text-tts-muted md:text-base">
-          Infraestrutura de pagamentos que conecta Pix ao Stellar Network.
-          Liquidação em segundos, custódia das chaves no cliente, integração por
-          API ou pelos canais de mensagem que sua operação já usa.
-        </p>
-
-        <div className="mt-2 flex flex-wrap justify-center gap-3">
-          <Button
-            asChild
-            className="h-11 bg-tts-deep px-5 text-sm text-tts-surface hover:bg-tts-deep/90"
-          >
-            <a href="#comecar">Falar com o time</a>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="h-11 border-tts-border bg-tts-surface px-5 text-sm text-tts-deep hover:bg-tts-bg"
-          >
-            <a href="#api">
-              Ver documentação
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </a>
-          </Button>
-        </div>
       </div>
     </section>
   )
