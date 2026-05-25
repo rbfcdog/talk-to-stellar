@@ -86,10 +86,22 @@ CREATE TABLE IF NOT EXISTS user_passkeys (
     transports TEXT [] DEFAULT '{}',
     device_type TEXT,
     backed_up BOOLEAN DEFAULT false,
+    credential_public_key_p256 JSONB,
+    smart_account_address TEXT,
+    smart_account_signer TEXT,
+    smart_account_verifier_address TEXT,
+    smart_account_network TEXT,
+    smart_account_type TEXT NOT NULL DEFAULT 'openzeppelin_stellar_smart_account',
+    smart_account_enabled BOOLEAN NOT NULL DEFAULT false,
+    smart_account_context_rule_id INTEGER,
+    smart_account_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_user_passkeys_user_id ON user_passkeys(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_passkeys_smart_account_address ON user_passkeys(smart_account_address) WHERE smart_account_address IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_user_passkeys_smart_account_enabled ON user_passkeys(user_id, smart_account_enabled);
+CREATE INDEX IF NOT EXISTS idx_user_passkeys_smart_account_network ON user_passkeys(smart_account_network) WHERE smart_account_network IS NOT NULL;
 CREATE TABLE IF NOT EXISTS passkey_challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,

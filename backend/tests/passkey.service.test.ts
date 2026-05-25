@@ -170,4 +170,31 @@ describe('PasskeyService challenge generation', () => {
     });
     expect(Buffer.from(result.options.challenge, 'base64url')).toHaveLength(32);
   });
+
+  it('decodes WebAuthn P-256 COSE public keys for smart-account signer metadata', async () => {
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
+    const x = Buffer.alloc(32, 1);
+    const y = Buffer.alloc(32, 2);
+    const cosePublicKey = Buffer.concat([
+      Buffer.from([0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20]),
+      x,
+      Buffer.from([0x22, 0x58, 0x20]),
+      y,
+    ]);
+
+    const decoded = PasskeyService.decodeCredentialPublicKeyForSmartAccount(cosePublicKey);
+
+    expect(decoded).toMatchObject({
+      kty: 'EC',
+      crv: 'P-256',
+      alg: 'ES256',
+      cose_kty: 2,
+      cose_alg: -7,
+      cose_crv: 1,
+      x: x.toString('base64url'),
+      y: y.toString('base64url'),
+      cose_public_key: cosePublicKey.toString('base64url'),
+      public_key_uncompressed: Buffer.concat([Buffer.from([0x04]), x, y]).toString('base64url'),
+    });
+  });
 });
