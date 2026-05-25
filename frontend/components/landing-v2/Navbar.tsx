@@ -1,39 +1,34 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronRight, Menu, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
 
 const NAV_LINKS = [
-  { id: 'produto', label: 'Produto' },
-  { id: 'canais', label: 'Integrações' },
-  { id: 'api', label: 'Intents' },
-  { id: 'comecar', label: 'Começar' },
+  { label: 'Produto', href: '#produto' },
+  { label: 'Integrações', href: '#canais' },
+  { label: 'Documentação', href: '#api' },
+  { label: 'FAQ', href: '#faq' },
+  { label: 'Empresa', href: '#empresa' },
 ]
 
-const EXPANDED_PANEL_ID = 'navbar-expanded'
+const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
 export function Navbar() {
   const [expanded, setExpanded] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const reduceMotion = useReducedMotion()
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const rootRef = useRef<HTMLElement>(null)
 
+  // Click-outside to collapse desktop expand
   useEffect(() => {
     if (!expanded) return
-
     const onPointerDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setExpanded(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setExpanded(false)
-        triggerRef.current?.focus()
-      }
+      if (e.key === 'Escape') setExpanded(false)
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKey)
@@ -43,143 +38,190 @@ export function Navbar() {
     }
   }, [expanded])
 
-  const transition = reduceMotion
-    ? { duration: 0 }
-    : { type: 'spring' as const, stiffness: 380, damping: 32 }
+  // Close mobile menu on resize to desktop
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) setMobileOpen(false)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
-  // Sequenced timings: content exit is fast so the container never has to
-  // squeeze around still-visible content. Enter waits for the layout spring
-  // to mostly settle before fading the new content in.
-  const exitDuration = reduceMotion ? 0 : 0.08
-  const enterDelay = reduceMotion ? 0 : 0.28
+  // Lock body scroll while mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileOpen])
 
-  const close = () => {
-    setExpanded(false)
-    triggerRef.current?.focus()
-  }
+  const closeMobile = useCallback(() => setMobileOpen(false), [])
 
   return (
-    <header
-      ref={rootRef}
-      className="fixed left-1/2 top-3 z-50 -translate-x-1/2"
-    >
-      <motion.div
-        layout
-        transition={transition}
-        className={cn(
-          'flex h-11 items-center overflow-hidden rounded-full border border-tts-deep bg-tts-deep text-tts-surface shadow-lg shadow-tts-deep/15 backdrop-blur-sm',
-          expanded
-            ? 'w-[min(900px,calc(100vw-24px))] gap-2 pl-3 pr-1.5'
-            : 'px-1',
-        )}
-        role={expanded ? 'dialog' : undefined}
-        aria-label={expanded ? 'Navegação' : undefined}
-        id={EXPANDED_PANEL_ID}
+    <>
+      <header
+        ref={rootRef}
+        className="fixed left-1/2 top-4 z-50 -translate-x-1/2"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {!expanded ? (
-            <motion.button
-              key="trigger"
-              ref={triggerRef}
-              type="button"
-              onClick={() => setExpanded(true)}
-              aria-expanded={false}
-              aria-controls={EXPANDED_PANEL_ID}
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 1,
-                transition: {
-                  duration: reduceMotion ? 0 : 0.14,
-                  delay: enterDelay,
-                },
+        <div className="flex items-center rounded-full border border-tts-deep bg-tts-deep px-2 py-1.5 text-tts-surface shadow-lg shadow-tts-deep/15 backdrop-blur-sm">
+          {/* Logo + wordmark always visible */}
+          <a
+            href="#top"
+            onClick={() => setExpanded(false)}
+            className="flex shrink-0 items-center gap-2 px-2"
+            aria-label="TalkToStellar — início"
+          >
+            <Logo size={20} />
+            <span className="hidden text-[13px] font-extrabold tracking-[-0.018em] sm:inline">
+              TalkToStellar
+            </span>
+          </a>
+
+          {/* Live pulse chip — always visible */}
+          <span
+            className="ml-1 flex shrink-0 items-center gap-1.5 rounded-full bg-tts-gold/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-tts-gold-lt"
+            aria-hidden
+          >
+            <span className="relative inline-flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-tts-gold-lt opacity-70" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-tts-gold-lt" />
+            </span>
+            Live
+          </span>
+
+          {/* Desktop nav links — expand horizontally via max-width */}
+          <div
+            className="hidden overflow-hidden md:block"
+            style={{
+              maxWidth: expanded ? '700px' : '0px',
+              transition: expanded
+                ? `max-width 700ms ${EASE}`
+                : `max-width 400ms ${EASE}`,
+            }}
+          >
+            <div className="flex items-center whitespace-nowrap">
+              <span className="mx-2 h-5 w-px shrink-0 bg-white/15" aria-hidden />
+              {NAV_LINKS.map((link, i) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setExpanded(false)}
+                  className="shrink-0 rounded-full px-3 py-1 text-[12px] font-medium text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface"
+                  style={{
+                    opacity: expanded ? 1 : 0,
+                    transition: expanded
+                      ? `opacity 200ms ${EASE} ${80 + i * 70}ms`
+                      : 'opacity 120ms ease-out',
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* Desktop expand/collapse chevron */}
+          <button
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-label={expanded ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={expanded}
+            className="ml-1 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface md:flex"
+          >
+            <ChevronRight
+              className="h-3.5 w-3.5"
+              style={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: `transform 350ms ${EASE}`,
               }}
-              exit={{
-                opacity: 0,
-                transition: { duration: exitDuration },
+            />
+          </button>
+
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen((prev) => !prev)}
+            aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={mobileOpen}
+            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface md:hidden"
+          >
+            {mobileOpen ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <Menu className="h-4 w-4" />
+            )}
+          </button>
+
+          {/* Divider */}
+          <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden />
+
+          {/* Right-side CTA — always visible */}
+          <Button
+            asChild
+            size="sm"
+            className="h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[12px] text-tts-deep hover:bg-tts-gold-lt"
+          >
+            <a href="#comecar">Falar com o time</a>
+          </Button>
+        </div>
+      </header>
+
+      {/* Mobile fullscreen menu */}
+      <div
+        className="fixed inset-0 z-40 md:hidden"
+        style={{
+          opacity: mobileOpen ? 1 : 0,
+          pointerEvents: mobileOpen ? 'auto' : 'none',
+          transition: `opacity 0.3s ${EASE}`,
+        }}
+        aria-hidden={!mobileOpen}
+      >
+        <div
+          className="absolute inset-0 bg-tts-deep/85 backdrop-blur-xl"
+          onClick={closeMobile}
+        />
+        <div className="relative flex h-full flex-col items-center justify-center gap-2 px-8 text-tts-surface">
+          {NAV_LINKS.map((link, i) => (
+            <a
+              key={link.href}
+              href={link.href}
+              onClick={closeMobile}
+              className="w-full rounded-xl py-3 text-center text-lg font-medium text-tts-surface/80 transition-colors hover:bg-white/10 hover:text-tts-surface"
+              style={{
+                opacity: mobileOpen ? 1 : 0,
+                transform: mobileOpen ? 'translateY(0)' : 'translateY(12px)',
+                transition: mobileOpen
+                  ? `opacity 350ms ${EASE} ${i * 60}ms, transform 350ms ${EASE} ${i * 60}ms`
+                  : 'opacity 180ms ease-out, transform 180ms ease-out',
               }}
-              className="flex h-full items-center gap-2 rounded-full px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-tts-gold focus-visible:ring-offset-2 focus-visible:ring-offset-tts-bg"
             >
-              <Logo size={20} />
-              <span className="text-[13px] font-extrabold tracking-[-0.018em]">
-                TalkToStellar
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 text-tts-surface/70" />
-            </motion.button>
-          ) : (
-            <motion.div
-              key="expanded"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 1,
-                transition: {
-                  duration: reduceMotion ? 0 : 0.14,
-                  delay: enterDelay,
-                },
-              }}
-              exit={{
-                opacity: 0,
-                transition: { duration: exitDuration },
-              }}
-              className="flex h-full w-full items-center gap-2"
+              {link.label}
+            </a>
+          ))}
+          <div
+            className="mt-6"
+            style={{
+              opacity: mobileOpen ? 1 : 0,
+              transform: mobileOpen ? 'translateY(0)' : 'translateY(12px)',
+              transition: mobileOpen
+                ? `opacity 350ms ${EASE} ${NAV_LINKS.length * 60}ms, transform 350ms ${EASE} ${NAV_LINKS.length * 60}ms`
+                : 'opacity 180ms ease-out, transform 180ms ease-out',
+            }}
+          >
+            <Button
+              asChild
+              size="lg"
+              className="rounded-full bg-tts-gold px-6 text-tts-deep hover:bg-tts-gold-lt"
             >
-              <a
-                href="#top"
-                onClick={close}
-                className="flex items-center gap-2 pr-2"
-                aria-label="TalkToStellar — início"
-              >
-                <Logo size={20} />
-                <span className="hidden text-[13px] font-extrabold tracking-[-0.018em] sm:inline">
-                  TalkToStellar
-                </span>
+              <a href="#comecar" onClick={closeMobile}>
+                Falar com o time
               </a>
-
-              <nav className="flex flex-1 items-center justify-center gap-1 overflow-x-auto md:gap-2">
-                {NAV_LINKS.map((link) => (
-                  <a
-                    key={link.id}
-                    href={`#${link.id}`}
-                    onClick={close}
-                    className="shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium text-tts-surface/75 transition-colors hover:bg-white/10 hover:text-tts-surface md:text-[13px]"
-                  >
-                    {link.label}
-                  </a>
-                ))}
-              </nav>
-
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="hidden h-8 px-3 text-tts-surface/80 hover:bg-white/10 hover:text-tts-surface md:inline-flex"
-                >
-                  <a href="/login" onClick={close}>
-                    Entrar
-                  </a>
-                </Button>
-                <Button
-                  asChild
-                  size="sm"
-                  className="h-8 rounded-full bg-tts-gold px-3 text-[12px] text-tts-deep hover:bg-tts-gold-lt"
-                >
-                  <a href="#comecar" onClick={close}>
-                    Falar com o time
-                  </a>
-                </Button>
-                <button
-                  type="button"
-                  onClick={close}
-                  aria-label="Fechar menu"
-                  className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-tts-surface/70 transition hover:bg-white/10 hover:text-tts-surface"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </header>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
