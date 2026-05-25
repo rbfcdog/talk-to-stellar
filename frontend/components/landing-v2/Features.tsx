@@ -1,3 +1,7 @@
+'use client'
+
+import { motion } from 'framer-motion'
+
 import { FeatureCard, type SnippetLine } from '@/components/ui/feature-card'
 
 interface Feature {
@@ -43,7 +47,13 @@ export function Features() {
   return (
     <section id="como-funciona" className="bg-tts-surface py-20">
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
-        <header className="flex flex-col gap-3">
+        <motion.header
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-3"
+        >
           <h2 className="text-[32px] font-extrabold tracking-[-0.022em] text-tts-deep">
             Por que TalkToStellar
           </h2>
@@ -51,15 +61,16 @@ export function Features() {
             Três fluxos essenciais para o usuário entrar, converter, render e
             sair sem trocar de contexto.
           </p>
-        </header>
+        </motion.header>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {FEATURES.map((feature) => (
+          {FEATURES.map((feature, index) => (
             <FeatureCard
               key={feature.title}
               snippetLines={feature.snippetLines}
               title={feature.title}
               description={feature.description}
+              index={index}
             />
           ))}
         </div>

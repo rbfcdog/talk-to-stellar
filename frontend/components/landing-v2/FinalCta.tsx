@@ -1,3 +1,6 @@
+'use client'
+
+import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -22,21 +25,30 @@ export function FinalCta() {
       />
 
       <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 md:px-8">
-        <TerminalEyebrow
-          command='chat "começar meu ciclo do dinheiro"'
-          dark
-          showCursor
-        />
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col items-start gap-8"
+        >
+          <TerminalEyebrow
+            command="tts onboarding --start --channel sandbox"
+            dark
+            showCursor
+          />
 
-        <h2 className="max-w-3xl text-[34px] font-extrabold leading-[1.05] tracking-[-0.025em] md:text-[48px]">
-          Comece pelo canal{' '}
-          <span className="text-tts-gold-lt">que você já usa.</span>
-        </h2>
+          <h2 className="max-w-3xl text-[34px] font-extrabold leading-[1.05] tracking-[-0.025em] md:text-[48px]">
+            Comece pelo canal{' '}
+            <span className="text-tts-gold-lt">que sua operação já usa.</span>
+          </h2>
 
-        <p className="max-w-xl text-sm leading-[1.65] text-white/55 md:text-base">
-          Use o chat para trazer dinheiro por PIX, converter, deixar rendendo
-          e retirar para seu PIX com revisão antes do PIN.
-        </p>
+          <p className="max-w-xl text-sm leading-[1.65] text-white/55 md:text-base">
+            Sandbox em minutos, API key na mesma chamada e suporte direto via
+            WhatsApp ou Telegram para a equipe de integração. Mainnet quando
+            estiver pronto — sem troca de payload.
+          </p>
+        </motion.div>
 
         <div className="flex flex-wrap gap-3">
           <Button
@@ -61,12 +73,16 @@ export function FinalCta() {
 
         <dl className="mt-4 grid w-full grid-cols-1 gap-px overflow-hidden border-t border-white/10 sm:grid-cols-3">
           {[
-            { value: 'PIX', label: 'entrada e saída' },
-            { value: '€', label: 'euro disponível' },
-            { value: 'PIN', label: 'revisão antes de confirmar' },
-          ].map(({ value, label }) => (
-            <div
+            { value: '<7d', label: 'Time to first conversion' },
+            { value: '24/7', label: 'Suporte técnico' },
+            { value: 'BCB+', label: 'Compliance Pix · KYC · KYB' },
+          ].map(({ value, label }, i) => (
+            <motion.div
               key={label}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.5 }}
+              transition={{ duration: 0.4, delay: i * 0.1, ease: 'easeOut' }}
               className="flex flex-col gap-1 border-b border-white/10 py-5 sm:border-b-0 sm:px-6"
             >
               <dt className="font-mono-financial text-[22px] font-bold text-tts-gold-lt">
@@ -75,7 +91,7 @@ export function FinalCta() {
               <dd className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/45">
                 {label}
               </dd>
-            </div>
+            </motion.div>
           ))}
         </dl>
       </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Minus, Plus } from 'lucide-react'
 
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
@@ -66,19 +67,29 @@ export function Faq() {
       />
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
-        <header className="flex flex-col gap-4">
-          <TerminalEyebrow command='chat "ajuda"' />
+        <motion.header
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-4"
+        >
+          <TerminalEyebrow command="tts faq --segment b2b" />
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-[-0.022em] text-tts-deep md:text-4xl">
             Perguntas comuns antes de usar.
           </h2>
-        </header>
+        </motion.header>
 
         <ul className="flex flex-col gap-2">
           {FAQS.map((faq, index) => {
             const isOpen = openIndex === index
             return (
-              <li
+              <motion.li
                 key={faq.question}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.35, delay: index * 0.06, ease: 'easeOut' }}
                 className="overflow-hidden rounded-xl border border-tts-border bg-tts-surface"
               >
                 <button
@@ -90,7 +101,9 @@ export function Faq() {
                   <span className="text-sm font-bold tracking-[-0.018em] text-tts-deep md:text-base">
                     {faq.question}
                   </span>
-                  <span
+                  <motion.span
+                    animate={{ rotate: isOpen ? 180 : 0 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
                     className={cn(
                       'mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors',
                       isOpen
@@ -104,14 +117,25 @@ export function Faq() {
                     ) : (
                       <Plus className="h-3.5 w-3.5" />
                     )}
-                  </span>
+                  </motion.span>
                 </button>
-                {isOpen && (
-                  <div className="border-t border-tts-border px-5 py-4 text-sm leading-[1.65] text-tts-muted">
-                    {faq.answer}
-                  </div>
-                )}
-              </li>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      key="content"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border-t border-tts-border px-5 py-4 text-sm leading-[1.65] text-tts-muted">
+                        {faq.answer}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.li>
             )
           })}
         </ul>

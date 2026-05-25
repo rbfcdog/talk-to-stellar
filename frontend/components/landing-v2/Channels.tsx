@@ -1,3 +1,7 @@
+'use client'
+
+import { motion } from 'framer-motion'
+
 import { Badge } from '@/components/ui/badge'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 
@@ -32,26 +36,34 @@ export function Channels() {
       />
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 md:px-8">
-        <TerminalEyebrow
-          command='chat "converter, render ou retirar?"'
-          dark
-          showCursor
-        />
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-8"
+        >
+          <TerminalEyebrow
+            command="tts channels --list --status active"
+            dark
+            showCursor
+          />
 
-        <header className="flex flex-col gap-4">
-          <h2 className="max-w-2xl text-[32px] font-extrabold leading-[1.08] tracking-[-0.022em] md:text-[42px]">
-            Seu cliente opera onde{' '}
-            <span className="text-tts-gold-lt">já está.</span>
-          </h2>
-          <p className="max-w-xl text-sm leading-[1.65] text-white/40">
-            A mesma intenção abre a interface certa no canal disponível:
-            chat, WhatsApp, Telegram ou tela avançada para multi-ativos.
-          </p>
-        </header>
+          <header className="flex flex-col gap-4">
+            <h2 className="max-w-2xl text-[32px] font-extrabold leading-[1.08] tracking-[-0.022em] md:text-[42px]">
+              Seu cliente opera onde{' '}
+              <span className="text-tts-gold-lt">já está.</span>
+            </h2>
+            <p className="max-w-xl text-sm leading-[1.65] text-white/40">
+              Mesmo SDK por trás, canais distintos na ponta. Comece pela API ou
+              ative o WhatsApp em horas — sem app novo para o cliente final.
+            </p>
+          </header>
+        </motion.div>
 
         <div className="flex flex-wrap gap-3">
-          {CHANNELS.map((channel) => (
-            <ChannelPill key={channel.name} channel={channel} />
+          {CHANNELS.map((channel, i) => (
+            <ChannelPill key={channel.name} channel={channel} index={i} />
           ))}
         </div>
       </div>
@@ -59,13 +71,26 @@ export function Channels() {
   )
 }
 
-function ChannelPill({ channel }: { channel: Channel }) {
+function ChannelPill({ channel, index }: { channel: Channel; index: number }) {
+  const isActive = channel.status === 'active'
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ duration: 0.35, delay: index * 0.08, ease: 'easeOut' }}
+      className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2"
+    >
+      {isActive && (
+        <span className="relative inline-flex h-2 w-2" aria-hidden>
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-tts-confirm opacity-70" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-tts-confirm" />
+        </span>
+      )}
       <span className="text-sm font-medium text-white">{channel.name}</span>
-      <Badge variant={channel.status === 'active' ? 'onDarkSuccess' : 'onDark'}>
-        {channel.status === 'active' ? 'Ativo' : 'Em breve'}
+      <Badge variant={isActive ? 'onDarkSuccess' : 'onDark'}>
+        {isActive ? 'Ativo' : 'Em breve'}
       </Badge>
-    </div>
+    </motion.div>
   )
 }

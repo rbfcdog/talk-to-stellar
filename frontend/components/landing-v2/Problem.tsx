@@ -1,3 +1,7 @@
+'use client'
+
+import { motion } from 'framer-motion'
+
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 
 const DOT_GRID_STYLE: React.CSSProperties = {
@@ -48,16 +52,22 @@ export function Problem() {
       />
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
-        <header className="flex flex-col gap-4">
-          <TerminalEyebrow command='chat "o que consigo fazer com meu saldo?"' />
+        <motion.header
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-4"
+        >
+          <TerminalEyebrow command="tts diagnose --market BRL --segment cross-border" />
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-[-0.022em] text-tts-deep md:text-4xl">
             O que trava o ciclo do dinheiro hoje.
           </h2>
-        </header>
+        </motion.header>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {PROBLEMS.map((card) => (
-            <ProblemCardView key={card.title} card={card} />
+          {PROBLEMS.map((card, i) => (
+            <ProblemCardView key={card.title} card={card} index={i} />
           ))}
         </div>
       </div>
@@ -65,25 +75,43 @@ export function Problem() {
   )
 }
 
-function ProblemCardView({ card }: { card: ProblemCard }) {
+function ProblemCardView({ card, index }: { card: ProblemCard; index: number }) {
   return (
-    <article className="flex flex-col gap-4 rounded-xl border border-tts-border bg-tts-surface p-6">
-      <div className="font-mono-financial">
-        <span className="text-[40px] font-bold leading-none text-tts-gold">
+    <motion.article
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.35 }}
+      transition={{ duration: 0.45, delay: index * 0.12, ease: 'easeOut' }}
+      className="group flex flex-col overflow-hidden rounded-xl border border-tts-deep bg-tts-surface transition-colors hover:border-tts-gold/40"
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }}
+        whileInView={{ scale: 1, opacity: 1 }}
+        viewport={{ once: true, amount: 0.35 }}
+        transition={{
+          duration: 0.5,
+          delay: 0.1 + index * 0.12,
+          ease: [0.34, 1.56, 0.64, 1],
+        }}
+        className="flex items-baseline gap-1 bg-tts-deep px-6 py-5 font-mono-financial"
+      >
+        <span className="text-[40px] font-bold leading-none text-tts-gold-lt">
           {card.figure}
         </span>
         {card.figureSuffix && (
-          <span className="text-[22px] font-bold leading-none text-tts-gold/70">
+          <span className="text-[20px] font-bold leading-none text-tts-gold-lt/70">
             {card.figureSuffix}
           </span>
         )}
+      </motion.div>
+      <div className="flex flex-col gap-3 p-6">
+        <h3 className="text-base font-bold tracking-[-0.018em] text-tts-deep">
+          {card.title}
+        </h3>
+        <p className="text-sm leading-[1.55] text-tts-muted">
+          {card.description}
+        </p>
       </div>
-      <h3 className="text-base font-bold tracking-[-0.018em] text-tts-deep">
-        {card.title}
-      </h3>
-      <p className="text-sm leading-[1.55] text-tts-muted">
-        {card.description}
-      </p>
-    </article>
+    </motion.article>
   )
 }

@@ -15,9 +15,12 @@ export const metadata: Metadata = {
   description: 'Global account to send, receive, and convert money with TalkToStellar.',
   generator: 'v0.app',
   icons: {
-    icon: '/talktostellar.png',
-    shortcut: '/talktostellar.png',
-    apple: '/talktostellar.png',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/talktostellar.png', type: 'image/png' },
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
   },
 }
 
