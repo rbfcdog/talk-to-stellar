@@ -81,18 +81,6 @@ export function Navbar() {
             </span>
           </a>
 
-          {/* Live pulse chip — always visible */}
-          <span
-            className="ml-1 flex shrink-0 items-center gap-1.5 rounded-full bg-tts-gold/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-tts-gold-lt"
-            aria-hidden
-          >
-            <span className="relative inline-flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-tts-gold-lt opacity-70" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-tts-gold-lt" />
-            </span>
-            Live
-          </span>
-
           {/* Desktop nav links — expand horizontally via max-width */}
           <div
             className="hidden overflow-hidden md:block"
@@ -157,11 +145,17 @@ export function Navbar() {
           {/* Divider */}
           <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden />
 
-          {/* Right-side CTA — always visible */}
+          {/* Right-side controls — always visible */}
+          <a
+            href="/login"
+            className="hidden h-7 shrink-0 items-center rounded-full px-3 text-[12px] font-medium text-tts-surface/80 transition-colors hover:bg-white/10 hover:text-tts-surface sm:inline-flex"
+          >
+            Entrar
+          </a>
           <Button
             asChild
             size="sm"
-            className="h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[12px] text-tts-deep hover:bg-tts-gold-lt"
+            className="ml-1 h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[12px] text-tts-deep hover:bg-tts-gold-lt"
           >
             <a href="#comecar">Falar com o time</a>
           </Button>
@@ -201,7 +195,7 @@ export function Navbar() {
             </a>
           ))}
           <div
-            className="mt-6"
+            className="mt-6 flex flex-col items-center gap-3"
             style={{
               opacity: mobileOpen ? 1 : 0,
               transform: mobileOpen ? 'translateY(0)' : 'translateY(12px)',
@@ -219,6 +213,13 @@ export function Navbar() {
                 Falar com o time
               </a>
             </Button>
+            <a
+              href="/login"
+              onClick={closeMobile}
+              className="text-sm text-tts-surface/70 underline-offset-4 hover:text-tts-surface hover:underline"
+            >
+              Entrar
+            </a>
           </div>
         </div>
       </div>
