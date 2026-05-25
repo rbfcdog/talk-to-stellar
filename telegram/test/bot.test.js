@@ -5,7 +5,8 @@ const { createTelegramBot, formatWelcomeMessage } = require('../src/bot');
 
 test('formatWelcomeMessage includes usage guidance (Portuguese)', () => {
   const message = formatWelcomeMessage();
-  assert.match(message, /Olá — TalkToStellar está online no Telegram!/);
+  assert.match(message, /Olá, aqui é o TalkToStellar\./);
+  assert.match(message, /colocar 10 reais via PIX/);
   assert.match(message, /\/reset/);
 });
 

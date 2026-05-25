@@ -44,6 +44,7 @@ describe('EvolutionService', () => {
       EVOLUTION_INSTANCE: 'main',
       INTERNAL_BACKEND_URL: 'http://backend.local',
       EVOLUTION_AGENT_URL: 'http://backend.local/api/agent/query',
+      AGENT_INGEST_SECRET: 'test-agent-ingest-secret',
     };
   });
 
@@ -112,6 +113,7 @@ describe('EvolutionService', () => {
     const agentCall = fetchMock.mock.calls.find(([url]) => String(url) === 'http://backend.local/api/agent/query');
     expect(agentCall).toBeTruthy();
     const agentInit = agentCall?.[1] as RequestInit | undefined;
+    expect((agentInit?.headers as Record<string, string>)?.['x-agent-ingest-secret']).toBe('test-agent-ingest-secret');
     const agentBody = JSON.parse(String(agentInit?.body || '{}'));
     expect(agentBody).toMatchObject({
       query: 'qual meu saldo?',

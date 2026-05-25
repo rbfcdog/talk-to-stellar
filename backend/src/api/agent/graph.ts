@@ -1088,9 +1088,7 @@ export class AgentGraph {
       const amountCurrency = intent.amount_currency || intent.asset_code;
       if (isPixFundedPayment && finalPayAmount && finalPayAsset) {
         url.searchParams.set('currency', finalPayAsset);
-        if (finalPayAsset === 'BRL') {
-          url.searchParams.set('amount', intent.amount);
-        }
+        url.searchParams.set('amount', intent.amount);
       } else if (intent.direction === 'onramp' && amountCurrency === 'USDC' && intent.asset_code === 'USDC') {
         url.searchParams.set('receive_amount', intent.amount);
         url.searchParams.set('receive_asset', 'USDC');
@@ -2477,6 +2475,7 @@ export class AgentGraph {
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
       '- If the user asks for XLM or technical balances, show only the app balance in R$ and US$ and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
+      '- Mini-menus must stay short: at most 5 actions, no technical terms, and no second welcome block if the user already received a login/onboarding completion message.',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
       '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',

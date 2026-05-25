@@ -416,19 +416,6 @@ function shortStellarHash(value: unknown): string {
   return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
 }
 
-function stellarExpertTxUrl(hash: unknown): string {
-  const txHash = String(hash || '').trim();
-  if (!txHash || txHash.startsWith('mock-')) return '';
-  const configuredNetwork = String(process.env.STELLAR_NETWORK || process.env.STELLAR_NETWORK_PASSPHRASE || 'testnet').toLowerCase();
-  const network = configuredNetwork.includes('mainnet') || configuredNetwork.includes('public') ? 'public' : 'testnet';
-  return `https://stellar.expert/explorer/${network}/tx/${encodeURIComponent(txHash)}`;
-}
-
-function stellarExpertNetworkLabel(): string {
-  const configuredNetwork = String(process.env.STELLAR_NETWORK || process.env.STELLAR_NETWORK_PASSPHRASE || 'testnet').toLowerCase();
-  return configuredNetwork.includes('mainnet') || configuredNetwork.includes('public') ? 'mainnet' : 'testnet';
-}
-
 function formatSavingsDate(date = new Date()): string {
   const dateLabel = normalizeCurrencySpacing(new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
@@ -4113,7 +4100,6 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     });
   }
 
-  const stellarUrl = stellarExpertTxUrl(stellarHash);
   const message = [
     '✅ *Transferência concluída*',
     dateLine,
@@ -4129,10 +4115,6 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     `💰 *Você economizou ${normalizeCurrencySpacing(formatBrl(savings))}*`,
     `vs banco que cobraria ${normalizeCurrencySpacing(formatBrl(bankFee))}`,
     '━━━━━━━━━━━━━━',
-    '',
-    '🔗 Comprovação:',
-    `${shortStellarHash(stellarHash)}`,
-    ...(stellarUrl ? [stellarUrl] : []),
     '',
     `📊 Ver histórico: ${historyLink}`,
     `📄 Comprovante PDF: ${receiptLink}`,
@@ -4153,7 +4135,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     savings_brl: savings,
     completed_at: completedAt,
     recipient_name: recipientName,
-    stellar_expert_url: stellarUrl || null,
+    technical_reference: stellarHash ? shortStellarHash(stellarHash) : null,
     source: paymentLog ? 'payment_logs' : 'tool_input',
     history_url: historyLink,
     receipt_url: receiptLink,

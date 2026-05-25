@@ -5,7 +5,7 @@ const { Resvg } = require('@resvg/resvg-js');
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
-const { createAgentClient } = require('./agent-client');
+const { createAgentClient, readAgentIngestSecret } = require('./agent-client');
 const { createHealthServer, readJsonBody, isAuthorized } = require('./health-server');
 const { createTelegramBot } = require('./bot');
 
@@ -351,7 +351,7 @@ async function main() {
   const sessionPrefix = process.env.TELEGRAM_SESSION_PREFIX || 'telegram';
   const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH || '/webhook/telegram';
   const notifySecret = process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '';
-  const ingestSecret = (process.env.AGENT_INGEST_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  const ingestSecret = readAgentIngestSecret();
   const webhookPublicBase = String(
     process.env.TELEGRAM_WEBHOOK_URL ||
     process.env.PUBLIC_APP_URL ||
@@ -364,7 +364,7 @@ async function main() {
   }
 
   if (!ingestSecret) {
-    throw new Error('AGENT_INGEST_SECRET is required (must match the backend value)');
+    throw new Error('AGENT_INGEST_SECRET is required (or configure INTERNAL_API_SECRET/TELEGRAM_NOTIFY_SECRET to match the backend value)');
   }
 
   await configureTelegramBotProfile({ botToken, logger: console });
