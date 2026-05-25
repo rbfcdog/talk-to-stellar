@@ -1,7 +1,12 @@
+'use client'
+
+import { useMemo } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
+import { useStaggeredTypewriter } from '@/hooks/use-typewriter'
 import { cn } from '@/lib/utils'
 
 interface JsonLine {
@@ -23,11 +28,41 @@ const RESPONSE: JsonLine[] = [
 ]
 
 export function ApiShowcase() {
+  const fullLines = useMemo(
+    () =>
+      RESPONSE.map((line) => {
+        if (line.type === 'object-open' || line.type === 'object-close') {
+          return line.value
+        }
+        const indent = '  '.repeat(line.indent ?? 0)
+        const display =
+          line.type === 'string' ? `"${line.value}"` : String(line.value)
+        return `${indent}"${line.key}": ${display},`
+      }),
+    [],
+  )
+
+  const { ref, progress } = useStaggeredTypewriter(fullLines, {
+    speedMs: 12,
+    lineDelayMs: 80,
+    startDelayMs: 250,
+  })
+
+  const totalChars = fullLines.reduce((sum, line) => sum + line.length, 0)
+  const typedChars = progress.reduce((sum, p) => sum + p, 0)
+  const done = typedChars >= totalChars
+
   return (
     <section id="api" className="bg-tts-bg py-20">
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 md:px-8 lg:grid-cols-2">
-        <div className="flex flex-col gap-6">
-          <TerminalEyebrow command='tool_call "abrir ciclo do dinheiro"' />
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-6"
+        >
+          <TerminalEyebrow command="tts --help" />
           <h2 className="text-[32px] font-extrabold tracking-[-0.022em] text-tts-deep md:text-[40px]">
             Intenção vira interface.
           </h2>
@@ -53,31 +88,79 @@ export function ApiShowcase() {
               </a>
             </Button>
           </div>
-        </div>
+        </motion.div>
 
-        <ResponseCard />
+        <ResponseCard
+          containerRef={ref as React.RefObject<HTMLDivElement>}
+          progress={progress}
+          done={done}
+        />
       </div>
     </section>
   )
 }
 
-function ResponseCard() {
+interface ResponseCardProps {
+  containerRef: React.RefObject<HTMLDivElement>
+  progress: number[]
+  done: boolean
+}
+
+function ResponseCard({ containerRef, progress, done }: ResponseCardProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-tts-deep/30 bg-tts-deep shadow-xl">
+    <div
+      ref={containerRef}
+      className="overflow-hidden rounded-xl border border-tts-deep/30 bg-tts-deep shadow-xl"
+    >
       <div className="flex items-center gap-3 bg-tts-deep2 px-4 py-3 font-mono text-[11px]">
         <span className="font-bold text-tts-gold-lt">POST</span>
-        <span className="text-white/50">/api/agent/query</span>
-        <span className="ml-auto text-tts-confirm">200 OK · 847ms</span>
+        <span className="text-white/50">/v1/conversions</span>
+        <span className="ml-auto inline-flex items-center gap-1.5">
+          <AnimatePresence mode="wait" initial={false}>
+            {done ? (
+              <motion.span
+                key="ok"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="inline-flex items-center gap-1.5 text-tts-confirm"
+              >
+                <PulseDot /> 200 OK · 847ms
+              </motion.span>
+            ) : (
+              <motion.span
+                key="pending"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="inline-flex items-center gap-1.5 text-white/40"
+              >
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-white/40" />
+                processing…
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </span>
       </div>
 
       <pre className="overflow-x-auto px-5 py-5 font-mono text-[11px] leading-relaxed">
         <code>
           {RESPONSE.map((line, i) => (
-            <JsonRow key={i} line={line} />
+            <JsonRow key={i} line={line} shown={progress[i] ?? 0} done={done} />
           ))}
         </code>
       </pre>
     </div>
+  )
+}
+
+function PulseDot() {
+  return (
+    <span className="relative inline-flex h-2 w-2">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-tts-confirm opacity-60" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-tts-confirm" />
+    </span>
   )
 }
 
@@ -87,29 +170,62 @@ const VALUE_COLOR = {
   boolean: 'text-tts-confirm',
 } as const
 
-function JsonRow({ line }: { line: JsonLine }) {
+function JsonRow({
+  line,
+  shown,
+  done,
+}: {
+  line: JsonLine
+  shown: number
+  done: boolean
+}) {
   if (line.type === 'object-open' || line.type === 'object-close') {
-    return <div className="text-white/60">{line.value}</div>
+    return (
+      <div className="min-h-[1.55em] text-white/60">{line.value.slice(0, shown)}</div>
+    )
   }
 
   const indent = '  '.repeat(line.indent ?? 0)
   const displayValue =
-    line.type === 'string' ? `"${line.value}"` : line.value
+    line.type === 'string' ? `"${line.value}"` : String(line.value)
+  const fullKeyPart = `${indent}"${line.key}": `
+  const fullLine = `${fullKeyPart}${displayValue},`
+  const isTypingThisLine = shown > 0 && shown < fullLine.length
+
+  const visible = fullLine.slice(0, shown)
+  const keyEnd = fullKeyPart.length
+  const keyVisible = visible.slice(0, Math.min(shown, keyEnd))
+  const valueVisible = shown > keyEnd ? visible.slice(keyEnd).replace(/,$/, '') : ''
+  const trailingComma = shown >= fullLine.length
+
+  const keyMatch = keyVisible.match(/^(\s*)"([^"]*)"?(:?\s*)$/)
+  const indentText = keyMatch?.[1] ?? indent.slice(0, keyVisible.length)
+  const keyName = keyMatch?.[2] ?? ''
+  const afterKey = keyMatch?.[3] ?? ''
 
   return (
-    <div>
-      <span className="text-white/40">{indent}</span>
-      <span className="text-white/70">{`"${line.key}"`}</span>
-      <span className="text-white/40">: </span>
-      <span
-        className={cn(
-          'font-bold',
-          VALUE_COLOR[line.type as keyof typeof VALUE_COLOR],
-        )}
-      >
-        {displayValue}
-      </span>
-      <span className="text-white/40">,</span>
+    <div className="min-h-[1.55em]">
+      <span className="text-white/40">{indentText}</span>
+      {keyName && (
+        <>
+          <span className="text-white/70">{`"${keyName}"`}</span>
+          <span className="text-white/40">{afterKey}</span>
+        </>
+      )}
+      {valueVisible && (
+        <span
+          className={cn(
+            'font-bold',
+            VALUE_COLOR[line.type as keyof typeof VALUE_COLOR],
+          )}
+        >
+          {valueVisible}
+        </span>
+      )}
+      {trailingComma && <span className="text-white/40">,</span>}
+      {isTypingThisLine && !done && (
+        <span className="ml-0.5 inline-block h-3 w-[1.5px] animate-caret bg-tts-gold-lt align-middle" />
+      )}
     </div>
   )
 }

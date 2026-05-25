@@ -1,3 +1,7 @@
+'use client'
+
+import { motion } from 'framer-motion'
+
 import { cn } from '@/lib/utils'
 
 interface Step {
@@ -42,15 +46,21 @@ export function HowItWorks() {
   return (
     <section className="bg-tts-bg py-20">
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
-        <header className="flex flex-col gap-3">
+        <motion.header
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="flex flex-col gap-3"
+        >
           <h2 className="max-w-2xl text-[32px] font-extrabold tracking-[-0.022em] text-tts-deep">
             O ciclo completo em quatro passos.
           </h2>
-        </header>
+        </motion.header>
 
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-tts-border bg-tts-border sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((step) => (
-            <StepCell key={step.number} step={step} />
+          {STEPS.map((step, index) => (
+            <StepCell key={step.number} step={step} index={index} />
           ))}
         </div>
 
@@ -69,24 +79,47 @@ export function HowItWorks() {
   )
 }
 
-function StepCell({ step }: { step: Step }) {
+function StepCell({ step, index }: { step: Step; index: number }) {
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.4 }}
+      transition={{ duration: 0.4, delay: index * 0.18, ease: 'easeOut' }}
       className={cn(
         'flex flex-col gap-4 p-6',
         step.emphasis ? 'bg-tts-gold/[0.05]' : 'bg-tts-surface',
       )}
     >
-      <div
-        className={cn(
-          'inline-flex h-8 w-fit items-center rounded-full px-3 font-mono-financial text-[11px] font-bold leading-none',
-          step.emphasis
-            ? 'bg-tts-gold text-tts-surface'
-            : 'bg-tts-deep text-tts-surface',
-        )}
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        whileInView={{ scale: 1, opacity: 1 }}
+        viewport={{ once: true, amount: 0.4 }}
+        transition={{
+          duration: 0.45,
+          delay: 0.15 + index * 0.18,
+          ease: [0.34, 1.56, 0.64, 1],
+        }}
+        className="relative w-fit"
       >
-        {step.number}
-      </div>
+        {step.emphasis && (
+          <span
+            className="absolute inset-0 -z-0 animate-ping rounded-full bg-tts-gold/30"
+            style={{ animationDuration: '2.4s' }}
+            aria-hidden
+          />
+        )}
+        <div
+          className={cn(
+            'relative inline-flex h-8 items-center rounded-full px-3 font-mono-financial text-[11px] font-bold leading-none',
+            step.emphasis
+              ? 'bg-tts-gold text-tts-surface'
+              : 'bg-tts-deep text-tts-surface',
+          )}
+        >
+          {step.number}
+        </div>
+      </motion.div>
       <h3
         className={cn(
           'text-base font-bold tracking-[-0.018em]',
@@ -98,6 +131,6 @@ function StepCell({ step }: { step: Step }) {
       <p className="text-[13px] leading-[1.55] text-tts-muted">
         {step.description}
       </p>
-    </div>
+    </motion.div>
   )
 }

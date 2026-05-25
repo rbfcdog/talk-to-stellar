@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
+import { Logo } from '@/components/shared/logo'
 
 const HERO_COMMAND = 'tts convert --from BRL --to USDC --channel whatsapp'
 const TYPE_INTERVAL_MS = 28
@@ -53,11 +54,51 @@ export function Hero() {
       id="produto"
       className="relative overflow-hidden bg-tts-bg pt-20 pb-16 md:pt-28 md:pb-24"
     >
+      {/* dot grid */}
       <div
         className="pointer-events-none absolute inset-0"
         style={DOT_GRID_STYLE}
         aria-hidden
       />
+
+      {/* ambient gold orb */}
+      <div
+        className="pointer-events-none absolute left-1/2 top-[38%] h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+        style={{
+          background:
+            'radial-gradient(circle, var(--tts-gold-bg) 0%, transparent 65%)',
+          animation: 'hero-orb 8s ease-in-out infinite',
+          opacity: 0.55,
+        }}
+        aria-hidden
+      />
+
+      {/* giant faint Stellar mark, bottom-right */}
+      <div
+        className="pointer-events-none absolute -bottom-32 -right-32 text-tts-deep md:-bottom-40 md:-right-20"
+        style={{ opacity: 0.05 }}
+        aria-hidden
+      >
+        <Logo size={520} />
+      </div>
+
+      {/* mono coordinate ticks — top-left */}
+      <div
+        className="pointer-events-none absolute left-6 top-24 hidden font-mono-financial text-[10px] uppercase tracking-[0.18em] text-tts-muted md:block"
+        aria-hidden
+      >
+        <span className="block opacity-50">stellar:mainnet</span>
+        <span className="block opacity-30">pix.in → usdc.settle</span>
+      </div>
+
+      {/* mono coordinate ticks — bottom-right */}
+      <div
+        className="pointer-events-none absolute bottom-8 right-8 hidden text-right font-mono-financial text-[10px] uppercase tracking-[0.18em] text-tts-muted md:block"
+        aria-hidden
+      >
+        <span className="block opacity-50">v1 · live</span>
+        <span className="block opacity-30">lat 847ms</span>
+      </div>
 
       <div className="relative mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 text-center md:gap-8 md:px-8">
         <TerminalEyebrow command={typed || ' '} showCursor />
