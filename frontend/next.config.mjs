@@ -5,11 +5,11 @@ const appDir = dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+  compress: true,
+  poweredByHeader: false,
   turbopack: {
     root: appDir,
-  },
-  images: {
-    unoptimized: true,
   },
 }
 

@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { Spinner, TypingDots } from "@/components/ui/feedback"
+import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { useLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 
@@ -160,14 +160,7 @@ export default function CreateAccountClient({
   const [preparedPasskeyRegistration, setPreparedPasskeyRegistration] = useState<PreparedPasskeyRegistration | null>(null)
   const [passkeyQrTargetUrl, setPasskeyQrTargetUrl] = useState("")
   const [result, setResult] = useState<FinalizeResponse | null>(null)
-  const [existingEmail, setExistingEmail] = useState("")
-  const [existingPin, setExistingPin] = useState("")
-  const [, setExistingEmailConfirmationRequired] = useState(false)
-  const [existingEmailConfirmationCode, setExistingEmailConfirmationCode] = useState("")
-  const [existingStatus, setExistingStatus] = useState<"idle" | "submitting" | "done" | "error">("idle")
-  const [existingError, setExistingError] = useState("")
   const [validation, setValidation] = useState<any>(initialValidation)
-  const [existingAccountDetected, setExistingAccountDetected] = useState(false)
   const [telegramDone, setTelegramDone] = useState(false)
   const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0)
   const submitLockRef = useRef(false)
@@ -286,7 +279,7 @@ export default function CreateAccountClient({
     const resolvedUserId = String(payload?.userId || payload?.user_id || "").trim()
 
     if (sessionId) {
-      saveClientSession(sessionId)
+      saveClientSession()
     }
 
     if (resolvedUserId) {
@@ -521,17 +514,15 @@ export default function CreateAccountClient({
         const recovered = await recoverOnboardingContextFromBackend(forceNewAccount)
 
         if (recovered.mode === "existing" && !forceNewAccount) {
-          setExistingAccountDetected(true)
           setValidation({
             success: true,
             valid: false,
-            message: 'Account found in this browser. You can sign in with email and PIN or fill out the form to create a new account.',
+            message: 'Account found in this browser. Fill out the form to create a new account.',
           })
           return
         }
 
         if (recovered.mode === "token") {
-          setExistingAccountDetected(false)
           setToken(recovered.token)
           setValidation({
             success: true,
@@ -578,7 +569,6 @@ export default function CreateAccountClient({
           tokenRecoveryError = readableErrorMessage(error)
         }
         if (fresh.token) {
-          setExistingAccountDetected(false)
           finalToken = fresh.token
           setToken(finalToken)
         } else {
@@ -589,11 +579,9 @@ export default function CreateAccountClient({
             tokenRecoveryError = readableErrorMessage(error) || tokenRecoveryError
           }
           if (recovered.mode === "existing") {
-            setExistingAccountDetected(true)
-            throw new Error("Could not generate a new creation link right now. Try again or use \"I already have an account\" to sign in.")
+            throw new Error("Could not generate a new creation link right now. Try again with a fresh creation link.")
           }
           if (recovered.mode === "token") {
-            setExistingAccountDetected(false)
             finalToken = recovered.token
             setToken(finalToken)
           }
@@ -677,7 +665,7 @@ export default function CreateAccountClient({
       }
 
       if (response.ok && payload.success) {
-        saveClientSession(payload.sessionId)
+        saveClientSession()
         localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "User")
       }
 
@@ -840,76 +828,6 @@ export default function CreateAccountClient({
       submitLockRef.current = false
       setPasskeyStatus('error')
       setPasskeyError(message)
-    }
-  }
-
-  async function handleLinkExisting(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (submitLockRef.current) return
-    submitLockRef.current = true
-    setExistingStatus("submitting")
-    setExistingError("")
-
-    try {
-      let browserId = localStorage.getItem("talk-to-stellar.browserId")
-      if (!browserId) {
-        browserId = generateBrowserId()
-        localStorage.setItem("talk-to-stellar.browserId", browserId)
-      }
-      const tokenPayload = validation?.payload || decodeJwtPayload(token)
-      const externalProvider = String(tokenPayload?.provider || "").trim().toLowerCase()
-      const externalProviderUserId = String(tokenPayload?.provider_user_id || "").trim()
-      const linkProvider = externalProvider && externalProviderUserId ? externalProvider : "web"
-      const linkProviderUserId = externalProvider && externalProviderUserId ? externalProviderUserId : browserId
-
-      const response = await idempotentFetch(`/api/external/link-existing`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: linkProvider,
-          provider_user_id: linkProviderUserId,
-          token: externalProvider && externalProviderUserId ? token : undefined,
-          email: existingEmail,
-          pin: existingPin,
-          email_confirmation_code: existingEmailConfirmationCode || undefined,
-          language,
-        }),
-      })
-
-      const payload = await response.json().catch(() => ({}))
-      if (payload?.emailConfirmationRequired) {
-        if (!EMAIL_CONFIRMATION_ENABLED) {
-          throw new Error(L("Confirmação por e-mail está desativada neste ambiente. Entre com PIN pelo link do chat.", "Email confirmation is disabled in this environment. Sign in with PIN from the chat link."))
-        }
-        setExistingEmailConfirmationRequired(true)
-        setExistingStatus("idle")
-        setExistingError(String(payload?.message || "Enter the code sent by email to continue."))
-        submitLockRef.current = false
-        return
-      }
-      if (!response.ok || !payload?.success) {
-        const linkMessage = String(payload?.message || "")
-        if (payload?.used || payload?.alreadyCompleted || linkMessage.toLowerCase().includes("já foi utilizado")) {
-          redirectToUsed(linkMessage || "This link has already been used.")
-          return
-        }
-        throw new Error(payload?.message || "Could not sign in with email and PIN.")
-      }
-
-      localStorage.setItem("talk-to-stellar.userName", existingEmail.trim())
-
-      setExistingEmailConfirmationRequired(false)
-      setExistingEmailConfirmationCode("")
-      setExistingStatus("done")
-      if (isTelegramContext) {
-        finishTelegramFlow(L(`Login concluído.\nConta conectada: ${existingEmail.trim()}`, `Sign-in completed.\nConnected account: ${existingEmail.trim()}`))
-      } else {
-        finishAndClose(L(`Login concluído.\nConta conectada: ${existingEmail.trim()}`, `Sign-in completed.\nConnected account: ${existingEmail.trim()}`))
-      }
-    } catch (error) {
-      submitLockRef.current = false
-      setExistingStatus("error")
-      setExistingError(error instanceof Error ? error.message : "Failed to sign in with email and PIN.")
     }
   }
 

@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { ChatSidebar } from "@/components/chat-sidebar"
-import { ChatWindow } from "@/components/chat-window"
-import { WelcomeScreen } from "@/components/welcome-screen"
+import { ChatSidebar } from "@/components/chat/chat-sidebar"
+import { ChatWindow } from "@/components/chat/chat-window"
+import { WelcomeScreen } from "@/components/chat/welcome-screen"
 
 export default function ChatPage() {
   const [selectedChat, setSelectedChat] = useState<string | null>("agent")

@@ -11,6 +11,7 @@ function normalizeTimestamp(raw: string | null): number {
   return parsed < 1_000_000_000_000 ? parsed * 1000 : parsed;
 }
 
+/** Read the server's view of the current session (sessionId + authenticated flag) via /api/session. */
 export async function getClientSession(): Promise<{ sessionId: string; authenticated: boolean }> {
   if (typeof window === "undefined") return { sessionId: "", authenticated: false };
   try {
@@ -25,7 +26,8 @@ export async function getClientSession(): Promise<{ sessionId: string; authentic
   }
 }
 
-export function saveClientSession(_sessionId?: string, _sessionToken?: string) {
+/** Stamp localStorage with a fresh session timestamp. Session id/token now live in HttpOnly cookies set server-side. */
+export function saveClientSession() {
   if (typeof window === "undefined") return;
 
   localStorage.removeItem(SESSION_ID_KEY);
@@ -35,6 +37,7 @@ export function saveClientSession(_sessionId?: string, _sessionToken?: string) {
   localStorage.setItem(SESSION_LAST_SEEN_AT_KEY, now);
 }
 
+/** Wipe local session timestamps and ask /api/session to clear the server-side cookies. */
 export function clearClientSession() {
   if (typeof window === "undefined") return;
 
@@ -45,11 +48,13 @@ export function clearClientSession() {
   fetch("/api/session", { method: "DELETE", cache: "no-store" }).catch(() => {});
 }
 
+/** Update the "last seen" timestamp so the session TTL window slides forward. */
 export function touchClientSessionActivity() {
   if (typeof window === "undefined") return;
   localStorage.setItem(SESSION_LAST_SEEN_AT_KEY, String(Date.now()));
 }
 
+/** True when the locally-tracked session has been idle longer than SESSION_TTL_MS. */
 export function isClientSessionExpired() {
   if (typeof window === "undefined") return false;
 
@@ -71,6 +76,7 @@ export function isClientSessionExpired() {
   return Date.now() - anchor > SESSION_TTL_MS;
 }
 
+/** Clear local session state and send the browser to /login?expired=1. */
 export function redirectToExpiredLogin() {
   if (typeof window === "undefined") return;
 

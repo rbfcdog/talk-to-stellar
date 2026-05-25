@@ -28,7 +28,13 @@ type ProxyOptions = {
   injectEtherfuseWebhookSecret?: boolean;
 };
 
-export async function proxyBackendApi(req: NextRequest, basePath: string, path: string[], options: ProxyOptions = {}) {
+/** Forward an incoming Next.js API request to the backend, attaching session headers + idempotency key. */
+export async function proxyBackendApi(
+  req: NextRequest,
+  basePath: string,
+  path: string[],
+  options: ProxyOptions = {},
+): Promise<NextResponse> {
   const backendBase = getBackendBaseUrl();
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/${basePath.replace(/^\/|\/$/g, "")}/${path.join("/")}${qs ? `?${qs}` : ""}`;

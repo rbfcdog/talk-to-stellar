@@ -24,11 +24,13 @@ function parseBody(body: BodyInit | null | undefined) {
   }
 }
 
+/** Build a deterministic idempotency key from a scope label + JSON-serializable payload. */
 export function buildIdempotencyKey(scope: string, payload: any) {
   const source = stableStringify({ scope, payload });
   return `tts_${hashString(source)}_${hashString(`${source}:v2`)}`;
 }
 
+/** Return the idempotency key for this scope+payload, persisting it in sessionStorage so retries reuse it. */
 export function getOrCreateIdempotencyKey(scope: string, payload: any) {
   const key = buildIdempotencyKey(scope, payload);
   if (typeof window === "undefined") return key;
@@ -40,6 +42,7 @@ export function getOrCreateIdempotencyKey(scope: string, payload: any) {
   return key;
 }
 
+/** fetch() wrapper that injects an Idempotency-Key header on mutating methods. */
 export function idempotentFetch(input: RequestInfo | URL, init: RequestInit = {}, scope?: string) {
   const method = String(init.method || "GET").toUpperCase();
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {

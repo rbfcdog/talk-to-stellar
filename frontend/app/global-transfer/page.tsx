@@ -1,3 +1,4 @@
+// LEGACY — kept for backward compat, review before next release
 import GlobalTransferClient from "./global-transfer-client"
 
 export const metadata = {

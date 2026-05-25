@@ -378,9 +378,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         throw new Error(payload?.message || "Could not sign in with email and PIN.")
       }
 
-      saveClientSession(
-        payload?.sessionId ? String(payload.sessionId) : undefined
-      )
+      saveClientSession()
       markExternalLoginCompleted()
       setEmailConfirmationRequired(false)
       setEmailConfirmationCode("")
@@ -462,9 +460,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         throw new Error(completePayload.message || "Failed to complete Passkey.")
       }
 
-      saveClientSession(
-        completePayload?.sessionId ? String(completePayload.sessionId) : undefined
-      )
+      saveClientSession()
       markExternalLoginCompleted()
       localStorage.setItem("talk-to-stellar.userName", email.trim())
       getBrowserId()
