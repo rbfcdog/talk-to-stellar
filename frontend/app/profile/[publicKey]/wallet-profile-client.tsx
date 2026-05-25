@@ -26,13 +26,6 @@ function formatAssetBalance(item: BalanceItem) {
   return code ? `${raw.toFixed(2)} ${code}` : ""
 }
 
-function shorten(value?: string, left = 6, right = 6) {
-  const raw = String(value || "").trim()
-  if (!raw) return "unavailable"
-  if (raw.length <= left + right + 3) return raw
-  return `${raw.slice(0, left)}...${raw.slice(-right)}`
-}
-
 export default function WalletProfileClient({ publicKey }: { publicKey: string }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [message, setMessage] = useState("")

@@ -19,6 +19,7 @@ function cookieOptions() {
   };
 }
 
+/** Extract sessionId + sessionToken from the incoming request's HttpOnly cookies. */
 export function readSessionCookies(req: NextRequest | Request): Partial<SessionPair> {
   const cookieHeader = req.headers.get("cookie") || "";
   const parsed = new Map<string, string>();
@@ -33,6 +34,7 @@ export function readSessionCookies(req: NextRequest | Request): Partial<SessionP
   };
 }
 
+/** Attach session cookies to a NextResponse (skips empty values). */
 export function setSessionCookies(response: NextResponse, session: Partial<SessionPair>) {
   const sessionId = String(session.sessionId || "").trim();
   const sessionToken = String(session.sessionToken || "").trim();
@@ -40,11 +42,13 @@ export function setSessionCookies(response: NextResponse, session: Partial<Sessi
   if (sessionToken) response.cookies.set(SESSION_TOKEN_COOKIE, sessionToken, cookieOptions());
 }
 
+/** Expire both session cookies on the given NextResponse. */
 export function clearSessionCookies(response: NextResponse) {
   response.cookies.set(SESSION_ID_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
   response.cookies.set(SESSION_TOKEN_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
 }
 
+/** Pull sessionId/sessionToken out of an arbitrary JSON body (snake or camel case). */
 export function extractSessionFromPayload(payload: any): Partial<SessionPair> {
   if (!payload || typeof payload !== "object") return {};
   return {
@@ -53,6 +57,7 @@ export function extractSessionFromPayload(payload: any): Partial<SessionPair> {
   };
 }
 
+/** Return a copy of payload with session id/token fields removed before sending to the browser. */
 export function stripSessionSecrets(payload: any): any {
   if (Array.isArray(payload)) return payload.map(stripSessionSecrets);
   if (!payload || typeof payload !== "object") return payload;
@@ -65,6 +70,7 @@ export function stripSessionSecrets(payload: any): any {
   return clone;
 }
 
+/** Build X-Session-Id / X-Session-Token headers from cookies, for forwarding to the backend. */
 export function buildSessionHeaders(req: NextRequest | Request): Record<string, string> {
   const session = readSessionCookies(req);
   return {
@@ -73,6 +79,7 @@ export function buildSessionHeaders(req: NextRequest | Request): Record<string, 
   };
 }
 
+/** Inject sessionId/sessionToken into an outbound JSON body if the cookies are present. */
 export function augmentJsonBodyWithSession(body: string | undefined, req: NextRequest | Request): string | undefined {
   if (body === undefined) return body;
   const session = readSessionCookies(req);
@@ -89,6 +96,7 @@ export function augmentJsonBodyWithSession(body: string | undefined, req: NextRe
   }
 }
 
+/** Build a NextResponse JSON body with session secrets stripped and cookies re-attached. */
 export function jsonResponseWithSession(payload: any, init: ResponseInit = {}) {
   const session = extractSessionFromPayload(payload);
   const response = NextResponse.json(stripSessionSecrets(payload), init);
@@ -96,6 +104,7 @@ export function jsonResponseWithSession(payload: any, init: ResponseInit = {}) {
   return response;
 }
 
+/** Return the backend response body verbatim, re-attaching session cookies when the content is JSON. */
 export function passthroughResponseWithSession(text: string, status: number, contentType: string) {
   if (contentType.includes("application/json")) {
     try {

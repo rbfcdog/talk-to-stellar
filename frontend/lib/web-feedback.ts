@@ -24,6 +24,7 @@ function sanitizeFeedbackText(content: string) {
     .trim()
 }
 
+/** Queue a feedback message in localStorage + broadcast it so any open web chat tab picks it up. */
 export function enqueueWebChatFeedback(content: string) {
   if (typeof window === "undefined") return
   const text = sanitizeFeedbackText(String(content || ""))
@@ -53,6 +54,7 @@ export function enqueueWebChatFeedback(content: string) {
   } catch {}
 }
 
+/** Drain and return the queued web-chat feedback items, clearing the queue. */
 export function consumeWebChatFeedback(): WebChatFeedback[] {
   if (typeof window === "undefined") return []
   try {
@@ -66,6 +68,7 @@ export function consumeWebChatFeedback(): WebChatFeedback[] {
   }
 }
 
+/** Close the current tab after a short delay (Telegram WebApp first, then window.close fallback). */
 export function closeIntermediatePage(delayMs = INTERMEDIATE_PAGE_CLOSE_DELAY_MS) {
   if (typeof window === "undefined") return
   window.setTimeout(() => {

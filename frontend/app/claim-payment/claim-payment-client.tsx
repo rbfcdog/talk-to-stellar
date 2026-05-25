@@ -7,7 +7,7 @@ import { LogIn, ShieldCheck, UserPlus } from "lucide-react"
 import { clearClientSession, getClientSession, isClientSessionExpired } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { TypingDots } from "@/components/ui/feedback"
+import { TypingDots } from "@/components/shared/feedback"
 import { useLanguage, type AppLanguage } from "@/lib/i18n"
 
 type ValidationResult = {

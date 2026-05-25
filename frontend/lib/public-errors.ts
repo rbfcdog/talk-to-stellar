@@ -37,12 +37,14 @@ function normalizeMessage(message: string) {
     .toLowerCase();
 }
 
+/** Generate a unique support reference (e.g. TTS-20260525...-AB12CD) for correlating user reports with logs. */
 export function createSupportCode(prefix = "TTS") {
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
   return `${prefix}-${stamp}-${suffix}`;
 }
 
+/** Map a raw backend/network error into a stable code + localized user-safe message. */
 export function mapPublicError(error: unknown, language?: string) {
   const raw = extractErrorMessage(error);
   const normalized = normalizeMessage(raw);
@@ -137,6 +139,7 @@ export function mapPublicError(error: unknown, language?: string) {
   };
 }
 
+/** Build the standard JSON error body returned by our API routes (code + message + support_code). */
 export function publicErrorPayload(error: unknown, options: PublicErrorOptions = {}): PublicErrorPayload {
   const mapped = mapPublicError(error, options.language);
   return {

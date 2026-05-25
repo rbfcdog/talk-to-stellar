@@ -8,7 +8,7 @@ import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
 import { getClientSession } from "@/lib/session"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { Spinner, TypingDots, Shimmer } from "@/components/ui/feedback"
+import { Spinner, TypingDots, Shimmer } from "@/components/shared/feedback"
 
 type CreatePayLinkResponse = {
   success?: boolean

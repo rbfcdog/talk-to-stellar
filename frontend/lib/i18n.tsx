@@ -8,6 +8,7 @@ export type AppLanguage = "pt-BR" | "en";
 const STORAGE_KEY = "talk-to-stellar.language";
 const COOKIE_KEY = "tts_lang";
 
+/** Coerce an arbitrary value (locale string, query param, etc.) into a supported AppLanguage. */
 export function normalizeLanguage(value: unknown): AppLanguage {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "pt" || normalized === "pt-br" || normalized.startsWith("pt-") || normalized.includes("portugu")) {
@@ -19,7 +20,6 @@ export function normalizeLanguage(value: unknown): AppLanguage {
 type Dictionary = Record<string, string>;
 
 const englishDictionary: Dictionary = {
-    language_button: "English",
     language_label: "Language",
     language_current: "English",
     chat_agent_welcome:
@@ -30,7 +30,6 @@ const englishDictionary: Dictionary = {
     chat_wait_session: "Give me a moment while I start the session...",
     chat_api_error: "I could not connect to the service right now. Try again in a few seconds.",
     chat_no_response: "No response received",
-    chat_error_prefix: "I could not finish that right now",
     chat_online: "online",
     chat_link_payment: "Open payment confirmation",
     chat_link_conversion: "Open conversion confirmation",
@@ -54,8 +53,6 @@ const englishDictionary: Dictionary = {
     login_pin_card_body: "The fastest way to sign in and continue.",
     login_next_card_title: "After login",
     login_next_card_body: "Go back to the chat and ask for balance, contacts, PIX, payments, or history.",
-    login_passkey_card_title: "Passkey",
-    login_passkey_card_body: "Optional. Use biometrics or your device lock only when a Passkey is already registered.",
     login_via: "Signing in with",
     login_telegram_id: "Telegram ID",
     login_telegram_help: "Enter your PIN to sign in to the account linked to this Telegram.",
@@ -105,7 +102,6 @@ const englishDictionary: Dictionary = {
 };
 
 const portugueseDictionary: Dictionary = {
-    language_button: "Português",
     language_label: "Idioma",
     language_current: "Português",
     chat_agent_welcome:
@@ -116,7 +112,6 @@ const portugueseDictionary: Dictionary = {
     chat_wait_session: "Só um momento enquanto inicio a sessão...",
     chat_api_error: "Não consegui conectar ao serviço agora. Tente novamente em alguns segundos.",
     chat_no_response: "Nenhuma resposta recebida",
-    chat_error_prefix: "Não consegui concluir agora",
     chat_online: "online",
     chat_link_payment: "Abrir confirmação de pagamento",
     chat_link_conversion: "Abrir confirmação de conversão",
@@ -140,8 +135,6 @@ const portugueseDictionary: Dictionary = {
     login_pin_card_body: "O jeito mais rápido de entrar e continuar.",
     login_next_card_title: "Depois do login",
     login_next_card_body: "Volte ao chat e peça saldo, contatos, PIX, pagamentos ou histórico.",
-    login_passkey_card_title: "Passkey",
-    login_passkey_card_body: "Opcional. Use biometria ou bloqueio do aparelho apenas quando já houver uma Passkey cadastrada.",
     login_via: "Entrando via",
     login_telegram_id: "ID do Telegram",
     login_telegram_help: "Digite seu PIN para entrar na conta vinculada a este Telegram.",
@@ -220,6 +213,7 @@ function persistLanguage(language: AppLanguage) {
   document.documentElement.lang = language === "pt-BR" ? "pt-BR" : "en";
 }
 
+/** Context provider that exposes the active language + a t() lookup with {{placeholder}} interpolation. */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const [language, setLanguageState] = useState<AppLanguage>("pt-BR");
@@ -270,6 +264,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
+/** Hook returning { language, setLanguage, toggleLanguage, t } — must be used inside LanguageProvider. */
 export function useLanguage() {
   const context = useContext(LanguageContext);
   if (!context) {

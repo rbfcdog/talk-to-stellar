@@ -1,6 +1,6 @@
 "use client"
 
-import { TypingDots } from "@/components/ui/feedback"
+import { TypingDots } from "@/components/shared/feedback"
 
 export type OperationProgressStatus = "ready" | "submitting" | "done" | "error"
 

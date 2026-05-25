@@ -76,7 +76,6 @@ type DebugLogEntry = {
 
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
 const ETHERFUSE_TESTNET_FEE_BPS = 20;
-const ETHERFUSE_TESTNET_FEE_SAMPLE_BRL = 100;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
@@ -2134,12 +2133,6 @@ export default function PixRampClient({
     });
   }
 
-  const timeline = [
-    { label: L("PIX gerado", "PIX generated"), done: Boolean(orderId), active: Boolean(orderId) && status === "pending" },
-    { label: L("Aguardando pagamento", "Waiting for payment"), done: ["processing", "funded", "completed"].includes(status), active: status === "pending" },
-    { label: L("Pagamento detectado", "Payment detected"), done: ["processing", "funded", "completed"].includes(status), active: ["processing", "funded"].includes(status) },
-    { label: transferFlow ? L("Transferência enviada", "Transfer sent") : L("Saldo entregue", "Balance delivered"), done: status === "completed", active: status === "completed" },
-  ];
   const offRampReceiptAmount = temporaryOffRampTestResult
     ? formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)
     : offRampDisplayAmount;
