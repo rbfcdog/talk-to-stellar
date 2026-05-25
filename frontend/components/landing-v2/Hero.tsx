@@ -17,10 +17,10 @@ const PHRASES = [
   'Cross-border sem wire bancário.',
 ]
 
-const PHRASE_TYPE_MS = 38 // per char while typing
-const PHRASE_ERASE_MS = 18 // per char while erasing
-const PHRASE_HOLD_MS = 2200 // hold a fully-typed phrase
-const PHRASE_GAP_MS = 300 // pause after erase before next phrase
+const PHRASE_TYPE_MS = 70 // per char while typing
+const PHRASE_ERASE_MS = 32 // per char while erasing
+const PHRASE_HOLD_MS = 2600 // hold a fully-typed phrase
+const PHRASE_GAP_MS = 400 // pause after erase before next phrase
 
 const DOT_GRID_STYLE: React.CSSProperties = {
   backgroundImage:
