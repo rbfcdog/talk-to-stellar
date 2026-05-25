@@ -10,6 +10,10 @@ import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { useLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
+import { AuthShell } from "@/components/auth/AuthShell"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Fingerprint } from "lucide-react"
 
 type FinalizeResponse = {
   success: boolean
@@ -833,268 +837,347 @@ export default function CreateAccountClient({
 
   if (telegramDone) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
-        <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
-          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">{isTelegramContext ? L("Telegram conectado", "Telegram connected") : L("Conta conectada", "Account connected")}</p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">{L("Sua conta foi vinculada.", "Your account is linked.")}</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            {isTelegramContext ? L("Volte ao Telegram e envie sua próxima mensagem.", "Go back to Telegram and send your next message.") : L("Processo concluído.", "Process complete.")}
-          </p>
-          <p className="mt-2 text-xs text-slate-400">
-            {INTERMEDIATE_PAGE_CLOSE_COPY}
-          </p>
-        </section>
-      </main>
+      <AuthShell
+        title={L("Sua conta foi vinculada.", "Your account is linked.")}
+        description={
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-confirm">
+              {isTelegramContext ? L("Telegram conectado", "Telegram connected") : L("Conta conectada", "Account connected")}
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-tts-muted">
+              {isTelegramContext
+                ? L("Volte ao Telegram e envie sua próxima mensagem.", "Go back to Telegram and send your next message.")
+                : L("Processo concluído.", "Process complete.")}
+            </p>
+            <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+          </>
+        }
+      >
+        <div />
+      </AuthShell>
     )
   }
 
+  const STEPS = [L("Identidade", "Identity"), L("Segurança", "Security"), L("Conta pronta", "Account ready")]
+  const submitDisabled =
+    submitLocked ||
+    !pin.trim() ||
+    !pinConfirm.trim() ||
+    (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur sm:p-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
-              {L("Criar conta", "Create account")}
-            </div>
-            <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {isClaimPaymentContext ? L("Crie sua conta para receber", "Create your account to receive") : L("Finalize sua conta TalkToStellar", "Finish your TalkToStellar account")}
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                {isClaimPaymentContext
-                  ? L("Você está a poucos passos de receber. Cadastre sua conta global e volte automaticamente ao link de pagamento.", "You are a few steps away from receiving. Create your global account and return automatically to the payment link.")
-                  : L("Preencha os dados abaixo e siga o passo a passo para concluir sua conta com segurança.", "Fill in the details below and follow the steps to finish your account securely.")}
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
-              {[L("Identidade", "Identity"), L("Segurança", "Security"), L("Conta pronta", "Account ready")].map((step, index) => (
-                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-cyan-400/20 text-cyan-100" : "text-slate-400"}`}>
-                  {step}
-                </motion.div>
-              ))}
-            </div>
-
-          </section>
-
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Nome", "Name")}</span>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  type="text"
-                  placeholder={L("Seu nome", "Your name")}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("E-mail", "Email")}</span>
-                <input
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value)
-                    setEmailConfirmationRequired(false)
-                    setEmailConfirmationCode("")
-                  }}
-                  type="email"
-                  placeholder="you@example.com"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Telefone", "Phone")}</span>
-                <input
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.target.value)}
-                  type="tel"
-                  placeholder="+55 11 99999-9999"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">CPF</span>
-                <input
-                  value={cpf}
-                  onChange={(event) => setCpf(event.target.value)}
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="000.000.000-00"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("PIN (4 a 8 dígitos)", "PIN (4 to 8 digits)")}</span>
-                <input
-                  value={pin}
-                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  placeholder={L("Crie seu PIN", "Create your PIN")}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{L("Confirmar PIN", "Confirm PIN")}</span>
-                <input
-                  value={pinConfirm}
-                  onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, ""))}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  placeholder={L("Confirme seu PIN", "Confirm your PIN")}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              {PASSKEY_ENROLLMENT_ENABLED && (
-                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={requestPasskey}
-                    onChange={(event) => setRequestPasskey(event.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
-                  />
-                  <span>{L("Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.", "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.")}</span>
-                </label>
-              )}
-
-              {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
-                <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
-                  <span className="text-sm font-medium text-cyan-50">{L("Código enviado por e-mail", "Code sent by email")}</span>
-                  <input
-                    value={emailConfirmationCode}
-                    onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="000000"
-                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
-                  />
-                  <span className="block text-xs text-cyan-100">{result?.message || L("Confira seu e-mail e informe o código para continuar.", "Check your email and enter the code to continue.")}</span>
-                  {result?.devCode && <span className="block text-xs text-cyan-100">Dev code: {result.devCode}</span>}
-                </label>
-              )}
-
-              {pinError && <p className="text-rose-300">{pinError}</p>}
-
-              <button
-                type="submit"
-                disabled={submitLocked || !pin.trim() || !pinConfirm.trim() || (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{L("Finalizando conta...", "Finishing account...")}</span> : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? L("Confirmar e finalizar", "Confirm and finish") : L("Finalizar conta", "Finish account")}
-              </button>
-            </form>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">Status</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">{L("Aguardando validação do link.", "Waiting for link validation.")}</p>}
-              {status === "submitting" && (
-                <div className="mt-3 space-y-3 text-slate-300">
-                  <div className="inline-flex items-center gap-2">
-                    <TypingDots />
-                    {L("Criando sua conta da forma mais otimizada...", "Creating your account with the most optimized setup...")}
-                  </div>
-                  <motion.p
-                    key={loadingPhraseIndex}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-50"
-                  >
-                    {loadingPhrases[loadingPhraseIndex]}
-                  </motion.p>
-                </div>
-              )}
-              <AnimatePresence mode="wait">
-              {status === "done" && result?.success && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
-                  <p>{L("Conta criada com sucesso.", "Account created successfully.")}</p>
-                </motion.div>
-              )}
-              {result?.success && PASSKEY_ENROLLMENT_ENABLED && (
-                <div className="mt-3 space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => registerAndSignInWithPasskey()}
-                    disabled={passkeyButtonDisabled}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {passkeyStatus === 'preparing'
-                      ? L('Preparando biometria...', 'Preparing biometrics...')
-                      : passkeyStatus === 'registering'
-                        ? L('Abrindo biometria...', 'Opening biometrics...')
-                        : L('Opcional: ativar biometria', 'Optional: enable biometrics')}
-                  </button>
-                  {passkeyStatus !== "registering" && passkeyStatus !== "preparing" && passkeyStatus !== "done" && (
-                    <button
-                      type="button"
-                      onClick={finishWithoutPasskey}
-                      className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                    >
-                      {L("Pular por agora e continuar com PIN", "Skip for now and continue with PIN")}
-                    </button>
-                  )}
-                  <p className="text-xs text-slate-400">
-                    {L("Passkey é opcional. Se o celular demorar ou cancelar, continue com PIN.", "Passkey is optional. If the phone times out or cancels, continue with PIN.")}
-                  </p>
-                  {passkeyHint && <p className="text-xs text-cyan-200">{passkeyHint}</p>}
-                  {passkeyQrImageUrl && (
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-slate-300">
-                      <p className="font-medium text-white">{L("Usar Passkey no celular", "Use Passkey on your phone")}</p>
-                      <p className="mt-1">{L("Escaneie para abrir o login com Passkey no celular e autorizar com Touch ID.", "Scan to open Passkey login on your phone and authorize with Touch ID.")}</p>
-                      <div className="mt-2 flex justify-center">
-                        <img
-                          src={passkeyQrImageUrl}
-                          alt="QR code for Passkey login on mobile"
-                          className="h-56 w-56 rounded-xl border border-white/10 bg-white p-2"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {passkeyError && <p className="text-xs text-rose-300">{passkeyError}</p>}
-                </div>
-              )}
-              {result?.success && !PASSKEY_ENROLLMENT_ENABLED && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-slate-400">
-                    {L("Use seu PIN para entrar e confirmar operações nesta demo.", "Use your PIN to sign in and confirm operations in this demo.")}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={finishWithoutPasskey}
-                    className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                  >
-                    {L("Continuar com PIN", "Continue with PIN")}
-                  </button>
-                </div>
-              )}
-              {status === "error" && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">
-                  {publicCreateAccountErrorMessage(result?.error || result?.message || L("Algo deu errado.", "Something went wrong."), language)}
-                </motion.p>
-              )}
-              {PASSKEY_ENROLLMENT_ENABLED && passkeyStatus === 'done' && (
-                <p className="mt-2 break-all text-emerald-300">{L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}</p>
-              )}
-              </AnimatePresence>
-            </div>
-
-            <a
-              href={loginHref}
-              className="mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              {L("Já tenho conta", "I already have an account")}
-            </a>
-          </section>
-        </div>
+    <AuthShell
+      title={
+        isClaimPaymentContext
+          ? L("Crie sua conta para receber", "Create your account to receive")
+          : L("Finalize sua conta TalkToStellar", "Finish your TalkToStellar account")
+      }
+      description={
+        isClaimPaymentContext
+          ? L(
+              "Você está a poucos passos de receber. Cadastre sua conta e volte ao link de pagamento.",
+              "You are a few steps away from receiving. Create your account and return to the payment link.",
+            )
+          : L(
+              "Preencha os dados abaixo para concluir sua conta com segurança.",
+              "Fill in the details below to finish your account securely.",
+            )
+      }
+      footer={
+        <a
+          href={loginHref}
+          className="text-[12px] text-tts-muted underline-offset-4 hover:text-tts-deep hover:underline"
+        >
+          {L("Já tenho conta", "I already have an account")}
+        </a>
+      }
+      className="max-w-md"
+    >
+      <div className="grid grid-cols-3 gap-2 rounded-xl border border-tts-border bg-tts-bg p-1.5 text-[11px]">
+        {STEPS.map((step, index) => (
+          <motion.div
+            key={step}
+            layout
+            className={`rounded-md px-2 py-1.5 text-center transition-colors ${
+              currentStep >= index + 1
+                ? "bg-tts-gold-bg font-medium text-tts-deep"
+                : "text-tts-muted"
+            }`}
+          >
+            {step}
+          </motion.div>
+        ))}
       </div>
-    </main>
+
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">{L("Nome", "Name")}</span>
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            type="text"
+            placeholder={L("Seu nome", "Your name")}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">{L("E-mail", "Email")}</span>
+          <Input
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value)
+              setEmailConfirmationRequired(false)
+              setEmailConfirmationCode("")
+            }}
+            type="email"
+            placeholder="you@example.com"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">{L("Telefone", "Phone")}</span>
+          <Input
+            value={phoneNumber}
+            onChange={(event) => setPhoneNumber(event.target.value)}
+            type="tel"
+            placeholder="+55 11 99999-9999"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">CPF</span>
+          <Input
+            value={cpf}
+            onChange={(event) => setCpf(event.target.value)}
+            type="text"
+            inputMode="numeric"
+            placeholder="000.000.000-00"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">
+            {L("PIN (4 a 8 dígitos)", "PIN (4 to 8 digits)")}
+          </span>
+          <Input
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            placeholder={L("Crie seu PIN", "Create your PIN")}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">
+            {L("Confirmar PIN", "Confirm PIN")}
+          </span>
+          <Input
+            value={pinConfirm}
+            onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, ""))}
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            placeholder={L("Confirme seu PIN", "Confirm your PIN")}
+          />
+        </label>
+
+        {PASSKEY_ENROLLMENT_ENABLED && (
+          <label className="flex items-start gap-3 rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-xs text-tts-deep">
+            <input
+              type="checkbox"
+              checked={requestPasskey}
+              onChange={(event) => setRequestPasskey(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-tts-border"
+            />
+            <span>
+              {L(
+                "Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.",
+                "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.",
+              )}
+            </span>
+          </label>
+        )}
+
+        {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
+          <label className="flex flex-col gap-1.5 rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2.5">
+            <span className="text-xs font-medium text-tts-deep">
+              {L("Código enviado por e-mail", "Code sent by email")}
+            </span>
+            <Input
+              value={emailConfirmationCode}
+              onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="000000"
+            />
+            <span className="text-[11px] text-tts-muted">
+              {result?.message || L("Confira seu e-mail e informe o código.", "Check your email and enter the code.")}
+            </span>
+            {result?.devCode && (
+              <span className="font-mono-financial text-[11px] text-tts-muted">
+                Dev code: {result.devCode}
+              </span>
+            )}
+          </label>
+        )}
+
+        {pinError && (
+          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
+            {pinError}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          size="lg"
+          disabled={submitDisabled}
+          className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+        >
+          {status === "submitting" ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner />
+              {L("Finalizando conta...", "Finishing account...")}
+            </span>
+          ) : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? (
+            L("Confirmar e finalizar", "Confirm and finish")
+          ) : (
+            L("Finalizar conta", "Finish account")
+          )}
+        </Button>
+      </form>
+
+      <div className="rounded-xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-muted">Status</p>
+        {status === "ready" && (
+          <p className="mt-2 text-xs text-tts-muted">
+            {L("Aguardando validação do link.", "Waiting for link validation.")}
+          </p>
+        )}
+        {status === "submitting" && (
+          <div className="mt-3 flex flex-col gap-3 text-xs text-tts-deep">
+            <div className="inline-flex items-center gap-2">
+              <TypingDots />
+              {L("Criando sua conta...", "Creating your account...")}
+            </div>
+            <motion.p
+              key={loadingPhraseIndex}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-tts-deep"
+            >
+              {loadingPhrases[loadingPhraseIndex]}
+            </motion.p>
+          </div>
+        )}
+        <AnimatePresence mode="wait">
+          {status === "done" && result?.success && (
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-2 text-xs text-tts-confirm"
+            >
+              {L("Conta criada com sucesso.", "Account created successfully.")}
+            </motion.p>
+          )}
+          {result?.success && PASSKEY_ENROLLMENT_ENABLED && (
+            <div className="mt-3 flex flex-col gap-2">
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                onClick={() => registerAndSignInWithPasskey()}
+                disabled={passkeyButtonDisabled}
+                className="w-full"
+              >
+                <Fingerprint className="mr-2 h-4 w-4" />
+                {passkeyStatus === "preparing"
+                  ? L("Preparando biometria...", "Preparing biometrics...")
+                  : passkeyStatus === "registering"
+                    ? L("Abrindo biometria...", "Opening biometrics...")
+                    : L("Ativar biometria", "Enable biometrics")}
+              </Button>
+              {passkeyStatus !== "registering" && passkeyStatus !== "preparing" && passkeyStatus !== "done" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={finishWithoutPasskey}
+                  className="w-full"
+                >
+                  {L("Pular e continuar com PIN", "Skip and continue with PIN")}
+                </Button>
+              )}
+              <p className="text-[11px] text-tts-muted">
+                {L(
+                  "Passkey é opcional. Se demorar ou cancelar, continue com PIN.",
+                  "Passkey is optional. If it times out or cancels, continue with PIN.",
+                )}
+              </p>
+              {passkeyHint && <p className="text-[11px] text-tts-gold">{passkeyHint}</p>}
+              {passkeyQrImageUrl && (
+                <div className="rounded-xl border border-tts-border bg-tts-bg p-3 text-[11px] text-tts-muted">
+                  <p className="font-medium text-tts-deep">
+                    {L("Usar Passkey no celular", "Use Passkey on your phone")}
+                  </p>
+                  <p className="mt-1">
+                    {L(
+                      "Escaneie para abrir o login com Passkey no celular.",
+                      "Scan to open Passkey login on your phone.",
+                    )}
+                  </p>
+                  <div className="mt-2 flex justify-center">
+                    <img
+                      src={passkeyQrImageUrl}
+                      alt="QR code for Passkey login on mobile"
+                      className="h-44 w-44 rounded-xl border border-tts-border bg-white p-2"
+                    />
+                  </div>
+                </div>
+              )}
+              {passkeyError && <p className="text-[11px] text-tts-error">{passkeyError}</p>}
+            </div>
+          )}
+          {result?.success && !PASSKEY_ENROLLMENT_ENABLED && (
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-[11px] text-tts-muted">
+                {L(
+                  "Use seu PIN para entrar e confirmar operações.",
+                  "Use your PIN to sign in and confirm operations.",
+                )}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={finishWithoutPasskey}
+                className="w-full"
+              >
+                {L("Continuar com PIN", "Continue with PIN")}
+              </Button>
+            </div>
+          )}
+          {status === "error" && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-2 text-xs text-tts-error"
+            >
+              {publicCreateAccountErrorMessage(
+                result?.error || result?.message || L("Algo deu errado.", "Something went wrong."),
+                language,
+              )}
+            </motion.p>
+          )}
+          {PASSKEY_ENROLLMENT_ENABLED && passkeyStatus === "done" && (
+            <p className="mt-2 break-all text-xs text-tts-confirm">
+              {L("Biometria ativada com sucesso.", "Biometrics enabled successfully.")}
+            </p>
+          )}
+        </AnimatePresence>
+      </div>
+    </AuthShell>
   )
 }

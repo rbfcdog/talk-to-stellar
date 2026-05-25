@@ -100,25 +100,25 @@ export default function TransactionsClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <section className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:p-10">
+        <section className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:p-10">
           <div className="no-print flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
+            <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-gold">
               <Wallet2 className="h-4 w-4" />
               History
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href="/chat"
-                className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
+                className="rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm text-tts-deep hover:bg-tts-surface"
               >
                 Back to chat
               </Link>
               <button
                 type="button"
                 onClick={exportPdf}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300"
+                className="inline-flex items-center gap-2 rounded-lg bg-tts-confirm px-3 py-2 text-sm font-semibold text-tts-deep hover:bg-tts-confirm"
               >
                 <FileDown className="h-4 w-4" />
                 Export PDF
@@ -128,14 +128,14 @@ export default function TransactionsClient() {
 
           <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-semibold text-white md:text-5xl">Transactions for {pageTitle}</h1>
-              <p className="mt-2 text-sm text-slate-300">Full list with person, transaction context, and short profile link.</p>
+              <h1 className="text-3xl font-semibold text-tts-surface md:text-5xl">Transactions for {pageTitle}</h1>
+              <p className="mt-2 text-sm text-tts-deep">Full list with person, transaction context, and short profile link.</p>
             </div>
             <div className="no-print flex items-center gap-2">
               <select
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+                className="rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm text-tts-surface outline-none"
               >
                 {Array.from({ length: 12 }).map((_, index) => (
                   <option key={index + 1} value={String(index + 1)}>
@@ -146,40 +146,40 @@ export default function TransactionsClient() {
               <input
                 value={year}
                 onChange={(event) => setYear(event.target.value.replace(/\D/g, "").slice(0, 4))}
-                className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+                className="w-24 rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm text-tts-surface outline-none"
                 inputMode="numeric"
                 placeholder="Year"
               />
               <button
                 type="button"
                 onClick={() => void loadTransactions()}
-                className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10"
+                className="rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm font-semibold text-tts-deep hover:bg-tts-surface"
               >
                 Refresh
               </button>
             </div>
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+          <div className="mt-6 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20">
             {status === "loading" && (
-              <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-300">
+              <div className="flex items-center gap-2 px-4 py-6 text-sm text-tts-deep">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading transactions...
               </div>
             )}
 
             {status === "error" && (
-              <div className="px-4 py-6 text-sm text-rose-300">{message || "Could not load history."}</div>
+              <div className="px-4 py-6 text-sm text-tts-error">{message || "Could not load history."}</div>
             )}
 
             {status === "ready" && transactions.length === 0 && (
-              <div className="px-4 py-6 text-sm text-slate-300">No transactions in this period.</div>
+              <div className="px-4 py-6 text-sm text-tts-deep">No transactions in this period.</div>
             )}
 
             {status === "ready" && transactions.length > 0 && (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="border-b border-white/10 bg-white/5 text-slate-300">
+                  <thead className="border-b border-tts-border bg-tts-surface text-tts-deep">
                     <tr>
                       <th className="px-4 py-3 font-medium">Person</th>
                       <th className="px-4 py-3 font-medium">Amount</th>
@@ -193,26 +193,26 @@ export default function TransactionsClient() {
                     {transactions.map((item) => {
                       const profileUrl = String(item.counterparty?.short_profile_url || item.counterparty?.profile_url || "").trim()
                       return (
-                        <tr key={String(item.id)} className="border-b border-white/5 text-slate-100">
+                        <tr key={String(item.id)} className="border-b border-tts-border text-tts-deep">
                           <td className="px-4 py-3 align-top">
-                            <p className="font-medium text-white">{item.counterparty?.name || "Recipient"}</p>
-                            <p className="text-xs text-slate-400">{item.counterparty?.identifier || "unavailable"}</p>
+                            <p className="font-medium text-tts-surface">{item.counterparty?.name || "Recipient"}</p>
+                            <p className="text-xs text-tts-muted">{item.counterparty?.identifier || "unavailable"}</p>
                           </td>
                           <td className="px-4 py-3 align-top">
                             <p>{formatAmount(item.destination_amount, item.destination_asset_code)}</p>
                             {item.source_amount && item.source_asset_code && (
-                              <p className="text-xs text-slate-400">Source: {formatAmount(item.source_amount, item.source_asset_code)}</p>
+                              <p className="text-xs text-tts-muted">Source: {formatAmount(item.source_amount, item.source_asset_code)}</p>
                             )}
                           </td>
                           <td className="px-4 py-3 align-top">
-                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${String(item.status || "").toLowerCase() === "success" ? "bg-emerald-400/20 text-emerald-200" : "bg-amber-300/15 text-amber-200"}`}>
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${String(item.status || "").toLowerCase() === "success" ? "bg-tts-confirm/10 text-tts-confirm" : "bg-tts-gold-bg text-tts-gold"}`}>
                               {String(item.status || "pending").toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-3 align-top text-slate-300">
+                          <td className="px-4 py-3 align-top text-tts-deep">
                             {item.context_message ? item.context_message : "—"}
                           </td>
-                          <td className="px-4 py-3 align-top text-slate-300">
+                          <td className="px-4 py-3 align-top text-tts-deep">
                             {formatWhen(item.completed_at || item.created_at)}
                           </td>
                           <td className="no-print px-4 py-3 align-top">
@@ -221,12 +221,12 @@ export default function TransactionsClient() {
                                 href={profileUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex rounded-md border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-xs font-semibold text-cyan-200 hover:bg-cyan-400/20"
+                                className="inline-flex rounded-md border border-tts-gold bg-tts-gold-bg px-2 py-1 text-xs font-semibold text-tts-gold hover:bg-tts-gold-bg"
                               >
                                 Open profile
                               </a>
                             ) : (
-                              <span className="text-xs text-slate-500">unavailable</span>
+                              <span className="text-xs text-tts-muted">unavailable</span>
                             )}
                           </td>
                         </tr>

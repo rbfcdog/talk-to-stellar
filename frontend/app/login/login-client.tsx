@@ -6,8 +6,11 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { LogIn, MessageCircle, Send, ShieldCheck } from "lucide-react"
+import { Fingerprint, LogIn, MessageCircle, Send } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
+import { AuthShell } from "@/components/auth/AuthShell"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -499,174 +502,188 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   if (loginDone) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07111f] px-6 text-slate-100">
-        <section className="w-full max-w-md rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-center shadow-2xl">
-          <p className="text-sm uppercase tracking-[0.24em] text-emerald-200">
-            {hasExternalContext ? t("login_connected_channel", { provider: externalProviderLabel }) : t("login_connected_account")}
-          </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">{t("login_linked_title")}</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            {nextPath ? t("login_continue_operation") : hasExternalContext ? t("login_back_to_channel", { provider: externalProviderLabel }) : t("login_done")}
-          </p>
-          <p className="mt-2 text-xs text-slate-400">
-            {nextPath ? t("login_opening_operation") : INTERMEDIATE_PAGE_CLOSE_COPY}
-          </p>
-        </section>
-      </main>
+      <AuthShell
+        title={t("login_linked_title")}
+        description={
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-confirm">
+              {hasExternalContext
+                ? t("login_connected_channel", { provider: externalProviderLabel })
+                : t("login_connected_account")}
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-tts-muted">
+              {nextPath
+                ? t("login_continue_operation")
+                : hasExternalContext
+                  ? t("login_back_to_channel", { provider: externalProviderLabel })
+                  : t("login_done")}
+            </p>
+            <p className="mt-2 text-xs text-tts-muted">
+              {nextPath ? t("login_opening_operation") : INTERMEDIATE_PAGE_CLOSE_COPY}
+            </p>
+          </>
+        }
+      >
+        <div />
+      </AuthShell>
     )
   }
 
+  const pinSubmitDisabled =
+    externalLinkUsed ||
+    actionLockRef.current ||
+    status === "pin" ||
+    status === "passkey" ||
+    (!useTelegramIdPinLogin && !email.trim()) ||
+    !pin.trim() ||
+    (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur sm:p-6 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-cyan-200">
-              <ShieldCheck className="h-4 w-4" />
-              TalkToStellar
-            </div>
-            <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {t("login_title")}
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                {t("login_subtitle")}
-              </p>
-              {hasExternalContext && (
-                <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100">
-                  <p className="font-medium">{t("login_channel_detected")}: {externalProviderLabel}</p>
-                  <p className="mt-1 text-cyan-100/90">{t("login_identifier")}: {externalIdentifierLabel}</p>
-                </div>
-              )}
-              {expired && (
-                <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
-                  {t("login_expired")}
-                </p>
-              )}
-            </div>
-
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_pin_card_title")}</p>
-                <p className="mt-2 text-sm text-slate-200">{t("login_pin_card_body")}</p>
-              </div>
-              <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{t("login_next_card_title")}</p>
-                <p className="mt-2 text-sm text-slate-200">{t("login_next_card_body")}</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
-            {hasExternalContext && (
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
-                {isTelegramContext ? <Send className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
-                {t("login_via")} {externalProviderLabel}
-              </div>
-            )}
-            <form className="space-y-4" onSubmit={handlePinLogin}>
-              {useTelegramIdPinLogin ? (
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-slate-200">{t("login_telegram_id")}</span>
-                  <input
-                    value={externalIdentifierLabel}
-                    type="text"
-                    readOnly
-                    disabled={externalLinkUsed}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
-                  />
-                  <span className="block text-xs text-slate-400">{t("login_telegram_help")}</span>
-                </label>
-              ) : (
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-slate-200">{t("login_email")}</span>
-                  <input
-                    value={email}
-                    onChange={(event) => {
-                      setEmail(event.target.value)
-                      setEmailConfirmationRequired(false)
-                      setEmailConfirmationCode("")
-                    }}
-                    type="email"
-                    disabled={externalLinkUsed}
-                    placeholder="you@example.com"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                  />
-                </label>
-              )}
-
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-200">{t("login_pin")}</span>
-                <input
-                  value={pin}
-                  onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  disabled={externalLinkUsed}
-                  placeholder={t("login_pin_placeholder")}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                />
-              </label>
-
-              {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
-                <label className="block space-y-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
-                  <span className="text-sm font-medium text-cyan-50">{t("login_email_code")}</span>
-                  <input
-                    value={emailConfirmationCode}
-                    onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    disabled={externalLinkUsed}
-                    placeholder="000000"
-                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
-                  />
-                  <span className="block text-xs text-cyan-100">{t("login_email_code_help")}</span>
-                </label>
-              )}
-
-              {error && <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">{error}</p>}
-
-              <button
-                type="submit"
-                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || (!useTelegramIdPinLogin && !email.trim()) || !pin.trim() || (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <LogIn className="h-4 w-4" />
-                {status === "pin" ? t("login_submitting") : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? t("login_confirm_submit") : t("login_submit")}
-              </button>
-            </form>
-
-            {PASSKEY_LOGIN_ENABLED && (
-              <button
-                type="button"
-                onClick={() => {
-                  void handlePasskeyLogin();
-                }}
-                disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
-                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
-              </button>
-            )}
-            {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && (
-              <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">{t("login_passkey_qr_title")}</p>
-                <p className="mt-1 text-slate-300">{t("login_passkey_qr_body")}</p>
-                <div className="mt-3 flex justify-center">
-                  <img
-                    src={qrImageUrl}
-                    alt={t("login_passkey_qr_alt")}
-                    className="h-72 w-72 rounded-xl border border-white/10 bg-white p-3"
-                  />
-                </div>
-                {qrTargetUrl && <p className="mt-3 break-all text-xs text-slate-400">{qrTargetUrl}</p>}
-              </div>
-            )}
-          </section>
+    <AuthShell
+      title={t("login_title")}
+      description={t("login_subtitle")}
+      footer={
+        <a
+          href="/create-account"
+          className="text-[12px] text-tts-muted underline-offset-4 hover:text-tts-deep hover:underline"
+        >
+          {language === "pt-BR" ? "Criar conta" : "Create account"}
+        </a>
+      }
+    >
+      {hasExternalContext && (
+        <div className="inline-flex items-center gap-2 self-center rounded-full border border-tts-border bg-tts-bg px-3 py-1 text-[11px] font-medium text-tts-deep">
+          {isTelegramContext ? <Send className="h-3.5 w-3.5 text-tts-gold" /> : <MessageCircle className="h-3.5 w-3.5 text-tts-gold" />}
+          {t("login_via")} {externalProviderLabel}
         </div>
-      </div>
-    </main>
+      )}
+
+      {hasExternalContext && (
+        <div className="rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-xs text-tts-deep">
+          <p className="font-medium">{t("login_channel_detected")}: {externalProviderLabel}</p>
+          <p className="mt-1 font-mono-financial text-tts-muted">{t("login_identifier")}: {externalIdentifierLabel}</p>
+        </div>
+      )}
+
+      {expired && (
+        <div className="rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs text-tts-deep">
+          {t("login_expired")}
+        </div>
+      )}
+
+      <form className="flex flex-col gap-4" onSubmit={handlePinLogin}>
+        {useTelegramIdPinLogin ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-tts-deep">{t("login_telegram_id")}</span>
+            <Input
+              value={externalIdentifierLabel}
+              type="text"
+              readOnly
+              disabled={externalLinkUsed}
+            />
+            <span className="text-[11px] text-tts-muted">{t("login_telegram_help")}</span>
+          </label>
+        ) : (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-tts-deep">{t("login_email")}</span>
+            <Input
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                setEmailConfirmationRequired(false)
+                setEmailConfirmationCode("")
+              }}
+              type="email"
+              disabled={externalLinkUsed}
+              placeholder="you@example.com"
+            />
+          </label>
+        )}
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">{t("login_pin")}</span>
+          <Input
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            disabled={externalLinkUsed}
+            placeholder={t("login_pin_placeholder")}
+          />
+        </label>
+
+        {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
+          <label className="flex flex-col gap-1.5 rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5">
+            <span className="text-xs font-medium text-tts-deep">{t("login_email_code")}</span>
+            <Input
+              value={emailConfirmationCode}
+              onChange={(event) => setEmailConfirmationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              disabled={externalLinkUsed}
+              placeholder="000000"
+            />
+            <span className="text-[11px] text-tts-muted">{t("login_email_code_help")}</span>
+          </label>
+        )}
+
+        {error && (
+          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
+            {error}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          size="lg"
+          disabled={pinSubmitDisabled}
+          className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+        >
+          <LogIn className="mr-2 h-4 w-4" />
+          {status === "pin"
+            ? t("login_submitting")
+            : EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired
+              ? t("login_confirm_submit")
+              : t("login_submit")}
+        </Button>
+      </form>
+
+      {PASSKEY_LOGIN_ENABLED && (
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={() => {
+            void handlePasskeyLogin();
+          }}
+          disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
+          className="w-full"
+        >
+          <Fingerprint className="mr-2 h-4 w-4" />
+          {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
+        </Button>
+      )}
+
+      {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && (
+        <div className="rounded-xl border border-tts-border bg-tts-bg p-4 text-xs text-tts-deep">
+          <p className="font-bold">{t("login_passkey_qr_title")}</p>
+          <p className="mt-1 text-tts-muted">{t("login_passkey_qr_body")}</p>
+          <div className="mt-3 flex justify-center">
+            <img
+              src={qrImageUrl}
+              alt={t("login_passkey_qr_alt")}
+              className="h-56 w-56 rounded-xl border border-tts-border bg-white p-3"
+            />
+          </div>
+          {qrTargetUrl && (
+            <p className="mt-3 break-all font-mono-financial text-[10px] text-tts-muted">
+              {qrTargetUrl}
+            </p>
+          )}
+        </div>
+      )}
+    </AuthShell>
   )
 }

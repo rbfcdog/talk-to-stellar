@@ -61,64 +61,64 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
   const stats = payload?.stats || {}
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-4 py-12 sm:px-6">
-        <section className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:p-10">
+        <section className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:p-10">
           <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-300/35 bg-indigo-300/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-indigo-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-gold">
               <UserCircle2 className="h-4 w-4" />
               Account profile
             </div>
             <Link
               href="/transactions"
-              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
+              className="rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm text-tts-deep hover:bg-tts-surface"
             >
               Back to history
             </Link>
           </div>
 
           {status === "loading" && (
-            <div className="mt-8 inline-flex items-center gap-2 text-slate-300">
+            <div className="mt-8 inline-flex items-center gap-2 text-tts-deep">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading profile...
             </div>
           )}
 
           {status === "error" && (
-            <p className="mt-8 text-rose-300">{message || "Could not load profile."}</p>
+            <p className="mt-8 text-tts-error">{message || "Could not load profile."}</p>
           )}
 
           {status === "ready" && (
             <>
-              <h1 className="mt-5 text-3xl font-semibold text-white md:text-5xl">
+              <h1 className="mt-5 text-3xl font-semibold text-tts-surface md:text-5xl">
                 {profile?.name || "Contact"}
               </h1>
-              <p className="mt-2 text-sm text-slate-300">Identifier: {profile?.identifier || "unavailable"}</p>
-              <p className="mt-1 text-xs text-slate-400">Account: {profile?.identifier || "TalkToStellar"}</p>
+              <p className="mt-2 text-sm text-tts-deep">Identifier: {profile?.identifier || "unavailable"}</p>
+              <p className="mt-1 text-xs text-tts-muted">Account: {profile?.identifier || "TalkToStellar"}</p>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Received operations</p>
-                  <p className="mt-2 text-xl font-semibold text-white">{Number(stats?.total_received_operations || 0)}</p>
+                <div className="rounded-xl border border-tts-border bg-tts-deep/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Received operations</p>
+                  <p className="mt-2 text-xl font-semibold text-tts-surface">{Number(stats?.total_received_operations || 0)}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Last received</p>
-                  <p className="mt-2 text-sm text-slate-200">
+                <div className="rounded-xl border border-tts-border bg-tts-deep/20 p-4 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Last received</p>
+                  <p className="mt-2 text-sm text-tts-deep">
                     {stats?.last_received_at ? new Date(stats.last_received_at).toLocaleString("en-US") : "No completed operations"}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                <div className="border-b border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300">Account balances</div>
+              <div className="mt-6 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20">
+                <div className="border-b border-tts-border bg-tts-surface px-4 py-3 text-sm font-medium text-tts-deep">Account balances</div>
                 {visibleBalances.length === 0 ? (
-                  <p className="px-4 py-5 text-sm text-slate-300">Balance unavailable right now.</p>
+                  <p className="px-4 py-5 text-sm text-tts-deep">Balance unavailable right now.</p>
                 ) : (
                   <ul className="divide-y divide-white/5">
                     {visibleBalances.map((item: BalanceItem, index: number) => (
                       <li key={`${item.asset_code || item.asset_type || "asset"}-${index}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-sm text-slate-300">{normalizeAssetCode(item.asset_code, item.asset_type)}</span>
-                        <span className="text-sm font-semibold text-white">{formatAssetBalance(item)}</span>
+                        <span className="text-sm text-tts-deep">{normalizeAssetCode(item.asset_code, item.asset_type)}</span>
+                        <span className="text-sm font-semibold text-tts-surface">{formatAssetBalance(item)}</span>
                       </li>
                     ))}
                   </ul>

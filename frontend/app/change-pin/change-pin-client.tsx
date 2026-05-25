@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { idempotentFetch } from '@/lib/idempotency';
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from '@/lib/web-feedback';
+import { AuthShell } from '@/components/auth/AuthShell';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/shared/feedback';
 
 interface ChangePinPageState {
   stage: 'verify' | 'change' | 'success' | 'error';
@@ -91,34 +95,19 @@ export default function ChangePinClient() {
     e.preventDefault();
 
     if (state.newPin.length < 4 || state.newPin.length > 8) {
-      setState((prev) => ({
-        ...prev,
-        errorMessage: 'PIN must be 4 to 8 characters long',
-      }));
+      setState((prev) => ({ ...prev, errorMessage: 'PIN must be 4 to 8 characters long' }));
       return;
     }
-
     if (state.newPin !== state.confirmPin) {
-      setState((prev) => ({
-        ...prev,
-        errorMessage: 'PINs do not match',
-      }));
+      setState((prev) => ({ ...prev, errorMessage: 'PINs do not match' }));
       return;
     }
-
     if (!/^\d+$/.test(state.newPin)) {
-      setState((prev) => ({
-        ...prev,
-        errorMessage: 'PIN must contain numbers only',
-      }));
+      setState((prev) => ({ ...prev, errorMessage: 'PIN must contain numbers only' }));
       return;
     }
 
-    setState((prev) => ({
-      ...prev,
-      isLoading: true,
-      errorMessage: '',
-    }));
+    setState((prev) => ({ ...prev, isLoading: true, errorMessage: '' }));
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -150,8 +139,8 @@ export default function ChangePinClient() {
         message: 'PIN changed successfully.',
       }));
 
-      enqueueWebChatFeedback('PIN changed successfully.\nYour new PIN is now active.')
-      closeIntermediatePage()
+      enqueueWebChatFeedback('PIN changed successfully.\nYour new PIN is now active.');
+      closeIntermediatePage();
     } catch (error) {
       setState((prev) => ({
         ...prev,
@@ -161,118 +150,116 @@ export default function ChangePinClient() {
     }
   };
 
-  return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-cyan-200">
-              Security
-            </div>
-            <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                Reset PIN
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                Use this flow to verify your link and set a new PIN securely.
-              </p>
-            </div>
-            <div className="min-w-0 overflow-hidden rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-50">
-              The PIN must contain only numbers and be 4 to 8 digits long.
-            </div>
-          </section>
-
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
-            {state.stage === 'verify' && (
-              <div className="flex flex-col items-center justify-center gap-4 py-10">
-                <p className="text-slate-200">{state.message}</p>
-                <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-300"></div>
-              </div>
-            )}
-
-            {state.stage === 'change' && (
-              <form onSubmit={handleChangePinSubmit} className="space-y-4">
-                <p className="text-sm text-slate-300">{state.message}</p>
-
-                <div className="space-y-2">
-                  <label htmlFor="newPin" className="text-sm font-medium text-slate-200">New PIN</label>
-                  <input
-                    id="newPin"
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={state.newPin}
-                    onChange={(e) =>
-                      setState((prev) => ({
-                        ...prev,
-                        newPin: e.target.value,
-                        errorMessage: '',
-                      }))
-                    }
-                    placeholder="Enter your new PIN"
-                    disabled={state.isLoading}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="confirmPin" className="text-sm font-medium text-slate-200">Confirm PIN</label>
-                  <input
-                    id="confirmPin"
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={state.confirmPin}
-                    onChange={(e) =>
-                      setState((prev) => ({
-                        ...prev,
-                        confirmPin: e.target.value,
-                        errorMessage: '',
-                      }))
-                    }
-                    placeholder="Confirm your new PIN"
-                    disabled={state.isLoading}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:bg-white/10"
-                  />
-                </div>
-
-                {state.errorMessage && (
-                  <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{state.errorMessage}</div>
-                )}
-
-                <button
-                  type="submit"
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={state.isLoading || !state.newPin || !state.confirmPin}
-                >
-                  {state.isLoading ? 'Processing...' : 'Confirm New PIN'}
-                </button>
-              </form>
-            )}
-
-            {state.stage === 'success' && (
-              <div className="space-y-3 py-8 text-center">
-                <h2 className="text-2xl font-semibold text-emerald-300">PIN Changed Successfully</h2>
-                <p className="text-slate-200">{state.message}</p>
-                <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
-              </div>
-            )}
-
-            {state.stage === 'error' && (
-              <div className="space-y-3 py-8 text-center">
-                <h2 className="text-2xl font-semibold text-rose-300">Error</h2>
-                <p className="text-slate-200">{state.errorMessage}</p>
-                <button
-                  onClick={() => (window.location.href = '/')}
-                  className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Back to Home
-                </button>
-              </div>
-            )}
-          </section>
+  if (state.stage === 'verify') {
+    return (
+      <AuthShell title="Verificando seu link" description={state.message}>
+        <div className="flex justify-center py-4">
+          <Spinner />
         </div>
-      </div>
-    </main>
+      </AuthShell>
+    );
+  }
+
+  if (state.stage === 'success') {
+    return (
+      <AuthShell
+        title="PIN alterado com sucesso"
+        description={
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-confirm">
+              Concluído
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-tts-muted">{state.message}</p>
+            <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+          </>
+        }
+      >
+        <div />
+      </AuthShell>
+    );
+  }
+
+  if (state.stage === 'error') {
+    return (
+      <AuthShell
+        title="Não foi possível continuar"
+        description={state.errorMessage}
+      >
+        <Button
+          type="button"
+          size="lg"
+          onClick={() => (window.location.href = '/')}
+          className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+        >
+          Voltar
+        </Button>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell
+      title="Redefinir PIN"
+      description="O PIN deve conter apenas números e ter de 4 a 8 dígitos."
+    >
+      <form onSubmit={handleChangePinSubmit} className="flex flex-col gap-4">
+        <p className="text-sm text-tts-muted">{state.message}</p>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">Novo PIN</span>
+          <Input
+            id="newPin"
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            value={state.newPin}
+            onChange={(e) =>
+              setState((prev) => ({
+                ...prev,
+                newPin: e.target.value.replace(/\D/g, ''),
+                errorMessage: '',
+              }))
+            }
+            placeholder="Digite seu novo PIN"
+            disabled={state.isLoading}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">Confirmar PIN</span>
+          <Input
+            id="confirmPin"
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            value={state.confirmPin}
+            onChange={(e) =>
+              setState((prev) => ({
+                ...prev,
+                confirmPin: e.target.value.replace(/\D/g, ''),
+                errorMessage: '',
+              }))
+            }
+            placeholder="Confirme seu novo PIN"
+            disabled={state.isLoading}
+          />
+        </label>
+
+        {state.errorMessage && (
+          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
+            {state.errorMessage}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          size="lg"
+          disabled={state.isLoading || !state.newPin || !state.confirmPin}
+          className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+        >
+          {state.isLoading ? 'Processando...' : 'Confirmar novo PIN'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

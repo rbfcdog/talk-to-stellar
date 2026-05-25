@@ -310,59 +310,59 @@ export default function ConfirmConversionClient({
     : T(feedbackLanguage, "Não consegui confirmar essa conversão agora. Tente novamente em alguns segundos.", "I could not confirm this conversion right now. Try again in a few seconds.")
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-emerald-200">
+            <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-tts-confirm">
               Conversion Confirmation
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
+              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-surface md:text-6xl">
                 Confirm this conversion
               </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
+              <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
                 Review the details and enter your PIN to execute the conversion in your account.
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-deep/20 p-2 text-xs">
               {["Review", "Authorize", "Complete"].map((step, index) => (
-                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-emerald-400/20 text-emerald-200" : "text-slate-400"}`}>
+                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}>
                   {step}
                 </motion.div>
               ))}
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Source</p>
-                <p className="mt-2 text-sm text-slate-200">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">Source</p>
+                <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(sourceAmount, sourceAssetCode)}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Destination</p>
-                <p className="mt-2 text-sm text-slate-200">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">Destination</p>
+                <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(destAmount, destAssetCode)}
                 </p>
               </div>
             </div>
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-                <p className="font-medium text-white">{T(feedbackLanguage, "Resumo", "Summary")}</p>
-                <p className="mt-2 text-slate-300">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
-                <p className="text-slate-300">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
+                <p className="font-medium text-tts-surface">{T(feedbackLanguage, "Resumo", "Summary")}</p>
+                <p className="mt-2 text-tts-deep">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
+                <p className="text-tts-deep">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
                 {showEstimatedFee && (
-                  <p className="text-slate-300">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeDisplay}</p>
+                  <p className="text-tts-deep">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-slate-300">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
+                  <p className="text-tts-deep">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
-                  <p className="text-emerald-300">
+                  <p className="text-tts-confirm">
                     {T(feedbackLanguage, "Economia estimada vs métodos tradicionais", "Estimated savings vs traditional methods")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}
                     {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1).replace(".", ",")}%)` : ""}
                   </p>
@@ -370,7 +370,7 @@ export default function ConfirmConversionClient({
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="pin" className="text-sm font-medium text-slate-200">PIN</label>
+                <label htmlFor="pin" className="text-sm font-medium text-tts-deep">PIN</label>
                 <input
                   id="pin"
                   value={pin}
@@ -379,14 +379,14 @@ export default function ConfirmConversionClient({
                   inputMode="numeric"
                   maxLength={8}
                   placeholder="Enter your PIN"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/60 focus:bg-white/10"
+                  className="w-full rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 
 	              <button
 	                type="submit"
 	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
               >
 	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming conversion...</span> : "Confirm conversion"}
 	              </button>
@@ -405,13 +405,13 @@ export default function ConfirmConversionClient({
 	              />
 	            </div>
 
-	            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-              <p className="font-medium text-white">Result</p>
-              {status === "ready" && <p className="mt-2 text-slate-400">Waiting for confirmation.</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-slate-300"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}
+	            <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
+              <p className="font-medium text-tts-surface">Result</p>
+              {status === "ready" && <p className="mt-2 text-tts-muted">Waiting for confirmation.</p>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-emerald-300">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-tts-confirm">
                   <p>{T(feedbackLanguage, "Conversão confirmada com sucesso.", "Conversion confirmed successfully.")}</p>
                   {result.transferDetails?.sourceAmount && (
                     <p>
@@ -430,10 +430,10 @@ export default function ConfirmConversionClient({
                     <p>Estimated savings on this operation: {formatBrl(estimatedSavingsBrl)}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                  <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-rose-300">{visibleError}</motion.p>}
+              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-tts-error">{visibleError}</motion.p>}
               </AnimatePresence>
             </div>
           </section>

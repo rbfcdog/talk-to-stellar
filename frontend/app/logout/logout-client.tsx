@@ -130,13 +130,13 @@ export default function LogoutClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#16324f,_#07111f_55%,_#02050b_100%)] text-slate-100">
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4 py-12 sm:px-6">
-        <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
-          <h1 className="text-3xl font-semibold text-white">Sign out</h1>
-          <p className="mt-3 text-slate-300">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
+        <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-8 shadow-2xl backdrop-blur">
+          <h1 className="text-3xl font-semibold text-tts-surface">Sign out</h1>
+          <p className="mt-3 text-tts-deep">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
           {status === "done" && (
-            <p className="mt-2 text-xs text-slate-400">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+            <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
           )}
           <div className="mt-6 flex min-w-0 flex-wrap gap-3">
             {status !== "done" && (
@@ -144,7 +144,7 @@ export default function LogoutClient() {
                 type="button"
                 onClick={handleConfirmLogout}
                 disabled={status === "loading"}
-                className="inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:opacity-60"
               >
                 {status === "loading" ? "Signing out..." : "Confirm sign-out"}
               </button>
