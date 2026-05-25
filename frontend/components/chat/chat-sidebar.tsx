@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/shared/logo";
 
 interface ChatSidebarProps {
   selectedChat: string | null;
@@ -161,15 +161,9 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-tts-border bg-tts-surface">
-      <header className="flex items-center gap-2 border-b border-tts-border px-4 py-3">
-        <Image
-          src="/talktostellar.png"
-          alt="TalkToStellar"
-          width={24}
-          height={24}
-          className="rounded-md object-contain"
-        />
-        <span className="text-sm font-bold tracking-tight text-tts-deep">
+      <header className="flex items-center gap-2 border-b border-tts-border px-4 py-3 text-tts-deep">
+        <Logo size={20} />
+        <span className="text-sm font-bold tracking-tight">
           TalkToStellar
         </span>
       </header>

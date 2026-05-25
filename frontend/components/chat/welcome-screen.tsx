@@ -4,19 +4,14 @@
 
 import { Lock } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
+import { Logo } from "@/components/shared/logo";
 
 export function WelcomeScreen() {
   const { t } = useLanguage();
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center border-b-4 border-tts-gold bg-tts-bg px-6 py-10 text-center sm:px-8">
-      <div className="mb-8 w-full max-w-[320px] sm:max-w-none">
-        <div className="relative mx-auto mb-8 h-40 w-40 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface sm:h-56 sm:w-56">
-          <img
-            src="/talktostellar.png"
-            alt="TalkToStellar"
-            className="h-full w-full object-contain p-8"
-          />
-        </div>
+      <div className="mb-8 flex h-40 w-40 items-center justify-center rounded-2xl border border-tts-border bg-tts-surface text-tts-deep sm:h-48 sm:w-48">
+        <Logo size={96} />
       </div>
 
       <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-tts-deep sm:text-3xl">
