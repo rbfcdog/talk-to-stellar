@@ -1,10 +1,10 @@
-import MainnetClient from "./mainnet-client";
+import RendimentosClient from "../rendimentos/rendimentos-client";
 
 export const metadata = {
-  title: "Stellar Network Console",
-  description: "Testnet/Mainnet network console for TalkToStellar users.",
+  title: "Rendimentos e saldos",
+  description: "Tela simples para acompanhar saldos e preparar rendimentos.",
 };
 
 export default function MainnetPage() {
-  return <MainnetClient />;
+  return <RendimentosClient />;
 }
