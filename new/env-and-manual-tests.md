@@ -85,6 +85,7 @@ NEXT_PUBLIC_BACKEND_URL=https://your-backend
 NEXT_PUBLIC_AGENT_API_URL=https://your-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://your-frontend
 NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
+NEXT_PUBLIC_PASSKEY_ENABLED=true
 ```
 
 ## 4. Telegram env to add or verify

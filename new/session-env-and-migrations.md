@@ -256,6 +256,7 @@ NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
 NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
+NEXT_PUBLIC_PASSKEY_ENABLED=true
 ```
 
 O domínio público do frontend precisa bater com `PASSKEY_RP_ID` e `PASSKEY_ORIGIN`.
@@ -421,6 +422,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `NEXT_PUBLIC_BACKEND_URL` | Frontend público | Base pública do backend para chamadas do browser. |
 | `NEXT_PUBLIC_AGENT_API_URL` | Frontend público | Endpoint público do agente quando chamadas partem do browser/chat. |
 | `NEXT_PUBLIC_FRONTEND_URL` | Frontend público | URL pública do próprio frontend, usada em links e redirects. |
+| `NEXT_PUBLIC_PASSKEY_ENABLED` | Frontend público | Liga a UX de cadastro, login e confirmação com Passkey. Use `true`; `false` esconde a opção sem remover PIN. |
 
 ### Payout internacional opcional
 
