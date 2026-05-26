@@ -7,20 +7,20 @@ import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 import { Logo } from '@/components/shared/logo'
 
 const HERO_COMMAND = 'tts convert --from BRL --to USDC --channel whatsapp'
-const TYPE_INTERVAL_MS = 28
+const TYPE_INTERVAL_MS = 8
 
 // Three value-focused phrases. Each one frames an outcome the customer
 // gets, not what the platform does internally.
 const PHRASES = [
-  'Real vira dólar em segundos.',
+  'Real -> dólar em millisegundos.',
   'Receba do mundo, direto no Pix.',
   'Cross-border sem wire bancário.',
 ]
 
-const PHRASE_TYPE_MS = 70 // per char while typing
-const PHRASE_ERASE_MS = 32 // per char while erasing
-const PHRASE_HOLD_MS = 2600 // hold a fully-typed phrase
-const PHRASE_GAP_MS = 400 // pause after erase before next phrase
+const PHRASE_TYPE_MS = 12 // per char while typing
+const PHRASE_ERASE_MS = 12 // per char while erasing (same speed)
+const PHRASE_HOLD_MS = 10000 // hold a fully-typed phrase
+const PHRASE_GAP_MS = 50 // pause after erase before next phrase
 
 const DOT_GRID_STYLE: React.CSSProperties = {
   backgroundImage:
@@ -31,13 +31,9 @@ const DOT_GRID_STYLE: React.CSSProperties = {
 
 export function Hero() {
   const reduceMotion = useReducedMotion()
-  const [commandTyped, setCommandTyped] = useState(
-    reduceMotion ? HERO_COMMAND : '',
-  )
+  const [commandTyped, setCommandTyped] = useState(HERO_COMMAND)
   const [phraseIndex, setPhraseIndex] = useState(0)
-  const [phraseTyped, setPhraseTyped] = useState(
-    reduceMotion ? PHRASES[0] : '',
-  )
+  const [phraseTyped, setPhraseTyped] = useState(PHRASES[0])
 
   // Terminal eyebrow typewriter
   useEffect(() => {
@@ -104,19 +100,13 @@ export function Hero() {
       }
     }
 
-    type(0)
+    type(1)
 
     return () => {
       cancelled = true
       timers.forEach(window.clearTimeout)
     }
   }, [phraseIndex, reduceMotion])
-
-  // Reserve height of longest phrase to prevent vertical jump while cycling
-  const tallestPhrase = PHRASES.reduce(
-    (best, current) => (current.length > best.length ? current : best),
-    '',
-  )
 
   return (
     <section
@@ -173,19 +163,11 @@ export function Hero() {
         <TerminalEyebrow command={commandTyped || ' '} showCursor />
 
         <h1
-          className="relative text-[44px] font-extrabold leading-[1.04] tracking-[-0.028em] text-tts-deep md:text-[72px] lg:text-[80px]"
+          className="w-full max-w-[10em] text-center text-[44px] font-extrabold leading-[1.08] tracking-[-0.028em] text-tts-deep md:text-[72px] lg:text-[80px]"
+          style={{ overflowWrap: 'normal', minHeight: '2.16em' }}
           aria-label={PHRASES[phraseIndex]}
         >
-          {/* invisible sizer keeps the headline area stable across cycles */}
-          <span aria-hidden className="invisible block whitespace-pre-wrap">
-            {tallestPhrase}
-          </span>
-          <span className="absolute inset-0 flex items-center justify-center">
-            <span className="block">
-              {phraseTyped}
-              <span className="ml-1 inline-block h-[0.85em] w-[3px] translate-y-[0.05em] animate-caret bg-tts-gold align-middle" />
-            </span>
-          </span>
+          {phraseTyped}
         </h1>
       </div>
     </section>

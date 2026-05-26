@@ -7,18 +7,17 @@ import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/shared/logo'
 
 const NAV_LINKS = [
-  { label: 'Produto', href: '#produto' },
+  { label: 'Produto', href: '#como-funciona' },
   { label: 'Integrações', href: '#canais' },
   { label: 'Documentação', href: '#api' },
   { label: 'FAQ', href: '#faq' },
-  { label: 'Empresa', href: '#empresa' },
 ]
 
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
 // Expanded link region width — wide enough to fit all links + a divider
 // without clipping. A plain pixel value because CSS doesn't interpolate
 // from `0px` to a `min()`/`calc()` expression.
-const EXPANDED_MAX_WIDTH = '720px'
+const EXPANDED_MAX_WIDTH = '1000px'
 
 export function Navbar() {
   const [expanded, setExpanded] = useState(false)
@@ -45,7 +44,7 @@ export function Navbar() {
   // Close mobile menu on resize to desktop
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth >= 768) setMobileOpen(false)
+      if (window.innerWidth >= 1024) setMobileOpen(false)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -69,10 +68,10 @@ export function Navbar() {
     <>
       <header
         ref={rootRef}
-        className="fixed left-1/2 top-4 z-50 -translate-x-1/2"
+        className="fixed inset-x-0 top-12 z-50 flex justify-center px-4"
       >
-        <div className="flex items-center rounded-full border border-tts-deep bg-tts-deep px-2 py-1.5 text-tts-surface shadow-lg shadow-tts-deep/15 backdrop-blur-sm">
-          {/* Brand */}
+        <div className="flex items-center gap-1.5 rounded-full border border-tts-deep bg-tts-deep py-1.5 pl-2 pr-1.5 text-tts-surface shadow-lg shadow-tts-deep/15 backdrop-blur-sm">
+          {/* ── Group 1: Brand (fixed) ── */}
           <a
             href="#top"
             onClick={() => setExpanded(false)}
@@ -85,9 +84,9 @@ export function Navbar() {
             </span>
           </a>
 
-          {/* Desktop nav links — expand horizontally via max-width */}
+          {/* ── Group 2: Nav links (expandable middle) ── */}
           <div
-            className="hidden shrink-0 overflow-hidden md:block"
+            className="hidden shrink-0 overflow-hidden lg:block"
             style={{
               maxWidth: expanded ? EXPANDED_MAX_WIDTH : '0px',
               transition: expanded
@@ -121,7 +120,7 @@ export function Navbar() {
             onClick={() => setExpanded((prev) => !prev)}
             aria-label={expanded ? 'Fechar menu' : 'Abrir menu'}
             aria-expanded={expanded}
-            className="ml-1 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface md:flex"
+            className="ml-1 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface lg:flex"
           >
             <ChevronRight
               className="h-3.5 w-3.5"
@@ -132,39 +131,36 @@ export function Navbar() {
             />
           </button>
 
-          {/* Mobile hamburger */}
+          {/* Mobile / tablet hamburger */}
           <button
             onClick={() => setMobileOpen((prev) => !prev)}
             aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
             aria-expanded={mobileOpen}
-            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface md:hidden"
+            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-tts-surface/70 transition-colors hover:bg-white/10 hover:text-tts-surface lg:hidden"
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
 
-          {/* Divider */}
+          {/* ── Group 3: Actions (fixed) ── */}
           <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden />
-
-          {/* Right-side controls — always visible */}
           <a
             href="/login"
             className="hidden h-7 shrink-0 items-center rounded-full px-3 text-[13px] font-medium text-tts-surface/80 transition-colors hover:bg-white/10 hover:text-tts-surface sm:inline-flex"
           >
             Entrar
           </a>
-          <Button
-            asChild
-            size="sm"
-            className="ml-1 h-7 shrink-0 rounded-full bg-tts-gold px-3 text-[13px] text-tts-deep hover:bg-tts-gold-lt"
+          <a
+            href="#comecar"
+            className="ml-1 inline-flex h-7 shrink-0 items-center rounded-full bg-tts-gold px-3 text-[13px] font-medium text-tts-deep transition-colors hover:bg-tts-gold-lt"
           >
-            <a href="#comecar">Falar com o time</a>
-          </Button>
+            Falar com o time
+          </a>
         </div>
       </header>
 
       {/* Mobile fullscreen menu */}
       <div
-        className="fixed inset-0 z-40 md:hidden"
+        className="fixed inset-0 z-40 lg:hidden"
         style={{
           opacity: mobileOpen ? 1 : 0,
           pointerEvents: mobileOpen ? 'auto' : 'none',

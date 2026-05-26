@@ -156,6 +156,11 @@
   body {
     max-width: 100%;
     overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
   }
   body {
     @apply bg-background text-foreground;
