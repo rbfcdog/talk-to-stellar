@@ -211,6 +211,7 @@ describe('agent Telegram identity binding', () => {
           action_params: expect.objectContaining({
             external_provider: 'telegram',
             external_provider_user_id: '777',
+            session_token: 'linked-token',
           }),
         })
       );
