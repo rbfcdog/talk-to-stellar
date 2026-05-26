@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
 import { Suspense } from 'react'
 import { LanguageToggle } from '@/components/shared/language-toggle'
+import { ThemeProvider } from '@/components/shared/theme-provider'
 import { LanguageProvider } from '@/lib/i18n'
 import './globals.css'
 
@@ -27,13 +28,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <Suspense fallback={null}>
-          <LanguageProvider>
-            <LanguageToggle />
-            {children}
-          </LanguageProvider>
+          <ThemeProvider>
+            <LanguageProvider>
+              <LanguageToggle />
+              {children}
+            </LanguageProvider>
+          </ThemeProvider>
         </Suspense>
         <Analytics />
       </body>
