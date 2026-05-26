@@ -86,11 +86,13 @@ Adicionar em `backend/.env` e producao do backend:
 ```env
 DEFINDEX_API_KEY=
 DEFINDEX_BASE_URL=https://api.defindex.io
+# Alias aceito pelo SDK/docs. Prefira DEFINDEX_BASE_URL no deploy.
+# DEFINDEX_API_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
 
-# Preencha apenas os vaults que existem e foram validados na rede ativa.
+# Preencha apenas os vaults C... que existem e foram validados na rede ativa.
 DEFINDEX_USDC_VAULT=
 DEFINDEX_EURC_VAULT=
 DEFINDEX_TESOURO_VAULT=
@@ -101,9 +103,11 @@ DEFINDEX_VAULTS_JSON=
 Como preencher:
 
 1. Obtenha a API key na documentacao/dashboard da Defindex ou solicitando acesso ao time Defindex/PaltaLabs.
-2. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
-3. Configure pelo menos um vault real antes de vender rendimento como operacional.
-4. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
+2. O valor de cada `DEFINDEX_*_VAULT` e o contrato Soroban do vault (`C...`), nao o issuer do asset e nao o factory address.
+3. Para obter um vault, selecione/crie no app da Defindex, crie via `@defindex/sdk` com factory operations, ou peca ao time Defindex/PaltaLabs o vault curado para asset/rede.
+4. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
+5. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
+6. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
 
 ## Prioridade 3: passkey/smart account
 

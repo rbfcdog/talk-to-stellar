@@ -57,11 +57,13 @@ O `AGENT_INGEST_SECRET` precisa ser identico no backend e no Telegram. Esse foi 
 
 ## 2. Para rendimento real com Defindex
 
-Configure no backend quando for ligar rendimento de verdade:
+O backend agora usa o SDK oficial `@defindex/sdk`. Configure no backend quando for ligar rendimento de verdade:
 
 ```env
 DEFINDEX_API_KEY=
 DEFINDEX_BASE_URL=https://api.defindex.io
+# Alias aceito pelo SDK/docs. Prefira DEFINDEX_BASE_URL no deploy.
+# DEFINDEX_API_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
@@ -71,7 +73,44 @@ DEFINDEX_TESOURO_VAULT=
 DEFINDEX_XLM_VAULT=
 ```
 
-Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate validar API key, vaults, assinatura, liquidez e saque em testnet.
+Os valores `DEFINDEX_*_VAULT` sao enderecos de contrato Soroban do vault, no formato `C...`. Eles nao sao issuer do asset, nao sao a conta `G...` do usuario e nao sao o factory address.
+
+Como obter os vaults:
+
+1. Use o app/dashboard da Defindex para selecionar ou criar um vault e copie o endereco do vault (`C...`) para o asset/rede correta.
+2. Ou crie via SDK/factory: `getFactoryAddress(SupportedNetworks.TESTNET)` mostra a factory; `createVault(...)` gera o XDR de criacao. Depois de assinar/submeter, use o endereco do vault criado em `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT` ou `DEFINDEX_XLM_VAULT`.
+3. Se for usar vault curado por parceiro/Defindex, peca o endereco oficial do vault para o asset e rede desejados. Valide antes de expor ao usuario.
+
+Validacao minima antes de ligar execucao:
+
+```ts
+import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
+
+const sdk = new DefindexSDK({
+  apiKey: process.env.DEFINDEX_API_KEY,
+  baseUrl: process.env.DEFINDEX_BASE_URL || 'https://api.defindex.io',
+  defaultNetwork: SupportedNetworks.TESTNET,
+});
+
+await sdk.healthCheck();
+await sdk.getVaultInfo(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTNET);
+await sdk.getVaultAPY(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTNET);
+```
+
+Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate validar API key, vaults, APY, balance, XDR de deposito, XDR de saque, assinatura pela wallet e saque real em testnet. So depois disso mude para `true`.
+
+Para EURC funcionar em producao:
+
+```env
+STELLAR_NETWORK=PUBLIC
+ENABLE_EURC_ASSET=true
+EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+DEFINDEX_NETWORK=mainnet
+DEFINDEX_EURC_VAULT=C... # vault EURC mainnet validado
+```
+
+Para testnet, use `DEFINDEX_NETWORK=testnet` e so preencha `EURC_ISSUER_TESTNET`/`DEFINDEX_EURC_VAULT` se voce tiver issuer e vault EURC de teste realmente validados. Nao use o issuer publico da Circle para transacao em testnet.
 
 ## 3. Para passkey
 
