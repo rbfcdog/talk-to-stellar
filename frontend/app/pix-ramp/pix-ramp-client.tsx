@@ -3039,7 +3039,7 @@ export default function PixRampClient({
           )}
 
           {rampMode === "offramp" && (
-          <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
+          <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 shadow-xl shadow-black/30 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-error">Teste interno de retirada</p>
             <h2 className="mt-1 text-2xl font-black">Saldo para PIX</h2>
             <p className="mt-3 text-sm leading-6 text-tts-muted">
@@ -3171,7 +3171,7 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
   result: Record<string, unknown> | null;
 }) {
   return (
-    <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-stone-300/40 sm:p-6">
+    <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 shadow-xl shadow-black/30 sm:p-6">
       <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-gold">Endpoint in frontend</p>
       <h2 className="mt-1 text-2xl font-black">{title}</h2>
       <p className="mt-3 text-sm leading-6 text-tts-muted">{description}</p>
