@@ -19,9 +19,10 @@ describe('getClientSession', () => {
       sessionId: 'session-1',
     })
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/session', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/session', expect.objectContaining({
       cache: 'no-store',
       credentials: 'same-origin',
-    })
+      signal: expect.any(AbortSignal),
+    }))
   })
 })

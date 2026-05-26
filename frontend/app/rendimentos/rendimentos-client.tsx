@@ -605,10 +605,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
   useEffect(() => {
     if (loadedInitialDataRef.current) return;
-    if (initialLanguage && language !== initialLanguage) return;
     loadedInitialDataRef.current = true;
     refreshDashboard();
-  }, [initialLanguage, language]);
+  }, []);
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">

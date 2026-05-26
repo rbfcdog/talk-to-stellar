@@ -3,6 +3,7 @@ const SESSION_CREATED_AT_KEY = "talk-to-stellar.sessionCreatedAt";
 const SESSION_LAST_SEEN_AT_KEY = "talk-to-stellar.sessionLastSeenAt";
 const SESSION_ID_KEY = "talk-to-stellar.sessionId";
 const SESSION_TOKEN_KEY = "talk-to-stellar.sessionToken";
+const SESSION_REQUEST_TIMEOUT_MS = 5000;
 
 function normalizeTimestamp(raw: string | null): number {
   const parsed = Number(raw || "0");
@@ -14,10 +15,13 @@ function normalizeTimestamp(raw: string | null): number {
 /** Read the server's view of the current session (sessionId + authenticated flag) via /api/session. */
 export async function getClientSession(): Promise<{ sessionId: string; authenticated: boolean }> {
   if (typeof window === "undefined") return { sessionId: "", authenticated: false };
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), SESSION_REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch("/api/session", {
       cache: "no-store",
       credentials: "same-origin",
+      signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
     return {
@@ -26,6 +30,8 @@ export async function getClientSession(): Promise<{ sessionId: string; authentic
     };
   } catch {
     return { sessionId: "", authenticated: false };
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
