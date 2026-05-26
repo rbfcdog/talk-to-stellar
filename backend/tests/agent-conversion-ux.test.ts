@@ -63,4 +63,49 @@ describe('Agent conversion UX', () => {
     expect(result.response_message).not.toMatch(/trustline|liquidez|XLM|Horizon|XDR/i);
     expect(repository.saveMessage).toHaveBeenCalledWith('session-1', 'assistant', result.response_message);
   });
+
+  it('opens the visual conversion interface when conversion details are incomplete', async () => {
+    const repository = {
+      saveMessage: jest.fn().mockResolvedValue(undefined),
+      saveState: jest.fn().mockResolvedValue(undefined),
+    };
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'system prompt') as any;
+    graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({
+      sourceAmount: '',
+      sourceAssetCode: '',
+      destAssetCode: '',
+      needs_clarification: true,
+      clarification_question: 'Qual valor e moedas?',
+    });
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      frontend_url: 'https://app.example.com/convert?source_asset=BRL&dest_asset=USDC&from=chat',
+      message: 'Abra a tela de conversão.',
+    }));
+
+    const result = await graph.handleAssetConversion({
+      session_id: 'session-2',
+      session_data: {
+        user_id: 'user-1',
+        public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      },
+      messages: [],
+      current_input: 'quero converter ativos',
+      detected_intent: IntentType.CONVERSION,
+      action_type: ActionType.CONVERT_ASSETS,
+      action_params: {},
+      response_message: '',
+      success: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeToolMock).toHaveBeenCalledWith('open_conversion_interface', expect.objectContaining({
+      source_asset_code: 'BRL',
+      dest_asset_code: 'USDC',
+    }));
+    expect(result.response_message).toContain('/convert?');
+    expect(result.response_message).not.toContain('source_issuer');
+    expect(result.response_message).not.toMatch(/trustline|Horizon|XDR/i);
+  });
 });

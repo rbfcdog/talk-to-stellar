@@ -555,7 +555,7 @@ export class AgentGraph {
     if (token === 'aud') return 'AUD';
     if (token === 'chf') return 'CHF';
     if (token === 'jpy' || token === 'yen') return 'JPY';
-    if (token === 'xlm' || token === 'lumen' || token === 'lumens') return '';
+    if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
   }
@@ -564,7 +564,9 @@ export class AgentGraph {
     const code = String(value || '').trim().toUpperCase();
     if (!code) return '';
     if (code === 'USD') return 'USDC';
-    if (code === 'EURO' || code === 'EUROS') return 'EUR';
+    if (code === 'EURO' || code === 'EUROS' || code === 'EURC') return 'EUR';
+    if (code === 'REAL' || code === 'REAIS' || code === 'R$') return 'BRL';
+    if (code === 'DOLAR' || code === 'DOLARES' || code === 'DOLLAR' || code === 'DOLLARS') return 'USDC';
     return code;
   }
 
@@ -584,18 +586,18 @@ export class AgentGraph {
       }
 
       const afterAmount = normalized.slice(amountIndex + matchedText.length);
-      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
       const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
       if (assetAfterAmount) return assetAfterAmount;
 
       const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
-      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
       const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
       if (assetBeforeAmount) return assetBeforeAmount;
     }
 
-    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
-    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
     return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
   }
 
@@ -2244,10 +2246,11 @@ export class AgentGraph {
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
-        '- sourceAssetCode deve ser o ativo de origem (USDC, BRL ou EUR). Não use XLM em respostas ou JSON de usuário.',
+        '- sourceAssetCode deve ser o ativo de origem (USDC, BRL, EUR, XLM ou outro código configurado quando citado explicitamente).',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
         '- Se o usuário usar euro/EUR/EURC, normalize para EUR.',
+        '- Se o usuário usar saldo operacional, XLM, lumen ou lumens, normalize para XLM.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
         '',
@@ -2302,14 +2305,21 @@ export class AgentGraph {
       .toLowerCase()
       .replace(/\busd\b/g, 'usdc')
       .replace(/\bdolares?\b/g, 'usdc')
+      .replace(/\bdollars?\b/g, 'usdc')
       .replace(/\beuros?\b/g, 'eur')
       .replace(/\beurc\b/g, 'eur')
-      .replace(/\breais?\b/g, 'brl');
+      .replace(/\breais?\b/g, 'brl')
+      .replace(/\breal\b/g, 'brl')
+      .replace(/\blumens?\b/g, 'xlm')
+      .replace(/\blibras?\b/g, 'gbp')
+      .replace(/\bpounds?\b/g, 'gbp')
+      .replace(/\bpesos?\b/g, 'mxn')
+      .replace(/\byen\b/g, 'jpy');
 
-    const assets = ['USDC', 'BRL', 'EUR'];
+    const assets = ['USDC', 'BRL', 'EUR', 'XLM', 'GBP', 'MXN', 'ARS', 'CAD', 'AUD', 'CHF', 'JPY'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
-    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur)\b/);
-    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur)\b/);
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur|xlm|gbp|mxn|ars|cad|aud|chf|jpy)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur|xlm|gbp|mxn|ars|cad|aud|chf|jpy)\b/);
 
     const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
     const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
@@ -3556,7 +3566,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
     const amountNumber = parseHumanAmountNumber(rawWithoutPin);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
     const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
     const confirms =
@@ -3693,7 +3703,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';
@@ -3732,7 +3742,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';
@@ -4125,10 +4135,30 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       if (!finalSourceAmount || !finalSourceAssetCode || !finalDestAssetCode) {
-        state.success = false;
-        state.response_message = llmParsed.needs_clarification && llmParsed.clarification_question
-          ? llmParsed.clarification_question
-          : 'Me diga a conversão neste formato: converter 10 dólares para reais.';
+        const conversionInterfaceRaw = await executeTool('open_conversion_interface', {
+          source_amount: finalSourceAmount,
+          source_asset_code: finalSourceAssetCode || 'BRL',
+          dest_asset_code: finalDestAssetCode || 'USDC',
+          language: this.getLanguage(state),
+        });
+
+        let conversionInterface: any;
+        try {
+          conversionInterface = JSON.parse(conversionInterfaceRaw);
+        } catch {
+          conversionInterface = { success: false };
+        }
+
+        state.success = Boolean(conversionInterface.success);
+        state.response_message = state.success
+          ? this.text(
+              this.getLanguage(state),
+              `Abra a tela de conversão para escolher valor e moedas. Depois ela volta para o chat com a cotação pronta:\n\n${conversionInterface.frontend_url}`,
+              `Open the conversion screen to choose amount and currencies. It returns to chat with the quote ready:\n\n${conversionInterface.frontend_url}`
+            )
+          : (llmParsed.needs_clarification && llmParsed.clarification_question
+              ? llmParsed.clarification_question
+              : this.text(this.getLanguage(state), 'Me diga a conversão neste formato: converter 10 dólares para reais.', 'Tell me the conversion like this: convert 10 dollars to reais.'));
       } else {
         const sourceIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, finalSourceAssetCode);
         let destIssuer = await this.resolveWalletAssetIssuer(state.session_data.public_key, finalDestAssetCode);

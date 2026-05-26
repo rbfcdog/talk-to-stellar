@@ -29,7 +29,9 @@ const STELLAR_PUBLIC_KEY_REGEX = /\bG[A-Z2-7]{55}\b/gi;
 function sanitizeVisibleChatText(content: string): string {
   return String(content || "")
     .replace(STELLAR_PUBLIC_KEY_REGEX, "[chave oculta]")
-    .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]");
+    .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]")
+    .replace(/stellar:mainnet/gi, "conta global")
+    .replace(/\bUSDC\b/g, "USD");
 }
 
 function normalizeMessageContentForDedupe(content: string): string {
@@ -93,6 +95,9 @@ function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
     const path = url.pathname.replace(/\/$/, "");
     if (path.endsWith("/confirm-payment")) return t("chat_link_payment");
     if (path.endsWith("/confirm-conversion")) return t("chat_link_conversion");
+    if (path.endsWith("/convert")) return t("chat_link_convert");
+    if (path.endsWith("/yield")) return t("chat_link_yield");
+    if (path.endsWith("/money-cycle")) return t("chat_link_money_cycle");
     if (path.endsWith("/create-account")) return t("chat_link_account");
     if (path.endsWith("/change-pin")) return t("chat_link_pin");
     if (path.endsWith("/pay-anyone")) return t("chat_link_pay_anyone");
@@ -135,7 +140,7 @@ function getOrCreateBrowserId(): string {
   return browserId;
 }
 
-export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => void }) {
+export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: string; onBack?: () => void; initialPrompt?: string }) {
   const { language, t } = useLanguage();
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const chatMeta: Record<string, { title: string; avatar: string; isBot?: boolean; starter: Message[] }> = {
@@ -179,6 +184,8 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
   const [sessionId, setSessionId] = useState<string>('');
   const [browserSessionExpired, setBrowserSessionExpired] = useState(false);
   const previousChatIdRef = useRef(chatId);
+  const appliedInitialPromptRef = useRef("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const browserSessionExpiredRef = useRef(false);
   const expiredNoticeShownRef = useRef(false);
 
@@ -275,6 +282,15 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     });
   }, [chatId, language]);
 
+  useEffect(() => {
+    if (chatId !== "agent") return;
+    const prompt = String(initialPrompt || "").trim();
+    if (!prompt || appliedInitialPromptRef.current === prompt) return;
+    appliedInitialPromptRef.current = prompt;
+    setInput((current) => current.trim() ? current : prompt);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [chatId, initialPrompt]);
+
   const appendWebFeedback = (items: WebChatFeedback[]) => {
     if (!Array.isArray(items) || items.length === 0) return;
     setMessages((prev) => {
@@ -343,7 +359,6 @@ export function ChatWindow({ chatId, onBack }: { chatId: string; onBack?: () => 
     };
   }, [chatId]);
   
-  const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const pollInFlightRef = useRef(false);
 

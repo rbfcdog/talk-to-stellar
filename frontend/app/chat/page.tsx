@@ -1,12 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { ChatSidebar } from "@/components/chat/chat-sidebar"
 import { ChatWindow } from "@/components/chat/chat-window"
 import { WelcomeScreen } from "@/components/chat/welcome-screen"
 
 export default function ChatPage() {
+  const searchParams = useSearchParams()
   const [selectedChat, setSelectedChat] = useState<string | null>("agent")
+  const initialPrompt = useMemo(() => searchParams.get("prompt") || searchParams.get("q") || "", [searchParams])
+
+  useEffect(() => {
+    if (initialPrompt) setSelectedChat("agent")
+  }, [initialPrompt])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-tts-bg text-tts-deep md:flex-row">
@@ -18,7 +25,7 @@ export default function ChatPage() {
 
       <div className={`${selectedChat ? "flex" : "hidden md:flex"} h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden`}>
         {selectedChat ? (
-          <ChatWindow chatId={selectedChat} onBack={() => setSelectedChat(null)} />
+          <ChatWindow chatId={selectedChat} onBack={() => setSelectedChat(null)} initialPrompt={initialPrompt} />
         ) : (
           <WelcomeScreen />
         )}
