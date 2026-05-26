@@ -14,10 +14,7 @@ import {
 } from "recharts";
 import {
   ArrowRightLeft,
-  CheckCircle2,
   Coins,
-  Loader2,
-  MessageSquareText,
   PiggyBank,
   RefreshCw,
   ShieldCheck,
@@ -26,6 +23,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
+import { getClientSession } from "@/lib/session";
 
 type AssetOption = {
   code: string;
@@ -50,6 +48,18 @@ type YieldStatus = {
   }>;
 };
 
+type SessionState = {
+  authenticated: boolean;
+  sessionId?: string;
+};
+
+type BalanceLine = {
+  asset_code: string;
+  asset_type?: string;
+  asset_issuer?: string;
+  balance: string;
+};
+
 const ASSETS: AssetOption[] = [
   {
     code: "BRL",
@@ -58,8 +68,8 @@ const ASSETS: AssetOption[] = [
     nameEn: "Reais",
     promptPt: "reais",
     promptEn: "BRL",
-    descriptionPt: "Entrada e retirada por PIX.",
-    descriptionEn: "Add and withdraw with PIX.",
+    descriptionPt: "Saldo em reais da sua conta.",
+    descriptionEn: "Reais balance in your account.",
     tone: "border-tts-border bg-tts-surface text-tts-deep",
     demoBrl: 1,
     annualRate: 0.105,
@@ -93,12 +103,12 @@ const ASSETS: AssetOption[] = [
   {
     code: "XLM",
     short: "XLM",
-    namePt: "Saldo operacional",
-    nameEn: "Operational balance",
+    namePt: "Reserva da conta",
+    nameEn: "Account reserve",
     promptPt: "XLM",
     promptEn: "XLM",
-    descriptionPt: "Para custos pequenos da conta.",
-    descriptionEn: "For small account costs.",
+    descriptionPt: "Usado para manter a conta funcionando.",
+    descriptionEn: "Used to keep the account working.",
     tone: "border-tts-border2 bg-tts-surface text-tts-muted",
     demoBrl: 0.7,
     annualRate: 0,
@@ -157,6 +167,32 @@ function buildUrl(path: string, params: Record<string, unknown>) {
   return query ? `${path}?${query}` : path;
 }
 
+function accountAssetCode(code: string) {
+  if (code === "BRL") return "TESOURO";
+  if (code === "EUR") return "EURC";
+  return code;
+}
+
+function balanceForAsset(balances: BalanceLine[], code: string) {
+  const accountCode = accountAssetCode(code);
+  return balances.find((item) => String(item.asset_code || "").trim().toUpperCase() === accountCode);
+}
+
+function hasEnoughBalance(balance: BalanceLine | undefined, amount: number) {
+  if (!balance || amount <= 0) return false;
+  const available = Number(String(balance.balance || "0").replace(",", "."));
+  return Number.isFinite(available) && available >= amount;
+}
+
+async function financialApi(path: string) {
+  const response = await fetch(`/api/financial/mainnet/${path}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.message || "Não foi possível carregar os dados da conta.");
+  }
+  return payload;
+}
+
 function rateFromYieldOption(option: any) {
   const raw = option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy;
   const text = Array.isArray(raw) ? String(raw[0] || "") : String(raw || "");
@@ -186,8 +222,10 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [destCode, setDestCode] = useState("USDC");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [safetyMode, setSafetyMode] = useState("balanced");
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
+  const [session, setSession] = useState<SessionState>({ authenticated: false });
+  const [balances, setBalances] = useState<BalanceLine[]>([]);
+  const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -206,18 +244,33 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
 
   useEffect(() => {
     let active = true;
-    setStatus("loading");
-    fetch("/api/ramp/defindex/yield/status", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((payload) => {
+    Promise.all([
+      fetch("/api/ramp/defindex/yield/status", { cache: "no-store" })
+        .then((response) => response.json())
+        .catch(() => null),
+      getClientSession()
+        .then(async (sessionPayload) => {
+          if (!sessionPayload.authenticated) return { sessionPayload, balancesPayload: [] };
+          const accountPayload = await financialApi("wallet").catch(() => ({ wallet: null }));
+          if (!accountPayload?.wallet?.public_key) return { sessionPayload, balancesPayload: [] };
+          const balancePayload = await financialApi("balance").catch(() => ({ balances: [] }));
+          return { sessionPayload, balancesPayload: Array.isArray(balancePayload?.balances) ? balancePayload.balances : [] };
+        })
+        .catch(() => ({ sessionPayload: { authenticated: false }, balancesPayload: [] })),
+    ])
+      .then(([yieldPayload, accountPayload]) => {
         if (!active) return;
-        setYieldStatus(payload);
-        setStatus("ready");
+        setYieldStatus(yieldPayload);
+        setSession(accountPayload.sessionPayload);
+        setBalances(accountPayload.balancesPayload);
+        setAccountStatus(accountPayload.sessionPayload.authenticated ? "ready" : "signed-out");
       })
       .catch(() => {
         if (!active) return;
         setYieldStatus(null);
-        setStatus("error");
+        setSession({ authenticated: false });
+        setBalances([]);
+        setAccountStatus("signed-out");
       });
     return () => {
       active = false;
@@ -227,6 +280,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const sourceAsset = getAsset(sourceCode);
   const destAsset = getAsset(destCode);
   const numericAmount = parseAmount(amount);
+  const sourceBalance = balanceForAsset(balances, sourceCode);
+  const sourceBalanceDisplay = sourceBalance ? `${formatDecimal(Number(String(sourceBalance.balance || "0").replace(",", ".")), language, 7)} ${sourceAsset.short}` : L("A consultar", "Pending");
+  const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const estimatedDestination = numericAmount > 0
     ? (numericAmount * sourceAsset.demoBrl) / destAsset.demoBrl
     : 0;
@@ -241,12 +297,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     () => buildProjectionData(estimatedDestination, destinationYieldRate, language),
     [destinationYieldRate, estimatedDestination, language]
   );
-  const destinationAfterYear = projectionData[projectionData.length - 1]?.balance || estimatedDestination;
   const earnedAfterYear = projectionData[projectionData.length - 1]?.earned || 0;
   const conversionPrompt = language === "pt-BR"
     ? `converter ${amount || "0"} ${assetPromptName(sourceAsset, language)} para ${assetPromptName(destAsset, language)}`
     : `convert ${amount || "0"} ${assetPromptName(sourceAsset, language)} to ${assetPromptName(destAsset, language)}`;
   const chatUrl = buildUrl("/chat", { prompt: conversionPrompt, lang: language });
+  const confirmReviewUrl = chatUrl;
   const yieldUrl = buildUrl("/yield", {
     asset: destAsset.code,
     amount: estimatedDestination > 0 ? estimatedDestination.toFixed(2) : amount,
@@ -254,53 +310,43 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     from: "convert",
     lang: language,
   });
-  const moneyCycleUrl = buildUrl("/money-cycle", {
-    asset: destAsset.code,
-    amount: estimatedDestination > 0 ? estimatedDestination.toFixed(2) : amount,
-    advanced: "1",
-    cycle: "1",
-    from: "convert",
-    lang: language,
-  });
-
   const conversionRows = [
-    { label: L("Origem", "Source"), value: `${formatDecimal(numericAmount, language, 7)} ${sourceAsset.short}` },
-    { label: L("Destino estimado", "Estimated destination"), value: `${formatDecimal(estimatedDestination, language, 7)} ${destAsset.short}` },
-    { label: L("Rendimento em 12 meses", "Yield in 12 months"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
-    { label: L("Saldo projetado", "Projected balance"), value: `${formatDecimal(destinationAfterYear, language, 7)} ${destAsset.short}` },
+    { label: L("Você troca", "You convert"), value: `${formatDecimal(numericAmount, language, 7)} ${sourceAsset.short}` },
+    { label: L("Você recebe", "You receive"), value: `${formatDecimal(estimatedDestination, language, 7)} ${destAsset.short}` },
+    { label: L("Pode render em 12 meses", "May earn in 12 months"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
   ];
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="grid gap-5 border-b border-tts-border pb-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-confirm">
+            <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
               {L("Conversão de saldos", "Balance conversion")}
             </div>
-            <h1 className="max-w-3xl text-3xl font-black tracking-tight text-tts-deep md:text-5xl">
-              {L("Troque moedas e já veja o próximo rendimento", "Convert currencies and see the next yield")}
+            <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
+              {L("Converter dentro da conta", "Convert inside your account")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
-                "Escolha origem, destino e valor em uma tela visual. O chat recebe a intenção pronta, cota a rota real e volta para confirmação com PIN.",
-                "Choose source, destination, and amount in a visual screen. Chat receives the ready intent, quotes the live route, and returns for PIN confirmation."
+                "Escolha o saldo de origem, a moeda de destino e revise o impacto antes de confirmar.",
+                "Choose the source balance, destination currency, and review the impact before confirming."
               )}
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
             <a
-              href={chatUrl}
-              className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+              href={confirmReviewUrl}
+              className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
             >
-              <MessageSquareText className="h-4 w-4" aria-hidden="true" />
-              {L("Cotar no chat", "Quote in chat")}
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              {L("Revisar conversão", "Review conversion")}
             </a>
             <button
               type="button"
               onClick={() => setLanguage(language === "en" ? "pt-BR" : "en")}
-              className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               {language === "en" ? "Português" : "English"}
@@ -308,25 +354,36 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-4" aria-label={L("Resumo da conversão", "Conversion summary")}>
+        <section className="grid gap-3 lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
           {conversionRows.map((row) => (
-            <Metric key={row.label} label={row.label} value={row.value} detail={row.label === L("Destino estimado", "Estimated destination") ? L("Prévia visual; cotação final no chat", "Visual preview; final quote in chat") : L("Antes de qualquer confirmação", "Before any confirmation")} />
+            <Metric key={row.label} label={row.label} value={row.value} detail={L("Prévia antes da confirmação", "Preview before confirmation")} />
           ))}
         </section>
 
-        <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="grid gap-6">
             <section className="border border-tts-border bg-tts-surface p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                     <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                    {L("Moedas", "Currencies")}
+                    {L("Saldos da conta", "Account balances")}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    {L("Toque em uma moeda de origem e outra de destino.", "Tap one source currency and one destination currency.")}
+                    {L("Escolha origem e destino. A revisão final usa cotação real antes do PIN.", "Choose source and destination. Final review uses a live quote before PIN.")}
                   </p>
                 </div>
+                <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${session.authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
+                  {accountStatus === "loading" ? L("Carregando", "Loading") : session.authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MiniStat label={L("Saldo de origem", "Source balance")} value={sourceBalanceDisplay} />
+                <MiniStat label={L("Estado", "Status")} value={sourceBalance ? enoughBalance ? L("Saldo suficiente", "Enough balance") : L("Revise o valor", "Review amount") : session.authenticated ? L("Saldo não encontrado", "Balance not found") : L("Entre para consultar", "Sign in to check")} />
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <button
                   type="button"
                   onClick={() => {
@@ -361,10 +418,10 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                     <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                    {L("Pedido para o chat", "Chat request")}
+                    {L("Revisão da conversão", "Conversion review")}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    {L("Edite o valor aqui. O chat faz a cotação final e gera a confirmação.", "Edit the amount here. Chat gets the final quote and creates the confirmation.")}
+                    {L("Edite o valor e confira a troca antes de abrir a confirmação.", "Edit the amount and review the swap before opening confirmation.")}
                   </p>
                 </div>
                 <button
@@ -410,22 +467,22 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </div>
 
                 <div className="border border-tts-border bg-tts-bg p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Texto que vai para o chat", "Text sent to chat")}</p>
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Pedido preparado", "Prepared request")}</p>
                   <p className="mt-2 break-words text-lg font-black text-tts-deep">{conversionPrompt}</p>
                   <p className="mt-3 text-sm leading-6 text-tts-muted">
                     {L(
-                      "Depois de abrir o chat, confira a mensagem e envie. A tela de confirmação aparece quando a cotação estiver pronta.",
-                      "After opening chat, review the message and send it. The confirmation screen appears when the quote is ready."
+                      "A próxima etapa recalcula a rota real e só confirma depois do PIN.",
+                      "The next step recalculates the live route and only confirms after PIN."
                     )}
                   </p>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <a href={chatUrl} className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90">
-                      <MessageSquareText className="h-4 w-4" aria-hidden="true" />
-                      {L("Continuar no chat", "Continue in chat")}
+                  <div className="mt-4 grid gap-2">
+                    <a href={confirmReviewUrl} className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90">
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      {L("Revisar conversão", "Review conversion")}
                     </a>
                     <a href={yieldUrl} className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2">
                       <PiggyBank className="h-4 w-4" aria-hidden="true" />
-                      {L("Ver rendimento", "See yield")}
+                      {L("Usar em rendimento", "Use for yield")}
                     </a>
                   </div>
                 </div>
@@ -439,12 +496,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                     <Sparkles className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                    {L("Depois da conversão", "After conversion")}
+                    {L("Impacto do destino", "Destination impact")}
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                     {L(
-                      "Veja o saldo estimado no destino e quanto ele pode render se você decidir manter esse valor trabalhando.",
-                      "See the estimated destination balance and how much it may earn if you decide to keep it working."
+                      "Veja o valor estimado no destino e o potencial se decidir manter esse saldo rendendo.",
+                      "See the estimated destination value and the potential if you keep that balance earning."
                     )}
                   </p>
                 </div>
@@ -475,36 +532,14 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <section className="border border-tts-border bg-tts-surface p-5">
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                 <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                {L("Próximas ações", "Next actions")}
+                {L("Depois de revisar", "After review")}
               </h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
-                <ActionLink href={chatUrl} title={L("Cotar e confirmar", "Quote and confirm")} body={L("O chat busca a cotação real e abre a confirmação com PIN.", "Chat gets the live quote and opens PIN confirmation.")} icon={<MessageSquareText className="h-4 w-4" aria-hidden="true" />} />
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                <ActionLink href={confirmReviewUrl} title={L("Confirmar conversão", "Confirm conversion")} body={L("Recalcula a rota real e abre a confirmação com PIN.", "Recalculates the live route and opens PIN confirmation.")} icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} />
                 <ActionLink href={yieldUrl} title={L("Manter rendendo", "Keep earning")} body={L("Use o destino da conversão como plano de rendimento.", "Use the conversion destination as the yield plan.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
-                <ActionLink href={moneyCycleUrl} title={L("Ciclo completo", "Full money cycle")} body={L("Entrar por PIX, render e sair para PIX em uma jornada.", "Add by PIX, earn, and send out to PIX in one journey.")} icon={<WalletCards className="h-4 w-4" aria-hidden="true" />} />
               </div>
             </section>
           </section>
-        </section>
-
-        <section className="border border-tts-border bg-tts-surface p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
-                <CheckCircle2 className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                {L("Integração pronta", "Integration ready")}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-tts-muted">
-                {L(
-                  "A tela prepara a intenção, o chat executa as ferramentas de cotação e a confirmação final acontece somente depois do PIN.",
-                  "This screen prepares the intent, chat runs the quote tools, and final confirmation only happens after PIN."
-                )}
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-2 border border-tts-border bg-tts-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
-              {status === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
-              {status === "loading" ? L("Atualizando opções", "Updating options") : L("Pronto para revisar", "Ready to review")}
-            </span>
-          </div>
         </section>
       </section>
     </main>
@@ -604,6 +639,15 @@ function ActionLink({ href, icon, title, body }: { href: string; icon: ReactNode
       <span className="mt-3 block text-base font-black text-tts-deep">{title}</span>
       <span className="mt-2 block text-sm leading-6 text-tts-muted">{body}</span>
     </a>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-tts-border bg-tts-bg p-3">
+      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{label}</p>
+      <p className="mt-1 break-words text-sm font-black text-tts-deep">{value}</p>
+    </div>
   );
 }
 
