@@ -397,14 +397,14 @@ describe('Agent tool execution', () => {
     const keepOutput = await executeTool('open_asset_interface', {
       action: 'keep',
       amount: '50',
-      asset_code: 'GBP',
+      asset_code: 'EUR',
       language: 'en',
     });
     const keep = JSON.parse(keepOutput);
 
     expect(keep.success).toBe(true);
     expect(keep.frontend_url).toContain('/money-cycle?');
-    expect(keep.frontend_url).toContain('asset=GBP');
+    expect(keep.frontend_url).toContain('asset=EUR');
     expect(keep.frontend_url).toContain('amount=50');
 
     const sendOutOutput = await executeTool('open_asset_interface', {

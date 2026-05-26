@@ -20,8 +20,11 @@ TELEGRAM_NOTIFY_URL=https://seu-telegram-service/notify
 ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ENABLE_EURC_ASSET=true
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 ```
+
+`EURC_ISSUER_PUBLIC` acima e o issuer publico da Circle para EURC na Stellar. Use com `STELLAR_NETWORK=PUBLIC`. Em testnet, nao existe issuer oficial equivalente validado aqui; nao use esse issuer publico para submeter transacoes na testnet.
 
 Gerar segredo:
 
@@ -35,7 +38,7 @@ openssl rand -hex 32
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 ```
 
 ### Telegram
@@ -92,9 +95,11 @@ Deixe `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate existir verifier P-256/WebAuthn 
 TESOURO_DISTRIBUTOR_PUBLIC=
 TESOURO_DISTRIBUTOR_SECRET=
 
-# So quando issuer, trustline, rota e liquidez estiverem validados.
-EURC_ISSUER_PUBLIC=
+# So se houver issuer EURC confiavel para testnet.
 EURC_ISSUER_TESTNET=
+
+# Fora do escopo por enquanto. Nao exponha sem issuer/codigo correto,
+# trustline, rota e liquidez validados.
 GBP_ISSUER=
 MXN_ISSUER=
 ARS_ISSUER=

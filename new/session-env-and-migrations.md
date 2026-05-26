@@ -175,9 +175,9 @@ TESOURO_DISTRIBUTOR_PUBLIC=
 TESOURO_DISTRIBUTOR_SECRET=
 ENABLE_EURC_ASSET=true
 EURC_ISSUER=
-EURC_ISSUER_PUBLIC=
+EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
 EURC_ISSUER_TESTNET=
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 
 # Assets extras opcionais, só quando houver issuer/liquidez/configuração real
 GBP_ISSUER=
@@ -227,18 +227,7 @@ BRIDGE_PAYOUT_CREATE_URL=
 ENABLE_REAL_PAYOUT_EXECUTION=false
 ```
 
-`DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/EUR/BRL:
-
-```json
-[
-  {
-    "asset_code": "GBP",
-    "vault_address": "C...",
-    "label": "Pounds Yield",
-    "network": "testnet"
-  }
-]
-```
+`DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/EUR/BRL, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
 
 Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até validar API key, vaults, issuers, liquidez e assinatura em testnet.
 
@@ -249,7 +238,7 @@ AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 ```
 
 O domínio público do frontend precisa bater com `PASSKEY_RP_ID` e `PASSKEY_ORIGIN`.

@@ -240,21 +240,21 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Manter rendendo está pronto para GBP.\n\nAbra:\nhttps://app.example.com/yield?asset=GBP',
+      message: 'Manter rendendo está pronto para EUR.\n\nAbra:\nhttps://app.example.com/yield?asset=EUR',
     }));
 
-    const result = await graph.processInput(createState('manter 50 libras'));
+    const result = await graph.processInput(createState('manter 50 euros'));
 
     expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
       session_id: 'eval-session',
       action: 'keep',
       amount: '50',
-      asset_code: 'GBP',
+      asset_code: 'EUR',
       destination_pix_key: '',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/yield?asset=GBP');
+    expect(result.response_message).toContain('/yield?asset=EUR');
   });
 
   it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {

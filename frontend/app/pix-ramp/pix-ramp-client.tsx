@@ -81,20 +81,13 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
 const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
-const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR", "GBP", "MXN", "ARS", "CAD", "AUD", "CHF", "JPY"];
-const FIAT_FORMAT_ASSETS = new Set(["BRL", "EUR", "GBP", "MXN", "ARS", "CAD", "AUD", "CHF", "JPY", "USD"]);
+const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR"];
+const FIAT_FORMAT_ASSETS = new Set(["BRL", "EUR", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
   BRL: "R$",
   USDC: "US$",
   USD: "US$",
   EUR: "€",
-  GBP: "£",
-  MXN: "MX$",
-  ARS: "AR$",
-  CAD: "CA$",
-  AUD: "A$",
-  CHF: "CHF",
-  JPY: "¥",
 };
 const ASSET_ALIASES: Record<string, TargetAsset> = {
   TESOURO: "BRL",
@@ -109,13 +102,6 @@ const ASSET_ALIASES: Record<string, TargetAsset> = {
   EURC: "EUR",
   EURO: "EUR",
   EUROS: "EUR",
-  POUND: "GBP",
-  POUNDS: "GBP",
-  LIBRA: "GBP",
-  LIBRAS: "GBP",
-  PESO: "MXN",
-  PESOS: "MXN",
-  YEN: "JPY",
 };
 
 function canonicalAssetCode(value: unknown, fallback = ""): TargetAsset {
