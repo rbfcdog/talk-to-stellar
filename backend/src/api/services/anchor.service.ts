@@ -767,8 +767,14 @@ function sameIssuedAsset(left: { code: string; issuer?: string }, right: { code:
 
 function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: string } {
   const raw = coalesceString(...values) || 'TESOURO';
+  const rawParts = String(raw || '').trim().split(':');
+  const rawCode = rawParts[0]?.toUpperCase();
+  const hasExplicitIssuer = Boolean(rawParts[1]?.trim());
   const parsed = parseIssuedAssetIdentifier(raw);
   const code = normalizeAssetCode(parsed.code || 'TESOURO');
+  if (['BRL', 'REAL', 'REAIS', 'R$'].includes(rawCode || '') && !hasExplicitIssuer) {
+    return { code: 'BRL' };
+  }
   const settlementCode = code === 'BRL' ? 'TESOURO' : code;
   if (settlementCode !== 'TESOURO' && !getUserFacingAssetCodes().includes(settlementCode)) {
     throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC, EUR ou TESOURO.`, 400);

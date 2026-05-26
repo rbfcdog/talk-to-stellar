@@ -155,6 +155,69 @@ describe('AnchorService PIX organization bank account routing', () => {
     });
   });
 
+  it('quotes user-facing BRL in reais instead of raw TESOURO units', async () => {
+    const anchor = {
+      getQuote: jest.fn().mockResolvedValue({
+        id: 'quote-brl-1',
+        fromCurrency: 'BRL',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        fromAmount: '50',
+        toAmount: '43.29',
+        destinationAmountAfterFee: '43.29',
+        exchangeRate: '0.8658',
+        fee: '0.10',
+        feeAmount: '0.10',
+        feeBps: '20',
+        provider: 'etherfuse',
+      }),
+    };
+
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+
+    const result = await AnchorService.getQuoteForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      direction: 'onramp',
+      amount: '50',
+      from_currency: 'BRL',
+      to_currency: 'TESOURO',
+      final_asset: 'BRL',
+    });
+
+    expect(anchor.getQuote).toHaveBeenCalledWith(expect.objectContaining({
+      fromAmount: '50',
+      fromCurrency: 'BRL',
+      toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    }));
+    expect(result.final_asset).toMatchObject({
+      code: 'BRL',
+      identifier: 'BRL',
+    });
+    expect(result.anchor_asset).toMatchObject({
+      code: 'TESOURO',
+    });
+    expect(result.quote).toMatchObject({
+      userFacingToCurrency: 'BRL',
+      userFacingToAmount: '49.75',
+      finalCurrency: 'BRL',
+      finalAmountBeforeFee: '50',
+      finalAmountAfterFee: '49.75',
+      talkToStellarFeeAmount: '0.15',
+      totalFeeAmount: '0.25',
+    });
+    expect((result.quote as any).userFacingToAmount).not.toBe('43.29');
+  });
+
   it('keeps a dynamic PIX destination while ignoring local destination ids', async () => {
     mockSandboxRuntime();
 

@@ -874,7 +874,7 @@ export default function PixRampClient({
   const receiveEstimateRequired = Boolean(
     rampMode === "onramp" &&
       desiredFinalAmount &&
-      desiredReceiveAsset === "USDC"
+      (desiredReceiveAsset === "USDC" || desiredReceiveAsset === "BRL")
   );
   const receiveEstimateMissing = Boolean(receiveEstimateRequired && !receiveEstimateReady);
   const waitingForReceiveEstimate = Boolean(receiveEstimateRequired && receiveEstimateLoading);
@@ -1198,13 +1198,17 @@ export default function PixRampClient({
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
       setTargetAsset(normalizedReceiveAsset);
-      if (normalizedReceiveAsset === "BRL") setAmountBrl(receiveAmount);
+      if (normalizedReceiveAsset === "BRL") {
+        setAmountBrl(receiveAmount);
+        setReceiveEstimateReady(false);
+        setReceiveEstimateLoading(true);
+      }
       if (normalizedReceiveAsset === "USDC") {
         setReceiveEstimateReady(false);
         setReceiveEstimateLoading(true);
       }
     }
-    if (amount && !(mode === "onramp" && receiveAmount && normalizedReceiveAsset === "USDC")) {
+    if (amount && !(mode === "onramp" && receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL"))) {
       if (mode === "offramp") setOffRampAmount(amount);
       else setAmountBrl(amount);
     }
@@ -1289,6 +1293,36 @@ export default function PixRampClient({
       response: sanitizeForDebug(entry.response),
     }, ...current].slice(0, 40));
   }, []);
+
+  useEffect(() => {
+    if (rampMode !== "onramp") return;
+    if (!desiredReceiveAmount || desiredReceiveAsset !== "BRL") return;
+    const receiveBrl = toPositiveNumber(desiredReceiveAmount, 0);
+    if (!receiveBrl) {
+      setReceiveEstimateReady(false);
+      setReceiveEstimateLoading(false);
+      return;
+    }
+
+    const totalFeeBps = ETHERFUSE_TESTNET_FEE_BPS + clientTtsTransactionFeeBps();
+    const denominator = Math.max(0.0001, 1 - (totalFeeBps / 10000));
+    const estimatedBrl = receiveBrl / denominator;
+    setAmountBrl(estimatedBrl.toFixed(2));
+    setReceiveEstimateReady(true);
+    setReceiveEstimateLoading(false);
+    setQuotePayload(null);
+    setQuoteReceivedAt(0);
+    setOrderPayload(null);
+    setStatusPayload(null);
+    setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
+    addDebugLog({
+      label: "PIX amount estimated from requested BRL receive amount",
+      method: "LOCAL",
+      path: "/pix-on",
+      request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
+      response: { amount_brl: estimatedBrl.toFixed(2), total_fee_bps: totalFeeBps },
+    });
+  }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   useEffect(() => {
     if (rampMode !== "onramp") return;
