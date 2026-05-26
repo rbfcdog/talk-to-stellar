@@ -17,10 +17,10 @@ export default function Pathfinding() {
         className="max-w-3xl mb-12 md:mb-16"
       >
         <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-[#4CA1EF]/10 border border-[#4CA1EF]/20 text-[#4CA1EF] font-semibold text-sm tracking-wide uppercase">
-          {L("Menos custo, mais clareza", "The Low-Fee Advantage")}
+          {L("Menos custo, mais clareza", "Lower cost, more clarity")}
         </div>
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6">
-          {L("A melhor rota aparece", "The Cheapest Route.")} <br className="block md:hidden" /><span className="text-gradient">{L("antes de confirmar.", "Every Time.")}</span>
+          {L("A melhor rota aparece", "The best route appears")} <br className="block md:hidden" /><span className="text-gradient">{L("antes de confirmar.", "before confirmation.")}</span>
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
           {L("O TalkToStellar mostra taxa e valor final antes do PIN, para a pessoa saber exatamente o que está fazendo.", "Forget hidden fees. TalkToStellar finds a fast, low-cost route and shows fees and final value before confirmation.")}
@@ -36,7 +36,7 @@ export default function Pathfinding() {
           viewport={{ once: true }}
           className="bg-[#00D87A] text-[#e9edef] px-4 py-2 md:px-5 md:py-3 rounded-2xl rounded-br-sm shadow-[0_4px_24px_rgba(0,0,0,0.2)] mb-8 relative flex items-end gap-3 z-10"
         >
-          <p className="text-base md:text-lg leading-snug pb-1 text-left">{L("Converta R$250 e pague com PIX.", "Convert R$250 and pay with PIX.")}</p>
+          <p className="text-base md:text-lg leading-snug pb-1 text-left">{L("Converta R$250 para euros e deixe rendendo.", "Convert R$250 to euros and keep it earning.")}</p>
           <div className="flex items-center gap-1 shrink-0 mb-1">
             <span className="text-xs text-[#9BA4B5]">14:42</span>
             <CheckCheck className="text-[#4CA1EF] w-4 h-4" />
@@ -45,7 +45,7 @@ export default function Pathfinding() {
           <div className="absolute -right-2 bottom-0 w-3 h-4 bg-[#00D87A]" style={{ clipPath: 'polygon(0 100%, 0 0, 100% 100%)' }} />
         </motion.div>
 
-        {/* AI Brain */}
+        {/* Route engine */}
         <motion.div 
           animate={{ scale: [1, 1.05, 1], boxShadow: ["0 0 20px rgba(143,0,255,0.2)", "0 0 40px rgba(143,0,255,0.5)", "0 0 20px rgba(143,0,255,0.2)"] }}
           transition={{ duration: 2, repeat: Infinity }}
@@ -70,7 +70,7 @@ export default function Pathfinding() {
             <div className="absolute top-0 left-0 w-full h-1 bg-red-500/30" />
             <h3 className="text-gray-500 font-medium mb-4">{L("Bancos e câmbio", "Banks & Exchanges")}</h3>
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-6 font-mono">
-              <span>BRL</span> <ArrowRight size={14} /> <span>SWIFT</span> <ArrowRight size={14} /> <span>USD</span>
+              <span>R$</span> <ArrowRight size={14} /> <span>{L("manual", "manual")}</span> <ArrowRight size={14} /> <span>US$</span>
             </div>
             <div className="flex w-full justify-between items-center mt-auto pt-4 border-t border-white/[0.03]">
               <div className="flex items-center gap-1 text-red-500/80">
@@ -102,9 +102,9 @@ export default function Pathfinding() {
               transition={{ duration: 2, repeat: Infinity }}
               className="flex items-center gap-2 text-base text-white mb-6 font-mono bg-white/5 px-4 py-2 rounded-lg border border-white/[0.03]"
             >
-              <span className="text-[#00D2FF]">BRL</span> 
-              <ArrowRight size={16} className="text-gray-400" /> 
-              <span className="text-[#00D2FF]">USDC</span>
+              <span className="text-[#00D2FF]">R$</span>
+              <ArrowRight size={16} className="text-gray-400" />
+              <span className="text-[#00D2FF]">€</span>
             </motion.div>
 
             <div className="flex w-full justify-between items-center mt-auto pt-4 border-t border-white/[0.03]">
@@ -119,7 +119,7 @@ export default function Pathfinding() {
             </div>
           </motion.div>
 
-          {/* Bridge DeFi */}
+          {/* App switching */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -128,9 +128,9 @@ export default function Pathfinding() {
             className="bg-white/5 backdrop-blur-md border border-yellow-500/10 rounded-2xl p-6 flex flex-col items-center relative overflow-hidden opacity-60 hover:opacity-100 transition-opacity duration-300 order-3 md:order-3"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/30" />
-            <h3 className="text-gray-500 font-medium mb-4">Bridge DeFi</h3>
+            <h3 className="text-gray-500 font-medium mb-4">{L("Várias telas", "Multiple apps")}</h3>
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-6 font-mono">
-              <span>BRL</span> <ArrowRight size={14} /> <span>ETH</span> <ArrowRight size={14} /> <span>USDC</span>
+              <span>R$</span> <ArrowRight size={14} /> <span>{L("câmbio", "FX")}</span> <ArrowRight size={14} /> <span>{L("retirada", "withdrawal")}</span>
             </div>
             <div className="flex w-full justify-between items-center mt-auto pt-4 border-t border-white/[0.03]">
               <div className="flex items-center gap-1 text-yellow-500/80">

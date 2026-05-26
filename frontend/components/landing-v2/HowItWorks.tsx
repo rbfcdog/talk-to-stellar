@@ -10,30 +10,30 @@ interface Step {
 const STEPS: Step[] = [
   {
     number: '01',
-    title: 'Pix entra',
+    title: 'PIX entra',
     description:
-      'Cliente paga via Pix QR ou copia-cola. O fluxo de cobrança usa PSP licenciado, com webhook de confirmação.',
+      'A pessoa informa valor e moeda pelo chat. A tela abre o PIX de entrada já preenchido e mostra o saldo esperado.',
     emphasis: false,
   },
   {
     number: '02',
-    title: 'BRL vira USDC',
+    title: 'Moeda escolhida',
     description:
-      'Conversão executada na Stellar com spread de 0,5%, sem hop por exchange centralizada nem janela de risco.',
+      'Reais podem virar dólares, euros ou outra moeda configurada, sempre com taxa e valor final antes da confirmação.',
     emphasis: true,
   },
   {
     number: '03',
-    title: 'Custódia no cliente',
+    title: 'Rendimento',
     description:
-      'Saldo USDC é registrado em uma conta Stellar controlada pela chave que vive no dispositivo do usuário.',
+      'O saldo pode ir para uma opção de rendimento, com gráfico, revisão e ação de guardar ou resgatar.',
     emphasis: true,
   },
   {
     number: '04',
-    title: 'Saída para qualquer lugar',
+    title: 'Saída para PIX',
     description:
-      'On-chain, Pix de volta, conta internacional via parceiro — a saída do USDC fica desacoplada da entrada.',
+      'Na retirada, a chave PIX é digitada dinamicamente e a tela confirma quanto chega em reais antes do PIN.',
     emphasis: false,
   },
 ]
@@ -44,7 +44,7 @@ export function HowItWorks() {
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
         <header className="flex flex-col gap-3">
           <h2 className="max-w-2xl text-[32px] font-extrabold tracking-[-0.022em] text-tts-deep">
-            Fricção zero do BRL ao USDC.
+            O ciclo completo em quatro passos.
           </h2>
         </header>
 
@@ -59,8 +59,9 @@ export function HowItWorks() {
             Arquitetura
           </span>
           <span className="text-tts-muted">
-            <strong className="font-bold text-tts-deep">Não-Custodial:</strong>{' '}
-            as chaves privadas nunca tocam nossos servidores.
+            <strong className="font-bold text-tts-deep">Passkey opcional:</strong>{' '}
+            a pessoa pode confirmar acesso pelo dispositivo, sem memorizar
+            credenciais frágeis.
           </span>
         </aside>
       </div>

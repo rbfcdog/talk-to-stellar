@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 
 const METRICS = [
-  { value: '<60s', label: 'Liquidação média' },
-  { value: '0.5%', label: 'Spread BRL → USDC' },
-  { value: '99.9%', label: 'Uptime SLA' },
+  { value: '3', label: 'moedas principais' },
+  { value: '24/7', label: 'PIX entrada e saída' },
+  { value: '1', label: 'chat para todo o ciclo' },
 ]
 
 const DOT_GRID_STYLE: React.CSSProperties = {
@@ -33,20 +33,20 @@ export function Hero() {
       <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 md:px-8 md:gap-10">
         <div className="flex flex-col items-start gap-6">
           <TerminalEyebrow
-            command="tts convert --from BRL --to USDC --channel whatsapp"
+            command='chat "entrar, render e sair para meu PIX"'
             showCursor
           />
 
           <h1 className="max-w-3xl text-[36px] font-extrabold leading-[1.04] tracking-[-0.025em] text-tts-deep md:text-[56px]">
-            Pix <span className="text-tts-gold">/</span> USDC.
+            TalkToStellar.
             <br />
-            Via API ou mensagem.
+            <span className="text-tts-gold">PIX, rendimento e saída.</span>
           </h1>
 
           <p className="max-w-lg text-sm leading-[1.65] text-tts-muted">
-            Infraestrutura de pagamentos que conecta Pix ao Stellar Network.
-            Liquidação em segundos, custódia das chaves no cliente, integração
-            por API ou pelos canais de mensagem que sua operação já usa.
+            Uma conta por conversa para colocar dinheiro com PIX, converter
+            entre reais, dólares e euros, deixar rendendo e retirar para uma
+            chave PIX informada na hora.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -54,15 +54,15 @@ export function Hero() {
               asChild
               className="h-11 bg-tts-deep px-5 text-sm text-tts-surface hover:bg-tts-deep/90"
             >
-              <a href="#comecar">Falar com o time</a>
+              <a href="/chat">Abrir chat</a>
             </Button>
             <Button
               asChild
               variant="outline"
               className="h-11 border-tts-border bg-tts-surface px-5 text-sm text-tts-deep hover:bg-tts-bg"
             >
-              <a href="#api">
-                Ver documentação
+              <a href="/yield">
+                Ver rendimento
                 <ArrowRight className="ml-1 h-4 w-4" />
               </a>
             </Button>

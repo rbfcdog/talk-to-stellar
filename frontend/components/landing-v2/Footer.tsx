@@ -7,13 +7,13 @@ const NAV_GROUPS = [
       { label: 'Visão geral', href: '#produto' },
       { label: 'Como funciona', href: '#como-funciona' },
       { label: 'Canais', href: '#canais' },
-      { label: 'API', href: '#api' },
+      { label: 'Intents', href: '#api' },
     ],
   },
   {
     title: 'Empresa',
     links: [
-      { label: 'Falar com o time', href: '#empresa' },
+      { label: 'Começar', href: '/chat' },
       { label: 'Entrar', href: '/login' },
     ],
   },
@@ -32,8 +32,8 @@ export function Footer() {
               </span>
             </div>
             <p className="max-w-xs text-sm leading-[1.65] text-white/55">
-              Infraestrutura de pagamentos BRL → USDC via Pix e Stellar Network.
-              API, WhatsApp, Telegram e dashboard.
+              Conta por conversa para PIX, conversão multi-moeda, rendimento e
+              retirada para sua chave PIX.
             </p>
           </div>
 

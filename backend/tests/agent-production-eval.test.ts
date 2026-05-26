@@ -44,6 +44,23 @@ describe('Agent production evals', () => {
     jest.clearAllMocks();
   });
 
+  it('routes broad capability questions to the deterministic help tool', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Guia rápido: saldo, PIX, converter, rendimento e ciclo completo.',
+    }));
+
+    const result = await graph.processInput(createState('olá, o que você pode fazer?'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('rendimento');
+    expect(result.response_message).toContain('ciclo completo');
+  });
+
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');

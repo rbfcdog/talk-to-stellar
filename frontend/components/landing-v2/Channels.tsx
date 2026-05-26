@@ -9,8 +9,8 @@ interface Channel {
 const CHANNELS: Channel[] = [
   { name: 'WhatsApp', status: 'active' },
   { name: 'Telegram', status: 'active' },
-  { name: 'REST API', status: 'active' },
-  { name: 'Dashboard', status: 'soon' },
+  { name: 'Chat web', status: 'active' },
+  { name: 'Modo avançado', status: 'active' },
 ]
 
 const DOT_GRID_STYLE: React.CSSProperties = {
@@ -33,7 +33,7 @@ export function Channels() {
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 md:px-8">
         <TerminalEyebrow
-          command="tts channels --list --status active"
+          command='chat "converter, render ou retirar?"'
           dark
           showCursor
         />
@@ -44,8 +44,8 @@ export function Channels() {
             <span className="text-tts-gold-lt">já está.</span>
           </h2>
           <p className="max-w-xl text-sm leading-[1.65] text-white/40">
-            Mesmo SDK por trás, canais distintos na ponta. Comece pela API ou
-            ative o WhatsApp em horas — sem app novo para o cliente final.
+            A mesma intenção abre a interface certa no canal disponível:
+            chat, WhatsApp, Telegram ou tela avançada para multi-ativos.
           </p>
         </header>
 

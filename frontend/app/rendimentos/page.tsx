@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Yield and balances",
-  description: "A simple screen to track balances and prepare yield.",
+  description: "Review balances, currencies, earning options, PIX add, and PIX withdrawal.",
 };
 
 export default function RendimentosPage() {
