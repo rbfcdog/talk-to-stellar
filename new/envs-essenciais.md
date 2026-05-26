@@ -63,6 +63,7 @@ NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
 NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
+NEXT_PUBLIC_PASSKEY_ENABLED=true
 ```
 
 ### Telegram
@@ -166,6 +167,8 @@ PASSKEY_SMART_ACCOUNT_ENABLED=false
 ```
 
 Deixe `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate existir verifier P-256/WebAuthn implantado e testado.
+
+No frontend, deixe `NEXT_PUBLIC_PASSKEY_ENABLED=true` para mostrar cadastro, login e confirmação com Passkey. Se precisar desativar temporariamente a UX, use `NEXT_PUBLIC_PASSKEY_ENABLED=false`.
 
 ## 4. So preencher depois
 

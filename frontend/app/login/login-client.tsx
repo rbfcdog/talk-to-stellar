@@ -76,7 +76,7 @@ function formatExternalIdentifier(provider: string, value: string): string {
 }
 
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
-const PASSKEY_LOGIN_ENABLED = false
+const PASSKEY_LOGIN_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()

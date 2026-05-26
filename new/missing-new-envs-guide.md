@@ -58,6 +58,7 @@ NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
 NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
+NEXT_PUBLIC_PASSKEY_ENABLED=true
 ```
 
 ### Telegram

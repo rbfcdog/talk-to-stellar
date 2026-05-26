@@ -382,7 +382,7 @@ function isPasskeyChallengeExpiredMessage(message?: string) {
   )
 }
 
-const PASSKEY_CONFIRMATION_ENABLED = false
+const PASSKEY_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 
 export default function ConfirmPaymentClient({
   initialToken = '',

@@ -31,7 +31,7 @@ type FinalizeResponse = {
 }
 
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
-const PASSKEY_ENROLLMENT_ENABLED = false
+const PASSKEY_ENROLLMENT_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
