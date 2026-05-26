@@ -35,6 +35,8 @@ type ApiState = {
 type SessionState = {
   authenticated: boolean;
   sessionId?: string;
+  loading?: boolean;
+  checked?: boolean;
 };
 
 type BalanceLine = {
@@ -333,6 +335,9 @@ function buildProjectionData(amount: string, annualRate: number | null, language
 function sanitizeUiError(error: unknown, language: AppLanguage) {
   const raw = error instanceof Error ? error.message : String(error || "");
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
+  if (/abort|timeout|timed out|demorou/i.test(raw)) {
+    return localCopy(language, "A conexão demorou demais. Atualize para tentar de novo.", "The connection took too long. Refresh to try again.");
+  }
   if (/session|login|unauthor|auth|token|jwt/i.test(raw)) {
     return localCopy(language, "Entre na sua conta para ver saldos e preparar rendimentos.", "Sign in to see balances and prepare yield.");
   }
@@ -346,14 +351,25 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     .replace(/asset/gi, "moeda");
 }
 
-async function yieldApi(path: string, init?: RequestInit) {
+function isSessionUiError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  return /session|login|unauthor|auth|token|jwt/i.test(raw);
+}
+
+async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   const response = await fetch(`/api/ramp/${path}`, {
     cache: "no-store",
+    credentials: "same-origin",
     ...init,
+    signal: controller.signal,
     headers: {
       "content-type": "application/json",
       ...(init?.headers || {}),
     },
+  }).finally(() => {
+    window.clearTimeout(timeout);
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
@@ -369,7 +385,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const appliedInitialQueryRef = useRef(false);
   const loadedInitialDataRef = useRef(false);
   const requestedAssetRef = useRef("");
-  const [session, setSession] = useState<SessionState>({ authenticated: false });
+  const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [accountPublicKey, setAccountPublicKey] = useState("");
@@ -397,7 +413,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const selectedProfile = moneyProfile(safeSelectedCode);
   const bestOptionCode = optionCode(bestOption);
   const selectedHasYield = Boolean(selectedOption);
-  const canPrepare = Boolean(session.authenticated && configured && selectedOption && Number(String(amount).replace(",", ".")) > 0);
+  const sessionLoading = Boolean(session.loading && !session.checked);
+  const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && selectedOption && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const projectionData = useMemo(
     () => buildProjectionData(amount, optionAnnualRate(selectedOption), language),
@@ -458,10 +475,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
   async function refreshDashboard() {
     setApiState({ loading: true, message: "", error: "" });
+    setSession((current) => ({ ...current, loading: true }));
     try {
-      const [sessionPayload, statusPayload] = await Promise.all([
-        getClientSession(),
-        yieldApi("defindex/yield/status").catch((error) => ({
+      const statusPromise = yieldApi("defindex/yield/status", undefined, 12000).catch((error) => ({
           success: false,
           runtime: {
             configured: false,
@@ -470,31 +486,49 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             unavailable_reason: sanitizeUiError(error, language),
           },
           vaults: [],
-        })),
-      ]);
+      }));
 
-      setSession(sessionPayload);
+      const sessionPayload = await getClientSession();
+      const nextSession: SessionState = {
+        ...sessionPayload,
+        loading: false,
+        checked: true,
+      };
+      setSession(nextSession);
+
+      const accountPromise = nextSession.authenticated
+        ? yieldApi("etherfuse/wallet-balances", undefined, 20000)
+        : Promise.resolve(null);
+
+      const statusPayload = await statusPromise;
       setYieldStatus(statusPayload);
 
       const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
       const bestAvailable = sortYieldOptionsByRate(vaults)[0] || null;
-      if (!requestedAssetRef.current && bestAvailable && !vaults.some((item: YieldOption) => optionCode(item) === selectedCode)) {
-        setSelectedCode(optionCode(bestAvailable));
+      if (!requestedAssetRef.current && bestAvailable) {
+        setSelectedCode((current) => vaults.some((item: YieldOption) => optionCode(item) === current)
+          ? current
+          : optionCode(bestAvailable));
       }
 
-      if (!sessionPayload.authenticated) {
+      if (!nextSession.authenticated) {
         setBalances([]);
         setAccountPublicKey("");
         setApiState({ loading: false, message: L("Entre para ver seus saldos e preparar rendimentos.", "Sign in to see balances and prepare yield."), error: "" });
         return;
       }
 
-      const accountPayload = await yieldApi("etherfuse/wallet-balances");
+      const accountPayload = await accountPromise;
       setAccountPublicKey(String(accountPayload?.public_key || ""));
       setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
 
       setApiState({ loading: false, message: L("Saldos e rendimentos atualizados.", "Balances and yield updated."), error: "" });
     } catch (error) {
+      if (isSessionUiError(error)) {
+        setSession({ authenticated: false, loading: false, checked: true });
+      } else {
+        setSession((current) => ({ ...current, loading: false, checked: true }));
+      }
       setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
     }
   }
@@ -644,6 +678,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         <section className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
           <AccountPanel
             authenticated={session.authenticated}
+            sessionLoading={sessionLoading}
+            balancesLoading={apiState.loading}
             accountPublicKey={accountPublicKey}
             balances={balances}
             options={options}
@@ -657,6 +693,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
           <YieldWorkspacePanel
             authenticated={session.authenticated}
+            sessionLoading={sessionLoading}
             action={action}
             onActionChange={setAction}
             amount={amount}
@@ -770,6 +807,8 @@ function YieldTutorialPanel({
 
 function AccountPanel({
   authenticated,
+  sessionLoading,
+  balancesLoading,
   accountPublicKey,
   balances,
   options,
@@ -777,6 +816,8 @@ function AccountPanel({
   onSelect,
 }: {
   authenticated: boolean;
+  sessionLoading: boolean;
+  balancesLoading: boolean;
   accountPublicKey: string;
   balances: BalanceLine[];
   options: YieldOption[];
@@ -803,13 +844,15 @@ function AccountPanel({
             {L("Sua conta", "Your account")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
-            {authenticated
+            {sessionLoading
+              ? L("Verificando sua conta.", "Checking your account.")
+              : authenticated
               ? L("Escolha um saldo para revisar rendimento.", "Choose a balance to review yield.")
               : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
           </p>
         </div>
         <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-          {authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
+          {sessionLoading ? L("Carregando", "Loading") : authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
         </span>
       </div>
 
@@ -853,12 +896,16 @@ function AccountPanel({
           );
         }) : (
           <div className="border border-tts-border bg-tts-bg p-4 text-sm leading-6 text-tts-muted">
-            {L("Entre na sua conta para carregar seus saldos.", "Sign in to load your balances.")}
+            {sessionLoading || (authenticated && balancesLoading)
+              ? L("Carregando seus saldos da conta.", "Loading your account balances.")
+              : authenticated
+                ? L("Nenhum saldo disponível apareceu ainda. Toque em atualizar em alguns segundos.", "No available balance appeared yet. Tap refresh in a few seconds.")
+                : L("Entre na sua conta para carregar seus saldos.", "Sign in to load your balances.")}
           </div>
         )}
       </div>
 
-      {!authenticated ? (
+      {!authenticated && !sessionLoading ? (
         <a href="/login?next=/yield" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
           {L("Entrar na conta", "Sign in")}
         </a>
@@ -873,6 +920,7 @@ function AccountPanel({
 
 function YieldWorkspacePanel({
   authenticated,
+  sessionLoading,
   action,
   onActionChange,
   amount,
@@ -903,6 +951,7 @@ function YieldWorkspacePanel({
   configured,
 }: {
   authenticated: boolean;
+  sessionLoading: boolean;
   action: "deposit" | "withdraw";
   onActionChange: (action: "deposit" | "withdraw") => void;
   amount: string;
@@ -964,7 +1013,17 @@ function YieldWorkspacePanel({
         </span>
       </div>
 
-      {!authenticated ? (
+      {sessionLoading ? (
+        <div className="mt-5 border border-tts-border bg-tts-bg p-4 text-sm leading-6 text-tts-muted">
+          <p className="flex items-center gap-2 font-black text-tts-deep">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            {L("Carregando sua conta", "Loading your account")}
+          </p>
+          <p className="mt-1">
+            {L("Estamos conferindo sua sessão antes de mostrar saldos e confirmação.", "We are checking your session before showing balances and confirmation.")}
+          </p>
+        </div>
+      ) : !authenticated ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
           <p className="font-black text-tts-gold">{L("Entre para revisar com seus saldos", "Sign in to review with your balances")}</p>
           <p className="mt-1">
@@ -980,7 +1039,7 @@ function YieldWorkspacePanel({
       ) : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MiniStat label={L("Saldo na conta", "Account balance")} value={balanceForSelected ? formatAmount(balanceForSelected.balance, language) : L("A consultar", "Pending")} />
+        <MiniStat label={L("Saldo na conta", "Account balance")} value={sessionLoading ? L("Carregando", "Loading") : balanceForSelected ? formatAmount(balanceForSelected.balance, language) : L("A consultar", "Pending")} />
         <MiniStat label={L("Saldo rendendo", "Earning balance")} value={yieldBalanceLoading ? L("Carregando", "Loading") : yieldBalance?.balance ? formatAmount(yieldBalance.balance, language) : L("A consultar", "Pending")} />
         <MiniStat label={L("Taxa anual", "Annual rate")} value={selectedOption ? optionRate(selectedOption, language) : L("Indisponível", "Unavailable")} />
         <MiniStat label={L("Em 12 meses", "In 12 months")} value={selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Aguardando", "Waiting")} />
