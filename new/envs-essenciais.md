@@ -11,14 +11,15 @@ DEFINDEX_API_KEY=
 DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
-DEFINDEX_ENABLE_EXECUTION=false
+DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
 DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
 CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ```
 
-O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate testar deposito, saque, assinatura e retorno em testnet.
+O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM. Para executar deposito/saque em testnet, use `DEFINDEX_ENABLE_EXECUTION=true`. Mainnet continua bloqueada enquanto `DEFINDEX_ALLOW_MAINNET_EXECUTION=false`.
 
 Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, CETES/TESOURO pode aparecer como real para o usuario; nao recrie o asset `BRL`.
 
@@ -86,7 +87,8 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 # DEFINDEX_API_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
-DEFINDEX_ENABLE_EXECUTION=false
+DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
 DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
@@ -106,13 +108,13 @@ Como obter os vaults:
 Script para buscar/preencher o bloco de env automaticamente:
 
 ```bash
-npm --prefix backend run defindex:env -- --network testnet
+npm --prefix backend run defindex:env -- --network testnet --enable-execution
 ```
 
 Para gerar um arquivo separado:
 
 ```bash
-npm --prefix backend run defindex:env -- --network testnet --write .env.defindex.testnet
+npm --prefix backend run defindex:env -- --network testnet --enable-execution --write .env.defindex.testnet
 ```
 
 O script usa `@defindex/sdk` para health/factory, consulta o registry publico da Defindex e tenta descobrir vaults em `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando encontrou vault real. Se EURC ou TESOURO nao aparecerem, nao invente valor: significa que nenhum vault testnet validado foi encontrado automaticamente.
@@ -133,7 +135,7 @@ await sdk.getVaultInfo(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTN
 await sdk.getVaultAPY(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTNET);
 ```
 
-Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate validar API key, vaults, APY, balance, XDR de deposito, XDR de saque, assinatura pela wallet e saque real em testnet. So depois disso mude para `true`.
+Para testnet com execucao real, use `DEFINDEX_ENABLE_EXECUTION=true` depois de validar API key, vaults, APY, balance, XDR de deposito, XDR de saque e assinatura pela wallet. O backend so executa se `DEFINDEX_NETWORK` e `STELLAR_NETWORK` apontarem para a mesma rede. Para mainnet, alem disso, exige `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
 Para EURC funcionar em producao:
 

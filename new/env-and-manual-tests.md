@@ -50,7 +50,8 @@ DEFINDEX_API_KEY=
 DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
-DEFINDEX_ENABLE_EXECUTION=false
+DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
 DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
@@ -100,13 +101,13 @@ TELEGRAM_NOTIFY_SECRET=same-value-as-backend
 
 The bot crash `AGENT_INGEST_SECRET is required` means this value is missing in Telegram or does not match the backend.
 
-## 5. Do not enable yet
+## 5. Keep mainnet and unknown vaults disabled
 
-Keep these off/empty until they are validated in the active network:
+For testnet execution, keep `DEFINDEX_ENABLE_EXECUTION=true`. Keep mainnet and unvalidated vaults off/empty:
 
 ```env
-# Leave false until deposit, withdraw, signing, and return path are tested in testnet.
-DEFINDEX_ENABLE_EXECUTION=false
+DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 
 # Do not invent these. Fill only when a real validated vault exists.
 DEFINDEX_EURC_VAULT=
@@ -157,7 +158,7 @@ npm --prefix frontend test
 Optional yield env discovery:
 
 ```bash
-npm --prefix backend run defindex:env -- --network testnet
+npm --prefix backend run defindex:env -- --network testnet --enable-execution
 ```
 
 ## 8. Manual tests
@@ -186,7 +187,7 @@ Then:
 2. Confirm the selected balance updates the right panel.
 3. Enter `100`.
 4. Click `Revisar`.
-5. With `DEFINDEX_ENABLE_EXECUTION=false`, final confirmation should stay disabled/off and the copy should say this clearly.
+5. With `DEFINDEX_ENABLE_EXECUTION=true` on testnet, final confirmation should show the PIN path for a signed-in wallet. Keep `DEFINDEX_ALLOW_MAINNET_EXECUTION=false` unless you are deliberately testing mainnet.
 
 ### B. PIX add money
 

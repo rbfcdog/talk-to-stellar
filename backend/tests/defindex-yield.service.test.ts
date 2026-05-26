@@ -82,6 +82,69 @@ describe('DefindexYieldService', () => {
     });
   });
 
+  it('enables execution on testnet when requested and configured', () => {
+    clearDefindexVaultEnv();
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.DEFINDEX_API_KEY = 'sk_test';
+    process.env.DEFINDEX_NETWORK = 'testnet';
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
+
+    const runtime = DefindexYieldService.getRuntimeInfo();
+
+    expect(runtime).toMatchObject({
+      configured: true,
+      network: 'testnet',
+      stellar_network: 'testnet',
+      network_mismatch: false,
+      execution_requested: true,
+      execution_enabled: true,
+      mainnet_execution_allowed: false,
+    });
+    expect(runtime.execution_blocked_reason).toBeUndefined();
+  });
+
+  it('does not enable mainnet execution from the general execution flag alone', () => {
+    clearDefindexVaultEnv();
+    process.env.STELLAR_NETWORK = 'PUBLIC';
+    process.env.DEFINDEX_API_KEY = 'sk_test';
+    process.env.DEFINDEX_NETWORK = 'mainnet';
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
+
+    const runtime = DefindexYieldService.getRuntimeInfo();
+
+    expect(runtime).toMatchObject({
+      configured: true,
+      network: 'mainnet',
+      stellar_network: 'mainnet',
+      network_mismatch: false,
+      execution_requested: true,
+      execution_enabled: false,
+      mainnet_execution_allowed: false,
+    });
+    expect(runtime.execution_blocked_reason).toContain('DEFINDEX_ALLOW_MAINNET_EXECUTION=true');
+  });
+
+  it('blocks yield operations when Defindex and Stellar networks differ', () => {
+    clearDefindexVaultEnv();
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.DEFINDEX_API_KEY = 'sk_test';
+    process.env.DEFINDEX_NETWORK = 'mainnet';
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
+
+    const runtime = DefindexYieldService.getRuntimeInfo();
+
+    expect(runtime).toMatchObject({
+      network: 'mainnet',
+      stellar_network: 'testnet',
+      network_mismatch: true,
+      execution_enabled: false,
+    });
+    expect(() => DefindexYieldService.requireVault('USDC')).toThrow('must match STELLAR_NETWORK');
+  });
+
   it('converts human amounts to 7-decimal contract units', () => {
     expect(DefindexYieldService.amountToContractUnits('1')).toBe(10000000);
     expect(DefindexYieldService.amountToContractUnits('0.0000001')).toBe(1);
