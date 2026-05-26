@@ -67,18 +67,20 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
-DEFINDEX_USDC_VAULT=
-DEFINDEX_EURC_VAULT=
-DEFINDEX_TESOURO_VAULT=
-DEFINDEX_XLM_VAULT=
+DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
+DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
+DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ```
 
 Os valores `DEFINDEX_*_VAULT` sao enderecos de contrato Soroban do vault, no formato `C...`. Eles nao sao issuer do asset, nao sao a conta `G...` do usuario e nao sao o factory address.
 
+Testnet validado agora: USDC, XLM e CETES. Nao configure yield de EURC ou TESOURO em testnet ate existir vault validado para esses assets.
+
 Como obter os vaults:
 
 1. Use o app/dashboard da Defindex para selecionar ou criar um vault e copie o endereco do vault (`C...`) para o asset/rede correta.
-2. Ou crie via SDK/factory: `getFactoryAddress(SupportedNetworks.TESTNET)` mostra a factory; `createVault(...)` gera o XDR de criacao. Depois de assinar/submeter, use o endereco do vault criado em `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT` ou `DEFINDEX_XLM_VAULT`.
+2. Ou crie via SDK/factory: `getFactoryAddress(SupportedNetworks.TESTNET)` mostra a factory; `createVault(...)` gera o XDR de criacao. Depois de assinar/submeter, use o endereco do vault criado em um env `DEFINDEX_<ASSET>_VAULT`.
 3. Se for usar vault curado por parceiro/Defindex, peca o endereco oficial do vault para o asset e rede desejados. Valide antes de expor ao usuario.
 
 Script para buscar/preencher o bloco de env automaticamente:
@@ -93,7 +95,7 @@ Para gerar um arquivo separado:
 npm --prefix backend run defindex:env -- --network testnet --write .env.defindex.testnet
 ```
 
-O script usa `@defindex/sdk` para health/factory, consulta o registry publico da Defindex e tenta descobrir vaults em `/vault/discover`. Se `DEFINDEX_EURC_VAULT` ou `EURC_ISSUER_TESTNET` sair vazio, nao invente valor: significa que nenhum vault/issuer EURC testnet validado foi encontrado automaticamente. Nesse caso, crie um vault EURC testnet na Defindex ou peca ao time Defindex/PaltaLabs o vault e issuer de teste.
+O script usa `@defindex/sdk` para health/factory, consulta o registry publico da Defindex e tenta descobrir vaults em `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando encontrou vault real. Se EURC ou TESOURO nao aparecerem, nao invente valor: significa que nenhum vault testnet validado foi encontrado automaticamente.
 
 Validacao minima antes de ligar execucao:
 
@@ -124,7 +126,7 @@ DEFINDEX_NETWORK=mainnet
 DEFINDEX_EURC_VAULT=C... # vault EURC mainnet validado
 ```
 
-Para testnet, use `DEFINDEX_NETWORK=testnet` e so preencha `EURC_ISSUER_TESTNET`/`DEFINDEX_EURC_VAULT` se voce tiver issuer e vault EURC de teste realmente validados. Nao use o issuer publico da Circle para transacao em testnet.
+Para testnet, use `DEFINDEX_NETWORK=testnet` e so preencha `EURC_ISSUER_TESTNET`/`DEFINDEX_EURC_VAULT` ou `DEFINDEX_TESOURO_VAULT` se voce tiver issuer e vault de teste realmente validados. Nao use o issuer publico da Circle para transacao em testnet.
 
 ## 3. Para passkey
 
