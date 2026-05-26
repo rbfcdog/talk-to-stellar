@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -14,14 +14,18 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ArrowUpFromLine,
+  BadgeCheck,
   BookOpen,
   CheckCircle2,
   Coins,
+  FileCheck2,
   Loader2,
+  LockKeyhole,
   PiggyBank,
   RefreshCw,
   SlidersHorizontal,
   Sparkles,
+  WalletCards,
 } from "lucide-react";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -258,12 +262,18 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
 function formatPercent(value: unknown, language: AppLanguage = "pt-BR") {
   const raw = Array.isArray(value) ? value[0] : value;
   const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
-  if (!Number.isFinite(parsed)) return localCopy(language, "A consultar", "Pending");
+  if (!Number.isFinite(parsed)) return localCopy(language, "Taxa indisponível", "Rate unavailable");
   return `${parsed.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
 }
 
 function optionRate(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
   return formatPercent(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy, language);
+}
+
+function optionRateText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
+  if (!option) return localCopy(language, "Sem taxa disponível", "No rate available");
+  const rate = optionRate(option, language);
+  return `${rate} ${localCopy(language, "ao ano", "per year")}`;
 }
 
 function parseRate(value: unknown): number | null {
@@ -572,7 +582,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         }),
       });
       setYieldResult(payload);
-      setApiState({ loading: false, message: L("Solicitação pronta. Revise e confirme quando quiser.", "Request ready. Review and confirm whenever you want."), error: "" });
+      setApiState({ loading: false, message: L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."), error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
     }
@@ -597,7 +607,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       });
       setYieldResult(payload);
       setPin("");
-      setApiState({ loading: false, message: L("Pedido confirmado. Vamos atualizar seus saldos em instantes.", "Request confirmed. We will update your balances shortly."), error: "" });
+      setApiState({ loading: false, message: L("Operação confirmada. Vamos atualizar seus saldos em instantes.", "Operation confirmed. We will update your balances shortly."), error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
     }
@@ -619,12 +629,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
               {L("Rendimentos", "Yield")}
             </div>
             <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
-              {L("Rendimento da sua conta", "Yield from your account")}
+              {L("Guardar dinheiro rendendo", "Keep money earning")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
-                "Escolha um saldo da conta, veja a taxa disponível e revise antes de confirmar. Nada sai sem revisão.",
-                "Choose an account balance, see the available rate, and review before confirming. Nothing moves without review."
+                "Veja seus saldos, escolha quanto quer guardar, simule o rendimento e confirme só depois da revisão. A experiência segue o fluxo de banco: saldo, aplicação, revisão e comprovante.",
+                "See your balances, choose how much to save, preview the yield, and confirm only after review. The flow follows a banking pattern: balance, deposit, review, and receipt."
               )}
             </p>
           </div>
@@ -673,6 +683,16 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             bestOption={bestOption}
           />
         ) : null}
+
+        <BankOverviewPanel
+          authenticated={session.authenticated}
+          sessionLoading={sessionLoading}
+          configured={configured}
+          confirmationEnabled={confirmationEnabled}
+          balances={balances}
+          options={options}
+          selectedOption={selectedOption}
+        />
 
         <section className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
           <AccountPanel
@@ -744,24 +764,24 @@ function YieldTutorialPanel({
   const bestProfile = moneyProfile(optionCode(bestOption));
   const steps = [
     {
-      title: L("1. Entre na sua conta", "1. Sign in"),
+      title: L("1. Conta", "1. Account"),
       body: authenticated
-        ? L("Conta carregada. Você já pode revisar valores.", "Account loaded. You can review values.")
-        : L("Sem login, a tela só mostra uma simulação.", "Without sign-in, this screen only shows a preview."),
+        ? L("Conta conectada. Seus saldos entram na revisão.", "Account connected. Your balances feed the review.")
+        : L("Entre para carregar saldos e preparar uma revisão real.", "Sign in to load balances and prepare a real review."),
       ready: authenticated,
     },
     {
-      title: L("2. Escolha uma opção disponível", "2. Choose an available option"),
+      title: L("2. Aplicação", "2. Deposit"),
       body: hasOptions
-        ? L(`Melhor opção agora: ${profileName(bestProfile, language)}.`, `Best option now: ${profileName(bestProfile, language)}.`)
-        : L("O backend ainda não devolveu nenhuma opção de rendimento.", "The backend has not returned any yield option yet."),
+        ? L(`Opção em destaque: ${profileName(bestProfile, language)}.`, `Highlighted option: ${profileName(bestProfile, language)}.`)
+        : L("Ainda não há opção de rendimento configurada.", "No yield option is configured yet."),
       ready: hasOptions,
     },
     {
-      title: L("3. Revise antes do PIN", "3. Review before PIN"),
+      title: L("3. Revisão", "3. Review"),
       body: confirmationEnabled
-        ? L("Depois da revisão, o PIN conclui a operação.", "After review, the PIN completes the operation.")
-        : L("Neste ambiente, a confirmação final ainda fica desligada.", "In this environment, final confirmation is still off."),
+        ? L("Depois da simulação, o PIN conclui a operação.", "After the preview, the PIN completes the operation.")
+        : L("Modo revisão: você simula e valida sem movimentar saldo.", "Review mode: you preview and validate without moving balance."),
       ready: confirmationEnabled,
     },
   ];
@@ -772,12 +792,12 @@ function YieldTutorialPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <BookOpen className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Primeiros passos para render", "First steps to earn")}
+            {L("Como funciona", "How it works")}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
             {L(
-              "Use esta tela de cima para baixo: escolha uma opção disponível, informe o valor, revise a simulação e só depois confirme.",
-              "Use this screen top to bottom: choose an available option, enter the amount, review the preview, and only then confirm."
+              "O fluxo é parecido com banco: escolha o saldo, informe o valor, veja taxa e projeção, depois gere a revisão antes de qualquer PIN.",
+              "The flow is bank-like: choose the balance, enter the amount, see rate and projection, then generate the review before any PIN."
             )}
           </p>
         </div>
@@ -786,7 +806,7 @@ function YieldTutorialPanel({
           className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
         >
           <PiggyBank className="h-4 w-4" aria-hidden="true" />
-          {L("Ir ao plano", "Go to plan")}
+          {L("Começar revisão", "Start review")}
         </a>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -801,6 +821,122 @@ function YieldTutorialPanel({
         ))}
       </div>
     </section>
+  );
+}
+
+function BankOverviewPanel({
+  authenticated,
+  sessionLoading,
+  configured,
+  confirmationEnabled,
+  balances,
+  options,
+  selectedOption,
+}: {
+  authenticated: boolean;
+  sessionLoading: boolean;
+  configured: boolean;
+  confirmationEnabled: boolean;
+  balances: BalanceLine[];
+  options: YieldOption[];
+  selectedOption: YieldOption | null;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const selectedProfile = moneyProfile(optionCode(selectedOption));
+  const accountValue = sessionLoading
+    ? L("Verificando", "Checking")
+    : authenticated
+      ? L("Conectada", "Connected")
+      : L("Entrar", "Sign in");
+  const accountDetail = authenticated
+    ? L("Saldos protegidos por revisão e PIN.", "Balances protected by review and PIN.")
+    : L("Entre para ver saldos reais.", "Sign in to see real balances.");
+  const setupValue = configured && options.length
+    ? `${options.length}`
+    : L("Em preparo", "Setup");
+  const setupDetail = configured && options.length
+    ? L("Opções disponíveis para simular.", "Options available to preview.")
+    : L("Configure o ambiente para liberar opções.", "Configure the environment to enable options.");
+  const selectedValue = selectedOption
+    ? profileName(selectedProfile, language)
+    : L("Escolha saldo", "Choose balance");
+  const selectedDetail = selectedOption
+    ? optionRateText(selectedOption, language)
+    : L("Selecione uma opção disponível.", "Select an available option.");
+  const confirmationValue = confirmationEnabled
+    ? L("PIN ativo", "PIN ready")
+    : L("Modo revisão", "Review mode");
+  const confirmationDetail = confirmationEnabled
+    ? L("Confirmar com PIN movimenta saldo.", "Confirming with PIN moves balance.")
+    : L("Simula e prepara sem movimentar saldo.", "Previews and prepares without moving balance.");
+
+  return (
+    <section className="grid gap-3 md:grid-cols-4" aria-label={L("Resumo bancário", "Banking summary")}>
+      <BankStatusCard
+        icon={<WalletCards className="h-5 w-5" aria-hidden="true" />}
+        label={L("Conta", "Account")}
+        value={accountValue}
+        detail={accountDetail}
+        tone={authenticated ? "confirm" : "warn"}
+      />
+      <BankStatusCard
+        icon={<PiggyBank className="h-5 w-5" aria-hidden="true" />}
+        label={L("Aplicações", "Yield options")}
+        value={setupValue}
+        detail={setupDetail}
+        tone={configured && options.length ? "confirm" : "warn"}
+      />
+      <BankStatusCard
+        icon={<Coins className="h-5 w-5" aria-hidden="true" />}
+        label={L("Selecionado", "Selected")}
+        value={selectedValue}
+        detail={selectedDetail}
+        tone={selectedOption ? "confirm" : "neutral"}
+      />
+      <BankStatusCard
+        icon={<LockKeyhole className="h-5 w-5" aria-hidden="true" />}
+        label={L("Segurança", "Security")}
+        value={confirmationValue}
+        detail={confirmationDetail}
+        tone={confirmationEnabled ? "confirm" : "warn"}
+      />
+    </section>
+  );
+}
+
+function BankStatusCard({
+  icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "confirm" | "warn" | "neutral";
+}) {
+  const toneClass = tone === "confirm"
+    ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
+    : tone === "warn"
+      ? "border-tts-gold bg-tts-gold-bg text-tts-gold"
+      : "border-tts-border bg-tts-bg text-tts-muted";
+
+  return (
+    <div className="border border-tts-border bg-tts-surface p-4">
+      <div className="flex items-start gap-3">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center border ${toneClass}`}>
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+          <p className="mt-1 text-base font-black text-tts-deep">{value}</p>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -840,26 +976,31 @@ function AccountPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-            {L("Sua conta", "Your account")}
+            {L("Carteira", "Balances")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {sessionLoading
-              ? L("Verificando sua conta.", "Checking your account.")
+              ? L("Verificando sua sessão e saldos.", "Checking your session and balances.")
               : authenticated
-              ? L("Escolha um saldo para revisar rendimento.", "Choose a balance to review yield.")
-              : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
+              ? L("Toque em um saldo para montar uma revisão.", "Tap a balance to build a review.")
+              : L("Entre para ver saldos reais e preparar uma aplicação.", "Sign in to see real balances and prepare a deposit.")}
           </p>
         </div>
         <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-          {sessionLoading ? L("Carregando", "Loading") : authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
+          {sessionLoading ? L("Carregando", "Loading") : authenticated ? L("Ativa", "Active") : L("Entrar", "Sign in")}
         </span>
       </div>
 
       {accountPublicKey ? (
         <p className="mt-3 border border-tts-border bg-tts-bg px-3 py-2 text-xs font-bold text-tts-muted">
-          {L("Conta", "Account")}: {shortAccount(accountPublicKey)}
+          {L("ID da conta", "Account ID")}: {shortAccount(accountPublicKey)}
         </p>
       ) : null}
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <MiniStat label={L("Saldos", "Balances")} value={sessionLoading ? L("Carregando", "Loading") : String(balanceItems.length)} detail={L("na carteira", "in account")} />
+        <MiniStat label={L("Com rendimento", "Earning-ready")} value={String(options.length)} detail={L("opções", "options")} />
+      </div>
 
       <div className="mt-5 grid gap-2">
         {balanceItems.length ? balanceItems.map((item) => {
@@ -881,10 +1022,10 @@ function AccountPanel({
                 <span className="mt-2 block text-sm font-black text-tts-deep">{option ? optionTitle(option, language) : profileName(profile, language)}</span>
                 {option ? (
                   <span className="mt-1 block text-xs font-bold text-tts-confirm">
-                    {optionRate(option, language)} {L("ao ano", "per year")}
+                    {optionRateText(option, language)}
                   </span>
                 ) : (
-                  <span className="mt-1 block text-xs text-tts-muted">{L("Sem rendimento ativo", "No active yield")}</span>
+                  <span className="mt-1 block text-xs text-tts-muted">{L("Saldo disponível para converter", "Available to convert")}</span>
                 )}
               </span>
               <span className="text-right">
@@ -896,22 +1037,22 @@ function AccountPanel({
         }) : (
           <div className="border border-tts-border bg-tts-bg p-4 text-sm leading-6 text-tts-muted">
             {sessionLoading || (authenticated && balancesLoading)
-              ? L("Carregando seus saldos da conta.", "Loading your account balances.")
+              ? L("Carregando saldos da sua conta.", "Loading your account balances.")
               : authenticated
-                ? L("Nenhum saldo disponível apareceu ainda. Toque em atualizar em alguns segundos.", "No available balance appeared yet. Tap refresh in a few seconds.")
-                : L("Entre na sua conta para carregar seus saldos.", "Sign in to load your balances.")}
+                ? L("Nenhum saldo apareceu ainda. Atualize em alguns segundos.", "No balance appeared yet. Refresh in a few seconds.")
+                : L("Entre com segurança para carregar sua carteira.", "Sign in securely to load your account.")}
           </div>
         )}
       </div>
 
       {!authenticated && !sessionLoading ? (
         <a href="/login?next=/yield" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
-          {L("Entrar na conta", "Sign in")}
+          {L("Entrar com segurança", "Sign in securely")}
         </a>
       ) : null}
 
       <a href="/convert" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
-        {L("Converter outro saldo", "Convert another balance")}
+        {L("Converter saldo", "Convert balance")}
       </a>
     </section>
   );
@@ -988,6 +1129,24 @@ function YieldWorkspacePanel({
   const bestProfile = moneyProfile(bestOptionCode);
   const hasPrepared = Boolean(result);
   const canConfirm = canPrepare && confirmationEnabled && pin.length >= 4 && !apiLoading;
+  const accountBalanceLabel = sessionLoading
+    ? L("Carregando saldo", "Loading balance")
+    : balanceForSelected
+      ? `${formatAmount(balanceForSelected.balance, language)} ${profileShort}`
+      : L("Saldo não disponível", "Balance unavailable");
+  const earningBalanceLabel = yieldBalanceLoading
+    ? L("Carregando posição", "Loading position")
+    : yieldBalance?.balance
+      ? `${formatAmount(yieldBalance.balance, language)} ${profileShort}`
+      : L("Nada aplicado ainda", "Nothing deposited yet");
+  const annualRateLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
+  const projectionLabel = selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
+  const actionTitle = action === "deposit"
+    ? L("Aplicar saldo", "Deposit balance")
+    : L("Resgatar para saldo", "Withdraw to balance");
+  const actionDescription = action === "deposit"
+    ? L("O valor sai do saldo disponível e passa a compor a posição rendendo depois da confirmação.", "The amount leaves available balance and becomes an earning position after confirmation.")
+    : L("O valor sai da posição rendendo e volta para o saldo disponível depois da confirmação.", "The amount leaves the earning position and returns to available balance after confirmation.");
   const tooltipFormatter = (value: unknown, name: unknown) => {
     const label = String(name) === "earned" ? L("Rendimento", "Yield") : L("Saldo", "Balance");
     return [`${formatAmount(value, language)} ${profileShort}`, label];
@@ -999,17 +1158,22 @@ function YieldWorkspacePanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Rendimento selecionado", "Selected yield")}
+            {L("Plano de rendimento", "Yield plan")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
-              ? L("Esse saldo está conectado a uma opção de rendimento.", "This balance is connected to a yield option.")
-              : L("Esse saldo ainda não tem rendimento ativo neste ambiente.", "This balance does not have active yield in this environment yet.")}
+              ? L("Monte a aplicação, revise a simulação e confirme só quando tudo estiver correto.", "Build the deposit, review the preview, and confirm only when everything is right.")
+              : L("Esse saldo ainda não tem rendimento ativo. A tela sugere uma conversão quando existir alternativa.", "This balance does not have active yield yet. The screen suggests conversion when an alternative exists.")}
           </p>
         </div>
-        <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
-          {profileShort} · {profileName(selectedProfile, language)}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
+            {profileShort} · {profileName(selectedProfile, language)}
+          </span>
+          <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${confirmationEnabled ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
+            {confirmationEnabled ? L("PIN ativo", "PIN ready") : L("Modo revisão", "Review mode")}
+          </span>
+        </div>
       </div>
 
       {sessionLoading ? (
@@ -1031,6 +1195,12 @@ function YieldWorkspacePanel({
               "Yield is calculated from your account. After signing in, your balances appear here and you can review before any confirmation."
             )}
           </p>
+          <div className="mt-3 border border-tts-border bg-tts-surface p-3">
+            <p className="font-black text-tts-deep">{L("Revisão segura", "Secure review")}</p>
+            <p className="mt-1 text-xs leading-5 text-tts-muted">
+              {L("A tela mostra valor, taxa e operação antes do PIN.", "The screen shows amount, rate, and operation before PIN.")}
+            </p>
+          </div>
           <a href="/login?next=/yield" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
             {L("Entrar na conta", "Sign in")}
           </a>
@@ -1038,10 +1208,10 @@ function YieldWorkspacePanel({
       ) : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MiniStat label={L("Saldo na conta", "Account balance")} value={sessionLoading ? L("Carregando", "Loading") : balanceForSelected ? formatAmount(balanceForSelected.balance, language) : L("A consultar", "Pending")} />
-        <MiniStat label={L("Saldo rendendo", "Earning balance")} value={yieldBalanceLoading ? L("Carregando", "Loading") : yieldBalance?.balance ? formatAmount(yieldBalance.balance, language) : L("A consultar", "Pending")} />
-        <MiniStat label={L("Taxa anual", "Annual rate")} value={selectedOption ? optionRate(selectedOption, language) : L("Indisponível", "Unavailable")} />
-        <MiniStat label={L("Em 12 meses", "In 12 months")} value={selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Aguardando", "Waiting")} />
+        <MiniStat label={L("Disponível", "Available")} value={accountBalanceLabel} detail={L("saldo da conta", "account balance")} />
+        <MiniStat label={L("Rendendo", "Earning")} value={earningBalanceLabel} detail={L("posição atual", "current position")} />
+        <MiniStat label={L("Taxa informada", "Reported rate")} value={annualRateLabel} detail={L("pode variar", "may vary")} />
+        <MiniStat label={L("Projeção 12m", "12m projection")} value={projectionLabel} detail={L("estimativa", "estimate")} />
       </div>
 
       {authenticated && !selectedHasYield ? (
@@ -1059,7 +1229,7 @@ function YieldWorkspacePanel({
           </p>
           {bestOption ? (
             <a href={convertToBestYieldHref} className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
-              {L("Converter para melhor opção", "Convert to best option")}
+              {L("Converter e revisar", "Convert and review")}
             </a>
           ) : null}
         </div>
@@ -1073,7 +1243,7 @@ function YieldWorkspacePanel({
                 className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-                {L("Guardar", "Save")}
+                {L("Aplicar", "Deposit")}
               </button>
               <button
                 type="button"
@@ -1083,6 +1253,10 @@ function YieldWorkspacePanel({
                 <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
                 {L("Resgatar", "Withdraw")}
               </button>
+            </div>
+            <div className="mt-4 border border-tts-border bg-tts-surface p-3">
+              <p className="text-sm font-black text-tts-deep">{actionTitle}</p>
+              <p className="mt-1 text-xs leading-5 text-tts-muted">{actionDescription}</p>
             </div>
 
             <label className="mt-4 block text-sm font-black text-tts-deep" htmlFor="yield-amount">
@@ -1112,7 +1286,7 @@ function YieldWorkspacePanel({
               ))}
             </div>
             <p id="yield-amount-help" className="mt-2 text-xs leading-5 text-tts-muted">
-              {L("A revisão usa seus saldos da conta. Nenhum valor sai sem confirmação.", "Review uses your account balances. Nothing moves without confirmation.")}
+              {L("A revisão usa seus saldos da conta. Nada sai sem uma etapa de confirmação.", "Review uses your account balances. Nothing moves without a confirmation step.")}
             </p>
 
             <button
@@ -1166,8 +1340,8 @@ function YieldWorkspacePanel({
                 disabled={!canPrepare || apiLoading}
                 className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
               >
-                {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                {L("Revisar", "Review")}
+                {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
+                {L("Preparar revisão", "Prepare review")}
               </button>
               {confirmationEnabled ? (
                 <button
@@ -1176,11 +1350,12 @@ function YieldWorkspacePanel({
                   disabled={!canConfirm}
                   className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {L("Confirmar", "Confirm")}
+                  <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                  {L("Confirmar com PIN", "Confirm with PIN")}
                 </button>
               ) : (
                 <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                  {L("Confirmação final desligada neste ambiente.", "Final confirmation is off in this environment.")}
+                  {L("Modo revisão: valida sem movimentar saldo.", "Review mode: validates without moving balance.")}
                 </div>
               )}
             </div>
@@ -1188,27 +1363,54 @@ function YieldWorkspacePanel({
 
           <div className="grid gap-4">
             <div className="border border-tts-border bg-tts-bg p-4">
-              <h3 className="text-base font-black text-tts-deep">{L("Revisão", "Review")}</h3>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-black text-tts-deep">{L("Revisão segura", "Secure review")}</h3>
+                  <p className="mt-1 text-xs leading-5 text-tts-muted">
+                    {L("Resumo antes de qualquer confirmação.", "Summary before any confirmation.")}
+                  </p>
+                </div>
+                <BadgeCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+              </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <MiniStat label={L("Ação", "Action")} value={action === "deposit" ? L("Guardar rendendo", "Save for yield") : L("Resgatar", "Withdraw")} />
+                <MiniStat label={L("Operação", "Operation")} value={actionTitle} />
                 <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
+                <MiniStat label={L("Taxa", "Rate")} value={annualRateLabel} />
+                <MiniStat label={L("Segurança", "Security")} value={confirmationEnabled ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")} />
               </div>
               <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
                 {hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
-                    {L("Solicitação preparada. Confira os valores antes de confirmar.", "Request prepared. Check values before confirming.")}
+                    {L("Revisão preparada. Confira taxa, valor e operação antes de confirmar.", "Review prepared. Check rate, amount, and operation before confirming.")}
                   </p>
                 ) : (
-                  <p>{L("Clique em revisar para preparar a operação com sua conta.", "Click review to prepare the operation with your account.")}</p>
+                  <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>
                 )}
+              </div>
+              <div className="mt-3 grid gap-2 text-xs leading-5 text-tts-muted sm:grid-cols-3">
+                <p className="border border-tts-border bg-tts-surface p-3">
+                  <span className="block font-black text-tts-deep">{L("1. Saldo", "1. Balance")}</span>
+                  {L("Usa a carteira conectada.", "Uses the connected account.")}
+                </p>
+                <p className="border border-tts-border bg-tts-surface p-3">
+                  <span className="block font-black text-tts-deep">{L("2. Revisão", "2. Review")}</span>
+                  {L("Mostra valor e taxa antes do PIN.", "Shows amount and rate before PIN.")}
+                </p>
+                <p className="border border-tts-border bg-tts-surface p-3">
+                  <span className="block font-black text-tts-deep">{L("3. Registro", "3. Record")}</span>
+                  {L("Após confirmar, vira histórico da conta.", "After confirmation, it becomes account history.")}
+                </p>
               </div>
             </div>
 
             <div className="border border-tts-border bg-tts-bg p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-base font-black text-tts-deep">{L("Projeção", "Projection")}</h3>
+                <h3 className="text-base font-black text-tts-deep">{L("Simulação com a taxa atual", "Preview with current rate")}</h3>
                 <span className="text-xs font-bold text-tts-muted">{`${formatAmount(projectedEarned, language)} ${profileShort} ${L("estimado", "estimated")}`}</span>
               </div>
+              <p className="mb-3 text-xs leading-5 text-tts-muted">
+                {L("A taxa pode variar. Esta simulação não é promessa de retorno.", "The rate may vary. This preview is not a promise of return.")}
+              </p>
               <div className="h-[220px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={projectionData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
@@ -1228,11 +1430,12 @@ function YieldWorkspacePanel({
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-3">
       <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{label}</p>
       <p className="mt-1 text-sm font-black text-tts-deep">{value}</p>
+      {detail ? <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p> : null}
     </div>
   );
 }

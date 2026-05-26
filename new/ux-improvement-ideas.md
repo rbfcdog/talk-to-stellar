@@ -2,6 +2,30 @@
 
 Este documento lista melhorias possiveis para a experiencia nova do app: chat, rendimento, conversao, PIX, passkey e ciclo completo do dinheiro. A prioridade e reduzir confusao, diminuir cliques e deixar claro quando algo esta em teste, em revisao ou pronto para executar.
 
+## Atualizacao: UX de rendimento mais parecida com banco
+
+Arquivo principal implementado: `frontend/app/rendimentos/rendimentos-client.tsx`.
+
+Objetivo: a tela `/yield` deve parecer uma tela bancaria de carteira + aplicacao + revisao, nao uma tela tecnica de protocolo.
+
+Mudancas aplicadas:
+- resumo superior com `Conta`, `Aplicacoes`, `Selecionado` e `Seguranca`;
+- linguagem de banco: `Carteira`, `Aplicar`, `Resgatar`, `Revisao segura`, `PIN ativo`, `Modo revisao`;
+- bloco de carteira separado do plano de rendimento;
+- revisao em 3 etapas: saldo, revisao, registro;
+- simulacao com aviso de que taxa pode variar e nao e promessa de retorno;
+- estados vazios mais claros: `Saldo nao disponivel`, `Nada aplicado ainda`, `Taxa indisponivel`;
+- ambiente sem execucao aparece como `Modo revisao`, nao como erro.
+
+Proximas melhorias para deixar ainda mais bancario:
+- extrato de rendimento com historico de aplicacoes/resgates;
+- comprovante visual apos confirmacao;
+- seletor de prazo simples: 1 mes, 6 meses, 12 meses;
+- estado `Conta em analise` quando KYC/compliance impedir execucao;
+- alerta de risco/regulacao em linguagem curta antes do PIN;
+- componente unico de `Resumo da conta` usado tambem em `/convert` e `/money-cycle`;
+- teste Playwright com screenshots desktop/mobile e varredura de termos tecnicos bloqueados.
+
 ## Prioridade 1: clareza imediata
 
 ### 1. Estado unico de conta em todas as telas
