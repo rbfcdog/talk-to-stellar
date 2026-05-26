@@ -6,11 +6,19 @@ export async function GET(req: Request) {
   return NextResponse.json({
     authenticated: Boolean(session.sessionId && session.sessionToken),
     session_id: session.sessionId || "",
+  }, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
   });
 }
 
 export async function DELETE() {
-  const response = NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true }, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
   clearSessionCookies(response);
   return response;
 }

@@ -15,7 +15,10 @@ function normalizeTimestamp(raw: string | null): number {
 export async function getClientSession(): Promise<{ sessionId: string; authenticated: boolean }> {
   if (typeof window === "undefined") return { sessionId: "", authenticated: false };
   try {
-    const response = await fetch("/api/session", { cache: "no-store" });
+    const response = await fetch("/api/session", {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
     const payload = await response.json().catch(() => ({}));
     return {
       sessionId: String(payload?.session_id || payload?.sessionId || "").trim(),
