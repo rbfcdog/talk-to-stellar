@@ -132,6 +132,8 @@ const wiseReceivingFeesUsd: Record<PayoutRail, number> = {
   swift_local: 6.11,
 }
 
+const INITIAL_QUOTE_TIME = new Date("2026-05-25T12:00:00.000Z")
+
 const anchorStatusRank: Record<AnchorStatus, number> = {
   draft: 0,
   customer_ready: 1,
@@ -274,7 +276,7 @@ export default function GlobalTransferClient() {
   const [anchorStatus, setAnchorStatus] = useState<AnchorStatus>("draft")
   const [externalStatus, setExternalStatus] = useState<ExternalStatus>("draft")
   const [simulationStarted, setSimulationStarted] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState(() => new Date())
+  const [lastUpdated, setLastUpdated] = useState(INITIAL_QUOTE_TIME)
 
   const quote = useMemo(() => {
     const safeAmountBrl = clampMoney(amountBrl)

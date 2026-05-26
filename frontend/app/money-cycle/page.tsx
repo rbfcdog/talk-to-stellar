@@ -30,5 +30,5 @@ export default async function MoneyCyclePage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await resolveSearchParams(searchParams);
-  return <RendimentosClient initialLanguage="en" initialQuery={serializeSearchParams(resolved)} />;
+  return <RendimentosClient initialQuery={serializeSearchParams(resolved)} />;
 }

@@ -22,6 +22,12 @@ type Dictionary = Record<string, string>;
 const englishDictionary: Dictionary = {
     language_label: "Language",
     language_current: "English",
+    language_switch_to_portuguese: "Switch to Portuguese",
+    theme_label: "Theme",
+    theme_switch_to_dark: "Switch to dark mode",
+    theme_switch_to_light: "Switch to light mode",
+    theme_dark_short: "Dark",
+    theme_light_short: "Light",
     chat_agent_welcome:
       "Hi, this is TalkToStellar.\n\nI can help with balance, PIX, contacts, payments, conversions, yield and the full money cycle.\n\nExamples:\n1. balance\n2. add 10 reais with PIX\n3. convert 500 reais to euros\n4. keep 200 dollars earning\n5. add, earn, and withdraw to PIX\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
     chat_search_placeholder: "Search account contacts...",
@@ -107,6 +113,12 @@ const englishDictionary: Dictionary = {
 const portugueseDictionary: Dictionary = {
     language_label: "Idioma",
     language_current: "Português",
+    language_switch_to_english: "Mudar para inglês",
+    theme_label: "Tema",
+    theme_switch_to_dark: "Mudar para tema escuro",
+    theme_switch_to_light: "Mudar para tema claro",
+    theme_dark_short: "Escuro",
+    theme_light_short: "Claro",
     chat_agent_welcome:
       "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com saldo, PIX, contatos, pagamentos, conversões, rendimento e ciclo completo do dinheiro.\n\nExemplos:\n1. saldo\n2. colocar 10 reais via PIX\n3. converter 500 reais para euros\n4. deixar 200 dólares rendendo\n5. entrar, render e sair para PIX\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
     chat_search_placeholder: "Buscar contatos da conta...",

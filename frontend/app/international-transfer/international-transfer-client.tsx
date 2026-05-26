@@ -77,6 +77,9 @@ const states: Array<{ key: TransferState; label: string; icon: any }> = [
 
 const stateRank = new Map(states.map((state, index) => [state.key, index]));
 
+const INITIAL_EVENT_TIME = "2026-05-25T12:00:00.000Z";
+const INITIAL_NOW_MS = Date.parse(INITIAL_EVENT_TIME);
+
 const nextActionByState: Partial<Record<TransferState, string>> = {
   QUOTE_CREATED: "Create the institution funding intent and attach the funding reference to the settlement record.",
   PIX_PENDING: "Wait for source-institution funding confirmation.",
@@ -343,7 +346,7 @@ export default function InternationalTransferClient() {
   const [events, setEvents] = useState<EventEntry[]>([
     {
       id: "initial",
-      at: new Date().toISOString(),
+      at: INITIAL_EVENT_TIME,
       title: "Ready",
       detail: "Create an institution route quote or run the full controlled flow to start recording settlement events.",
       state: "info",
@@ -352,7 +355,7 @@ export default function InternationalTransferClient() {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
   const migrationError = /international_transfer_quotes|international_transfers|schema cache/i.test(error);
 
   useEffect(() => {
@@ -883,103 +886,8 @@ export default function InternationalTransferClient() {
   ];
 
   return (
-    <main className="dark usd-rail-dark min-h-screen bg-black text-tts-deep transition-colors">
-      <style jsx global>{`
-        .usd-rail-dark {
-          color-scheme: dark;
-          background: #000;
-        }
-        .usd-rail-dark .bg-white {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .bg-tts-surface {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .bg-tts-deep,
-        .usd-rail-dark .bg-tts-deep {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .bg-tts-confirm,
-        .usd-rail-dark .bg-tts-confirm {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .bg-tts-gold,
-        .usd-rail-dark .bg-tts-gold,
-        .usd-rail-dark .bg-tts-gold,
-        .usd-rail-dark .bg-tts-gold {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .bg-tts-error {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark [class*="bg-white"],
-        .usd-rail-dark [class*="bg-slate-"],
-        .usd-rail-dark [class*="bg-neutral-"],
-        .usd-rail-dark [class*="bg-emerald-"],
-        .usd-rail-dark [class*="bg-sky-"],
-        .usd-rail-dark [class*="bg-cyan-"],
-        .usd-rail-dark [class*="bg-indigo-"],
-        .usd-rail-dark [class*="bg-red-"],
-        .usd-rail-dark [class*="bg-amber-"] {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark [class*="bg-black"] {
-          background-color: #000 !important;
-        }
-        .usd-rail-dark .border-tts-border,
-        .usd-rail-dark .border-tts-border,
-        .usd-rail-dark .border-tts-border,
-        .usd-rail-dark .border-tts-border,
-        .usd-rail-dark .border-tts-border,
-        .usd-rail-dark .border-tts-border {
-          border-color: #262626 !important;
-        }
-        .usd-rail-dark .border-tts-confirm,
-        .usd-rail-dark .border-tts-confirm {
-          border-color: rgba(52, 211, 153, 0.38) !important;
-        }
-        .usd-rail-dark .border-tts-gold,
-        .usd-rail-dark .border-tts-gold {
-          border-color: rgba(34, 211, 238, 0.38) !important;
-        }
-        .usd-rail-dark .border-tts-error {
-          border-color: rgba(248, 113, 113, 0.38) !important;
-        }
-        .usd-rail-dark .text-tts-deep,
-        .usd-rail-dark .text-tts-deep,
-        .usd-rail-dark .text-tts-deep {
-          color: rgb(248, 250, 252) !important;
-        }
-        .usd-rail-dark .text-tts-muted,
-        .usd-rail-dark .text-tts-muted {
-          color: rgb(203, 213, 225) !important;
-        }
-        .usd-rail-dark .text-tts-muted {
-          color: rgb(148, 163, 184) !important;
-        }
-        .usd-rail-dark .text-tts-confirm,
-        .usd-rail-dark .text-tts-confirm,
-        .usd-rail-dark .text-tts-confirm {
-          color: rgb(110, 231, 183) !important;
-        }
-        .usd-rail-dark .text-tts-gold,
-        .usd-rail-dark .text-tts-gold,
-        .usd-rail-dark .text-tts-gold,
-        .usd-rail-dark .text-tts-gold {
-          color: rgb(125, 211, 252) !important;
-        }
-        .usd-rail-dark .shadow-sm {
-          box-shadow: 0 18px 46px rgba(0, 0, 0, 0.72) !important;
-        }
-        .usd-rail-dark input,
-        .usd-rail-dark select,
-        .usd-rail-dark textarea,
-        .usd-rail-dark pre,
-        .usd-rail-dark code {
-          background-color: #000 !important;
-        }
-      `}</style>
-      <header className="border-b border-tts-border bg-black backdrop-blur">
+    <main className="min-h-screen bg-tts-bg text-tts-deep transition-colors">
+      <header className="border-b border-tts-border bg-tts-surface backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-white px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
