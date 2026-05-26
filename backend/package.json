@@ -14,6 +14,7 @@
     "test:api": "jest api-integration.test.ts",
     "test:stellar": "jest stellar-sdk.test.ts",
     "test:agent": "jest agent-ai.test.ts",
+    "test:yield": "jest --runInBand tests/defindex-yield.service.test.ts tests/defindex-yield-transactions.test.ts",
     "eval:agent": "jest --runInBand tests/agent-production-eval.test.ts tests/agent-conversion-ux.test.ts tests/agent-pix-offramp.test.ts tests/agent-payment-link.test.ts tests/agent-tools.test.ts",
     "test:e2e": "jest e2e.test.ts",
     "test:ci": "jest --coverage --bail --forceExit",
