@@ -423,6 +423,27 @@ describe('Agent tool execution', () => {
     expect(parsed.message).toContain('ciclo completo');
   });
 
+  it('opens the conversion interface with multi-asset defaults from chat', async () => {
+    const output = await executeTool('open_conversion_interface', {
+      source_amount: '500',
+      source_asset_code: 'BRL',
+      dest_asset_code: 'EUR',
+      language: 'en',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.action).toBe('conversion_interface');
+    expect(parsed.source_asset_code).toBe('BRL');
+    expect(parsed.dest_asset_code).toBe('EUR');
+    expect(parsed.frontend_url).toContain('/convert?');
+    expect(parsed.frontend_url).toContain('amount=500');
+    expect(parsed.frontend_url).toContain('source_asset=BRL');
+    expect(parsed.frontend_url).toContain('dest_asset=EUR');
+    expect(parsed.message).toContain('Conversion is ready to review');
+    expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|issuer|trustline|XDR/i);
+  });
+
   it('sanitizes yield confirmation setup errors before returning them to chat', async () => {
     const { AnchorService } = require('../src/api/services/anchor.service');
     jest.spyOn(AnchorService, 'executeDefindexYieldForSession').mockRejectedValueOnce(

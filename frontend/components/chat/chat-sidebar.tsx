@@ -19,7 +19,9 @@ function sanitizeVisiblePreview(content: string, hiddenKeyLabel: string): string
   return String(content || "")
     .replace(/\s+/g, " ")
     .replace(STELLAR_PUBLIC_KEY_REGEX, hiddenKeyLabel)
-    .replace(/public_key\s*=\s*[^\s|]+/gi, `public_key=${hiddenKeyLabel}`);
+    .replace(/public_key\s*=\s*[^\s|]+/gi, `public_key=${hiddenKeyLabel}`)
+    .replace(/stellar:mainnet/gi, "global account")
+    .replace(/\bUSDC\b/g, "USD");
 }
 
 export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
@@ -174,10 +176,10 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         </p>
         <p className="mt-1 flex items-baseline gap-1.5 font-mono-financial">
           <span className="text-xl font-bold text-tts-deep">184.27</span>
-          <span className="text-sm font-bold text-tts-gold">USDC</span>
+          <span className="text-sm font-bold text-tts-gold">USD</span>
         </p>
         <p className="mt-1 font-mono text-[10px] tracking-tight text-tts-muted">
-          stellar:mainnet
+          {L("Conta global", "Global account")}
         </p>
       </div>
 

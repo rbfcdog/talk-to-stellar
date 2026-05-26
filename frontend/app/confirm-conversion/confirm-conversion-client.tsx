@@ -122,6 +122,16 @@ function getProviderLabel(provider?: string) {
   return normalized ? normalized : ""
 }
 
+function buildActionUrl(path: string, params: Record<string, unknown>) {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    const text = String(value ?? "").trim()
+    if (text) search.set(key, text)
+  }
+  const query = search.toString()
+  return query ? `${path}?${query}` : path
+}
+
 function publicConversionErrorMessage(error: unknown, language: AppLanguage) {
   return mapPublicError(error, language).message
 }
@@ -281,6 +291,29 @@ export default function ConfirmConversionClient({
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
   const sourceAmount = String(payload.source_amount || payload.sourceAmount || "")
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
+  const nextDestinationAssetCode = normalizeAssetCode(result?.transferDetails?.destinationAssetCode || destAssetCode || "")
+  const nextDestinationAmount = String(result?.transferDetails?.destinationAmount || destAmount || "")
+  const keepEarningUrl = buildActionUrl("/yield", {
+    asset: nextDestinationAssetCode,
+    amount: nextDestinationAmount,
+    advanced: "1",
+    from: "confirm-conversion",
+    lang: feedbackLanguage,
+  })
+  const moneyCycleUrl = buildActionUrl("/money-cycle", {
+    asset: nextDestinationAssetCode,
+    amount: nextDestinationAmount,
+    advanced: "1",
+    cycle: "1",
+    from: "confirm-conversion",
+    lang: feedbackLanguage,
+  })
+  const chatPrompt = T(
+    feedbackLanguage,
+    `quero manter ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""} rendendo`,
+    `keep ${nextDestinationAmount || "this balance"} ${nextDestinationAssetCode || ""} earning`
+  ).trim()
+  const chatUrl = buildActionUrl("/chat", { prompt: chatPrompt, lang: feedbackLanguage })
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
   const routeChain = formatRouteChainFromPayload(payload)
@@ -302,7 +335,7 @@ export default function ConfirmConversionClient({
     },
     {
       label: T(feedbackLanguage, "Conversão enviada", "Conversion submitted"),
-      detail: T(feedbackLanguage, "A transação é assinada e enviada para a Stellar.", "The transaction is signed and submitted to Stellar."),
+      detail: T(feedbackLanguage, "A confirmação é enviada para sua conta.", "The confirmation is submitted to your account."),
     },
     {
       label: T(feedbackLanguage, "Saldo atualizado", "Balance updated"),
@@ -316,47 +349,62 @@ export default function ConfirmConversionClient({
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-tts-confirm">
-              Conversion Confirmation
+            <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-[0.2em] text-tts-confirm">
+              {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-surface md:text-6xl">
-                Confirm this conversion
+              <h1 className="max-w-xl text-4xl font-black tracking-tight text-tts-deep md:text-6xl">
+                {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
-                Review the details and enter your PIN to execute the conversion in your account.
+                {T(feedbackLanguage, "Revise os valores e digite seu PIN para concluir na sua conta.", "Review the details and enter your PIN to complete it in your account.")}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-deep/20 p-2 text-xs">
-              {["Review", "Authorize", "Complete"].map((step, index) => (
-                <motion.div key={step} layout className={`rounded-xl px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}>
+            <div className="grid grid-cols-3 gap-2 border border-tts-border bg-tts-bg p-2 text-xs">
+              {[T(feedbackLanguage, "Revisar", "Review"), T(feedbackLanguage, "Autorizar", "Authorize"), T(feedbackLanguage, "Concluir", "Complete")].map((step, index) => (
+                <motion.div key={step} layout className={`px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}>
                   {step}
                 </motion.div>
               ))}
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">Source</p>
+              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
-                  {formatAmount(sourceAmount, sourceAssetCode)}
+                  {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">Destination</p>
+              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-tts-muted">{T(feedbackLanguage, "Destino", "Destination")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
-                  {formatAmount(destAmount, destAssetCode)}
+                  {formatAmount(destAmount, destAssetCode, feedbackLanguage)}
                 </p>
               </div>
             </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Manter rendendo", "Keep earning")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão no plano de rendimento.", "Use this conversion destination in the yield plan.")}</p>
+              </a>
+              <a href={moneyCycleUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Ciclo completo", "Full money cycle")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Entrar, render e sair para PIX em uma jornada.", "Add, earn, and send out to PIX in one journey.")}</p>
+              </a>
+              <a href={chatUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Voltar ao chat", "Back to chat")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Peça o próximo passo em linguagem natural.", "Ask for the next step in natural language.")}</p>
+              </a>
+            </div>
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
-                <p className="font-medium text-tts-surface">{T(feedbackLanguage, "Resumo", "Summary")}</p>
+              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
+                <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-tts-deep">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
                 <p className="text-tts-deep">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
                 {showEstimatedFee && (
@@ -382,17 +430,17 @@ export default function ConfirmConversionClient({
                   type="password"
                   inputMode="numeric"
                   maxLength={8}
-                  placeholder="Enter your PIN"
-                  className="w-full rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+                  placeholder={T(feedbackLanguage, "Digite seu PIN", "Enter your PIN")}
+                  className="w-full border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 
 	              <button
 	                type="submit"
 	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
               >
-	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />Confirming conversion...</span> : "Confirm conversion"}
+	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
 	              </button>
 	            </form>
 
@@ -401,17 +449,17 @@ export default function ConfirmConversionClient({
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
 	                title={T(feedbackLanguage, "Andamento da conversão", "Conversion progress")}
-	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra validação, rota, rede e saldo.", "After confirmation, this screen shows validation, route, network and balance.")}
-	                runningMessage={T(feedbackLanguage, "Conversão em andamento. Não clique de novo; a rota e a rede estão sendo processadas.", "Conversion in progress. Do not click again; route and network are being processed.")}
+	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra validação, rota e saldo.", "After confirmation, this screen shows validation, route, and balance.")}
+	                runningMessage={T(feedbackLanguage, "Conversão em andamento. Não clique de novo; a rota e sua conta estão sendo processadas.", "Conversion in progress. Do not click again; route and account are being processed.")}
 	                doneMessage={T(feedbackLanguage, "Conversão concluída. O saldo e o chat serão atualizados.", "Conversion completed. Balance and chat will be updated.")}
 	                errorMessage={T(feedbackLanguage, "A conversão parou antes de concluir. Leia o erro abaixo antes de tentar novamente.", "The conversion stopped before completion. Read the error below before trying again.")}
 	                steps={conversionProgressSteps}
 	              />
 	            </div>
 
-	            <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
-              <p className="font-medium text-tts-surface">Result</p>
-              {status === "ready" && <p className="mt-2 text-tts-muted">Waiting for confirmation.</p>}
+	            <div className="mt-5 border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
+              <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
+              {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
@@ -419,19 +467,19 @@ export default function ConfirmConversionClient({
                   <p>{T(feedbackLanguage, "Conversão confirmada com sucesso.", "Conversion confirmed successfully.")}</p>
                   {result.transferDetails?.sourceAmount && (
                     <p>
-                      Source debited: {formatAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode)}
+                      {T(feedbackLanguage, "Origem debitada", "Source debited")}: {formatAmount(result.transferDetails.sourceAmount, result.transferDetails.sourceAssetCode, feedbackLanguage)}
                     </p>
                   )}
                   {result.transferDetails?.destinationAmount && (
                     <p>
-                      Destination received: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode)}
+                      {T(feedbackLanguage, "Destino recebido", "Destination received")}: {formatAmount(result.transferDetails.destinationAmount, result.transferDetails.destinationAssetCode, feedbackLanguage)}
                     </p>
                   )}
                   {showResultFee && (
-                    <p>Applied fee: {resultFeeDisplay}</p>
+                    <p>{T(feedbackLanguage, "Taxa aplicada", "Applied fee")}: {resultFeeDisplay}</p>
                   )}
-                  {isCrossAssetConversion && formatBrl(estimatedSavingsBrl) && (
-                    <p>Estimated savings on this operation: {formatBrl(estimatedSavingsBrl)}</p>
+                  {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
+                    <p>{T(feedbackLanguage, "Economia estimada nesta operação", "Estimated savings on this operation")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>

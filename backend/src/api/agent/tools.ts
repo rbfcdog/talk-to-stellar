@@ -440,6 +440,24 @@ function buildMoneyCycleFrontendUrl(input: {
   });
 }
 
+function buildConversionFrontendUrl(input: {
+  sourceAmount?: unknown;
+  sourceAssetCode?: unknown;
+  destAssetCode?: unknown;
+  language?: 'pt-BR' | 'en';
+}): string {
+  return buildFrontendInterfaceUrl({
+    path: '/convert',
+    params: {
+      amount: input.sourceAmount,
+      source_asset: frontendAssetCode(input.sourceAssetCode || 'BRL'),
+      dest_asset: frontendAssetCode(input.destAssetCode || 'USDC'),
+      from: 'chat',
+      lang: input.language || 'pt-BR',
+    },
+  });
+}
+
 function normalizeMoneyInterfaceAction(value: unknown): 'bring' | 'keep' | 'send_out' {
   const normalized = String(value || '').trim().toLowerCase();
   if (['keep', 'hold', 'yield', 'earn', 'rendimento', 'manter', 'guardar', 'render'].includes(normalized)) return 'keep';
@@ -883,6 +901,33 @@ export const toolDefinitions = [
         session_id: {
           type: "string",
           description: "Current chat session ID, when available.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "open_conversion_interface",
+    description: "Return the frontend URL for the asset conversion interface, prefilled from chat. Use when the user wants to explore or set up conversion between balances before confirming with PIN.",
+    parameters: {
+      type: "object",
+      properties: {
+        source_amount: {
+          type: "string",
+          description: "Optional source amount to prefill.",
+        },
+        source_asset_code: {
+          type: "string",
+          description: "Source currency, such as BRL, USDC, USD, EUR, XLM, or another configured asset.",
+        },
+        dest_asset_code: {
+          type: "string",
+          description: "Destination currency, such as BRL, USDC, USD, EUR, XLM, or another configured asset.",
         },
         language: {
           type: "string",
@@ -1880,6 +1925,8 @@ export async function executeTool(
         return await executeOpenAssetInterface(toolInput);
       case "open_money_cycle":
         return await executeOpenMoneyCycle(toolInput);
+      case "open_conversion_interface":
+        return await executeOpenConversionInterface(toolInput);
       case "get_yield_balance":
         return await executeGetYieldBalance(toolInput);
       case "prepare_yield_action":
@@ -2293,6 +2340,40 @@ async function executeOpenMoneyCycle(input: any): Promise<string> {
       message: language === 'en'
         ? `The full money cycle is ready for ${displayAsset}: add by PIX, keep earning with the best available option, then send out to PIX.\n\nOpen:\n${frontendUrl}`
         : `O ciclo completo está pronto para ${displayAsset}: entrar por PIX, manter rendendo na melhor opção disponível e sair por PIX.\n\nAbra:\n${frontendUrl}`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: sanitizeYieldToolError(error, language),
+    });
+  }
+}
+
+async function executeOpenConversionInterface(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const sourceAsset = normalizeYieldAssetInput(input.source_asset_code || input.sourceAssetCode || input.from_asset || input.fromAsset || 'BRL');
+    const destAsset = normalizeYieldAssetInput(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || 'USDC');
+    const sourceAmount = String(input.source_amount || input.sourceAmount || input.amount || '').trim();
+    const frontendUrl = buildConversionFrontendUrl({
+      sourceAmount,
+      sourceAssetCode: sourceAsset,
+      destAssetCode: destAsset,
+      language,
+    });
+    const sourceDisplay = frontendAssetCode(sourceAsset);
+    const destDisplay = frontendAssetCode(destAsset);
+
+    return JSON.stringify({
+      success: true,
+      action: 'conversion_interface',
+      source_amount: sourceAmount || null,
+      source_asset_code: sourceDisplay,
+      dest_asset_code: destDisplay,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `Conversion is ready to review: ${sourceAmount || 'amount'} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
+        : `Conversão pronta para revisar: ${sourceAmount || 'valor'} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
