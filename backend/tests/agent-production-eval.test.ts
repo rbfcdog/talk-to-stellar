@@ -42,6 +42,7 @@ function createState(input: string, hasWallet = true): AgentState {
 describe('Agent production evals', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.STELLAR_NETWORK = 'TESTNET';
   });
 
   it('routes broad capability questions to the deterministic help tool', async () => {
@@ -136,7 +137,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Available yield options: dollars, euros, reais.',
+      message: 'Available yield options: dollars, CETES, reais.',
     }));
 
     const result = await graph.processInput(createState('show yield options', false));
@@ -170,24 +171,24 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Revisão pronta');
   });
 
-  it('routes yield balance checks to get_yield_balance for euro', async () => {
+  it('routes yield balance checks to get_yield_balance for CETES', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Você tem 40 euros rendendo agora.',
+      message: 'Você tem 40 CETES rendendo agora.',
     }));
 
-    const result = await graph.processInput(createState('quanto tenho rendendo em euro?'));
+    const result = await graph.processInput(createState('quanto tenho rendendo em cetes?'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_yield_balance', {
       session_id: 'eval-session',
-      asset_code: 'EUR',
+      asset_code: 'CETES',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('40 euros');
+    expect(result.response_message).toContain('40 CETES');
   });
 
   it('routes explicit yield confirmations with PIN to confirm_yield_action', async () => {
@@ -240,21 +241,21 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Manter rendendo está pronto para EUR.\n\nAbra:\nhttps://app.example.com/yield?asset=EUR',
+      message: 'Manter rendendo está pronto para CETES.\n\nAbra:\nhttps://app.example.com/yield?asset=CETES',
     }));
 
-    const result = await graph.processInput(createState('manter 50 euros'));
+    const result = await graph.processInput(createState('manter 50 cetes'));
 
     expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
       session_id: 'eval-session',
       action: 'keep',
       amount: '50',
-      asset_code: 'EUR',
+      asset_code: 'CETES',
       destination_pix_key: '',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/yield?asset=EUR');
+    expect(result.response_message).toContain('/yield?asset=CETES');
   });
 
   it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {

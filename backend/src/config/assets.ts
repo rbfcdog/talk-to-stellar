@@ -1,4 +1,4 @@
-export type AssetCode = 'XLM' | 'USDC' | 'TESOURO' | 'EURC' | string;
+export type AssetCode = 'XLM' | 'USDC' | 'TESOURO' | 'EURC' | 'CETES' | string;
 
 export interface AssetConfig {
   code: AssetCode;
@@ -36,7 +36,9 @@ export function normalizeAssetCode(value: unknown): string {
   const code = String(value || 'XLM').trim().toUpperCase();
   if (!code || code === 'NATIVE') return 'XLM';
   if (code === 'USD') return 'USDC';
-  if (['EUR', 'EURO', 'EUROS'].includes(code)) return 'EURC';
+  if (['EUR', 'EURO', 'EUROS', 'EURC'].includes(code)) {
+    return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EURC';
+  }
   return code;
 }
 
@@ -109,10 +111,13 @@ export function getUserFacingAssetCodes(): string[] {
     process.env.SUPPORTED_ASSET_CODES
   );
   const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
-  const includeEurc = envFlag('ENABLE_EURC_ASSET', true);
+  const network = getStellarNetworkName();
+  const includeCetes = envFlag('ENABLE_CETES_ASSET', network === 'TESTNET');
+  const includeEurc = envFlag('ENABLE_EURC_ASSET', network === 'PUBLIC');
   return uniqueAssetCodes([
     ...(includeTesouro ? ['TESOURO'] : []),
     'USDC',
+    ...(includeCetes ? ['CETES'] : []),
     ...(includeEurc ? ['EURC'] : []),
     ...configured,
   ]);

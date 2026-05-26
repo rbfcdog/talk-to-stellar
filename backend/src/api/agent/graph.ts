@@ -12,7 +12,7 @@ import { ALL_TOOLS, executeTool } from "./tools";
 import { logger } from "../../utils/logger";
 import ExternalService from '../services/core/external.service';
 import { supabase } from '../../config/supabase';
-import { getAssetIssuer, resolveConfiguredAsset } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, resolveConfiguredAsset } from '../../config/assets';
 import { WalletRepository } from '../repository/core/wallet.repository';
 import { ActivityFeedService } from '../services/activity-feed.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
@@ -449,11 +449,7 @@ export class AgentGraph {
   ): { amount: string; assetCode?: string } {
     const amountText = String(rawAmount || '').trim();
     const hinted = String(hintedAsset || '').trim().toUpperCase();
-    const normalizedAsset = hinted === 'USD'
-      ? 'USDC'
-      : (hinted === 'EURC' || hinted === 'EUR' || hinted === 'EURO' || hinted === 'EUROS')
-        ? 'EUR'
-        : (hinted || undefined);
+    const normalizedAsset = hinted ? this.normalizeAgentAssetCode(hinted) : undefined;
     const normalizedAmount = normalizeHumanAmountText(amountText);
     const cleanedAmount = Number.isFinite(Number(normalizedAmount)) ? normalizedAmount : amountText;
 
@@ -552,7 +548,10 @@ export class AgentGraph {
       .trim();
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
-    if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') return 'EUR';
+    if (token === 'cetes') return 'CETES';
+    if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') {
+      return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EUR';
+    }
     if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
@@ -562,7 +561,9 @@ export class AgentGraph {
     const code = String(value || '').trim().toUpperCase();
     if (!code) return '';
     if (code === 'USD') return 'USDC';
-    if (code === 'EURO' || code === 'EUROS' || code === 'EURC') return 'EUR';
+    if (code === 'EUR' || code === 'EURO' || code === 'EUROS' || code === 'EURC') {
+      return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EUR';
+    }
     if (code === 'REAL' || code === 'REAIS' || code === 'R$') return 'BRL';
     if (code === 'DOLAR' || code === 'DOLARES' || code === 'DOLLAR' || code === 'DOLLARS') return 'USDC';
     return code;
@@ -584,18 +585,18 @@ export class AgentGraph {
       }
 
       const afterAmount = normalized.slice(amountIndex + matchedText.length);
-      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
       const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
       if (assetAfterAmount) return assetAfterAmount;
 
       const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
-      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
       const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
       if (assetBeforeAmount) return assetBeforeAmount;
     }
 
-    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
-    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
     return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
   }
 
@@ -628,7 +629,7 @@ export class AgentGraph {
 
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|xlm|lumens?)/);
+    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|xlm|lumens?)/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -668,7 +669,7 @@ export class AgentGraph {
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
 
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
+    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -1701,7 +1702,7 @@ export class AgentGraph {
     if (!/\b(enviar|mandar|transferir|pagar|chegar|receber)\b/.test(normalized)) return null;
 
     const amountPattern = '((?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,8})?|\\d+(?:[.,]\\d{1,8})?))';
-    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares)?\\b`));
+    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares)?\\b`));
     const genericRecipient = this.isGenericRecipientReference(parsed?.recipient_query || text);
     if (!receiveMatch && !genericRecipient) return null;
 
@@ -1712,7 +1713,10 @@ export class AgentGraph {
       this.assetCodeFromTextToken(receiveMatch?.[2]) ||
       String(parsed?.receive_asset_code || parsed?.asset_code || 'BRL')
     ).toUpperCase().replace(/^USD$/, 'USDC');
-    const safeDestAssetCode = ['BRL', 'USDC', 'EUR'].includes(destAssetCode) ? destAssetCode : 'BRL';
+    const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
+      ? ['BRL', 'USDC', 'CETES']
+      : ['BRL', 'USDC', 'EUR'];
+    const safeDestAssetCode = allowedRouteAssets.includes(destAssetCode) ? destAssetCode : 'BRL';
     const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
 
     return {
@@ -2081,8 +2085,8 @@ export class AgentGraph {
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem identificador técnico.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou EUR) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser euro/EUR/EURC, normalize para EUR.',
-        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/EUR". Isso também vale para links de pagamento.',
+        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou CETES em testnet; EUR só em public/mainnet) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser euro/EUR/EURC em testnet, normalize para CETES.',
+        '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/CETES". Isso também vale para links de pagamento.',
         '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
@@ -2094,7 +2098,7 @@ export class AgentGraph {
         '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero transferir 200 brl pra Carlos Souza pra ele receber em usdc" => {"recipient_query":"Carlos Souza","amount":"200","asset_code":"BRL","receive_asset_code":"USDC","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
-        '- "quero mandar 20 euros pra Ana" => {"recipient_query":"Ana","amount":"20","asset_code":"EUR","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "quero mandar 20 cetes pra Ana" => {"recipient_query":"Ana","amount":"20","asset_code":"CETES","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc pra pessoa receber em brl" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "gerar link de pagamento de 15 dólares" => {"recipient_query":"","amount":"15","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
@@ -2244,10 +2248,10 @@ export class AgentGraph {
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
-        '- sourceAssetCode deve ser o ativo de origem (USDC, BRL, EUR, XLM ou outro código configurado quando citado explicitamente).',
+        '- sourceAssetCode deve ser o ativo de origem (USDC, BRL, CETES, XLM ou outro código configurado quando citado explicitamente).',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
-        '- Se o usuário usar euro/EUR/EURC, normalize para EUR.',
+        '- Se o usuário usar euro/EUR/EURC em testnet, normalize para CETES. EUR/EURC fica apenas para public/mainnet.',
         '- Se o usuário usar saldo operacional, XLM, lumen ou lumens, normalize para XLM.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
@@ -2297,6 +2301,7 @@ export class AgentGraph {
   }
 
   private inferConversionAssetsFromText(message: string): { sourceAssetCode?: string; destAssetCode?: string } {
+    const euroReplacement = getStellarNetworkName() === 'TESTNET' ? 'cetes' : 'eur';
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -2304,19 +2309,22 @@ export class AgentGraph {
       .replace(/\busd\b/g, 'usdc')
       .replace(/\bdolares?\b/g, 'usdc')
       .replace(/\bdollars?\b/g, 'usdc')
-      .replace(/\beuros?\b/g, 'eur')
-      .replace(/\beurc\b/g, 'eur')
+      .replace(/\beuros?\b/g, euroReplacement)
+      .replace(/\beur\b/g, euroReplacement)
+      .replace(/\beurc\b/g, euroReplacement)
       .replace(/\breais?\b/g, 'brl')
       .replace(/\breal\b/g, 'brl')
       .replace(/\blumens?\b/g, 'xlm');
 
-    const assets = ['USDC', 'BRL', 'EUR', 'XLM'];
+    const assets = getStellarNetworkName() === 'TESTNET'
+      ? ['USDC', 'BRL', 'CETES', 'XLM']
+      : ['USDC', 'BRL', 'EUR', 'XLM'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
-    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur|xlm)\b/);
-    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur|xlm)\b/);
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|cetes|eur|xlm)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|cetes|eur|xlm)\b/);
 
-    const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
-    const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
+    const sourceAssetCode = this.normalizeAgentAssetCode(sourceMatch?.[1] || found[0]);
+    const destAssetCode = this.normalizeAgentAssetCode(destMatch?.[1] || found.find((asset) => asset !== sourceAssetCode));
 
     return {
       sourceAssetCode,
@@ -2517,7 +2525,7 @@ export class AgentGraph {
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
-      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and € and say TalkToStellar displays the available app balance.',
+      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico yield in testnet and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- Mini-menus must stay short: at most 5 actions, no technical terms, and no second welcome block if the user already received a login/onboarding completion message.',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
@@ -2525,7 +2533,7 @@ export class AgentGraph {
       '',
       '## YIELD UX',
       '- For rendimento, rendimentos, render, rentabilidade, yield, earning, guardar rendendo, or resgatar rendimento, use yield tools instead of free text.',
-      '- User-facing yield copy must say rendimento, yield, money, dollars, euros, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
+      '- User-facing yield copy must say rendimento, yield, money, dollars, CETES/Mexico yield, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
       '- Use get_yield_options for available currencies/rates, get_yield_balance for current earning balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "keep earning", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- For complete lifecycle requests like "injetar dinheiro, render e sair", "ciclo completo", or "add, earn, withdraw", use open_money_cycle so the user gets one consolidated interface.',
@@ -2534,7 +2542,7 @@ export class AgentGraph {
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
-      '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or € according to the asset involved.',
+      '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or CETES/Mexico yield according to the asset involved.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
       '- For BRL -> US$ net value, exchange-rate, fee, or received-amount questions, call get_conversion_preview or a quote tool. Never use a hardcoded exchange rate.',
@@ -3345,7 +3353,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             byAsset.set(asset, { ...balance, asset });
           }
         }
-        const exactBalances = ['BRL', 'USDC', 'EUR'].map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
+        const balanceAssets = getStellarNetworkName() === 'TESTNET' ? ['BRL', 'USDC', 'CETES'] : ['BRL', 'USDC', 'EUR'];
+        const exactBalances = balanceAssets.map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
         const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();
         const savingsLine = monthlySavingsMessage ? `\n\n💰 ${monthlySavingsMessage}` : '';
@@ -3560,7 +3569,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
     const amountNumber = parseHumanAmountNumber(rawWithoutPin);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
     const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
     const confirms =
@@ -3697,7 +3706,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';
@@ -3736,7 +3745,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';

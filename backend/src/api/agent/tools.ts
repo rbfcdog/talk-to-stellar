@@ -331,7 +331,6 @@ function normalizeYieldAssetInput(value: unknown): string {
   const raw = String(value || 'USDC').trim().toUpperCase();
   if (!raw || raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
   if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS' || raw === 'R$') return 'TESOURO';
-  if (raw === 'EUR' || raw === 'EURO' || raw === 'EUROS' || raw === 'EURC') return 'EURC';
   return normalizeAssetCode(raw);
 }
 
@@ -860,7 +859,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency. Use BRL, USDC/USD, or EUR for now.",
+          description: "User-facing currency. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
         },
         destination_pix_key: {
           type: "string",
@@ -891,7 +890,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency. Use BRL, USDC/USD, or EUR for now.",
+          description: "User-facing currency. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
         },
         destination_pix_key: {
           type: "string",
@@ -922,11 +921,11 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source currency, such as BRL, USDC, USD, EUR, XLM, or another configured asset.",
+          description: "Source currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. On testnet, CETES replaces EUR/EURC.",
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination currency, such as BRL, USDC, USD, EUR, XLM, or another configured asset.",
+          description: "Destination currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. On testnet, CETES replaces EUR/EURC.",
         },
         language: {
           type: "string",
@@ -949,7 +948,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         language: {
           type: "string",
@@ -981,7 +980,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         slippage_bps: {
           type: "number",
@@ -1017,7 +1016,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         pin: {
           type: "string",
@@ -1219,7 +1218,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code to send. For user-facing flows use BRL, USDC or EUR.",
+          description: "Asset code to send. For user-facing flows use BRL, USDC or CETES on testnet; EURC is public/mainnet only.",
         },
         asset_issuer: {
           type: "string",
@@ -1257,7 +1256,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code for user-facing flows, e.g. USDC, BRL or EUR",
+          description: "Destination asset code for user-facing flows, e.g. USDC, BRL or CETES on testnet",
         },
         dest_asset_issuer: {
           type: "string",
@@ -1265,7 +1264,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code for user-facing flows, e.g. USDC, BRL or EUR",
+          description: "Source asset code for user-facing flows, e.g. USDC, BRL or CETES on testnet",
         },
         source_asset_issuer: {
           type: "string",
@@ -1299,7 +1298,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Moeda de origem (BRL, USDC ou EUR).",
+          description: "Moeda de origem (BRL, USDC ou CETES em testnet).",
         },
         source_asset_issuer: {
           type: "string",
@@ -1307,7 +1306,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Moeda de destino (BRL, USDC ou EUR).",
+          description: "Moeda de destino (BRL, USDC ou CETES em testnet).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -1341,7 +1340,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code, e.g. USDC, BRL or EUR",
+          description: "Destination asset code, e.g. USDC, BRL or CETES on testnet",
         },
         dest_asset_issuer: {
           type: "string",
@@ -1349,7 +1348,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code, e.g. USDC, BRL or EUR",
+          description: "Source asset code, e.g. USDC, BRL or CETES on testnet",
         },
         source_asset_issuer: {
           type: "string",
@@ -1379,7 +1378,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code, e.g. USDC, BRL or EUR",
+          description: "Asset code, e.g. USDC, BRL or CETES on testnet",
         },
         asset_issuer: {
           type: "string",
@@ -1401,7 +1400,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code the recipient receives. For user-facing flows use BRL, USDC or EUR.",
+          description: "Asset code the recipient receives. For user-facing flows use BRL, USDC or CETES on testnet; EURC is public/mainnet only.",
         },
         asset_issuer: {
           type: "string",
@@ -1413,7 +1412,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Origin/source asset the sender spends (BRL, USDC or EUR). Must not be confused with destination_asset_code.",
+          description: "Origin/source asset the sender spends (BRL, USDC or CETES on testnet). Must not be confused with destination_asset_code.",
         },
         source_asset_issuer: {
           type: "string",
@@ -1425,7 +1424,7 @@ export const toolDefinitions = [
         },
         destination_asset_code: {
           type: "string",
-          description: "Destination asset the recipient receives (BRL, USDC or EUR).",
+          description: "Destination asset the recipient receives (BRL, USDC or CETES on testnet).",
         },
         destination_asset_issuer: {
           type: "string",
@@ -1487,7 +1486,7 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source asset code (USDC, BRL or EUR).",
+          description: "Source asset code (USDC, BRL or CETES on testnet).",
         },
         source_asset_issuer: {
           type: "string",
@@ -1499,7 +1498,7 @@ export const toolDefinitions = [
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination asset code (USDC, BRL or EUR).",
+          description: "Destination asset code (USDC, BRL or CETES on testnet).",
         },
         dest_asset_issuer: {
           type: "string",
@@ -2039,8 +2038,8 @@ function executeGetIntentHelp(): string {
     {
       command: "saldo",
       intent: "balance",
-      description: "Mostra o saldo disponível em R$, US$, € e moedas configuradas.",
-      examples: ["ver saldo", "qual meu saldo em euro?"],
+      description: "Mostra o saldo disponível em R$, US$, CETES e moedas configuradas.",
+      examples: ["ver saldo", "qual meu saldo em cetes?"],
     },
     {
       command: "contatos",
@@ -2057,8 +2056,8 @@ function executeGetIntentHelp(): string {
     {
       command: "converter",
       intent: "conversion",
-      description: "Abre a conversão entre reais, dólares, euros e moedas configuradas pela rota mais otimizada.",
-      examples: ["converter 10 us$ para euros"],
+      description: "Abre a conversão entre reais, dólares, CETES e moedas configuradas pela rota mais otimizada.",
+      examples: ["converter 10 us$ para cetes"],
     },
     {
       command: "rota",
@@ -2070,7 +2069,7 @@ function executeGetIntentHelp(): string {
       command: "rendimento",
       intent: "yield",
       description: "Mostra opções de rendimento por moeda, saldo rendendo e prepara guardar/resgatar com revisão.",
-      examples: ["guardar 100 reais rendendo", "quanto tenho rendendo em euro?"],
+      examples: ["guardar 100 reais rendendo", "quanto tenho rendendo em cetes?"],
     },
     {
       command: "ciclo",
@@ -2088,7 +2087,7 @@ function executeGetIntentHelp(): string {
       command: "PIX",
       intent: "pix",
       description: "Coloca dinheiro via PIX, retira saldo para a chave PIX informada ou paga um contato depois do PIX.",
-      examples: ["colocar 100 reais via PIX", "retirar 80 euros para meu PIX user@example.com"],
+      examples: ["colocar 100 reais via PIX", "retirar 80 cetes para meu PIX user@example.com"],
     },
     {
       command: "histórico",
@@ -2127,10 +2126,10 @@ function executeGetIntentHelp(): string {
     commands,
     message: [
       "Guia rápido TalkToStellar (o que você pode fazer agora):",
-      "1) saldo: ver dinheiro disponível em R$, US$, € e outras moedas configuradas.",
+      "1) saldo: ver dinheiro disponível em R$, US$, CETES e outras moedas configuradas.",
       "2) contatos: listar ou salvar destinatários.",
       "3) PIX: colocar dinheiro, retirar para uma chave PIX digitada na hora ou pagar um contato usando PIX.",
-      "4) converter: trocar reais, dólares, euros e moedas configuradas pela rota mais otimizada.",
+      "4) converter: trocar reais, dólares, CETES e moedas configuradas pela rota mais otimizada.",
       "5) rendimento: ver opções por moeda, saldo rendendo e preparar guardar/resgatar.",
       "6) ciclo completo: colocar por PIX, manter rendendo e sair para PIX em uma interface.",
       "7) enviar: fazer pagamento com confirmação segura da forma mais otimizada.",
@@ -2146,13 +2145,13 @@ function executeGetIntentHelp(): string {
       "",
       "Exemplos prontos:",
       "- \"enviar 10 dólares para Ana da forma mais otimizada\"",
-      "- \"converter 200 reais para euro\"",
+      "- \"converter 200 reais para cetes\"",
       "- \"colocar 100 reais via PIX\"",
       "- \"pagar Ana Silva com 100 reais via PIX\"",
       "- \"sacar 50 reais por PIX para user@example.com\"",
       "- \"guardar 100 reais rendendo\"",
       "- \"injetar 500 reais, deixar rendendo e depois sair para meu PIX\"",
-      "- \"converter 50 euros para dólares\"",
+      "- \"converter 50 cetes para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
       "",
@@ -3009,16 +3008,18 @@ async function executeGetSaldoTecnico(input: any): Promise<string> {
       asset_issuer: balance.asset_issuer,
     }));
 
-    const technicalAssets = ['XLM', 'TESOURO', 'USDC', 'EURC'].map((assetCode) => {
-      const existing = mappedBalances.find((balance: any) => balanceMatchesConfiguredAsset(balance, assetCode));
-      if (existing) return existing;
-      return {
-        asset: assetCode,
-        balance: '0.0000000',
-        type: assetCode === 'XLM' ? 'native' : 'credit_alphanum4',
-        asset_issuer: assetCode === 'XLM' ? undefined : getAssetIssuer(assetCode),
-      };
-    });
+    const technicalAssets = ['XLM', ...getUserFacingAssetCodes()]
+      .filter((assetCode, index, all) => all.indexOf(assetCode) === index)
+      .map((assetCode) => {
+        const existing = mappedBalances.find((balance: any) => balanceMatchesConfiguredAsset(balance, assetCode));
+        if (existing) return existing;
+        return {
+          asset: assetCode,
+          balance: '0.0000000',
+          type: assetCode === 'XLM' ? 'native' : 'credit_alphanum4',
+          asset_issuer: assetCode === 'XLM' ? undefined : getAssetIssuer(assetCode),
+        };
+      });
 
     return JSON.stringify({
       success: true,

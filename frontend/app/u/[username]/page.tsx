@@ -140,7 +140,7 @@ export default function PublicReceivePage() {
               >
                 <option value="USDC">US$</option>
                 <option value="BRL">R$</option>
-                <option value="EUR">€</option>
+                <option value="CETES">CETES</option>
               </select>
             </label>
           </div>

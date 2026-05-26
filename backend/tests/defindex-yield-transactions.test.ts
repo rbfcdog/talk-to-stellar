@@ -150,7 +150,33 @@ describe('Defindex yield transaction flows', () => {
     }));
   });
 
-  it.each(['EURC', 'TESOURO'] as const)('blocks yield preparation for %s when no vault is configured', async (assetCode) => {
+  it('normalizes testnet EURC yield requests to CETES', async () => {
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
+      xdr: 'deposit-cetes-xdr',
+      raw: { action: 'deposit', assetCode: 'CETES' },
+    });
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '10',
+      asset_code: 'EURC',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      vault: expect.objectContaining({ asset_code: 'CETES', vault_address: YIELD_VAULTS.CETES }),
+      xdr: 'deposit-cetes-xdr',
+    });
+    expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
+      vaultAddress: YIELD_VAULTS.CETES,
+      network: 'testnet',
+    }));
+  });
+
+  it.each(['TESOURO'] as const)('blocks yield preparation for %s when no vault is configured', async (assetCode) => {
     await expect(AnchorService.prepareDefindexYieldForSession({
       session_id: 'session-1',
       session_token: 'token-1',

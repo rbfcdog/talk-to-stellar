@@ -85,6 +85,7 @@ describe('Agent tool execution', () => {
       ok: false,
       json: async () => ({}),
     } as any);
+    process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USD_BRL_FALLBACK_RATE = '5.13';
     process.env.XLM_USDC_FALLBACK_RATE = '0.1';
   });
@@ -151,7 +152,7 @@ describe('Agent tool execution', () => {
       'rendimento',
       'ciclo',
     ]));
-    expect(parsed.message).toContain('R$, US$, €');
+    expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('ciclo completo');
     expect(parsed.message).toContain('sair para meu PIX');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
@@ -399,14 +400,14 @@ describe('Agent tool execution', () => {
     const keepOutput = await executeTool('open_asset_interface', {
       action: 'keep',
       amount: '50',
-      asset_code: 'EUR',
+      asset_code: 'CETES',
       language: 'en',
     });
     const keep = JSON.parse(keepOutput);
 
     expect(keep.success).toBe(true);
     expect(keep.frontend_url).toContain('/money-cycle?');
-    expect(keep.frontend_url).toContain('asset=EUR');
+    expect(keep.frontend_url).toContain('asset=CETES');
     expect(keep.frontend_url).toContain('amount=50');
 
     const sendOutOutput = await executeTool('open_asset_interface', {
@@ -447,7 +448,7 @@ describe('Agent tool execution', () => {
     const output = await executeTool('open_conversion_interface', {
       source_amount: '500',
       source_asset_code: 'BRL',
-      dest_asset_code: 'EUR',
+      dest_asset_code: 'CETES',
       language: 'en',
     });
     const parsed = JSON.parse(output);
@@ -455,11 +456,11 @@ describe('Agent tool execution', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.action).toBe('conversion_interface');
     expect(parsed.source_asset_code).toBe('BRL');
-    expect(parsed.dest_asset_code).toBe('EUR');
+    expect(parsed.dest_asset_code).toBe('CETES');
     expect(parsed.frontend_url).toContain('/convert?');
     expect(parsed.frontend_url).toContain('amount=500');
     expect(parsed.frontend_url).toContain('source_asset=BRL');
-    expect(parsed.frontend_url).toContain('dest_asset=EUR');
+    expect(parsed.frontend_url).toContain('dest_asset=CETES');
     expect(parsed.message).toContain('Conversion is ready to review');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|issuer|trustline|XDR/i);
   });

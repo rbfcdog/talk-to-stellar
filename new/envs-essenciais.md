@@ -21,7 +21,7 @@ CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 
 O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM. Para executar deposito/saque em testnet, use `DEFINDEX_ENABLE_EXECUTION=true`. Mainnet continua bloqueada enquanto `DEFINDEX_ALLOW_MAINNET_EXECUTION=false`.
 
-Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, CETES/TESOURO pode aparecer como real para o usuario; nao recrie o asset `BRL`.
+Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, TESOURO aparece como real/reais; CETES aparece como rendimento Mexico. Nao recrie o asset `BRL`.
 
 ## 1. Obrigatorias agora
 
@@ -40,12 +40,13 @@ TELEGRAM_NOTIFY_URL=https://seu-telegram-service/notify
 
 ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
-ENABLE_EURC_ASSET=true
-EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
-TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+ENABLE_CETES_ASSET=true
+ENABLE_EURC_ASSET=false
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
-`EURC_ISSUER_PUBLIC` acima e o issuer publico da Circle para EURC na Stellar. Use com `STELLAR_NETWORK=PUBLIC`. Em testnet, nao existe issuer oficial equivalente validado aqui; nao use esse issuer publico para submeter transacoes na testnet.
+EURC fica desligado em testnet porque nao ha issuer/vault EURC validado neste ambiente. Use CETES no lugar de EUR/EURC enquanto `STELLAR_NETWORK=TESTNET`.
 
 Use `TESOURO` no env, nao `BRL`. TESOURO e o asset real do produto para reais; a interface pode exibir como real/reais quando for o melhor texto para usuario.
 
@@ -61,7 +62,7 @@ openssl rand -hex 32
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
 ### Telegram
@@ -137,7 +138,7 @@ await sdk.getVaultAPY(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTNE
 
 Para testnet com execucao real, use `DEFINDEX_ENABLE_EXECUTION=true` depois de validar API key, vaults, APY, balance, XDR de deposito, XDR de saque e assinatura pela wallet. O backend so executa se `DEFINDEX_NETWORK` e `STELLAR_NETWORK` apontarem para a mesma rede. Para mainnet, alem disso, exige `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
-Para EURC funcionar em producao:
+Para EURC funcionar futuramente em producao/mainnet:
 
 ```env
 STELLAR_NETWORK=PUBLIC
@@ -148,7 +149,7 @@ DEFINDEX_NETWORK=mainnet
 DEFINDEX_EURC_VAULT=C... # vault EURC mainnet validado
 ```
 
-Para testnet, use `DEFINDEX_NETWORK=testnet` e so preencha `EURC_ISSUER_TESTNET`/`DEFINDEX_EURC_VAULT` ou `DEFINDEX_TESOURO_VAULT` se voce tiver issuer e vault de teste realmente validados. Nao use o issuer publico da Circle para transacao em testnet.
+Para testnet agora, mantenha EURC desligado e use CETES: `ENABLE_CETES_ASSET=true`, `ENABLE_EURC_ASSET=false`, `DEFINDEX_CETES_VAULT=...`. So preencha `EURC_ISSUER_TESTNET`/`DEFINDEX_EURC_VAULT` no futuro se voce tiver issuer e vault de teste realmente validados. Nao use o issuer publico da Circle para transacao em testnet.
 
 ## 3. Para passkey
 

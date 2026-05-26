@@ -56,29 +56,28 @@ describe('DefindexYieldService', () => {
     expect(runtime.unavailable_reason).toContain('DEFINDEX_API_KEY');
   });
 
-  it('loads multi-asset vaults from env and normalizes EUR to EURC', () => {
+  it('loads multi-asset vaults and normalizes testnet EUR aliases to CETES', () => {
     clearDefindexVaultEnv();
     process.env.DEFINDEX_API_KEY = 'sk_test';
     process.env.DEFINDEX_NETWORK = 'testnet';
     process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
-    process.env.DEFINDEX_CETES_VAULT = 'CCETESVAULT';
     process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
     process.env.DEFINDEX_VAULTS_JSON = JSON.stringify([
-      { asset_code: 'EUR', vault_address: 'CEURVAULT', label: 'Euro vault', network: 'testnet' },
+      { asset_code: 'EUR', vault_address: 'CCETESVAULT', label: 'CETES vault', network: 'testnet' },
       { asset_code: 'XLM', vault_address: 'CXLMVAULT', label: 'XLM vault', network: 'mainnet' },
     ]);
 
     const runtime = DefindexYieldService.getRuntimeInfo();
 
     expect(runtime.configured).toBe(true);
-    expect(runtime.vaults.map((vault) => vault.asset_code)).toEqual(['EURC', 'USDC', 'CETES']);
-    expect(runtime.vaults.find((vault) => vault.asset_code === 'EURC')).toMatchObject({
-      vault_address: 'CEURVAULT',
-      label: 'Euro vault',
-    });
+    expect(runtime.vaults.map((vault) => vault.asset_code)).toEqual(['CETES', 'USDC']);
     expect(runtime.vaults.find((vault) => vault.asset_code === 'CETES')).toMatchObject({
       vault_address: 'CCETESVAULT',
+      label: 'CETES vault',
       asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    });
+    expect(runtime.vaults.find((vault) => vault.asset_code === 'USDC')).toMatchObject({
+      vault_address: 'CUSDCVAULT',
     });
   });
 

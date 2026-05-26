@@ -11,7 +11,7 @@ Para a experiência nova funcionar de ponta a ponta, o ambiente precisa ter:
 3. Supabase configurado com service role e todas as migrations listadas neste documento.
 4. `AGENT_INGEST_SECRET` igual no backend, Telegram e qualquer adapter de chat.
 5. `FRONTEND_URL`/`PUBLIC_APP_URL` apontando para o domínio real do frontend, porque as tool calls devolvem links públicos.
-6. Assets visíveis configurados em `TTS_VISIBLE_ASSET_CODES`; use `TESOURO,USDC,EURC,XLM`, sem asset BRL separado.
+6. Assets visíveis configurados em `TTS_VISIBLE_ASSET_CODES`; em testnet use `TESOURO,USDC,CETES,XLM`, sem asset BRL separado.
 7. Issuers, liquidez/rotas e setup dos assets extras antes de marcar uma moeda como operacional.
 8. PIX/Etherfuse com API key, organização/conta habilitada e webhook configurado.
 9. Defindex com vaults e API key para rendimento; execução deve ficar desligada até validação completa.
@@ -80,7 +80,7 @@ Fonte oficial: `https://docs.etherfuse.com/initial-setup`
 8. Cada vault deve ser um endereco de contrato Soroban `C...`; nao use issuer do asset, conta `G...` de usuario ou factory address.
 9. Obtenha vaults pelo app/dashboard da Defindex, criando via `@defindex/sdk` factory operations, ou pedindo ao time Defindex/PaltaLabs o vault curado para o asset e rede.
 10. Para gerar um bloco automaticamente com execucao testnet, rode `npm --prefix backend run defindex:env -- --network testnet --enable-execution`; para gravar arquivo separado, adicione `--write .env.defindex.testnet`.
-11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Se EURC/TESOURO nao aparecerem em testnet, nao configure yield desses assets.
+11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Em testnet, use CETES no lugar de EURC; se EURC/TESOURO nao aparecerem, nao configure yield desses assets.
 12. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
 13. Use `DEFINDEX_ENABLE_EXECUTION=true` para executar deposit/withdraw em testnet depois de testar assinatura e liquidez. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
@@ -178,11 +178,13 @@ ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 TESOURO_DISTRIBUTOR_PUBLIC=
 TESOURO_DISTRIBUTOR_SECRET=
-ENABLE_EURC_ASSET=true
+ENABLE_CETES_ASSET=true
+ENABLE_EURC_ASSET=false
 EURC_ISSUER=
 EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
 EURC_ISSUER_TESTNET=
-TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 
 # Assets extras opcionais, só quando houver issuer/liquidez/configuração real
 GBP_ISSUER=
@@ -242,7 +244,7 @@ Os `DEFINDEX_*_VAULT` sao enderecos de contrato Soroban do vault, no formato `C.
 
 Em testnet, o registry/API validou USDC, XLM e CETES. Nao configure yield de EURC/TESOURO em testnet ate existir vault validado para esses assets.
 
-`DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/EUR/BRL, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
+`DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/CETES/TESOURO, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
 
 Use `DEFINDEX_ENABLE_EXECUTION=true` para execucao em testnet depois de validar API key, vaults, issuers, liquidez e assinatura. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
@@ -253,7 +255,7 @@ AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
 O domínio público do frontend precisa bater com `PASSKEY_RP_ID` e `PASSKEY_ORIGIN`.
@@ -359,12 +361,14 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `TESOURO_ISSUER` | Backend | Issuer do asset TESOURO. O usuário vê Real/BRL; não criar asset BRL separado. |
 | `TESOURO_DISTRIBUTOR_PUBLIC` | Backend | Conta distributor pública para TESOURO, quando emissão/distribuição real estiver habilitada. |
 | `TESOURO_DISTRIBUTOR_SECRET` | Backend | Secret da distributor TESOURO. Só backend/custody. |
-| `ENABLE_EURC_ASSET` | Backend | Liga suporte a euro/EURC na UX e config de assets. |
+| `ENABLE_CETES_ASSET` | Backend | Liga CETES em testnet como substituto operacional de EUR/EURC. |
+| `ENABLE_EURC_ASSET` | Backend | Liga suporte a euro/EURC apenas quando houver issuer/liquidez/vault validado, normalmente public/mainnet. Em testnet atual fica `false`. |
 | `EURC_ISSUER` | Backend | Issuer EURC genérico/fallback. |
 | `EURC_ISSUER_PUBLIC` | Backend | Issuer EURC em public/mainnet. |
-| `EURC_ISSUER_TESTNET` | Backend | Issuer EURC em testnet. |
-| `TTS_VISIBLE_ASSET_CODES` | Backend | Lista canônica de assets expostos pela UX e agente. Use `TESOURO,USDC,EURC,XLM`. |
-| `NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES` | Frontend | Mesma lista para renderização no frontend: `TESOURO,USDC,EURC,XLM`. Não torna asset operacional sozinho. |
+| `EURC_ISSUER_TESTNET` | Backend | Issuer EURC em testnet. Deixe vazio ate existir issuer/vault validado. |
+| `CETES_ISSUER_TESTNET` | Backend | Issuer CETES usado no ambiente testnet atual. |
+| `TTS_VISIBLE_ASSET_CODES` | Backend | Lista canônica de assets expostos pela UX e agente. Em testnet use `TESOURO,USDC,CETES,XLM`. |
+| `NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES` | Frontend | Mesma lista para renderização no frontend: `TESOURO,USDC,CETES,XLM`. Não torna asset operacional sozinho. |
 | `GBP_ISSUER`, `MXN_ISSUER`, `ARS_ISSUER`, `CAD_ISSUER`, `AUD_ISSUER`, `CHF_ISSUER`, `JPY_ISSUER` | Backend | Issuers opcionais para moedas extras. Preencher só com liquidez/path/vault validados. |
 
 ### PIX / Etherfuse
@@ -389,7 +393,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `DEFINDEX_ALLOW_MAINNET_EXECUTION` | Backend | Guarda adicional para mainnet. Mantenha `false` em testnet; mainnet so executa quando esta flag tambem for `true`. |
 | `DEFINDEX_USDC_VAULT` | Backend | Endereco `C...` do vault para rendimento em USDC. |
 | `DEFINDEX_CETES_VAULT` | Backend | Endereco `C...` do vault para rendimento em CETES testnet. |
-| `DEFINDEX_EURC_VAULT` | Backend | Endereco `C...` do vault para rendimento em EURC/euro. |
+| `DEFINDEX_EURC_VAULT` | Backend | Endereco `C...` do vault para rendimento em EURC/euro. Nao usar em testnet atual; CETES substitui EURC. |
 | `DEFINDEX_TESOURO_VAULT` | Backend | Endereco `C...` do vault para rendimento em TESOURO/Real. |
 | `DEFINDEX_XLM_VAULT` | Backend | Endereco `C...` do vault para rendimento em XLM. |
 | `DEFINDEX_VAULTS_JSON` | Backend | Lista/objeto JSON para vaults extras, labels, network e enable por asset. |
@@ -469,7 +473,7 @@ backend/migrations/20260523_01_agent_messages_intro_dedupe.sql
    - `npm --prefix frontend run build`
 7. Smoke test manual depois do deploy:
    - Chat: “o que você pode fazer?”
-   - Chat: “converter 500 reais para euros”
+   - Chat: “converter 500 reais para CETES”
    - Chat: “deixar 200 dólares rendendo”
    - Chat: “injetar 500 reais, deixar render e sair para user@example.com”
    - Abrir `/yield?lang=pt-BR&asset=CETES&amount=200`

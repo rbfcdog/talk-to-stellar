@@ -71,7 +71,6 @@ function stellarRuntimeNetwork(): DefindexNetwork {
 
 function normalizeVaultAsset(value: unknown): string {
   const normalized = normalizeAssetCode(value);
-  if (normalized === 'EUR') return 'EURC';
   if (normalized === 'BRL' || normalized === 'TESOURO') return 'TESOURO';
   return normalized;
 }
@@ -114,7 +113,7 @@ function parseVaultsFromEnv(fallbackNetwork: DefindexNetwork): DefindexVaultConf
   const candidates: Array<{ asset: string; env: string; label: string }> = [
     { asset: 'USDC', env: 'DEFINDEX_USDC_VAULT', label: 'USDC Yield Vault' },
     { asset: 'CETES', env: 'DEFINDEX_CETES_VAULT', label: 'CETES Yield Vault' },
-    { asset: 'EURC', env: 'DEFINDEX_EURC_VAULT', label: 'EUR Yield Vault' },
+    ...(fallbackNetwork === 'testnet' ? [] : [{ asset: 'EURC', env: 'DEFINDEX_EURC_VAULT', label: 'EUR Yield Vault' }]),
     { asset: 'XLM', env: 'DEFINDEX_XLM_VAULT', label: 'XLM Yield Vault' },
     { asset: 'TESOURO', env: 'DEFINDEX_TESOURO_VAULT', label: 'Real Yield Vault' },
   ];

@@ -81,13 +81,13 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
 const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
-const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "EUR"];
-const FIAT_FORMAT_ASSETS = new Set(["BRL", "EUR", "USD"]);
+const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES"];
+const FIAT_FORMAT_ASSETS = new Set(["BRL", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
   BRL: "R$",
   USDC: "US$",
   USD: "US$",
-  EUR: "€",
+  CETES: "CETES",
 };
 const ASSET_ALIASES: Record<string, TargetAsset> = {
   TESOURO: "BRL",
@@ -99,9 +99,10 @@ const ASSET_ALIASES: Record<string, TargetAsset> = {
   DOLARES: "USDC",
   DOLLAR: "USDC",
   DOLLARS: "USDC",
-  EURC: "EUR",
-  EURO: "EUR",
-  EUROS: "EUR",
+  EUR: "CETES",
+  EURC: "CETES",
+  EURO: "CETES",
+  EUROS: "CETES",
 };
 
 function canonicalAssetCode(value: unknown, fallback = ""): TargetAsset {

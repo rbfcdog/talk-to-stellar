@@ -35,9 +35,10 @@ TELEGRAM_NOTIFY_URL=https://your-telegram-service/notify
 # Assets visible in UX
 ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
-ENABLE_EURC_ASSET=true
-EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
-TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+ENABLE_CETES_ASSET=true
+ENABLE_EURC_ASSET=false
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 
 # PIX / ramp
 ETHERFUSE_API_KEY=api_sand:replace:replace
@@ -83,7 +84,7 @@ AGENT_API_URL=https://your-backend/api/agent/query
 NEXT_PUBLIC_BACKEND_URL=https://your-backend
 NEXT_PUBLIC_AGENT_API_URL=https://your-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://your-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
 ## 4. Telegram env to add or verify
@@ -114,7 +115,7 @@ DEFINDEX_EURC_VAULT=
 DEFINDEX_TESOURO_VAULT=
 DEFINDEX_VAULTS_JSON=
 
-# Testnet EURC issuer is not validated here.
+# Testnet EURC issuer is not validated here. Keep EURC disabled on testnet.
 EURC_ISSUER_TESTNET=
 
 # TESOURO distributor is only needed for on-chain TESOURO settlement.
@@ -127,7 +128,7 @@ PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS=
 PASSKEY_SMART_ACCOUNT_DEFAULT_CONTEXT_RULE_ID=
 ```
 
-EURC is configured for public network with Circle's issuer. Do not use `EURC_ISSUER_PUBLIC` to submit testnet transactions.
+EURC is not used on testnet here. CETES replaces EUR/EURC in testnet UX and transactions. Do not use `EURC_ISSUER_PUBLIC` to submit testnet transactions.
 
 TESOURO is the real product asset for reais. Do not recreate or expose a separate `BRL` asset.
 
@@ -239,10 +240,10 @@ Expected:
 Also test:
 
 ```text
-/convert?source_asset=USDC&dest_asset=EURC&amount=20&lang=en
+/convert?source_asset=USDC&dest_asset=CETES&amount=20&lang=en
 ```
 
-Expected: English UI, euro destination, no technical terms.
+Expected: English UI, CETES destination, no technical terms.
 
 ### E. Money cycle
 
@@ -327,7 +328,7 @@ Before shipping, inspect the visible UI:
 3. Yield starts from the user's account balances.
 4. PIX key can be typed or changed by the user on withdraw.
 5. TESOURO is treated as reais in UX; no separate BRL issued asset.
-6. EURC is visible only as euro/euros, and only operational where issuer/liquidity are valid.
+6. CETES is visible in testnet instead of EURC; EURC stays hidden until issuer/liquidity/vault are valid for the active network.
 7. No visible technical terms: `Defindex`, `vault`, `XDR`, `issuer`, `trustline`, `blockchain`, `secret`.
 8. Mobile layout has no overlapping text.
 9. Confirmation/PIN appears only at the final step.

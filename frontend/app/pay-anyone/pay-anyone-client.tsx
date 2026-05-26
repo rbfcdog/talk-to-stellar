@@ -21,7 +21,7 @@ type LinkMode = "send" | "receive"
 function normalizeAssetCode(value: string) {
   const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO") return "BRL"
-  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR"
+  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
   return code
 }
 
@@ -29,7 +29,7 @@ function displayAsset(assetCode: string) {
   const code = normalizeAssetCode(assetCode)
   if (code === "USDC") return "US$"
   if (code === "BRL") return "R$"
-  if (code === "EUR") return "€"
+  if (code === "CETES") return "CETES"
   return code
 }
 
@@ -305,7 +305,7 @@ export default function PayAnyoneClient() {
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
-                  <option value="EUR">€</option>
+                  <option value="CETES">CETES</option>
                 </select>
               </label>
               <label className="block space-y-2">
@@ -317,7 +317,7 @@ export default function PayAnyoneClient() {
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
-                  <option value="EUR">€</option>
+                  <option value="CETES">CETES</option>
                 </select>
               </label>
               <label className="block space-y-2 sm:col-span-3">

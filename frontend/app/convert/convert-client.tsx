@@ -88,17 +88,17 @@ const ASSETS: AssetOption[] = [
     annualRate: 0.045,
   },
   {
-    code: "EUR",
-    short: "EUR",
-    namePt: "Euros",
-    nameEn: "Euros",
-    promptPt: "euros",
-    promptEn: "euros",
-    descriptionPt: "Para objetivos ligados à Europa.",
-    descriptionEn: "For goals linked to Europe.",
+    code: "CETES",
+    short: "CETES",
+    namePt: "Rendimento México",
+    nameEn: "Mexico yield",
+    promptPt: "CETES",
+    promptEn: "CETES",
+    descriptionPt: "Opção testnet disponível para rendimento.",
+    descriptionEn: "Testnet option available for earning.",
     tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
-    demoBrl: 5.65,
-    annualRate: 0.032,
+    demoBrl: 0.3,
+    annualRate: 0.0875,
   },
   {
     code: "XLM",
@@ -122,7 +122,7 @@ function localCopy(language: AppLanguage, pt: string, en: string) {
 function normalizeAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
   if (!code || code === "USD" || code === "DOLLAR" || code === "DOLLARS") return "USDC";
-  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR";
+  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES";
   if (code === "TESOURO" || code === "REAL" || code === "REAIS" || code === "R$") return "BRL";
   return ASSETS.some((asset) => asset.code === code) ? code : "USDC";
 }
@@ -169,7 +169,6 @@ function buildUrl(path: string, params: Record<string, unknown>) {
 
 function accountAssetCode(code: string) {
   if (code === "BRL") return "TESOURO";
-  if (code === "EUR") return "EURC";
   return code;
 }
 

@@ -298,7 +298,7 @@ function normalizeUiAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
   if (!code) return "";
   if (code === "USD" || code === "DOLLAR" || code === "DOLLARS") return "USDC";
-  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR";
+  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES";
   if (code === "TESOURO" || code === "REAL" || code === "REAIS" || code === "R$") return "BRL";
   return code;
 }
