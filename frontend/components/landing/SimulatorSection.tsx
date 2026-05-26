@@ -110,7 +110,7 @@ export default function SimulatorSection() {
           {L("Simule sua", "Simulate your")} <span className="text-[#00D2FF]">{L("economia", "savings")}</span>
         </h2>
         <p className="text-lg text-[#9BA4B5] max-w-2xl mx-auto">
-          {L("Compare a taxa de um caminho tradicional com a rota do TalkToStellar antes de começar.", "Compare traditional fees with the real BRL to USDC route in TalkToStellar.")}
+          {L("Compare a taxa de um caminho tradicional com a rota do TalkToStellar antes de começar.", "Compare traditional fees with the TalkToStellar route before you start.")}
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export default function SimulatorSection() {
             {numbers.rate > 0 ? `R$ 1 = US$ ${numbers.rate.toFixed(6)}` : L("Carregando estimativa...", "Loading estimate...")}
           </p>
           <p className="text-[11px] text-[#9BA4B5] mt-1">
-            {L("Base: reais da sua conta", "Source: BRL from your account")}
+            {L("Base: reais da sua conta", "Source: reais from your account")}
           </p>
         </div>
 
@@ -148,7 +148,7 @@ export default function SimulatorSection() {
               />
               <div className="flex items-center gap-2 bg-[#0C1421]/80 rounded-full px-3 py-1.5 shrink-0 ml-2 border border-white/[0.03]">
                 <img src="https://flagcdn.com/w20/br.png" alt="BRL" className="w-5 h-5 rounded-full object-cover" />
-                <span className="font-bold text-slate-200">BRL</span>
+                <span className="font-bold text-slate-200">R$</span>
               </div>
             </div>
           </div>
@@ -172,7 +172,7 @@ export default function SimulatorSection() {
                 <div className="w-5 h-5 rounded-full bg-[#4CA1EF] flex items-center justify-center">
                   <span className="text-white text-[10px] font-bold">$</span>
                 </div>
-                <span className="font-bold text-slate-200">USDC</span>
+                <span className="font-bold text-slate-200">US$</span>
               </div>
             </div>
             <p className="mt-2 text-xs text-[#9BA4B5]">
@@ -238,7 +238,7 @@ export default function SimulatorSection() {
             <div className="mt-auto pt-4 border-t border-white/[0.03] w-full">
               <p className="text-[11px] text-[#9BA4B5] uppercase tracking-wider mb-1">{L("Você preserva", "You keep")}</p>
               <p className="font-bold text-emerald-400 text-xl">{formatBrl(numbers.savingsBrl)}</p>
-              <p className="text-xs text-emerald-500/70 mt-1">{L("Com a rota do TalkToStellar", "With BRL to USDC routing in TalkToStellar")}</p>
+              <p className="text-xs text-emerald-500/70 mt-1">{L("Com a rota do TalkToStellar", "With the TalkToStellar route")}</p>
             </div>
           </div>
         </div>

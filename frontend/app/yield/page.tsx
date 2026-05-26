@@ -2,7 +2,7 @@ import RendimentosClient from "../rendimentos/rendimentos-client";
 
 export const metadata = {
   title: "Yield and balances",
-  description: "A simple screen to track balances and prepare yield.",
+  description: "Review balances, currencies, earning options, PIX add, and PIX withdrawal.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

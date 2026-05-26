@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MessageCircle, Zap, FileText, Download, Send, UserPlus } from 'lucide-react';
+import { MessageCircle, FileText, Download, ArrowDownToLine, ArrowUpFromLine, PiggyBank } from 'lucide-react';
 import ChatMockup, { ChatMessage } from './ChatMockup';
 import { useLanguage } from '@/lib/i18n';
 
@@ -51,39 +51,38 @@ export default function ScrollFeatures() {
       ]
     },
     {
-      title: L("2. Salve um contato", "2. Add a Contact"),
-      description: L("Salve destinatários e contas de destino com linguagem simples, sem preencher tudo de novo a cada envio.", "Save recipient details or your own global accounts through a natural chat flow."),
+      title: L("2. Traga dinheiro por PIX", "2. Add Money with PIX"),
+      description: L("Digite valor e moeda. A tela abre com PIX preenchido, mostra quanto entra e mantém a chave de retirada separada para quando você quiser sair.", "Type the amount and currency. The screen opens with PIX prefilled, shows what enters the account, and keeps withdrawal details for later."),
       color: "#4CA1EF",
-      animIcon: <PhaseIconAnim Icon={UserPlus} color="#4CA1EF" delay={0.5} />,
+      animIcon: <PhaseIconAnim Icon={ArrowDownToLine} color="#4CA1EF" delay={0.5} />,
       messages: [
-        { type: 'user', text: L('Quero salvar minha conta global.', 'I want to add my Nomad account.'), time: '09:45' },
-        { type: 'bot', text: L('Claro. Envie os dados da conta de destino.', 'Sure. Send me your Nomad account number and routing number (ABA).'), time: '09:45' },
-        { type: 'user', text: 'Account 12345678, routing 122105155', time: '09:46' },
-        { type: 'bot', text: L('Contato salvo como "Minha conta global".', 'Contact saved successfully as "My Nomad Account".'), time: '09:46' },
+        { type: 'user', text: L('Colocar R$ 500 via PIX e manter em euro.', 'Add R$500 with PIX and keep it in euros.'), time: '09:45' },
+        { type: 'bot', text: L('Abri o PIX com valor e moeda preenchidos. Antes do PIN, você vê taxa, valor final e saldo esperado.', 'I opened PIX with amount and currency prefilled. Before PIN, you see fee, final amount, and expected balance.'), time: '09:45' },
+        { type: 'bot', text: <a href="#" className="text-blue-500 underline font-medium">{L("Abrir PIX", "Open PIX")}</a>, time: '09:45' },
       ]
     },
     {
-      title: L("3. Envie para o contato", "3. Send to the Contact"),
-      description: L("Peça o envio, veja valor e taxa, e aprove a operação com PIN. O assistente prepara tudo antes da confirmação.", "Ask for the most optimized route and approve the payment to the saved account. The AI structures the operation and shows the conversion amount."),
+      title: L("3. Escolha rendimento", "3. Choose Yield"),
+      description: L("Depois que o saldo entra, o assistente mostra opções por moeda e prepara guardar ou resgatar com revisão clara.", "After the balance arrives, the assistant shows earning options by currency and prepares save or withdraw with a clear review."),
       color: "#00D2FF",
-      animIcon: <PhaseIconAnim Icon={Send} color="#00D2FF" delay={1} />,
+      animIcon: <PhaseIconAnim Icon={PiggyBank} color="#00D2FF" delay={1} />,
       messages: [
-        { type: 'user', text: L('Converta R$5.000 para dólares e envie para minha conta global', 'Convert R$5,000 to dollars and send it to my Nomad account'), time: '09:50' },
-        { type: 'bot', text: L('Você vai enviar R$5.000,00 para "Minha conta global".\n\nEstimativa de recebimento: US$ 994,50.', 'You are sending R$5,000.00 to "My Nomad Account" through the most optimized route.\n\nEstimated result: 994.50 USDC.'), time: '09:50' },
-        { type: 'bot', text: L('Para continuar, escaneie o PIX ou copie o código:', 'To continue, scan the code below or copy the PIX payment code:'), time: '09:50' },
-        { type: 'bot', text: <div className="bg-[#0C1421] text-[#9BA4B5] p-2.5 rounded-lg border border-white/[0.03] break-all text-[11px] font-mono text-center shadow-inner">00020101021126580014br.gov.bcb.pix.gui<br/>...</div>, time: '09:50' },
+        { type: 'user', text: L('Quais opções de rendimento eu tenho?', 'Which earning options do I have?'), time: '09:50' },
+        { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. Euros\n\nVocê revisa a taxa estimada antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. Euros\n\nYou review the estimated rate before confirming.'), time: '09:50' },
+        { type: 'user', text: L('Deixar 200 euros rendendo.', 'Keep 200 euros earning.'), time: '09:51' },
       ]
     },
     {
-      title: L("4. Pagamento confirmado", "4. Payment Confirmed"),
-      description: L("Depois da confirmação, o usuário recebe status e comprovante sem precisar sair da conversa.", "Once you confirm the payment, digital dollars arrive on the other side almost in real time, with a receipt."),
+      title: L("4. Saia para seu PIX", "4. Withdraw to PIX"),
+      description: L("Quando quiser retirar, digite a chave PIX no momento da saída. A tela mostra quanto sai, quanto chega em reais e registra o comprovante.", "When you want to withdraw, enter the PIX key at the moment. The screen shows what leaves, what arrives in reais, and stores the receipt."),
       color: "#4CA1EF",
-      animIcon: <PhaseIconAnim Icon={Zap} color="#4CA1EF" delay={1.5} />,
+      animIcon: <PhaseIconAnim Icon={ArrowUpFromLine} color="#4CA1EF" delay={1.5} />,
       messages: [
-        { type: 'bot', text: L('Pagamento de R$5.000,00 confirmado.', 'R$5,000.00 payment confirmed successfully.'), time: '09:52' },
+        { type: 'user', text: L('Retirar 80 euros para meu PIX user@example.com', 'Withdraw 80 euros to my PIX user@example.com'), time: '09:52' },
+        { type: 'bot', text: L('A retirada está pronta. Antes do PIN, você verá quanto chega em reais no seu PIX.', 'The withdrawal is ready. Before PIN, you will see how much arrives in reais in your PIX.'), time: '09:52' },
         { type: 'bot', text: (
           <div className="flex flex-col gap-2">
-            <span>{L("Pagamento concluído. Aqui está o comprovante:", "Payment complete. Here is your receipt:")}</span>
+            <span>{L("Retirada concluída. Aqui está o comprovante:", "Withdrawal complete. Here is your receipt:")}</span>
             <div className="bg-[#0C1421] border border-white/[0.03] rounded-xl p-3 flex items-center gap-3 w-[200px] mt-1 relative overflow-hidden group hover:bg-[#162032] transition-colors cursor-pointer shadow-sm">
               <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5 text-red-500" />

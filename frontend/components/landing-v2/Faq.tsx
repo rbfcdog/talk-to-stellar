@@ -13,34 +13,34 @@ interface FaqItem {
 
 const FAQS: FaqItem[] = [
   {
-    question: 'Em quanto tempo o TalkToStellar fica integrado à nossa stack?',
+    question: 'O que posso pedir no chat?',
     answer:
-      'API REST com payloads versionados, sandbox imediato, idempotency keys nativas e webhooks idempotentes. Equipes integram a primeira conversão em menos de uma semana usando a coleção Postman e o SDK Node.',
+      'Você pode pedir saldo, colocar dinheiro com PIX, converter entre moedas, deixar saldo rendendo, retirar para uma chave PIX e ver comprovantes.',
   },
   {
-    question: 'Quem custodia as chaves dos usuários finais?',
+    question: 'A chave PIX de saída é fixa?',
     answer:
-      'Ninguém além do próprio cliente final. A chave Stellar é gerada no dispositivo e protegida por passkey. Nada de seed phrase, nada de chave em servidor nosso. Operações exigem assinatura local.',
+      'Não. Na retirada, a pessoa pode digitar a chave PIX no momento da saída. A tela mostra quanto sai da conta e quanto chega em reais antes do PIN.',
   },
   {
-    question: 'Qual é o SLA e o tempo médio de liquidação?',
+    question: 'Quais moedas aparecem para o usuário?',
     answer:
-      'Liquidação média abaixo de 60 segundos do confirm Pix até o USDC creditado na Stellar. SLA de uptime 99.9% mensal com créditos contratuais em caso de descumprimento.',
+      'A experiência mostra reais, dólares, euros e as moedas extras configuradas no ambiente. Reais são tratados como reais na UX.',
   },
   {
-    question: 'Qual é a fee total para BRL → USDC?',
+    question: 'Como funciona o rendimento?',
     answer:
-      'Spread de 0,5% sobre a cotação interbancária, sem taxa de wire, sem IOF de remessa. Network fee Stellar é incluída no quote final. O custo total é exibido na resposta da API antes do confirm.',
+      'O usuário vê opções disponíveis por moeda, gráfico estimado e uma revisão antes de guardar ou resgatar. Retornos variam e não são prometidos como garantidos.',
   },
   {
-    question: 'Vocês são autorizados a operar com Pix e câmbio no Brasil?',
+    question: 'Dá para fazer tudo em um fluxo?',
     answer:
-      'Operamos via PSP licenciado pelo BCB para o trilho Pix e parceiro corretor para a etapa de câmbio. KYC/KYB, listas restritivas e travel rule integrados ao onboarding.',
+      'Sim. Peça algo como “injetar 500 reais, deixar rendendo e sair para meu PIX”. O agente abre a interface consolidada do ciclo do dinheiro.',
   },
   {
-    question: 'Funciona em testnet antes de habilitar mainnet?',
+    question: 'Preciso baixar app novo?',
     answer:
-      'Sim. Sandbox espelha o contrato de produção com a Stellar Testnet e Pix mock. Migração para mainnet é uma troca de chave de API — nenhuma alteração de payload é necessária.',
+      'Não. A pessoa pode começar pelo chat web, WhatsApp ou Telegram, e confirmar operações em telas seguras quando necessário.',
   },
 ]
 
@@ -67,9 +67,9 @@ export function Faq() {
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
         <header className="flex flex-col gap-4">
-          <TerminalEyebrow command="tts faq --segment b2b" />
+          <TerminalEyebrow command='chat "ajuda"' />
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-[-0.022em] text-tts-deep md:text-4xl">
-            O que times técnicos perguntam antes de integrar.
+            Perguntas comuns antes de usar.
           </h2>
         </header>
 

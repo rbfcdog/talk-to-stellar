@@ -23,7 +23,7 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-2 text-sm font-medium text-gray-300 bg-white/5 px-4 py-2 rounded-full border border-white/[0.03]">
-          {L("Criado para pagamentos globais", "Built for global payments")}
+          {L("Criado para PIX, rendimento e saída", "Built for PIX, yield, and withdrawal")}
         </div>
 
       </div>

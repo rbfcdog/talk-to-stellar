@@ -533,6 +533,11 @@ export class AgentGraph {
       normalized.includes('principais comandos') ||
       normalized.includes('comandos disponiveis') ||
       normalized.includes('o que voce faz') ||
+      normalized.includes('o que voce pode fazer') ||
+      normalized.includes('o que tu pode fazer') ||
+      normalized.includes('o que da pra fazer') ||
+      normalized.includes('o que consigo fazer') ||
+      normalized.includes('what can you do') ||
       normalized.includes('como usar') ||
       normalized.includes('mostrar comandos') ||
       normalized.includes('mostre os comandos')
@@ -2503,7 +2508,7 @@ export class AgentGraph {
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
-      '- For balances, contacts, history, payments, conversions, reset PIN, and logout, prefer tools over free text.',
+      '- For balances, contacts, history, payments, conversions, PIX, yield, money-cycle, reset PIN, and logout, prefer tools over free text.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
@@ -2523,7 +2528,7 @@ export class AgentGraph {
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
-      '- If the user asks for XLM or technical balances, show only the app balance in R$ and US$ and say TalkToStellar displays the available app balance.',
+      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and € and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- Mini-menus must stay short: at most 5 actions, no technical terms, and no second welcome block if the user already received a login/onboarding completion message.',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',

@@ -13,8 +13,8 @@ type DesktopMode = 'bar' | 'pill-collapsed' | 'pill-expanded'
 const NAV_LINKS = [
   { id: 'produto', label: 'Produto' },
   { id: 'canais', label: 'Integrações' },
-  { id: 'api', label: 'Documentação' },
-  { id: 'empresa', label: 'Empresa' },
+  { id: 'api', label: 'Intents' },
+  { id: 'comecar', label: 'Começar' },
 ]
 
 const HERO_SECTION_ID = 'produto'
@@ -224,8 +224,8 @@ function MobileNav() {
               size="sm"
               className="bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
             >
-              <a href="#comecar" onClick={close}>
-                Falar com o time
+              <a href="/chat" onClick={close}>
+                Abrir chat
               </a>
             </Button>
           </div>
@@ -271,7 +271,7 @@ function BarBody({
           className="bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
         >
           <a href="#comecar" onClick={onLinkClick}>
-            Falar com o time
+            Abrir chat
           </a>
         </Button>
         {showCloseButton && (

@@ -23,20 +23,19 @@ export function FinalCta() {
 
       <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 md:px-8">
         <TerminalEyebrow
-          command="tts onboarding --start --channel sandbox"
+          command='chat "começar meu ciclo do dinheiro"'
           dark
           showCursor
         />
 
         <h2 className="max-w-3xl text-[34px] font-extrabold leading-[1.05] tracking-[-0.025em] md:text-[48px]">
           Comece pelo canal{' '}
-          <span className="text-tts-gold-lt">que sua operação já usa.</span>
+          <span className="text-tts-gold-lt">que você já usa.</span>
         </h2>
 
         <p className="max-w-xl text-sm leading-[1.65] text-white/55 md:text-base">
-          Sandbox em minutos, API key na mesma chamada e suporte direto via
-          WhatsApp ou Telegram para a equipe de integração. Mainnet quando
-          estiver pronto — sem troca de payload.
+          Use o chat para trazer dinheiro por PIX, converter, deixar rendendo
+          e retirar para seu PIX com revisão antes do PIN.
         </p>
 
         <div className="flex flex-wrap gap-3">
@@ -44,8 +43,8 @@ export function FinalCta() {
             asChild
             className="h-12 bg-tts-gold px-6 text-sm text-tts-deep hover:bg-tts-gold-lt"
           >
-            <a href="mailto:team.talktostellar@gmail.com?subject=Sandbox%20TalkToStellar">
-              Falar com o time
+            <a href="/chat">
+              Abrir chat
             </a>
           </Button>
           <Button
@@ -53,8 +52,8 @@ export function FinalCta() {
             variant="outline"
             className="h-12 border-white/20 bg-white/5 px-6 text-sm text-white hover:bg-white/10"
           >
-            <a href="#api">
-              Ver documentação
+            <a href="/money-cycle">
+              Ver ciclo completo
               <ArrowRight className="ml-1 h-4 w-4" />
             </a>
           </Button>
@@ -62,9 +61,9 @@ export function FinalCta() {
 
         <dl className="mt-4 grid w-full grid-cols-1 gap-px overflow-hidden border-t border-white/10 sm:grid-cols-3">
           {[
-            { value: '<7d', label: 'Time to first conversion' },
-            { value: '24/7', label: 'Suporte técnico' },
-            { value: 'BCB+', label: 'Compliance Pix · KYC · KYB' },
+            { value: 'PIX', label: 'entrada e saída' },
+            { value: '€', label: 'euro disponível' },
+            { value: 'PIN', label: 'revisão antes de confirmar' },
           ].map(({ value, label }) => (
             <div
               key={label}

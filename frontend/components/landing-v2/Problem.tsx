@@ -16,25 +16,25 @@ interface ProblemCard {
 
 const PROBLEMS: ProblemCard[] = [
   {
-    figure: '4–6',
-    figureSuffix: '%',
-    title: 'Custo efetivo alto',
+    figure: '3',
+    figureSuffix: ' telas',
+    title: 'Dinheiro espalhado',
     description:
-      'Spreads, IOF e taxas de wire corroem qualquer operação cross-border que dependa do trilho bancário tradicional.',
+      'Entrada, conversão, rendimento e retirada normalmente ficam em lugares diferentes, com pouco contexto para decidir.',
   },
   {
-    figure: '3',
-    figureSuffix: ' etapas',
-    title: 'Barreira da Web3',
+    figure: '1',
+    figureSuffix: ' chave',
+    title: 'PIX precisa ser dinâmico',
     description:
-      'Criar carteira, salvar seed phrase, escolher rede. Cada etapa derruba a conversão do cliente final.',
+      'Na hora de sair, a pessoa deve informar a chave PIX correta naquele momento, revisar o valor e confirmar com segurança.',
   },
   {
     figure: '4',
-    figureSuffix: '×',
-    title: 'Ferramentas fragmentadas',
+    figureSuffix: ' moedas',
+    title: 'Multi-moeda sem confusão',
     description:
-      'PSP, on-ramp, custódia e mensageria em fornecedores diferentes — cada um com SLA, contrato e console próprios.',
+      'Reais, dólares, euros e outras moedas precisam aparecer em linguagem simples, sem expor infraestrutura para o usuário.',
   },
 ]
 
@@ -49,9 +49,9 @@ export function Problem() {
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 md:px-8">
         <header className="flex flex-col gap-4">
-          <TerminalEyebrow command="tts diagnose --market BRL --segment cross-border" />
+          <TerminalEyebrow command='chat "o que consigo fazer com meu saldo?"' />
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-[-0.022em] text-tts-deep md:text-4xl">
-            O que trava operações BRL → USDC hoje.
+            O que trava o ciclo do dinheiro hoje.
           </h2>
         </header>
 

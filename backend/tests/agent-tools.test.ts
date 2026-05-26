@@ -139,6 +139,24 @@ describe('Agent tool execution', () => {
     expect(mockDisableConversionRule).toHaveBeenCalledWith('rule-123');
   });
 
+  it('lists the current chat capabilities around PIX, multi-asset conversion, yield, and money cycle', async () => {
+    const output = await executeTool('get_intent_help', {});
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.commands.map((item: any) => item.command)).toEqual(expect.arrayContaining([
+      'saldo',
+      'PIX',
+      'converter',
+      'rendimento',
+      'ciclo',
+    ]));
+    expect(parsed.message).toContain('R$, US$, €');
+    expect(parsed.message).toContain('ciclo completo');
+    expect(parsed.message).toContain('sair para meu PIX');
+    expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
+  });
+
   it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
     const output = await executeTool('get_brl_usdc_quote', {});
     const parsed = JSON.parse(output);

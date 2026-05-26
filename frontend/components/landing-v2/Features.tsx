@@ -8,33 +8,33 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
-    title: 'Liquidação em segundos',
+    title: 'Conversão multi-moeda',
     description:
-      'Cada conversão BRL → USDC fecha na Stellar com confirmação em menos de um segundo. Sem janela de risco aberta entre on-ramp e custódia.',
+      'O chat entende reais, dólares, euros e moedas configuradas, abre a interface certa e mostra a revisão antes do PIN.',
     snippetLines: [
-      { key: 'status', value: 'settled', type: 'string' },
-      { key: 'latency_ms', value: '847', type: 'number' },
-      { key: 'network', value: 'stellar', type: 'string' },
+      { key: 'intent', value: 'convert', type: 'string' },
+      { key: 'from', value: 'R$', type: 'string' },
+      { key: 'to', value: '€', type: 'string' },
     ],
   },
   {
-    title: 'Arquitetura não-custodial',
+    title: 'Rendimento guiado',
     description:
-      'Chave privada gerada e mantida no dispositivo do cliente via passkey. Nada de seed phrase, nada de chave em nosso servidor.',
+      'A experiência mostra opções por moeda, gráfico de rendimento e ação de guardar ou resgatar sem termos técnicos.',
     snippetLines: [
-      { key: 'custody', value: 'non-custodial', type: 'string' },
-      { key: 'auth', value: 'passkey', type: 'string' },
-      { key: 'key_on_server', value: 'false', type: 'boolean' },
+      { key: 'intent', value: 'yield', type: 'string' },
+      { key: 'asset', value: 'euro', type: 'string' },
+      { key: 'review_required', value: 'true', type: 'boolean' },
     ],
   },
   {
-    title: 'Canais nativos',
+    title: 'PIX entra e sai',
     description:
-      'WhatsApp, Telegram, REST API ou dashboard — o cliente final escolhe onde operar. Sem app novo, sem onboarding longo.',
+      'Entrada por PIX, retirada para uma chave PIX digitada na hora e comprovante no mesmo fluxo de chat.',
     snippetLines: [
-      { key: 'channel', value: 'whatsapp', type: 'string' },
-      { key: 'install_required', value: 'false', type: 'boolean' },
-      { key: 'onboarding', value: '<2min', type: 'string' },
+      { key: 'intent', value: 'money_cycle', type: 'string' },
+      { key: 'pix_key_dynamic', value: 'true', type: 'boolean' },
+      { key: 'receipt', value: 'chat', type: 'string' },
     ],
   },
 ]
@@ -48,8 +48,8 @@ export function Features() {
             Por que TalkToStellar
           </h2>
           <p className="max-w-xl text-sm leading-[1.65] text-tts-muted">
-            Três decisões de arquitetura que removem o atrito típico de
-            integrações Pix + cripto.
+            Três fluxos essenciais para o usuário entrar, converter, render e
+            sair sem trocar de contexto.
           </p>
         </header>
 
