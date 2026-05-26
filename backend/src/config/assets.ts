@@ -69,13 +69,13 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     return String(process.env.TESOURO_ISSUER || '').trim() || ETHERFUSE_TESOURO_ISSUER;
   }
   if (code === 'EURC') {
-    const configured = String(process.env.EURC_ISSUER || process.env.EUR_ISSUER || '').trim();
-    if (configured) return configured;
-    return String(
+    const networkSpecific = String(
       network === 'PUBLIC'
         ? process.env.EURC_ISSUER_PUBLIC || process.env.EUR_ISSUER_PUBLIC || ''
         : process.env.EURC_ISSUER_TESTNET || process.env.EUR_ISSUER_TESTNET || ''
-    ).trim() || undefined;
+    ).trim();
+    if (networkSpecific) return networkSpecific;
+    return String(process.env.EURC_ISSUER || process.env.EUR_ISSUER || '').trim() || undefined;
   }
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }

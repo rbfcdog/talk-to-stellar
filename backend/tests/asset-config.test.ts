@@ -88,7 +88,7 @@ describe('asset config', () => {
   it('resolves user-facing EUR to Circle EURC issuer on public network', () => {
     process.env.STELLAR_NETWORK = 'PUBLIC';
     process.env.EURC_ISSUER_PUBLIC = 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2';
-    delete process.env.EURC_ISSUER;
+    process.env.EURC_ISSUER = 'GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO';
     delete process.env.EUR_ISSUER;
 
     expect(resolveConfiguredAsset('EUR')).toEqual({

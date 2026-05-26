@@ -77,7 +77,10 @@ Fonte oficial: `https://docs.etherfuse.com/initial-setup`
 5. Configure `DEFINDEX_BASE_URL=https://api.defindex.io`.
 6. Use `Authorization: Bearer <key>` para chamadas diretas.
 7. Configure vaults reais por asset (`DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT`, `DEFINDEX_XLM_VAULT` ou `DEFINDEX_VAULTS_JSON`).
-8. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
+8. Cada vault deve ser um endereco de contrato Soroban `C...`; nao use issuer do asset, conta `G...` de usuario ou factory address.
+9. Obtenha vaults pelo app/dashboard da Defindex, criando via `@defindex/sdk` factory operations, ou pedindo ao time Defindex/PaltaLabs o vault curado para o asset e rede.
+10. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
+11. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
 
 Fontes oficiais: `https://docs.defindex.io/api-integration-guide/quickstart`, `https://docs.defindex.io/wallet-developer/api-reference/api` e `https://docs.defindex.io/api-integration-guide/creating-a-defindex-vault`
 
@@ -197,6 +200,8 @@ ETHERFUSE_WEBHOOK_SECRET=
 # Defindex / rendimento
 DEFINDEX_API_KEY=
 DEFINDEX_BASE_URL=https://api.defindex.io
+# Alias aceito pelo backend/SDK. Prefira DEFINDEX_BASE_URL no deploy.
+# DEFINDEX_API_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
@@ -226,6 +231,8 @@ BRIDGE_API_KEY=
 BRIDGE_PAYOUT_CREATE_URL=
 ENABLE_REAL_PAYOUT_EXECUTION=false
 ```
+
+Os `DEFINDEX_*_VAULT` sao enderecos de contrato Soroban do vault, no formato `C...`. `getFactoryAddress()` retorna a factory usada para criar vaults; o valor que vai no env e o endereco do vault criado/selecionado, nao a factory.
 
 `DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/EUR/BRL, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
 
@@ -367,13 +374,14 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | --- | --- | --- |
 | `DEFINDEX_API_KEY` | Backend | API key DeFindex, usada com `Authorization: Bearer`. |
 | `DEFINDEX_BASE_URL` | Backend | Base da API DeFindex, normalmente `https://api.defindex.io`. |
+| `DEFINDEX_API_URL` | Backend | Alias aceito por compatibilidade com docs/SDK; prefira `DEFINDEX_BASE_URL`. |
 | `DEFINDEX_NETWORK` | Backend | `testnet` ou `mainnet`; deve bater com Stellar runtime e vaults. |
 | `DEFINDEX_TIMEOUT_MS` | Backend | Timeout de chamadas DeFindex. |
 | `DEFINDEX_ENABLE_EXECUTION` | Backend | Quando `false`, mantém ações em modo preparado/preview sem execução real. |
-| `DEFINDEX_USDC_VAULT` | Backend | Vault para rendimento em USDC. |
-| `DEFINDEX_EURC_VAULT` | Backend | Vault para rendimento em EURC/euro. |
-| `DEFINDEX_TESOURO_VAULT` | Backend | Vault para rendimento em TESOURO/Real. |
-| `DEFINDEX_XLM_VAULT` | Backend | Vault para rendimento em XLM. |
+| `DEFINDEX_USDC_VAULT` | Backend | Endereco `C...` do vault para rendimento em USDC. |
+| `DEFINDEX_EURC_VAULT` | Backend | Endereco `C...` do vault para rendimento em EURC/euro. |
+| `DEFINDEX_TESOURO_VAULT` | Backend | Endereco `C...` do vault para rendimento em TESOURO/Real. |
+| `DEFINDEX_XLM_VAULT` | Backend | Endereco `C...` do vault para rendimento em XLM. |
 | `DEFINDEX_VAULTS_JSON` | Backend | Lista/objeto JSON para vaults extras, labels, network e enable por asset. |
 
 ### Passkey / smart account

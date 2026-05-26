@@ -1,4 +1,5 @@
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 import { stellarConfig } from '../../config/stellar';
 import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
 
@@ -41,6 +42,15 @@ function envFlag(name: string, fallback = false): boolean {
 
 function cleanBaseUrl(value: unknown): string {
   return coalesceString(value, 'https://api.defindex.io').replace(/\/+$/, '');
+}
+
+function defindexBaseUrl(): string {
+  return cleanBaseUrl(process.env.DEFINDEX_BASE_URL || process.env.DEFINDEX_API_URL);
+}
+
+function defindexTimeoutMs(): number {
+  const timeoutMs = Number(process.env.DEFINDEX_TIMEOUT_MS || 30000);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000;
 }
 
 function defaultNetwork(): DefindexNetwork {
@@ -133,7 +143,13 @@ function extractXdr(payload: any): string {
 }
 
 function extractHash(payload: any): string {
-  return coalesceString(payload?.hash, payload?.transaction_hash, payload?.transactionHash, payload?.id);
+  return coalesceString(payload?.txHash, payload?.hash, payload?.transaction_hash, payload?.transactionHash, payload?.id);
+}
+
+function sdkNetwork(network?: DefindexNetwork): SupportedNetworks {
+  return (network || defaultNetwork()) === 'mainnet'
+    ? SupportedNetworks.MAINNET
+    : SupportedNetworks.TESTNET;
 }
 
 export class DefindexYieldService {
@@ -153,7 +169,7 @@ export class DefindexYieldService {
       provider: 'defindex',
       configured,
       api_key_configured: Boolean(apiKey),
-      base_url: cleanBaseUrl(process.env.DEFINDEX_BASE_URL),
+      base_url: defindexBaseUrl(),
       network,
       execution_enabled: envFlag('DEFINDEX_ENABLE_EXECUTION', false),
       vaults,
@@ -192,57 +208,32 @@ export class DefindexYieldService {
     return vault;
   }
 
-  private static async request(path: string, init?: RequestInit): Promise<any> {
-    const runtime = this.getRuntimeInfo();
-    const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
-    if (!apiKey) throw new Error('DEFINDEX_API_KEY is required for Defindex API calls.');
-    const url = `${runtime.base_url}${path}`;
-    const controller = new AbortController();
-    const timeoutMs = Number(process.env.DEFINDEX_TIMEOUT_MS || 30000);
-    const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000);
-    try {
-      const response = await fetch(url, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
-          ...((init?.headers || {}) as Record<string, string>),
-        },
-      });
-      const payload: any = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || `Defindex API request failed with HTTP ${response.status}.`);
-      }
-      return payload;
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
-        throw new Error('Defindex API request timed out.');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
+  private static sdk(network = defaultNetwork()): DefindexSDK {
+    return new DefindexSDK({
+      apiKey: coalesceString(process.env.DEFINDEX_API_KEY),
+      baseUrl: defindexBaseUrl(),
+      timeout: defindexTimeoutMs(),
+      defaultNetwork: sdkNetwork(network),
+    });
   }
 
   static async healthCheck(): Promise<any> {
-    return this.request('/health', { method: 'GET' }).catch((error) => ({
+    return this.sdk().healthCheck().catch((error) => ({
       reachable: false,
       error: error instanceof Error ? error.message : String(error),
     }));
   }
 
   static async getVaultInfo(vaultAddress: string, network = defaultNetwork()): Promise<any> {
-    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/info?network=${encodeURIComponent(network)}`, { method: 'GET' });
+    return this.sdk(network).getVaultInfo(vaultAddress, sdkNetwork(network));
   }
 
   static async getVaultAPY(vaultAddress: string, network = defaultNetwork()): Promise<any> {
-    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/apy?network=${encodeURIComponent(network)}`, { method: 'GET' });
+    return this.sdk(network).getVaultAPY(vaultAddress, sdkNetwork(network));
   }
 
   static async getVaultBalance(vaultAddress: string, caller: string, network = defaultNetwork()): Promise<any> {
-    const params = new URLSearchParams({ network, from: caller, caller });
-    return this.request(`/vault/${encodeURIComponent(vaultAddress)}/balance?${params.toString()}`, { method: 'GET' });
+    return this.sdk(network).getVaultBalance(vaultAddress, caller, sdkNetwork(network));
   }
 
   static async buildVaultAction(input: {
@@ -255,18 +246,15 @@ export class DefindexYieldService {
     slippageBps?: number;
   }): Promise<{ xdr: string; raw: any }> {
     const network = input.network || defaultNetwork();
-    const endpoint = input.action === 'deposit' ? 'deposit' : 'withdraw';
+    const sdk = this.sdk(network);
     const body = {
       amounts: [input.amountUnits],
       caller: input.caller,
-      from: input.caller,
-      ...(input.action === 'deposit' ? { invest: input.invest !== false } : {}),
       slippageBps: Number.isFinite(input.slippageBps) ? input.slippageBps : 100,
     };
-    const raw = await this.request(`/vault/${encodeURIComponent(input.vaultAddress)}/${endpoint}?network=${encodeURIComponent(network)}`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    const raw = input.action === 'deposit'
+      ? await sdk.depositToVault(input.vaultAddress, { ...body, invest: input.invest !== false }, sdkNetwork(network))
+      : await sdk.withdrawFromVault(input.vaultAddress, body, sdkNetwork(network));
     const xdr = extractXdr(raw);
     if (!xdr) throw new Error('Defindex did not return an unsigned transaction XDR.');
     return { xdr, raw };
@@ -284,10 +272,7 @@ export class DefindexYieldService {
     network?: DefindexNetwork;
   }): Promise<{ hash: string; raw: any }> {
     const network = input.network || defaultNetwork();
-    const raw = await this.request(`/vault/${encodeURIComponent(input.vaultAddress)}/send?network=${encodeURIComponent(network)}`, {
-      method: 'POST',
-      body: JSON.stringify({ xdr: input.signedXdr }),
-    });
+    const raw = await this.sdk(network).sendTransaction(input.signedXdr, sdkNetwork(network));
     return { hash: extractHash(raw), raw };
   }
 }
