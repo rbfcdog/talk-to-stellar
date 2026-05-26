@@ -114,7 +114,14 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBr
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
   return {
-    sessionId: String(req.body?.session_id || req.query?.session_id || req.params?.session_id || '').trim() || undefined,
+    sessionId: String(
+      req.body?.session_id ||
+        req.query?.session_id ||
+        req.params?.session_id ||
+        req.headers['x-session-id'] ||
+        req.headers['x-talktostellar-session-id'] ||
+        ''
+    ).trim() || undefined,
     userId: String(req.body?.user_id || req.query?.user_id || '').trim() || undefined,
   };
 }

@@ -346,22 +346,6 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     .replace(/asset/gi, "moeda");
 }
 
-async function financialApi(path: string, init?: RequestInit) {
-  const response = await fetch(`/api/financial/mainnet/${path}`, {
-    cache: "no-store",
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || "Não foi possível carregar os dados da conta.");
-  }
-  return payload;
-}
-
 async function yieldApi(path: string, init?: RequestInit) {
   const response = await fetch(`/api/ramp/${path}`, {
     cache: "no-store",
@@ -414,7 +398,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const bestOptionCode = optionCode(bestOption);
   const selectedHasYield = Boolean(selectedOption);
   const canPrepare = Boolean(session.authenticated && configured && selectedOption && Number(String(amount).replace(",", ".")) > 0);
-  const balanceForSelected = balances.find((item) => String(item.asset_code || "").toUpperCase() === safeSelectedCode);
+  const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const projectionData = useMemo(
     () => buildProjectionData(amount, optionAnnualRate(selectedOption), language),
     [amount, selectedOption, language]
@@ -505,15 +489,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         return;
       }
 
-      const accountPayload = await financialApi("wallet").catch(() => ({ wallet: null }));
-      if (accountPayload?.wallet?.public_key) {
-        setAccountPublicKey(String(accountPayload.wallet.public_key));
-        const balancePayload = await financialApi("balance").catch(() => ({ balances: [] }));
-        setBalances(Array.isArray(balancePayload?.balances) ? balancePayload.balances : []);
-      } else {
-        setAccountPublicKey("");
-        setBalances([]);
-      }
+      const accountPayload = await yieldApi("etherfuse/wallet-balances");
+      setAccountPublicKey(String(accountPayload?.public_key || ""));
+      setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
 
       setApiState({ loading: false, message: L("Saldos e rendimentos atualizados.", "Balances and yield updated."), error: "" });
     } catch (error) {
@@ -843,7 +821,7 @@ function AccountPanel({
 
       <div className="mt-5 grid gap-2">
         {balanceItems.length ? balanceItems.map((item) => {
-          const code = String(item.asset_code || "").toUpperCase();
+          const code = normalizeUiAssetCode(item.asset_code);
           const profile = moneyProfile(code);
           const selected = code === selectedCode;
           const option = options.find((candidate) => optionCode(candidate) === code);
@@ -881,7 +859,7 @@ function AccountPanel({
       </div>
 
       {!authenticated ? (
-        <a href="/login" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
+        <a href="/login?next=/yield" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
           {L("Entrar na conta", "Sign in")}
         </a>
       ) : null}
@@ -995,7 +973,7 @@ function YieldWorkspacePanel({
               "Yield is calculated from your account. After signing in, your balances appear here and you can review before any confirmation."
             )}
           </p>
-          <a href="/login" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+          <a href="/login?next=/yield" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
             {L("Entrar na conta", "Sign in")}
           </a>
         </div>

@@ -183,8 +183,8 @@ function hasEnoughBalance(balance: BalanceLine | undefined, amount: number) {
   return Number.isFinite(available) && available >= amount;
 }
 
-async function financialApi(path: string) {
-  const response = await fetch(`/api/financial/mainnet/${path}`, { cache: "no-store" });
+async function accountApi(path: string) {
+  const response = await fetch(`/api/ramp/${path}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
     throw new Error(payload?.message || "Não foi possível carregar os dados da conta.");
@@ -250,10 +250,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       getClientSession()
         .then(async (sessionPayload) => {
           if (!sessionPayload.authenticated) return { sessionPayload, balancesPayload: [] };
-          const accountPayload = await financialApi("wallet").catch(() => ({ wallet: null }));
-          if (!accountPayload?.wallet?.public_key) return { sessionPayload, balancesPayload: [] };
-          const balancePayload = await financialApi("balance").catch(() => ({ balances: [] }));
-          return { sessionPayload, balancesPayload: Array.isArray(balancePayload?.balances) ? balancePayload.balances : [] };
+          const accountPayload = await accountApi("etherfuse/wallet-balances").catch(() => ({ balances: [] }));
+          return { sessionPayload, balancesPayload: Array.isArray(accountPayload?.balances) ? accountPayload.balances : [] };
         })
         .catch(() => ({ sessionPayload: { authenticated: false }, balancesPayload: [] })),
     ])
