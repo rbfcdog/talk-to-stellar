@@ -3616,6 +3616,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const language = this.getLanguage(state);
     const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
     const assetCode = intent.asset_code || 'USDC';
+    const sessionToken = String((state.action_params as any)?.session_token || '').trim();
+    const sessionAuth = sessionToken ? { session_token: sessionToken } : {};
 
     if (!hasActiveWallet && intent.mode !== 'options') {
       state.success = false;
@@ -3630,11 +3632,12 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     if (intent.mode === 'balance') {
       toolName = 'get_yield_balance';
-      toolInput = { session_id: state.session_id, asset_code: assetCode, language };
+      toolInput = { session_id: state.session_id, ...sessionAuth, asset_code: assetCode, language };
     } else if (intent.mode === 'prepare') {
       toolName = 'prepare_yield_action';
       toolInput = {
         session_id: state.session_id,
+        ...sessionAuth,
         action: intent.action,
         amount: intent.amount,
         asset_code: assetCode,
@@ -3644,6 +3647,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       toolName = 'confirm_yield_action';
       toolInput = {
         session_id: state.session_id,
+        ...sessionAuth,
         action: intent.action,
         amount: intent.amount,
         asset_code: assetCode,

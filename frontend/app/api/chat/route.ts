@@ -104,9 +104,9 @@ export async function POST(req: Request) {
     const browserId = String(metadata?.browser_id || "").trim();
     const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
 
-    // Always prioritize the linked web session when browser_id is mapped.
-    // This avoids sending chat messages with stale local session_id after login/linking.
-    sessionId = linkedSessionId || session_id || generateSessionId();
+    // The authenticated cookie session is the credentialed source of truth.
+    // Fall back to browser_id linkage only when no active cookie session exists.
+    sessionId = session.sessionId || linkedSessionId || session_id || generateSessionId();
 
     const dataToSend = {
       query: userMessage.content,
@@ -186,7 +186,7 @@ export async function GET(req: Request) {
     }
 
     const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
-    const resolvedSessionId = linkedSessionId || sessionId;
+    const resolvedSessionId = cookieSession.sessionId || linkedSessionId || sessionId;
 
     const messagesUrl = new URL(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50));
 

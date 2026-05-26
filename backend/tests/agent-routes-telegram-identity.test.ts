@@ -116,6 +116,50 @@ describe('agent Telegram identity binding', () => {
     process.env = originalEnv;
   });
 
+  it('passes authenticated web session token into agent state for account tools', async () => {
+    const webSessionId = '11111111-1111-4111-8111-111111111111';
+    const repository = createRepository({
+      [webSessionId]: {
+        user_id: 'web@example.com',
+        email: 'web@example.com',
+        session_token: 'cookie-token',
+        public_key: 'G'.padEnd(56, 'W'),
+        last_activity: new Date().toISOString(),
+      },
+    });
+    checkExternalAccountMock.mockResolvedValue(null);
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': 'cookie-token',
+        },
+        body: JSON.stringify({
+          query: 'colocar 100 em rendimento',
+          session_id: webSessionId,
+          source: 'web',
+          metadata: {
+            browser_id: 'browser-1',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.session_id).toBe(webSessionId);
+      expect(processInputMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: webSessionId,
+          action_params: expect.objectContaining({
+            session_token: 'cookie-token',
+          }),
+        })
+      );
+    });
+  });
+
   it('uses the Telegram external account session instead of a stale incoming session_id', async () => {
     const staleSessionId = '11111111-1111-4111-8111-111111111111';
     const linkedSessionId = '22222222-2222-4222-8222-222222222222';

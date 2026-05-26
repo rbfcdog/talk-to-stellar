@@ -33,7 +33,9 @@ function createState(input: string, hasWallet = true): AgentState {
     current_input: input,
     detected_intent: IntentType.GENERAL,
     action_type: ActionType.NONE,
-    action_params: {},
+    action_params: {
+      session_token: 'eval-session-token',
+    },
     response_message: '',
     success: false,
   };
@@ -162,6 +164,7 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).toHaveBeenCalledWith('prepare_yield_action', {
       session_id: 'eval-session',
+      session_token: 'eval-session-token',
       action: 'deposit',
       amount: '250',
       asset_code: 'BRL',
@@ -184,6 +187,7 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).toHaveBeenCalledWith('get_yield_balance', {
       session_id: 'eval-session',
+      session_token: 'eval-session-token',
       asset_code: 'CETES',
       language: 'pt-BR',
     });
@@ -204,6 +208,7 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).toHaveBeenCalledWith('confirm_yield_action', {
       session_id: 'eval-session',
+      session_token: 'eval-session-token',
       action: 'deposit',
       amount: '100',
       asset_code: 'BRL',
@@ -227,6 +232,7 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).toHaveBeenCalledWith('prepare_yield_action', {
       session_id: 'eval-session',
+      session_token: 'eval-session-token',
       action: 'deposit',
       amount: '100',
       asset_code: 'BRL',
