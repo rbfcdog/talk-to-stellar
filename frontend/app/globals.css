@@ -5,29 +5,29 @@
 
 :root {
   /* Base */
-  --background:   oklch(93% 0.022 82);   /* #F5F1E8 parchment */
-  --foreground:   oklch(12% 0.018 72);   /* #1C1812 warm black */
+  --background:   oklch(12% 0.018 255);  /* dark app shell */
+  --foreground:   oklch(97% 0.012 88);
 
   /* Surfaces */
-  --card:         oklch(98% 0.012 88);   /* #FDFAF3 */
-  --card-foreground: oklch(12% 0.018 72);
-  --popover:      oklch(98% 0.012 88);
-  --popover-foreground: oklch(12% 0.018 72);
+  --card:         oklch(18% 0.018 255);
+  --card-foreground: oklch(97% 0.012 88);
+  --popover:      oklch(18% 0.018 255);
+  --popover-foreground: oklch(97% 0.012 88);
 
   /* Primary = gold */
   --primary:      oklch(60% 0.12 75);    /* #B8880F */
   --primary-foreground: oklch(98% 0.012 88);
 
   /* Secondary = slightly darker parchment */
-  --secondary:    oklch(89% 0.020 82);   /* #EDE7D6 */
-  --secondary-foreground: oklch(12% 0.018 72);
+  --secondary:    oklch(23% 0.020 255);
+  --secondary-foreground: oklch(97% 0.012 88);
 
   /* Muted */
-  --muted:        oklch(89% 0.020 82);
-  --muted-foreground: oklch(52% 0.030 78); /* #8C7E64 */
+  --muted:        oklch(23% 0.020 255);
+  --muted-foreground: oklch(72% 0.022 255);
 
   /* Accent */
-  --accent:       oklch(89% 0.020 82);
+  --accent:       oklch(23% 0.020 255);
   --accent-foreground: oklch(60% 0.12 75);
 
   /* Semantic */
@@ -35,8 +35,8 @@
   --destructive-foreground: oklch(98% 0 0);
 
   /* Borders & inputs */
-  --border:       oklch(85% 0.018 80);   /* #DDD5C3 */
-  --input:        oklch(85% 0.018 80);
+  --border:       oklch(31% 0.020 255);
+  --input:        oklch(31% 0.020 255);
   --ring:         oklch(60% 0.12 75);    /* gold focus ring */
 
   /* Radius */
@@ -50,17 +50,17 @@
   --chart-5: oklch(85% 0.018 80);
 
   /* Sidebar */
-  --sidebar: oklch(98% 0.012 88);
-  --sidebar-foreground: oklch(12% 0.018 72);
+  --sidebar: oklch(18% 0.018 255);
+  --sidebar-foreground: oklch(97% 0.012 88);
   --sidebar-primary: oklch(60% 0.12 75);
   --sidebar-primary-foreground: oklch(98% 0.012 88);
-  --sidebar-accent: oklch(89% 0.020 82);
-  --sidebar-accent-foreground: oklch(12% 0.018 72);
-  --sidebar-border: oklch(85% 0.018 80);
+  --sidebar-accent: oklch(23% 0.020 255);
+  --sidebar-accent-foreground: oklch(97% 0.012 88);
+  --sidebar-border: oklch(31% 0.020 255);
   --sidebar-ring: oklch(60% 0.12 75);
 
   /* TTS custom tokens */
-  --tts-bg:       oklch(93% 0.022 82);   /* #F5F1E8 */
+  --tts-bg:       oklch(12% 0.018 255);  /* dark page */
   --tts-surface:  oklch(98% 0.012 88);   /* #FDFAF3 */
   --tts-deep:     oklch(12% 0.018 72);   /* #1C1812 */
   --tts-deep2:    oklch(17% 0.018 72);   /* #2E2820 */
@@ -69,11 +69,18 @@
   --tts-gold-bg:  oklch(60% 0.12 75 / 0.10);
   --tts-gold-br:  oklch(60% 0.12 75 / 0.24);
   --tts-muted:    oklch(52% 0.030 78);   /* #8C7E64 */
-  --tts-border:   oklch(85% 0.018 80);   /* #DDD5C3 */
-  --tts-border2:  oklch(79% 0.022 78);   /* #C8BFAD */
+  --tts-border:   oklch(31% 0.020 255);
+  --tts-border2:  oklch(42% 0.024 255);
   --tts-confirm:  oklch(65% 0.18 155);   /* #22C55E — use ONLY for payment confirmations */
   --tts-error:    oklch(55% 0.20 25);    /* #E5362A */
   --tts-mono: 'Geist Mono', 'Courier New', monospace;
+  --tts-dark-bg: #070a12;
+  --tts-dark-surface: #101723;
+  --tts-dark-surface-2: #151f2e;
+  --tts-dark-elevated: #1b2738;
+  --tts-dark-text: #f8fafc;
+  --tts-dark-muted: #a9b4c7;
+  --tts-dark-border: rgba(255, 255, 255, 0.12);
 }
 
 @theme inline {
@@ -175,6 +182,115 @@
   select,
   button {
     max-width: 100%;
+  }
+}
+
+/* Dark operational theme.
+   The existing app uses the same TTS token names for both surfaces and text in
+   older screens. These utility overrides keep every route visually dark while
+   preserving readable foreground colors and button contrast. */
+@layer utilities {
+  .bg-tts-bg,
+  .bg-background {
+    background-color: var(--tts-dark-bg) !important;
+  }
+
+  .bg-tts-surface,
+  .bg-card,
+  .bg-popover,
+  .bg-sidebar {
+    background-color: var(--tts-dark-surface) !important;
+  }
+
+  .bg-tts-surface\/90,
+  .bg-tts-surface\/95,
+  .bg-tts-surface\/80 {
+    background-color: color-mix(in oklab, var(--tts-dark-surface) 92%, transparent) !important;
+  }
+
+  .bg-tts-surface\/30,
+  .bg-tts-surface\/40,
+  .bg-tts-surface\/60,
+  .bg-tts-surface\/\[0\.03\],
+  .bg-tts-bg\/40,
+  .bg-tts-bg\/60 {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .bg-tts-deep {
+    background-color: #02050b !important;
+  }
+
+  .bg-tts-deep\/5,
+  .bg-tts-deep\/8,
+  .bg-tts-deep\/20,
+  .bg-tts-deep\/40,
+  .bg-tts-deep\/60 {
+    background-color: rgba(255, 255, 255, 0.07) !important;
+  }
+
+  .border-tts-border,
+  .border-tts-border2,
+  .border-border,
+  .border-input {
+    border-color: var(--tts-dark-border) !important;
+  }
+
+  .text-tts-deep,
+  .text-foreground,
+  .text-card-foreground,
+  .text-popover-foreground,
+  .text-sidebar-foreground {
+    color: var(--tts-dark-text) !important;
+  }
+
+  .text-tts-deep\/80,
+  .text-tts-deep\/70,
+  .text-tts-deep\/60,
+  .text-tts-muted,
+  .text-muted-foreground {
+    color: var(--tts-dark-muted) !important;
+  }
+
+  .text-tts-surface {
+    color: var(--tts-dark-text) !important;
+  }
+
+  .text-tts-surface\/80,
+  .text-tts-surface\/75,
+  .text-tts-surface\/70,
+  .text-tts-surface\/65,
+  .text-tts-surface\/60,
+  .text-tts-surface\/45,
+  .text-tts-surface\/40,
+  .text-tts-surface\/30 {
+    color: var(--tts-dark-muted) !important;
+  }
+
+  .placeholder\:text-tts-muted::placeholder,
+  .placeholder\:text-tts-surface\/30::placeholder {
+    color: rgba(169, 180, 199, 0.72) !important;
+  }
+
+  .bg-tts-gold.text-tts-deep,
+  .bg-tts-gold .text-tts-deep,
+  .bg-tts-confirm.text-tts-deep,
+  .bg-tts-confirm .text-tts-deep,
+  .bg-tts-error.text-tts-deep,
+  .bg-tts-error .text-tts-deep {
+    color: #090b10 !important;
+  }
+
+  .bg-tts-gold.text-tts-surface,
+  .bg-tts-confirm.text-tts-surface,
+  .bg-tts-error.text-tts-surface {
+    color: #090b10 !important;
+  }
+
+  input,
+  textarea,
+  select {
+    color-scheme: dark;
   }
 }
 
