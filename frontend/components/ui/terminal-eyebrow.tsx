@@ -24,7 +24,7 @@ export function TerminalEyebrow({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-[11px] leading-none tracking-tight',
+        'inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-[11px] leading-none tracking-tight',
         palette,
         className,
       )}
@@ -33,7 +33,7 @@ export function TerminalEyebrow({
       <span className={cn('font-bold', promptColor)} aria-hidden>
         $
       </span>
-      <span className="whitespace-nowrap">{command}</span>
+      <span className="truncate">{command}</span>
       {showCursor && (
         <span
           className={cn(
