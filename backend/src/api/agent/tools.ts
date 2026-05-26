@@ -332,8 +332,6 @@ function normalizeYieldAssetInput(value: unknown): string {
   if (!raw || raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
   if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS' || raw === 'R$') return 'TESOURO';
   if (raw === 'EUR' || raw === 'EURO' || raw === 'EUROS' || raw === 'EURC') return 'EURC';
-  if (raw === 'POUND' || raw === 'POUNDS' || raw === 'LIBRA' || raw === 'LIBRAS') return 'GBP';
-  if (raw === 'PESO' || raw === 'PESOS') return 'MXN';
   return normalizeAssetCode(raw);
 }
 
@@ -861,7 +859,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency, such as BRL, USDC, USD, EUR, GBP, MXN, or another configured asset.",
+          description: "User-facing currency. Use BRL, USDC/USD, or EUR for now.",
         },
         destination_pix_key: {
           type: "string",
@@ -892,7 +890,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency, such as BRL, USDC, USD, EUR, GBP, MXN, or another configured asset.",
+          description: "User-facing currency. Use BRL, USDC/USD, or EUR for now.",
         },
         destination_pix_key: {
           type: "string",

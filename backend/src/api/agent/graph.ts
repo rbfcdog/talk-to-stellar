@@ -553,13 +553,6 @@ export class AgentGraph {
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
     if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') return 'EUR';
-    if (token === 'gbp' || token === 'pound' || token === 'pounds' || token === 'libra' || token === 'libras' || token === '£') return 'GBP';
-    if (token === 'mxn' || token === 'peso' || token === 'pesos') return 'MXN';
-    if (token === 'ars' || token === 'peso argentino' || token === 'pesos argentinos') return 'ARS';
-    if (token === 'cad') return 'CAD';
-    if (token === 'aud') return 'AUD';
-    if (token === 'chf') return 'CHF';
-    if (token === 'jpy' || token === 'yen') return 'JPY';
     if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
@@ -591,18 +584,18 @@ export class AgentGraph {
       }
 
       const afterAmount = normalized.slice(amountIndex + matchedText.length);
-      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
       const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
       if (assetAfterAmount) return assetAfterAmount;
 
       const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
-      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
       const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
       if (assetBeforeAmount) return assetBeforeAmount;
     }
 
-    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
-    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|gbp|pound|pounds|libra|libras|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
     return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
   }
 
@@ -2315,16 +2308,12 @@ export class AgentGraph {
       .replace(/\beurc\b/g, 'eur')
       .replace(/\breais?\b/g, 'brl')
       .replace(/\breal\b/g, 'brl')
-      .replace(/\blumens?\b/g, 'xlm')
-      .replace(/\blibras?\b/g, 'gbp')
-      .replace(/\bpounds?\b/g, 'gbp')
-      .replace(/\bpesos?\b/g, 'mxn')
-      .replace(/\byen\b/g, 'jpy');
+      .replace(/\blumens?\b/g, 'xlm');
 
-    const assets = ['USDC', 'BRL', 'EUR', 'XLM', 'GBP', 'MXN', 'ARS', 'CAD', 'AUD', 'CHF', 'JPY'];
+    const assets = ['USDC', 'BRL', 'EUR', 'XLM'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
-    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur|xlm|gbp|mxn|ars|cad|aud|chf|jpy)\b/);
-    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur|xlm|gbp|mxn|ars|cad|aud|chf|jpy)\b/);
+    const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|eur|xlm)\b/);
+    const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|eur|xlm)\b/);
 
     const sourceAssetCode = sourceMatch?.[1]?.toUpperCase() || found[0];
     const destAssetCode = destMatch?.[1]?.toUpperCase() || found.find((asset) => asset !== sourceAssetCode);
@@ -3571,7 +3560,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
     const amountNumber = parseHumanAmountNumber(rawWithoutPin);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
     const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
     const confirms =
@@ -3708,7 +3697,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';
@@ -3747,7 +3736,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|gbp|pound|pounds|libra|libras|£|mxn|peso|pesos|ars|cad|aud|chf|jpy|yen|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';

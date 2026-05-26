@@ -31,9 +31,14 @@ AGENT_INGEST_SECRET=gere-com-openssl-rand-hex-32
 # Fallback interno. Pode ser igual ao AGENT_INGEST_SECRET para simplificar deploy inicial.
 INTERNAL_API_SECRET=mesmo-valor-do-agent-ingest-secret
 
+# Euro real na Stellar public network: Circle EURC.
+EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+
 # Assets que a UX mostra. BRL continua sendo TESOURO internamente.
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 ```
+
+Use `EURC_ISSUER_PUBLIC` com `STELLAR_NETWORK=PUBLIC`. Para testnet, nao use o issuer publico da Circle para submeter transacoes; deixe `EURC_ISSUER_TESTNET` vazio ate validar um issuer de teste confiavel.
 
 Gerar segredo:
 
@@ -49,7 +54,7 @@ Adicionar em `frontend/.env` e no provider de producao do frontend:
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR,GBP,MXN,ARS,CAD,AUD,CHF,JPY
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
 ```
 
 ### Telegram
@@ -97,18 +102,7 @@ Como preencher:
 1. Obtenha a API key na documentacao/dashboard da Defindex ou solicitando acesso ao time Defindex/PaltaLabs.
 2. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
 3. Configure pelo menos um vault real antes de vender rendimento como operacional.
-4. Use `DEFINDEX_VAULTS_JSON` para assets extras, por exemplo:
-
-```json
-[
-  {
-    "asset_code": "GBP",
-    "vault_address": "C...",
-    "label": "Pounds Yield",
-    "network": "testnet"
-  }
-]
-```
+4. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
 
 ## Prioridade 3: passkey/smart account
 
@@ -143,11 +137,14 @@ Esses envs estavam faltando, mas sao opcionais. Nao preencha como operacional at
 TESOURO_DISTRIBUTOR_PUBLIC=
 TESOURO_DISTRIBUTOR_SECRET=
 
-# EURC por rede, apenas quando issuer real estiver definido.
-EURC_ISSUER_PUBLIC=
+# EURC public network ja validado via Circle.
+EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+
+# So preencha se houver issuer testnet confiavel.
 EURC_ISSUER_TESTNET=
 
-# Moedas extras, so depois de configurar issuer/liquidez/vault.
+# Moedas extras ficam fora por enquanto; so depois de confirmar codigo real,
+# issuer, trustline, liquidez/path e vault.
 GBP_ISSUER=
 MXN_ISSUER=
 ARS_ISSUER=
@@ -165,4 +162,4 @@ JPY_ISSUER=
 4. `/yield`, `/convert`, `/money-cycle`, `/pix-on` e `/pix-off` abrem no frontend publico.
 5. Defindex fica com `DEFINDEX_ENABLE_EXECUTION=false` ate validar API key e vaults.
 6. Smart account fica com `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate haver verifier P-256 implantado.
-7. Extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de liquidez/path real.
+7. Por enquanto exponha so `BRL,USDC,EUR`; extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.

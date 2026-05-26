@@ -82,4 +82,17 @@ describe('asset config', () => {
     expect(getTrustedPathAssetCodes()).not.toContain('BRL');
     expect(userFacingAssetCode('EURC')).toBe('EUR');
   });
+
+  it('resolves user-facing EUR to Circle EURC issuer on public network', () => {
+    process.env.STELLAR_NETWORK = 'PUBLIC';
+    process.env.EURC_ISSUER_PUBLIC = 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2';
+    delete process.env.EURC_ISSUER;
+    delete process.env.EUR_ISSUER;
+
+    expect(resolveConfiguredAsset('EUR')).toEqual({
+      code: 'EURC',
+      issuer: 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2',
+    });
+    expect(getAssetIssuer('EURC')).toBe('GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2');
+  });
 });
