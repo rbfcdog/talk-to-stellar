@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ArrowUpFromLine,
+  BookOpen,
   CheckCircle2,
   Coins,
   Loader2,
@@ -26,7 +27,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  WalletCards,
 } from "lucide-react";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -420,7 +420,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [flowIntent, setFlowIntent] = useState<FlowIntent>("earn");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [cycleMode, setCycleMode] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [cycleDestinationPixKey, setCycleDestinationPixKey] = useState("");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
@@ -457,24 +457,6 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     from: "yield",
     lang: language,
   }), [amount, safeSelectedCode, language]);
-  const keepMoneyUrl = useMemo(() => buildMoneyUrl(cycleMode ? "/money-cycle" : "/yield", {
-    action,
-    asset: safeSelectedCode,
-    amount,
-    advanced: advancedOpen ? "1" : "",
-    cycle: cycleMode ? "1" : "",
-    destination_pix_key: cycleDestinationPixKey,
-    lang: language,
-  }), [action, amount, advancedOpen, cycleDestinationPixKey, cycleMode, safeSelectedCode, language]);
-  const cycleMoneyUrl = useMemo(() => buildMoneyUrl("/money-cycle", {
-    cycle: "1",
-    action: "deposit",
-    asset: safeSelectedCode,
-    amount,
-    destination_pix_key: cycleDestinationPixKey,
-    advanced: "1",
-    lang: language,
-  }), [amount, cycleDestinationPixKey, safeSelectedCode, language]);
   const sendMoneyUrl = useMemo(() => buildMoneyUrl("/pix-off", {
     mode: "offramp",
     asset: safeSelectedCode,
@@ -510,16 +492,6 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       : !selectedHasYield && bestOptionCode
         ? L("Converter para render", "Convert to earn")
         : L("Revisar rendimento", "Review yield");
-  const flowChatPrompt = flowIntent === "add"
-    ? L(`colocar ${amount || "0"} reais com PIX e manter em ${profileName(selectedProfile, language)}`, `add ${amount || "0"} reais with PIX and keep it in ${profileName(selectedProfile, language)}`)
-    : flowIntent === "withdraw"
-      ? L(`retirar ${amount || "0"} ${profileName(selectedProfile, language)} para meu PIX${cycleDestinationPixKey ? ` ${cycleDestinationPixKey}` : ""}`, `withdraw ${amount || "0"} ${profileName(selectedProfile, language)} to my PIX${cycleDestinationPixKey ? ` ${cycleDestinationPixKey}` : ""}`)
-      : L(`deixar ${amount || "0"} ${profileName(selectedProfile, language)} rendendo`, `keep ${amount || "0"} ${profileName(selectedProfile, language)} earning`);
-  const flowChatUrl = useMemo(() => buildMoneyUrl("/chat", {
-    prompt: flowChatPrompt,
-    lang: language,
-  }), [flowChatPrompt, language]);
-
   useEffect(() => {
     if (initialLanguage && !appliedInitialLanguageRef.current) {
       appliedInitialLanguageRef.current = true;
@@ -555,7 +527,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       ""
     ).trim();
     const queryCycleMode = params.get("cycle") === "1" || params.get("cycle") === "true" || path === "/money-cycle";
-    if (queryCycleMode) setCycleMode(true);
+    if (queryCycleMode) setShowTutorial(true);
     if (queryAsset) {
       requestedAssetRef.current = queryAsset;
       setSelectedCode(queryAsset);
@@ -714,19 +686,20 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <button
               type="button"
+              onClick={() => setShowTutorial((current) => !current)}
+              className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+              {showTutorial ? L("Ocultar primeiros passos", "Hide first steps") : L("Primeiros passos", "First steps")}
+            </button>
+            <button
+              type="button"
               onClick={refreshDashboard}
-              className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+              className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               {L("Atualizar saldos", "Refresh balances")}
             </button>
-            <a
-              href="/chat"
-              className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-            >
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              {L("Acessar minha conta", "Access my account")}
-            </a>
           </div>
         </header>
 
@@ -753,6 +726,15 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           <Metric label={L("Confirmação", "Confirmation")} value={confirmationEnabled ? L("Ativa", "Active") : L("Em preparo", "In setup")} detail={confirmationEnabled ? L("PIN habilitado", "PIN enabled") : L("Somente revisão", "Review only")} />
         </section>
 
+        {showTutorial ? (
+          <YieldTutorialPanel
+            hasOptions={options.length > 0}
+            authenticated={session.authenticated}
+            confirmationEnabled={confirmationEnabled}
+            bestOption={bestOption}
+          />
+        ) : null}
+
         <EssentialFlowPanel
           flowIntent={flowIntent}
           onFlowIntentChange={(next) => {
@@ -774,87 +756,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           onDestinationPixKeyChange={setCycleDestinationPixKey}
           primaryHref={primaryFlowUrl}
           primaryLabel={primaryFlowLabel}
-          chatHref={flowChatUrl}
           convertToBestYieldHref={convertToBestYieldUrl}
+          onShowTutorial={() => setShowTutorial(true)}
         />
-
-        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Ciclo do dinheiro", "Money cycle")}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                <WalletCards className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                {cycleMode ? L("Ciclo completo consolidado", "Consolidated money cycle") : L("Entrar, render e sair", "Add, earn, and send out")}
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-                {L(
-                  "O dinheiro entra por PIX, fica na melhor opção de rendimento disponível para você revisar, e sai por PIX com a chave informada na hora.",
-                  "Money comes in by PIX, moves into the best available earning option for review, and goes out by PIX with the key entered at the moment."
-                )}
-              </p>
-            </div>
-            <span className="inline-flex w-fit border border-tts-border bg-tts-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
-              {selectedProfile.short} · {profileName(selectedProfile, language)}
-            </span>
-          </div>
-
-          <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            <CycleStep
-              index="1"
-              title={L("Injetar por PIX", "Add by PIX")}
-              detail={L("Use o PIX de entrada para criar saldo na moeda escolhida.", "Use PIX in to create balance in the selected currency.")}
-              href={addMoneyUrl}
-              action={L("Abrir entrada", "Open add money")}
-            />
-            <CycleStep
-              index="2"
-              title={L("Render melhor", "Earn best available")}
-              detail={bestOption
-                ? L(
-                    `Melhor opção atual: ${profileName(bestProfile, language)} com ${optionRate(bestOption, language)} ao ano.`,
-                    `Current best option: ${profileName(bestProfile, language)} at ${optionRate(bestOption, language)} per year.`
-                  )
-                : L("Aguardando configuração das opções de rendimento.", "Waiting for earning options to be configured.")}
-              href={bestOption ? buildMoneyUrl(cycleMode ? "/money-cycle" : "/yield", { cycle: cycleMode ? "1" : "", asset: bestOptionCode, amount, destination_pix_key: cycleDestinationPixKey, advanced: "1", lang: language }) : keepMoneyUrl}
-              action={bestOption ? L("Usar melhor opção", "Use best option") : L("Abrir revisão", "Open review")}
-            />
-            <CycleStep
-              index="3"
-              title={L("Sair para PIX", "Send out to PIX")}
-              detail={cycleDestinationPixKey
-                ? L(`Saída preparada para ${cycleDestinationPixKey}. Você ainda revisa antes do PIN.`, `Exit prepared for ${cycleDestinationPixKey}. You still review before PIN.`)
-                : L("A retirada pergunta a chave PIX dinamicamente antes do PIN.", "Withdrawal asks for the PIX key dynamically before PIN.")}
-              href={sendMoneyUrl}
-              action={L("Abrir saída", "Open withdrawal")}
-            />
-          </div>
-
-          <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-black text-tts-confirm">{L("Ambiente consolidado", "Consolidated environment")}</p>
-                <p className="mt-1 text-sm leading-6 text-tts-muted">
-                  {selectedHasYield
-                    ? L("A moeda selecionada já tem uma opção de rendimento para revisão.", "The selected currency already has an earning option ready for review.")
-                    : bestOption
-                      ? L("A moeda selecionada ainda não tem rendimento configurado aqui; use a melhor opção disponível ou troque a moeda.", "The selected currency does not have earning configured here yet; use the best available option or switch currency.")
-                      : L("Configure uma opção de rendimento para completar o ciclo interno.", "Configure an earning option to complete the internal cycle.")}
-                </p>
-              </div>
-              <a
-                href={cycleMoneyUrl}
-                className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
-              >
-                <WalletCards className="h-4 w-4" aria-hidden="true" />
-                {L("Abrir ciclo", "Open cycle")}
-              </a>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <ActionLink href={addMoneyUrl} icon={<ArrowDownToLine className="h-4 w-4" aria-hidden="true" />} title={L("Trazer dinheiro", "Add money")} body={L("Abra PIX já com a moeda e o valor preenchidos.", "Open PIX with currency and amount prefilled.")} />
-            <ActionLink href={keepMoneyUrl} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} title={L("Manter rendendo", "Keep earning")} body={L("Continue nesta tela para revisar taxa, valor e confirmação.", "Stay on this screen to review rate, amount, and confirmation.")} />
-            <ActionLink href={sendMoneyUrl} icon={<ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />} title={L("Mandar para PIX", "Send to PIX")} body={L("A retirada pede a chave PIX dinamicamente antes do PIN.", "Withdrawal asks for the PIX key dynamically before PIN.")} />
-          </div>
-        </section>
 
         <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <BalancePanel balances={balances} options={options} selectedCode={safeSelectedCode} onSelect={setSelectedCode} />
@@ -918,7 +822,21 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
                 );
               }) : (
                 <div className="border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold md:col-span-3">
-                  {L("As opções de rendimento ainda não foram configuradas para este ambiente.", "Yield options have not been set up for this environment yet.")}
+                  <p className="font-black">{L("Nenhuma opção ativa ainda", "No active option yet")}</p>
+                  <p className="mt-1 leading-6 text-tts-muted">
+                    {L(
+                      "Quando as opções do backend estiverem configuradas, elas aparecem aqui. Enquanto isso, use o tutorial para ver o fluxo correto.",
+                      "Once backend options are configured, they appear here. Until then, use the tutorial to see the right flow."
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowTutorial(true)}
+                    className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90"
+                  >
+                    <BookOpen className="h-4 w-4" aria-hidden="true" />
+                    {L("Ver primeiros passos", "See first steps")}
+                  </button>
                 </div>
               )}
             </div>
@@ -1042,22 +960,94 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           amount={amount}
         />
 
-        <section className="grid gap-4 lg:grid-cols-3">
-          <ActionLink href={addMoneyUrl} icon={<QrCode className="h-4 w-4" aria-hidden="true" />} title={L("Adicionar por PIX", "Add with PIX")} body={L("Abre com valor e moeda já preenchidos.", "Opens with amount and currency prefilled.")} />
-          <ActionLink href={sendMoneyUrl} icon={<ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />} title={L("Retirar por PIX", "Withdraw with PIX")} body={L("Usa a chave PIX informada nesta tela.", "Uses the PIX key entered on this screen.")} />
-          <ActionLink href={flowChatUrl} icon={<Sparkles className="h-4 w-4" aria-hidden="true" />} title={L("Pedir ajuda", "Ask for help")} body={L("Leva o pedido atual para o chat.", "Sends the current request to chat.")} />
-        </section>
-
-        <section className="border border-tts-border bg-tts-surface p-5">
-          <h2 className="text-lg font-black text-tts-deep">{L("Antes de confirmar", "Before confirming")}</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <InfoBlock title={L("Você escolhe a moeda", "You choose the currency")} body={L("Dólares, euros e reais aparecem com nomes simples para reduzir erro de seleção.", "Dollars, euros, and reais appear with simple names to reduce selection mistakes.")} />
-            <InfoBlock title={L("Nada é automático", "Nothing is automatic")} body={L("A tela prepara a solicitação primeiro. A confirmação final depende do seu PIN.", "The screen prepares the request first. Final confirmation depends on your PIN.")} />
-            <InfoBlock title={L("PIX fica separado", "PIX stays separate")} body={L("Entrada e retirada em reais continuam em botões próprios para ficar claro o caminho do dinheiro.", "Adding and withdrawing reais remain in their own buttons so the money path stays clear.")} />
-          </div>
-        </section>
+        {!showTutorial ? (
+          <button
+            type="button"
+            onClick={() => setShowTutorial(true)}
+            className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+          >
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
+            {L("Ver primeiros passos", "See first steps")}
+          </button>
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function YieldTutorialPanel({
+  hasOptions,
+  authenticated,
+  confirmationEnabled,
+  bestOption,
+}: {
+  hasOptions: boolean;
+  authenticated: boolean;
+  confirmationEnabled: boolean;
+  bestOption: YieldOption | null;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const bestProfile = moneyProfile(optionCode(bestOption));
+  const steps = [
+    {
+      title: L("1. Entre na sua conta", "1. Sign in"),
+      body: authenticated
+        ? L("Conta carregada. Você já pode revisar valores.", "Account loaded. You can review values.")
+        : L("Sem login, a tela só mostra uma simulação.", "Without sign-in, this screen only shows a preview."),
+      ready: authenticated,
+    },
+    {
+      title: L("2. Escolha uma opção disponível", "2. Choose an available option"),
+      body: hasOptions
+        ? L(`Melhor opção agora: ${profileName(bestProfile, language)}.`, `Best option now: ${profileName(bestProfile, language)}.`)
+        : L("O backend ainda não devolveu nenhuma opção de rendimento.", "The backend has not returned any yield option yet."),
+      ready: hasOptions,
+    },
+    {
+      title: L("3. Revise antes do PIN", "3. Review before PIN"),
+      body: confirmationEnabled
+        ? L("Depois da revisão, o PIN conclui a operação.", "After review, the PIN completes the operation.")
+        : L("Neste ambiente, a confirmação final ainda fica desligada.", "In this environment, final confirmation is still off."),
+      ready: confirmationEnabled,
+    },
+  ];
+
+  return (
+    <section className="border border-tts-confirm bg-tts-confirm/10 p-5" aria-label={L("Primeiros passos", "First steps")}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+            <BookOpen className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+            {L("Primeiros passos para render", "First steps to earn")}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
+            {L(
+              "Use esta tela de cima para baixo: escolha uma opção disponível, informe o valor, revise a simulação e só depois confirme.",
+              "Use this screen top to bottom: choose an available option, enter the amount, review the preview, and only then confirm."
+            )}
+          </p>
+        </div>
+        <a
+          href="#yield-plan"
+          className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+        >
+          <PiggyBank className="h-4 w-4" aria-hidden="true" />
+          {L("Ir ao plano", "Go to plan")}
+        </a>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {steps.map((step) => (
+          <div key={step.title} className={`border p-4 ${step.ready ? "border-tts-confirm bg-tts-bg" : "border-tts-gold bg-tts-gold-bg"}`}>
+            <div className="flex items-center gap-2">
+              {step.ready ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4 text-tts-gold" aria-hidden="true" />}
+              <h3 className="text-sm font-black text-tts-deep">{step.title}</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-tts-muted">{step.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1078,8 +1068,8 @@ function EssentialFlowPanel({
   onDestinationPixKeyChange,
   primaryHref,
   primaryLabel,
-  chatHref,
   convertToBestYieldHref,
+  onShowTutorial,
 }: {
   flowIntent: FlowIntent;
   onFlowIntentChange: (intent: FlowIntent) => void;
@@ -1097,8 +1087,8 @@ function EssentialFlowPanel({
   onDestinationPixKeyChange: (value: string) => void;
   primaryHref: string;
   primaryLabel: string;
-  chatHref: string;
   convertToBestYieldHref: string;
+  onShowTutorial: () => void;
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
@@ -1202,8 +1192,8 @@ function EssentialFlowPanel({
               </h2>
               <p className="mt-2 text-sm leading-6 text-tts-muted">
                 {L(
-                  "Escolha a intenção principal. A tela ajusta o próximo botão, o chat e a chave PIX sem trocar de contexto.",
-                  "Choose the main intent. The screen adjusts the next button, chat, and PIX key without changing context."
+                  "Escolha o que quer fazer. A tela mantém valor, moeda e chave PIX no mesmo lugar.",
+                  "Choose what you want to do. The screen keeps amount, currency, and PIX key in one place."
                 )}
               </p>
             </div>
@@ -1259,7 +1249,7 @@ function EssentialFlowPanel({
                 ))}
               </div>
               <p className="mt-2 text-xs leading-5 text-tts-muted">
-                {L("Este mesmo valor alimenta os botões de PIX, rendimento e chat.", "This same amount feeds PIX, yield, and chat actions.")}
+                {L("Este mesmo valor alimenta a entrada, a retirada e a revisão.", "This same amount feeds add money, withdrawal, and review.")}
               </p>
             </div>
 
@@ -1307,13 +1297,14 @@ function EssentialFlowPanel({
               {flowIntent === "add" ? <QrCode className="h-4 w-4" aria-hidden="true" /> : flowIntent === "withdraw" ? <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" /> : <PiggyBank className="h-4 w-4" aria-hidden="true" />}
               {primaryLabel}
             </a>
-            <a
-              href={chatHref}
+            <button
+              type="button"
+              onClick={onShowTutorial}
               className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-              {L("Pedir no chat", "Ask in chat")}
-            </a>
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+              {L("Como usar", "How to use")}
+            </button>
           </div>
 
           {!selectedHasYield && bestOption ? (
@@ -1431,6 +1422,26 @@ function YieldProjectionPanel({
   const projectedEnd = data[data.length - 1]?.balance || 0;
   const projectedEarned = data[data.length - 1]?.earned || 0;
 
+  if (!option) {
+    return (
+      <section className="border border-tts-border bg-tts-surface p-5">
+        <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+          <Sparkles className="h-5 w-5 text-tts-gold" aria-hidden="true" />
+          {L("Projeção de rendimento", "Yield projection")}
+        </h2>
+        <div className="mt-4 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
+          <p className="font-black text-tts-gold">{L("Aguardando opção ativa", "Waiting for an active option")}</p>
+          <p className="mt-1">
+            {L(
+              "Configure uma opção de rendimento no backend para ver taxa, projeção e revisão antes do PIN.",
+              "Configure a backend yield option to see rate, projection, and review before PIN."
+            )}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   const tooltipFormatter = (value: unknown, name: unknown) => {
     const label = String(name) === "earned" ? L("Rendimento", "Yield") : L("Saldo", "Balance");
     return [`${formatAmount(value, language)} ${profileShort}`, label];
@@ -1519,6 +1530,22 @@ function ReviewPanel({
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
+  if (!option) {
+    return (
+      <section className="border border-tts-border bg-tts-bg p-4">
+        <h3 className="text-base font-black text-tts-deep">{L("Escolha uma opção para revisar", "Choose an option to review")}</h3>
+        <div className="mt-4 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
+          <p className="font-black text-tts-gold">{L("Rendimento ainda não configurado", "Yield is not configured yet")}</p>
+          <p className="mt-1">
+            {L(
+              "Assim que o backend devolver pelo menos uma opção, esta área mostra valor, taxa, saldo e confirmação.",
+              "As soon as the backend returns at least one option, this area shows amount, rate, balance, and confirmation."
+            )}
+          </p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="border border-tts-border bg-tts-bg p-4">
       <h3 className="text-base font-black text-tts-deep">{L("Resumo antes do PIN", "Summary before PIN")}</h3>
@@ -1552,33 +1579,6 @@ function ReviewPanel({
   );
 }
 
-function ActionLink({ href, icon, title, body }: { href: string; icon: ReactNode; title: string; body: string }) {
-  return (
-    <a href={href} className="group border border-tts-border bg-tts-surface p-5 transition hover:border-tts-border2">
-      <span className="inline-flex h-10 w-10 items-center justify-center bg-tts-deep text-tts-surface">
-        {icon}
-      </span>
-      <span className="mt-4 block text-lg font-black text-tts-deep">{title}</span>
-      <span className="mt-2 block text-sm leading-6 text-tts-muted">{body}</span>
-    </a>
-  );
-}
-
-function CycleStep({ index, title, detail, href, action }: { index: string; title: string; detail: string; href: string; action: string }) {
-  return (
-    <a href={href} className="group flex min-h-[172px] flex-col justify-between border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm hover:bg-tts-confirm/5">
-      <span>
-        <span className="inline-flex h-8 w-8 items-center justify-center bg-tts-deep text-sm font-black text-tts-surface">
-          {index}
-        </span>
-        <span className="mt-4 block text-lg font-black text-tts-deep">{title}</span>
-        <span className="mt-2 block text-sm leading-6 text-tts-muted">{detail}</span>
-      </span>
-      <span className="mt-4 text-sm font-black text-tts-confirm">{action}</span>
-    </a>
-  );
-}
-
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
@@ -1594,15 +1594,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="border border-tts-border bg-tts-surface p-3">
       <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{label}</p>
       <p className="mt-1 text-sm font-black text-tts-deep">{value}</p>
-    </div>
-  );
-}
-
-function InfoBlock({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="border border-tts-border bg-tts-bg p-4">
-      <p className="font-black text-tts-deep">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-tts-muted">{body}</p>
     </div>
   );
 }

@@ -2,6 +2,26 @@
 
 Versao curta para deploy. Isto nao repete envs basicos que o projeto ja usava, como `SUPABASE_*`, `OPENAI_API_KEY`, `STELLAR_*`, `JWT_SECRET` e `PIN_PEPPER`.
 
+## 0. O que ainda falta preencher para rendimento
+
+Para a tela `/yield` deixar de mostrar "aguardando opção", confirme estes envs no backend do deploy:
+
+```env
+DEFINDEX_API_KEY=
+DEFINDEX_BASE_URL=https://api.defindex.io
+DEFINDEX_NETWORK=testnet
+DEFINDEX_TIMEOUT_MS=30000
+DEFINDEX_ENABLE_EXECUTION=false
+DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
+DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
+DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
+```
+
+O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate testar deposito, saque, assinatura e retorno em testnet.
+
+Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, CETES/TESOURO pode aparecer como real para o usuario; nao recrie o asset `BRL`.
+
 ## 1. Obrigatorias agora
 
 ### Backend
