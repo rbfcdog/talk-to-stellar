@@ -69,16 +69,18 @@ describe('asset config', () => {
     expect(normalizeAssetCode('foo')).toBe('FOO');
   });
 
-  it('uses TESOURO and EURC as configured settlement assets', () => {
+  it('uses TESOURO, USDC, EURC and XLM as configured visible settlement assets', () => {
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = TESTNET_USDC_ISSUER;
     process.env.TESOURO_ISSUER = ETHERFUSE_TESOURO_ISSUER;
     process.env.EURC_ISSUER = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
+    process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,EURC,XLM';
 
-    expect(getUserFacingAssetCodes()).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
+    expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('BRL');
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('XLM');
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
-    expect(getTrustedPathAssetCodes()).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
+    expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
     expect(getTrustedPathAssetCodes()).not.toContain('BRL');
     expect(userFacingAssetCode('EURC')).toBe('EUR');
   });

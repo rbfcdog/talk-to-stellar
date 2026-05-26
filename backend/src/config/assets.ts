@@ -19,7 +19,7 @@ function parseAssetCodeList(value: unknown): string[] {
   return String(value || '')
     .split(/[,\s]+/)
     .map((item) => settlementAssetCode(item))
-    .filter((item) => item && item !== 'XLM');
+    .filter(Boolean);
 }
 
 function uniqueAssetCodes(values: string[]): string[] {

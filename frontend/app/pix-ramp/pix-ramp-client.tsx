@@ -114,7 +114,7 @@ function parseConfiguredAssetList(value: unknown): TargetAsset[] {
   return String(value || "")
     .split(/[,\s]+/)
     .map((item) => canonicalAssetCode(item))
-    .filter((item) => item && item !== "XLM");
+    .filter(Boolean);
 }
 
 function uniqueAssets(values: TargetAsset[]) {

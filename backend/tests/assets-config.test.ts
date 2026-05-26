@@ -7,12 +7,12 @@ describe('asset configuration', () => {
     process.env = { ...originalEnv };
   });
 
-  it('supports env-driven visible assets while keeping only EUR enabled for now', () => {
+  it('supports the canonical visible asset list without separate BRL or EUR aliases', () => {
     process.env.ENABLE_TESOURO_ASSET = 'true';
     process.env.ENABLE_EURC_ASSET = 'true';
-    process.env.TTS_VISIBLE_ASSET_CODES = 'BRL,USDC,EUR';
+    process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,EURC,XLM';
 
-    expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC']);
-    expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC']);
+    expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
+    expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
   });
 });

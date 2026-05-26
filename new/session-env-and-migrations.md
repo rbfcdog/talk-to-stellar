@@ -11,7 +11,7 @@ Para a experiência nova funcionar de ponta a ponta, o ambiente precisa ter:
 3. Supabase configurado com service role e todas as migrations listadas neste documento.
 4. `AGENT_INGEST_SECRET` igual no backend, Telegram e qualquer adapter de chat.
 5. `FRONTEND_URL`/`PUBLIC_APP_URL` apontando para o domínio real do frontend, porque as tool calls devolvem links públicos.
-6. Assets visíveis configurados em `TTS_VISIBLE_ASSET_CODES`; BRL deve continuar sendo TESOURO internamente, sem asset BRL separado.
+6. Assets visíveis configurados em `TTS_VISIBLE_ASSET_CODES`; use `TESOURO,USDC,EURC,XLM`, sem asset BRL separado.
 7. Issuers, liquidez/rotas e setup dos assets extras antes de marcar uma moeda como operacional.
 8. PIX/Etherfuse com API key, organização/conta habilitada e webhook configurado.
 9. Defindex com vaults e API key para rendimento; execução deve ficar desligada até validação completa.
@@ -168,7 +168,7 @@ BRL_USDC_QUOTE_SOURCE=binance
 BRL_USDC_QUOTE_SYMBOL=USDCBRL
 BRL_USDC_QUOTE_TIMEOUT_MS=8000
 
-# Assets visíveis na UX. BRL continua sendo TESOURO internamente.
+# Assets visíveis. TESOURO e o asset real do produto para reais; nao use BRL aqui.
 ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 TESOURO_DISTRIBUTOR_PUBLIC=
@@ -177,7 +177,7 @@ ENABLE_EURC_ASSET=true
 EURC_ISSUER=
 EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
 EURC_ISSUER_TESTNET=
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 
 # Assets extras opcionais, só quando houver issuer/liquidez/configuração real
 GBP_ISSUER=
@@ -238,7 +238,7 @@ AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 ```
 
 O domínio público do frontend precisa bater com `PASSKEY_RP_ID` e `PASSKEY_ORIGIN`.
@@ -340,7 +340,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 
 | Variável | Onde | Significado |
 | --- | --- | --- |
-| `ENABLE_TESOURO_ASSET` | Backend | Liga o tratamento de BRL visível como TESOURO internamente. |
+| `ENABLE_TESOURO_ASSET` | Backend | Liga TESOURO como asset real do produto para reais. |
 | `TESOURO_ISSUER` | Backend | Issuer do asset TESOURO. O usuário vê Real/BRL; não criar asset BRL separado. |
 | `TESOURO_DISTRIBUTOR_PUBLIC` | Backend | Conta distributor pública para TESOURO, quando emissão/distribuição real estiver habilitada. |
 | `TESOURO_DISTRIBUTOR_SECRET` | Backend | Secret da distributor TESOURO. Só backend/custody. |
@@ -348,8 +348,8 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `EURC_ISSUER` | Backend | Issuer EURC genérico/fallback. |
 | `EURC_ISSUER_PUBLIC` | Backend | Issuer EURC em public/mainnet. |
 | `EURC_ISSUER_TESTNET` | Backend | Issuer EURC em testnet. |
-| `TTS_VISIBLE_ASSET_CODES` | Backend | Lista canônica de assets expostos pela UX e agente. |
-| `NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES` | Frontend | Mesma lista para renderização no frontend. Não torna asset operacional sozinho. |
+| `TTS_VISIBLE_ASSET_CODES` | Backend | Lista canônica de assets expostos pela UX e agente. Use `TESOURO,USDC,EURC,XLM`. |
+| `NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES` | Frontend | Mesma lista para renderização no frontend: `TESOURO,USDC,EURC,XLM`. Não torna asset operacional sozinho. |
 | `GBP_ISSUER`, `MXN_ISSUER`, `ARS_ISSUER`, `CAD_ISSUER`, `AUD_ISSUER`, `CHF_ISSUER`, `JPY_ISSUER` | Backend | Issuers opcionais para moedas extras. Preencher só com liquidez/path/vault validados. |
 
 ### PIX / Etherfuse
