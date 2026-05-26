@@ -489,18 +489,19 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (short === "JPY" || short === "ARS") return ["1000", "5000", "10000", "25000"];
     return ["10", "50", "100", "250"];
   }, [selectedProfile.short]);
+  const earnReviewUrl = selectedHasYield || !bestOptionCode ? "#yield-plan" : convertToBestYieldUrl;
   const primaryFlowUrl = flowIntent === "add"
     ? addMoneyUrl
     : flowIntent === "withdraw"
       ? sendMoneyUrl
-      : !selectedHasYield && bestOptionCode
-        ? convertToBestYieldUrl
-        : keepMoneyUrl;
+      : earnReviewUrl;
   const primaryFlowLabel = flowIntent === "add"
     ? L("Abrir PIX de entrada", "Open PIX add")
     : flowIntent === "withdraw"
       ? L("Abrir retirada PIX", "Open PIX withdrawal")
-      : L("Revisar rendimento", "Review yield");
+      : !selectedHasYield && bestOptionCode
+        ? L("Converter para render", "Convert to earn")
+        : L("Revisar rendimento", "Review yield");
   const flowChatPrompt = flowIntent === "add"
     ? L(`colocar ${amount || "0"} reais com PIX e manter em ${profileName(selectedProfile, language)}`, `add ${amount || "0"} reais with PIX and keep it in ${profileName(selectedProfile, language)}`)
     : flowIntent === "withdraw"
@@ -758,6 +759,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           selectedHasYield={selectedHasYield}
           bestOption={bestOption}
           bestProfile={bestProfile}
+          authenticated={session.authenticated}
+          confirmationEnabled={confirmationEnabled}
           pixAvailable={pixAvailable}
           destinationPixKey={cycleDestinationPixKey}
           onDestinationPixKeyChange={setCycleDestinationPixKey}
@@ -848,7 +851,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <BalancePanel balances={balances} options={options} selectedCode={safeSelectedCode} onSelect={setSelectedCode} />
 
-          <section className="border border-tts-border bg-tts-surface p-5">
+          <section id="yield-plan" className="scroll-mt-6 border border-tts-border bg-tts-surface p-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -1032,9 +1035,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         />
 
         <section className="grid gap-4 lg:grid-cols-3">
-          <ActionLink href="/pix-on" icon={<QrCode className="h-4 w-4" aria-hidden="true" />} title={L("Adicionar por PIX", "Add with PIX")} body={L("Coloque reais na conta e acompanhe o saldo aqui.", "Add reais to your account and track the balance here.")} />
-          <ActionLink href="/pix-off" icon={<ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />} title={L("Retirar por PIX", "Withdraw with PIX")} body={L("Envie saldo para uma chave PIX escolhida por você.", "Send balance to a PIX key you choose.")} />
-          <ActionLink href="/chat" icon={<Sparkles className="h-4 w-4" aria-hidden="true" />} title={L("Pedir ajuda", "Ask for help")} body={L("Use linguagem natural para saldo, PIX e rendimentos.", "Use natural language for balances, PIX, and yield.")} />
+          <ActionLink href={addMoneyUrl} icon={<QrCode className="h-4 w-4" aria-hidden="true" />} title={L("Adicionar por PIX", "Add with PIX")} body={L("Abre com valor e moeda já preenchidos.", "Opens with amount and currency prefilled.")} />
+          <ActionLink href={sendMoneyUrl} icon={<ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />} title={L("Retirar por PIX", "Withdraw with PIX")} body={L("Usa a chave PIX informada nesta tela.", "Uses the PIX key entered on this screen.")} />
+          <ActionLink href={flowChatUrl} icon={<Sparkles className="h-4 w-4" aria-hidden="true" />} title={L("Pedir ajuda", "Ask for help")} body={L("Leva o pedido atual para o chat.", "Sends the current request to chat.")} />
         </section>
 
         <section className="border border-tts-border bg-tts-surface p-5">
@@ -1060,6 +1063,8 @@ function EssentialFlowPanel({
   selectedHasYield,
   bestOption,
   bestProfile,
+  authenticated,
+  confirmationEnabled,
   pixAvailable,
   destinationPixKey,
   onDestinationPixKeyChange,
@@ -1077,6 +1082,8 @@ function EssentialFlowPanel({
   selectedHasYield: boolean;
   bestOption: YieldOption | null;
   bestProfile: MoneyProfile;
+  authenticated: boolean;
+  confirmationEnabled: boolean;
   pixAvailable: boolean;
   destinationPixKey: string;
   onDestinationPixKeyChange: (value: string) => void;
@@ -1088,11 +1095,17 @@ function EssentialFlowPanel({
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const amountReady = normalizeDecimal(amount) > 0;
-  const needsPixKey = flowIntent === "withdraw";
   const bestOptionText = bestOption
     ? `${profileName(bestProfile, language)} · ${optionRate(bestOption, language)} ${L("ao ano", "per year")}`
     : L("Aguardando opção", "Waiting for option");
   const selectedName = profileName(selectedProfile, language);
+  const actionSummary = flowIntent === "add"
+    ? L("Entrada por PIX", "PIX add")
+    : flowIntent === "withdraw"
+      ? L("Saída por PIX", "PIX withdrawal")
+      : selectedHasYield
+        ? L("Revisão de rendimento", "Yield review")
+        : L("Conversão para render", "Convert to earn");
   const flowOptions: Array<{
     id: FlowIntent;
     title: string;
@@ -1122,26 +1135,52 @@ function EssentialFlowPanel({
   ];
   const readiness = [
     {
+      key: "account",
+      label: L("Conta", "Account"),
+      ready: authenticated,
+      detail: authenticated ? L("Pronta para revisar operações.", "Ready to review operations.") : L("Entre para consultar saldos e confirmar.", "Sign in to check balances and confirm."),
+    },
+    {
+      key: "amount",
       label: L("Valor definido", "Amount set"),
       ready: amountReady,
       detail: amountReady ? `${formatAmount(amount, language)} ${selectedProfile.short}` : L("Informe um valor maior que zero.", "Enter an amount above zero."),
     },
-    {
+    ...(flowIntent === "add" || flowIntent === "withdraw" ? [{
+      key: "pix",
       label: L("PIX disponível", "PIX available"),
       ready: pixAvailable,
       detail: pixAvailable ? L("Entrada e saída podem continuar.", "Add and withdraw can continue.") : L("PIX ainda não está disponível neste ambiente.", "PIX is not available in this environment yet."),
-    },
-    {
+    }] : []),
+    ...(flowIntent === "earn" ? [{
+      key: "yield",
       label: L("Rendimento", "Yield"),
       ready: selectedHasYield || Boolean(bestOption),
       detail: selectedHasYield ? L("A moeda escolhida tem revisão de rendimento.", "The selected currency has yield review.") : bestOptionText,
-    },
-    {
+    }, {
+      key: "confirmation",
+      label: L("Confirmação", "Confirmation"),
+      ready: confirmationEnabled,
+      detail: confirmationEnabled ? L("PIN habilitado para concluir.", "PIN enabled to finish.") : L("Você ainda pode revisar a simulação.", "You can still review the preview."),
+    }] : []),
+    ...(flowIntent === "withdraw" ? [{
+      key: "pix-key",
       label: L("Chave PIX de saída", "Withdrawal PIX key"),
-      ready: !needsPixKey || Boolean(destinationPixKey.trim()),
+      ready: Boolean(destinationPixKey.trim()),
       detail: destinationPixKey.trim() || L("Pode preencher agora ou na tela de retirada.", "You can fill it now or on the withdrawal screen."),
-    },
+    }] : []),
+    ...(flowIntent === "add" ? [{
+      key: "destination",
+      label: L("Destino", "Destination"),
+      ready: true,
+      detail: L(`Saldo em ${selectedName} depois do PIX.`, `Balance in ${selectedName} after PIX.`),
+    }] : []),
   ];
+  const blockers = readiness.filter((item) => !item.ready).length;
+  const readinessTone = blockers === 0 ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold";
+  const readinessText = blockers === 0
+    ? L("Pronto para avançar", "Ready to continue")
+    : L(`${blockers} ponto${blockers > 1 ? "s" : ""} para revisar`, `${blockers} item${blockers > 1 ? "s" : ""} to review`);
 
   return (
     <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Plano essencial", "Essential plan")}>
@@ -1211,6 +1250,9 @@ function EssentialFlowPanel({
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-xs leading-5 text-tts-muted">
+                {L("Este mesmo valor alimenta os botões de PIX, rendimento e chat.", "This same amount feeds PIX, yield, and chat actions.")}
+              </p>
             </div>
 
             <div>
@@ -1234,10 +1276,18 @@ function EssentialFlowPanel({
         </div>
 
         <div className="border border-tts-border bg-tts-bg p-4">
-          <h3 className="text-base font-black text-tts-deep">{L("Próximo passo", "Next step")}</h3>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-base font-black text-tts-deep">{L("Próximo passo", "Next step")}</h3>
+              <p className="mt-1 text-sm leading-5 text-tts-muted">{actionSummary}</p>
+            </div>
+            <span className={`inline-flex w-fit border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${readinessTone}`}>
+              {readinessText}
+            </span>
+          </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {readiness.map((item) => (
-              <ReadinessItem key={item.label} ready={item.ready} label={item.label} detail={item.detail} />
+              <ReadinessItem key={item.key} ready={item.ready} label={item.label} detail={item.detail} />
             ))}
           </div>
 
