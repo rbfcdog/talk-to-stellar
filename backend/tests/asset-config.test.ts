@@ -21,10 +21,11 @@ describe('asset config', () => {
   });
 
   it('normalizes USD and native asset aliases', () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
     expect(normalizeAssetCode('usd')).toBe('USDC');
     expect(normalizeAssetCode('native')).toBe('XLM');
     expect(normalizeAssetCode('brl')).toBe('BRL');
-    expect(normalizeAssetCode('euro')).toBe('EURC');
+    expect(normalizeAssetCode('euro')).toBe('CETES');
   });
 
   it('uses Circle testnet USDC issuer by default on testnet', () => {
@@ -69,20 +70,20 @@ describe('asset config', () => {
     expect(normalizeAssetCode('foo')).toBe('FOO');
   });
 
-  it('uses TESOURO, USDC, EURC and XLM as configured visible settlement assets', () => {
+  it('uses TESOURO, USDC, CETES and XLM as configured visible settlement assets on testnet', () => {
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = TESTNET_USDC_ISSUER;
     process.env.TESOURO_ISSUER = ETHERFUSE_TESOURO_ISSUER;
-    process.env.EURC_ISSUER = 'GCGI6NT5KO6BH5FGPIKPZWDKTEL7XQJQLMT7NIH22P7CVXGTKJV2P3KF';
-    process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,EURC,XLM';
+    process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,CETES,XLM';
 
-    expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
+    expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'CETES', 'XLM']);
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('BRL');
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('XLM');
-    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'EURC']));
-    expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'EURC', 'XLM']);
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'CETES']));
+    expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'CETES', 'XLM']);
     expect(getTrustedPathAssetCodes()).not.toContain('BRL');
-    expect(userFacingAssetCode('EURC')).toBe('EUR');
+    expect(userFacingAssetCode('EURC')).toBe('CETES');
   });
 
   it('resolves user-facing EUR to Circle EURC issuer on public network', () => {

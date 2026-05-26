@@ -31,15 +31,17 @@ AGENT_INGEST_SECRET=gere-com-openssl-rand-hex-32
 # Fallback interno. Pode ser igual ao AGENT_INGEST_SECRET para simplificar deploy inicial.
 INTERNAL_API_SECRET=mesmo-valor-do-agent-ingest-secret
 
-# Euro real na Stellar public network: Circle EURC.
-EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+# CETES e o substituto de EUR/EURC no ambiente testnet atual.
+ENABLE_CETES_ASSET=true
+ENABLE_EURC_ASSET=false
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 
 # Lista canonica de assets expostos. Use TESOURO no env, nao BRL.
 # TESOURO e o asset real do produto para reais.
-TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
-Use `EURC_ISSUER_PUBLIC` com `STELLAR_NETWORK=PUBLIC`. Para testnet, nao use o issuer publico da Circle para submeter transacoes; deixe `EURC_ISSUER_TESTNET` vazio ate validar um issuer de teste confiavel.
+Use CETES em testnet porque nao ha issuer/vault EURC validado aqui. `EURC_ISSUER_PUBLIC` e apenas para `STELLAR_NETWORK=PUBLIC` no futuro/mainnet.
 
 Gerar segredo:
 
@@ -55,7 +57,7 @@ Adicionar em `frontend/.env` e no provider de producao do frontend:
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
 ```
 
 ### Telegram
@@ -147,10 +149,10 @@ Esses envs estavam faltando, mas sao opcionais. Nao preencha como operacional at
 TESOURO_DISTRIBUTOR_PUBLIC=
 TESOURO_DISTRIBUTOR_SECRET=
 
-# EURC public network ja validado via Circle.
+# EURC public network, apenas quando ligar producao/mainnet.
 EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
 
-# So preencha se houver issuer testnet confiavel.
+# So preencha se houver issuer testnet confiavel. Por enquanto, testnet usa CETES.
 EURC_ISSUER_TESTNET=
 
 # Moedas extras ficam fora por enquanto; so depois de confirmar codigo real,
@@ -172,4 +174,4 @@ JPY_ISSUER=
 4. `/yield`, `/convert`, `/money-cycle`, `/pix-on` e `/pix-off` abrem no frontend publico.
 5. Defindex usa `DEFINDEX_ENABLE_EXECUTION=true` para execucao em testnet depois de API key e vaults validados. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 6. Smart account fica com `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate haver verifier P-256 implantado.
-7. Por enquanto exponha so `TESOURO,USDC,EURC,XLM`; extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.
+7. Por enquanto exponha so `TESOURO,USDC,CETES,XLM`; EURC fica para public/mainnet e extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.

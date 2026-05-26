@@ -16,7 +16,7 @@ function normalizeAssetCode(value?: string, type?: string) {
   if (String(type || "").toLowerCase() === "native") return ""
   const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO") return "BRL"
-  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR"
+  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
   return code
 }
 
@@ -26,14 +26,14 @@ function formatAssetBalance(item: BalanceItem) {
   if (!Number.isFinite(raw)) return `${item.balance || "0"} ${code}`
   if (code === "USDC") return `US$ ${raw.toFixed(2)}`
   if (code === "BRL") return `R$ ${raw.toFixed(2)}`
-  if (code === "EUR") return `€ ${raw.toFixed(2)}`
+  if (code === "CETES") return `${raw.toFixed(2)} CETES`
   return code ? `${raw.toFixed(2)} ${code}` : ""
 }
 
 function displayAssetCode(code: string) {
   if (code === "BRL") return "R$"
   if (code === "USDC") return "US$"
-  if (code === "EUR") return "€"
+  if (code === "CETES") return "CETES"
   return code
 }
 

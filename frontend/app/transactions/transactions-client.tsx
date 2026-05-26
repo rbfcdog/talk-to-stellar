@@ -29,7 +29,7 @@ type TransactionItem = {
 function normalizeAssetCode(value?: string) {
   const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO") return "BRL"
-  if (code === "EURC" || code === "EURO" || code === "EUROS") return "EUR"
+  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
   return code
 }
 
@@ -39,7 +39,7 @@ function formatAmount(amount?: string | null, assetCode?: string | null) {
   if (!Number.isFinite(n)) return `${amount || "0"} ${code}`.trim()
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
-  if (code === "EUR") return `€ ${n.toFixed(2)}`
+  if (code === "CETES") return `${n.toFixed(2)} CETES`
   if (code === "XLM") return "Account balance"
   return `${n.toFixed(2)} ${code}`
 }

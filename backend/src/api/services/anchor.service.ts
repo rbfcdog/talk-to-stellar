@@ -765,7 +765,7 @@ function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: s
   const code = normalizeAssetCode(parsed.code || 'TESOURO');
   const settlementCode = code === 'BRL' ? 'TESOURO' : code;
   if (settlementCode !== 'TESOURO' && !getUserFacingAssetCodes().includes(settlementCode)) {
-    throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC, EUR ou TESOURO.`, 400);
+    throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC, CETES ou TESOURO.`, 400);
   }
   return resolveConfiguredAsset(settlementCode, parsed.issuer);
 }
