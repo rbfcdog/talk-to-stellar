@@ -4,7 +4,7 @@ import path from 'path';
 import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 
 type NetworkName = 'testnet' | 'mainnet';
-type YieldAsset = 'USDC' | 'EURC' | 'TESOURO' | 'XLM';
+type YieldAsset = 'USDC' | 'CETES' | 'EURC' | 'TESOURO' | 'XLM';
 
 type VaultCandidate = {
   address: string;
@@ -19,7 +19,7 @@ type MatchedVault = VaultCandidate & {
   label?: string;
 };
 
-const ASSETS: YieldAsset[] = ['USDC', 'EURC', 'TESOURO', 'XLM'];
+const ASSETS: YieldAsset[] = ['USDC', 'CETES', 'XLM', 'EURC', 'TESOURO'];
 const DEFAULT_BASE_URL = 'https://api.defindex.io';
 const DEFAULT_TIMEOUT_MS = 30000;
 const TESTNET_REGISTRY_URL = 'https://raw.githubusercontent.com/paltalabs/defindex/main/public/testnet.contracts.json';
@@ -51,6 +51,7 @@ function sdkNetwork(network: NetworkName): SupportedNetworks {
 function normalizeAsset(value: unknown): YieldAsset | undefined {
   const raw = String(value || '').trim().toUpperCase();
   if (!raw) return undefined;
+  if (raw === 'NATIVE') return 'XLM';
   if (raw === 'USD') return 'USDC';
   if (raw === 'EUR' || raw === 'EURO') return 'EURC';
   if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS') return 'TESOURO';
@@ -92,6 +93,7 @@ function registryCandidates(registry: any): VaultCandidate[] {
 function assetFromRegistrySource(source: string): YieldAsset | undefined {
   const key = source.toUpperCase();
   if (key.includes('USDC')) return 'USDC';
+  if (key.includes('CETES')) return 'CETES';
   if (key.includes('EURC')) return 'EURC';
   if (key.includes('TESOURO')) return 'TESOURO';
   if (key.includes('XLM')) return 'XLM';
@@ -169,15 +171,20 @@ function renderEnv(input: {
   lines.push('');
   for (const asset of ASSETS) {
     const match = input.matches.get(asset);
-    lines.push(`DEFINDEX_${asset}_VAULT=${match?.address || ''}`);
+    if (!match) continue;
+    lines.push(`DEFINDEX_${asset}_VAULT=${match.address}`);
     if (match?.source) lines.push(`# ${asset} source: ${match.source}${match.apy == null ? '' : `, apy=${match.apy}`}`);
     if (match?.assetContract) lines.push(`# ${asset} asset_contract: ${match.assetContract}`);
   }
   lines.push('');
   lines.push('ENABLE_EURC_ASSET=true');
-  if (input.network === 'testnet') {
-    lines.push(`EURC_ISSUER_TESTNET=${input.matches.get('EURC')?.issuer || ''}`);
-  } else {
+  for (const asset of ASSETS) {
+    const match = input.matches.get(asset);
+    if (asset === 'USDC') continue;
+    if (!match?.issuer || asset === 'XLM') continue;
+    lines.push(`${asset}_ISSUER_${input.network === 'mainnet' ? 'PUBLIC' : 'TESTNET'}=${match.issuer}`);
+  }
+  if (input.network === 'mainnet' && !input.matches.get('EURC')?.issuer) {
     lines.push('EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2');
   }
   lines.push('TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM');

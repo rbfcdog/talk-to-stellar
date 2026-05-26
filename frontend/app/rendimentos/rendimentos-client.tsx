@@ -107,6 +107,14 @@ const MONEY_PROFILES: Record<string, MoneyProfile> = {
     descriptionEn: "For holding money in dollars.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
   },
+  CETES: {
+    namePt: "Rendimento México",
+    nameEn: "Mexico yield",
+    short: "CETES",
+    descriptionPt: "Opção de teste com rendimento disponível.",
+    descriptionEn: "A test option with yield available.",
+    tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
+  },
   USD: {
     namePt: "Dólares",
     nameEn: "Dollars",

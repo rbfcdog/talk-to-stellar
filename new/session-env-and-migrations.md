@@ -76,11 +76,11 @@ Fonte oficial: `https://docs.etherfuse.com/initial-setup`
 4. Configure `DEFINDEX_API_KEY` apenas no backend.
 5. Configure `DEFINDEX_BASE_URL=https://api.defindex.io`.
 6. Use `Authorization: Bearer <key>` para chamadas diretas.
-7. Configure vaults reais por asset (`DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT`, `DEFINDEX_XLM_VAULT` ou `DEFINDEX_VAULTS_JSON`).
+7. Configure vaults reais por asset (`DEFINDEX_USDC_VAULT`, `DEFINDEX_CETES_VAULT`, `DEFINDEX_XLM_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT` ou `DEFINDEX_VAULTS_JSON`).
 8. Cada vault deve ser um endereco de contrato Soroban `C...`; nao use issuer do asset, conta `G...` de usuario ou factory address.
 9. Obtenha vaults pelo app/dashboard da Defindex, criando via `@defindex/sdk` factory operations, ou pedindo ao time Defindex/PaltaLabs o vault curado para o asset e rede.
 10. Para gerar um bloco automaticamente, rode `npm --prefix backend run defindex:env -- --network testnet`; para gravar arquivo separado, adicione `--write .env.defindex.testnet`.
-11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Se EURC testnet sair vazio, crie/solicite um vault EURC testnet validado antes de preencher `DEFINDEX_EURC_VAULT`.
+11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Se EURC/TESOURO nao aparecerem em testnet, nao configure yield desses assets.
 12. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
 13. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
 
@@ -208,9 +208,12 @@ DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
 DEFINDEX_USDC_VAULT=
-DEFINDEX_EURC_VAULT=
-DEFINDEX_TESOURO_VAULT=
+DEFINDEX_CETES_VAULT=
 DEFINDEX_XLM_VAULT=
+CETES_ISSUER_TESTNET=
+# So quando houver vault validado na rede ativa.
+# DEFINDEX_EURC_VAULT=
+# DEFINDEX_TESOURO_VAULT=
 DEFINDEX_VAULTS_JSON=
 
 # Passkey / smart account
@@ -235,6 +238,8 @@ ENABLE_REAL_PAYOUT_EXECUTION=false
 ```
 
 Os `DEFINDEX_*_VAULT` sao enderecos de contrato Soroban do vault, no formato `C...`. `getFactoryAddress()` retorna a factory usada para criar vaults; o valor que vai no env e o endereco do vault criado/selecionado, nao a factory.
+
+Em testnet, o registry/API validou USDC, XLM e CETES. Nao configure yield de EURC/TESOURO em testnet ate existir vault validado para esses assets.
 
 `DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/EUR/BRL, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
 
@@ -381,6 +386,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `DEFINDEX_TIMEOUT_MS` | Backend | Timeout de chamadas DeFindex. |
 | `DEFINDEX_ENABLE_EXECUTION` | Backend | Quando `false`, mantém ações em modo preparado/preview sem execução real. |
 | `DEFINDEX_USDC_VAULT` | Backend | Endereco `C...` do vault para rendimento em USDC. |
+| `DEFINDEX_CETES_VAULT` | Backend | Endereco `C...` do vault para rendimento em CETES testnet. |
 | `DEFINDEX_EURC_VAULT` | Backend | Endereco `C...` do vault para rendimento em EURC/euro. |
 | `DEFINDEX_TESOURO_VAULT` | Backend | Endereco `C...` do vault para rendimento em TESOURO/Real. |
 | `DEFINDEX_XLM_VAULT` | Backend | Endereco `C...` do vault para rendimento em XLM. |
@@ -464,6 +470,6 @@ backend/migrations/20260523_01_agent_messages_intro_dedupe.sql
    - Chat: “converter 500 reais para euros”
    - Chat: “deixar 200 dólares rendendo”
    - Chat: “injetar 500 reais, deixar render e sair para user@example.com”
-   - Abrir `/yield?lang=pt-BR&asset=EUR&amount=200`
+   - Abrir `/yield?lang=pt-BR&asset=CETES&amount=200`
    - Abrir `/money-cycle?cycle=1&asset=BRL&amount=500&destination_pix_key=user%40example.com`
-   - Abrir `/pix-off?asset=EUR&amount=80&destination_pix_key=user%40example.com`
+   - Abrir `/pix-off?asset=USDC&amount=80&destination_pix_key=user%40example.com`

@@ -340,6 +340,7 @@ function formatYieldAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt
   if (displayCode === 'BRL') return language === 'en' ? 'reais' : 'reais';
   if (displayCode === 'EUR') return language === 'en' ? 'euros' : 'euros';
   if (displayCode === 'USDC') return language === 'en' ? 'dollars' : 'dólares';
+  if (displayCode === 'CETES') return language === 'en' ? 'Mexico yield' : 'rendimento México';
   return displayCode;
 }
 
@@ -948,7 +949,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
         },
         language: {
           type: "string",
@@ -980,7 +981,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
         },
         slippage_bps: {
           type: "number",
@@ -1016,7 +1017,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as BRL, USDC, USD, EUR, or EURC.",
+          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, USD, EUR, or EURC.",
         },
         pin: {
           type: "string",

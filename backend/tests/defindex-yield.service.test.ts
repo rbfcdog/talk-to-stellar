@@ -30,10 +30,18 @@ describe('DefindexYieldService', () => {
     jest.clearAllMocks();
   });
 
+  function clearDefindexVaultEnv() {
+    delete process.env.DEFINDEX_USDC_VAULT;
+    delete process.env.DEFINDEX_CETES_VAULT;
+    delete process.env.DEFINDEX_EURC_VAULT;
+    delete process.env.DEFINDEX_XLM_VAULT;
+    delete process.env.DEFINDEX_TESOURO_VAULT;
+    delete process.env.DEFINDEX_VAULTS_JSON;
+  }
+
   it('reports missing API key and vault configuration without throwing', () => {
     delete process.env.DEFINDEX_API_KEY;
-    delete process.env.DEFINDEX_USDC_VAULT;
-    delete process.env.DEFINDEX_VAULTS_JSON;
+    clearDefindexVaultEnv();
     process.env.STELLAR_NETWORK = 'TESTNET';
 
     const runtime = DefindexYieldService.getRuntimeInfo();
@@ -49,9 +57,12 @@ describe('DefindexYieldService', () => {
   });
 
   it('loads multi-asset vaults from env and normalizes EUR to EURC', () => {
+    clearDefindexVaultEnv();
     process.env.DEFINDEX_API_KEY = 'sk_test';
     process.env.DEFINDEX_NETWORK = 'testnet';
     process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
+    process.env.DEFINDEX_CETES_VAULT = 'CCETESVAULT';
+    process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
     process.env.DEFINDEX_VAULTS_JSON = JSON.stringify([
       { asset_code: 'EUR', vault_address: 'CEURVAULT', label: 'Euro vault', network: 'testnet' },
       { asset_code: 'XLM', vault_address: 'CXLMVAULT', label: 'XLM vault', network: 'mainnet' },
@@ -60,10 +71,14 @@ describe('DefindexYieldService', () => {
     const runtime = DefindexYieldService.getRuntimeInfo();
 
     expect(runtime.configured).toBe(true);
-    expect(runtime.vaults.map((vault) => vault.asset_code)).toEqual(['EURC', 'USDC']);
+    expect(runtime.vaults.map((vault) => vault.asset_code)).toEqual(['EURC', 'USDC', 'CETES']);
     expect(runtime.vaults.find((vault) => vault.asset_code === 'EURC')).toMatchObject({
       vault_address: 'CEURVAULT',
       label: 'Euro vault',
+    });
+    expect(runtime.vaults.find((vault) => vault.asset_code === 'CETES')).toMatchObject({
+      vault_address: 'CCETESVAULT',
+      asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
   });
 

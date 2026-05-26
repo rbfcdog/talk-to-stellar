@@ -93,12 +93,14 @@ DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=false
 
 # Preencha apenas os vaults C... que existem e foram validados na rede ativa.
-DEFINDEX_USDC_VAULT=
-DEFINDEX_EURC_VAULT=
-DEFINDEX_TESOURO_VAULT=
-DEFINDEX_XLM_VAULT=
+DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
+DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
+DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 DEFINDEX_VAULTS_JSON=
 ```
+
+Em testnet, use yield apenas para assets com vault encontrado. Hoje o script encontra USDC, XLM e CETES; deixe EURC/TESOURO fora do yield testnet ate haver vault validado.
 
 Como preencher:
 
@@ -106,10 +108,10 @@ Como preencher:
 2. O valor de cada `DEFINDEX_*_VAULT` e o contrato Soroban do vault (`C...`), nao o issuer do asset e nao o factory address.
 3. Para obter um vault, selecione/crie no app da Defindex, crie via `@defindex/sdk` com factory operations, ou peca ao time Defindex/PaltaLabs o vault curado para asset/rede.
 4. Para gerar um bloco automaticamente, rode `npm --prefix backend run defindex:env -- --network testnet`. Para arquivo separado, adicione `--write .env.defindex.testnet`.
-5. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Se EURC testnet sair vazio, crie/solicite um vault EURC testnet validado antes de preencher `DEFINDEX_EURC_VAULT`.
+5. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Se EURC/TESOURO nao aparecerem, nao configure yield desses assets.
 6. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
 7. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
-8. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
+8. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_CETES_VAULT` e `DEFINDEX_XLM_VAULT` em testnet.
 
 ## Prioridade 3: passkey/smart account
 

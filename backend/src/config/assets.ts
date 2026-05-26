@@ -77,6 +77,12 @@ export function getAssetIssuer(assetCode: unknown, providedIssuer?: unknown): st
     if (networkSpecific) return networkSpecific;
     return String(process.env.EURC_ISSUER || process.env.EUR_ISSUER || '').trim() || undefined;
   }
+  const networkSpecific = String(
+    network === 'PUBLIC'
+      ? process.env[`${code}_ISSUER_PUBLIC`] || ''
+      : process.env[`${code}_ISSUER_TESTNET`] || ''
+  ).trim();
+  if (networkSpecific) return networkSpecific;
   return String(process.env[`${code}_ISSUER`] || '').trim() || undefined;
 }
 
