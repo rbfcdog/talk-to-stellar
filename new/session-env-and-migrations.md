@@ -79,8 +79,10 @@ Fonte oficial: `https://docs.etherfuse.com/initial-setup`
 7. Configure vaults reais por asset (`DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT`, `DEFINDEX_XLM_VAULT` ou `DEFINDEX_VAULTS_JSON`).
 8. Cada vault deve ser um endereco de contrato Soroban `C...`; nao use issuer do asset, conta `G...` de usuario ou factory address.
 9. Obtenha vaults pelo app/dashboard da Defindex, criando via `@defindex/sdk` factory operations, ou pedindo ao time Defindex/PaltaLabs o vault curado para o asset e rede.
-10. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
-11. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
+10. Para gerar um bloco automaticamente, rode `npm --prefix backend run defindex:env -- --network testnet`; para gravar arquivo separado, adicione `--write .env.defindex.testnet`.
+11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Se EURC testnet sair vazio, crie/solicite um vault EURC testnet validado antes de preencher `DEFINDEX_EURC_VAULT`.
+12. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
+13. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
 
 Fontes oficiais: `https://docs.defindex.io/api-integration-guide/quickstart`, `https://docs.defindex.io/wallet-developer/api-reference/api` e `https://docs.defindex.io/api-integration-guide/creating-a-defindex-vault`
 

@@ -81,6 +81,20 @@ Como obter os vaults:
 2. Ou crie via SDK/factory: `getFactoryAddress(SupportedNetworks.TESTNET)` mostra a factory; `createVault(...)` gera o XDR de criacao. Depois de assinar/submeter, use o endereco do vault criado em `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT` ou `DEFINDEX_XLM_VAULT`.
 3. Se for usar vault curado por parceiro/Defindex, peca o endereco oficial do vault para o asset e rede desejados. Valide antes de expor ao usuario.
 
+Script para buscar/preencher o bloco de env automaticamente:
+
+```bash
+npm --prefix backend run defindex:env -- --network testnet
+```
+
+Para gerar um arquivo separado:
+
+```bash
+npm --prefix backend run defindex:env -- --network testnet --write .env.defindex.testnet
+```
+
+O script usa `@defindex/sdk` para health/factory, consulta o registry publico da Defindex e tenta descobrir vaults em `/vault/discover`. Se `DEFINDEX_EURC_VAULT` ou `EURC_ISSUER_TESTNET` sair vazio, nao invente valor: significa que nenhum vault/issuer EURC testnet validado foi encontrado automaticamente. Nesse caso, crie um vault EURC testnet na Defindex ou peca ao time Defindex/PaltaLabs o vault e issuer de teste.
+
 Validacao minima antes de ligar execucao:
 
 ```ts
