@@ -19,6 +19,108 @@ Para a experiência nova funcionar de ponta a ponta, o ambiente precisa ter:
 11. Telegram com token, webhook e profile setup, caso o canal Telegram esteja ativo.
 12. OpenAI API key no backend para o agente usar tool calls.
 
+## Como obter APIs, chaves e valores externos
+
+Use esta seção como checklist de aquisição antes de preencher os envs. Nunca coloque chaves reais no repo, em logs ou em variáveis `NEXT_PUBLIC_*`.
+
+### OpenAI
+
+1. Entre em `https://platform.openai.com/api-keys`.
+2. Selecione o projeto correto e crie uma secret key.
+3. Copie a chave no momento da criação; a OpenAI não mostra o valor completo de novo depois.
+4. Configure no backend como `OPENAI_API_KEY`.
+
+Fonte oficial: `https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key`
+
+### Supabase
+
+1. Abra o projeto no dashboard do Supabase.
+2. Pegue a URL do projeto no Connect dialog ou em Data API.
+3. Em Settings -> API Keys, copie:
+   - `anon` ou publishable key para uso público/controlado.
+   - `service_role` ou secret key para o backend.
+4. `SUPABASE_SERVICE_ROLE_KEY` fica só no backend, porque bypassa RLS.
+
+Fontes oficiais: `https://supabase.com/docs/guides/getting-started/api-keys` e `https://supabase.com/docs/guides/api/creating-routes`
+
+### Telegram
+
+1. No Telegram, abra `@BotFather`.
+2. Use `/newbot`, escolha nome e username terminado em `bot`.
+3. O BotFather retorna o token; configure em `TELEGRAM_BOT_TOKEN`.
+4. Configure `TELEGRAM_AGENT_URL` apontando para o backend e use o mesmo `AGENT_INGEST_SECRET` no backend e no adapter.
+5. Em modo webhook, `TELEGRAM_WEBHOOK_URL` precisa ser a URL pública HTTPS do serviço Telegram.
+6. Teste o token com:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
+```
+
+Fonte oficial: `https://core.telegram.org/bots/features#botfather`
+
+### Etherfuse PIX/ramp
+
+1. Para sandbox, crie conta em `https://devnet.etherfuse.com`.
+2. No menu Ramp -> API Keys, crie uma sandbox API key.
+3. Use `ETHERFUSE_BASE_URL=https://api.sand.etherfuse.com`.
+4. Para produção, use `https://app.etherfuse.com`, complete KYC real e solicite/ative keys de produção.
+5. A autenticação da API Etherfuse usa o header `Authorization` com a key direta, sem prefixo `Bearer`.
+
+Fonte oficial: `https://docs.etherfuse.com/initial-setup`
+
+### Defindex rendimento
+
+1. Tente o fluxo atual da documentação em `https://docs.defindex.io/api-integration-guide/quickstart`.
+2. Se o botão/fluxo de gerar key não estiver disponível, solicite acesso ao time DeFindex/PaltaLabs pelo Discord indicado na documentação.
+3. A key normalmente começa com `sk_`.
+4. Configure `DEFINDEX_API_KEY` apenas no backend.
+5. Configure `DEFINDEX_BASE_URL=https://api.defindex.io`.
+6. Use `Authorization: Bearer <key>` para chamadas diretas.
+7. Configure vaults reais por asset (`DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT`, `DEFINDEX_TESOURO_VAULT`, `DEFINDEX_XLM_VAULT` ou `DEFINDEX_VAULTS_JSON`).
+8. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` até testar deposit/withdraw, assinatura e liquidez em testnet.
+
+Fontes oficiais: `https://docs.defindex.io/api-integration-guide/quickstart`, `https://docs.defindex.io/wallet-developer/api-reference/api` e `https://docs.defindex.io/api-integration-guide/creating-a-defindex-vault`
+
+### Stellar keys e issuers
+
+1. Para testnet, gere keypair no Stellar Lab ou via SDK/CLI.
+2. Fund account com Friendbot apenas em testnet/futurenet.
+3. Em produção, `STELLAR_SECRET_KEY`, distributor keys e issuer keys devem seguir política de custody/rotação, não serem keys pessoais.
+4. Para assets extras, preencha `CODE_ISSUER` só quando issuer, trustline, path payment/liquidez e UX estiverem validados.
+
+Fonte oficial: `https://developers.stellar.org/docs/tools/lab/account`
+
+### Passkey / OpenZeppelin smart account
+
+Passkey/WebAuthn não exige API key externa. Exige domínio público HTTPS correto:
+
+1. `PASSKEY_RP_ID` deve ser só o domínio, por exemplo `app.exemplo.com`.
+2. `PASSKEY_ORIGIN` deve ser a origem completa, por exemplo `https://app.exemplo.com`.
+3. O navegador só valida passkey se a origem real bater com esses valores.
+4. Para smart account on-chain, use o framework de smart account da OpenZeppelin Stellar Contracts e configure o endereço do verifier P-256/WebAuthn em `PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS` quando houver contrato implantado e auditado.
+5. Enquanto não houver verifier/rules on-chain implantados, deixe `PASSKEY_SMART_ACCOUNT_ENABLED=false`.
+
+Fontes oficiais: `https://docs.openzeppelin.com/stellar-contracts/accounts/smart-account` e `https://docs.openzeppelin.com/stellar-contracts/accounts/signers-and-verifiers`
+
+### Circle / Bridge payout opcional
+
+Só precisa se `PAYOUT_PROVIDER` sair de `mock` e `ENABLE_REAL_PAYOUT_EXECUTION=true`.
+
+- Circle: crie key no Circle developer dashboard, sandbox ou production conforme o ambiente.
+- Bridge: use o dashboard/API docs da Bridge e envie a key no header esperado pelo provider.
+
+Fontes oficiais: `https://developers.circle.com/circle-mint/api-keys` e `https://apidocs.bridge.xyz/api-reference`
+
+### Segredos internos
+
+Gere valores longos e diferentes por ambiente para `JWT_SECRET`, `PIN_PEPPER`, `AGENT_INGEST_SECRET`, `INTERNAL_API_SECRET`, `TELEGRAM_NOTIFY_SECRET` e webhooks:
+
+```bash
+openssl rand -hex 32
+```
+
+`AGENT_INGEST_SECRET` precisa ser exatamente igual no backend e nos adapters que chamam `/api/agent/query`.
+
 ## Backend env
 
 ```env
@@ -101,6 +203,7 @@ DEFINDEX_ENABLE_EXECUTION=false
 DEFINDEX_USDC_VAULT=
 DEFINDEX_EURC_VAULT=
 DEFINDEX_TESOURO_VAULT=
+DEFINDEX_XLM_VAULT=
 DEFINDEX_VAULTS_JSON=
 
 # Passkey / smart account
@@ -108,6 +211,7 @@ PASSKEY_RP_ID=seu-dominio-frontend.com
 PASSKEY_ORIGIN=https://seu-dominio-frontend.com
 PASSKEY_RP_NAME=TalkToStellar
 PASSKEY_OPERATION_TIMEOUT_MS=180000
+PASSKEY_CHALLENGE_TTL_SECONDS=900
 PASSKEY_USER_VERIFICATION=preferred
 PASSKEY_SMART_ACCOUNT_ENABLED=false
 PASSKEY_SMART_ACCOUNT_NETWORK=testnet
@@ -162,11 +266,161 @@ TELEGRAM_HEALTH_PORT=3005
 TELEGRAM_SESSION_PREFIX=telegram
 TELEGRAM_WEBHOOK_PATH=/webhook/telegram
 TELEGRAM_PROFILE_SETUP=true
+TELEGRAM_PROFILE_PHOTO_PATH=
+TELEGRAM_SHORT_DESCRIPTION=TalkToStellar account assistant for balance, PIX, conversion, yield, and withdrawals.
+TELEGRAM_DESCRIPTION=TalkToStellar helps you check your balance, add or withdraw with PIX, convert currencies, keep money earning, manage contacts, and send payments from Telegram.
 AGENT_INGEST_SECRET=mesmo-valor-do-backend
 TELEGRAM_NOTIFY_SECRET=mesmo-valor-ou-fallback
 ```
 
 O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu sem esse segredo ou com valor diferente do backend.
+
+## O que cada env significa
+
+### Core backend
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `PORT` | Backend | Porta HTTP do backend. |
+| `NODE_ENV` | Backend | Ambiente de execução; use `production` em deploy real. |
+| `JWT_SECRET` | Backend | Segredo para assinar/verificar JWT de sessão. Gere valor longo. |
+| `PIN_PEPPER` | Backend | Pepper server-side usado no hash de PIN. Não pode ir para frontend. |
+| `OPENAI_API_KEY` | Backend | Chave da OpenAI usada pelo agente para interpretar mensagens e emitir tool calls. |
+
+### Supabase
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `SUPABASE_URL` | Backend | URL do projeto Supabase. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Backend | Key server-side com privilégios elevados. Nunca expor no browser. |
+| `SUPABASE_ANON_KEY` | Backend/cliente controlado | Key pública/legacy anon. Use com RLS e sem privilégios administrativos. |
+
+### URLs públicas e CORS
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `FRONTEND_URL` | Backend | Base principal para links que o backend/agente devolvem ao usuário. |
+| `PUBLIC_APP_URL` | Backend | Fallback público para links do app. Mantenha igual ao frontend real. |
+| `CREATE_ACCOUNT_BASE` | Backend | Base dos links de criação/onboarding de conta. |
+| `PAYMENT_CONFIRM_BASE` | Backend | Base dos links de confirmação/checkout. |
+| `PUBLIC_BACKEND_URL` | Backend | URL pública do backend para webhooks, callbacks e links internos. |
+| `CORS_ORIGINS` | Backend | Lista de origins autorizadas a chamar o backend pelo browser. |
+
+### Ingestão do agente, Telegram e notificações
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `AGENT_INGEST_SECRET` | Backend + adapters | Segredo preferencial enviado no header `x-agent-ingest-secret` por Telegram/WhatsApp. Deve bater entre serviços. |
+| `INTERNAL_API_SECRET` | Backend/adapters | Fallback compatível para integrações internas antigas. |
+| `TELEGRAM_NOTIFY_SECRET` | Backend + Telegram | Segredo para `POST /notify` no adapter Telegram e fallback de ingestão. |
+| `TELEGRAM_NOTIFY_URL` | Backend | Endpoint público do serviço Telegram para notificações pós-confirmação. |
+| `TELEGRAM_BOT_TOKEN` | Backend opcional + Telegram | Token do bot criado no BotFather. No backend é fallback direto; no adapter é obrigatório. |
+| `TELEGRAM_AGENT_URL` | Telegram | Endpoint `/api/agent/query` do backend. |
+| `TELEGRAM_BOT_MODE` | Telegram | `webhook` em produção; polling apenas para desenvolvimento. |
+| `TELEGRAM_WEBHOOK_URL` | Telegram | Base pública HTTPS onde o Telegram entregará updates. |
+| `TELEGRAM_BOT_USERNAME` | Telegram | Username público do bot, usado em links e textos. |
+| `TELEGRAM_HEALTH_PORT` | Telegram | Porta local do health server do adapter. |
+| `TELEGRAM_SESSION_PREFIX` | Telegram | Prefixo para IDs de sessão vindos do Telegram. |
+| `TELEGRAM_WEBHOOK_PATH` | Telegram | Path que recebe updates do Telegram, normalmente `/webhook/telegram`. |
+| `TELEGRAM_PROFILE_SETUP` | Telegram | Quando `true`, o adapter tenta atualizar perfil/descrição do bot no boot. |
+| `TELEGRAM_PROFILE_PHOTO_PATH` | Telegram | Caminho opcional da foto de perfil do bot. |
+| `TELEGRAM_SHORT_DESCRIPTION` | Telegram | Descrição curta do bot exibida pelo Telegram. |
+| `TELEGRAM_DESCRIPTION` | Telegram | Descrição longa do bot exibida pelo Telegram. |
+
+### Stellar, conversão e taxas
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `STELLAR_NETWORK` | Backend | Rede Stellar: `TESTNET` ou `PUBLIC`. |
+| `STELLAR_HORIZON_URL` | Backend | Horizon usado pelo backend para leitura/submissão clássica. |
+| `STELLAR_SECRET_KEY` | Backend | Secret key operacional usada para assinar operações server-side configuradas. Proteger como custody. |
+| `STELLAR_PUBLIC_KEY` | Backend | Public key correspondente à conta operacional. |
+| `USDC_ISSUER` | Backend | Issuer padrão de USDC quando `USDC_ASSET_ISSUER` não estiver definido. |
+| `USDC_ASSET_CODE` | Backend | Código do asset USDC, normalmente `USDC`. |
+| `USDC_ASSET_ISSUER` | Backend | Issuer explícito de USDC para trustlines/path payments. |
+| `STELLAR_ENFORCE_TRUSTED_PATH_ASSETS` | Backend | Quando `true`, restringe path assets a issuers confiáveis configurados. |
+| `ONBOARDING_AUTO_CONVERT_TO_USDC` | Backend | Converte automaticamente saldo inicial/onboarding para USDC quando aplicável. |
+| `QUOTE_TTL_SECONDS` | Backend | Tempo de validade de cotações antes de exigir nova cotação. |
+| `TALKTOSTELLAR_SPREAD_BPS` | Backend | Spread da plataforma em basis points. `30` = 0,30%. |
+| `TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY` | Backend | Conta treasury que recebe fee/spread quando configurada. |
+| `BRL_USDC_QUOTE_SOURCE` | Backend | Fonte de preço BRL/USDC; nesta sessão usada como `binance`. |
+| `BRL_USDC_QUOTE_SYMBOL` | Backend | Símbolo do par usado na fonte de preço, ex. `USDCBRL`. |
+| `BRL_USDC_QUOTE_TIMEOUT_MS` | Backend | Timeout para buscar cotação BRL/USDC. |
+
+### Assets e TESOURO = Real
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `ENABLE_TESOURO_ASSET` | Backend | Liga o tratamento de BRL visível como TESOURO internamente. |
+| `TESOURO_ISSUER` | Backend | Issuer do asset TESOURO. O usuário vê Real/BRL; não criar asset BRL separado. |
+| `TESOURO_DISTRIBUTOR_PUBLIC` | Backend | Conta distributor pública para TESOURO, quando emissão/distribuição real estiver habilitada. |
+| `TESOURO_DISTRIBUTOR_SECRET` | Backend | Secret da distributor TESOURO. Só backend/custody. |
+| `ENABLE_EURC_ASSET` | Backend | Liga suporte a euro/EURC na UX e config de assets. |
+| `EURC_ISSUER` | Backend | Issuer EURC genérico/fallback. |
+| `EURC_ISSUER_PUBLIC` | Backend | Issuer EURC em public/mainnet. |
+| `EURC_ISSUER_TESTNET` | Backend | Issuer EURC em testnet. |
+| `TTS_VISIBLE_ASSET_CODES` | Backend | Lista canônica de assets expostos pela UX e agente. |
+| `NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES` | Frontend | Mesma lista para renderização no frontend. Não torna asset operacional sozinho. |
+| `GBP_ISSUER`, `MXN_ISSUER`, `ARS_ISSUER`, `CAD_ISSUER`, `AUD_ISSUER`, `CHF_ISSUER`, `JPY_ISSUER` | Backend | Issuers opcionais para moedas extras. Preencher só com liquidez/path/vault validados. |
+
+### PIX / Etherfuse
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `ETHERFUSE_API_KEY` | Backend | API key do Etherfuse para PIX/ramp. Server-side only. |
+| `ETHERFUSE_BASE_URL` | Backend | Base da API Etherfuse: sandbox `https://api.sand.etherfuse.com`, produção `https://api.etherfuse.com`. |
+| `ETHERFUSE_BLOCKCHAIN` | Backend | Blockchain usada na integração, aqui `stellar`. |
+| `ETHERFUSE_WEBHOOK_SECRET` | Backend | Segredo para validar webhooks Etherfuse quando configurado. |
+
+### Defindex / rendimento
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `DEFINDEX_API_KEY` | Backend | API key DeFindex, usada com `Authorization: Bearer`. |
+| `DEFINDEX_BASE_URL` | Backend | Base da API DeFindex, normalmente `https://api.defindex.io`. |
+| `DEFINDEX_NETWORK` | Backend | `testnet` ou `mainnet`; deve bater com Stellar runtime e vaults. |
+| `DEFINDEX_TIMEOUT_MS` | Backend | Timeout de chamadas DeFindex. |
+| `DEFINDEX_ENABLE_EXECUTION` | Backend | Quando `false`, mantém ações em modo preparado/preview sem execução real. |
+| `DEFINDEX_USDC_VAULT` | Backend | Vault para rendimento em USDC. |
+| `DEFINDEX_EURC_VAULT` | Backend | Vault para rendimento em EURC/euro. |
+| `DEFINDEX_TESOURO_VAULT` | Backend | Vault para rendimento em TESOURO/Real. |
+| `DEFINDEX_XLM_VAULT` | Backend | Vault para rendimento em XLM. |
+| `DEFINDEX_VAULTS_JSON` | Backend | Lista/objeto JSON para vaults extras, labels, network e enable por asset. |
+
+### Passkey / smart account
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `PASSKEY_RP_ID` | Backend | Relying Party ID do WebAuthn. Deve ser o domínio, sem protocolo. |
+| `PASSKEY_ORIGIN` | Backend | Origin completa esperada pelo WebAuthn, com `https://`. |
+| `PASSKEY_RP_NAME` | Backend | Nome mostrado no prompt de passkey. |
+| `PASSKEY_OPERATION_TIMEOUT_MS` | Backend | Janela para a operação passkey/QR ser concluída. |
+| `PASSKEY_CHALLENGE_TTL_SECONDS` | Backend | TTL do challenge WebAuthn salvo no backend. Default do código: 900 segundos. |
+| `PASSKEY_USER_VERIFICATION` | Backend | Política WebAuthn: `preferred`, `required` ou `discouraged`. |
+| `PASSKEY_SMART_ACCOUNT_ENABLED` | Backend | Liga metadata/uso de smart account passkey. Deixe `false` até contrato/verifier reais. |
+| `PASSKEY_SMART_ACCOUNT_NETWORK` | Backend | Rede do smart account, normalmente `testnet` até auditoria. |
+| `PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS` | Backend | Endereço do verifier WebAuthn/P-256 em Soroban. |
+| `PASSKEY_SMART_ACCOUNT_DEFAULT_CONTEXT_RULE_ID` | Backend | Rule ID padrão usado pelo cliente para autorizações smart account. |
+
+### Frontend
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `AGENT_API_URL` | Frontend server-side | Endpoint interno usado por server actions/API routes do frontend para chamar o agente. |
+| `NEXT_PUBLIC_BACKEND_URL` | Frontend público | Base pública do backend para chamadas do browser. |
+| `NEXT_PUBLIC_AGENT_API_URL` | Frontend público | Endpoint público do agente quando chamadas partem do browser/chat. |
+| `NEXT_PUBLIC_FRONTEND_URL` | Frontend público | URL pública do próprio frontend, usada em links e redirects. |
+
+### Payout internacional opcional
+
+| Variável | Onde | Significado |
+| --- | --- | --- |
+| `PAYOUT_PROVIDER` | Backend | Provider de payout: `mock` enquanto não houver integração real. |
+| `CIRCLE_API_KEY` | Backend | API key Circle se o payout real usar Circle. |
+| `CIRCLE_PAYOUT_CREATE_URL` | Backend | Endpoint custom/configurado para criar payout via Circle. |
+| `BRIDGE_API_KEY` | Backend | API key Bridge se o payout real usar Bridge. |
+| `BRIDGE_PAYOUT_CREATE_URL` | Backend | Endpoint custom/configurado para criar payout via Bridge. |
+| `ENABLE_REAL_PAYOUT_EXECUTION` | Backend | Guarda de segurança; só `true` depois de provider, compliance e testes reais. |
 
 ## Migrations para aplicar
 
