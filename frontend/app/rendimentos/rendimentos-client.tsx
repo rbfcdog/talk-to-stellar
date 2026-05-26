@@ -253,6 +253,13 @@ function optionCode(option?: YieldOption | null) {
   return String(option?.display_asset_code || option?.asset_code || "").trim().toUpperCase();
 }
 
+function shortAccount(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.length <= 14) return raw;
+  return `${raw.slice(0, 6)}...${raw.slice(-5)}`;
+}
+
 function optionTitle(option: YieldOption | null | undefined, language: AppLanguage) {
   const profile = moneyProfile(optionCode(option));
   if (profile.short === "BRL") return localCopy(language, "Reserva em reais", "Reais reserve");
@@ -415,9 +422,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
   const [balances, setBalances] = useState<BalanceLine[]>([]);
+  const [accountPublicKey, setAccountPublicKey] = useState("");
   const [selectedCode, setSelectedCode] = useState("USDC");
   const [amount, setAmount] = useState("100");
-  const [flowIntent, setFlowIntent] = useState<FlowIntent>("earn");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -426,6 +433,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [pin, setPin] = useState("");
   const [yieldBalance, setYieldBalance] = useState<any | null>(null);
   const [yieldResult, setYieldResult] = useState<any | null>(null);
+  const [yieldBalanceLoading, setYieldBalanceLoading] = useState(false);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
@@ -437,11 +445,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const configured = Boolean(yieldStatus?.runtime?.configured);
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
   const pixAvailable = Boolean(rampConfig?.available);
-  const totalBalances = balances.length;
   const safeSelectedCode = optionCode(selectedOption) || selectedCode;
   const selectedProfile = moneyProfile(safeSelectedCode);
   const bestOptionCode = optionCode(bestOption);
-  const bestProfile = moneyProfile(bestOptionCode || safeSelectedCode);
   const selectedHasYield = Boolean(selectedOption);
   const canPrepare = Boolean(session.authenticated && configured && selectedOption && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => String(item.asset_code || "").toUpperCase() === safeSelectedCode);
@@ -479,19 +485,6 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (short === "JPY" || short === "ARS") return ["1000", "5000", "10000", "25000"];
     return ["10", "50", "100", "250"];
   }, [selectedProfile.short]);
-  const earnReviewUrl = selectedHasYield || !bestOptionCode ? "#yield-plan" : convertToBestYieldUrl;
-  const primaryFlowUrl = flowIntent === "add"
-    ? addMoneyUrl
-    : flowIntent === "withdraw"
-      ? sendMoneyUrl
-      : earnReviewUrl;
-  const primaryFlowLabel = flowIntent === "add"
-    ? L("Abrir PIX de entrada", "Open PIX add")
-    : flowIntent === "withdraw"
-      ? L("Abrir retirada PIX", "Open PIX withdrawal")
-      : !selectedHasYield && bestOptionCode
-        ? L("Converter para render", "Convert to earn")
-        : L("Revisar rendimento", "Review yield");
   useEffect(() => {
     if (initialLanguage && !appliedInitialLanguageRef.current) {
       appliedInitialLanguageRef.current = true;
@@ -535,10 +528,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (queryAmount > 0) setAmount(String(queryAmount));
     if (queryAction === "withdraw" || queryAction === "resgatar") setAction("withdraw");
     if (queryAction === "deposit" || queryAction === "guardar") setAction("deposit");
-    if (queryFlow === "add" || queryFlow === "bring" || queryFlow === "entrada") setFlowIntent("add");
-    if (queryFlow === "earn" || queryFlow === "yield" || queryFlow === "rendimento" || queryFlow === "keep") setFlowIntent("earn");
+    if (queryFlow === "earn" || queryFlow === "yield" || queryFlow === "rendimento" || queryFlow === "keep") setAction("deposit");
     if (queryFlow === "withdraw" || queryFlow === "exit" || queryFlow === "saida" || queryFlow === "sair") {
-      setFlowIntent("withdraw");
       setAction("withdraw");
     }
     if (queryDestinationPixKey) setCycleDestinationPixKey(queryDestinationPixKey);
@@ -579,15 +570,18 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
       if (!sessionPayload.authenticated) {
         setBalances([]);
+        setAccountPublicKey("");
         setApiState({ loading: false, message: L("Entre para ver seus saldos e preparar rendimentos.", "Sign in to see balances and prepare yield."), error: "" });
         return;
       }
 
       const accountPayload = await financialApi("wallet").catch(() => ({ wallet: null }));
       if (accountPayload?.wallet?.public_key) {
+        setAccountPublicKey(String(accountPayload.wallet.public_key));
         const balancePayload = await financialApi("balance").catch(() => ({ balances: [] }));
         setBalances(Array.isArray(balancePayload?.balances) ? balancePayload.balances : []);
       } else {
+        setAccountPublicKey("");
         setBalances([]);
       }
 
@@ -597,17 +591,28 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     }
   }
 
-  async function refreshYieldBalance() {
-    if (!selectedOption) return;
-    setApiState({ loading: true, message: "", error: "" });
-    try {
-      const payload = await yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(selectedOption.asset_code)}&vault_address=${encodeURIComponent(selectedOption.vault_address)}`);
-      setYieldBalance(payload);
-      setApiState({ loading: false, message: L("Saldo de rendimento atualizado.", "Yield balance updated."), error: "" });
-    } catch (error) {
-      setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
+  useEffect(() => {
+    if (!session.authenticated || !configured || !selectedOption) {
+      setYieldBalance(null);
+      setYieldBalanceLoading(false);
+      return;
     }
-  }
+    let cancelled = false;
+    setYieldBalanceLoading(true);
+    yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(selectedOption.asset_code)}&vault_address=${encodeURIComponent(selectedOption.vault_address)}`)
+      .then((payload) => {
+        if (!cancelled) setYieldBalance(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setYieldBalance(null);
+      })
+      .finally(() => {
+        if (!cancelled) setYieldBalanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [configured, selectedOption?.asset_code, selectedOption?.vault_address, session.authenticated]);
 
   async function prepareYield() {
     if (!selectedOption) return;
@@ -665,40 +670,40 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="grid gap-5 border-b border-tts-border pb-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
+            <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
               {L("Rendimentos", "Yield")}
             </div>
-            <h1 className="max-w-3xl text-3xl font-black tracking-tight text-tts-deep md:text-5xl">
-              {L("Saldos que trabalham por você", "Balances that work for you")}
+            <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
+              {L("Rendimento da sua conta", "Yield from your account")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
-                "Veja seu dinheiro por moeda, escolha quanto quer deixar rendendo e confirme tudo com calma. A tela prioriza nomes simples, valores claros e ações reversíveis.",
-                "See your money by currency, choose how much you want to put to work, and review everything calmly. This screen uses simple names, clear values, and reversible actions."
+                "Escolha um saldo da conta, veja a taxa disponível e revise antes de confirmar. Nada sai sem revisão.",
+                "Choose an account balance, see the available rate, and review before confirming. Nothing moves without review."
               )}
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
             <button
               type="button"
               onClick={() => setShowTutorial((current) => !current)}
-              className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               <BookOpen className="h-4 w-4" aria-hidden="true" />
-              {showTutorial ? L("Ocultar primeiros passos", "Hide first steps") : L("Primeiros passos", "First steps")}
+              {showTutorial ? L("Ocultar guia", "Hide guide") : L("Como usar", "How to use")}
             </button>
             <button
               type="button"
               onClick={refreshDashboard}
-              className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+              className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
             >
               {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
-              {L("Atualizar saldos", "Refresh balances")}
+              {L("Atualizar", "Refresh")}
             </button>
           </div>
         </header>
@@ -714,17 +719,10 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         ) : null}
 
         {apiState.message ? (
-          <div className="border border-tts-confirm bg-tts-confirm/10 p-4 text-sm font-semibold text-tts-confirm" aria-live="polite">
+          <div className="sr-only" aria-live="polite">
             {apiState.message}
           </div>
         ) : null}
-
-        <section className="grid gap-4 lg:grid-cols-4" aria-label={L("Resumo da conta", "Account summary")}>
-          <Metric label={L("Moedas na conta", "Currencies")} value={String(totalBalances || options.length || 0)} detail={L("Saldos disponíveis", "Available balances")} />
-          <Metric label={L("Opções rendendo", "Yield options")} value={String(options.length)} detail={configured ? L("Prontas para simular", "Ready to preview") : L("Aguardando configuração", "Waiting for setup")} />
-          <Metric label="PIX" value={pixAvailable ? L("Disponível", "Available") : L("Pendente", "Pending")} detail={L("Entrada e retirada em reais", "Add and withdraw in reais")} />
-          <Metric label={L("Confirmação", "Confirmation")} value={confirmationEnabled ? L("Ativa", "Active") : L("Em preparo", "In setup")} detail={confirmationEnabled ? L("PIN habilitado", "PIN enabled") : L("Somente revisão", "Review only")} />
-        </section>
 
         {showTutorial ? (
           <YieldTutorialPanel
@@ -735,241 +733,54 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           />
         ) : null}
 
-        <EssentialFlowPanel
-          flowIntent={flowIntent}
-          onFlowIntentChange={(next) => {
-            setFlowIntent(next);
-            if (next === "earn") setAction("deposit");
-            if (next === "withdraw") setAction("withdraw");
-          }}
-          amount={amount}
-          onAmountChange={setAmount}
-          amountPresets={amountPresets}
-          selectedProfile={selectedProfile}
-          selectedHasYield={selectedHasYield}
-          bestOption={bestOption}
-          bestProfile={bestProfile}
-          authenticated={session.authenticated}
-          confirmationEnabled={confirmationEnabled}
-          pixAvailable={pixAvailable}
-          destinationPixKey={cycleDestinationPixKey}
-          onDestinationPixKeyChange={setCycleDestinationPixKey}
-          primaryHref={primaryFlowUrl}
-          primaryLabel={primaryFlowLabel}
-          convertToBestYieldHref={convertToBestYieldUrl}
-          onShowTutorial={() => setShowTutorial(true)}
-        />
+        <section className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
+          <AccountPanel
+            authenticated={session.authenticated}
+            accountPublicKey={accountPublicKey}
+            balances={balances}
+            options={options}
+            selectedCode={safeSelectedCode}
+            onSelect={(code) => {
+              setSelectedCode(code);
+              setYieldBalance(null);
+              setYieldResult(null);
+            }}
+            pixAvailable={pixAvailable}
+            addMoneyUrl={addMoneyUrl}
+            sendMoneyUrl={sendMoneyUrl}
+          />
 
-        <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <BalancePanel balances={balances} options={options} selectedCode={safeSelectedCode} onSelect={setSelectedCode} />
-
-          <section id="yield-plan" className="scroll-mt-6 border border-tts-border bg-tts-surface p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                  <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                  {L("Plano de rendimento", "Yield plan")}
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-tts-muted">
-                  {L("Escolha uma moeda, informe o valor e revise antes de confirmar.", "Choose a currency, enter an amount, and review before confirming.")}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-pressed={advancedOpen}
-                onClick={() => setAdvancedOpen(!advancedOpen)}
-                className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-              >
-                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                {advancedOpen ? L("Ocultar ajustes", "Hide settings") : L("Modo avançado", "Advanced mode")}
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-3" role="radiogroup" aria-label={L("Moeda para rendimento", "Currency for yield")}>
-              {options.length ? options.map((option) => {
-                const code = optionCode(option);
-                const profile = moneyProfile(code);
-                const selected = code === safeSelectedCode;
-                const recommended = code === bestOptionCode;
-                return (
-                  <button
-                    key={`${option.asset_code}-${option.vault_address}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => {
-                      setSelectedCode(code);
-                      setYieldBalance(null);
-                      setYieldResult(null);
-                    }}
-                    className={`min-h-[128px] border p-4 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
-                  >
-                    <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
-                      {profile.short}
-                    </span>
-                    {recommended ? (
-                      <span className="ml-2 inline-flex border border-tts-confirm bg-tts-confirm/10 px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-tts-confirm">
-                        {L("Melhor", "Best")}
-                      </span>
-                    ) : null}
-                    <span className="mt-3 block text-lg font-black text-tts-deep">{optionTitle(option, language)}</span>
-                    <span className="mt-1 block text-sm text-tts-muted">{profileDescription(profile, language)}</span>
-                    <span className="mt-3 inline-flex items-center gap-2 text-sm font-black text-tts-confirm">
-                      <Sparkles className="h-4 w-4" aria-hidden="true" />
-                      {optionRate(option, language)} {L("ao ano", "per year")}
-                    </span>
-                  </button>
-                );
-              }) : (
-                <div className="border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold md:col-span-3">
-                  <p className="font-black">{L("Nenhuma opção ativa ainda", "No active option yet")}</p>
-                  <p className="mt-1 leading-6 text-tts-muted">
-                    {L(
-                      "Quando as opções do backend estiverem configuradas, elas aparecem aqui. Enquanto isso, use o tutorial para ver o fluxo correto.",
-                      "Once backend options are configured, they appear here. Until then, use the tutorial to see the right flow."
-                    )}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowTutorial(true)}
-                    className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90"
-                  >
-                    <BookOpen className="h-4 w-4" aria-hidden="true" />
-                    {L("Ver primeiros passos", "See first steps")}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
-              <div className="border border-tts-border bg-tts-bg p-4">
-                <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface p-1">
-                  <button
-                    type="button"
-                    onClick={() => setAction("deposit")}
-                    className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
-                  >
-                    <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-                    {L("Guardar", "Save")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAction("withdraw")}
-                    className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "withdraw" ? "bg-tts-gold text-tts-deep" : "text-tts-muted"}`}
-                  >
-                    <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
-                    {L("Resgatar", "Withdraw")}
-                  </button>
-                </div>
-
-                <label className="mt-4 block text-sm font-black text-tts-deep" htmlFor="yield-amount">
-                  {L("Valor em", "Amount in")} {profileName(selectedProfile, language).toLowerCase()}
-                </label>
-                <input
-                  id="yield-amount"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
-                  inputMode="decimal"
-                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
-                  aria-describedby="yield-amount-help"
-                />
-                <p id="yield-amount-help" className="mt-2 text-xs leading-5 text-tts-muted">
-                  {L("Você pode revisar antes de confirmar. Nenhum valor sai sem PIN.", "You can review before confirming. No money moves without your PIN.")}
-                </p>
-
-                {advancedOpen ? (
-                  <div className="mt-4 border-t border-tts-border pt-4">
-                    <label className="block text-sm font-black text-tts-deep" htmlFor="yield-variation">
-                      {L("Margem de segurança", "Safety margin")}
-                    </label>
-                    <select
-                      id="yield-variation"
-                      value={variationBps}
-                      onChange={(event) => setVariationBps(event.target.value)}
-                      className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
-                    >
-                      <option value="50">{L("Baixa", "Low")}</option>
-                      <option value="100">{L("Padrão", "Standard")}</option>
-                      <option value="200">{L("Alta", "High")}</option>
-                    </select>
-
-                    <label className="mt-4 block text-sm font-black text-tts-deep" htmlFor="yield-pin">
-                      {L("PIN para confirmar", "PIN to confirm")}
-                    </label>
-                    <input
-                      id="yield-pin"
-                      value={pin}
-                      onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
-                      inputMode="numeric"
-                      type="password"
-                      className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
-                    />
-                  </div>
-                ) : null}
-
-                <div className="mt-5 grid gap-2">
-                  <button
-                    type="button"
-                    onClick={refreshYieldBalance}
-                    disabled={!canPrepare || apiState.loading}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    {L("Ver saldo", "Check balance")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={prepareYield}
-                    disabled={!canPrepare || apiState.loading}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                    {L("Revisar", "Review")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmYield}
-                    disabled={!canPrepare || !confirmationEnabled || pin.length < 4 || apiState.loading}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {L("Confirmar", "Confirm")}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <ReviewPanel
-                  action={action}
-                  amount={amount}
-                  profile={selectedProfile}
-                  option={selectedOption}
-                  balanceForSelected={balanceForSelected}
-                  yieldBalance={yieldBalance}
-                  result={yieldResult}
-                  confirmationEnabled={confirmationEnabled}
-                />
-              </div>
-            </div>
-          </section>
+          <YieldWorkspacePanel
+            action={action}
+            onActionChange={setAction}
+            amount={amount}
+            onAmountChange={setAmount}
+            amountPresets={amountPresets}
+            selectedProfile={selectedProfile}
+            selectedOption={selectedOption}
+            selectedHasYield={selectedHasYield}
+            bestOption={bestOption}
+            bestOptionCode={bestOptionCode}
+            balanceForSelected={balanceForSelected}
+            yieldBalance={yieldBalance}
+            yieldBalanceLoading={yieldBalanceLoading}
+            result={yieldResult}
+            projectionData={projectionData}
+            canPrepare={canPrepare}
+            confirmationEnabled={confirmationEnabled}
+            apiLoading={apiState.loading}
+            advancedOpen={advancedOpen}
+            onAdvancedOpenChange={setAdvancedOpen}
+            variationBps={variationBps}
+            onVariationBpsChange={setVariationBps}
+            pin={pin}
+            onPinChange={setPin}
+            onPrepare={prepareYield}
+            onConfirm={confirmYield}
+            convertToBestYieldHref={convertToBestYieldUrl}
+            configured={configured}
+          />
         </section>
-
-        <YieldProjectionPanel
-          data={projectionData}
-          profile={selectedProfile}
-          option={selectedOption}
-          amount={amount}
-        />
-
-        {!showTutorial ? (
-          <button
-            type="button"
-            onClick={() => setShowTutorial(true)}
-            className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-          >
-            <BookOpen className="h-4 w-4" aria-hidden="true" />
-            {L("Ver primeiros passos", "See first steps")}
-          </button>
-        ) : null}
       </section>
     </main>
   );
@@ -1051,7 +862,408 @@ function YieldTutorialPanel({
   );
 }
 
-function EssentialFlowPanel({
+function AccountPanel({
+  authenticated,
+  accountPublicKey,
+  balances,
+  options,
+  selectedCode,
+  onSelect,
+  pixAvailable,
+  addMoneyUrl,
+  sendMoneyUrl,
+}: {
+  authenticated: boolean;
+  accountPublicKey: string;
+  balances: BalanceLine[];
+  options: YieldOption[];
+  selectedCode: string;
+  onSelect: (code: string) => void;
+  pixAvailable: boolean;
+  addMoneyUrl: string;
+  sendMoneyUrl: string;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const balanceItems: BalanceLine[] = balances.length
+    ? balances
+    : options.length
+      ? options.map((option) => ({
+        asset_code: optionCode(option),
+        balance: "0",
+      }))
+      : [{
+        asset_code: selectedCode,
+        balance: "0",
+      }];
+
+  return (
+    <section className="border border-tts-border bg-tts-surface p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+            <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
+            {L("Sua conta", "Your account")}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-tts-muted">
+            {authenticated
+              ? L("Escolha um saldo para revisar rendimento.", "Choose a balance to review yield.")
+              : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
+          </p>
+        </div>
+        <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
+          {authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
+        </span>
+      </div>
+
+      {accountPublicKey ? (
+        <p className="mt-3 border border-tts-border bg-tts-bg px-3 py-2 text-xs font-bold text-tts-muted">
+          {L("Conta", "Account")}: {shortAccount(accountPublicKey)}
+        </p>
+      ) : null}
+
+      <div className="mt-5 grid gap-2">
+        {balanceItems.length ? balanceItems.map((item) => {
+          const code = String(item.asset_code || "").toUpperCase();
+          const profile = moneyProfile(code);
+          const selected = code === selectedCode;
+          const option = options.find((candidate) => optionCode(candidate) === code);
+          return (
+            <button
+              key={`${code}-${item.asset_issuer || "default"}`}
+              type="button"
+              onClick={() => onSelect(code)}
+              className={`grid min-h-20 grid-cols-[1fr_auto] items-center gap-3 border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
+            >
+              <span>
+                <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
+                  {profile.short}
+                </span>
+                <span className="mt-2 block text-sm font-black text-tts-deep">{option ? optionTitle(option, language) : profileName(profile, language)}</span>
+                {option ? (
+                  <span className="mt-1 block text-xs font-bold text-tts-confirm">
+                    {optionRate(option, language)} {L("ao ano", "per year")}
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-xs text-tts-muted">{L("Sem rendimento ativo", "No active yield")}</span>
+                )}
+              </span>
+              <span className="text-right">
+                <span className="block text-lg font-black text-tts-deep">{formatAmount(item.balance, language)}</span>
+                <span className="block text-xs font-bold text-tts-muted">{profile.short}</span>
+              </span>
+            </button>
+          );
+        }) : (
+          <div className="border border-tts-border bg-tts-bg p-4 text-sm leading-6 text-tts-muted">
+            {L("Entre na sua conta para carregar seus saldos.", "Sign in to load your balances.")}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <a
+          href={addMoneyUrl}
+          className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-black ${pixAvailable ? "bg-tts-deep text-tts-surface hover:bg-tts-deep2" : "border border-tts-border text-tts-muted"}`}
+        >
+          <QrCode className="h-4 w-4" aria-hidden="true" />
+          {L("Adicionar PIX", "Add PIX")}
+        </a>
+        <a
+          href={sendMoneyUrl}
+          className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-black ${pixAvailable ? "border border-tts-border bg-tts-bg text-tts-deep hover:border-tts-border2" : "border border-tts-border text-tts-muted"}`}
+        >
+          <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
+          {L("Retirar PIX", "Withdraw PIX")}
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function YieldWorkspacePanel({
+  action,
+  onActionChange,
+  amount,
+  onAmountChange,
+  amountPresets,
+  selectedProfile,
+  selectedOption,
+  selectedHasYield,
+  bestOption,
+  bestOptionCode,
+  balanceForSelected,
+  yieldBalance,
+  yieldBalanceLoading,
+  result,
+  projectionData,
+  canPrepare,
+  confirmationEnabled,
+  apiLoading,
+  advancedOpen,
+  onAdvancedOpenChange,
+  variationBps,
+  onVariationBpsChange,
+  pin,
+  onPinChange,
+  onPrepare,
+  onConfirm,
+  convertToBestYieldHref,
+  configured,
+}: {
+  action: "deposit" | "withdraw";
+  onActionChange: (action: "deposit" | "withdraw") => void;
+  amount: string;
+  onAmountChange: (amount: string) => void;
+  amountPresets: string[];
+  selectedProfile: MoneyProfile;
+  selectedOption: YieldOption | null;
+  selectedHasYield: boolean;
+  bestOption: YieldOption | null;
+  bestOptionCode: string;
+  balanceForSelected?: BalanceLine;
+  yieldBalance: any | null;
+  yieldBalanceLoading: boolean;
+  result: any | null;
+  projectionData: Array<{ month: number; label: string; balance: number; earned: number }>;
+  canPrepare: boolean;
+  confirmationEnabled: boolean;
+  apiLoading: boolean;
+  advancedOpen: boolean;
+  onAdvancedOpenChange: (open: boolean) => void;
+  variationBps: string;
+  onVariationBpsChange: (value: string) => void;
+  pin: string;
+  onPinChange: (value: string) => void;
+  onPrepare: () => void;
+  onConfirm: () => void;
+  convertToBestYieldHref: string;
+  configured: boolean;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const projectedEnd = projectionData[projectionData.length - 1]?.balance || normalizeDecimal(amount);
+  const projectedEarned = projectionData[projectionData.length - 1]?.earned || 0;
+  const profileShort = selectedProfile.short;
+  const bestProfile = moneyProfile(bestOptionCode);
+  const hasPrepared = Boolean(result);
+  const canConfirm = canPrepare && confirmationEnabled && pin.length >= 4 && !apiLoading;
+  const tooltipFormatter = (value: unknown, name: unknown) => {
+    const label = String(name) === "earned" ? L("Rendimento", "Yield") : L("Saldo", "Balance");
+    return [`${formatAmount(value, language)} ${profileShort}`, label];
+  };
+
+  return (
+    <section id="yield-plan" className="scroll-mt-6 border border-tts-border bg-tts-surface p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+            <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+            {L("Rendimento selecionado", "Selected yield")}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-tts-muted">
+            {selectedHasYield
+              ? L("Esse saldo está conectado a uma opção de rendimento.", "This balance is connected to a yield option.")
+              : L("Esse saldo ainda não tem rendimento ativo neste ambiente.", "This balance does not have active yield in this environment yet.")}
+          </p>
+        </div>
+        <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
+          {profileShort} · {profileName(selectedProfile, language)}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MiniStat label={L("Saldo na conta", "Account balance")} value={balanceForSelected ? formatAmount(balanceForSelected.balance, language) : L("A consultar", "Pending")} />
+        <MiniStat label={L("Saldo rendendo", "Earning balance")} value={yieldBalanceLoading ? L("Carregando", "Loading") : yieldBalance?.balance ? formatAmount(yieldBalance.balance, language) : L("A consultar", "Pending")} />
+        <MiniStat label={L("Taxa anual", "Annual rate")} value={selectedOption ? optionRate(selectedOption, language) : L("Indisponível", "Unavailable")} />
+        <MiniStat label={L("Em 12 meses", "In 12 months")} value={selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Aguardando", "Waiting")} />
+      </div>
+
+      {!selectedHasYield ? (
+        <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
+          <p className="font-black text-tts-gold">
+            {configured ? L("Sem rendimento para esta moeda", "No yield for this currency") : L("Rendimento ainda sem configuração", "Yield is not configured yet")}
+          </p>
+          <p className="mt-1">
+            {bestOption
+              ? L(
+                  `Melhor opção disponível: ${profileName(bestProfile, language)} com ${optionRate(bestOption, language)} ao ano.`,
+                  `Best available option: ${profileName(bestProfile, language)} at ${optionRate(bestOption, language)} per year.`
+                )
+              : L("Configure as opções no backend para ativar esta tela.", "Configure backend options to activate this screen.")}
+          </p>
+          {bestOption ? (
+            <a href={convertToBestYieldHref} className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+              {L("Converter para melhor opção", "Convert to best option")}
+            </a>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
+          <div className="border border-tts-border bg-tts-bg p-4">
+            <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface p-1">
+              <button
+                type="button"
+                onClick={() => onActionChange("deposit")}
+                className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
+              >
+                <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+                {L("Guardar", "Save")}
+              </button>
+              <button
+                type="button"
+                onClick={() => onActionChange("withdraw")}
+                className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "withdraw" ? "bg-tts-gold text-tts-deep" : "text-tts-muted"}`}
+              >
+                <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
+                {L("Resgatar", "Withdraw")}
+              </button>
+            </div>
+
+            <label className="mt-4 block text-sm font-black text-tts-deep" htmlFor="yield-amount">
+              {L("Valor", "Amount")}
+            </label>
+            <div className="mt-2 flex min-h-12 items-center border border-tts-border bg-tts-surface focus-within:border-tts-gold">
+              <span className="border-r border-tts-border px-3 text-sm font-black text-tts-muted">{profileShort}</span>
+              <input
+                id="yield-amount"
+                value={amount}
+                onChange={(event) => onAmountChange(event.target.value.replace(/[^\d,.]/g, ""))}
+                inputMode="decimal"
+                className="min-h-12 flex-1 bg-transparent px-3 text-base font-bold text-tts-deep outline-none"
+                aria-describedby="yield-amount-help"
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {amountPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => onAmountChange(preset)}
+                  className="min-h-9 border border-tts-border bg-tts-surface px-2 text-xs font-black text-tts-deep transition hover:border-tts-border2"
+                >
+                  {formatAmount(preset, language)}
+                </button>
+              ))}
+            </div>
+            <p id="yield-amount-help" className="mt-2 text-xs leading-5 text-tts-muted">
+              {L("A revisão usa seus saldos da conta. Nenhum valor sai sem confirmação.", "Review uses your account balances. Nothing moves without confirmation.")}
+            </p>
+
+            <button
+              type="button"
+              aria-pressed={advancedOpen}
+              onClick={() => onAdvancedOpenChange(!advancedOpen)}
+              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border px-3 py-2 text-xs font-black text-tts-deep transition hover:border-tts-border2"
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+              {advancedOpen ? L("Ocultar ajustes", "Hide settings") : L("Ajustes", "Settings")}
+            </button>
+
+            {advancedOpen ? (
+              <div className="mt-4 border-t border-tts-border pt-4">
+                <label className="block text-sm font-black text-tts-deep" htmlFor="yield-variation">
+                  {L("Margem de segurança", "Safety margin")}
+                </label>
+                <select
+                  id="yield-variation"
+                  value={variationBps}
+                  onChange={(event) => onVariationBpsChange(event.target.value)}
+                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
+                >
+                  <option value="50">{L("Baixa", "Low")}</option>
+                  <option value="100">{L("Padrão", "Standard")}</option>
+                  <option value="200">{L("Alta", "High")}</option>
+                </select>
+              </div>
+            ) : null}
+
+            {confirmationEnabled ? (
+              <div className="mt-4">
+                <label className="block text-sm font-black text-tts-deep" htmlFor="yield-pin">
+                  {L("PIN para confirmar", "PIN to confirm")}
+                </label>
+                <input
+                  id="yield-pin"
+                  value={pin}
+                  onChange={(event) => onPinChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                  inputMode="numeric"
+                  type="password"
+                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={onPrepare}
+                disabled={!canPrepare || apiLoading}
+                className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                {L("Revisar", "Review")}
+              </button>
+              {confirmationEnabled ? (
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  disabled={!canConfirm}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {L("Confirmar", "Confirm")}
+                </button>
+              ) : (
+                <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
+                  {L("Confirmação final desligada neste ambiente.", "Final confirmation is off in this environment.")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="border border-tts-border bg-tts-bg p-4">
+              <h3 className="text-base font-black text-tts-deep">{L("Revisão", "Review")}</h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <MiniStat label={L("Ação", "Action")} value={action === "deposit" ? L("Guardar rendendo", "Save for yield") : L("Resgatar", "Withdraw")} />
+                <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
+              </div>
+              <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
+                {hasPrepared ? (
+                  <p className="font-bold text-tts-confirm">
+                    {L("Solicitação preparada. Confira os valores antes de confirmar.", "Request prepared. Check values before confirming.")}
+                  </p>
+                ) : (
+                  <p>{L("Clique em revisar para preparar a operação com sua conta.", "Click review to prepare the operation with your account.")}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-tts-border bg-tts-bg p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-base font-black text-tts-deep">{L("Projeção", "Projection")}</h3>
+                <span className="text-xs font-bold text-tts-muted">{`${formatAmount(projectedEarned, language)} ${profileShort} ${L("estimado", "estimated")}`}</span>
+              </div>
+              <div className="h-[220px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={projectionData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="var(--tts-border)" strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} />
+                    <YAxis tickLine={false} axisLine={false} width={58} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} tickFormatter={(value) => formatAmount(value, language)} />
+                    <Tooltip formatter={tooltipFormatter} labelFormatter={(label) => `${L("Mês", "Month")}: ${label}`} />
+                    <Area type="monotone" dataKey="balance" stroke="var(--tts-confirm)" fill="var(--tts-confirm)" fillOpacity={0.16} strokeWidth={2} name="balance" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function EssentialFlowPanel({
   flowIntent,
   onFlowIntentChange,
   amount,
@@ -1327,7 +1539,7 @@ function EssentialFlowPanel({
   );
 }
 
-function ReadinessItem({ ready, label, detail }: { ready: boolean; label: string; detail: string }) {
+export function ReadinessItem({ ready, label, detail }: { ready: boolean; label: string; detail: string }) {
   return (
     <div className={`border p-3 ${ready ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-gold bg-tts-gold-bg"}`}>
       <div className="flex items-center gap-2">
@@ -1339,7 +1551,7 @@ function ReadinessItem({ ready, label, detail }: { ready: boolean; label: string
   );
 }
 
-function BalancePanel({
+export function BalancePanel({
   balances,
   options,
   selectedCode,
@@ -1404,7 +1616,7 @@ function BalancePanel({
   );
 }
 
-function YieldProjectionPanel({
+export function YieldProjectionPanel({
   data,
   profile,
   option,
@@ -1509,7 +1721,7 @@ function YieldProjectionPanel({
   );
 }
 
-function ReviewPanel({
+export function ReviewPanel({
   action,
   amount,
   profile,
@@ -1579,7 +1791,7 @@ function ReviewPanel({
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+export function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
       <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
