@@ -134,6 +134,7 @@ describe('AnchorService PIX organization bank account routing', () => {
       asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
     jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
 
     const result = await AnchorService.createOnRampForSession({
       session_id: 'session-1',
@@ -152,7 +153,10 @@ describe('AnchorService PIX organization bank account routing', () => {
       sandbox_mock: true,
       fromAmount: '10',
       fromCurrency: 'BRL',
+      toAmount: '9.9300000',
+      toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
+    expect(result.transaction.toAmount).not.toBe('8.65');
   });
 
   it('quotes user-facing BRL in reais instead of raw TESOURO units', async () => {
@@ -200,8 +204,9 @@ describe('AnchorService PIX organization bank account routing', () => {
       toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     }));
     expect(result.final_asset).toMatchObject({
-      code: 'BRL',
-      identifier: 'BRL',
+      code: 'TESOURO',
+      issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      identifier: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
     expect(result.anchor_asset).toMatchObject({
       code: 'TESOURO',
@@ -209,9 +214,14 @@ describe('AnchorService PIX organization bank account routing', () => {
     expect(result.quote).toMatchObject({
       userFacingToCurrency: 'BRL',
       userFacingToAmount: '49.75',
-      finalCurrency: 'BRL',
+      finalCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      finalAsset: {
+        code: 'TESOURO',
+        issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      },
       finalAmountBeforeFee: '50',
       finalAmountAfterFee: '49.75',
+      finalSettlementMode: 'stellar_asset',
       talkToStellarFeeAmount: '0.15',
       totalFeeAmount: '0.25',
     });

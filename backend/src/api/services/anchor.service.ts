@@ -28,7 +28,6 @@ import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
-import { isVirtualFiatAsset, resolveBrlSettlementRoute } from './money-rail.service';
 import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
@@ -391,13 +390,9 @@ function buildExternalBankAccountFields(context: SessionWalletContext) {
   };
 }
 
-function estimateTesouroFromBrl(amountBrl: string, expectedToAmount?: string): string {
-  const expected = Number(String(expectedToAmount || '').replace(',', '.'));
-  if (Number.isFinite(expected) && expected > 0) {
-    return toStellarAmount(expected);
-  }
+function estimateTesouroFromBrl(amountBrl: string): string {
   const brl = Number(String(amountBrl || '0').replace(',', '.'));
-  return toStellarAmount(brl * 0.8665);
+  return toStellarAmount(brl);
 }
 
 function formatPixAmount(value: string): string {
@@ -752,7 +747,6 @@ function parseIssuedAssetIdentifier(identifier: string): { code: string; issuer?
 function assetIdentifier(asset: { code: string; issuer?: string }): string {
   const code = normalizeAssetCode(asset.code);
   if (code === 'XLM') return 'XLM';
-  if (isVirtualFiatAsset(asset)) return code;
   const issuer = String(asset.issuer || getAssetIssuer(code) || '').trim();
   return issuer ? `${code}:${issuer}` : code;
 }
@@ -767,14 +761,8 @@ function sameIssuedAsset(left: { code: string; issuer?: string }, right: { code:
 
 function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: string } {
   const raw = coalesceString(...values) || 'TESOURO';
-  const rawParts = String(raw || '').trim().split(':');
-  const rawCode = rawParts[0]?.toUpperCase();
-  const hasExplicitIssuer = Boolean(rawParts[1]?.trim());
   const parsed = parseIssuedAssetIdentifier(raw);
   const code = normalizeAssetCode(parsed.code || 'TESOURO');
-  if (['BRL', 'REAL', 'REAIS', 'R$'].includes(rawCode || '') && !hasExplicitIssuer) {
-    return { code: 'BRL' };
-  }
   const settlementCode = code === 'BRL' ? 'TESOURO' : code;
   if (settlementCode !== 'TESOURO' && !getUserFacingAssetCodes().includes(settlementCode)) {
     throw apiError(`Asset final ${code} não é suportado para PIX ramp. Use BRL, USDC, EUR ou TESOURO.`, 400);
@@ -810,12 +798,11 @@ export class AnchorService {
 
     const anchorAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
     const finalIsAnchor = sameIssuedAsset(finalAsset, anchorAsset);
-    const anchorAmountBeforeFee = coalesceString(quote.destinationAmountBeforeFee, quote.toAmount);
-    const anchorAmountAfterFee = coalesceString(quote.destinationAmountAfterFee, quote.toAmount);
     const desiredFinalAmount = coalesceString(input.desiredFinalAmount);
     const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || finalAsset.code);
     const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.sourceAmountBrl, quote);
-    const finalIsVirtualBrl = isVirtualFiatAsset(finalAsset) && normalizeAssetCode(finalAsset.code) === 'BRL';
+    const anchorAmountBeforeFee = brlFeeBridge.grossAmount;
+    const anchorAmountAfterFee = brlFeeBridge.netAmount;
 
     const decorated: Quote & Record<string, unknown> = {
       ...input.quote,
@@ -829,18 +816,18 @@ export class AnchorService {
       anchorProviderFeeCurrency: 'BRL',
     };
 
-    if (finalIsVirtualBrl) {
-      const exactBrlAmount = desiredFinalAmount && desiredFinalAssetCode === 'BRL'
+    if (finalIsAnchor) {
+      const exactBrlAmount = desiredFinalAmount && ['BRL', 'TESOURO'].includes(desiredFinalAssetCode)
         ? desiredFinalAmount
         : brlFeeBridge.netAmount;
       decorated.userFacingToCurrency = 'BRL';
       decorated.userFacingToAmount = exactBrlAmount;
-      decorated.finalCurrency = 'BRL';
-      decorated.finalAsset = { code: 'BRL', kind: 'fiat-abstraction', rail: 'PIX' };
-      decorated.finalAmountBeforeFee = brlFeeBridge.grossAmount;
+      decorated.finalCurrency = this.getTesouroIdentifier();
+      decorated.finalAsset = anchorAsset;
+      decorated.finalAmountBeforeFee = anchorAmountBeforeFee;
       decorated.finalAmountAfterFee = exactBrlAmount;
       decorated.finalConversionRequired = false;
-      decorated.finalSettlementMode = 'fiat_ledger';
+      decorated.finalSettlementMode = 'stellar_asset';
       decorated.talkToStellarFeeAmount = brlFeeBridge.talkToStellarFeeAmount;
       decorated.talkToStellarFeeCurrency = 'BRL';
       decorated.totalFeeAmount = brlFeeBridge.totalFeeAmount;
@@ -850,19 +837,9 @@ export class AnchorService {
       return decorated;
     }
 
-    if (finalIsAnchor) {
-      decorated.userFacingToCurrency = this.getTesouroIdentifier();
-      decorated.userFacingToAmount = anchorAmountAfterFee;
-      decorated.finalCurrency = this.getTesouroIdentifier();
-      decorated.finalAmountBeforeFee = anchorAmountBeforeFee;
-      decorated.finalAmountAfterFee = anchorAmountAfterFee;
-      decorated.finalConversionRequired = false;
-      return decorated;
-    }
-
     const exactFinalAmount = desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code)
       ? desiredFinalAmount
-      : (finalAsset.code === 'BRL' ? brlFeeBridge.netAmount : '');
+      : '';
 
     decorated.userFacingToCurrency = assetIdentifier(finalAsset);
     decorated.finalCurrency = assetIdentifier(finalAsset);
@@ -876,16 +853,10 @@ export class AnchorService {
 
     if (exactFinalAmount) {
       decorated.userFacingToAmount = exactFinalAmount;
-      decorated.finalAmountBeforeFee = finalAsset.code === 'BRL' ? brlFeeBridge.grossAmount : exactFinalAmount;
+      decorated.finalAmountBeforeFee = exactFinalAmount;
       decorated.finalAmountAfterFee = exactFinalAmount;
       decorated.requestedFinalAmount = exactFinalAmount;
       decorated.requestedFinalAssetCode = normalizeAssetCode(finalAsset.code);
-      if (finalAsset.code === 'BRL') {
-        decorated.talkToStellarFeeAmount = brlFeeBridge.talkToStellarFeeAmount;
-        decorated.talkToStellarFeeCurrency = 'BRL';
-        decorated.totalFeeAmount = brlFeeBridge.totalFeeAmount;
-        decorated.totalFeeCurrency = 'BRL';
-      }
     }
 
     return decorated;
@@ -1458,14 +1429,17 @@ export class AnchorService {
   }): OnRampTransaction {
     const orderId = `sandbox-pix-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
-    const destinationAmount = estimateTesouroFromBrl(input.amount, input.expectedToAmount);
     const finalIsTesouro = sameIssuedAsset(input.finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
     const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.amount, input.quote as Record<string, unknown> | undefined);
+    const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || input.finalAsset.code);
+    const destinationAmount = toStellarAmount(
+      finalIsTesouro && input.desiredFinalAmount && ['BRL', 'TESOURO'].includes(desiredFinalAssetCode)
+        ? input.desiredFinalAmount
+        : brlFeeBridge.netAmount,
+    );
     const finalAmount = finalIsTesouro
       ? destinationAmount
-      : input.finalAsset.code === 'BRL' && !input.desiredFinalAmount
-        ? brlFeeBridge.netAmount
-        : undefined;
+      : undefined;
     const transaction = {
       id: orderId,
       customerId: input.customerId,
@@ -1580,7 +1554,7 @@ export class AnchorService {
       context.anchor_amount,
       context.destination_amount,
       context.to_amount,
-      estimateTesouroFromBrl(amount, coalesceString(context.expected_to_amount)),
+      estimateTesouroFromBrl(amount),
     );
     const finalAmount = coalesceString(context.final_amount) || (finalIsTesouro ? destinationAmount : '');
     const status = mapOperationStatusToRampStatus(operation.status);
@@ -1774,27 +1748,6 @@ export class AnchorService {
     const { record, sourceSecret, destinationAmountTesouro } = input;
     const finalAsset = resolveRampFinalAsset(record.finalAssetCode || 'TESOURO', record.finalAssetIssuer);
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
-
-    if (isVirtualFiatAsset(finalAsset) && normalizeAssetCode(finalAsset.code) === 'BRL') {
-      const finalAmount = toStellarAmount(record.finalAmount || record.desiredFinalAmount || record.sourceAmountBrl);
-      record.finalAmount = finalAmount;
-      record.deliverySourceAmount = record.sourceAmountBrl;
-      (record.transaction as any).toAmount = finalAmount;
-      (record.transaction as any).toCurrency = 'BRL';
-      (record.transaction as any).finalAmount = finalAmount;
-      (record.transaction as any).auto_conversion = {
-        required: false,
-        status: 'completed',
-        settlement_mode: 'fiat_ledger',
-        temporary_settlement_asset: resolveBrlSettlementRoute().settlementAsset,
-      };
-      return this.completeSandboxOnRamp(record, undefined, {
-        delivery_source_amount: record.sourceAmountBrl,
-        destination_amount_anchor: destinationAmountTesouro,
-        final_settlement_mode: 'fiat_ledger',
-        final_amount: finalAmount,
-      });
-    }
 
     if (sameIssuedAsset(finalAsset, tesouroAsset)) {
       const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
@@ -1997,28 +1950,6 @@ export class AnchorService {
     await this.updateRampOperationStatus(record.operationId, 'PROCESSING');
 
     const finalAsset = resolveRampFinalAsset(record.finalAssetCode || 'TESOURO', record.finalAssetIssuer);
-    if (isVirtualFiatAsset(finalAsset) && normalizeAssetCode(finalAsset.code) === 'BRL') {
-      const destinationAmount = toStellarAmount(record.destinationAmount);
-      const finalAmount = toStellarAmount(record.finalAmount || record.desiredFinalAmount || record.sourceAmountBrl);
-      record.finalAmount = finalAmount;
-      record.deliverySourceAmount = record.sourceAmountBrl;
-      (record.transaction as any).toAmount = finalAmount;
-      (record.transaction as any).toCurrency = 'BRL';
-      (record.transaction as any).finalAmount = finalAmount;
-      (record.transaction as any).auto_conversion = {
-        required: false,
-        status: 'completed',
-        settlement_mode: 'fiat_ledger',
-        temporary_settlement_asset: resolveBrlSettlementRoute().settlementAsset,
-      };
-      return this.completeSandboxOnRamp(record, undefined, {
-        delivery_source_amount: record.sourceAmountBrl,
-        destination_amount_anchor: destinationAmount,
-        final_settlement_mode: 'fiat_ledger',
-        final_amount: finalAmount,
-      });
-    }
-
     const sourceSecret = coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
     if (!sourceSecret) {
       if (this.sandboxLedgerSettlementEnabled()) {
@@ -2750,7 +2681,7 @@ export class AnchorService {
       throw apiError(trustline.error || `Could not create ${targetAsset.code || 'asset'} trustline before on-ramp.`, 409);
     }
     let finalTrustline: TrustlineResult | undefined;
-    if (!isVirtualFiatAsset(finalAsset) && !sameIssuedAsset(finalAsset, targetAsset)) {
+    if (!sameIssuedAsset(finalAsset, targetAsset)) {
       finalTrustline = await this.ensureIssuedAssetTrustline(context, finalAsset);
       if (!finalTrustline.success) {
         throw apiError(finalTrustline.error || `Could not create ${finalAsset.code} trustline before final PIX settlement.`, 409);
@@ -3003,11 +2934,22 @@ export class AnchorService {
     }
 
     const brlFeeBridge = this.estimateOnRampBrlFeeBridge(amount, orderQuote as Record<string, unknown> | undefined);
-    const operationFinalAmount = desiredFinalAmount || (finalAsset.code === 'BRL'
-      ? brlFeeBridge.netAmount
-      : sameIssuedAsset(finalAsset, targetAsset)
-        ? (transaction.toAmount || orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount))
-        : undefined);
+    const finalIsTesouro = sameIssuedAsset(finalAsset, targetAsset);
+    const desiredMatchesFinalAsset = Boolean(
+      desiredFinalAmount &&
+      (
+        desiredFinalAssetCode === normalizeAssetCode(finalAsset.code) ||
+        (finalIsTesouro && desiredFinalAssetCode === 'BRL')
+      )
+    );
+    const operationFinalAmount = desiredMatchesFinalAsset
+      ? desiredFinalAmount
+      : finalIsTesouro
+        ? brlFeeBridge.netAmount
+        : undefined;
+    const destinationAmountAnchor = finalIsTesouro
+      ? operationFinalAmount
+      : brlFeeBridge.netAmount;
 
     const operationContext = {
       provider: 'etherfuse',
@@ -3025,13 +2967,12 @@ export class AnchorService {
       anchor_asset: anchorToCurrency,
       crypto_wallet_id: cryptoWalletId,
       source_amount_brl: amount,
-      destination_amount_anchor: orderQuote?.toAmount || coalesceString(input.expected_to_amount, input.expectedToAmount, transaction.toAmount),
+      destination_amount_anchor: destinationAmountAnchor,
       final_amount: operationFinalAmount,
       final_asset_code: finalAsset.code,
       final_asset_issuer: finalAsset.issuer,
-      final_asset_kind: isVirtualFiatAsset(finalAsset) ? 'fiat-abstraction' : 'stellar-asset',
-      final_settlement_mode: isVirtualFiatAsset(finalAsset) ? 'fiat_ledger' : 'stellar_asset',
-      temporary_settlement_asset: isVirtualFiatAsset(finalAsset) ? resolveBrlSettlementRoute().settlementAsset : undefined,
+      final_asset_kind: 'stellar-asset',
+      final_settlement_mode: 'stellar_asset',
       provider_onramp_fee_amount: brlFeeBridge.providerFeeAmount,
       talktostellar_transaction_fee_amount: brlFeeBridge.talkToStellarFeeAmount,
       total_fee_amount: brlFeeBridge.totalFeeAmount,
@@ -3098,39 +3039,6 @@ export class AnchorService {
     const context = parseOperationContext(operation.context);
     const finalAsset = resolveRampFinalAsset(context.target_asset, context.final_asset, 'TESOURO');
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
-    if (isVirtualFiatAsset(finalAsset) && normalizeAssetCode(finalAsset.code) === 'BRL') {
-      const destinationAmount = coalesceString(
-        context.final_amount,
-        context.source_amount_brl,
-        transaction.fromAmount,
-        transaction.toAmount,
-      );
-      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
-        transaction,
-        operation: operation as unknown as Record<string, unknown>,
-        context: {
-          ...context,
-          final_settlement_mode: 'fiat_ledger',
-          final_amount: destinationAmount,
-        },
-        finalAsset,
-        destinationAmount,
-      });
-      return {
-        ...transaction,
-        toAmount: destinationAmount || transaction.toAmount,
-        toCurrency: 'BRL',
-        finalAmount: destinationAmount || transaction.toAmount,
-        ...(receiptUrl ? { receiptUrl, receipt_url: receiptUrl } : {}),
-        finalAsset: { code: 'BRL', kind: 'fiat-abstraction', rail: 'PIX' },
-        auto_conversion: {
-          required: false,
-          status: 'completed',
-          settlement_mode: 'fiat_ledger',
-          temporary_settlement_asset: resolveBrlSettlementRoute().settlementAsset,
-        },
-      } as OnRampTransaction;
-    }
     if (sameIssuedAsset(finalAsset, tesouroAsset)) {
       const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
         transaction,
@@ -3572,23 +3480,8 @@ export class AnchorService {
           country: 'BR',
         });
 
-    const probeQuote = await this.getQuoteForSession({
-      session_id: context.sessionId,
-      session_token: context.sessionToken,
-      customer_id: customerResult.customer.id,
-      direction: 'offramp',
-      amount: '1',
-      from_currency: this.getTesouroIdentifier(),
-      to_currency: 'BRL',
-    });
-    const probeReceive = Number(String(probeQuote.quote.toAmount || '').replace(',', '.'));
-    const impliedRate = Number(String(probeQuote.quote.exchangeRate || '').replace(',', '.'));
-    const brlPerTesouro = Number.isFinite(probeReceive) && probeReceive > 0
-      ? probeReceive
-      : (Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : 1.154);
-
     let amount = targetBrl
-      ? toStellarAmount(Number(targetBrl) / brlPerTesouro)
+      ? toStellarAmount(Number(targetBrl))
       : requestedSourceAmount;
     let quoteResult = await this.getQuoteForSession({
       session_id: context.sessionId,
@@ -3599,21 +3492,6 @@ export class AnchorService {
       from_currency: this.getTesouroIdentifier(),
       to_currency: 'BRL',
     });
-
-    const quotedReceive = Number(String(quoteResult.quote.toAmount || '').replace(',', '.'));
-    const targetReceive = Number(targetBrl);
-    if (Number.isFinite(quotedReceive) && quotedReceive > 0 && Math.abs(quotedReceive - targetReceive) > 0.01) {
-      amount = toStellarAmount(Number(amount) * (targetReceive / quotedReceive));
-      quoteResult = await this.getQuoteForSession({
-        session_id: context.sessionId,
-        session_token: context.sessionToken,
-        customer_id: customerResult.customer.id,
-        direction: 'offramp',
-        amount,
-        from_currency: this.getTesouroIdentifier(),
-        to_currency: 'BRL',
-      });
-    }
 
     const decoratedQuote: Quote & Record<string, unknown> = { ...quoteResult.quote };
     if (PlatformFeeService.isUsdcBrlTransaction(sourceAsset.code, 'BRL')) {
@@ -3638,7 +3516,7 @@ export class AnchorService {
       source_asset_code: sourceAsset.code,
       source_asset_issuer: sourceAsset.issuer,
       target_brl: targetBrl,
-      destination_amount: quoteResult.quote.toAmount || targetBrl,
+      destination_amount: targetBrl || quoteResult.quote.toAmount,
       destination_asset_code: 'BRL',
     };
   }
@@ -4301,21 +4179,7 @@ export class AnchorService {
     }
 
     if (targetBrl) {
-      const probeQuote = await this.getQuoteForSession({
-        session_id: context.sessionId,
-        session_token: context.sessionToken,
-        customer_id: customerResult.customer.id,
-        direction: 'offramp',
-        amount: '1',
-        from_currency: this.getTesouroIdentifier(),
-        to_currency: 'BRL',
-      });
-      const probeReceive = Number(String(probeQuote.quote.toAmount || '').replace(',', '.'));
-      const impliedRate = Number(String(probeQuote.quote.exchangeRate || '').replace(',', '.'));
-      const brlPerTesouro = Number.isFinite(probeReceive) && probeReceive > 0
-        ? probeReceive
-        : (Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : 1.154);
-      amount = toStellarAmount(Number(targetBrl) / brlPerTesouro);
+      amount = toStellarAmount(Number(targetBrl));
     }
 
     let quoteResult = await this.getQuoteForSession({
@@ -4327,23 +4191,6 @@ export class AnchorService {
       from_currency: this.getTesouroIdentifier(),
       to_currency: 'BRL',
     });
-    if (targetBrl) {
-      const quotedReceive = Number(String(quoteResult.quote.toAmount || '').replace(',', '.'));
-      const targetReceive = Number(targetBrl);
-      if (Number.isFinite(quotedReceive) && quotedReceive > 0 && Math.abs(quotedReceive - targetReceive) > 0.01) {
-        amount = toStellarAmount(Number(amount) * (targetReceive / quotedReceive));
-        quoteResult = await this.getQuoteForSession({
-          session_id: context.sessionId,
-          session_token: context.sessionToken,
-          customer_id: customerResult.customer.id,
-          direction: 'offramp',
-          amount,
-          from_currency: this.getTesouroIdentifier(),
-          to_currency: 'BRL',
-        });
-      }
-    }
-
     const orderResult = await this.createOffRampForSession({
       session_id: context.sessionId,
       session_token: context.sessionToken,
