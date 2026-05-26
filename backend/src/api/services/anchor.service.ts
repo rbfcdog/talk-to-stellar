@@ -3859,7 +3859,11 @@ export class AnchorService {
   }> {
     const runtime = DefindexYieldService.getRuntimeInfo();
     if (!runtime.execution_enabled) {
-      throw apiError('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.', 403);
+      throw apiError(
+        runtime.execution_blocked_reason ||
+          'Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.',
+        403
+      );
     }
     const context = await this.resolveSessionWallet(input);
     const walletPin = this.requireWalletPin(input, context);

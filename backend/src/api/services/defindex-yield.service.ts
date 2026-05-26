@@ -21,9 +21,14 @@ export type DefindexRuntimeInfo = {
   api_key_configured: boolean;
   base_url: string;
   network: DefindexNetwork;
+  stellar_network: DefindexNetwork;
+  network_mismatch: boolean;
+  execution_requested: boolean;
   execution_enabled: boolean;
+  mainnet_execution_allowed: boolean;
   vaults: DefindexVaultConfig[];
   unavailable_reason?: string;
+  execution_blocked_reason?: string;
 };
 
 function coalesceString(...values: unknown[]): string {
@@ -57,6 +62,10 @@ function defaultNetwork(): DefindexNetwork {
   const explicit = coalesceString(process.env.DEFINDEX_NETWORK).toLowerCase();
   if (explicit === 'mainnet' || explicit === 'public') return 'mainnet';
   if (explicit === 'testnet') return 'testnet';
+  return getStellarNetworkName() === 'PUBLIC' ? 'mainnet' : 'testnet';
+}
+
+function stellarRuntimeNetwork(): DefindexNetwork {
   return getStellarNetworkName() === 'PUBLIC' ? 'mainnet' : 'testnet';
 }
 
@@ -156,6 +165,10 @@ function sdkNetwork(network?: DefindexNetwork): SupportedNetworks {
 export class DefindexYieldService {
   static getRuntimeInfo(): DefindexRuntimeInfo {
     const network = defaultNetwork();
+    const stellarNetwork = stellarRuntimeNetwork();
+    const networkMismatch = network !== stellarNetwork;
+    const executionRequested = envFlag('DEFINDEX_ENABLE_EXECUTION', false);
+    const mainnetExecutionAllowed = envFlag('DEFINDEX_ALLOW_MAINNET_EXECUTION', false);
     const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
     const vaults = [
       ...parseVaultsFromJson(network),
@@ -166,19 +179,39 @@ export class DefindexYieldService {
       all.findIndex((candidate) => candidate.asset_code === vault.asset_code && candidate.vault_address === vault.vault_address) === index
     ));
     const configured = Boolean(apiKey && vaults.length);
+    const executionBlockedReason = executionRequested
+      ? networkMismatch
+        ? `DEFINDEX_NETWORK=${network} must match STELLAR_NETWORK=${stellarNetwork} before executing yield transactions.`
+        : network === 'mainnet' && !mainnetExecutionAllowed
+          ? 'Mainnet Defindex execution requires DEFINDEX_ALLOW_MAINNET_EXECUTION=true. Keep this unset for testnet.'
+          : configured
+            ? undefined
+            : !apiKey
+              ? 'DEFINDEX_API_KEY is not configured.'
+              : 'No Defindex vault address is configured for the active network.'
+      : undefined;
+    const executionEnabled = executionRequested &&
+      configured &&
+      !networkMismatch &&
+      (network === 'testnet' || mainnetExecutionAllowed);
     return {
       provider: 'defindex',
       configured,
       api_key_configured: Boolean(apiKey),
       base_url: defindexBaseUrl(),
       network,
-      execution_enabled: envFlag('DEFINDEX_ENABLE_EXECUTION', false),
+      stellar_network: stellarNetwork,
+      network_mismatch: networkMismatch,
+      execution_requested: executionRequested,
+      execution_enabled: executionEnabled,
+      mainnet_execution_allowed: mainnetExecutionAllowed,
       vaults,
       unavailable_reason: configured
         ? undefined
         : !apiKey
           ? 'DEFINDEX_API_KEY is not configured.'
           : 'No Defindex vault address is configured for the active network.',
+      execution_blocked_reason: executionBlockedReason,
     };
   }
 
@@ -201,6 +234,9 @@ export class DefindexYieldService {
     const runtime = this.getRuntimeInfo();
     if (!runtime.api_key_configured) {
       throw new Error('DEFINDEX_API_KEY is required for Defindex yield operations.');
+    }
+    if (runtime.network_mismatch) {
+      throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before yield operations.`);
     }
     const vault = this.resolveVault(assetCode, vaultAddress);
     if (!vault) {
