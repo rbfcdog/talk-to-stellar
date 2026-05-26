@@ -325,8 +325,9 @@ describe('Agent tool execution', () => {
         execution_enabled: false,
       },
       vaults: [
-        { asset_code: 'TESOURO', display_asset_code: 'BRL', apy_percent: '12.5' },
-        { asset_code: 'EURC', display_asset_code: 'EUR', apy: { apyPercent: '4.2' } },
+        { asset_code: 'USDC', display_asset_code: 'USDC', apy_percent: '5.25' },
+        { asset_code: 'CETES', display_asset_code: 'CETES', apy: { apyPercent: '8.75' } },
+        { asset_code: 'XLM', display_asset_code: 'XLM', apy_percent: '2.1' },
       ],
     } as any);
 
@@ -335,8 +336,9 @@ describe('Agent tool execution', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.options).toEqual([
-      { currency: 'BRL', name: 'reais', annual_rate: '12.5%', available: true },
-      { currency: 'EUR', name: 'euros', annual_rate: '4.2%', available: true },
+      { currency: 'USD', name: 'dollars', annual_rate: '5.25%', available: true },
+      { currency: 'CETES', name: 'Mexico yield', annual_rate: '8.75%', available: true },
+      { currency: 'XLM', name: 'XLM', annual_rate: '2.1%', available: true },
     ]);
     expect(parsed.message).toContain('Available yield options');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|TESOURO|XDR/i);
