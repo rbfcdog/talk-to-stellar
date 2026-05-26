@@ -44,6 +44,8 @@ function readSessionToken(req: Request): string {
   return String(
     req.body?.session_token ||
       req.body?.sessionToken ||
+      req.body?.metadata?.session_token ||
+      req.body?.metadata?.sessionToken ||
       req.headers['x-session-token'] ||
       bearer ||
       ''
@@ -526,7 +528,7 @@ export function createAgentRoutes(
   ) => {
     try {
       const { query, session_id, source, metadata } = req.body;
-      const requestSessionToken = String(req.body?.session_token || req.body?.sessionToken || metadata?.session_token || '').trim();
+      const requestSessionToken = readSessionToken(req);
       const requestLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale);
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
@@ -829,6 +831,8 @@ export function createAgentRoutes(
       const actionParams = { ...(previousState?.action_params || {}) };
       if (requestSessionToken) {
         (actionParams as any).session_token = requestSessionToken;
+      } else {
+        delete (actionParams as any).session_token;
       }
       if (Object.keys(runtimeExternalContext).length === 0) {
         delete (actionParams as any).external_provider;
