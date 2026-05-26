@@ -528,7 +528,7 @@ export function createAgentRoutes(
   ) => {
     try {
       const { query, session_id, source, metadata } = req.body;
-      const requestSessionToken = readSessionToken(req);
+      let requestSessionToken = readSessionToken(req);
       const requestLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale);
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
@@ -651,6 +651,11 @@ export function createAgentRoutes(
           if (expiredExternalSession && externalSession) {
             await repository.saveSession(String(existing.session_id), externalSession);
             externalSession = await repository.getSession(String(existing.session_id)) || externalSession;
+          }
+          const mappedSessionToken = String((externalSession as any)?.session_token || '').trim();
+          if (mappedSessionToken) {
+            requestSessionToken = mappedSessionToken;
+            req.body.session_token = mappedSessionToken;
           }
           // Never trust an incoming session_id over the channel identity mapping.
           req.body.session_id = String(existing.session_id);
