@@ -34,8 +34,9 @@ INTERNAL_API_SECRET=mesmo-valor-do-agent-ingest-secret
 # Euro real na Stellar public network: Circle EURC.
 EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
 
-# Assets que a UX mostra. BRL continua sendo TESOURO internamente.
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+# Lista canonica de assets expostos. Use TESOURO no env, nao BRL.
+# TESOURO e o asset real do produto para reais.
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 ```
 
 Use `EURC_ISSUER_PUBLIC` com `STELLAR_NETWORK=PUBLIC`. Para testnet, nao use o issuer publico da Circle para submeter transacoes; deixe `EURC_ISSUER_TESTNET` vazio ate validar um issuer de teste confiavel.
@@ -54,7 +55,7 @@ Adicionar em `frontend/.env` e no provider de producao do frontend:
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 ```
 
 ### Telegram
@@ -162,4 +163,4 @@ JPY_ISSUER=
 4. `/yield`, `/convert`, `/money-cycle`, `/pix-on` e `/pix-off` abrem no frontend publico.
 5. Defindex fica com `DEFINDEX_ENABLE_EXECUTION=false` ate validar API key e vaults.
 6. Smart account fica com `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate haver verifier P-256 implantado.
-7. Por enquanto exponha so `BRL,USDC,EUR`; extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.
+7. Por enquanto exponha so `TESOURO,USDC,EURC,XLM`; extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.

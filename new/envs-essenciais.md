@@ -21,10 +21,12 @@ ENABLE_TESOURO_ASSET=true
 TESOURO_ISSUER=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ENABLE_EURC_ASSET=true
 EURC_ISSUER_PUBLIC=GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
-TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 ```
 
 `EURC_ISSUER_PUBLIC` acima e o issuer publico da Circle para EURC na Stellar. Use com `STELLAR_NETWORK=PUBLIC`. Em testnet, nao existe issuer oficial equivalente validado aqui; nao use esse issuer publico para submeter transacoes na testnet.
+
+Use `TESOURO` no env, nao `BRL`. TESOURO e o asset real do produto para reais; a interface pode exibir como real/reais quando for o melhor texto para usuario.
 
 Gerar segredo:
 
@@ -38,7 +40,7 @@ openssl rand -hex 32
 NEXT_PUBLIC_BACKEND_URL=https://seu-backend
 NEXT_PUBLIC_AGENT_API_URL=https://seu-backend/api/agent/query
 NEXT_PUBLIC_FRONTEND_URL=https://seu-frontend
-NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=BRL,USDC,EUR
+NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,EURC,XLM
 ```
 
 ### Telegram
