@@ -87,6 +87,8 @@ type YieldStatus = {
   vaults?: YieldOption[];
 };
 
+type FlowIntent = "add" | "earn" | "withdraw";
+
 type MoneyProfile = {
   namePt: string;
   nameEn: string;
@@ -407,6 +409,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [selectedCode, setSelectedCode] = useState("USDC");
   const [amount, setAmount] = useState("100");
+  const [flowIntent, setFlowIntent] = useState<FlowIntent>("earn");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cycleMode, setCycleMode] = useState(false);
@@ -473,6 +476,40 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     from: "yield",
     lang: language,
   }), [amount, cycleDestinationPixKey, safeSelectedCode, language]);
+  const convertToBestYieldUrl = useMemo(() => buildMoneyUrl("/convert", {
+    amount,
+    source_asset: safeSelectedCode,
+    dest_asset: bestOptionCode,
+    from: "yield",
+    lang: language,
+  }), [amount, bestOptionCode, safeSelectedCode, language]);
+  const amountPresets = useMemo(() => {
+    const short = selectedProfile.short;
+    if (short === "BRL") return ["50", "100", "500", "1000"];
+    if (short === "JPY" || short === "ARS") return ["1000", "5000", "10000", "25000"];
+    return ["10", "50", "100", "250"];
+  }, [selectedProfile.short]);
+  const primaryFlowUrl = flowIntent === "add"
+    ? addMoneyUrl
+    : flowIntent === "withdraw"
+      ? sendMoneyUrl
+      : !selectedHasYield && bestOptionCode
+        ? convertToBestYieldUrl
+        : keepMoneyUrl;
+  const primaryFlowLabel = flowIntent === "add"
+    ? L("Abrir PIX de entrada", "Open PIX add")
+    : flowIntent === "withdraw"
+      ? L("Abrir retirada PIX", "Open PIX withdrawal")
+      : L("Revisar rendimento", "Review yield");
+  const flowChatPrompt = flowIntent === "add"
+    ? L(`colocar ${amount || "0"} reais com PIX e manter em ${profileName(selectedProfile, language)}`, `add ${amount || "0"} reais with PIX and keep it in ${profileName(selectedProfile, language)}`)
+    : flowIntent === "withdraw"
+      ? L(`retirar ${amount || "0"} ${profileName(selectedProfile, language)} para meu PIX${cycleDestinationPixKey ? ` ${cycleDestinationPixKey}` : ""}`, `withdraw ${amount || "0"} ${profileName(selectedProfile, language)} to my PIX${cycleDestinationPixKey ? ` ${cycleDestinationPixKey}` : ""}`)
+      : L(`deixar ${amount || "0"} ${profileName(selectedProfile, language)} rendendo`, `keep ${amount || "0"} ${profileName(selectedProfile, language)} earning`);
+  const flowChatUrl = useMemo(() => buildMoneyUrl("/chat", {
+    prompt: flowChatPrompt,
+    lang: language,
+  }), [flowChatPrompt, language]);
 
   useEffect(() => {
     if (initialLanguage && !appliedInitialLanguageRef.current) {
@@ -500,6 +537,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       ""
     );
     const queryAction = String(params.get("action") || params.get("mode") || "").trim().toLowerCase();
+    const queryFlow = String(params.get("flow") || params.get("intent") || params.get("step") || "").trim().toLowerCase();
     const queryDestinationPixKey = String(
       params.get("destination_pix_key") ||
       params.get("pix_key") ||
@@ -516,6 +554,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (queryAmount > 0) setAmount(String(queryAmount));
     if (queryAction === "withdraw" || queryAction === "resgatar") setAction("withdraw");
     if (queryAction === "deposit" || queryAction === "guardar") setAction("deposit");
+    if (queryFlow === "add" || queryFlow === "bring" || queryFlow === "entrada") setFlowIntent("add");
+    if (queryFlow === "earn" || queryFlow === "yield" || queryFlow === "rendimento" || queryFlow === "keep") setFlowIntent("earn");
+    if (queryFlow === "withdraw" || queryFlow === "exit" || queryFlow === "saida" || queryFlow === "sair") {
+      setFlowIntent("withdraw");
+      setAction("withdraw");
+    }
     if (queryDestinationPixKey) setCycleDestinationPixKey(queryDestinationPixKey);
     if (params.get("advanced") === "1" || params.get("advanced") === "true") setAdvancedOpen(true);
   }, [initialQuery]);
@@ -699,6 +743,29 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           <Metric label="PIX" value={pixAvailable ? L("Disponível", "Available") : L("Pendente", "Pending")} detail={L("Entrada e retirada em reais", "Add and withdraw in reais")} />
           <Metric label={L("Confirmação", "Confirmation")} value={confirmationEnabled ? L("Ativa", "Active") : L("Em preparo", "In setup")} detail={confirmationEnabled ? L("PIN habilitado", "PIN enabled") : L("Somente revisão", "Review only")} />
         </section>
+
+        <EssentialFlowPanel
+          flowIntent={flowIntent}
+          onFlowIntentChange={(next) => {
+            setFlowIntent(next);
+            if (next === "earn") setAction("deposit");
+            if (next === "withdraw") setAction("withdraw");
+          }}
+          amount={amount}
+          onAmountChange={setAmount}
+          amountPresets={amountPresets}
+          selectedProfile={selectedProfile}
+          selectedHasYield={selectedHasYield}
+          bestOption={bestOption}
+          bestProfile={bestProfile}
+          pixAvailable={pixAvailable}
+          destinationPixKey={cycleDestinationPixKey}
+          onDestinationPixKeyChange={setCycleDestinationPixKey}
+          primaryHref={primaryFlowUrl}
+          primaryLabel={primaryFlowLabel}
+          chatHref={flowChatUrl}
+          convertToBestYieldHref={convertToBestYieldUrl}
+        />
 
         <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Ciclo do dinheiro", "Money cycle")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -980,6 +1047,246 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         </section>
       </section>
     </main>
+  );
+}
+
+function EssentialFlowPanel({
+  flowIntent,
+  onFlowIntentChange,
+  amount,
+  onAmountChange,
+  amountPresets,
+  selectedProfile,
+  selectedHasYield,
+  bestOption,
+  bestProfile,
+  pixAvailable,
+  destinationPixKey,
+  onDestinationPixKeyChange,
+  primaryHref,
+  primaryLabel,
+  chatHref,
+  convertToBestYieldHref,
+}: {
+  flowIntent: FlowIntent;
+  onFlowIntentChange: (intent: FlowIntent) => void;
+  amount: string;
+  onAmountChange: (amount: string) => void;
+  amountPresets: string[];
+  selectedProfile: MoneyProfile;
+  selectedHasYield: boolean;
+  bestOption: YieldOption | null;
+  bestProfile: MoneyProfile;
+  pixAvailable: boolean;
+  destinationPixKey: string;
+  onDestinationPixKeyChange: (value: string) => void;
+  primaryHref: string;
+  primaryLabel: string;
+  chatHref: string;
+  convertToBestYieldHref: string;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const amountReady = normalizeDecimal(amount) > 0;
+  const needsPixKey = flowIntent === "withdraw";
+  const bestOptionText = bestOption
+    ? `${profileName(bestProfile, language)} · ${optionRate(bestOption, language)} ${L("ao ano", "per year")}`
+    : L("Aguardando opção", "Waiting for option");
+  const selectedName = profileName(selectedProfile, language);
+  const flowOptions: Array<{
+    id: FlowIntent;
+    title: string;
+    detail: string;
+    icon: ReactNode;
+  }> = [
+    {
+      id: "add",
+      title: L("Trazer", "Add"),
+      detail: L("PIX de entrada com valor preenchido.", "PIX add with amount prefilled."),
+      icon: <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      id: "earn",
+      title: L("Render", "Earn"),
+      detail: selectedHasYield
+        ? L("Revisar rendimento da moeda escolhida.", "Review yield for the selected currency.")
+        : L("Converter para a melhor opção disponível.", "Convert to the best available option."),
+      icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      id: "withdraw",
+      title: L("Sair", "Withdraw"),
+      detail: L("PIX de saída com chave dinâmica.", "PIX withdrawal with a dynamic key."),
+      icon: <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />,
+    },
+  ];
+  const readiness = [
+    {
+      label: L("Valor definido", "Amount set"),
+      ready: amountReady,
+      detail: amountReady ? `${formatAmount(amount, language)} ${selectedProfile.short}` : L("Informe um valor maior que zero.", "Enter an amount above zero."),
+    },
+    {
+      label: L("PIX disponível", "PIX available"),
+      ready: pixAvailable,
+      detail: pixAvailable ? L("Entrada e saída podem continuar.", "Add and withdraw can continue.") : L("PIX ainda não está disponível neste ambiente.", "PIX is not available in this environment yet."),
+    },
+    {
+      label: L("Rendimento", "Yield"),
+      ready: selectedHasYield || Boolean(bestOption),
+      detail: selectedHasYield ? L("A moeda escolhida tem revisão de rendimento.", "The selected currency has yield review.") : bestOptionText,
+    },
+    {
+      label: L("Chave PIX de saída", "Withdrawal PIX key"),
+      ready: !needsPixKey || Boolean(destinationPixKey.trim()),
+      detail: destinationPixKey.trim() || L("Pode preencher agora ou na tela de retirada.", "You can fill it now or on the withdrawal screen."),
+    },
+  ];
+
+  return (
+    <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Plano essencial", "Essential plan")}>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+                <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+                {L("O que fazer agora", "What to do now")}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-tts-muted">
+                {L(
+                  "Escolha a intenção principal. A tela ajusta o próximo botão, o chat e a chave PIX sem trocar de contexto.",
+                  "Choose the main intent. The screen adjusts the next button, chat, and PIX key without changing context."
+                )}
+              </p>
+            </div>
+            <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
+              {selectedProfile.short} · {selectedName}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-2 md:grid-cols-3" role="tablist" aria-label={L("Intenção do fluxo", "Flow intent")}>
+            {flowOptions.map((option) => {
+              const selected = option.id === flowIntent;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => onFlowIntentChange(option.id)}
+                  className={`min-h-[118px] border p-4 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
+                >
+                  <span className={`inline-flex h-9 w-9 items-center justify-center ${selected ? "bg-tts-confirm text-tts-deep" : "bg-tts-surface text-tts-muted"}`}>
+                    {option.icon}
+                  </span>
+                  <span className="mt-3 block text-base font-black text-tts-deep">{option.title}</span>
+                  <span className="mt-1 block text-xs leading-5 text-tts-muted">{option.detail}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div>
+              <label className="block text-sm font-black text-tts-deep" htmlFor="essential-flow-amount">
+                {L("Valor", "Amount")}
+              </label>
+              <input
+                id="essential-flow-amount"
+                value={amount}
+                onChange={(event) => onAmountChange(event.target.value.replace(/[^\d,.]/g, ""))}
+                inputMode="decimal"
+                className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
+              />
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {amountPresets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => onAmountChange(preset)}
+                    className="min-h-9 border border-tts-border bg-tts-bg px-2 text-xs font-black text-tts-deep transition hover:border-tts-border2"
+                  >
+                    {formatAmount(preset, language)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-black text-tts-deep" htmlFor="essential-flow-pix-key">
+                {L("Chave PIX para saída", "PIX key for withdrawal")}
+              </label>
+              <input
+                id="essential-flow-pix-key"
+                value={destinationPixKey}
+                onChange={(event) => onDestinationPixKeyChange(event.target.value)}
+                placeholder={L("email, CPF, telefone ou chave aleatória", "email, tax ID, phone, or random key")}
+                className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
+              />
+              <p className="mt-2 text-xs leading-5 text-tts-muted">
+                {flowIntent === "withdraw"
+                  ? L("Preencher aqui evita repetir a chave na retirada.", "Filling it here avoids typing the key again at withdrawal.")
+                  : L("Opcional agora; fica pronto se você decidir sair para PIX.", "Optional now; ready if you decide to send out to PIX.")}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="border border-tts-border bg-tts-bg p-4">
+          <h3 className="text-base font-black text-tts-deep">{L("Próximo passo", "Next step")}</h3>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {readiness.map((item) => (
+              <ReadinessItem key={item.label} ready={item.ready} label={item.label} detail={item.detail} />
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            <a
+              href={primaryHref}
+              className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+            >
+              {flowIntent === "add" ? <QrCode className="h-4 w-4" aria-hidden="true" /> : flowIntent === "withdraw" ? <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" /> : <PiggyBank className="h-4 w-4" aria-hidden="true" />}
+              {primaryLabel}
+            </a>
+            <a
+              href={chatHref}
+              className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              {L("Pedir no chat", "Ask in chat")}
+            </a>
+          </div>
+
+          {!selectedHasYield && bestOption ? (
+            <div className="mt-4 border border-tts-gold bg-tts-gold-bg p-3 text-sm leading-6 text-tts-gold">
+              <p className="font-black">{L("Sugestão essencial", "Essential suggestion")}</p>
+              <p className="mt-1">
+                {L(
+                  `A moeda ${selectedProfile.short} ainda não tem rendimento aqui. A melhor opção disponível agora é ${bestOptionText}.`,
+                  `${selectedProfile.short} does not have yield here yet. The best available option now is ${bestOptionText}.`
+                )}
+              </p>
+              <a href={convertToBestYieldHref} className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+                {L("Converter para melhor opção", "Convert to best option")}
+              </a>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReadinessItem({ ready, label, detail }: { ready: boolean; label: string; detail: string }) {
+  return (
+    <div className={`border p-3 ${ready ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-gold bg-tts-gold-bg"}`}>
+      <div className="flex items-center gap-2">
+        {ready ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4 text-tts-gold" aria-hidden="true" />}
+        <p className={`text-sm font-black ${ready ? "text-tts-confirm" : "text-tts-gold"}`}>{label}</p>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-tts-muted">{detail}</p>
+    </div>
   );
 }
 
