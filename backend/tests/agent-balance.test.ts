@@ -59,8 +59,8 @@ describe('Agent balance flow', () => {
     });
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('Saldo da sua conta TalkToStellar:');
-    expect(result.response_message).toContain('BRL: 12.3400000');
-    expect(result.response_message).toContain('USDC: 8.9000000');
+    expect(result.response_message).toContain('R$: 12.3400000');
+    expect(result.response_message).toContain('US$: 8.9000000');
   });
 
   it('does not expose account preparation internals when balance is unavailable', async () => {
