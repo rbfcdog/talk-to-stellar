@@ -22,9 +22,21 @@ function createWalletsBuilder(walletRow: any = null) {
 
 describe('AnchorService PIX-funded transfer recipient resolution', () => {
   const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      STELLAR_NETWORK: 'TESTNET',
+      ETHERFUSE_SANDBOX_PIX_FALLBACK: 'true',
+      USDC_ISSUER: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+    };
+    delete process.env.TESOURO_DISTRIBUTOR_SECRET;
+  });
 
   afterEach(() => {
     jest.restoreAllMocks();
+    process.env = { ...originalEnv };
   });
 
   it('accepts the public key carried by the chat link when the saved contact row only has phone/PIX metadata', async () => {
@@ -139,5 +151,56 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       recipientKey: '5595280606751',
       sessionId: 'recipient-session',
     });
+  });
+
+  it('simulates the post-PIX transfer in sandbox ledger mode when no on-chain funding secret is available', async () => {
+    jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
+      sandbox: true,
+      provider: 'etherfuse',
+      network: 'Stellar Testnet',
+      base_url: 'https://api.sand.etherfuse.com',
+      stellar_network_id: 'TESTNET',
+      asset: {
+        code: 'TESOURO',
+        issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        identifier: 'TESOURO',
+      },
+    });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'owner-user',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sessionPinHash: 'hash',
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue(undefined);
+    jest.spyOn(AnchorService as any, 'resolveTransferRecipient').mockResolvedValue({
+      publicKey: anaPublicKey,
+      displayName: 'Ana Silva',
+      pixKey: '5595280606751',
+      recipientKey: '5595280606751',
+    });
+
+    const result = await AnchorService.submitPixFundedTransferForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      recipient: 'Ana Silva',
+      recipient_key: '5595280606751',
+      amount: '43.29',
+      asset_code: 'USDC',
+      order_id: 'sandbox-pix-ledger-test',
+      pin: '1234',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      sandbox: true,
+      sandbox_ledger_transfer: true,
+      recipient_name: 'Ana Silva',
+      amount: '43.29',
+      asset_code: 'USDC',
+    });
+    expect(String(result.transaction_hash)).toMatch(/^sandbox-ledger-transfer-/);
   });
 });

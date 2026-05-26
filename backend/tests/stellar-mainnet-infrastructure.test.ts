@@ -48,6 +48,7 @@ describe('Stellar Mainnet infrastructure', () => {
       STELLAR_MAINNET_EXTERNAL_SIGNER_URL: 'https://signer.example.com/stellar',
       STELLAR_MAINNET_FEE_TREASURY_PUBLIC_KEY: PUBLIC_USDC_ISSUER,
       STELLAR_MAINNET_DISTRIBUTION_PUBLIC_KEY: PUBLIC_USDC_ISSUER,
+      STELLAR_MAINNET_EURC_ISSUER: PUBLIC_USDC_ISSUER,
       STELLAR_MAINNET_MAX_PAYMENT_USDC: '100',
       STELLAR_MAINNET_SEP10_HOME_DOMAIN: 'talktostellar.com',
       STELLAR_MAINNET_STELLAR_TOML_URL: 'https://talktostellar.com/.well-known/stellar.toml',

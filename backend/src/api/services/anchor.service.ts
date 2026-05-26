@@ -1394,6 +1394,11 @@ export class AnchorService {
       envFlag('ETHERFUSE_SANDBOX_PIX_FALLBACK', true);
   }
 
+  private static sandboxLedgerSettlementEnabled(): boolean {
+    return this.sandboxPixFallbackEnabled() &&
+      !coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
+  }
+
   private static buildSandboxPixInstructions(orderId: string, amount: string) {
     const pixKey = `pix-${orderId.replace(/^sandbox-pix-/, '').slice(0, 8)}@talktostellar.local`;
     const txid = `TS${orderId.replace(/[^a-f0-9]/gi, '').slice(0, 23)}`;
@@ -1923,6 +1928,56 @@ export class AnchorService {
     return this.failSandboxOnRamp(record, record.finalConversionError);
   }
 
+  private static async completeSandboxOnRampWithLedgerSettlement(
+    record: SandboxMockOnRampOrder,
+    destinationAmountTesouro: string,
+    reason: string,
+  ): Promise<SandboxMockOnRampOrder> {
+    const finalAsset = resolveRampFinalAsset(record.finalAssetCode || 'TESOURO', record.finalAssetIssuer);
+    const finalAmount = toStellarAmount(coalesceString(
+      record.finalAmount,
+      record.desiredFinalAmount,
+      record.operationContext?.final_amount,
+      record.transaction.toAmount,
+      destinationAmountTesouro,
+    ));
+    const pseudoHash = `sandbox-ledger-${String(record.transaction.id || crypto.randomUUID()).replace(/^sandbox-pix-/, '').slice(0, 18)}`;
+
+    record.finalAmount = finalAmount;
+    record.deliverySourceAmount = record.sourceAmountBrl;
+    record.finalConversionHash = pseudoHash;
+    record.finalConversionSourceAmount = destinationAmountTesouro;
+    (record.transaction as any).toAmount = finalAmount;
+    (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+    (record.transaction as any).finalAmount = finalAmount;
+    (record.transaction as any).sandbox_ledger_settlement = true;
+    (record.transaction as any).auto_conversion = {
+      required: !sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() }),
+      status: 'completed',
+      source_asset_code: 'TESOURO',
+      source_amount: destinationAmountTesouro,
+      destination_asset_code: finalAsset.code,
+      destination_asset_issuer: finalAsset.issuer,
+      destination_amount: finalAmount,
+      hash: pseudoHash,
+      mode: 'sandbox_ledger_no_distributor',
+      reason,
+    };
+
+    return this.completeSandboxOnRamp(record, pseudoHash, {
+      delivery_source_amount: record.sourceAmountBrl,
+      destination_amount_anchor: destinationAmountTesouro,
+      final_conversion_status: 'completed',
+      final_conversion_hash: pseudoHash,
+      final_conversion_source_amount: destinationAmountTesouro,
+      final_conversion_mode: 'sandbox_ledger_no_distributor',
+      final_settlement_mode: 'sandbox_ledger_no_distributor',
+      final_amount: finalAmount,
+      sandbox_ledger_settlement: true,
+      settlement_note: reason,
+    });
+  }
+
   private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext): Promise<SandboxMockOnRampOrder | null> {
     const record = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (!record) return null;
@@ -1960,6 +2015,13 @@ export class AnchorService {
 
     const sourceSecret = coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
     if (!sourceSecret) {
+      if (this.sandboxLedgerSettlementEnabled()) {
+        return this.completeSandboxOnRampWithLedgerSettlement(
+          record,
+          toStellarAmount(record.destinationAmount),
+          'TESOURO_DISTRIBUTOR_SECRET is not configured; sandbox PIX completed in ledger simulation mode.',
+        );
+      }
       return this.failSandboxOnRamp(record, 'TESOURO_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.');
     }
 
@@ -4537,7 +4599,8 @@ export class AnchorService {
 
     const context = await this.resolveSessionWallet(input);
     this.requireWalletPin(input, context);
-    if (!context.vaultSecretId) {
+    const ledgerFallback = this.sandboxLedgerSettlementEnabled();
+    if (!context.vaultSecretId && !ledgerFallback) {
       throw apiError('Source wallet secret is unavailable for the current TalkToStellar session.', 409);
     }
 
@@ -4562,29 +4625,54 @@ export class AnchorService {
       }
     );
     if (recipient.vaultSecretId) {
-      const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
-      const trustline = await StellarService.ensureTrustlineFromSecret({
-        sourceSecret: destinationSecret,
-        assetCode: asset.code,
-        assetIssuer: asset.issuer,
-      });
-      if (!trustline.success) {
-        throw apiError(`Could not activate ${asset.code} for recipient: ${trustline.error || 'unknown trustline error'}`, 409);
+      try {
+        const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
+        const trustline = await StellarService.ensureTrustlineFromSecret({
+          sourceSecret: destinationSecret,
+          assetCode: asset.code,
+          assetIssuer: asset.issuer,
+        });
+        if (!trustline.success && !ledgerFallback) {
+          throw apiError(`Could not activate ${asset.code} for recipient: ${trustline.error || 'unknown trustline error'}`, 409);
+        }
+        if (!trustline.success) {
+          console.warn(`[ramp] Continuing sandbox PIX-funded transfer without recipient trustline: ${trustline.error || 'unknown trustline error'}`);
+        }
+      } catch (error) {
+        if (!ledgerFallback) throw error;
+        console.warn('[ramp] Continuing sandbox PIX-funded transfer without recipient trustline setup:', debugErrorMessage(error));
       }
     }
 
-    const sourceSecret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    const result = await StellarService.submitAssetPaymentFromSecret({
-      sourceSecret,
-      destination: recipient.publicKey,
-      amount: toStellarAmount(amount),
-      assetCode: asset.code,
-      assetIssuer: asset.issuer,
-      memoText: 'PIX funded',
-    });
+    let result: { success: boolean; hash?: string; error?: string };
+    let sandboxLedgerTransfer = false;
+    if (context.vaultSecretId) {
+      try {
+        const sourceSecret = await new VaultService(supabase).getSecret(context.vaultSecretId);
+        result = await StellarService.submitAssetPaymentFromSecret({
+          sourceSecret,
+          destination: recipient.publicKey,
+          amount: toStellarAmount(amount),
+          assetCode: asset.code,
+          assetIssuer: asset.issuer,
+          memoText: 'PIX funded',
+        });
+      } catch (error) {
+        result = { success: false, error: debugErrorMessage(error) };
+      }
+    } else {
+      result = { success: false, error: 'Source wallet secret is unavailable for the current TalkToStellar session.' };
+    }
 
     if (!result.success) {
-      throw apiError(result.error || 'Could not submit PIX-funded transfer.', 400);
+      if (!ledgerFallback) {
+        throw apiError(result.error || 'Could not submit PIX-funded transfer.', 400);
+      }
+      sandboxLedgerTransfer = true;
+      result = {
+        success: true,
+        hash: `sandbox-ledger-transfer-${crypto.randomUUID().slice(0, 18)}`,
+      };
     }
 
     const route = {
@@ -4649,6 +4737,7 @@ export class AnchorService {
       asset_code: asset.code,
       asset_issuer: asset.issuer,
       transaction_hash: result.hash,
+      sandbox_ledger_transfer: sandboxLedgerTransfer,
       receipt_url: receiptUrl,
       route_summary: routeContext,
       route,
