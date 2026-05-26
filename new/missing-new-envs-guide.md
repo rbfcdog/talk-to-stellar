@@ -105,9 +105,11 @@ Como preencher:
 1. Obtenha a API key na documentacao/dashboard da Defindex ou solicitando acesso ao time Defindex/PaltaLabs.
 2. O valor de cada `DEFINDEX_*_VAULT` e o contrato Soroban do vault (`C...`), nao o issuer do asset e nao o factory address.
 3. Para obter um vault, selecione/crie no app da Defindex, crie via `@defindex/sdk` com factory operations, ou peca ao time Defindex/PaltaLabs o vault curado para asset/rede.
-4. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
-5. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
-6. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
+4. Para gerar um bloco automaticamente, rode `npm --prefix backend run defindex:env -- --network testnet`. Para arquivo separado, adicione `--write .env.defindex.testnet`.
+5. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Se EURC testnet sair vazio, crie/solicite um vault EURC testnet validado antes de preencher `DEFINDEX_EURC_VAULT`.
+6. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
+7. Mantenha `DEFINDEX_ENABLE_EXECUTION=false` ate deposit/withdraw, assinatura e liquidez estarem testados em testnet.
+8. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_EURC_VAULT` e `DEFINDEX_TESOURO_VAULT`.
 
 ## Prioridade 3: passkey/smart account
 

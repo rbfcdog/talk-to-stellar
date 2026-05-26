@@ -1,3 +1,5 @@
+process.env.STELLAR_NETWORK = 'TESTNET';
+
 const mockSdkMethods = {
   healthCheck: jest.fn(),
   getVaultInfo: jest.fn(),
