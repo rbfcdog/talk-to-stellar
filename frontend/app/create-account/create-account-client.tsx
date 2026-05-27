@@ -17,10 +17,15 @@ import { Fingerprint } from "lucide-react"
 
 type FinalizeResponse = {
   success: boolean
+  code?: string
   sessionId?: string
   userId?: string
   message?: string
   error?: string
+  request_id?: string
+  requestId?: string
+  support_code?: string
+  supportCode?: string
   processing?: boolean
   used?: boolean
   alreadyCompleted?: boolean
@@ -115,7 +120,35 @@ function readableErrorMessage(error: any) {
 }
 
 function publicCreateAccountErrorMessage(error: unknown, language: string) {
+  const raw = error instanceof Error ? error.message : String(error || "").trim()
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+
+  const alreadyPublic =
+    /^(nao foi possivel concluir|não foi possível concluir|pin |pin e|pin é|telefone |cpf |informe |este link|a conta informada|ja existe|já existe|conta ja|conta já|confirmacao|confirmação|sua sessao|sua sessão)/i.test(raw) &&
+    !/duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505|schema cache|relation .* does not exist|jwt malformed|secret|stack|sql/i.test(raw)
+
+  if (alreadyPublic) return raw
+  if (normalized.includes("failed to fetch") || normalized.includes("network")) {
+    return language === "pt-BR"
+      ? "A conexão caiu antes de concluir. Verifique a internet do celular e tente novamente."
+      : "The connection dropped before finishing. Check your phone connection and try again."
+  }
   return mapPublicError(error, language).message
+}
+
+function createAccountErrorTrace(payload?: FinalizeResponse | null) {
+  const requestId = String(payload?.request_id || payload?.requestId || "").trim()
+  const supportCode = String(payload?.support_code || payload?.supportCode || "").trim()
+  return requestId || supportCode
+}
+
+function withCreateAccountTrace(message: string, payload: FinalizeResponse | null | undefined, language: string) {
+  const trace = createAccountErrorTrace(payload)
+  if (!trace) return message
+  return `${message}\n${language === "pt-BR" ? "ID do erro" : "Error ID"}: ${trace}`
 }
 
 function isLikelyEmbeddedBrowser() {
@@ -617,7 +650,14 @@ export default function CreateAccountClient({
         }),
       })
 
-      const payload = (await response.json()) as FinalizeResponse
+      const requestId = response.headers.get("x-request-id") || ""
+      const payload = (await response.json().catch(() => ({
+        success: false,
+        message: response.statusText || L("Não consegui concluir agora. Tente novamente em alguns segundos.", "I could not finish that right now. Try again in a few seconds."),
+      }))) as FinalizeResponse
+      if (requestId && !payload.request_id && !payload.requestId) {
+        payload.request_id = requestId
+      }
       if (!response.ok && payload?.processing) {
         setValidation({
           success: true,
@@ -1163,10 +1203,14 @@ export default function CreateAccountClient({
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-2 text-xs text-tts-error"
+              className="mt-2 whitespace-pre-line text-xs text-tts-error"
             >
-              {publicCreateAccountErrorMessage(
-                result?.error || result?.message || L("Algo deu errado.", "Something went wrong."),
+              {withCreateAccountTrace(
+                publicCreateAccountErrorMessage(
+                  result?.error || result?.message || L("Algo deu errado.", "Something went wrong."),
+                  language,
+                ),
+                result,
                 language,
               )}
             </motion.p>

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import {
   augmentJsonBodyWithSession,
   buildSessionHeaders,
   passthroughResponseWithSession,
+  readSessionCookies,
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
@@ -35,7 +37,7 @@ function looksLikeTechnicalError(value: unknown) {
   );
 }
 
-function sanitizeBackendErrorResponse(text: string, status: number, contentType: string) {
+function sanitizeBackendErrorResponse(text: string, status: number, contentType: string, requestId: string) {
   if (!contentType.includes("application/json") || status < 400) return null;
 
   try {
@@ -47,11 +49,33 @@ function sanitizeBackendErrorResponse(text: string, status: number, contentType:
       {
         ...payload,
         ...publicErrorPayload(rawMessage, { code: payload?.code || "backend_error" }),
+        request_id: requestId,
       },
-      { status },
+      { status, headers: { "x-request-id": requestId } },
     );
   } catch {
     return null;
+  }
+}
+
+function isAccountCreationPath(path: string[]) {
+  const joined = path.join("/");
+  return joined === "finalize" || joined === "check-account" || joined === "validate-token";
+}
+
+function safeBackendErrorSummary(text: string, contentType: string): Record<string, unknown> {
+  if (!contentType.includes("application/json")) return {};
+  try {
+    const payload = JSON.parse(text || "{}");
+    return {
+      code: payload?.code || undefined,
+      message: payload?.message || payload?.error || undefined,
+      processing: payload?.processing === true || undefined,
+      used: payload?.used === true || payload?.alreadyCompleted === true || undefined,
+      email_confirmation_required: payload?.emailConfirmationRequired === true || undefined,
+    };
+  } catch {
+    return {};
   }
 }
 
@@ -100,12 +124,16 @@ function validateShortLinkPayload(body: string, frontendOrigin: string): string 
 
 async function proxy(req: NextRequest, path: string[]) {
   const backendBase = getBackendBaseUrl();
+  const pathText = path.join("/");
+  const requestId = req.headers.get("x-request-id") || `external_${crypto.randomUUID()}`;
+  const trackAccountCreation = isAccountCreationPath(path);
   const qs = req.nextUrl.searchParams.toString();
-  const target = `${backendBase}/api/external/${path.join("/")}${qs ? `?${qs}` : ""}`;
+  const target = `${backendBase}/api/external/${pathText}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
   const body = augmentJsonBodyWithSession(rawBody, req);
   const inboundIdempotencyKey = req.headers.get("Idempotency-Key");
-  const isShortLinkCreate = req.method === "POST" && path.join("/") === "short-links";
+  const isShortLinkCreate = req.method === "POST" && pathText === "short-links";
+  const session = readSessionCookies(req);
 
   if (isShortLinkCreate) {
     const validationError = validateShortLinkPayload(body || "", req.nextUrl.origin);
@@ -117,6 +145,7 @@ async function proxy(req: NextRequest, path: string[]) {
   const headers: Record<string, string> = {
     "content-type": req.headers.get("content-type") || "application/json",
     "x-frontend-origin": req.nextUrl.origin,
+    "x-request-id": requestId,
     ...buildSessionHeaders(req),
   };
   if (inboundIdempotencyKey) {
@@ -136,15 +165,53 @@ async function proxy(req: NextRequest, path: string[]) {
   }
 
   try {
+    if (trackAccountCreation) {
+      console.log("[external-proxy] account_start", {
+        request_id: requestId,
+        method: req.method,
+        path: pathText,
+        backend_base: backendBase,
+        has_session: Boolean(session.sessionId && session.sessionToken),
+        has_idempotency_key: Boolean(inboundIdempotencyKey),
+      });
+    }
     const res = await fetch(target, init);
     const text = await res.text();
     const contentType = res.headers.get("content-type") || "application/json";
-    const sanitized = sanitizeBackendErrorResponse(text, res.status, contentType);
+    if (trackAccountCreation) {
+      const fields = {
+        request_id: requestId,
+        method: req.method,
+        path: pathText,
+        status: res.status,
+        ok: res.ok,
+        response_bytes: text.length,
+        ...safeBackendErrorSummary(text, contentType),
+      };
+      if (res.ok) {
+        console.log("[external-proxy] account_response", fields);
+      } else {
+        console.error("[external-proxy] account_response_failed", fields);
+      }
+    }
+    const sanitized = sanitizeBackendErrorResponse(text, res.status, contentType, requestId);
     if (sanitized) return sanitized;
-    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    response.headers.set("x-request-id", requestId);
+    return response;
   } catch (error: any) {
-    console.error("[external-proxy] request failed", { target, error: error?.message || error });
-    return NextResponse.json(publicErrorPayload(error, { code: "external_service_unavailable" }), { status: 502 });
+    console.error("[external-proxy] request failed", {
+      request_id: requestId,
+      path: pathText,
+      target,
+      error: error?.message || error,
+    });
+    const response = NextResponse.json(
+      { ...publicErrorPayload(error, { code: "external_service_unavailable", prefix: "EXT" }), request_id: requestId },
+      { status: 502 },
+    );
+    response.headers.set("x-request-id", requestId);
+    return response;
   }
 }
 
