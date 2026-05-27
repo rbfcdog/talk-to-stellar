@@ -192,9 +192,9 @@ export class DefindexYieldService {
     const configured = Boolean(apiKey && vaults.length);
     const executionBlockedReason = executionRequested
       ? networkMismatch
-        ? `DEFINDEX_NETWORK=${network} must match STELLAR_NETWORK=${stellarNetwork} before executing yield transactions.`
+        ? `DEFINDEX_NETWORK=${network} must match STELLAR_NETWORK=${stellarNetwork} before executing APY transactions.`
         : !complianceApproved
-          ? 'Defindex yield execution requires DEFINDEX_COMPLIANCE_APPROVED=true after legal and compliance approval.'
+          ? 'APY execution requires DEFINDEX_COMPLIANCE_APPROVED=true after legal and compliance approval.'
           : network === 'mainnet' && !mainnetExecutionAllowed
             ? 'Mainnet Defindex execution requires DEFINDEX_ALLOW_MAINNET_EXECUTION=true. Keep this unset for testnet.'
             : configured
@@ -258,10 +258,10 @@ export class DefindexYieldService {
   static requireVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig {
     const runtime = this.getRuntimeInfo();
     if (!runtime.api_key_configured) {
-      throw new Error('DEFINDEX_API_KEY is required for Defindex yield operations.');
+      throw new Error('DEFINDEX_API_KEY is required for APY operations.');
     }
     if (runtime.network_mismatch) {
-      throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before yield operations.`);
+      throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before APY operations.`);
     }
     const vault = this.resolveVault(assetCode, vaultAddress);
     if (!vault) {

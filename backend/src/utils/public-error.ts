@@ -30,10 +30,13 @@ export function publicErrorCode(error: unknown) {
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) return 'setup_unavailable';
   if (/duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505/.test(normalized)) return 'identity_conflict';
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) return 'account_preparing';
-  if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) return 'invalid_pin';
+  if (/pin.*(required|obrigator|obrigatorio)|pin da wallet|pin da conta/.test(normalized)) return 'missing_pin';
+  if (/(invalid|incorrect|wrong|invalido).*(pin)|pin.*(invalid|incorrect|wrong|invalido)|senha/.test(normalized)) return 'invalid_pin';
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
   if (/defindex.*desativad|execucao defindex|defindex_enable_execution|defindex_compliance_approved|compliance approval|yield.*execution.*(disabled|requires)|execution.*yield.*disabled/.test(normalized)) return 'yield_execution_disabled';
-  if (/(wallet private key|source wallet secret|private key|secret).*(defindex|yield|rendimento)|(defindex|yield|rendimento).*(wallet private key|source wallet secret|private key|secret)/.test(normalized)) return 'account_signing_unavailable';
+  if (/review.*not ready|prepare.*again|revisao.*nao.*pronta|prepare.*revisao/.test(normalized)) return 'review_not_prepared';
+  if (/(wallet private key|source wallet secret|private key|secret|failed to read secret from vault|get_private_key|assinar esta operacao|not ready to sign).*(defindex|yield|rendimento|operacao)|(defindex|yield|rendimento|operacao).*(wallet private key|source wallet secret|private key|secret|failed to read secret from vault|get_private_key|assinar esta operacao|not ready to sign)/.test(normalized)) return 'account_signing_unavailable';
+  if (/send transaction|submit.*transaction|external execution|confirmacao.*externa|operacao.*externa|transacao.*externa|envio.*transacao|failed to submit|transaction failed/.test(normalized)) return 'execution_unavailable';
   if (/defindex|yield confirmation|yield operation|yield service|rendimento/.test(normalized)) return 'yield_unavailable';
   if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) return 'recipient_not_found';
   if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) return 'pix_account_not_ready';
@@ -71,6 +74,12 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
       return 'A confirmacao ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas execucao real exige aprovacao de compliance.';
     case 'account_signing_unavailable':
       return 'Esta conta ainda nao esta pronta para assinar esta operacao. Entre novamente e tente outra vez.';
+    case 'missing_pin':
+      return 'Digite o PIN da conta para confirmar.';
+    case 'review_not_prepared':
+      return 'Prepare a revisao novamente e confirme em seguida.';
+    case 'execution_unavailable':
+      return 'Nao foi possivel concluir a confirmacao agora. Prepare uma nova revisao e tente novamente.';
     case 'yield_unavailable':
       return 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.';
     case 'invalid_pin':

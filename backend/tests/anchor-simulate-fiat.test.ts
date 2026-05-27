@@ -51,7 +51,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       session_id: 'session-1',
       session_token: 'token-1',
       order_id: 'order-1',
-    })).rejects.toThrow(/PIN da wallet/i);
+    })).rejects.toMatchObject({ code: 'missing_pin' });
   });
 
   it('keeps trusted internal simulation usable for debug helpers', async () => {

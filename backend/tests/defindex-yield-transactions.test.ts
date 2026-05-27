@@ -226,7 +226,7 @@ describe('Defindex yield transaction flows', () => {
       amount: '10',
       asset_code: 'USDC',
       pin: '1234',
-    })).rejects.toThrow('Execução Defindex está desativada');
+    })).rejects.toMatchObject({ code: 'yield_execution_disabled' });
   });
 
   it.each([
@@ -236,8 +236,9 @@ describe('Defindex yield transaction flows', () => {
   ] as const)('builds, signs and submits server-prepared transaction XDR for %s when execution is enabled', async (assetCode, vaultAddress) => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    const signingSecret = `S${'A'.repeat(55)}`;
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
-    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SSECRET');
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue(signingSecret);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
       xdr: `server-prepared-${assetCode}-xdr`,
       raw: { success: true, source: 'server' },
@@ -285,7 +286,7 @@ describe('Defindex yield transaction flows', () => {
       network: 'testnet',
       invest: true,
     }));
-    expect(DefindexYieldService.signXdr).toHaveBeenCalledWith(`server-prepared-${assetCode}-xdr`, 'SSECRET');
+    expect(DefindexYieldService.signXdr).toHaveBeenCalledWith(`server-prepared-${assetCode}-xdr`, signingSecret);
     expect(sendSpy).toHaveBeenCalledWith({
       vaultAddress,
       signedXdr: `signed-${assetCode}-xdr`,
