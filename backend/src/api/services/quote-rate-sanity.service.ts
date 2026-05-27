@@ -1,4 +1,4 @@
-import { normalizeAssetCode } from '../../config/assets';
+import { getStellarNetworkName, normalizeAssetCode } from '../../config/assets';
 import { FiatRateService } from './fiat-rate.service';
 
 const DEFAULT_USD_BRL_SANITY_MIN = 3;
@@ -94,6 +94,19 @@ export function computeBrlPerUsdc(input: {
   return null;
 }
 
+function shouldSkipMarketDeviationCheck(input: {
+  sourceAssetCode: string;
+  destinationAssetCode: string;
+}): boolean {
+  const sourceCode = normalizeAssetCode(input.sourceAssetCode);
+  const destinationCode = normalizeAssetCode(input.destinationAssetCode);
+  const isBrlUsdcPair =
+    (isUsdLike(sourceCode) && isBrlLike(destinationCode)) ||
+    (isBrlLike(sourceCode) && isUsdLike(destinationCode));
+
+  return getStellarNetworkName() === 'TESTNET' && isBrlUsdcPair;
+}
+
 export async function assertSaneBrlUsdcQuote(input: {
   sourceAssetCode: string;
   destinationAssetCode: string;
@@ -113,6 +126,10 @@ export async function assertSaneBrlUsdcQuote(input: {
       `Faixa configurada: R$ ${min.toFixed(2)} a R$ ${max.toFixed(2)}. ` +
       'A liquidez da testnet está distorcida; rebalanceie o mercado BRL/USDC antes de gerar o link de confirmação.',
     );
+  }
+
+  if (shouldSkipMarketDeviationCheck(input)) {
+    return;
   }
 
   let marketQuote;

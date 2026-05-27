@@ -7,6 +7,9 @@ export interface AssetConfig {
 
 export const PUBLIC_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+export const DEFINDEX_TESTNET_USDC_ISSUER = 'GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56';
+export const DEFINDEX_TESTNET_USDC_CONTRACT = 'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU';
+export const DEFINDEX_TESTNET_USDC_VAULT = 'CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN';
 export const ETHERFUSE_TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -92,6 +95,31 @@ export function resolveConfiguredAsset(assetCode: unknown, providedIssuer?: unkn
   const code = settlementAssetCode(assetCode);
   const issuer = getAssetIssuer(code, providedIssuer);
   return code === 'XLM' ? { code } : { code, issuer };
+}
+
+export function getDefindexTestnetUsdcAsset(): AssetConfig & { code: 'USDC'; issuer: string; contract: string; vault: string } {
+  return {
+    code: 'USDC',
+    issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+    contract: DEFINDEX_TESTNET_USDC_CONTRACT,
+    vault: DEFINDEX_TESTNET_USDC_VAULT,
+  };
+}
+
+export function isDefindexTestnetUsdcAsset(input: {
+  code?: unknown;
+  issuer?: unknown;
+  contract?: unknown;
+  vault?: unknown;
+}): boolean {
+  const code = settlementAssetCode(input.code || 'USDC');
+  if (code !== 'USDC') return false;
+  const issuer = String(input.issuer || '').trim();
+  const contract = String(input.contract || '').trim();
+  const vault = String(input.vault || '').trim();
+  return issuer === DEFINDEX_TESTNET_USDC_ISSUER ||
+    contract === DEFINDEX_TESTNET_USDC_CONTRACT ||
+    vault === DEFINDEX_TESTNET_USDC_VAULT;
 }
 
 export function assetMatchesConfiguredIssuer(assetCode: unknown, assetIssuer?: unknown): boolean {

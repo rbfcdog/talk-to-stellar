@@ -654,7 +654,7 @@ function defindexErrorFields(error: unknown): Record<string, unknown> {
 }
 
 function classifyDefindexBuildFailure(error: unknown): {
-  code: 'yield_account_setup_required' | 'yield_asset_incompatible' | 'insufficient_balance' | 'yield_execution_unavailable';
+  code: 'yield_account_setup_required' | 'yield_asset_incompatible' | 'yield_asset_conversion_required' | 'yield_asset_conversion_unavailable' | 'insufficient_balance' | 'yield_execution_unavailable';
   reason: string;
   setupRequired: boolean;
 } {
@@ -760,6 +760,42 @@ function assertSufficientBalance(
       409,
     );
   }
+}
+
+function rawIssuedBalanceAmount(
+  balances: any[],
+  asset: { code: string; issuer?: string },
+): number {
+  const assetCode = normalizeAssetCode(asset.code);
+  const issuer = String(asset.issuer || '').trim();
+  const match = (Array.isArray(balances) ? balances : []).find((balance) => {
+    const balanceCode = normalizeAssetCode(balance?.asset_code || (balance?.asset_type === 'native' ? 'XLM' : ''));
+    if (assetCode !== balanceCode) return false;
+    if (assetCode === 'XLM') return true;
+    return String(balance?.asset_issuer || '').trim() === issuer;
+  });
+  return parseHumanAmountNumber(match?.balance || '0');
+}
+
+function defindexSameCodeConversionSane(input: {
+  requestedDestinationAmount: string;
+  quotedSourceAmount?: unknown;
+  quotedSourceMax?: unknown;
+  maxPremiumPct?: number;
+}): { sane: boolean; sourceAmount: number; sourceMax: number; maxAllowed: number; premiumPct: number } {
+  const destination = Math.max(0, parseHumanAmountNumber(input.requestedDestinationAmount));
+  const sourceAmount = Math.max(0, parseHumanAmountNumber(input.quotedSourceAmount));
+  const sourceMax = Math.max(sourceAmount, parseHumanAmountNumber(input.quotedSourceMax));
+  const maxPremiumPct = Number.isFinite(input.maxPremiumPct) ? Number(input.maxPremiumPct) : 2;
+  const maxAllowed = destination * (1 + Math.max(0, maxPremiumPct) / 100);
+  const premiumPct = destination > 0 ? ((sourceAmount / destination) - 1) * 100 : 0;
+  return {
+    sane: destination > 0 && sourceAmount > 0 && sourceAmount <= maxAllowed,
+    sourceAmount,
+    sourceMax,
+    maxAllowed,
+    premiumPct,
+  };
 }
 
 function balanceKey(balance: { asset_code: string; asset_issuer?: string }): string {
@@ -2738,7 +2774,7 @@ export class AnchorService {
       code: targetAsset.code || 'TESOURO',
       issuer: targetAsset.issuer || getAssetIssuer(targetAsset.code || 'TESOURO'),
     });
-    if (!trustline.success) {
+    if (trustline && !trustline.success) {
       throw apiError(trustline.error || `Could not create ${targetAsset.code || 'asset'} trustline before on-ramp.`, 409);
     }
     let finalTrustline: TrustlineResult | undefined;
@@ -3820,6 +3856,10 @@ export class AnchorService {
         const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
         enriched.vault_asset = compatibility.info;
         enriched.asset_compatible = compatibility.compatible;
+        enriched.hardcoded_asset_override = Boolean(compatibility.hardcoded_asset_override);
+        enriched.requires_wallet_asset_conversion = Boolean(compatibility.requires_wallet_asset_conversion);
+        if (compatibility.wallet_source_asset) enriched.wallet_source_asset = compatibility.wallet_source_asset;
+        if (compatibility.vault_deposit_asset) enriched.vault_deposit_asset = compatibility.vault_deposit_asset;
         if (!compatibility.compatible) {
           enriched.unavailable_reason = 'Vault asset does not match the configured wallet asset for this environment.';
           logDefindex('warn', 'status_vault_asset_incompatible', {
@@ -3830,6 +3870,15 @@ export class AnchorService {
             configured_issuer: maskLogValue(compatibility.configured_issuer),
             vault_asset_contract: maskLogValue(compatibility.info.asset_contract),
             configured_contract: maskLogValue(compatibility.configured_contract),
+          });
+        } else if (compatibility.requires_wallet_asset_conversion) {
+          enriched.conversion_note = 'This testnet vault uses a distinct USDC issuance and requires a same-currency conversion before execution.';
+          logDefindex('info', 'status_vault_asset_conversion_required', {
+            asset_code: vault.asset_code,
+            vault_address: maskLogValue(vault.vault_address),
+            network: vault.network,
+            vault_asset_issuer: maskLogValue(compatibility.info.asset_issuer),
+            configured_issuer: maskLogValue(compatibility.configured_issuer),
           });
         }
       } catch (error) {
@@ -3856,7 +3905,7 @@ export class AnchorService {
       }
       return enriched;
     }));
-    const availableVaults = vaults.filter((vault) => vault.asset_compatible !== false);
+    const availableVaults = vaults;
     logDefindex('info', 'status_success', {
       network: runtime.network,
       configured: runtime.configured,
@@ -3929,11 +3978,234 @@ export class AnchorService {
     };
   }
 
+  private static async getDefindexDepositAssetReadiness(input: {
+    requestId?: string;
+    context: SessionWalletContext;
+    action: DefindexYieldAction;
+    amount: string;
+    walletSourceAsset?: { code: string; issuer?: string };
+    vault: ReturnType<typeof DefindexYieldService.requireVault>;
+    compatibility: Awaited<ReturnType<typeof DefindexYieldService.getVaultAssetCompatibility>>;
+  }): Promise<{
+    requiresConversion: boolean;
+    conversionReady: boolean;
+    executionBlockedCode?: 'yield_asset_conversion_required' | 'yield_asset_conversion_unavailable' | 'yield_account_setup_required' | 'insufficient_balance';
+    executionBlockedReason?: string;
+    setupRequired?: boolean;
+    trustline?: TrustlineResult;
+    conversionQuote?: Record<string, unknown>;
+    vaultDepositAsset?: { code: string; issuer?: string; contract?: string };
+    walletSourceAsset?: { code: string; issuer?: string };
+  }> {
+    const vaultDepositAsset = input.compatibility.vault_deposit_asset;
+    const walletSourceAsset = input.walletSourceAsset || input.compatibility.wallet_source_asset;
+    const sourceDiffersFromVault = Boolean(vaultDepositAsset && walletSourceAsset && !sameIssuedAsset(walletSourceAsset, vaultDepositAsset));
+    const requiresConversion = input.action === 'deposit' &&
+      Boolean(vaultDepositAsset) &&
+      Boolean(walletSourceAsset) &&
+      sourceDiffersFromVault;
+
+    if (!requiresConversion || !vaultDepositAsset || !walletSourceAsset) {
+      return {
+        requiresConversion: false,
+        conversionReady: false,
+        vaultDepositAsset,
+        walletSourceAsset,
+      };
+    }
+
+    let trustline: TrustlineResult | undefined;
+    if (normalizeAssetCode(vaultDepositAsset.code) !== 'XLM') {
+      try {
+        trustline = await this.ensureIssuedAssetTrustline(input.context, {
+          code: vaultDepositAsset.code,
+          issuer: vaultDepositAsset.issuer,
+        });
+        logDefindex('info', 'prepare_vault_asset_trustline_checked', {
+          request_id: input.requestId,
+          session_id: maskLogValue(input.context.sessionId),
+          user_id: maskLogValue(input.context.userId),
+          public_key: maskLogValue(input.context.publicKey),
+          asset_code: vaultDepositAsset.code,
+          asset_issuer: maskLogValue(vaultDepositAsset.issuer),
+          existing: trustline.existing,
+          success: trustline.success,
+        });
+      } catch (error) {
+        logDefindex('warn', 'prepare_vault_asset_trustline_failed', {
+          request_id: input.requestId,
+          session_id: maskLogValue(input.context.sessionId),
+          user_id: maskLogValue(input.context.userId),
+          public_key: maskLogValue(input.context.publicKey),
+          asset_code: vaultDepositAsset.code,
+          asset_issuer: maskLogValue(vaultDepositAsset.issuer),
+          ...defindexErrorFields(error),
+        });
+        return {
+          requiresConversion: true,
+          conversionReady: false,
+          executionBlockedCode: 'yield_account_setup_required',
+          executionBlockedReason: 'Revisao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+          setupRequired: true,
+          vaultDepositAsset,
+          walletSourceAsset,
+        };
+      }
+    }
+
+    if (trustline && !trustline.success) {
+      return {
+        requiresConversion: true,
+        conversionReady: false,
+        executionBlockedCode: 'yield_account_setup_required',
+        executionBlockedReason: 'Revisao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+        setupRequired: true,
+        trustline,
+        vaultDepositAsset,
+        walletSourceAsset,
+      };
+    }
+
+    const balances = await StellarService.getAccountBalance(input.context.publicKey);
+    const sourceAmount = formatDecimalAmount(parseHumanAmountNumber(input.amount));
+    const sourceAvailable = rawIssuedBalanceAmount(balances, walletSourceAsset);
+    if (sourceAvailable + 0.0000001 < parseHumanAmountNumber(sourceAmount)) {
+      return {
+        requiresConversion: true,
+        conversionReady: false,
+        executionBlockedCode: 'insufficient_balance',
+        executionBlockedReason: 'Revisao preparada, mas o saldo disponivel nao e suficiente para converter e confirmar este valor.',
+        setupRequired: false,
+        trustline,
+        vaultDepositAsset,
+        walletSourceAsset,
+        conversionQuote: {
+          conversion_mode: 'strict_send_source_amount',
+          source_asset: walletSourceAsset,
+          destination_asset: vaultDepositAsset,
+          source_amount: sourceAmount,
+          source_available: formatDecimalAmount(sourceAvailable),
+        },
+      };
+    }
+
+    try {
+      const quote = await StellarService.quoteStrictSendConversion({
+        sourcePublicKey: input.context.publicKey,
+        destination: input.context.publicKey,
+        sourceAsset: walletSourceAsset,
+        sourceAmount,
+        destAsset: vaultDepositAsset,
+      });
+      const conversionQuote = {
+        conversion_mode: 'strict_send_source_amount',
+        source_asset: walletSourceAsset,
+        destination_asset: vaultDepositAsset,
+        source_amount: quote.sourceAmount,
+        effective_source_amount: quote.effectiveSourceAmount,
+        destination_amount: quote.destinationAmount,
+        destination_min: quote.destinationMin,
+        source_available: formatDecimalAmount(sourceAvailable),
+        route_sane: true,
+        path: quote.path,
+      };
+
+      if (parseHumanAmountNumber(quote.destinationAmount) <= 0) {
+        logDefindex('warn', 'prepare_vault_asset_conversion_unsafe', {
+          request_id: input.requestId,
+          session_id: maskLogValue(input.context.sessionId),
+          user_id: maskLogValue(input.context.userId),
+          public_key: maskLogValue(input.context.publicKey),
+          asset_code: input.vault.asset_code,
+          vault_address: maskLogValue(input.vault.vault_address),
+          source_amount: sourceAmount,
+          destination_amount: quote.destinationAmount,
+          source_available: formatDecimalAmount(sourceAvailable),
+        });
+        return {
+          requiresConversion: true,
+          conversionReady: false,
+          executionBlockedCode: 'yield_asset_conversion_unavailable',
+          executionBlockedReason: 'Revisao preparada. A rota para converter o saldo escolhido para esta aplicacao nao retornou valor suficiente agora.',
+          setupRequired: false,
+          trustline,
+          vaultDepositAsset,
+          walletSourceAsset,
+          conversionQuote,
+        };
+      }
+
+      return {
+        requiresConversion: true,
+        conversionReady: true,
+        trustline,
+        vaultDepositAsset,
+        walletSourceAsset,
+        conversionQuote,
+      };
+    } catch (error) {
+      logDefindex('warn', 'prepare_vault_asset_conversion_quote_failed', {
+        request_id: input.requestId,
+        session_id: maskLogValue(input.context.sessionId),
+        user_id: maskLogValue(input.context.userId),
+        public_key: maskLogValue(input.context.publicKey),
+        asset_code: input.vault.asset_code,
+        vault_address: maskLogValue(input.vault.vault_address),
+        source_amount: sourceAmount,
+        ...defindexErrorFields(error),
+      });
+      return {
+        requiresConversion: true,
+        conversionReady: false,
+        executionBlockedCode: 'yield_asset_conversion_unavailable',
+        executionBlockedReason: 'Revisao preparada. A rota para converter o saldo escolhido para esta aplicacao nao esta disponivel agora.',
+        setupRequired: false,
+        trustline,
+        vaultDepositAsset,
+        walletSourceAsset,
+      };
+    }
+  }
+
+  private static resolveDefindexSourceAsset(input: {
+    sourceAssetCode?: unknown;
+    sourceAssetIssuer?: unknown;
+    fallbackAssetCode?: unknown;
+  }): { code: string; issuer?: string } {
+    const code = normalizeAssetCode(coalesceString(input.sourceAssetCode, input.fallbackAssetCode, 'USDC'));
+    return resolveConfiguredAsset(code, input.sourceAssetIssuer);
+  }
+
+  private static async buildDefindexVaultAction(input: {
+    action: DefindexYieldAction;
+    vault: ReturnType<typeof DefindexYieldService.requireVault>;
+    publicKey: string;
+    amount: string;
+    invest?: boolean;
+    slippageBps: number;
+  }): Promise<{ amount: string; amountUnits: number; prepared: { xdr: string; raw: any } }> {
+    const amountUnits = DefindexYieldService.amountToContractUnits(input.amount);
+    const prepared = await DefindexYieldService.buildVaultAction({
+      action: input.action,
+      vaultAddress: input.vault.vault_address,
+      caller: input.publicKey,
+      amountUnits,
+      network: input.vault.network,
+      invest: input.invest !== false,
+      slippageBps: Number.isFinite(input.slippageBps) ? input.slippageBps : 100,
+    });
+    return { amount: input.amount, amountUnits, prepared };
+  }
+
   static async prepareDefindexYieldForSession(input: RampSessionInput & {
     action?: string;
     amount?: string;
     asset_code?: string;
     assetCode?: string;
+    source_asset_code?: string;
+    sourceAssetCode?: string;
+    source_asset_issuer?: string;
+    sourceAssetIssuer?: string;
     vault_address?: string;
     vaultAddress?: string;
     invest?: boolean;
@@ -3952,6 +4224,9 @@ export class AnchorService {
     execution_blocked_reason?: string;
     execution_blocked_code?: string;
     setup_required?: boolean;
+    conversion_required?: boolean;
+    asset_conversion?: Record<string, unknown>;
+    trustline?: TrustlineResult;
     xdr?: string;
     raw?: unknown;
   }> {
@@ -3962,6 +4237,11 @@ export class AnchorService {
       : 'deposit';
     const amount = normalizeAmount(input.amount, 'amount');
     const assetCode = coalesceString(input.asset_code, input.assetCode);
+    const sourceAsset = this.resolveDefindexSourceAsset({
+      sourceAssetCode: coalesceString(input.source_asset_code, input.sourceAssetCode),
+      sourceAssetIssuer: coalesceString(input.source_asset_issuer, input.sourceAssetIssuer),
+      fallbackAssetCode: assetCode || 'USDC',
+    });
     const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
     logDefindex('info', 'prepare_start', {
       request_id: defindexRequestId(input),
@@ -3971,6 +4251,8 @@ export class AnchorService {
       action,
       amount,
       asset_code: assetCode || 'USDC',
+      source_asset_code: sourceAsset.code,
+      source_asset_issuer: maskLogValue(sourceAsset.issuer),
       requested_vault: maskLogValue(requestedVault),
       network: runtime.network,
       execution_enabled: runtime.execution_enabled,
@@ -4047,17 +4329,85 @@ export class AnchorService {
         setup_required: false,
       };
     }
+    const reviewWithVaultAsset = {
+      ...reviewResponse,
+      vault: {
+        ...reviewResponse.vault,
+        vault_asset: compatibility.info,
+        hardcoded_asset_override: Boolean(compatibility.hardcoded_asset_override),
+        requires_wallet_asset_conversion: Boolean(compatibility.requires_wallet_asset_conversion),
+        wallet_source_asset: sourceAsset,
+        ...(compatibility.vault_deposit_asset ? { vault_deposit_asset: compatibility.vault_deposit_asset } : {}),
+      },
+    };
+    const depositReadiness = await this.getDefindexDepositAssetReadiness({
+      requestId: defindexRequestId(input),
+      context,
+      action,
+      amount,
+      walletSourceAsset: sourceAsset,
+      vault,
+      compatibility,
+    });
+    if (depositReadiness.requiresConversion && depositReadiness.executionBlockedCode) {
+      logDefindex('warn', 'prepare_vault_asset_conversion_blocked', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        blocked_code: depositReadiness.executionBlockedCode,
+      });
+      return {
+        ...reviewWithVaultAsset,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: depositReadiness.executionBlockedReason,
+        execution_blocked_code: depositReadiness.executionBlockedCode,
+        setup_required: Boolean(depositReadiness.setupRequired),
+        conversion_required: true,
+        ...(depositReadiness.trustline ? { trustline: depositReadiness.trustline } : {}),
+        ...(depositReadiness.conversionQuote ? { asset_conversion: depositReadiness.conversionQuote } : {}),
+      };
+    }
+    if (depositReadiness.requiresConversion && depositReadiness.conversionReady) {
+      logDefindex('info', 'prepare_vault_asset_conversion_ready', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+      });
+      return {
+        ...reviewWithVaultAsset,
+        review_only: false,
+        execution_ready: true,
+        conversion_required: true,
+        ...(depositReadiness.trustline ? { trustline: depositReadiness.trustline } : {}),
+        ...(depositReadiness.conversionQuote ? { asset_conversion: depositReadiness.conversionQuote } : {}),
+      };
+    }
     let prepared: { xdr: string; raw: any };
     try {
-      prepared = await DefindexYieldService.buildVaultAction({
+      const built = await this.buildDefindexVaultAction({
         action,
-        vaultAddress: vault.vault_address,
-        caller: context.publicKey,
-        amountUnits,
-        network: vault.network,
+        vault,
+        publicKey: context.publicKey,
+        amount,
         invest: input.invest !== false,
         slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
       });
+      prepared = built.prepared;
     } catch (error) {
       const block = classifyDefindexBuildFailure(error);
       logDefindex('warn', 'prepare_build_failed', {
@@ -4077,7 +4427,7 @@ export class AnchorService {
         ...defindexErrorFields(error),
       });
       return {
-        ...reviewResponse,
+        ...reviewWithVaultAsset,
         review_only: true,
         execution_ready: false,
         execution_blocked_reason: block.reason,
@@ -4098,13 +4448,14 @@ export class AnchorService {
       network: vault.network,
       has_xdr: Boolean(prepared.xdr),
     });
-	    return {
-	      ...reviewResponse,
-	      review_only: false,
-	      execution_ready: true,
-	      xdr: prepared.xdr,
-	      raw: prepared.raw,
-	    };
+    return {
+      ...reviewWithVaultAsset,
+      review_only: false,
+      execution_ready: true,
+      ...(depositReadiness.requiresConversion ? { conversion_required: false } : {}),
+      xdr: prepared.xdr,
+      raw: prepared.raw,
+    };
   }
 
   static async executeDefindexYieldForSession(input: RampSessionInput & {
@@ -4112,6 +4463,10 @@ export class AnchorService {
     amount?: string;
     asset_code?: string;
     assetCode?: string;
+    source_asset_code?: string;
+    sourceAssetCode?: string;
+    source_asset_issuer?: string;
+    sourceAssetIssuer?: string;
     vault_address?: string;
     vaultAddress?: string;
     invest?: boolean;
@@ -4171,14 +4526,134 @@ export class AnchorService {
       });
       throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
     }
-    const prepared = await this.prepareDefindexYieldForSession(input);
+    let prepared = await this.prepareDefindexYieldForSession(input);
     const action = prepared.action;
-    const amount = prepared.amount;
-    const amountUnits = prepared.amount_units;
+    let amount = prepared.amount;
+    let amountUnits = prepared.amount_units;
     const vault = DefindexYieldService.requireVault(
       coalesceString(input.asset_code, input.assetCode),
       coalesceString(input.vault_address, input.vaultAddress),
     );
+    let secret: string | undefined;
+    const readSigningSecret = async (): Promise<string> => {
+      if (secret) return secret;
+      try {
+        secret = await new VaultService(supabase).getSecret(context.vaultSecretId!);
+      } catch (error) {
+        logDefindex('warn', 'execute_secret_read_failed', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          vault_secret_id: maskLogValue(context.vaultSecretId),
+          ...defindexErrorFields(error),
+        });
+        throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+      }
+      if (!/^S[A-Z2-7]{55}$/.test(secret)) {
+        logDefindex('warn', 'execute_secret_invalid_format', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          vault_secret_id: maskLogValue(context.vaultSecretId),
+        });
+        throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+      }
+      return secret;
+    };
+    if ((prepared as any).conversion_required && prepared.execution_ready && !prepared.xdr) {
+      const conversion = (prepared as any).asset_conversion || {};
+      const sourceAsset = conversion.source_asset;
+      const destinationAsset = conversion.destination_asset;
+      const destinationAmount = coalesceString(conversion.destination_amount);
+      const sourceAmount = coalesceString(conversion.source_amount, amount);
+      const sourceMax = coalesceString(conversion.source_max, conversion.path_source_max);
+      const destinationMin = coalesceString(conversion.destination_min);
+      if (!sourceAsset || !destinationAsset || !destinationAmount || (!destinationMin && !sourceMax)) {
+        throw apiError('A revisao precisa ser preparada novamente antes da confirmacao.', 409, 'review_not_prepared');
+      }
+      const signingSecret = await readSigningSecret();
+      logDefindex('info', 'execute_vault_asset_conversion_start', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        conversion_mode: coalesceString(conversion.conversion_mode, 'strict_receive'),
+        source_amount: sourceAmount,
+        destination_amount: destinationAmount,
+        destination_min: destinationMin,
+        source_max: sourceMax,
+      });
+      const converted = destinationMin
+        ? await StellarService.submitStrictSendPaymentFromSecret({
+            sourceSecret: signingSecret,
+            destination: context.publicKey,
+            sourceAsset,
+            sourceAmount,
+            destinationAsset,
+            memoText: 'TTS DEF',
+          })
+        : await StellarService.submitStrictReceivePaymentFromSecret({
+            sourceSecret: signingSecret,
+            destination: context.publicKey,
+            sourceAsset,
+            destinationAsset,
+            destinationAmount,
+            sourceMax,
+            memoText: 'TTS DEF',
+          });
+      if (!converted.success) {
+        logDefindex('warn', 'execute_vault_asset_conversion_failed', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          action,
+          amount,
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          error: converted.error,
+        });
+        throw apiError('Nao foi possivel converter o saldo para a moeda usada nesta aplicacao agora. Tente novamente mais tarde.', 409, 'yield_asset_conversion_unavailable');
+      }
+      logDefindex('info', 'execute_vault_asset_conversion_success', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        hash: maskLogValue(converted.hash, 10, 8),
+        source_amount: (converted as any).sourceAmount || sourceAmount,
+        destination_amount: (converted as any).destinationAmount || destinationAmount,
+      });
+      await sleep(Math.max(250, Number(process.env.DEFINDEX_CONVERSION_SETTLE_MS || 1500)));
+      const convertedVaultAmount = normalizeAmount((converted as any).destinationAmount || destinationAmount, 'amount');
+      const builtAfterConversion = await this.buildDefindexVaultAction({
+        action,
+        vault,
+        publicKey: context.publicKey,
+        amount: convertedVaultAmount,
+        invest: input.invest !== false,
+        slippageBps: Number(coalesceString(input.slippage_bps, input.slippageBps, 100)),
+      });
+      amount = builtAfterConversion.amount;
+      amountUnits = builtAfterConversion.amountUnits;
+      prepared = {
+        ...prepared,
+        amount,
+        amount_units: amountUnits,
+        xdr: builtAfterConversion.prepared.xdr,
+        raw: builtAfterConversion.prepared.raw,
+      };
+    }
     if (!prepared.execution_ready || !prepared.xdr) {
       const blockedCode = coalesceString((prepared as any).execution_blocked_code, 'yield_execution_unavailable');
       const blockedReason = coalesceString(
@@ -4202,35 +4677,11 @@ export class AnchorService {
       });
       throw apiError(blockedReason, 409, blockedCode);
     }
-
-    let secret: string;
-    try {
-      secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    } catch (error) {
-      logDefindex('warn', 'execute_secret_read_failed', {
-        request_id: defindexRequestId(input),
-        session_id: maskLogValue(context.sessionId),
-        user_id: maskLogValue(context.userId),
-        public_key: maskLogValue(context.publicKey),
-        vault_secret_id: maskLogValue(context.vaultSecretId),
-        ...defindexErrorFields(error),
-      });
-      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
-    }
-    if (!/^S[A-Z2-7]{55}$/.test(secret)) {
-      logDefindex('warn', 'execute_secret_invalid_format', {
-        request_id: defindexRequestId(input),
-        session_id: maskLogValue(context.sessionId),
-        user_id: maskLogValue(context.userId),
-        public_key: maskLogValue(context.publicKey),
-        vault_secret_id: maskLogValue(context.vaultSecretId),
-      });
-      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
-    }
+    const signingSecret = await readSigningSecret();
 
     let signedXdr: string;
     try {
-      signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
+      signedXdr = DefindexYieldService.signXdr(prepared.xdr, signingSecret);
     } catch (error) {
       logDefindex('warn', 'execute_sign_failed', {
         request_id: defindexRequestId(input),

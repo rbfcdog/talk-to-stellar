@@ -18,7 +18,7 @@ describe('Agent conversion UX', () => {
     jest.clearAllMocks();
   });
 
-  it('does not expose routing internals when a conversion quote fails', async () => {
+  it('does not send USDC to BRL conversion failures to PIX or expose routing internals', async () => {
     const repository = {
       saveMessage: jest.fn().mockResolvedValue(undefined),
       saveState: jest.fn().mockResolvedValue(undefined),
@@ -57,13 +57,84 @@ describe('Agent conversion UX', () => {
       success: false,
     });
 
-    expect(result.success).toBe(true);
-    expect(result.response_message).toContain('saída por PIX');
-    expect(result.response_message).toContain('/pix-off?');
+    expect(result.success).toBe(false);
+    expect(result.response_message).toContain('rota segura');
+    expect(result.response_message).not.toContain('saída por PIX');
+    expect(result.response_message).not.toContain('/pix-off?');
     expect(result.response_message).not.toContain('source_issuer');
     expect(result.response_message).not.toContain('dest_issuer');
     expect(result.response_message).not.toMatch(/trustline|liquidez|XLM|Horizon|XDR/i);
     expect(repository.saveMessage).toHaveBeenCalledWith('session-1', 'assistant', result.response_message);
+  });
+
+  it('quotes USDC to BRL as an internal TESOURO conversion and prepares confirmation', async () => {
+    const repository = {
+      saveMessage: jest.fn().mockResolvedValue(undefined),
+      saveState: jest.fn().mockResolvedValue(undefined),
+    };
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'system prompt') as any;
+    graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({
+      sourceAmount: '10',
+      sourceAssetCode: 'USDC',
+      destAssetCode: 'BRL',
+      needs_clarification: false,
+      clarification_question: '',
+    });
+    graph.resolveWalletAssetIssuer = jest
+      .fn()
+      .mockResolvedValueOnce('GUSDC')
+      .mockResolvedValueOnce('GTESOURO');
+
+    executeToolMock
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        quote: {
+          sourceAmount: '10',
+          destinationAmount: '43.8720000',
+          sourceAsset: { code: 'USDC', issuer: 'GUSDC' },
+          destinationAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
+          path: [],
+        },
+        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
+        message: 'Rota mais otimizada agora.',
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        url: 'https://app.example.com/confirm-conversion?token=abc',
+      }));
+
+    const result = await graph.handleAssetConversion({
+      session_id: 'session-3',
+      session_data: {
+        user_id: 'user-1',
+        public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      },
+      messages: [],
+      current_input: 'converter 10 usdc para brl',
+      detected_intent: IntentType.CONVERSION,
+      action_type: ActionType.CONVERT_ASSETS,
+      action_params: {},
+      response_message: '',
+      success: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeToolMock).toHaveBeenNthCalledWith(1, 'get_best_route', expect.objectContaining({
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+      source_amount: '10',
+    }));
+    expect(executeToolMock).toHaveBeenNthCalledWith(2, 'prepare_conversion_confirmation', expect.objectContaining({
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+      source_amount: '10',
+      dest_amount: '43.8720000',
+    }));
+    expect(result.response_message).toContain('US$ 10.00');
+    expect(result.response_message).toContain('R$ 43.87');
+    expect(result.response_message).toContain('/confirm-conversion?');
+    expect(result.response_message).not.toContain('/pix-off?');
+    expect(result.response_message).not.toMatch(/TESOURO|issuer|trustline|Horizon|XDR/i);
   });
 
   it('opens the visual conversion interface when conversion details are incomplete', async () => {
