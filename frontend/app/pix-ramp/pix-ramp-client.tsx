@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { AccountStatusCard } from "@/components/shared/account-status";
+import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -2285,6 +2287,13 @@ export default function PixRampClient({
   const successTransaction = rampMode === "offramp"
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
     : order;
+  const pixChatPrompt = rampMode === "onramp"
+    ? language === "pt-BR"
+      ? `acompanhar PIX de entrada de ${formatMoney(amountBrl)}`
+      : `follow PIX money in for ${formatMoney(amountBrl)}`
+    : language === "pt-BR"
+      ? `acompanhar retirada PIX de ${offRampDisplayAmount}`
+      : `follow PIX withdrawal for ${offRampDisplayAmount}`;
   const onRampReceiptUrl = String(
     statusPayload?.receipt_url ||
     statusPayload?.transaction?.receipt_url ||
@@ -2300,12 +2309,15 @@ export default function PixRampClient({
       <div className="mx-auto max-w-6xl">
         <header className="overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
-              rampMode === "onramp"
-                ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
-                : "border-tts-gold bg-tts-gold-bg text-tts-gold"
-            }`}>
-              PIX
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className={`inline-flex w-fit rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
+                rampMode === "onramp"
+                  ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
+                  : "border-tts-gold bg-tts-gold-bg text-tts-gold"
+              }`}>
+                PIX
+              </div>
+              <ReturnToChat prompt={pixChatPrompt} className="bg-tts-bg/80" />
             </div>
             <div className="space-y-4">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-surface md:text-6xl">
@@ -2436,6 +2448,13 @@ export default function PixRampClient({
 	                  )}
                 </div>
             </div>
+            <AccountStatusCard
+              state={!sessionReady ? "loading" : hasSession ? "connected" : "signed-out"}
+              ctaHref={loginHref || "/login"}
+              detail={hasSession ? L("Sua conta está pronta para revisar este PIX.", "Your account is ready to review this PIX.") : undefined}
+              compact
+              className="bg-tts-bg/70"
+            />
           </section>
         </header>
 

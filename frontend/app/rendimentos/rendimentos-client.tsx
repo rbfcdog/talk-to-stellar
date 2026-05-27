@@ -27,6 +27,8 @@ import {
   Sparkles,
   WalletCards,
 } from "lucide-react";
+import { AccountStatusCard } from "@/components/shared/account-status";
+import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 
@@ -249,13 +251,6 @@ function moneyProfile(code?: string): MoneyProfile {
 
 function optionCode(option?: YieldOption | null) {
   return String(option?.display_asset_code || option?.asset_code || "").trim().toUpperCase();
-}
-
-function shortAccount(value?: string) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (raw.length <= 14) return raw;
-  return `${raw.slice(0, 6)}...${raw.slice(-5)}`;
 }
 
 function optionTitle(option: YieldOption | null | undefined, language: AppLanguage) {
@@ -499,6 +494,9 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     from: "yield",
     lang: language,
   }), [amount, bestOptionCode, safeSelectedCode, language]);
+  const chatPrompt = language === "pt-BR"
+    ? `revisar rendimento de ${amount || "0"} ${profileName(selectedProfile, language)}`
+    : `review yield for ${amount || "0"} ${profileName(selectedProfile, language)}`;
   const amountPresets = useMemo(() => {
     const short = selectedProfile.short;
     if (short === "BRL") return ["50", "100", "500", "1000"];
@@ -717,7 +715,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
+          <div className="grid gap-2 sm:grid-cols-3 md:min-w-[480px]">
+            <ReturnToChat prompt={chatPrompt} />
             <button
               type="button"
               onClick={() => setShowTutorial((current) => !current)}
@@ -776,6 +775,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           configured={configured}
           confirmationEnabled={confirmationEnabled}
           balances={balances}
+          accountPublicKey={accountPublicKey}
           options={options}
           selectedOption={selectedOption}
         />
@@ -1153,6 +1153,7 @@ function BankOverviewPanel({
   configured,
   confirmationEnabled,
   balances,
+  accountPublicKey,
   options,
   selectedOption,
 }: {
@@ -1161,20 +1162,13 @@ function BankOverviewPanel({
   configured: boolean;
   confirmationEnabled: boolean;
   balances: BalanceLine[];
+  accountPublicKey: string;
   options: YieldOption[];
   selectedOption: YieldOption | null;
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const selectedProfile = moneyProfile(optionCode(selectedOption));
-  const accountValue = sessionLoading
-    ? L("Verificando", "Checking")
-    : authenticated
-      ? L("Conectada", "Connected")
-      : L("Entrar", "Sign in");
-  const accountDetail = authenticated
-    ? L("Saldos usados só depois de revisão.", "Balances used only after review.")
-    : L("Entre para ver saldos reais.", "Sign in to see real balances.");
   const setupValue = configured && options.length
     ? `${options.length}`
     : L("Em preparo", "Setup");
@@ -1196,12 +1190,12 @@ function BankOverviewPanel({
 
   return (
     <section className="grid gap-3 md:grid-cols-4" aria-label={L("Resumo bancário", "Banking summary")}>
-      <BankStatusCard
-        icon={<WalletCards className="h-5 w-5" aria-hidden="true" />}
-        label={L("Conta", "Account")}
-        value={accountValue}
-        detail={accountDetail}
-        tone={authenticated ? "confirm" : "warn"}
+      <AccountStatusCard
+        state={sessionLoading ? "loading" : authenticated ? "connected" : "signed-out"}
+        accountId={accountPublicKey}
+        ctaHref="/login?next=/yield"
+        detail={authenticated ? L("Saldos entram apenas na revisão escolhida.", "Balances are used only in the selected review.") : undefined}
+        compact
       />
       <BankStatusCard
         icon={<PiggyBank className="h-5 w-5" aria-hidden="true" />}
@@ -1306,19 +1300,18 @@ function AccountPanel({
               ? L("Verificando sua sessão, saldos disponíveis e posições antes de liberar a revisão.", "Checking your session, available balances, and positions before enabling the review.")
               : authenticated
               ? L("Toque no saldo que você quer usar. A próxima etapa recebe essa moeda, mostra APY estimado e calcula a simulação.", "Tap the balance you want to use. The next step receives that currency, shows estimated APY, and calculates the preview.")
-              : L("Entre para carregar saldos reais. Sem conta conectada, a tela fica apenas em consulta e não prepara confirmação.", "Sign in to load real balances. Without a connected account, the screen remains view-only and does not prepare confirmation.")}
+              : L("Entre para carregar saldos reais. Antes de entrar, a tela fica apenas em consulta e não prepara confirmação.", "Sign in to load real balances. Before signing in, the screen remains view-only and does not prepare confirmation.")}
           </p>
         </div>
-        <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-          {sessionLoading ? L("Carregando", "Loading") : authenticated ? L("Ativa", "Active") : L("Entrar", "Sign in")}
-        </span>
       </div>
 
-      {accountPublicKey ? (
-        <p className="mt-3 border border-tts-border bg-tts-bg px-3 py-2 text-xs font-bold text-tts-muted">
-          {L("ID da conta", "Account ID")}: {shortAccount(accountPublicKey)}
-        </p>
-      ) : null}
+      <AccountStatusCard
+        state={sessionLoading ? "loading" : authenticated ? "connected" : "signed-out"}
+        accountId={accountPublicKey}
+        ctaHref="/login?next=/yield"
+        compact
+        className="mt-4"
+      />
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <MiniStat label={L("Saldos", "Balances")} value={sessionLoading ? L("Carregando", "Loading") : String(balanceItems.length)} detail={L("na carteira", "in account")} />

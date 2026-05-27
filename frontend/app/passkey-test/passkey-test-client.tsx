@@ -19,6 +19,8 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
+import { AccountStatusCard } from "@/components/shared/account-status";
+import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { getClientSession, saveClientSession } from "@/lib/session";
 
 type SessionSnapshot = {
@@ -208,7 +210,7 @@ export default function PasskeyTestClient() {
       setStatusState({
         loading: false,
         message: "",
-        error: "Entre na conta antes de consultar o status OpenZeppelin.",
+        error: "Entre na conta antes de consultar o status de segurança avançada.",
       });
       return;
     }
@@ -217,7 +219,7 @@ export default function PasskeyTestClient() {
     try {
       const payload = await postPasskey("smart-account-status", {});
       setSmartStatus(payload);
-      setStatusState({ loading: false, message: "Status OpenZeppelin atualizado.", error: "" });
+      setStatusState({ loading: false, message: "Status de seguranca avancada atualizado.", error: "" });
     } catch (error) {
       setStatusState({ loading: false, message: "", error: passkeyErrorMessage(error) });
     }
@@ -242,7 +244,7 @@ export default function PasskeyTestClient() {
 
       setLastRegistration(completePayload);
       setIdentity(String(initPayload.userId || identity || ""));
-      setRegisterState({ loading: false, message: "Passkey registrada e metadata P-256 salvo.", error: "" });
+      setRegisterState({ loading: false, message: "Passkey registrada e dados técnicos salvos.", error: "" });
       await refreshSmartStatus(true);
     } catch (error) {
       setRegisterState({ loading: false, message: "", error: passkeyErrorMessage(error) });
@@ -321,18 +323,19 @@ export default function PasskeyTestClient() {
         <header className="border-b border-tts-border pb-5">
           <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Diagnóstico de passkey
+            Teste de biometria
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h1 className="max-w-3xl text-3xl font-black tracking-tight md:text-4xl">
-                Testar passkey e OpenZeppelin
+                Entrar com biometria
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-tts-muted md:text-base">
-                Use esta tela para validar navegador, sessão, registro biométrico e metadata OpenZeppelin. Quando der erro, a própria tela mostra a causa provável e o próximo passo.
+                Use esta tela para validar se este aparelho consegue registrar e usar biometria na sua conta. Se algo falhar, a tela mostra a causa provável e o próximo passo.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[360px]">
+            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
+              <ReturnToChat prompt="testar entrada com biometria" />
               <ActionButton
                 variant="secondary"
                 onClick={refreshSession}
@@ -364,11 +367,11 @@ export default function PasskeyTestClient() {
             detail={browser.checked ? (browser.platformAuthenticator ? "Disponível neste aparelho." : "Use passkey externa ou outro aparelho.") : "Verificando biometria."}
             icon={<KeyRound className="h-5 w-5" aria-hidden="true" />}
           />
-          <ReadinessCard
-            ready={session.authenticated}
-            title="Conta"
-            detail={session.authenticated ? "Sessão conectada para registrar." : "Entre com PIN antes de registrar."}
-            icon={<LogIn className="h-5 w-5" aria-hidden="true" />}
+          <AccountStatusCard
+            state={session.authenticated ? "connected" : "signed-out"}
+            ctaHref="/login?next=/passkey-test"
+            detail={session.authenticated ? "Sessão conectada para registrar biometria." : "Entre com PIN antes de registrar biometria."}
+            compact
           />
           <ReadinessCard
             ready={readinessLabel === "ready"}
@@ -431,10 +434,10 @@ export default function PasskeyTestClient() {
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-black">
                     <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                    2. OpenZeppelin
+                    2. Segurança avançada
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    Mostra se a passkey já gerou metadata P-256 e se o modo OpenZeppelin está apenas salvo como metadata ou pronto para execução.
+                    Mostra se a biometria já gerou os dados técnicos necessários e se o modo avançado está apenas salvo como diagnóstico ou pronto para teste.
                   </p>
                 </div>
                 <ActionButton
@@ -457,16 +460,16 @@ export default function PasskeyTestClient() {
 
               <div className={`mt-5 border p-4 text-sm leading-6 ${smartAccountReady ? "border-tts-confirm bg-tts-confirm/10 text-tts-deep" : "border-tts-gold bg-tts-gold-bg text-tts-muted"}`}>
                 <p className="font-black text-tts-deep">
-                  {smartAccountReady ? "OpenZeppelin pronto para teste" : "OpenZeppelin ainda não está pronto para execução"}
+                  {smartAccountReady ? "Segurança avançada pronta para teste" : "Segurança avançada ainda não está pronta para execução"}
                 </p>
                 <p className="mt-1">
                   {smartAccountReady
-                    ? "O backend tem modo smart account ativo e endereço do verificador configurado."
-                    : "A tela ainda pode testar passkey e salvar metadata. Para execução on-chain, configure PASSKEY_SMART_ACCOUNT_ENABLED e PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS."}
+                    ? "O backend tem modo avançado ativo e endereço do verificador configurado."
+                    : "A tela ainda pode testar biometria e salvar metadados. Para execução on-chain, configure PASSKEY_SMART_ACCOUNT_ENABLED e PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS."}
                 </p>
               </div>
 
-              <Feedback label="Status OpenZeppelin" state={statusState} />
+              <Feedback label="Status de segurança avançada" state={statusState} />
             </section>
 
             {passkeys.length ? (
