@@ -822,22 +822,40 @@ function YieldTutorialPanel({
     {
       title: L("1. Conta", "1. Account"),
       body: authenticated
-        ? L("Conta conectada. Seus saldos entram na revisão.", "Account connected. Your balances feed the review.")
-        : L("Entre para carregar saldos e preparar uma revisão real.", "Sign in to load balances and prepare a real review."),
+        ? L(
+            "A tela usa a conta conectada para buscar seus saldos disponíveis e mostrar quanto já está aplicado. Você escolhe o saldo de origem antes de qualquer simulação.",
+            "The screen uses the connected account to load available balances and show what is already earning. You choose the source balance before any preview."
+          )
+        : L(
+            "Entre na conta para a tela carregar saldos reais, posição rendendo e limites de revisão. Sem login, nada é preparado para confirmação.",
+            "Sign in so the screen can load real balances, earning position, and review limits. Without sign-in, nothing is prepared for confirmation."
+          ),
       ready: authenticated,
     },
     {
       title: L("2. Aplicação", "2. Deposit"),
       body: hasOptions
-        ? L(`Opção em destaque: ${profileName(bestProfile, language)}.`, `Highlighted option: ${profileName(bestProfile, language)}.`)
-        : L("Ainda não há opção de rendimento configurada.", "No yield option is configured yet."),
+        ? L(
+            `Opção em destaque: ${profileName(bestProfile, language)}. Ela aparece porque já tem uma configuração de rendimento pronta para simular taxa, projeção e revisão.`,
+            `Highlighted option: ${profileName(bestProfile, language)}. It appears because it already has an earning setup ready to preview rate, projection, and review.`
+          )
+        : L(
+            "Ainda não há opção de rendimento configurada. A tela continua segura para consulta, mas não prepara aplicação até existir uma opção ativa.",
+            "No earning option is configured yet. The screen remains safe for viewing, but it will not prepare a deposit until an active option exists."
+          ),
       ready: hasOptions,
     },
     {
       title: L("3. Revisão", "3. Review"),
       body: confirmationEnabled
-        ? L("Depois da simulação, o PIN conclui a operação.", "After the preview, the PIN completes the operation.")
-        : L("Modo revisão: você simula e valida sem movimentar saldo.", "Review mode: you preview and validate without moving balance."),
+        ? L(
+            "Depois da simulação, a revisão mostra operação, valor, taxa e projeção. Só o botão final com PIN movimenta saldo.",
+            "After the preview, the review shows operation, amount, rate, and projection. Only the final PIN button moves balance."
+          )
+        : L(
+            "Modo revisão: você consegue testar valor, taxa e projeção sem movimentar saldo. É útil para validar o fluxo antes de ligar execução.",
+            "Review mode: you can test amount, rate, and projection without moving balance. It is useful for validating the flow before enabling execution."
+          ),
       ready: confirmationEnabled,
     },
   ];
@@ -852,8 +870,8 @@ function YieldTutorialPanel({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
             {L(
-              "O fluxo é parecido com banco: escolha o saldo, informe o valor, veja taxa e projeção, depois gere a revisão antes de qualquer PIN.",
-              "The flow is bank-like: choose the balance, enter the amount, see rate and projection, then generate the review before any PIN."
+              "Esta tela organiza rendimento como um banco: primeiro identifica a conta conectada, depois separa o saldo que você quer aplicar ou resgatar, calcula uma projeção com a taxa disponível e só então monta uma revisão. O PIN fica separado no fim para evitar confirmação acidental.",
+              "This screen organizes earning like a bank: first it identifies the connected account, then separates the balance you want to deposit or withdraw, calculates a projection with the available rate, and only then builds a review. The PIN stays separate at the end to avoid accidental confirmation."
             )}
           </p>
         </div>
@@ -960,23 +978,38 @@ function YieldStepHelp({ step }: { step: YieldStep }) {
     wallet: {
       title: L("Carteira", "Balances"),
       body: L(
-        "Aqui você só escolhe de qual saldo quer partir. É como selecionar a conta de origem no banco. Depois disso, a próxima etapa monta a aplicação.",
-        "Here you only choose which balance to start from. It works like selecting the source account in a bank. The next step builds the deposit."
+        "Aqui você vê a conta conectada e escolhe qual saldo será usado no plano. É a etapa de origem: ela não aplica, não resgata e não pede PIN.",
+        "Here you see the connected account and choose which balance will be used in the plan. This is the source step: it does not deposit, withdraw, or ask for a PIN."
       ),
+      details: [
+        L("Use quando quiser conferir se a conta certa está conectada.", "Use it when you want to check that the right account is connected."),
+        L("Toque em uma moeda para levar esse saldo para a etapa de aplicação.", "Tap a currency to take that balance to the deposit step."),
+        L("Se o saldo não aparecer, atualize a tela antes de montar a revisão.", "If the balance does not appear, refresh before building the review."),
+      ],
     },
     plan: {
       title: L("Aplicar ou resgatar", "Deposit or withdraw"),
       body: L(
-        "Aqui ficam valor, ação e taxa. A tela ainda não confirma nada: ela prepara uma simulação clara para você revisar.",
-        "This is where amount, action, and rate live. The screen does not confirm anything yet: it prepares a clear preview for review."
+        "Aqui você define o que quer fazer com o saldo: aplicar para render ou resgatar de volta. A tela mostra taxa, posição atual e projeção antes de preparar a revisão.",
+        "Here you define what to do with the balance: deposit to earn or withdraw back. The screen shows rate, current position, and projection before preparing the review."
       ),
+      details: [
+        L("Informe o valor ou use os atalhos para testar cenários rápidos.", "Enter the amount or use shortcuts to test quick scenarios."),
+        L("A taxa exibida vem da opção disponível para a moeda selecionada.", "The displayed rate comes from the available option for the selected currency."),
+        L("Preparar revisão valida os dados, mas ainda não confirma a operação.", "Preparing the review validates the data, but still does not confirm the operation."),
+      ],
     },
     review: {
       title: L("Revisão segura", "Secure review"),
       body: L(
-        "Aqui você confere operação, valor, taxa e projeção. Se o ambiente estiver com PIN ativo, confirmar movimenta saldo; em modo revisão, só valida a preparação.",
-        "Here you check operation, amount, rate, and projection. If PIN is active, confirming moves balance; in review mode, it only validates preparation."
+        "Aqui você confere a operação montada antes do passo final. A revisão separa valor, taxa, projeção e segurança para ficar claro o que será confirmado.",
+        "Here you check the assembled operation before the final step. The review separates amount, rate, projection, and security so it is clear what will be confirmed."
       ),
+      details: [
+        L("Se algo estiver errado, volte para Carteira ou Aplicar antes de confirmar.", "If something is wrong, go back to Balances or Deposit before confirming."),
+        L("Com execução ligada, o PIN é o único passo que movimenta saldo.", "When execution is enabled, the PIN is the only step that moves balance."),
+        L("Em modo revisão, a tela valida o fluxo sem tirar dinheiro da conta.", "In review mode, the screen validates the flow without moving money from the account."),
+      ],
     },
   }[step];
 
@@ -987,6 +1020,13 @@ function YieldStepHelp({ step }: { step: YieldStep }) {
         {copy.title}
       </h2>
       <p className="mt-2 text-tts-muted">{copy.body}</p>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {copy.details.map((detail) => (
+          <p key={detail} className="border border-tts-border bg-tts-surface p-3 text-xs leading-5 text-tts-muted">
+            {detail}
+          </p>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1147,10 +1187,10 @@ function AccountPanel({
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {sessionLoading
-              ? L("Verificando sua sessão e saldos.", "Checking your session and balances.")
+              ? L("Verificando sua sessão, saldos disponíveis e posição rendendo antes de liberar a revisão.", "Checking your session, available balances, and earning position before enabling the review.")
               : authenticated
-              ? L("Toque em um saldo para montar uma revisão.", "Tap a balance to build a review.")
-              : L("Entre para ver saldos reais e preparar uma aplicação.", "Sign in to see real balances and prepare a deposit.")}
+              ? L("Toque no saldo que você quer usar. A próxima etapa recebe essa moeda, mostra taxa disponível e calcula a simulação.", "Tap the balance you want to use. The next step receives that currency, shows the available rate, and calculates the preview.")
+              : L("Entre para carregar saldos reais. Sem conta conectada, a tela fica apenas em consulta e não prepara confirmação.", "Sign in to load real balances. Without a connected account, the screen remains view-only and does not prepare confirmation.")}
           </p>
         </div>
         <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
@@ -1336,8 +1376,8 @@ function YieldWorkspacePanel({
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
-              ? L("Monte a aplicação, revise a simulação e confirme só quando tudo estiver correto.", "Build the deposit, review the preview, and confirm only when everything is right.")
-              : L("Esse saldo ainda não tem rendimento ativo. A tela sugere uma conversão quando existir alternativa.", "This balance does not have active yield yet. The screen suggests conversion when an alternative exists.")}
+              ? L("Defina aplicar ou resgatar, informe o valor e gere uma revisão. A confirmação fica separada para você conferir taxa, projeção e impacto no saldo.", "Choose deposit or withdraw, enter the amount, and generate a review. Confirmation stays separate so you can check rate, projection, and balance impact.")
+              : L("Esse saldo ainda não tem rendimento ativo. Quando existir uma opção melhor para outra moeda, a tela sugere conversão antes da revisão.", "This balance does not have active yield yet. When another currency has a better option, the screen suggests conversion before review.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1538,7 +1578,7 @@ function YieldWorkspacePanel({
                 <div>
                   <h3 className="text-base font-black text-tts-deep">{L("Revisão segura", "Secure review")}</h3>
                   <p className="mt-1 text-xs leading-5 text-tts-muted">
-                    {L("Resumo antes de qualquer confirmação.", "Summary before any confirmation.")}
+                    {L("Confira a operação montada, o valor, a taxa e a projeção antes de qualquer confirmação.", "Check the assembled operation, amount, rate, and projection before any confirmation.")}
                   </p>
                 </div>
                 <BadgeCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
@@ -1595,15 +1635,15 @@ function YieldWorkspacePanel({
               <div className="mt-3 grid gap-2 text-xs leading-5 text-tts-muted sm:grid-cols-3">
                 <p className="border border-tts-border bg-tts-surface p-3">
                   <span className="block font-black text-tts-deep">{L("1. Saldo", "1. Balance")}</span>
-                  {L("Usa a carteira conectada.", "Uses the connected account.")}
+                  {L("Usa a conta conectada e a moeda escolhida na carteira.", "Uses the connected account and the currency selected in balances.")}
                 </p>
                 <p className="border border-tts-border bg-tts-surface p-3">
                   <span className="block font-black text-tts-deep">{L("2. Revisão", "2. Review")}</span>
-                  {L("Mostra valor e taxa antes do PIN.", "Shows amount and rate before PIN.")}
+                  {L("Mostra valor, ação, taxa e projeção antes do PIN.", "Shows amount, action, rate, and projection before PIN.")}
                 </p>
                 <p className="border border-tts-border bg-tts-surface p-3">
                   <span className="block font-black text-tts-deep">{L("3. Registro", "3. Record")}</span>
-                  {L("Após confirmar, vira histórico da conta.", "After confirmation, it becomes account history.")}
+                  {L("Depois da confirmação, a operação fica registrada na conta.", "After confirmation, the operation is recorded in the account.")}
                 </p>
               </div>
             </div>

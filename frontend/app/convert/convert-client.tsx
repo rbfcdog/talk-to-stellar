@@ -312,6 +312,32 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     { label: L("Você recebe", "You receive"), value: `${formatDecimal(estimatedDestination, language, 7)} ${destAsset.short}` },
     { label: L("Pode render em 12 meses", "May earn in 12 months"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
   ];
+  const howItWorksSteps = [
+    {
+      title: L("1. Origem", "1. Source"),
+      body: L(
+        "Escolha de qual saldo da conta a conversão sai. A tela mostra se o saldo parece suficiente antes de abrir qualquer confirmação.",
+        "Choose which account balance the conversion starts from. The screen shows whether the balance looks sufficient before opening any confirmation."
+      ),
+      icon: <WalletCards className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      title: L("2. Destino", "2. Destination"),
+      body: L(
+        "Escolha para qual moeda quer ir e informe o valor. A prévia estima quanto chega, mas a rota real é recalculada na revisão final.",
+        "Choose the destination currency and enter the amount. The preview estimates what arrives, but the live route is recalculated in final review."
+      ),
+      icon: <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      title: L("3. Depois", "3. Next"),
+      body: L(
+        "Depois de revisar, você pode confirmar com PIN ou usar o saldo de destino como base para rendimento. Nada muda na conta antes da confirmação.",
+        "After review, you can confirm with PIN or use the destination balance as the basis for earning. Nothing changes in the account before confirmation."
+      ),
+      icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -355,6 +381,34 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           {conversionRows.map((row) => (
             <Metric key={row.label} label={row.label} value={row.value} detail={L("Prévia antes da confirmação", "Preview before confirmation")} />
           ))}
+        </section>
+
+        <section className="border border-tts-confirm bg-tts-confirm/10 p-5" aria-label={L("Como funciona a conversão", "How conversion works")}>
+          <div className="flex flex-col gap-2">
+            <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+              <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+              {L("Como funciona", "How it works")}
+            </h2>
+            <p className="max-w-3xl text-sm leading-6 text-tts-muted">
+              {L(
+                "A conversão também segue revisão bancária: você escolhe origem e destino, vê uma prévia para entender o impacto e só confirma depois que a rota real for preparada.",
+                "Conversion also follows a banking-style review: you choose source and destination, see a preview to understand the impact, and only confirm after the live route is prepared."
+              )}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {howItWorksSteps.map((item) => (
+              <div key={item.title} className="border border-tts-border bg-tts-surface p-4">
+                <div className="flex items-center gap-2 text-sm font-black text-tts-deep">
+                  <span className="grid h-8 w-8 place-items-center border border-tts-confirm text-tts-confirm">
+                    {item.icon}
+                  </span>
+                  {item.title}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-tts-muted">{item.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
