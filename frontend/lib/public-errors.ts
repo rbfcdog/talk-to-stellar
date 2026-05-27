@@ -77,6 +77,13 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
+  if (/duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505/.test(normalized)) {
+    return {
+      code: "identity_conflict",
+      message: copy(language, "Já existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.", "An account already exists with this information. Sign in to the existing account or use another email, phone, or CPF."),
+    };
+  }
+
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) {
     return {
       code: "account_preparing",

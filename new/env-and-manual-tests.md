@@ -141,6 +141,7 @@ Apply these migrations if they are not already applied:
 backend/migrations/20260510_wallet_pix_and_assets.sql
 backend/migrations/20260514_01_external_bank_accounts.sql
 backend/migrations/20260525_00_passkey_smart_accounts.sql
+backend/migrations/20260527_00_external_identity_indexes_sanitized.sql
 ```
 
 For a fresh database, also apply the base financial assistant migrations listed in `new/session-env-and-migrations.md`.

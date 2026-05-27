@@ -443,6 +443,7 @@ Aplicar pelo runner do projeto ou diretamente no Supabase, na ordem:
 backend/migrations/20260510_wallet_pix_and_assets.sql
 backend/migrations/20260514_01_external_bank_accounts.sql
 backend/migrations/20260525_00_passkey_smart_accounts.sql
+backend/migrations/20260527_00_external_identity_indexes_sanitized.sql
 ```
 
 Também confirme que as migrations base do assistente financeiro já existem no ambiente:

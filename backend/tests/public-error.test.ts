@@ -42,4 +42,12 @@ describe('public-error utility', () => {
     expect(message).toContain('Gerar PIX');
     expect(message).not.toContain('customer_id');
   });
+
+  it('hides database unique constraint names from user-facing messages', () => {
+    const message = publicErrorMessage('duplicate key value violates unique constraint "idx_external_accounts_data_phone_unique"');
+
+    expect(message).toContain('Ja existe uma conta');
+    expect(message).not.toContain('idx_external_accounts_data_phone_unique');
+    expect(message).not.toMatch(/duplicate key|unique constraint/i);
+  });
 });
