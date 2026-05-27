@@ -52,6 +52,7 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
@@ -105,10 +106,11 @@ The bot crash `AGENT_INGEST_SECRET is required` means this value is missing in T
 
 ## 5. Keep mainnet and unknown vaults disabled
 
-For testnet execution, keep `DEFINDEX_ENABLE_EXECUTION=true`. Keep mainnet and unvalidated vaults off/empty:
+For testnet execution, keep `DEFINDEX_ENABLE_EXECUTION=true` only after technical validation. Keep `DEFINDEX_COMPLIANCE_APPROVED=false` until legal/compliance approval is complete. Keep mainnet and unvalidated vaults off/empty:
 
 ```env
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 
 # Do not invent these. Fill only when a real validated vault exists.
@@ -178,11 +180,11 @@ Open:
 
 Expected:
 
-1. First screen says `Rendimento da sua conta`.
+1. First screen says `Simular opções de rendimento`.
 2. Left side shows `Sua conta`, account status, and balances.
 3. Right side shows `Rendimento selecionado`.
 4. No old dashboard blocks like `Moedas na conta`, `O que fazer agora`, or `Próximo passo`.
-5. User-facing text does not show provider internals like `Defindex`, `vault`, `XDR`, `issuer`, `trustline`, `blockchain`, or `secret`.
+5. User-facing text does not present APY as guaranteed, fixed income, savings, bank deposit, or investment advice.
 
 Then:
 
@@ -190,7 +192,8 @@ Then:
 2. Confirm the selected balance updates the right panel.
 3. Enter `100`.
 4. Click `Revisar`.
-5. With `DEFINDEX_ENABLE_EXECUTION=true` on testnet, final confirmation should show the PIN path for a signed-in wallet. Keep `DEFINDEX_ALLOW_MAINNET_EXECUTION=false` unless you are deliberately testing mainnet.
+5. With `DEFINDEX_ENABLE_EXECUTION=true` and `DEFINDEX_COMPLIANCE_APPROVED=false`, final confirmation must stay in review mode and not show a submit path.
+6. Only after formal approval, set `DEFINDEX_COMPLIANCE_APPROVED=true` in testnet and confirm the PIN path appears for a signed-in wallet. Keep `DEFINDEX_ALLOW_MAINNET_EXECUTION=false` unless you are deliberately testing mainnet.
 
 ### B. PIX add money
 

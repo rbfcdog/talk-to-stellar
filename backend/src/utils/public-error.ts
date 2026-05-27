@@ -32,7 +32,7 @@ export function publicErrorCode(error: unknown) {
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) return 'account_preparing';
   if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) return 'invalid_pin';
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
-  if (/defindex.*desativad|execucao defindex|defindex_enable_execution|yield.*execution.*disabled|execution.*yield.*disabled/.test(normalized)) return 'yield_execution_disabled';
+  if (/defindex.*desativad|execucao defindex|defindex_enable_execution|defindex_compliance_approved|compliance approval|yield.*execution.*(disabled|requires)|execution.*yield.*disabled/.test(normalized)) return 'yield_execution_disabled';
   if (/(wallet private key|source wallet secret|private key|secret).*(defindex|yield|rendimento)|(defindex|yield|rendimento).*(wallet private key|source wallet secret|private key|secret)/.test(normalized)) return 'account_signing_unavailable';
   if (/defindex|yield confirmation|yield operation|yield service|rendimento/.test(normalized)) return 'yield_unavailable';
   if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) return 'recipient_not_found';
@@ -68,7 +68,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'account_preparing':
       return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
     case 'yield_execution_disabled':
-      return 'A confirmacao de rendimento ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas nao confirmar com PIN.';
+      return 'A confirmacao de rendimento ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas execucao real exige aprovacao de compliance.';
     case 'account_signing_unavailable':
       return 'Esta conta ainda nao esta pronta para assinar rendimento. Entre novamente e tente outra vez.';
     case 'yield_unavailable':

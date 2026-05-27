@@ -39,7 +39,7 @@ Hoje, quando o usuario pede para converter todo o saldo operacional, o backend p
 Use linguagem simples:
 
 ```text
-Esse saldo mantem sua conta funcionando. Ele cobre pequenas tarifas e uma reserva de seguranca para que transferencias, conversoes e aplicacoes possam ser processadas.
+Esse saldo mantem sua conta funcionando. Ele cobre pequenas tarifas e uma reserva de seguranca para que transferencias, conversoes e revisoes possam ser processadas.
 ```
 
 Versao curta:
@@ -90,12 +90,12 @@ ou, em espacos compactos:
 Operacional
 ```
 
-Mostrar `OPS` apenas como detalhe tecnico ou em telas internas. Em telas bancarias simples, o ideal e deixar esse saldo separado dos saldos principais e explicar que ele fica reservado para funcionamento da conta.
+Mostrar `OPS` apenas como detalhe tecnico ou em telas internas. Em telas simples, o ideal e deixar esse saldo separado dos saldos principais e explicar que ele fica reservado para funcionamento da conta.
 
 Comportamento recomendado:
 
 1. Nao incluir saldo operacional nas recomendacoes de rendimento.
-2. Nao sugerir aplicar esse saldo.
+2. Nao sugerir usar esse saldo em rendimento.
 3. Ao converter XLM/OPS, manter reserva minima.
 4. Se houver excesso acima da reserva, permitir converter apenas o excesso.
 5. Se nao houver excesso, explicar que o saldo esta reservado.
@@ -129,4 +129,4 @@ Para usuario final, o conceito correto e:
 Saldo operacional = reserva tecnica para manter a conta funcionando.
 ```
 
-Ele deve existir, mas nao deve competir visualmente com reais, dolares, CETES ou saldo rendendo. A UX ideal e mostrar esse saldo apenas quando for relevante para explicar por que nem todo valor pode ser convertido, sacado ou aplicado.
+Ele deve existir, mas nao deve competir visualmente com reais, dolares, CETES ou posicoes de rendimento. A UX ideal e mostrar esse saldo apenas quando for relevante para explicar por que nem todo valor pode ser convertido, sacado ou usado.

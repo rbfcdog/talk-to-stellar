@@ -25,8 +25,19 @@ export type DefindexRuntimeInfo = {
   network_mismatch: boolean;
   execution_requested: boolean;
   execution_enabled: boolean;
+  compliance_approved: boolean;
+  compliance_mode: 'review_only' | 'approved_execution';
   mainnet_execution_allowed: boolean;
   vaults: DefindexVaultConfig[];
+  disclosure: {
+    environment: DefindexNetwork;
+    source: 'defindex';
+    rate_label: 'estimated_historical_apy';
+    testnet: boolean;
+    not_guaranteed: true;
+    not_investment_advice: true;
+    not_bank_deposit: true;
+  };
   unavailable_reason?: string;
   execution_blocked_reason?: string;
 };
@@ -167,6 +178,7 @@ export class DefindexYieldService {
     const stellarNetwork = stellarRuntimeNetwork();
     const networkMismatch = network !== stellarNetwork;
     const executionRequested = envFlag('DEFINDEX_ENABLE_EXECUTION', false);
+    const complianceApproved = envFlag('DEFINDEX_COMPLIANCE_APPROVED', false);
     const mainnetExecutionAllowed = envFlag('DEFINDEX_ALLOW_MAINNET_EXECUTION', false);
     const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
     const vaults = [
@@ -181,15 +193,18 @@ export class DefindexYieldService {
     const executionBlockedReason = executionRequested
       ? networkMismatch
         ? `DEFINDEX_NETWORK=${network} must match STELLAR_NETWORK=${stellarNetwork} before executing yield transactions.`
-        : network === 'mainnet' && !mainnetExecutionAllowed
-          ? 'Mainnet Defindex execution requires DEFINDEX_ALLOW_MAINNET_EXECUTION=true. Keep this unset for testnet.'
-          : configured
-            ? undefined
-            : !apiKey
-              ? 'DEFINDEX_API_KEY is not configured.'
-              : 'No Defindex vault address is configured for the active network.'
+        : !complianceApproved
+          ? 'Defindex yield execution requires DEFINDEX_COMPLIANCE_APPROVED=true after legal and compliance approval.'
+          : network === 'mainnet' && !mainnetExecutionAllowed
+            ? 'Mainnet Defindex execution requires DEFINDEX_ALLOW_MAINNET_EXECUTION=true. Keep this unset for testnet.'
+            : configured
+              ? undefined
+              : !apiKey
+                ? 'DEFINDEX_API_KEY is not configured.'
+                : 'No Defindex vault address is configured for the active network.'
       : undefined;
     const executionEnabled = executionRequested &&
+      complianceApproved &&
       configured &&
       !networkMismatch &&
       (network === 'testnet' || mainnetExecutionAllowed);
@@ -203,8 +218,19 @@ export class DefindexYieldService {
       network_mismatch: networkMismatch,
       execution_requested: executionRequested,
       execution_enabled: executionEnabled,
+      compliance_approved: complianceApproved,
+      compliance_mode: executionEnabled ? 'approved_execution' : 'review_only',
       mainnet_execution_allowed: mainnetExecutionAllowed,
       vaults,
+      disclosure: {
+        environment: network,
+        source: 'defindex',
+        rate_label: 'estimated_historical_apy',
+        testnet: network === 'testnet',
+        not_guaranteed: true,
+        not_investment_advice: true,
+        not_bank_deposit: true,
+      },
       unavailable_reason: configured
         ? undefined
         : !apiKey

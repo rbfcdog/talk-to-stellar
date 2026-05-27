@@ -324,6 +324,7 @@ describe('Agent tool execution', () => {
       runtime: {
         configured: true,
         execution_enabled: false,
+        network: 'testnet',
       },
       vaults: [
         { asset_code: 'USDC', display_asset_code: 'USDC', apy_percent: '5.25' },
@@ -337,12 +338,13 @@ describe('Agent tool execution', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.options).toEqual([
-      { currency: 'USD', name: 'dollars', annual_rate: '5.25%', available: true },
-      { currency: 'CETES', name: 'Mexico yield', annual_rate: '8.75%', available: true },
-      { currency: 'XLM', name: 'XLM', annual_rate: '2.1%', available: true },
+      { currency: 'USD', name: 'dollars', estimated_apy: '5.25%', available: true },
+      { currency: 'CETES', name: 'Mexico test option', estimated_apy: '8.75%', available: true },
+      { currency: 'XLM', name: 'XLM', estimated_apy: '2.1%', available: true },
     ]);
-    expect(parsed.message).toContain('Available yield options');
-    expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|TESOURO|XDR/i);
+    expect(parsed.message).toContain('Yield review options');
+    expect(parsed.disclosure.toLowerCase()).toContain('not guaranteed');
+    expect(JSON.stringify(parsed)).not.toMatch(/vault|TESOURO|XDR/i);
     expect(statusSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -376,7 +378,7 @@ describe('Agent tool execution', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.review).toMatchObject({
-      action: 'save for yield',
+      action: 'review entry',
       amount: '100',
       currency: 'BRL',
       name: 'reais',
@@ -482,7 +484,8 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toContain('Yield is not available right now');
+    expect(parsed.error).toContain('review mode');
+    expect(parsed.error).toContain('compliance approval');
     expect(parsed.error).not.toMatch(/Defindex|DEFINDEX|XDR|vault/i);
   });
 

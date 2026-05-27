@@ -6,6 +6,8 @@ Este documento explica de onde saem taxas como "Dolares 13,68% ao ano", "Rendime
 
 Isto nao e parecer juridico. Antes de oferecer rendimento real para usuarios, tratar como assunto de produto regulado e validar com advogado financeiro/mercado de capitais em cada jurisdicao.
 
+Atualizacao de implementacao: o backend agora exige `DEFINDEX_COMPLIANCE_APPROVED=true` alem de `DEFINDEX_ENABLE_EXECUTION=true` para enviar transacoes DeFindex. A UX fica em modo revisao/simulacao enquanto essa aprovacao nao existir.
+
 ## Resposta curta
 
 Esses percentuais nao sao hardcoded na tela de rendimento.
