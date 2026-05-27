@@ -303,6 +303,8 @@ function buildFiles(options) {
     "ENABLE_REAL_PAYOUT_EXECUTION=false",
     "",
     "# Runtime limits and summaries.",
+    "LOG_LEVEL=info",
+    "LOG_FILE=",
     "RATE_LIMIT_WINDOW_MS=60000",
     "RATE_LIMIT_MAX=300",
     "SENSITIVE_RATE_LIMIT_WINDOW_MS=60000",

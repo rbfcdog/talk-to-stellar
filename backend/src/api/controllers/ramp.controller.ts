@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AnchorService } from '../services/anchor.service';
 import { timingSafeEqualString } from '../../utils/password';
 import { publicErrorCode, publicErrorMessage } from '../../utils/public-error';
+import { logger } from '../../utils/logger';
 
 function statusFromError(error: any): number {
   if (publicErrorCode(error) === 'service_timeout') return 504;
@@ -32,6 +33,32 @@ function yieldErrorPayload(error: any): Record<string, unknown> {
     code,
     message: publicErrorMessage(error, 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.'),
   };
+}
+
+function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  if (text.length <= start + end + 3) return `${text.slice(0, 2)}...`;
+  return `${text.slice(0, start)}...${text.slice(-end)}`;
+}
+
+function logYieldRouteFailure(route: string, req: Request, error: any): void {
+  const code = publicErrorCode(error);
+  const status = statusFromError(error);
+  const source = { ...req.query, ...req.body, ...req.params } as Record<string, unknown>;
+  logger.warn(`[defindex] event=route_failed ${JSON.stringify({
+    route,
+    method: req.method,
+    status,
+    code,
+    session_id: maskLogValue(source.session_id || source.sessionId || req.headers['x-session-id']),
+    asset_code: source.asset_code || source.assetCode,
+    action: source.action,
+    amount: source.amount,
+    requested_vault: maskLogValue(source.vault_address || source.vaultAddress),
+    has_pin: Boolean(source.pin || source.wallet_pin || source.walletPin || req.headers['x-wallet-pin'] || req.headers['x-talktostellar-wallet-pin']),
+    error: error instanceof Error ? error.message : String(error || 'Unknown error'),
+  })}`);
 }
 
 function requestInput(req: Request): Record<string, unknown> {
@@ -125,6 +152,7 @@ export class RampController {
       const result = await AnchorService.getDefindexYieldStatus();
       res.status(200).json(result);
     } catch (error: any) {
+      logYieldRouteFailure('status', _req, error);
       res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
@@ -134,6 +162,7 @@ export class RampController {
       const result = await AnchorService.getDefindexYieldBalanceForSession(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {
+      logYieldRouteFailure('balance', req, error);
       res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
@@ -143,6 +172,7 @@ export class RampController {
       const result = await AnchorService.prepareDefindexYieldForSession(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {
+      logYieldRouteFailure('prepare', req, error);
       res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
@@ -156,6 +186,7 @@ export class RampController {
       }
       res.status(200).json(result);
     } catch (error: any) {
+      logYieldRouteFailure('execute', req, error);
       res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
