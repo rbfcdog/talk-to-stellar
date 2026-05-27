@@ -9,11 +9,13 @@ import {
 } from "@simplewebauthn/browser";
 import {
   AlertTriangle,
+  BadgeCheck,
   CheckCircle2,
   Fingerprint,
   KeyRound,
   Loader2,
   LogIn,
+  Settings2,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
@@ -60,6 +62,23 @@ function passkeyErrorMessage(error: unknown) {
   return message || "Nao foi possivel concluir o teste de passkey.";
 }
 
+function passkeyErrorHint(errorText: string) {
+  const normalized = errorText.toLowerCase();
+  if (/dominio|domain|rp_id|rp id|origin|security/i.test(errorText)) {
+    return "Confira PASSKEY_RP_ID e PASSKEY_ORIGIN. Em produção precisa ser HTTPS e bater exatamente com o domínio aberto no navegador.";
+  }
+  if (/sess|login|conta|sign in|auth|token/i.test(errorText)) {
+    return "Entre com PIN neste navegador e depois volte para testar o registro da passkey.";
+  }
+  if (/cancel|expir|notallowed|confirmacao/i.test(normalized)) {
+    return "Toque no botão novamente e confirme biometria/senha do aparelho antes do tempo expirar.";
+  }
+  if (/not supported|suport|webauthn|biometr/i.test(normalized)) {
+    return "Teste em um navegador moderno. Se o aparelho não tiver biometria local, use uma passkey externa ou outro dispositivo.";
+  }
+  return "Atualize o status, confira as variáveis de ambiente e tente novamente. Se persistir, copie o erro exibido nesta tela.";
+}
+
 async function postPasskey(path: string, body: Record<string, unknown>) {
   const response = await fetch(`/api/passkeys/${path}`, {
     method: "POST",
@@ -85,22 +104,28 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-function StatusLine({
+function ReadinessCard({
   ready,
-  label,
-  value,
+  title,
+  detail,
+  icon,
 }: {
   ready: boolean;
-  label: string;
-  value: string;
+  title: string;
+  detail: string;
+  icon: ReactNode;
 }) {
   return (
-    <div className="flex min-h-12 items-center justify-between gap-3 border border-tts-border bg-tts-bg px-3 py-2">
-      <span className="text-xs font-black uppercase tracking-[0.12em] text-tts-muted">{label}</span>
-      <span className={`inline-flex items-center gap-2 text-sm font-black ${ready ? "text-tts-confirm" : "text-tts-gold"}`}>
-        {ready ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
-        {value}
-      </span>
+    <div className="border border-tts-border bg-tts-surface p-4">
+      <div className="flex items-start gap-3">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center border ${ready ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
+          {icon}
+        </span>
+        <div>
+          <p className="text-sm font-black text-tts-deep">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -155,6 +180,12 @@ export default function PasskeyTestClient() {
   const passkeys = Array.isArray(smartStatus?.passkeys) ? smartStatus.passkeys : [];
   const canRegister = session.authenticated && browser.webauthn && !registerState.loading;
   const canAuthenticate = Boolean(identity.trim()) && browser.webauthn && !authState.loading;
+  const smartAccountReady = Boolean(smartConfig.enabled && smartConfig.verifierAddress);
+  const smartAccountMode = smartConfig.enabled
+    ? smartAccountReady
+      ? "Pronto para testar"
+      : "Configuração incompleta"
+    : "Somente metadata";
 
   const readinessLabel = useMemo(() => {
     if (!browser.checked) return "checking";
@@ -290,15 +321,15 @@ export default function PasskeyTestClient() {
         <header className="border-b border-tts-border pb-5">
           <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            OpenZeppelin Passkey Test
+            Diagnóstico de passkey
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h1 className="max-w-3xl text-3xl font-black tracking-tight md:text-4xl">
-                Teste de passkey e smart account
+                Testar passkey e OpenZeppelin
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-tts-muted md:text-base">
-                Registre uma passkey WebAuthn, valide login e confira o metadata P-256 usado pelo fluxo de smart account OpenZeppelin em Stellar.
+                Use esta tela para validar navegador, sessão, registro biométrico e metadata OpenZeppelin. Quando der erro, a própria tela mostra a causa provável e o próximo passo.
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[360px]">
@@ -320,26 +351,30 @@ export default function PasskeyTestClient() {
           </div>
         </header>
 
-        <section className="grid gap-3 md:grid-cols-4">
-          <StatusLine
+        <section className="grid gap-3 md:grid-cols-4" aria-label="Pré-requisitos da passkey">
+          <ReadinessCard
             ready={browser.webauthn}
-            label="WebAuthn"
-            value={browser.checked ? (browser.webauthn ? "ok" : "not supported") : "checking"}
+            title="Navegador"
+            detail={browser.checked ? (browser.webauthn ? "Compatível com passkey." : "Este navegador não suporta passkey.") : "Verificando suporte."}
+            icon={<Fingerprint className="h-5 w-5" aria-hidden="true" />}
           />
-          <StatusLine
+          <ReadinessCard
             ready={browser.platformAuthenticator}
-            label="Biometria"
-            value={browser.checked ? (browser.platformAuthenticator ? "available" : "external only") : "checking"}
+            title="Biometria local"
+            detail={browser.checked ? (browser.platformAuthenticator ? "Disponível neste aparelho." : "Use passkey externa ou outro aparelho.") : "Verificando biometria."}
+            icon={<KeyRound className="h-5 w-5" aria-hidden="true" />}
           />
-          <StatusLine
+          <ReadinessCard
             ready={session.authenticated}
-            label="Sessao"
-            value={session.authenticated ? "connected" : "not signed in"}
+            title="Conta"
+            detail={session.authenticated ? "Sessão conectada para registrar." : "Entre com PIN antes de registrar."}
+            icon={<LogIn className="h-5 w-5" aria-hidden="true" />}
           />
-          <StatusLine
+          <ReadinessCard
             ready={readinessLabel === "ready"}
-            label="Teste"
-            value={readinessLabel}
+            title="Status"
+            detail={readinessLabel === "ready" ? "Pode iniciar o teste." : `Ainda não pronto: ${readinessLabel}.`}
+            icon={<BadgeCheck className="h-5 w-5" aria-hidden="true" />}
           />
         </section>
 
@@ -347,10 +382,10 @@ export default function PasskeyTestClient() {
           <div className="border border-tts-border bg-tts-surface p-5">
             <h2 className="flex items-center gap-2 text-xl font-black">
               <Fingerprint className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-              Fluxo de teste
+              1. Teste de passkey
             </h2>
             <p className="mt-2 text-sm leading-6 text-tts-muted">
-              Para registrar, entre com PIN primeiro. Para testar login, informe o e-mail ou usuario da conta que ja tem passkey.
+              Primeiro registre uma passkey na conta conectada. Depois teste login usando o e-mail ou usuário da conta.
             </p>
 
             <label className="mt-5 block text-sm font-black" htmlFor="passkey-identity">
@@ -385,9 +420,8 @@ export default function PasskeyTestClient() {
             </div>
 
             <div className="mt-5 grid gap-3">
-              <Feedback state={registerState} />
-              <Feedback state={authState} />
-              <Feedback state={statusState} />
+              <Feedback label="Registro" state={registerState} />
+              <Feedback label="Login" state={authState} />
             </div>
           </div>
 
@@ -397,10 +431,10 @@ export default function PasskeyTestClient() {
                 <div>
                   <h2 className="flex items-center gap-2 text-xl font-black">
                     <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                    OpenZeppelin smart account
+                    2. OpenZeppelin
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    O backend grava o signer WebAuthn P-256 e mostra se o modo smart account esta apenas em metadata ou pronto para execucao.
+                    Mostra se a passkey já gerou metadata P-256 e se o modo OpenZeppelin está apenas salvo como metadata ou pronto para execução.
                   </p>
                 </div>
                 <ActionButton
@@ -415,13 +449,24 @@ export default function PasskeyTestClient() {
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <Mini label="standard" value={String(smartConfig.standard || "openzeppelin-stellar-contracts/accounts")} />
-                <Mini label="network" value={String(smartConfig.network || "not loaded")} />
-                <Mini label="enabled" value={smartConfig.enabled ? "true" : "false"} />
-                <Mini label="verifier" value={compact(smartConfig.verifierAddress)} />
-                <Mini label="context rule" value={smartConfig.contextRuleId === null || smartConfig.contextRuleId === undefined ? "not set" : String(smartConfig.contextRuleId)} />
-                <Mini label="stored passkeys" value={String(passkeys.length)} />
+                <Mini label="modo" value={smartAccountMode} />
+                <Mini label="rede" value={String(smartConfig.network || "não carregado")} />
+                <Mini label="verificador" value={compact(smartConfig.verifierAddress)} />
+                <Mini label="passkeys salvas" value={String(passkeys.length)} />
               </div>
+
+              <div className={`mt-5 border p-4 text-sm leading-6 ${smartAccountReady ? "border-tts-confirm bg-tts-confirm/10 text-tts-deep" : "border-tts-gold bg-tts-gold-bg text-tts-muted"}`}>
+                <p className="font-black text-tts-deep">
+                  {smartAccountReady ? "OpenZeppelin pronto para teste" : "OpenZeppelin ainda não está pronto para execução"}
+                </p>
+                <p className="mt-1">
+                  {smartAccountReady
+                    ? "O backend tem modo smart account ativo e endereço do verificador configurado."
+                    : "A tela ainda pode testar passkey e salvar metadata. Para execução on-chain, configure PASSKEY_SMART_ACCOUNT_ENABLED e PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS."}
+                </p>
+              </div>
+
+              <Feedback label="Status OpenZeppelin" state={statusState} />
             </section>
 
             {passkeys.length ? (
@@ -435,8 +480,8 @@ export default function PasskeyTestClient() {
                         <span className="text-xs font-bold text-tts-muted">{item.createdAt ? new Date(item.createdAt).toLocaleString() : "created date unavailable"}</span>
                       </div>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <Mini label="signer" value={String(item.smartAccount?.signer || "not stored")} />
-                        <Mini label="P-256 key" value={item.smartAccount?.credentialPublicKeyP256 ? "stored" : "missing"} />
+                        <Mini label="signer" value={String(item.smartAccount?.signer || "não salvo")} />
+                        <Mini label="chave P-256" value={item.smartAccount?.credentialPublicKeyP256 ? "salva" : "ausente"} />
                       </div>
                     </div>
                   ))}
@@ -446,33 +491,46 @@ export default function PasskeyTestClient() {
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-2">
-          <div className="border border-tts-border bg-tts-surface p-5">
-            <h2 className="text-lg font-black">Ultimo registro</h2>
-            <div className="mt-3">
-              <JsonBlock value={lastRegistration || { waiting: "register a passkey" }} />
+        <section className="border border-tts-border bg-tts-surface p-5">
+          <details>
+            <summary className="flex cursor-pointer items-center gap-2 text-lg font-black text-tts-deep">
+              <Settings2 className="h-5 w-5 text-tts-gold" aria-hidden="true" />
+              Dados técnicos do último teste
+            </summary>
+            <div className="mt-4 grid gap-5 lg:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-black">Último registro</h3>
+                <div className="mt-3">
+                  <JsonBlock value={lastRegistration || { waiting: "register a passkey" }} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-black">Última autenticação</h3>
+                <div className="mt-3">
+                  <JsonBlock value={lastAuthentication || { waiting: "test passkey login" }} />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="border border-tts-border bg-tts-surface p-5">
-            <h2 className="text-lg font-black">Ultima autenticacao</h2>
-            <div className="mt-3">
-              <JsonBlock value={lastAuthentication || { waiting: "test passkey login" }} />
-            </div>
-          </div>
+          </details>
         </section>
       </section>
     </main>
   );
 }
 
-function Feedback({ state }: { state: StepState }) {
+function Feedback({ label, state }: { label: string; state: StepState }) {
   if (!state.message && !state.error) return null;
   return (
     <div className={`border p-3 text-sm leading-6 ${state.error ? "border-tts-error bg-tts-error/10 text-tts-error" : "border-tts-confirm bg-tts-confirm/10 text-tts-deep"}`}>
       <p className="flex items-center gap-2 font-bold">
         {state.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : state.error ? <AlertTriangle className="h-4 w-4" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-        {state.error || state.message}
+        {label}: {state.error || state.message}
       </p>
+      {state.error ? (
+        <p className="mt-2 text-xs leading-5 text-tts-muted">
+          {passkeyErrorHint(state.error)}
+        </p>
+      ) : null}
     </div>
   );
 }
