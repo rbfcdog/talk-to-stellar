@@ -353,6 +353,12 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
   if (code === "yield_execution_disabled") {
     return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente. Você pode preparar a revisão, mas não movimentar saldo.", "PIN confirmation is not enabled in this environment yet. You can prepare the review, but not move funds.");
   }
+  if (code === "yield_account_setup_required") {
+    return localCopy(language, "Revisão preparada. Esta conta ainda não está pronta para confirmar esta aplicação; escolha outra opção ou aguarde a configuração da moeda.", "Review prepared. This account is not ready to confirm this application yet; choose another option or wait for currency setup.");
+  }
+  if (code === "yield_execution_unavailable") {
+    return localCopy(language, "Revisão preparada, mas a confirmação por PIN ainda não está disponível para esta opção. Tente outra opção ou tente novamente em alguns segundos.", "Review prepared, but PIN confirmation is not available for this option yet. Try another option or try again in a few seconds.");
+  }
   if (code === "account_signing_unavailable") {
     return localCopy(language, "Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more.");
   }
@@ -682,7 +688,17 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       });
       setYieldResult(payload);
       setActiveStep("review");
-      setApiState({ loading: false, message: L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."), error: "" });
+      const blockedCode = String(payload?.execution_blocked_code || "").trim();
+      const blockedMessage = blockedCode
+        ? sanitizeUiError({ code: blockedCode, message: payload?.execution_blocked_reason }, language)
+        : "";
+      setApiState({
+        loading: false,
+        message: payload?.execution_ready === false
+          ? blockedMessage || L("Revisão preparada em modo consulta. Nenhum saldo será movimentado.", "Review prepared in view-only mode. No funds will move.")
+          : L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."),
+        error: "",
+      });
     } catch (error) {
       setApiState({ loading: false, message: "", error: yieldUiError(error, language) });
     }
@@ -693,6 +709,18 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (!yieldResult) {
       setActiveStep("review");
       setApiState({ loading: false, message: "", error: L("Prepare a revisão antes de confirmar com PIN.", "Prepare the review before confirming with PIN.") });
+      return;
+    }
+    if (yieldResult?.execution_ready === false) {
+      const blockedCode = String(yieldResult?.execution_blocked_code || "").trim();
+      setActiveStep("review");
+      setApiState({
+        loading: false,
+        message: blockedCode
+          ? sanitizeUiError({ code: blockedCode, message: yieldResult?.execution_blocked_reason }, language)
+          : L("Esta revisão está apenas para consulta. Escolha outra opção ou prepare novamente mais tarde.", "This review is view-only. Choose another option or prepare again later."),
+        error: "",
+      });
       return;
     }
     setApiState({ loading: true, message: "", error: "" });
@@ -1479,7 +1507,13 @@ function YieldWorkspacePanel({
   const bestProfile = moneyProfile(bestOptionCode);
   const hasPrepared = Boolean(result);
   const submitted = Boolean(result?.submitted || result?.hash);
-  const canConfirm = canPrepare && confirmationEnabled && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
+  const preparedExecutionBlocked = Boolean(hasPrepared && result?.execution_ready === false);
+  const confirmationAvailable = confirmationEnabled && !preparedExecutionBlocked;
+  const canConfirm = canPrepare && confirmationAvailable && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
+  const blockedCode = String(result?.execution_blocked_code || "").trim();
+  const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
+    ? L("Revisão preparada. Esta conta ainda não está pronta para confirmar esta aplicação; escolha outra opção ou aguarde a configuração da moeda.", "Review prepared. This account is not ready to confirm this application yet; choose another option or wait for currency setup.")
+    : L("Revisão preparada em modo consulta. A confirmação por PIN ainda não está disponível para esta opção.", "Review prepared in view-only mode. PIN confirmation is not available for this option yet.");
   const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
@@ -1527,8 +1561,8 @@ function YieldWorkspacePanel({
           <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
             {profileShort} · {profileName(selectedProfile, language)}
           </span>
-          <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${confirmationEnabled ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-            {confirmationEnabled ? L("Execução aprovada", "Execution approved") : L("Modo revisão", "Review mode")}
+          <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${confirmationAvailable ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
+            {confirmationAvailable ? L("Execução aprovada", "Execution approved") : L("Só revisão", "Review only")}
           </span>
         </div>
       </div>
@@ -1716,7 +1750,7 @@ function YieldWorkspacePanel({
                 <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} />
                 <MiniStat
                   label={L("Segurança", "Security")}
-                  value={submitted ? L("Enviado", "Sent") : confirmationEnabled ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")}
+                  value={submitted ? L("Enviado", "Sent") : confirmationAvailable ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")}
                 />
               </div>
               <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
@@ -1731,6 +1765,10 @@ function YieldWorkspacePanel({
                       </p>
                     ) : null}
                   </div>
+                ) : preparedExecutionBlocked ? (
+                  <p className="font-bold text-tts-gold">
+                    {preparedBlockedMessage}
+                  </p>
                 ) : hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
                     {L("Revisão preparada. Confira taxa, valor e operação antes de confirmar.", "Review prepared. Check rate, amount, and operation before confirming.")}
@@ -1739,7 +1777,7 @@ function YieldWorkspacePanel({
                   <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>
                 )}
               </div>
-              {confirmationEnabled ? (
+              {confirmationAvailable ? (
                 <div className="mt-4 border border-tts-border bg-tts-surface p-4">
                   <label className="block text-sm font-black text-tts-deep" htmlFor="yield-pin-review">
                     {L("PIN para confirmar", "PIN to confirm")}
@@ -1778,7 +1816,7 @@ function YieldWorkspacePanel({
                   {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
                   {L("Preparar", "Prepare")}
                 </button>
-                {confirmationEnabled ? (
+                {confirmationAvailable ? (
                   <button
                     type="button"
                     onClick={onConfirm}
@@ -1790,7 +1828,7 @@ function YieldWorkspacePanel({
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                    {L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
+                    {preparedExecutionBlocked ? preparedBlockedMessage : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
                   </div>
                 )}
               </div>
