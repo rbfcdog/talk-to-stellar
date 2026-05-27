@@ -1,7 +1,15 @@
 import { Asset, Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 import { stellarConfig } from '../../config/stellar';
-import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
+import {
+  DEFINDEX_TESTNET_USDC_VAULT,
+  getAssetIssuer,
+  getDefindexTestnetUsdcAsset,
+  getStellarNetworkName,
+  isDefindexTestnetUsdcAsset,
+  normalizeAssetCode,
+  userFacingAssetCode,
+} from '../../config/assets';
 import { logger } from '../../utils/logger';
 import { errorLogFields, errorLogMessage } from '../../utils/error-log';
 
@@ -22,7 +30,19 @@ export type DefindexVaultAssetInfo = {
   asset_code: string;
   asset_issuer?: string;
   asset_contract?: string;
-  source: 'vault_info' | 'configured';
+  source: 'vault_info' | 'configured' | 'hardcoded';
+};
+
+export type DefindexVaultAssetCompatibility = {
+  compatible: boolean;
+  info: DefindexVaultAssetInfo;
+  configured_issuer?: string;
+  configured_contract?: string;
+  reason?: string;
+  hardcoded_asset_override?: boolean;
+  requires_wallet_asset_conversion?: boolean;
+  wallet_source_asset?: { code: string; issuer?: string };
+  vault_deposit_asset?: { code: string; issuer?: string; contract?: string };
 };
 
 export type DefindexRuntimeInfo = {
@@ -143,10 +163,15 @@ function parseVaultEntry(value: any, fallbackNetwork: DefindexNetwork): Defindex
   if (!vaultAddress || !assetCode) return null;
   const networkRaw = coalesceString(value?.network).toLowerCase();
   const network: DefindexNetwork = networkRaw === 'mainnet' || networkRaw === 'public' ? 'mainnet' : networkRaw === 'testnet' ? 'testnet' : fallbackNetwork;
+  const hardcodedUsdc = network === 'testnet' &&
+    assetCode === 'USDC' &&
+    vaultAddress === DEFINDEX_TESTNET_USDC_VAULT
+    ? getDefindexTestnetUsdcAsset()
+    : undefined;
   return {
     asset_code: assetCode,
-    asset_issuer: coalesceString(value?.asset_issuer, value?.assetIssuer) || getAssetIssuer(assetCode),
-    asset_contract: coalesceString(value?.asset_contract, value?.assetContract),
+    asset_issuer: hardcodedUsdc?.issuer || coalesceString(value?.asset_issuer, value?.assetIssuer) || getAssetIssuer(assetCode),
+    asset_contract: hardcodedUsdc?.contract || coalesceString(value?.asset_contract, value?.assetContract),
     vault_address: vaultAddress,
     label: coalesceString(value?.label, value?.name, `${userFacingAssetCode(assetCode)} Yield Vault`),
     network,
@@ -223,11 +248,19 @@ function assetInfoFromVaultInfo(vault: DefindexVaultConfig, info: any): Defindex
   const wanted = normalizeVaultAsset(vault.asset_code);
   const match = assets.find((asset: any) => normalizeVaultAsset(asset?.symbol || asset?.code || asset?.name) === wanted) || assets[0];
   const issuer = extractIssuer(match?.name) || extractIssuer(match?.symbol) || extractIssuer(match?.code);
+  const hardcodedUsdc = vault.network === 'testnet' && isDefindexTestnetUsdcAsset({
+    code: wanted,
+    issuer: issuer || vault.asset_issuer,
+    contract: coalesceString(match?.address, vault.asset_contract),
+    vault: vault.vault_address,
+  })
+    ? getDefindexTestnetUsdcAsset()
+    : undefined;
   return {
     asset_code: wanted,
-    asset_issuer: issuer || vault.asset_issuer || getAssetIssuer(wanted),
-    asset_contract: coalesceString(match?.address, vault.asset_contract),
-    source: match ? 'vault_info' : 'configured',
+    asset_issuer: issuer || hardcodedUsdc?.issuer || vault.asset_issuer || getAssetIssuer(wanted),
+    asset_contract: coalesceString(match?.address, hardcodedUsdc?.contract, vault.asset_contract),
+    source: match ? 'vault_info' : hardcodedUsdc ? 'hardcoded' : 'configured',
   };
 }
 
@@ -381,13 +414,7 @@ export class DefindexYieldService {
     return this.vaultAssetInfoCache.get(key)!;
   }
 
-  static async getVaultAssetCompatibility(vault: DefindexVaultConfig): Promise<{
-    compatible: boolean;
-    info: DefindexVaultAssetInfo;
-    configured_issuer?: string;
-    configured_contract?: string;
-    reason?: string;
-  }> {
+  static async getVaultAssetCompatibility(vault: DefindexVaultConfig): Promise<DefindexVaultAssetCompatibility> {
     const info = await this.getVaultAssetInfo(vault);
     const configuredIssuer = getAssetIssuer(vault.asset_code);
     const configuredContract = configuredAssetContract(vault.asset_code, configuredIssuer);
@@ -396,12 +423,61 @@ export class DefindexYieldService {
     const issuerMismatch = Boolean(vaultIssuer && configuredIssuer && vaultIssuer !== configuredIssuer);
     const contractMismatch = Boolean(vaultContract && configuredContract && vaultContract !== configuredContract);
     if (issuerMismatch || contractMismatch) {
+      const hardcodedUsdc = vault.network === 'testnet' && isDefindexTestnetUsdcAsset({
+        code: vault.asset_code,
+        issuer: vaultIssuer,
+        contract: vaultContract,
+        vault: vault.vault_address,
+      })
+        ? getDefindexTestnetUsdcAsset()
+        : undefined;
+      if (hardcodedUsdc) {
+        return {
+          compatible: true,
+          info: {
+            ...info,
+            asset_issuer: hardcodedUsdc.issuer,
+            asset_contract: hardcodedUsdc.contract,
+          },
+          configured_issuer: configuredIssuer,
+          configured_contract: configuredContract,
+          hardcoded_asset_override: true,
+          requires_wallet_asset_conversion: configuredIssuer !== hardcodedUsdc.issuer,
+          wallet_source_asset: configuredIssuer ? { code: 'USDC', issuer: configuredIssuer } : undefined,
+          vault_deposit_asset: {
+            code: 'USDC',
+            issuer: hardcodedUsdc.issuer,
+            contract: hardcodedUsdc.contract,
+          },
+          reason: 'DeFindex testnet USDC vault uses a hardcoded USDC issuance distinct from the wallet USDC rail.',
+        };
+      }
+      const vaultDepositIssuer = vaultIssuer || vault.asset_issuer;
+      if (configuredIssuer && vaultDepositIssuer && configuredIssuer !== vaultDepositIssuer) {
+        return {
+          compatible: true,
+          info: {
+            ...info,
+            asset_issuer: vaultDepositIssuer,
+          },
+          configured_issuer: configuredIssuer,
+          configured_contract: configuredContract,
+          requires_wallet_asset_conversion: true,
+          wallet_source_asset: { code: vault.asset_code, issuer: configuredIssuer },
+          vault_deposit_asset: {
+            code: vault.asset_code,
+            issuer: vaultDepositIssuer,
+            contract: vaultContract || vault.asset_contract,
+          },
+          reason: `Vault ${vault.asset_code} uses a different issuance than the configured wallet rail; conversion is required before execution.`,
+        };
+      }
       return {
         compatible: false,
         info,
         configured_issuer: configuredIssuer,
         configured_contract: configuredContract,
-        reason: `Vault ${vault.asset_code} asset does not match configured ${vault.asset_code}.`,
+        reason: `Vault ${vault.asset_code} asset does not expose an issuer that can be converted from the configured wallet rail.`,
       };
     }
     return {
@@ -409,6 +485,11 @@ export class DefindexYieldService {
       info,
       configured_issuer: configuredIssuer,
       configured_contract: configuredContract,
+      vault_deposit_asset: {
+        code: vault.asset_code,
+        issuer: info.asset_issuer || vault.asset_issuer || configuredIssuer,
+        contract: info.asset_contract || vault.asset_contract || configuredContract,
+      },
     };
   }
 

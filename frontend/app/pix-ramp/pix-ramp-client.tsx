@@ -543,10 +543,10 @@ function WalletPinInput({
       : "focus-within:border-tts-confirm";
 
   return (
-    <div className={`mt-2 rounded-3xl border border-tts-border bg-tts-deep/20 transition ${border}`}>
+    <div className={`mt-2 rounded-2xl border border-tts-border bg-tts-bg transition ${border}`}>
       <div className="flex items-center gap-3">
         <input
-          className="min-w-0 flex-1 bg-transparent px-4 py-4 text-xl font-black tracking-[0.35em] text-tts-surface outline-none placeholder:tracking-normal placeholder:text-tts-surface/30"
+          className="min-w-0 flex-1 bg-transparent px-4 py-4 text-xl font-black tracking-[0.35em] text-tts-deep outline-none placeholder:tracking-normal placeholder:text-tts-muted"
           ref={inputRef}
           value={value}
           inputMode="numeric"
@@ -566,7 +566,7 @@ function WalletPinInput({
         />
         <button
           type="button"
-          className="mr-2 rounded-full bg-tts-surface px-3 py-2 text-xs font-black text-tts-surface/75 transition hover:bg-tts-surface"
+          className="mr-2 rounded-full border border-tts-border bg-tts-surface px-3 py-2 text-xs font-black text-tts-muted transition hover:text-tts-deep"
           onClick={() => onChange("")}
         >
           {clearLabel}
@@ -2321,7 +2321,7 @@ export default function PixRampClient({
   return (
     <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:p-10">
+        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className={`inline-flex w-fit rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
@@ -2334,7 +2334,7 @@ export default function PixRampClient({
               <ReturnToChat prompt={pixChatPrompt} className="bg-tts-bg/80" />
             </div>
             <div className="space-y-4">
-                <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-surface md:text-6xl">
+                <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-deep md:text-6xl">
                   {rampMode === "onramp"
                     ? transferFlow && safeTransferRecipientLabel
                       ? L(`Pagar ${safeTransferRecipientLabel} com PIX`, `Pay ${safeTransferRecipientLabel} with PIX`)
@@ -2343,7 +2343,7 @@ export default function PixRampClient({
                       : t("pix_add_title")
                     : t("pix_send_title")}
                 </h1>
-                <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
+                <p className="max-w-2xl text-base leading-7 text-tts-muted md:text-lg">
                   {rampMode === "onramp"
                     ? transferFlow && safeTransferRecipientLabel
                       ? t("pix_transfer_subtitle", { recipient: safeTransferRecipientLabel })
@@ -2354,17 +2354,17 @@ export default function PixRampClient({
                 </p>
             </div>
             <div className="grid min-w-0 gap-4 sm:grid-cols-3">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{L("Moeda", "Currency")}</p>
                 <p className="mt-2 text-sm font-black text-tts-deep">{friendlyAssetName(targetAsset, language)} {targetAsset}</p>
               </div>
-                <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+                <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                   <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_destination")}</p>
                   <p className="mt-2 text-sm text-tts-deep">{transferFlow && transferRecipientLabel ? transferRecipientLabel : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
                   {transferFlow && transferRecipientDisplayKey && (
@@ -2481,7 +2481,7 @@ export default function PixRampClient({
               : t("pix_need_email")}
             {loginHref && (
               <a
-                className="mt-3 inline-flex rounded-full bg-tts-gold px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-gold transition hover:bg-tts-gold"
+                className="mt-3 inline-flex rounded-full bg-tts-gold px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep transition hover:bg-tts-gold/90"
                 href={loginHref}
               >
                 {L("Entrar com PIN", "Sign in with PIN")}
@@ -2495,7 +2495,7 @@ export default function PixRampClient({
             <p>{error}</p>
             {rampMode === "onramp" && !orderId && !operationLocked && /conta pix|pix account/i.test(error) && (
               <button
-                className="mt-3 inline-flex rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-error transition hover:bg-tts-error disabled:opacity-50"
+                className="mt-3 inline-flex rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep transition hover:bg-tts-error/90 disabled:opacity-50"
                 disabled={Boolean(loading) || Boolean(transferRecipientBlocker)}
                 onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}
               >
@@ -2550,7 +2550,7 @@ export default function PixRampClient({
         {!lockedMode && (
         <section className="mt-5 grid gap-3 rounded-[2rem] border border-tts-border bg-tts-surface p-3 shadow-2xl backdrop-blur sm:grid-cols-2">
           <button
-            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-tts-confirm text-tts-deep shadow-lg" : "bg-tts-deep/20 text-tts-deep hover:bg-tts-surface"}`}
+            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-tts-confirm text-tts-deep shadow-lg" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
             onClick={() => {
               setRampMode("onramp");
               setError("");
@@ -2560,7 +2560,7 @@ export default function PixRampClient({
             <span className="mt-1 block text-lg font-black">{L("PIX para saldo", "PIX to balance")}</span>
           </button>
           <button
-            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-tts-gold text-tts-deep shadow-lg" : "bg-tts-deep/20 text-tts-deep hover:bg-tts-surface"}`}
+            className={`rounded-[1.5rem] px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-tts-gold text-tts-deep shadow-lg" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
             onClick={() => {
               setRampMode("offramp");
               setError("");
@@ -2574,9 +2574,9 @@ export default function PixRampClient({
 
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-[2rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl sm:p-6">
+            <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-xl sm:p-6">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-gold">{L("Retirada via PIX", "PIX withdrawal")}</p>
-                <h2 className="mt-1 text-3xl font-black text-tts-surface">{L("Mandar saldo para seu PIX", "Send balance to your PIX")}</h2>
+                <h2 className="mt-1 text-3xl font-black text-tts-deep">{L("Mandar saldo para seu PIX", "Send balance to your PIX")}</h2>
                 <p className="mt-3 text-sm leading-6 text-tts-deep">
                   {L("O saldo sai da sua conta TalkToStellar e chega em BRL no seu PIX.", "The balance leaves your TalkToStellar account and arrives as BRL in your PIX.")}
                 </p>
@@ -2584,10 +2584,10 @@ export default function PixRampClient({
               <label className="mt-6 block text-sm font-bold text-tts-deep">
                 {offRampInputAsset === "BRL" ? L("Você quer receber", "You want to receive") : L("Você quer retirar", "You want to withdraw")}
               </label>
-              <div className="mt-2 flex overflow-hidden rounded-3xl border border-tts-border bg-tts-surface focus-within:border-tts-gold">
-                <span className="flex items-center bg-tts-surface px-4 text-sm font-black text-tts-deep">{offRampInputPrefix}</span>
+              <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
+                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputPrefix}</span>
                 <input
-                  className="w-full bg-transparent px-4 py-4 text-3xl font-black text-tts-surface outline-none disabled:opacity-100 disabled:text-tts-surface"
+                  className="min-w-0 w-full bg-transparent px-4 py-4 text-3xl font-black text-tts-deep outline-none disabled:text-tts-deep disabled:opacity-100"
                   value={offRampInputValue}
                   inputMode="decimal"
                   placeholder="100"
@@ -2606,15 +2606,15 @@ export default function PixRampClient({
                     }
                   }}
                 />
-                <span className="flex items-center px-4 text-sm font-black text-tts-deep">{offRampInputAsset}</span>
+                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputAsset}</span>
               </div>
               {offRampAmountLocked && (
                 <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
               )}
               <label className="mt-6 block text-sm font-bold text-tts-deep">{L("PIX de destino", "Destination PIX")}</label>
-              <div className="mt-2 overflow-hidden rounded-3xl border border-tts-border bg-tts-surface focus-within:border-tts-gold">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
                 <input
-                  className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-surface outline-none placeholder:text-tts-muted"
+                  className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-deep outline-none placeholder:text-tts-muted"
                   value={offRampPixKey}
                   inputMode="text"
                   autoComplete="off"
@@ -2691,30 +2691,30 @@ export default function PixRampClient({
               </button>
             </div>
 
-            <div className="rounded-[2rem] border border-tts-border bg-tts-deep/40 p-5 text-tts-surface shadow-xl sm:p-6">
+            <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-xl sm:p-6">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-gold">{L("Seu PIX", "Your PIX")}</p>
               <h2 className="mt-1 text-2xl font-black">{L("Envio para PIX", "Send to PIX")}</h2>
               {!temporaryOffRampTestResult ? (
-                <div className="mt-8 h-28 rounded-3xl border border-dashed border-tts-border bg-white/[0.03]" />
+                <div className="mt-8 h-28 rounded-3xl border border-dashed border-tts-border bg-tts-bg/60" />
               ) : (
                 <div className="mt-6 space-y-4">
-                    <div className="rounded-3xl bg-tts-surface p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-error">Status</p>
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-gold">Status</p>
                       <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
                     </div>
-                    <div className="rounded-3xl bg-tts-surface p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-error">{L("Saiu da conta", "Left account")}</p>
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-gold">{L("Saiu da conta", "Left account")}</p>
                       <p className="mt-1 text-lg font-black">{formatRampAsset(temporaryOffRampTestResult.source_amount || offRampInputValue, temporaryOffRampTestResult.source_asset_code || offRampInputAsset)}</p>
                     </div>
-                    <div className="rounded-3xl bg-tts-surface p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-error">{L("Entrou no seu PIX", "Arrived in your PIX")}</p>
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-gold">{L("Entrou no seu PIX", "Arrived in your PIX")}</p>
                       <p className="mt-1 text-lg font-black">{offRampPixTargetDisplay}</p>
-                      <p className="mt-1 text-sm font-bold text-tts-surface/60">{externalPixDestination}</p>
+                      <p className="mt-1 text-sm font-bold text-tts-muted">{externalPixDestination}</p>
                     </div>
                     {temporaryOffRampTestResult.target_brl && (
-                      <div className="rounded-3xl bg-tts-surface p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-error">{L("Conversão para BRL", "Conversion to BRL")}</p>
-                        <p className="mt-1 text-sm font-bold text-tts-surface/75">
+                      <div className="rounded-3xl bg-tts-bg/60 p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-gold">{L("Conversão para BRL", "Conversion to BRL")}</p>
+                        <p className="mt-1 text-sm font-bold text-tts-muted">
                           {L("O valor foi convertido na saída para chegar em BRL no PIX.", "The amount was converted on exit so BRL arrives in PIX.")}
                         </p>
                       </div>
@@ -2730,11 +2730,11 @@ export default function PixRampClient({
 
         {rampMode === "onramp" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-[2rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl sm:p-6">
+          <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-xl sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-confirm">PIX</p>
-                <h2 className="mt-1 text-2xl font-black text-tts-surface">
+                <h2 className="mt-1 text-2xl font-black text-tts-deep">
                   {transferFlow && transferRecipientLabel
                     ? L(`Quanto você quer mandar para ${transferRecipientLabel}?`, `How much do you want to send to ${transferRecipientLabel}?`)
                     : L("Quanto você quer colocar?", "How much do you want to add?")}
@@ -2747,7 +2747,7 @@ export default function PixRampClient({
               <label className="block text-sm font-bold text-tts-confirm">{L("Email da conta", "Account email")}</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <input
-                  className="min-w-0 flex-1 rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm font-bold text-tts-surface outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+                  className="min-w-0 flex-1 rounded-2xl border border-tts-border bg-tts-bg px-4 py-3 text-sm font-bold text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm"
                   type="email"
                   value={rampEmail}
                   placeholder="jorge@gmail.com"
@@ -2777,10 +2777,10 @@ export default function PixRampClient({
             {desiredFinalAmount ? (
               <>
                 <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Você quer receber", "You want to receive")}</label>
-                <div className="mt-2 flex overflow-hidden rounded-3xl border border-tts-border bg-tts-surface">
-                  <span className="flex items-center bg-tts-surface px-4 text-sm font-black text-tts-deep">{friendlyAssetName(desiredFinalAsset, language)}</span>
-                  <div className="w-full px-4 py-4 text-3xl font-black text-tts-surface">{desiredFinalAmount}</div>
-                  <span className="flex items-center px-4 text-sm font-black text-tts-deep">{desiredFinalAsset}</span>
+                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg">
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{friendlyAssetName(desiredFinalAsset, language)}</span>
+                  <div className="min-w-0 w-full px-4 py-4 text-3xl font-black text-tts-deep">{desiredFinalAmount}</div>
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{desiredFinalAsset}</span>
                 </div>
                 <div className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
                   {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : L(`PIX estimado pela rota da sua conta: ${formatMoney(amountBrl)}`, `Estimated PIX from your account route: ${formatMoney(amountBrl)}`)}
@@ -2789,10 +2789,10 @@ export default function PixRampClient({
             ) : (
               <>
                 <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Valor", "Amount")}</label>
-                <div className="mt-2 flex overflow-hidden rounded-3xl border border-tts-border bg-tts-surface focus-within:border-tts-confirm">
-                  <span className="flex items-center bg-tts-surface px-4 text-sm font-black text-tts-deep">R$</span>
+                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-confirm">
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">R$</span>
                   <input
-                    className="w-full bg-transparent px-4 py-4 text-3xl font-black text-tts-surface outline-none"
+                    className="min-w-0 w-full bg-transparent px-4 py-4 text-3xl font-black text-tts-deep outline-none"
                     value={amountBrl}
                     inputMode="decimal"
                     onChange={(event) => {
@@ -2800,7 +2800,7 @@ export default function PixRampClient({
                       clearQuoteState();
                     }}
                   />
-                  <span className="flex items-center px-4 text-sm font-black text-tts-deep">BRL</span>
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">BRL</span>
                 </div>
               </>
             )}
@@ -2824,7 +2824,7 @@ export default function PixRampClient({
                 {L("Avançado", "Advanced")}
               </button>
             </div>
-            <div className={`mt-2 grid gap-2 rounded-3xl border border-tts-border bg-tts-deep/20 p-2 ${advancedAssetMode ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2"}`}>
+            <div className={`mt-2 grid gap-2 rounded-3xl border border-tts-border bg-tts-bg/60 p-2 ${advancedAssetMode ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2"}`}>
               {(advancedAssetMode ? ADVANCED_TARGET_ASSETS : BASIC_TARGET_ASSETS).map((asset) => (
                 <button
                   key={asset}
@@ -2869,7 +2869,7 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-tts-deep px-5 py-4 text-base font-bold text-tts-surface shadow-lg shadow-tts-deep/15 transition hover:bg-tts-deep/90 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-lg shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
               {operationLocked
                 ? L("PIX concluído", "PIX complete")
                 : loading === "Preparing PIX checkout"
@@ -2889,7 +2889,7 @@ export default function PixRampClient({
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-confirm">{L("Pronto", "Ready")}</p>
-                    <h3 className="mt-1 text-2xl font-black text-tts-surface">{estimatedReceiveLabel}</h3>
+                    <h3 className="mt-1 text-2xl font-black text-tts-deep">{estimatedReceiveLabel}</h3>
                   </div>
                   <div className={`rounded-full px-3 py-1 text-xs font-black ${quoteExpired ? "bg-tts-error text-tts-deep" : "bg-tts-confirm text-tts-deep"}`}>
                     {quoteCountdown}
@@ -2911,7 +2911,7 @@ export default function PixRampClient({
                 {onboardingUrl && (
                   <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
                     <p className="font-bold">{L("Precisamos concluir o cadastro PIX desta conta.", "We need to finish this account's PIX setup.")}</p>
-                    <a className="mt-3 inline-flex rounded-full bg-tts-gold px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-gold" href={onboardingUrl} target="_blank" rel="noreferrer">
+                    <a className="mt-3 inline-flex rounded-full bg-tts-gold px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep" href={onboardingUrl} target="_blank" rel="noreferrer">
                       {L("Abrir cadastro PIX", "Open PIX setup")}
                     </a>
                   </div>
@@ -2925,7 +2925,7 @@ export default function PixRampClient({
             )}
           </div>
 
-          <div className="rounded-[2rem] border border-tts-border bg-tts-deep/40 p-5 text-tts-surface shadow-xl sm:p-6">
+          <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-xl sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-confirm">{L("Pagamento", "Payment")}</p>
@@ -2934,7 +2934,7 @@ export default function PixRampClient({
             </div>
 
             {!order ? (
-              <div className="mt-8 rounded-3xl border border-dashed border-tts-border p-8 text-center text-sm text-tts-surface/60">
+              <div className="mt-8 rounded-3xl border border-dashed border-tts-border bg-tts-bg/60 p-8 text-center text-sm text-tts-muted">
                 <p>
                   {quoteExpired
                       ? L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")
@@ -2946,7 +2946,7 @@ export default function PixRampClient({
             ) : (
               <>
                     <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-                      <div className="rounded-3xl bg-white p-4">
+                      <div className="rounded-3xl p-4" style={{ backgroundColor: "#ffffff", color: "#111827" }}>
                         {qrDataUrl ? (
                           <img
                             src={qrDataUrl}
@@ -2958,15 +2958,15 @@ export default function PixRampClient({
                         )}
                       </div>
                   <div className="space-y-3">
-                    <div className="rounded-3xl bg-tts-surface p-4">
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Recebedor", "Receiver")}</p>
                       <p className="mt-1 text-lg font-black">TalkToStellar</p>
                     </div>
-                    <div className="rounded-3xl bg-tts-surface p-4">
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Valor", "Amount")}</p>
                       <p className="mt-1 text-lg font-black">{formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)}</p>
                     </div>
-                    <div className="rounded-3xl bg-tts-surface p-4">
+                    <div className="rounded-3xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Expira em", "Expires in")}</p>
                       <p className="mt-1 text-lg font-black">{quoteCountdown}</p>
                     </div>
@@ -2993,18 +2993,18 @@ export default function PixRampClient({
                       </p>
                     </div>
                   ) : (
-                    <div className="mt-5 rounded-3xl bg-tts-deep/20 p-4">
+                    <div className="mt-5 rounded-3xl bg-tts-bg/60 p-4">
                       <p className="mb-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
                         {L("PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.", "Bank PIX integrated. Use the QR or copy the code to pay in your bank app.")}
                       </p>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Código PIX copia e cola", "Copy-and-paste PIX code")}</p>
-                        <button className="rounded-full bg-tts-deep px-3 py-1 text-xs font-bold text-tts-surface transition hover:bg-tts-deep/90" onClick={() => run("Copying PIX code", copyPixCode)}>
+                        <button className="rounded-full bg-tts-confirm px-3 py-1 text-xs font-bold text-tts-deep transition hover:bg-tts-confirm/90" onClick={() => run("Copying PIX code", copyPixCode)}>
                           {copied ? L("Copiado", "Copied") : L("Copiar código PIX", "Copy PIX code")}
                         </button>
                       </div>
-                      <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-tts-surface p-3 font-mono text-xs text-tts-surface/80">{pixCode || "PIX code not returned yet"}</p>
-                      <p className="mt-3 text-sm text-tts-surface/65">{L("Chave PIX", "PIX key")}: <span className="font-mono text-tts-surface">{pixKey || L("indisponível", "unavailable")}</span></p>
+                      <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-tts-surface p-3 font-mono text-xs text-tts-deep">{pixCode || "PIX code not returned yet"}</p>
+                      <p className="mt-3 text-sm text-tts-muted">{L("Chave PIX", "PIX key")}: <span className="font-mono text-tts-deep">{pixKey || L("indisponível", "unavailable")}</span></p>
                     </div>
                   )}
 
@@ -3013,7 +3013,7 @@ export default function PixRampClient({
                       <p className="text-sm font-black">{L("Não foi possível concluir este PIX.", "This PIX could not be completed.")}</p>
                       <p className="mt-2 text-sm font-bold text-tts-error">{L("Gere um novo PIX e tente novamente.", "Create a new PIX and try again.")}</p>
                       <button
-                        className="mt-4 rounded-2xl bg-tts-error px-4 py-3 text-xs font-black text-tts-error"
+                        className="mt-4 rounded-2xl bg-tts-error px-4 py-3 text-xs font-black text-tts-deep"
                         onClick={clearQuoteState}
                       >
                         {L("Gerar novo PIX", "Create new PIX")}
@@ -3047,7 +3047,7 @@ export default function PixRampClient({
                               }}
                             />
                             <button
-                              className="mt-4 w-full rounded-3xl bg-tts-gold px-5 py-5 text-base font-black text-tts-gold shadow-lg shadow-amber-950/30 transition hover:bg-tts-gold disabled:opacity-50"
+                              className="mt-4 w-full rounded-3xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-lg shadow-amber-950/30 transition hover:bg-tts-gold/90 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
@@ -3123,7 +3123,7 @@ export default function PixRampClient({
         )}
 
         {step === "success" && successTransaction && (
-          <section className="mt-5 overflow-hidden rounded-[2rem] border border-tts-confirm bg-tts-bg text-tts-surface shadow-2xl shadow-emerald-950/25">
+          <section className="mt-5 overflow-hidden rounded-[2rem] border border-tts-confirm bg-tts-surface text-tts-deep shadow-2xl shadow-emerald-950/25">
             <div className="relative p-6 sm:p-8">
               <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-tts-confirm/10 blur-3xl" />
               <div className="absolute -bottom-28 left-8 h-48 w-48 rounded-full bg-tts-confirm/10 blur-3xl" />
@@ -3137,7 +3137,7 @@ export default function PixRampClient({
                       <h2 className="text-3xl font-black tracking-tight sm:text-5xl">
                         {rampMode === "offramp" ? L("Retirada confirmada", "Withdrawal confirmed") : transferFlow ? L("PIX e transferência confirmados", "PIX and transfer confirmed") : L("PIX confirmado", "PIX confirmed")}
                       </h2>
-                      <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-tts-surface/65">
+                      <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-tts-muted">
                         {rampMode === "offramp"
                           ? L("O saldo saiu da sua conta TalkToStellar e entrou no seu PIX.", "The balance left your TalkToStellar account and arrived in your PIX.")
                           : transferFlow
@@ -3153,11 +3153,11 @@ export default function PixRampClient({
               </div>
 
               <div className="relative mt-8 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-[1.75rem] border border-tts-border bg-white/[0.07] p-5">
+                <div className="rounded-[1.75rem] border border-tts-border bg-tts-bg/60 p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-confirm">
                     {rampMode === "offramp" ? L("Valor retirado", "Amount withdrawn") : L("Valor recebido", "Amount received")}
                   </p>
-                  <p className="mt-3 text-4xl font-black tracking-tight text-tts-surface sm:text-5xl">
+                  <p className="mt-3 text-4xl font-black tracking-tight text-tts-deep sm:text-5xl">
                     {rampMode === "offramp"
                       ? offRampReceiptAmount
                       : formatRampAsset(finalReceivedAmount || order?.toAmount || quote?.toAmount, receivedCode)}
@@ -3174,7 +3174,7 @@ export default function PixRampClient({
                   </div>
                 </div>
 
-                <div className="rounded-[1.75rem] border border-tts-border bg-tts-deep/20 p-5">
+                <div className="rounded-[1.75rem] border border-tts-border bg-tts-bg/60 p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-confirm">{L("Detalhes do comprovante", "Receipt details")}</p>
                   <dl className="mt-4 grid gap-3 text-sm">
                     <ReceiptRow label={L("Destino", "Destination")} value={rampMode === "offramp" ? L("Seu PIX", "Your PIX") : L("Minha conta TalkToStellar", "My TalkToStellar account")} />
@@ -3206,7 +3206,7 @@ export default function PixRampClient({
                 </div>
               )}
 
-              <p className="relative mt-4 text-xs font-semibold text-tts-surface/45">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+              <p className="relative mt-4 text-xs font-semibold text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
             </div>
           </section>
         )}
@@ -3229,16 +3229,16 @@ function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden,
       <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-gold">Endpoint in frontend</p>
       <h2 className="mt-1 text-2xl font-black">{title}</h2>
       <p className="mt-3 text-sm leading-6 text-tts-muted">{description}</p>
-      <div className="mt-4 rounded-2xl bg-tts-surface p-4 font-mono text-xs font-black text-tts-deep">{endpoint}</div>
+      <div className="mt-4 rounded-2xl bg-tts-bg/60 p-4 font-mono text-xs font-black text-tts-deep">{endpoint}</div>
       {hidden ? (
-        <div className="mt-5 rounded-2xl bg-tts-surface p-4 text-sm font-bold text-tts-muted">Hidden in production.</div>
+        <div className="mt-5 rounded-2xl bg-tts-bg/60 p-4 text-sm font-bold text-tts-muted">Hidden in production.</div>
       ) : (
-        <button className="mt-5 w-full rounded-2xl bg-tts-deep px-5 py-3 text-sm font-bold text-tts-surface transition hover:bg-tts-deep/90 disabled:opacity-50" disabled={disabled} onClick={onRun}>
+        <button className="mt-5 w-full rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-bold text-tts-deep transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={disabled} onClick={onRun}>
           Test whole flow and asset delta
         </button>
       )}
       {result && (
-        <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-tts-surface p-4 text-xs text-tts-confirm">{JSON.stringify(result, null, 2)}</pre>
+        <pre className="mt-5 max-h-80 overflow-auto rounded-2xl bg-tts-bg/60 p-4 text-xs text-tts-confirm">{JSON.stringify(result, null, 2)}</pre>
       )}
     </div>
   );
@@ -3270,27 +3270,27 @@ function EtherfuseMeasuredFeeNotice({
     : L("Você verá quanto sai da conta, a taxa do app e quanto chega no PIX antes de digitar o PIN.", "You will see how much leaves the account, the app fee, and how much arrives in PIX before entering the PIN.");
 
   return (
-    <div className="mt-4 rounded-3xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-gold">
+    <div className="mt-4 rounded-3xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-gold">{label}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-tts-deep/20 p-3">
+        <div className="rounded-2xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
           <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-gold">
             {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada", "Withdrawal fee")}
           </p>
           <p className="mt-1 text-lg font-black">{formatMoney(estimatedProviderFee)}</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-tts-gold">
+          <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">
             {L("Valor aproximado para este PIX.", "Approximate amount for this PIX.")}
           </p>
         </div>
-        <div className="rounded-2xl bg-tts-deep/20 p-3">
+        <div className="rounded-2xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
           <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-gold">{L("Taxa do app", "App fee")}</p>
           <p className="mt-1 text-lg font-black">{formatMoney(estimatedTtsFee)}</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-tts-gold">
+          <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">
             {L("Mostrada antes da confirmação.", "Shown before confirmation.")}
           </p>
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold leading-5 text-tts-gold">{description}</p>
+      <p className="mt-3 text-xs font-semibold leading-5 text-tts-muted">{description}</p>
     </div>
   );
 }
@@ -3342,11 +3342,11 @@ function RampFeeBridge({
     : L("Chega no PIX", "Arrives in PIX");
 
   return (
-    <div className="mt-5 rounded-3xl border border-tts-border bg-tts-deep/20 p-4">
+    <div className="mt-5 rounded-3xl border border-tts-border bg-tts-bg/60 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{L("Antes de confirmar", "Before confirming")}</p>
-          <h3 className="mt-1 text-xl font-black text-tts-surface">{feeTitle}</h3>
+          <h3 className="mt-1 text-xl font-black text-tts-deep">{feeTitle}</h3>
           <p className="mt-1 text-xs font-semibold leading-5 text-tts-muted">{feeCaption}</p>
         </div>
       </div>
@@ -3366,12 +3366,12 @@ function RampFeeBridge({
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <div className="rounded-2xl bg-tts-surface p-3">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{mode === "onramp" ? L("Você paga", "You pay") : L("Sai da conta", "Leaves account")}</p>
-          <p className="mt-2 text-lg font-black text-tts-surface">{sourceValue}</p>
+          <p className="mt-2 text-lg font-black text-tts-deep">{sourceValue}</p>
           <p className="mt-1 text-xs font-bold text-tts-muted">{sourceCaption || L("valor inicial", "starting amount")}</p>
         </div>
         <div className="rounded-2xl bg-tts-surface p-3">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Taxa", "Fee")}</p>
-          <p className="mt-2 text-lg font-black text-tts-surface">{totalFeeDisplay}</p>
+          <p className="mt-2 text-lg font-black text-tts-deep">{totalFeeDisplay}</p>
           <p className="mt-1 text-xs font-bold text-tts-muted">{L("descontada nesta operação", "deducted in this operation")}</p>
         </div>
         <div className="rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3">
@@ -3382,13 +3382,13 @@ function RampFeeBridge({
       </div>
 
       <div className="mt-3 grid gap-2 text-xs font-bold text-tts-deep lg:grid-cols-2">
-        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-gold">
+        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep">
           <span className="block uppercase tracking-[0.14em] text-tts-gold">
             {mode === "onramp" ? L("PIX", "PIX") : L("Retirada", "Withdrawal")}
           </span>
           <span className="mt-1 block text-sm font-black">{feeValue}</span>
         </div>
-        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-gold">
+        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep">
           <span className="block uppercase tracking-[0.14em] text-tts-gold">{L("App", "App")}</span>
           <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
         </div>
@@ -3419,7 +3419,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
   return (
     <section className="mt-5 overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface shadow-2xl backdrop-blur">
       <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className={`${mode === "onramp" ? "bg-tts-confirm/10 text-tts-confirm" : "bg-tts-gold-bg text-tts-gold"} p-5 sm:p-6`}>
+        <div className={`${mode === "onramp" ? "bg-tts-confirm/10" : "bg-tts-gold-bg"} p-5 text-tts-deep sm:p-6`}>
           <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">{L("Acompanhe seu PIX", "Follow your PIX")}</p>
           <h2 className="mt-2 text-3xl font-black">
             {mode === "onramp" ? L("PIX entra e vira saldo na conta", "PIX comes in and becomes account balance") : L("Saldo sai e chega no seu PIX", "Balance goes out and arrives in your PIX")}
@@ -3429,7 +3429,7 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
               ? L("Aberto pelo chat. Acompanhe cada etapa até concluir.", "Opened from chat. Follow each step until it is done.")
               : L("Acompanhe valor, confirmação e saldo em uma tela só.", "Track amount, confirmation, and balance in one screen.")}
           </p>
-          <div className="mt-5 rounded-full bg-tts-deep/20 p-1">
+          <div className="mt-5 rounded-full bg-tts-bg/60 p-1">
             <div
               className={`h-3 rounded-full transition-all duration-700 ${mode === "onramp" ? "bg-tts-confirm" : "bg-tts-gold"}`}
               style={{ width: `${Math.max(6, progress)}%` }}
@@ -3443,21 +3443,21 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
 
         <div className="grid gap-3 p-4 sm:p-5">
           {activeStep && (
-            <div className="rounded-3xl border border-tts-border bg-tts-deep/40 p-4 shadow-xl">
+            <div className="rounded-3xl border border-tts-border bg-tts-bg/60 p-4 shadow-xl">
               <div className="flex items-center gap-3">
                 <span className={`h-3 w-3 rounded-full ${activeStep.state === "warning" ? "bg-tts-gold" : "animate-pulse bg-tts-confirm"}`} />
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
                   {L("Agora", "Now")}
                 </p>
               </div>
-              <p className="mt-2 text-lg font-black text-tts-surface">{activeStep.label}</p>
-              <p className="mt-1 text-sm font-bold text-tts-deep">{activeStep.detail}</p>
+              <p className="mt-2 text-lg font-black text-tts-deep">{activeStep.label}</p>
+              <p className="mt-1 text-sm font-bold text-tts-muted">{activeStep.detail}</p>
             </div>
           )}
 
           <div className="grid gap-2 md:grid-cols-2">
             {steps.map((step, index) => (
-              <div key={`${step.label}-${index}`} className="rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div key={`${step.label}-${index}`} className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
                 <div className="flex items-start gap-3">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
                     step.state === "done"
@@ -3465,13 +3465,13 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
                       : step.state === "active"
                         ? "bg-tts-gold text-tts-deep"
                         : step.state === "warning"
-                          ? "bg-tts-gold text-tts-gold"
+                          ? "bg-tts-gold text-tts-deep"
                           : "bg-tts-surface text-tts-muted"
                   }`}>
                     {step.state === "done" ? "OK" : index + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-black text-tts-surface">{step.label}</p>
+                    <p className="text-sm font-black text-tts-deep">{step.label}</p>
                     <p className="mt-1 text-xs font-semibold leading-5 text-tts-muted">{step.detail}</p>
                   </div>
                 </div>
@@ -3486,12 +3486,12 @@ function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, languag
 
 function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () => void }) {
   return (
-    <div className="rounded-[2rem] bg-tts-surface p-5 text-tts-surface shadow-xl shadow-emerald-950/20 sm:p-6">
+    <div className="rounded-[2rem] bg-tts-surface p-5 text-tts-deep shadow-xl shadow-emerald-950/20 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
 	          <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-confirm">Debug interno</p>
 	          <h2 className="mt-1 text-2xl font-black">Registro de requisições</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-surface/60">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">
             Mostra os detalhes tecnicos enviados para `/api/ramp/...` e o que voltou. Segredos e ativos internos ficam mascarados.
           </p>
         </div>
@@ -3501,22 +3501,22 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
       </div>
       <div className="mt-5 grid gap-3">
         {logs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-tts-border p-5 text-sm font-bold text-tts-surface/45">
+          <div className="rounded-2xl border border-dashed border-tts-border bg-tts-bg/60 p-5 text-sm font-bold text-tts-muted">
             Nenhuma chamada ainda. Use a tela para ver os requests mascarados.
           </div>
         ) : logs.map((log) => (
-          <details key={log.id} className="rounded-2xl border border-tts-border bg-tts-surface p-4" open={Boolean(log.error)}>
+          <details key={log.id} className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4" open={Boolean(log.error)}>
             <summary className="cursor-pointer list-none">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-black">{log.label}</p>
-                  <p className="mt-1 font-mono text-xs text-tts-surface/45">{log.method} {log.path}</p>
+                  <p className="mt-1 font-mono text-xs text-tts-muted">{log.method} {log.path}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs font-black">
-                  <span className="rounded-full bg-tts-surface px-3 py-1 text-tts-surface/70">{log.at}</span>
-                  {typeof log.durationMs === "number" && <span className="rounded-full bg-tts-surface px-3 py-1 text-tts-surface/70">{log.durationMs}ms</span>}
+                  <span className="rounded-full bg-tts-surface px-3 py-1 text-tts-muted">{log.at}</span>
+                  {typeof log.durationMs === "number" && <span className="rounded-full bg-tts-surface px-3 py-1 text-tts-muted">{log.durationMs}ms</span>}
                   {typeof log.status === "number" && (
-                    <span className={`rounded-full px-3 py-1 ${log.status >= 200 && log.status < 300 ? "bg-tts-confirm text-tts-deep" : "bg-tts-error text-tts-error"}`}>
+                    <span className={`rounded-full px-3 py-1 ${log.status >= 200 && log.status < 300 ? "bg-tts-confirm text-tts-deep" : "bg-tts-error text-tts-deep"}`}>
                       HTTP {log.status}
                     </span>
                   )}
@@ -3527,11 +3527,11 @@ function DebugLogPanel({ logs, onClear }: { logs: DebugLogEntry[]; onClear: () =
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">Request</p>
-                <pre className="max-h-80 overflow-auto rounded-xl bg-tts-deep/20 p-3 text-xs text-tts-confirm">{formatDebugJson(log.request)}</pre>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-tts-surface p-3 text-xs text-tts-confirm">{formatDebugJson(log.request)}</pre>
               </div>
               <div>
                 <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">Response</p>
-                <pre className="max-h-80 overflow-auto rounded-xl bg-tts-deep/20 p-3 text-xs text-tts-confirm">{formatDebugJson(log.response)}</pre>
+                <pre className="max-h-80 overflow-auto rounded-xl bg-tts-surface p-3 text-xs text-tts-confirm">{formatDebugJson(log.response)}</pre>
               </div>
             </div>
           </details>
@@ -3551,9 +3551,9 @@ function AssetMovement({ title, before, after, deltas }: {
   const displayAsset = (code?: string) => String(code || "").toUpperCase() === "XLM" ? "Account balance" : String(code || "");
 
   return (
-    <div className="rounded-[2rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl sm:p-6">
+    <div className="rounded-[2rem] border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-xl sm:p-6">
       <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-gold">Account balances changing</p>
-      <h2 className="mt-1 text-2xl font-black text-tts-surface">{title}</h2>
+      <h2 className="mt-1 text-2xl font-black text-tts-deep">{title}</h2>
       <div className="mt-5 grid gap-3">
         {before.length > 0 && after.length === 0 ? (
           <>
@@ -3561,37 +3561,37 @@ function AssetMovement({ title, before, after, deltas }: {
               Snapshot inicial capturado. O delta so aparece quando o snapshot final existir, para nao mostrar saldo como zero antes da liquidacao.
             </div>
             {before.map((item) => (
-              <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-tts-surface">{displayAsset(item.asset_code)}</p>
+                    <p className="text-sm font-black text-tts-deep">{displayAsset(item.asset_code)}</p>
                   </div>
                   <span className="rounded-full bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep">pending</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">Before</span><p className="mt-1 font-black text-tts-surface">{item.balance}</p></div>
-                  <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">After</span><p className="mt-1 font-black text-tts-surface">waiting</p></div>
+                  <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">Before</span><p className="mt-1 font-black text-tts-deep">{item.balance}</p></div>
+                  <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">After</span><p className="mt-1 font-black text-tts-deep">waiting</p></div>
                 </div>
               </div>
             ))}
           </>
         ) : deltas.length === 0 ? (
-          <div className="rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm font-bold text-tts-muted">Gere um PIX para acompanhar seu saldo.</div>
+          <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-sm font-bold text-tts-muted">Gere um PIX para acompanhar seu saldo.</div>
         ) : deltas.map((item) => {
           const deltaNumber = Number(item.delta || 0);
           return (
-            <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+            <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-black text-tts-surface">{displayAsset(item.asset_code)}</p>
+                  <p className="text-sm font-black text-tts-deep">{displayAsset(item.asset_code)}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-black ${deltaNumber > 0 ? "bg-tts-confirm text-tts-deep" : deltaNumber < 0 ? "bg-tts-error text-tts-deep" : "bg-tts-surface text-tts-deep"}`}>
                   {deltaNumber > 0 ? "+" : ""}{item.delta}
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">Before</span><p className="mt-1 font-black text-tts-surface">{item.before}</p></div>
-                <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">After</span><p className="mt-1 font-black text-tts-surface">{item.after}</p></div>
+                <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">Before</span><p className="mt-1 font-black text-tts-deep">{item.before}</p></div>
+                <div className="rounded-xl bg-tts-surface p-3"><span className="text-tts-muted">After</span><p className="mt-1 font-black text-tts-deep">{item.after}</p></div>
               </div>
             </div>
           );
@@ -3603,9 +3603,9 @@ function AssetMovement({ title, before, after, deltas }: {
 
 function ReceiptRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-tts-surface p-4">
+    <div className="rounded-2xl bg-tts-bg/60 p-4">
       <dt className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{label}</dt>
-      <dd className="mt-2 break-all font-black text-tts-surface">{value}</dd>
+      <dd className="mt-2 break-all font-black text-tts-deep">{value}</dd>
     </div>
   );
 }

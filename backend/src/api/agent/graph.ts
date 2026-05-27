@@ -4225,25 +4225,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           }
 
           if (!toolResult.success) {
-            const sourceFacingCode = this.toUserFacingAssetCode(finalSourceAssetCode);
-            const destFacingCode = this.toUserFacingAssetCode(finalDestAssetCode);
-            if (sourceFacingCode === 'USDC' && destFacingCode === 'BRL') {
-              const pixUrl = await this.buildPixRampUrl(state, {
-                direction: 'offramp',
-                amount: finalSourceAmount,
-                amount_currency: 'USDC',
-                asset_code: 'USDC',
-              });
-              state.success = true;
-              state.response_message = this.text(
-                this.getLanguage(state),
-                `Conversão interna direta de US$ para R$ não está disponível neste ambiente agora. Para receber reais, use a saída por PIX; ela calcula o valor em R$ antes do PIN:\n\n${pixUrl}`,
-                `Direct in-account conversion from US$ to R$ is not available in this environment right now. To receive reais, use PIX cash-out; it calculates the R$ amount before PIN confirmation:\n\n${pixUrl}`
-              );
-            } else {
-              state.success = false;
-              state.response_message = this.conversionUnavailableMessage(this.getLanguage(state));
-            }
+            state.success = false;
+            state.response_message = this.conversionUnavailableMessage(this.getLanguage(state));
           } else {
             const conversionDestAmount = String(toolResult.quote?.destinationAmount || '').trim();
             const conversionPrepareRaw = await executeTool('prepare_conversion_confirmation', {

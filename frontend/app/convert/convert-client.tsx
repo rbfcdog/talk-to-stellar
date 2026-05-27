@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRightLeft,
-  Banknote,
   CheckCircle2,
   Coins,
   RefreshCw,
@@ -220,60 +219,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         : L("Entre para consultar", "Sign in to check");
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const sameAsset = sourceCode === destCode;
-  const brlCashOut = sourceCode === "USDC" && destCode === "BRL";
-  const brlCashIn = sourceCode === "BRL" && destCode === "USDC";
   const conversionPrompt = language === "pt-BR"
     ? `converter ${amount || "0"} ${assetPromptName(sourceAsset, language)} para ${assetPromptName(destAsset, language)}`
     : `convert ${amount || "0"} ${assetPromptName(sourceAsset, language)} to ${assetPromptName(destAsset, language)}`;
   const chatUrl = buildUrl("/chat", { prompt: conversionPrompt, lang: language });
-  const pixOffUrl = buildUrl("/pix-off", {
-    mode: "offramp",
-    source_asset: sourceCode,
-    asset: sourceCode,
-    source_amount: amount,
-    amount,
-    currency: sourceCode,
-    from: "convert",
-    lang: language,
-  });
-  const pixOnUrl = buildUrl("/pix-on", {
-    mode: "onramp",
-    receive_asset: "USDC",
-    source_asset: "BRL",
-    amount,
-    from: "convert",
-    lang: language,
-  });
-  const primaryHref = brlCashOut ? pixOffUrl : brlCashIn ? pixOnUrl : chatUrl;
-  const primaryLabel = brlCashOut
-    ? L("Abrir saída PIX", "Open PIX withdrawal")
-    : brlCashIn
-      ? L("Abrir entrada PIX", "Open PIX deposit")
-      : L("Revisar conversão", "Review conversion");
-  const routeTitle = brlCashOut
-    ? L("Dólar para R$ usa saída PIX", "Dollars to R$ uses PIX withdrawal")
-    : brlCashIn
-      ? L("R$ para dólar usa entrada PIX", "R$ to dollars uses PIX deposit")
-      : L("Conversão interna", "Internal conversion");
-  const routeDescription = brlCashOut
-    ? L(
-        "Neste ambiente, USDC para R$ não deve mostrar cotação interna falsa. A saída PIX calcula o valor em reais, taxas e destino antes do PIN.",
-        "In this environment, USDC to R$ should not show a fake internal quote. PIX withdrawal calculates BRL amount, fees, and destination before PIN."
-      )
-    : brlCashIn
-      ? L(
-          "Para colocar R$ na conta e receber saldo em dólares, use o PIX de entrada. A cotação real aparece antes de confirmar.",
-          "To bring R$ into the account and receive dollar balance, use PIX deposit. The live quote appears before confirmation."
-        )
-      : L(
-          "A próxima etapa pede a rota real ao backend. Se não existir caminho seguro, ela mostra a alternativa em vez de inventar preço.",
-          "The next step asks the backend for the live route. If there is no safe path, it shows the alternative instead of inventing a price."
-        );
-  const destinationValue = brlCashOut
-    ? L("Calculado na saída PIX", "Calculated in PIX withdrawal")
-    : brlCashIn
-      ? L("Calculado na entrada PIX", "Calculated in PIX deposit")
-      : L("Calculado na revisão", "Calculated in review");
+  const primaryHref = chatUrl;
+  const primaryLabel = L("Revisar conversão", "Review conversion");
+  const routeTitle = L("Conversão interna", "Internal conversion");
+  const routeDescription = L(
+    "A próxima etapa pede a rota real ao backend. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
+    "The next step asks the backend for the live route. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
+  );
+  const destinationValue = L("Calculado na revisão", "Calculated in review");
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
   const securityValue = sameAsset
@@ -398,7 +355,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                {brlCashOut || brlCashIn ? <Banknote className="h-5 w-5 text-tts-confirm" aria-hidden="true" /> : <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />}
+                <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
                 {routeTitle}
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
