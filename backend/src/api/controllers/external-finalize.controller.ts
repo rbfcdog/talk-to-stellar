@@ -37,7 +37,7 @@ import {
 } from '../services/email-confirmation.service';
 import { getRequiredJwtSecret } from '../../config/secrets';
 import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
-import { publicErrorMessage } from '../../utils/public-error';
+import { publicErrorCode, publicErrorMessage, publicErrorPayload } from '../../utils/public-error';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -162,6 +162,17 @@ const externalRepo = new ExternalRepository(supabase);
 const vaultService = new VaultService(supabase);
 
 const IDENTITY_CONFLICT_MESSAGE = 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).';
+
+function requestIdFromReq(req: Request): string {
+  return String(req?.headers?.['x-request-id'] || req?.headers?.['x-correlation-id'] || '').trim();
+}
+
+function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  if (text.length <= start + end + 3) return `${text.slice(0, 2)}...`;
+  return `${text.slice(0, start)}...${text.slice(-end)}`;
+}
 
 function verifyPinAgainstSession(pin: string, session: any) {
   return verifyWalletPinAgainstAny(pin, [
@@ -1461,6 +1472,7 @@ export default class ExternalFinalizeController {
   // body: { token, name?, email? }
   static async finalize(req: Request, res: Response) {
     let onboardingReservationTokenHash: string | null = null;
+    const requestId = requestIdFromReq(req);
     try {
       const { token, name, email, pin } = req.body;
       const rawPhoneNumber = String(req.body?.phone_number || req.body?.phoneNumber || '').trim();
@@ -2776,6 +2788,16 @@ export default class ExternalFinalizeController {
       if (!provider || !provider_user_id) {
         return res.status(400).json({ success: false, message: 'token missing provider data' });
       }
+      logger.info(`[external-finalize] event=account_finalize_start ${JSON.stringify({
+        request_id: requestId || undefined,
+        provider,
+        provider_user_id: maskLogValue(provider_user_id),
+        token_hash: maskLogValue(tokenHash, 10, 6),
+        has_email: Boolean(email),
+        has_phone: Boolean(rawPhoneNumber),
+        has_cpf: Boolean(rawCpf),
+        has_browser_id: Boolean(browserId),
+      })}`);
       const channelMetadata = externalChannelMetadata(payload, req.body, normalizedPhoneNumber);
       if (isPhoneProvider(provider) && !normalizedPhoneNumber) {
         normalizedPhoneNumber = provider_user_id;
@@ -3249,15 +3271,25 @@ export default class ExternalFinalizeController {
       if (onboardingReservationTokenHash) {
         await failOnboardingFinalization(onboardingReservationTokenHash, message);
       }
+      logger.error(`[external-finalize] event=account_finalize_failed ${JSON.stringify({
+        request_id: requestId || undefined,
+        token_hash: maskLogValue(onboardingReservationTokenHash, 10, 6),
+        code: publicErrorCode(error),
+        error: message,
+      })}`);
       if (isUniqueViolation(error)) {
         return res.status(409).json({
           success: false,
           message: IDENTITY_CONFLICT_MESSAGE,
+          ...(requestId ? { request_id: requestId } : {}),
         });
       }
       return res.status(500).json({
-        success: false,
-        message: publicErrorMessage(error, 'Não consegui concluir agora. Tente novamente em alguns segundos.'),
+        ...publicErrorPayload(error, {
+          includeSupportCode: true,
+          fallback: 'Não consegui concluir agora. Tente novamente em alguns segundos.',
+        }),
+        ...(requestId ? { request_id: requestId } : {}),
       });
     }
   }
