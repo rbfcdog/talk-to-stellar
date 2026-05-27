@@ -653,6 +653,34 @@ function defindexErrorFields(error: unknown): Record<string, unknown> {
   return errorLogFields(error);
 }
 
+function classifyDefindexBuildFailure(error: unknown): {
+  code: 'yield_account_setup_required' | 'insufficient_balance' | 'yield_execution_unavailable';
+  reason: string;
+  setupRequired: boolean;
+} {
+  const fields = defindexErrorFields(error);
+  const text = `${debugErrorMessage(error)} ${JSON.stringify(fields)}`.toLowerCase();
+  if (/missing\s*trustline|missingtrustline|trustline|trust line/.test(text)) {
+    return {
+      code: 'yield_account_setup_required',
+      reason: 'Revisao preparada. Esta conta ainda nao esta pronta para confirmar esta aplicacao; escolha outra opcao ou aguarde a configuracao da moeda.',
+      setupRequired: true,
+    };
+  }
+  if (/insufficient|underfunded|not enough|saldo|balance/.test(text)) {
+    return {
+      code: 'insufficient_balance',
+      reason: 'Revisao preparada, mas o saldo disponivel nao e suficiente para confirmar este valor.',
+      setupRequired: false,
+    };
+  }
+  return {
+    code: 'yield_execution_unavailable',
+    reason: 'Revisao preparada. A confirmacao por PIN ainda nao esta disponivel para esta opcao; tente novamente em alguns segundos ou escolha outra opcao.',
+    setupRequired: false,
+  };
+}
+
 function defindexRequestId(input: RampSessionInput): string | undefined {
   return coalesceString(input.request_id, input.requestId) || undefined;
 }
@@ -3885,25 +3913,27 @@ export class AnchorService {
     invest?: boolean;
     slippage_bps?: string | number;
     slippageBps?: string | number;
-	  }): Promise<{
-	    success: true;
-	    prepared: true;
-	    public_key: string;
-	    action: DefindexYieldAction;
-	    amount: string;
-	    amount_units: number;
-	    vault: Record<string, unknown>;
-	    review_only?: boolean;
-	    execution_ready?: boolean;
-	    execution_blocked_reason?: string;
-	    xdr?: string;
-	    raw?: unknown;
-	  }> {
-	    const runtime = DefindexYieldService.getRuntimeInfo();
-	    const context = await this.resolveSessionWallet(input);
-	    const action: DefindexYieldAction = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
-	      ? 'withdraw'
-	      : 'deposit';
+  }): Promise<{
+    success: true;
+    prepared: true;
+    public_key: string;
+    action: DefindexYieldAction;
+    amount: string;
+    amount_units: number;
+    vault: Record<string, unknown>;
+    review_only?: boolean;
+    execution_ready?: boolean;
+    execution_blocked_reason?: string;
+    execution_blocked_code?: string;
+    setup_required?: boolean;
+    xdr?: string;
+    raw?: unknown;
+  }> {
+    const runtime = DefindexYieldService.getRuntimeInfo();
+    const context = await this.resolveSessionWallet(input);
+    const action: DefindexYieldAction = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
+      ? 'withdraw'
+      : 'deposit';
     const amount = normalizeAmount(input.amount, 'amount');
     const assetCode = coalesceString(input.asset_code, input.assetCode);
     const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
@@ -3925,21 +3955,21 @@ export class AnchorService {
       assetCode,
       requestedVault,
     );
-	    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
-	    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
-	    const reviewResponse = {
-	      success: true as const,
-	      prepared: true as const,
-	      public_key: context.publicKey,
-	      action,
-	      amount,
-	      amount_units: amountUnits,
-	      vault: {
-	        ...vault,
-	        display_asset_code: userFacingAssetCode(vault.asset_code),
-	      },
-	    };
-	    if (!runtime.execution_enabled) {
+    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
+    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
+    const reviewResponse = {
+      success: true as const,
+      prepared: true as const,
+      public_key: context.publicKey,
+      action,
+      amount,
+      amount_units: amountUnits,
+      vault: {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      },
+    };
+    if (!runtime.execution_enabled) {
       logDefindex('info', 'prepare_review_only', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -3953,14 +3983,16 @@ export class AnchorService {
         network: vault.network,
         blocked_reason: runtime.execution_blocked_reason,
       });
-	      return {
-	        ...reviewResponse,
-	        review_only: true,
-	        execution_ready: false,
-	        execution_blocked_reason: runtime.execution_blocked_reason ||
-	          'Defindex execution is disabled for this environment.',
-	      };
-	    }
+      return {
+        ...reviewResponse,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: runtime.execution_blocked_reason ||
+          'Defindex execution is disabled for this environment.',
+        execution_blocked_code: 'yield_execution_disabled',
+        setup_required: false,
+      };
+    }
     let prepared: { xdr: string; raw: any };
     try {
       prepared = await DefindexYieldService.buildVaultAction({
@@ -3973,6 +4005,7 @@ export class AnchorService {
         slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
       });
     } catch (error) {
+      const block = classifyDefindexBuildFailure(error);
       logDefindex('warn', 'prepare_build_failed', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -3985,9 +4018,18 @@ export class AnchorService {
         vault_address: maskLogValue(vault.vault_address),
         network: vault.network,
         slippage_bps: Number.isFinite(slippageBps) ? slippageBps : 100,
+        blocked_code: block.code,
+        setup_required: block.setupRequired,
         ...defindexErrorFields(error),
       });
-      throw error;
+      return {
+        ...reviewResponse,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: block.reason,
+        execution_blocked_code: block.code,
+        setup_required: block.setupRequired,
+      };
     }
     logDefindex('info', 'prepare_success', {
       request_id: defindexRequestId(input),
@@ -4084,6 +4126,11 @@ export class AnchorService {
       coalesceString(input.vault_address, input.vaultAddress),
     );
     if (!prepared.execution_ready || !prepared.xdr) {
+      const blockedCode = coalesceString((prepared as any).execution_blocked_code, 'yield_execution_unavailable');
+      const blockedReason = coalesceString(
+        prepared.execution_blocked_reason,
+        'A confirmacao por PIN ainda nao esta disponivel para esta revisao.',
+      );
       logDefindex('warn', 'execute_review_not_ready', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -4096,8 +4143,10 @@ export class AnchorService {
         vault_address: maskLogValue(vault.vault_address),
         network: vault.network,
         execution_ready: prepared.execution_ready,
+        blocked_code: blockedCode,
+        setup_required: (prepared as any).setup_required,
       });
-      throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
+      throw apiError(blockedReason, 409, blockedCode);
     }
 
     let secret: string;

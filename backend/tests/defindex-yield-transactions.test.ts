@@ -208,6 +208,64 @@ describe('Defindex yield transaction flows', () => {
     }));
   });
 
+  it('keeps the review available when the vault action cannot be built for account setup', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockRejectedValue({
+      message: 'TokenErrors.MissingTrustline',
+      error: 'Simulation Failed',
+    });
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'yield_account_setup_required',
+      setup_required: true,
+      action: 'deposit',
+      amount: '100',
+      amount_units: 1000000000,
+      vault: expect.objectContaining({ asset_code: 'USDC', vault_address: YIELD_VAULTS.USDC }),
+    });
+    expect(result).not.toHaveProperty('xdr');
+    expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
+      vaultAddress: YIELD_VAULTS.USDC,
+      caller: SESSION_CONTEXT.publicKey,
+      amountUnits: 1000000000,
+    }));
+  });
+
+  it('blocks PIN execution with a clear code when review is account-setup only', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
+    jest.spyOn(DefindexYieldService, 'buildVaultAction').mockRejectedValue({
+      message: 'TokenErrors.MissingTrustline',
+      error: 'Simulation Failed',
+    });
+
+    await expect(AnchorService.executeDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+      pin: '1234',
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'yield_account_setup_required',
+    });
+  });
+
   it.each(['TESOURO'] as const)('blocks yield preparation for %s when no vault is configured', async (assetCode) => {
     await expect(AnchorService.prepareDefindexYieldForSession({
       session_id: 'session-1',
