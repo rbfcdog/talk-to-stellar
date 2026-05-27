@@ -25,6 +25,15 @@ function errorPayload(error: any): Record<string, unknown> {
   return payload;
 }
 
+function yieldErrorPayload(error: any): Record<string, unknown> {
+  const code = publicErrorCode(error);
+  return {
+    success: false,
+    code,
+    message: publicErrorMessage(error, 'Nao foi possivel atualizar o rendimento agora. Tente novamente em alguns segundos.'),
+  };
+}
+
 function requestInput(req: Request): Record<string, unknown> {
   const headerPin = String(req.headers['x-wallet-pin'] || req.headers['x-talktostellar-wallet-pin'] || '').trim();
   const headerSessionId = String(req.headers['x-session-id'] || req.headers['x-talktostellar-session-id'] || '').trim();
@@ -116,7 +125,7 @@ export class RampController {
       const result = await AnchorService.getDefindexYieldStatus();
       res.status(200).json(result);
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
 
@@ -125,7 +134,7 @@ export class RampController {
       const result = await AnchorService.getDefindexYieldBalanceForSession(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
 
@@ -134,16 +143,20 @@ export class RampController {
       const result = await AnchorService.prepareDefindexYieldForSession(requestInput(req));
       res.status(200).json(result);
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
 
   static async executeDefindexYield(req: Request, res: Response) {
     try {
       const result = await AnchorService.executeDefindexYieldForSession(requestInput(req));
-      res.status(result.success ? 200 : 400).json(result);
+      if (!result.success) {
+        res.status(400).json(yieldErrorPayload((result as any).error || result));
+        return;
+      }
+      res.status(200).json(result);
     } catch (error: any) {
-      res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
+      res.status(statusFromError(error)).json(yieldErrorPayload(error));
     }
   }
 

@@ -50,4 +50,20 @@ describe('public-error utility', () => {
     expect(message).not.toContain('idx_external_accounts_data_phone_unique');
     expect(message).not.toMatch(/duplicate key|unique constraint/i);
   });
+
+  it('maps disabled yield execution without exposing env names', () => {
+    const message = publicErrorMessage('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.');
+
+    expect(message).toContain('rendimento');
+    expect(message).toContain('PIN');
+    expect(message).not.toMatch(/Defindex|DEFINDEX|ENABLE_EXECUTION|assinar e enviar/i);
+  });
+
+  it('maps missing yield signing material without exposing vault internals', () => {
+    const message = publicErrorMessage('Wallet private key is not available in Vault for Defindex yield.');
+
+    expect(message).toContain('conta');
+    expect(message).toContain('rendimento');
+    expect(message).not.toMatch(/Wallet private key|Vault|Defindex|secret/i);
+  });
 });

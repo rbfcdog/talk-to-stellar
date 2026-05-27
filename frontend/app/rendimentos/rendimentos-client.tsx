@@ -36,6 +36,8 @@ type ApiState = {
   error: string;
 };
 
+type YieldApiError = Error & { code?: string };
+
 type YieldStep = "wallet" | "plan" | "review";
 
 type SessionState = {
@@ -345,7 +347,25 @@ function buildProjectionData(amount: string, annualRate: number | null, language
 }
 
 function sanitizeUiError(error: unknown, language: AppLanguage) {
+  const code = typeof error === "object" && error && "code" in error
+    ? String((error as { code?: unknown }).code || "").trim()
+    : "";
   const raw = error instanceof Error ? error.message : String(error || "");
+  if (code === "yield_execution_disabled") {
+    return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente. Você pode preparar a revisão, mas não movimentar saldo.", "PIN confirmation is not enabled in this environment yet. You can prepare the review, but not move funds.");
+  }
+  if (code === "account_signing_unavailable") {
+    return localCopy(language, "Esta conta ainda não está pronta para assinar rendimento. Entre novamente e tente outra vez.", "This account is not ready to sign yield actions yet. Sign in again and try once more.");
+  }
+  if (code === "invalid_pin") {
+    return localCopy(language, "Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again.");
+  }
+  if (code === "insufficient_balance") {
+    return localCopy(language, "Saldo insuficiente para aplicar esse valor. Ajuste o valor e tente novamente.", "Insufficient balance for this amount. Adjust the amount and try again.");
+  }
+  if (code === "yield_unavailable") {
+    return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
+  }
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
   if (/pix/i.test(raw)) {
     return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
@@ -413,7 +433,9 @@ async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || "Não foi possível preparar a solicitação.");
+    const apiError = new Error(payload?.message || payload?.error || "Não foi possível preparar a solicitação.") as YieldApiError;
+    if (payload?.code) apiError.code = String(payload.code);
+    throw apiError;
   }
   return payload;
 }
@@ -604,6 +626,11 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     };
   }, [configured, selectedOption?.asset_code, selectedOption?.vault_address, session.authenticated]);
 
+  useEffect(() => {
+    setYieldResult(null);
+    setPin("");
+  }, [action, amount, selectedOption?.vault_address]);
+
   async function prepareYield() {
     if (!selectedOption) return;
     setApiState({ loading: true, message: "", error: "" });
@@ -620,6 +647,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
         }),
       });
       setYieldResult(payload);
+      setActiveStep("review");
       setApiState({ loading: false, message: L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."), error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
@@ -628,8 +656,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
   async function confirmYield() {
     if (!selectedOption) return;
+    if (!yieldResult) {
+      setActiveStep("review");
+      setApiState({ loading: false, message: "", error: L("Prepare a revisão antes de confirmar com PIN.", "Prepare the review before confirming with PIN.") });
+      return;
+    }
     setApiState({ loading: true, message: "", error: "" });
-    setYieldResult(null);
     try {
       const payload = await yieldApi("defindex/yield/execute", {
         method: "POST",
@@ -1341,7 +1373,7 @@ function YieldWorkspacePanel({
   const profileShort = selectedProfile.short;
   const bestProfile = moneyProfile(bestOptionCode);
   const hasPrepared = Boolean(result);
-  const canConfirm = canPrepare && confirmationEnabled && pin.length >= 4 && !apiLoading;
+  const canConfirm = canPrepare && confirmationEnabled && hasPrepared && pin.length >= 4 && !apiLoading;
   const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
@@ -1532,22 +1564,6 @@ function YieldWorkspacePanel({
               </div>
             ) : null}
 
-            {confirmationEnabled ? (
-              <div className="mt-4">
-                <label className="block text-sm font-black text-tts-deep" htmlFor="yield-pin">
-                  {L("PIN para confirmar", "PIN to confirm")}
-                </label>
-                <input
-                  id="yield-pin"
-                  value={pin}
-                  onChange={(event) => onPinChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
-                  inputMode="numeric"
-                  type="password"
-                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
-                />
-              </div>
-            ) : null}
-
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <button
                 type="button"
@@ -1598,6 +1614,27 @@ function YieldWorkspacePanel({
                   <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>
                 )}
               </div>
+              {confirmationEnabled ? (
+                <div className="mt-4 border border-tts-border bg-tts-surface p-4">
+                  <label className="block text-sm font-black text-tts-deep" htmlFor="yield-pin-review">
+                    {L("PIN para confirmar", "PIN to confirm")}
+                  </label>
+                  <p className="mt-1 text-xs leading-5 text-tts-muted">
+                    {hasPrepared
+                      ? L("Digite o PIN apenas depois de conferir a revisão acima.", "Enter the PIN only after checking the review above.")
+                      : L("Primeiro prepare a revisão; depois o PIN libera a confirmação.", "Prepare the review first; then the PIN enables confirmation.")}
+                  </p>
+                  <input
+                    id="yield-pin-review"
+                    value={pin}
+                    onChange={(event) => onPinChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                    inputMode="numeric"
+                    type="password"
+                    disabled={!hasPrepared || apiLoading}
+                    className="mt-3 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold disabled:cursor-not-allowed disabled:opacity-55"
+                  />
+                </div>
+              ) : null}
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <button
                   type="button"
@@ -1624,7 +1661,7 @@ function YieldWorkspacePanel({
                     className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                    {L("Confirmar com PIN", "Confirm with PIN")}
+                    {hasPrepared ? L("Confirmar com PIN", "Confirm with PIN") : L("Prepare primeiro", "Prepare first")}
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
