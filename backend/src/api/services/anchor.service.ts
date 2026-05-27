@@ -3861,7 +3861,7 @@ export class AnchorService {
     if (!runtime.execution_enabled) {
       throw apiError(
         runtime.execution_blocked_reason ||
-          'Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.',
+          'Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovação jurídica/compliance.',
         403
       );
     }

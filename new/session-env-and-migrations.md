@@ -82,7 +82,7 @@ Fonte oficial: `https://docs.etherfuse.com/initial-setup`
 10. Para gerar um bloco automaticamente com execucao testnet, rode `npm --prefix backend run defindex:env -- --network testnet --enable-execution`; para gravar arquivo separado, adicione `--write .env.defindex.testnet`.
 11. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Em testnet, use CETES no lugar de EURC; se EURC/TESOURO nao aparecerem, nao configure yield desses assets.
 12. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
-13. Use `DEFINDEX_ENABLE_EXECUTION=true` para executar deposit/withdraw em testnet depois de testar assinatura e liquidez. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
+13. Use `DEFINDEX_ENABLE_EXECUTION=true` para permitir execucao tecnica em testnet depois de testar assinatura e liquidez. O backend so envia transacoes se `DEFINDEX_COMPLIANCE_APPROVED=true` tambem estiver definido apos aprovacao juridica/compliance. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
 Fontes oficiais: `https://docs.defindex.io/api-integration-guide/quickstart`, `https://docs.defindex.io/wallet-developer/api-reference/api` e `https://docs.defindex.io/api-integration-guide/creating-a-defindex-vault`
 
@@ -209,6 +209,7 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=
 DEFINDEX_CETES_VAULT=
@@ -246,7 +247,7 @@ Em testnet, o registry/API validou USDC, XLM e CETES. Nao configure yield de EUR
 
 `DEFINDEX_VAULTS_JSON` aceita assets extras além de USDC/CETES/TESOURO, mas por enquanto mantenha vazio ate validar codigo real, issuer, path/liquidez e vault do asset novo.
 
-Use `DEFINDEX_ENABLE_EXECUTION=true` para execucao em testnet depois de validar API key, vaults, issuers, liquidez e assinatura. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
+Use `DEFINDEX_ENABLE_EXECUTION=true` para execucao tecnica em testnet depois de validar API key, vaults, issuers, liquidez e assinatura. O backend ainda bloqueia envio ate `DEFINDEX_COMPLIANCE_APPROVED=true`; mantenha `false` ate haver aprovacao juridica/compliance, termos, disclosures e controles por jurisdicao. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
 ## Frontend env
 
@@ -390,7 +391,8 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `DEFINDEX_API_URL` | Backend | Alias aceito por compatibilidade com docs/SDK; prefira `DEFINDEX_BASE_URL`. |
 | `DEFINDEX_NETWORK` | Backend | `testnet` ou `mainnet`; deve bater com Stellar runtime e vaults. |
 | `DEFINDEX_TIMEOUT_MS` | Backend | Timeout de chamadas DeFindex. |
-| `DEFINDEX_ENABLE_EXECUTION` | Backend | Quando `true`, permite assinar e enviar deposit/withdraw em testnet se a rede e os vaults estiverem configurados. Quando `false`, fica em modo preview. |
+| `DEFINDEX_ENABLE_EXECUTION` | Backend | Guarda tecnica. Quando `true`, permite preparar execucao; o envio real ainda exige `DEFINDEX_COMPLIANCE_APPROVED=true`. Quando `false`, fica em modo preview/revisao. |
+| `DEFINDEX_COMPLIANCE_APPROVED` | Backend | Guarda de produto/compliance. Deve ficar `false` ate haver aprovacao juridica/compliance formal para executar rendimento nas jurisdicoes atendidas. |
 | `DEFINDEX_ALLOW_MAINNET_EXECUTION` | Backend | Guarda adicional para mainnet. Mantenha `false` em testnet; mainnet so executa quando esta flag tambem for `true`. |
 | `DEFINDEX_USDC_VAULT` | Backend | Endereco `C...` do vault para rendimento em USDC. |
 | `DEFINDEX_CETES_VAULT` | Backend | Endereco `C...` do vault para rendimento em CETES testnet. |

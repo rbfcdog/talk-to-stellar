@@ -2,24 +2,31 @@
 
 Este documento lista melhorias possiveis para a experiencia nova do app: chat, rendimento, conversao, PIX, passkey e ciclo completo do dinheiro. A prioridade e reduzir confusao, diminuir cliques e deixar claro quando algo esta em teste, em revisao ou pronto para executar.
 
-## Atualizacao: UX de rendimento mais parecida com banco
+## Atualizacao: UX de rendimento em modo revisao
 
 Arquivo principal implementado: `frontend/app/rendimentos/rendimentos-client.tsx`.
 
-Objetivo: a tela `/yield` deve parecer uma tela bancaria de carteira + aplicacao + revisao, nao uma tela tecnica de protocolo.
+Objetivo: a tela `/yield` deve parecer uma revisao financeira simples de carteira + simulacao + confirmacao, sem vender a experiencia como deposito bancario, poupanca, renda fixa, investimento garantido ou recomendacao personalizada.
 
 Mudancas aplicadas:
-- resumo superior com `Conta`, `Aplicacoes`, `Selecionado` e `Seguranca`;
-- linguagem de banco: `Carteira`, `Aplicar`, `Resgatar`, `Revisao segura`, `PIN ativo`, `Modo revisao`;
+- resumo superior com `Conta`, `Simulacoes`, `Selecionado` e `Seguranca`;
+- linguagem de revisao: `Carteira`, `Simular`, `Entrada`, `Saida`, `Revisao segura`, `Modo revisao`;
 - bloco de carteira separado do plano de rendimento;
-- navegacao por etapas separadas: `Carteira`, `Aplicar`, `Revisar`;
+- navegacao por etapas separadas: `Carteira`, `Simular`, `Revisar`;
 - botao `Explicar etapa` com explicacao contextual de cada tela;
 - revisao em 3 etapas: saldo, revisao, registro;
-- simulacao com aviso de que taxa pode variar e nao e promessa de retorno;
-- estados vazios mais claros: `Saldo nao disponivel`, `Nada aplicado ainda`, `Taxa indisponivel`;
+- simulacao com aviso de que APY e historico, estimado, variavel e nao e promessa de retorno;
+- estados vazios mais claros: `Saldo nao disponivel`, `Nada aplicado ainda`, `APY indisponivel`;
 - ambiente sem execucao aparece como `Modo revisao`, nao como erro.
 - erros genericos de PIX sao ocultados no contexto de rendimento e viram erro de rendimento;
 - payloads de saldo de rendimento em objeto sao convertidos para valor legivel, evitando `[object Object]`.
+
+Atualizacao de compliance aplicada:
+- aviso fixo de que APY nao e garantia, recomendacao personalizada, renda fixa, poupanca ou deposito bancario;
+- testnet aparece como teste tecnico;
+- `DEFINDEX_ENABLE_EXECUTION=true` nao basta para executar; tambem precisa `DEFINDEX_COMPLIANCE_APPROVED=true`;
+- `/convert` nao usa APY fallback estatico para simular rendimento;
+- o agente nao deve chamar a opcao de "melhor investimento" nem ranquear por maior APY.
 
 Tela de diagnostico passkey/OpenZeppelin: `frontend/app/passkey-test/passkey-test-client.tsx`.
 
@@ -30,8 +37,8 @@ Mudancas aplicadas:
 - status OpenZeppelin diferencia `Somente metadata`, `Configuracao incompleta` e `Pronto para testar`;
 - dados tecnicos ficam recolhidos em `Dados tecnicos do ultimo teste`.
 
-Proximas melhorias para deixar ainda mais bancario:
-- extrato de rendimento com historico de aplicacoes/resgates;
+Proximas melhorias:
+- extrato de rendimento com historico de entradas/saidas revisadas;
 - comprovante visual apos confirmacao;
 - seletor de prazo simples: 1 mes, 6 meses, 12 meses;
 - estado `Conta em analise` quando KYC/compliance impedir execucao;
@@ -61,9 +68,9 @@ Problema: o sistema tem nomes internos como `USDC`, `CETES`, `TESOURO`, `XLM`, m
 Melhoria:
 - Real/Reais para `TESOURO`;
 - Dolares para `USDC`;
-- Rendimento Mexico para `CETES`;
+- Opcao Mexico em teste para `CETES` ate existir lastro/autorizacao real;
 - ocultar `XLM` em fluxo normal, mostrar apenas se for necessario como saldo operacional;
-- nunca mostrar issuer, vault, trustline, XDR, Defindex ou contrato na UX principal.
+- nunca mostrar issuer, vault, trustline, XDR ou contrato na UX principal; DeFindex pode aparecer apenas como fonte do APY estimado/disclosure.
 
 Validacao:
 - varrer texto renderizado das telas e chat contra termos tecnicos bloqueados;
@@ -76,7 +83,7 @@ Problema: quando `DEFINDEX_ENABLE_EXECUTION=false`, a tela pode parecer quebrada
 Melhoria:
 - trocar "confirmacao desligada" por um estado de produto: `Modo revisao`;
 - mostrar: `Voce pode simular e revisar. Execucao real ainda esta bloqueada neste ambiente.`;
-- se `DEFINDEX_ENABLE_EXECUTION=true`, mudar para `Pronto para confirmar`.
+- se `DEFINDEX_ENABLE_EXECUTION=true` e `DEFINDEX_COMPLIANCE_APPROVED=true`, mudar para `Execucao aprovada`.
 
 Validacao:
 - em testnet/revisao, usuario entende que nada saiu da conta;
@@ -90,7 +97,7 @@ Problema: a tela de rendimento ainda tem muitos detalhes ao mesmo tempo.
 
 Melhoria:
 1. Escolher saldo.
-2. Ver rendimento disponivel.
+2. Ver APY estimado disponivel.
 3. Revisar e confirmar.
 
 Detalhes avancados devem ficar colapsados:
@@ -128,9 +135,9 @@ Validacao:
 Problema: grafico de rendimento pode parecer promessa.
 
 Melhoria:
-- titulo: `Simulacao com a taxa atual`;
+- titulo: `Simulacao com APY estimado`;
 - incluir seletor simples: `1 mes`, `6 meses`, `12 meses`;
-- mostrar o valor inicial e rendimento estimado separadamente;
+- mostrar o valor inicial e diferenca estimada separadamente;
 - texto curto: `Nao e promessa de retorno`.
 
 Validacao:
@@ -163,7 +170,7 @@ Melhoria:
 - evitar menus grandes depois que a intencao ja esta clara.
 
 Exemplo:
-`Entendi: voce quer deixar 100 dolares rendendo. Abri a revisao com sua conta. Nada sera confirmado sem PIN.`
+`Entendi: voce quer revisar rendimento para 100 dolares. Abri a revisao com sua conta. Nada sera confirmado sem PIN.`
 
 Validacao:
 - testes de LLM para rendimento, conversao, PIX e passkey.
@@ -176,7 +183,7 @@ Problema: usuario pode nao entender quando precisa converter antes de render.
 
 Melhoria:
 - se a moeda escolhida nao tem rendimento, mostrar uma recomendacao operacional:
-  `Esse saldo ainda nao tem rendimento aqui. Voce pode converter para Dolares ou Rendimento Mexico e revisar.`
+  `Esse saldo ainda nao tem opcao de rendimento aqui. Voce pode converter para Dolares ou Opcao Mexico em teste e revisar.`
 - CTA unico: `Converter e revisar`.
 
 Validacao:
@@ -189,7 +196,7 @@ Problema: PIX entrada, rendimento e PIX saida podem parecer tres produtos difere
 Melhoria:
 - `/money-cycle` deve mostrar um fluxo linear:
   1. adicionar dinheiro;
-  2. manter rendendo;
+  2. revisar rendimento;
   3. retirar;
 - manter valor, moeda e chave PIX no mesmo contexto;
 - mostrar apenas uma acao principal por etapa.

@@ -81,8 +81,8 @@ const ASSETS: AssetOption[] = [
     nameEn: "Dollars",
     promptPt: "dólares",
     promptEn: "dollars",
-    descriptionPt: "Para guardar em moeda forte.",
-    descriptionEn: "For holding money in dollars.",
+    descriptionPt: "Saldo em dólares da conta.",
+    descriptionEn: "Dollar balance in the account.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
     demoBrl: 5.2,
     annualRate: 0.045,
@@ -90,12 +90,12 @@ const ASSETS: AssetOption[] = [
   {
     code: "CETES",
     short: "CETES",
-    namePt: "Rendimento México",
-    nameEn: "Mexico yield",
+    namePt: "Opção México (teste)",
+    nameEn: "Mexico option (test)",
     promptPt: "CETES",
     promptEn: "CETES",
-    descriptionPt: "Opção testnet disponível para rendimento.",
-    descriptionEn: "Testnet option available for earning.",
+    descriptionPt: "Opção testnet para simulação.",
+    descriptionEn: "Testnet option for preview.",
     tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
     demoBrl: 0.3,
     annualRate: 0.0875,
@@ -288,7 +288,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       const code = normalizeAssetCode(item.display_asset_code || item.asset_code);
       return code === destAsset.code;
     });
-    return rateFromYieldOption(option as any) ?? destAsset.annualRate;
+    return rateFromYieldOption(option as any) ?? 0;
   }, [destAsset, yieldStatus]);
   const projectionData = useMemo(
     () => buildProjectionData(estimatedDestination, destinationYieldRate, language),
@@ -310,7 +310,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const conversionRows = [
     { label: L("Você troca", "You convert"), value: `${formatDecimal(numericAmount, language, 7)} ${sourceAsset.short}` },
     { label: L("Você recebe", "You receive"), value: `${formatDecimal(estimatedDestination, language, 7)} ${destAsset.short}` },
-    { label: L("Pode render em 12 meses", "May earn in 12 months"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
+    { label: L("Prévia 12m estimada", "Estimated 12m preview"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
   ];
   const howItWorksSteps = [
     {
@@ -332,8 +332,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     {
       title: L("3. Depois", "3. Next"),
       body: L(
-        "Depois de revisar, você pode confirmar com PIN ou usar o saldo de destino como base para rendimento. Nada muda na conta antes da confirmação.",
-        "After review, you can confirm with PIN or use the destination balance as the basis for earning. Nothing changes in the account before confirmation."
+        "Depois de revisar, você pode confirmar com PIN ou abrir uma revisão de rendimento para o saldo de destino. Nada muda na conta antes da confirmação.",
+        "After review, you can confirm with PIN or open a yield review for the destination balance. Nothing changes in the account before confirmation."
       ),
       icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
     },
@@ -391,8 +391,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-tts-muted">
               {L(
-                "A conversão também segue revisão bancária: você escolhe origem e destino, vê uma prévia para entender o impacto e só confirma depois que a rota real for preparada.",
-                "Conversion also follows a banking-style review: you choose source and destination, see a preview to understand the impact, and only confirm after the live route is prepared."
+                "A conversão segue uma revisão simples: você escolhe origem e destino, vê uma prévia para entender o impacto e só confirma depois que a rota real for preparada.",
+                "Conversion follows a simple review: you choose source and destination, see a preview to understand the impact, and only confirm after the live route is prepared."
               )}
             </p>
           </div>
@@ -533,7 +533,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     </a>
                     <a href={yieldUrl} className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2">
                       <PiggyBank className="h-4 w-4" aria-hidden="true" />
-                      {L("Usar em rendimento", "Use for yield")}
+                      {L("Revisar rendimento", "Review yield")}
                     </a>
                   </div>
                 </div>
@@ -551,8 +551,14 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                     {L(
-                      "Veja o valor estimado no destino e o potencial se decidir manter esse saldo rendendo.",
-                      "See the estimated destination value and the potential if you keep that balance earning."
+                      "Veja o valor estimado no destino e uma simulação com APY estimado, quando houver opção configurada.",
+                      "See the estimated destination value and a preview with estimated APY when an option is configured."
+                    )}
+                  </p>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-tts-muted">
+                    {L(
+                      "A simulação de rendimento é histórica, variável e não representa garantia, recomendação de investimento ou depósito bancário.",
+                      "The yield preview is historical, variable, and is not a guarantee, investment advice, or bank deposit."
                     )}
                   </p>
                 </div>
@@ -570,7 +576,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   asset={destAsset.short}
                 />
                 <ProjectionChart
-                  title={L("Rendimento acumulado", "Accumulated yield")}
+                  title={L("Diferença estimada", "Estimated difference")}
                   data={projectionData.slice(1)}
                   dataKey="earned"
                   color="var(--tts-gold)"
@@ -587,7 +593,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               </h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                 <ActionLink href={confirmReviewUrl} title={L("Confirmar conversão", "Confirm conversion")} body={L("Recalcula a rota real e abre a confirmação com PIN.", "Recalculates the live route and opens PIN confirmation.")} icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} />
-                <ActionLink href={yieldUrl} title={L("Manter rendendo", "Keep earning")} body={L("Use o destino da conversão como plano de rendimento.", "Use the conversion destination as the yield plan.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
+                <ActionLink href={yieldUrl} title={L("Revisar rendimento", "Review yield")} body={L("Use o destino da conversão para abrir uma simulação com APY estimado.", "Use the conversion destination to open a preview with estimated APY.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
               </div>
             </section>
           </section>

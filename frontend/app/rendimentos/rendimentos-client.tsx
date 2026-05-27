@@ -74,7 +74,19 @@ type YieldStatus = {
     api_key_configured?: boolean;
     network?: string;
     execution_enabled?: boolean;
+    compliance_approved?: boolean;
+    compliance_mode?: string;
     unavailable_reason?: string;
+    execution_blocked_reason?: string;
+    disclosure?: {
+      environment?: string;
+      source?: string;
+      rate_label?: string;
+      testnet?: boolean;
+      not_guaranteed?: boolean;
+      not_investment_advice?: boolean;
+      not_bank_deposit?: boolean;
+    };
   };
   vaults?: YieldOption[];
 };
@@ -93,24 +105,24 @@ const MONEY_PROFILES: Record<string, MoneyProfile> = {
     namePt: "Dólares",
     nameEn: "Dollars",
     short: "USD",
-    descriptionPt: "Para guardar em moeda forte.",
-    descriptionEn: "For holding money in dollars.",
+    descriptionPt: "Saldo em dólares da conta.",
+    descriptionEn: "Dollar balance in the account.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
   },
   CETES: {
-    namePt: "Rendimento México",
-    nameEn: "Mexico yield",
+    namePt: "Opção México (teste)",
+    nameEn: "Mexico option (test)",
     short: "CETES",
-    descriptionPt: "Opção de teste com rendimento disponível.",
-    descriptionEn: "A test option with yield available.",
+    descriptionPt: "Opção testnet para simulação.",
+    descriptionEn: "Testnet option for preview.",
     tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
   },
   USD: {
     namePt: "Dólares",
     nameEn: "Dollars",
     short: "USD",
-    descriptionPt: "Para guardar em moeda forte.",
-    descriptionEn: "For holding money in dollars.",
+    descriptionPt: "Saldo em dólares da conta.",
+    descriptionEn: "Dollar balance in the account.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
   },
   GBP: {
@@ -277,7 +289,8 @@ function optionRate(option: YieldOption | null | undefined, language: AppLanguag
 function optionRateText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
   if (!option) return localCopy(language, "Sem taxa disponível", "No rate available");
   const rate = optionRate(option, language);
-  return `${rate} ${localCopy(language, "ao ano", "per year")}`;
+  if (/indispon.vel|unavailable/i.test(rate)) return rate;
+  return localCopy(language, `APY estimado ${rate}`, `estimated APY ${rate}`);
 }
 
 function parseRate(value: unknown): number | null {
@@ -289,15 +302,6 @@ function parseRate(value: unknown): number | null {
 
 function optionAnnualRate(option?: YieldOption | null) {
   return parseRate(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy);
-}
-
-function sortYieldOptionsByRate(options: YieldOption[]) {
-  return [...options].sort((left, right) => {
-    const leftRate = optionAnnualRate(left) ?? -1;
-    const rightRate = optionAnnualRate(right) ?? -1;
-    if (rightRate !== leftRate) return rightRate - leftRate;
-    return optionCode(left).localeCompare(optionCode(right));
-  });
 }
 
 function normalizeDecimal(value: unknown) {
@@ -361,7 +365,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again.");
   }
   if (code === "insufficient_balance") {
-    return localCopy(language, "Saldo insuficiente para aplicar esse valor. Ajuste o valor e tente novamente.", "Insufficient balance for this amount. Adjust the amount and try again.");
+    return localCopy(language, "Saldo insuficiente para revisar esse valor. Ajuste o valor e tente novamente.", "Insufficient balance for this amount. Adjust the amount and try again.");
   }
   if (code === "yield_unavailable") {
     return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
@@ -466,13 +470,17 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
-  const sortedOptions = useMemo(() => sortYieldOptionsByRate(options), [options]);
+  const sortedOptions = useMemo(() => [...options], [options]);
   const bestOption = sortedOptions[0] || null;
   const selectedOption = useMemo(() => {
     return options.find((item) => optionCode(item) === selectedCode) || null;
   }, [options, selectedCode]);
   const configured = Boolean(yieldStatus?.runtime?.configured);
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
+  const complianceApproved = Boolean(yieldStatus?.runtime?.compliance_approved);
+  const yieldNetwork = String(yieldStatus?.runtime?.network || "").toLowerCase();
+  const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
+  const executionBlockedReason = String(yieldStatus?.runtime?.execution_blocked_reason || "");
   const safeSelectedCode = optionCode(selectedOption) || selectedCode;
   const selectedProfile = moneyProfile(safeSelectedCode);
   const bestOptionCode = optionCode(bestOption);
@@ -574,7 +582,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       setYieldStatus(statusPayload);
 
       const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
-      const bestAvailable = sortYieldOptionsByRate(vaults)[0] || null;
+      const bestAvailable = vaults[0] || null;
       if (!requestedAssetRef.current && bestAvailable) {
         setSelectedCode((current) => vaults.some((item: YieldOption) => optionCode(item) === current)
           ? current
@@ -699,12 +707,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
               {L("Rendimentos", "Yield")}
             </div>
             <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
-              {L("Guardar dinheiro rendendo", "Keep money earning")}
+              {L("Simular opções de rendimento", "Review yield options")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
-                "Veja seus saldos, escolha quanto quer guardar, simule o rendimento e confirme só depois da revisão. A experiência segue o fluxo de banco: saldo, aplicação, revisão e comprovante.",
-                "See your balances, choose how much to save, preview the yield, and confirm only after review. The flow follows a banking pattern: balance, deposit, review, and receipt."
+                "Veja seus saldos, escolha um valor e revise uma simulação com APY estimado. Nada aqui é promessa de retorno, recomendação de investimento ou depósito bancário.",
+                "See your balances, choose an amount, and review a preview with estimated APY. Nothing here is a guaranteed return, investment advice, or a bank deposit."
               )}
             </p>
           </div>
@@ -745,11 +753,19 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           </div>
         ) : null}
 
+        <YieldComplianceNotice
+          isTestnet={isTestnetYield}
+          complianceApproved={complianceApproved}
+          confirmationEnabled={confirmationEnabled}
+          executionBlockedReason={executionBlockedReason}
+        />
+
         {showTutorial ? (
           <YieldTutorialPanel
             hasOptions={options.length > 0}
             authenticated={session.authenticated}
             confirmationEnabled={confirmationEnabled}
+            isTestnet={isTestnetYield}
             bestOption={bestOption}
           />
         ) : null}
@@ -836,15 +852,78 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   );
 }
 
+function YieldComplianceNotice({
+  isTestnet,
+  complianceApproved,
+  confirmationEnabled,
+  executionBlockedReason,
+}: {
+  isTestnet: boolean;
+  complianceApproved: boolean;
+  confirmationEnabled: boolean;
+  executionBlockedReason: string;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const modeLabel = confirmationEnabled
+    ? L("Execução aprovada", "Execution approved")
+    : L("Somente revisão", "Review only");
+  const detail = confirmationEnabled
+    ? L(
+        "Mesmo com execução ativa, revise APY, valor e riscos antes do PIN. O APY é histórico, estimado e variável.",
+        "Even with execution enabled, review APY, amount, and risks before PIN. APY is historical, estimated, and variable."
+      )
+    : L(
+        "Este ambiente prepara e simula sem movimentar saldo. A execução real exige aprovação jurídica/compliance e env explícita.",
+        "This environment prepares and previews without moving funds. Real execution requires legal/compliance approval and an explicit env."
+      );
+  const blocked = executionBlockedReason && !confirmationEnabled;
+
+  return (
+    <section className="border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6" aria-label={L("Aviso de rendimento", "Yield notice")}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="flex items-center gap-2 font-black text-tts-deep">
+            <AlertTriangle className="h-4 w-4 text-tts-gold" aria-hidden="true" />
+            {L("Rendimento em revisão", "Yield in review")}
+          </p>
+          <p className="mt-1 text-tts-muted">
+            {L(
+              "APY estimado pela DeFindex, histórico e variável. Não é garantia, recomendação personalizada, renda fixa, poupança ou depósito bancário.",
+              "Estimated APY from DeFindex, historical and variable. Not guaranteed, not personalized advice, not fixed income, savings, or a bank deposit."
+            )}
+          </p>
+          {isTestnet ? (
+            <p className="mt-1 text-xs font-bold text-tts-muted">
+              {L("Ambiente testnet: use apenas para teste técnico.", "Testnet environment: use for technical testing only.")}
+            </p>
+          ) : null}
+          {blocked ? (
+            <p className="mt-1 text-xs font-bold text-tts-muted">
+              {L("Bloqueio atual", "Current block")}: {executionBlockedReason}
+            </p>
+          ) : null}
+        </div>
+        <span className={`inline-flex w-fit shrink-0 border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${complianceApproved ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-bg text-tts-gold"}`}>
+          {modeLabel}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-tts-muted">{detail}</p>
+    </section>
+  );
+}
+
 function YieldTutorialPanel({
   hasOptions,
   authenticated,
   confirmationEnabled,
+  isTestnet,
   bestOption,
 }: {
   hasOptions: boolean;
   authenticated: boolean;
   confirmationEnabled: boolean;
+  isTestnet: boolean;
   bestOption: YieldOption | null;
 }) {
   const { language } = useLanguage();
@@ -855,25 +934,25 @@ function YieldTutorialPanel({
       title: L("1. Conta", "1. Account"),
       body: authenticated
         ? L(
-            "A tela usa a conta conectada para buscar seus saldos disponíveis e mostrar quanto já está aplicado. Você escolhe o saldo de origem antes de qualquer simulação.",
-            "The screen uses the connected account to load available balances and show what is already earning. You choose the source balance before any preview."
+            "A tela usa a conta conectada para buscar saldos disponíveis e posições já abertas. Você escolhe o saldo de origem antes de qualquer simulação.",
+            "The screen uses the connected account to load available balances and existing positions. You choose the source balance before any preview."
           )
         : L(
-            "Entre na conta para a tela carregar saldos reais, posição rendendo e limites de revisão. Sem login, nada é preparado para confirmação.",
-            "Sign in so the screen can load real balances, earning position, and review limits. Without sign-in, nothing is prepared for confirmation."
+            "Entre na conta para carregar saldos, posição e limites de revisão. Sem login, nada é preparado para confirmação.",
+            "Sign in to load balances, position, and review limits. Without sign-in, nothing is prepared for confirmation."
           ),
       ready: authenticated,
     },
     {
-      title: L("2. Aplicação", "2. Deposit"),
+      title: L("2. Simulação", "2. Preview"),
       body: hasOptions
         ? L(
-            `Opção em destaque: ${profileName(bestProfile, language)}. Ela aparece porque já tem uma configuração de rendimento pronta para simular taxa, projeção e revisão.`,
-            `Highlighted option: ${profileName(bestProfile, language)}. It appears because it already has an earning setup ready to preview rate, projection, and review.`
+            `Opção disponível: ${profileName(bestProfile, language)}. Ela aparece porque já tem configuração para revisar APY estimado, projeção e operação.`,
+            `Available option: ${profileName(bestProfile, language)}. It appears because it is configured for estimated APY, projection, and operation review.`
           )
         : L(
-            "Ainda não há opção de rendimento configurada. A tela continua segura para consulta, mas não prepara aplicação até existir uma opção ativa.",
-            "No earning option is configured yet. The screen remains safe for viewing, but it will not prepare a deposit until an active option exists."
+            "Ainda não há opção configurada. A tela continua segura para consulta, mas não prepara operação até existir uma opção ativa.",
+            "No option is configured yet. The screen remains safe for viewing, but it will not prepare an operation until an active option exists."
           ),
       ready: hasOptions,
     },
@@ -885,8 +964,8 @@ function YieldTutorialPanel({
             "After the preview, the review shows operation, amount, rate, and projection. Only the final PIN button moves balance."
           )
         : L(
-            "Modo revisão: você consegue testar valor, taxa e projeção sem movimentar saldo. É útil para validar o fluxo antes de ligar execução.",
-            "Review mode: you can test amount, rate, and projection without moving balance. It is useful for validating the flow before enabling execution."
+            "Modo revisão: você testa valor, APY estimado e projeção sem movimentar saldo. Execução real fica bloqueada até aprovação de compliance.",
+            "Review mode: you test amount, estimated APY, and projection without moving balance. Real execution stays blocked until compliance approval."
           ),
       ready: confirmationEnabled,
     },
@@ -902,10 +981,15 @@ function YieldTutorialPanel({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
             {L(
-              "Esta tela organiza rendimento como um banco: primeiro identifica a conta conectada, depois separa o saldo que você quer aplicar ou resgatar, calcula uma projeção com a taxa disponível e só então monta uma revisão. O PIN fica separado no fim para evitar confirmação acidental.",
-              "This screen organizes earning like a bank: first it identifies the connected account, then separates the balance you want to deposit or withdraw, calculates a projection with the available rate, and only then builds a review. The PIN stays separate at the end to avoid accidental confirmation."
+              "Use de cima para baixo: confirme a conta, escolha um saldo, simule com APY estimado e monte a revisão. O PIN fica no fim para evitar confirmação acidental.",
+              "Use it top to bottom: confirm the account, choose a balance, preview with estimated APY, and build the review. PIN stays at the end to avoid accidental confirmation."
             )}
           </p>
+          {isTestnet ? (
+            <p className="mt-2 text-xs font-bold text-tts-muted">
+              {L("Como está em testnet, estes números servem para validar a experiência, não para decisão financeira real.", "Because this is testnet, these numbers validate the experience, not real financial decisions.")}
+            </p>
+          ) : null}
         </div>
         <a
           href="#yield-plan"
@@ -952,8 +1036,8 @@ function YieldStepNavigation({
     },
     {
       key: "plan",
-      label: L("2. Aplicar", "2. Deposit"),
-      description: L("Valor e taxa", "Amount and rate"),
+      label: L("2. Simular", "2. Preview"),
+      description: L("Valor e APY", "Amount and APY"),
       icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
     },
     {
@@ -1010,36 +1094,36 @@ function YieldStepHelp({ step }: { step: YieldStep }) {
     wallet: {
       title: L("Carteira", "Balances"),
       body: L(
-        "Aqui você vê a conta conectada e escolhe qual saldo será usado no plano. É a etapa de origem: ela não aplica, não resgata e não pede PIN.",
-        "Here you see the connected account and choose which balance will be used in the plan. This is the source step: it does not deposit, withdraw, or ask for a PIN."
+        "Aqui você vê a conta conectada e escolhe qual saldo será usado na simulação. É a etapa de origem: ela não movimenta saldo e não pede PIN.",
+        "Here you see the connected account and choose which balance will be used in the preview. This source step does not move funds or ask for a PIN."
       ),
       details: [
         L("Use quando quiser conferir se a conta certa está conectada.", "Use it when you want to check that the right account is connected."),
-        L("Toque em uma moeda para levar esse saldo para a etapa de aplicação.", "Tap a currency to take that balance to the deposit step."),
+        L("Toque em uma moeda para levar esse saldo para a simulação.", "Tap a currency to take that balance to the preview."),
         L("Se o saldo não aparecer, atualize a tela antes de montar a revisão.", "If the balance does not appear, refresh before building the review."),
       ],
     },
     plan: {
-      title: L("Aplicar ou resgatar", "Deposit or withdraw"),
+      title: L("Simular entrada ou saída", "Preview entry or exit"),
       body: L(
-        "Aqui você define o que quer fazer com o saldo: aplicar para render ou resgatar de volta. A tela mostra taxa, posição atual e projeção antes de preparar a revisão.",
-        "Here you define what to do with the balance: deposit to earn or withdraw back. The screen shows rate, current position, and projection before preparing the review."
+        "Aqui você define o que quer revisar com o saldo: entrada na opção ou saída de volta. A tela mostra APY estimado, posição atual e projeção antes de preparar a revisão.",
+        "Here you define what to review with the balance: entry into the option or exit back. The screen shows estimated APY, current position, and projection before preparing the review."
       ),
       details: [
         L("Informe o valor ou use os atalhos para testar cenários rápidos.", "Enter the amount or use shortcuts to test quick scenarios."),
-        L("A taxa exibida vem da opção disponível para a moeda selecionada.", "The displayed rate comes from the available option for the selected currency."),
-        L("Preparar revisão valida os dados, mas ainda não confirma a operação.", "Preparing the review validates the data, but still does not confirm the operation."),
+        L("O APY exibido vem da opção disponível para a moeda selecionada e pode variar.", "The displayed APY comes from the available option for the selected currency and may vary."),
+        L("Preparar revisão valida os dados, mas ainda não executa a operação.", "Preparing the review validates the data, but still does not execute the operation."),
       ],
     },
     review: {
       title: L("Revisão segura", "Secure review"),
       body: L(
-        "Aqui você confere a operação montada antes do passo final. A revisão separa valor, taxa, projeção e segurança para ficar claro o que será confirmado.",
-        "Here you check the assembled operation before the final step. The review separates amount, rate, projection, and security so it is clear what will be confirmed."
+        "Aqui você confere a operação montada antes do passo final. A revisão separa valor, APY estimado, projeção e segurança para ficar claro o que foi preparado.",
+        "Here you check the assembled operation before the final step. The review separates amount, estimated APY, projection, and security so it is clear what was prepared."
       ),
       details: [
-        L("Se algo estiver errado, volte para Carteira ou Aplicar antes de confirmar.", "If something is wrong, go back to Balances or Deposit before confirming."),
-        L("Com execução ligada, o PIN é o único passo que movimenta saldo.", "When execution is enabled, the PIN is the only step that moves balance."),
+        L("Se algo estiver errado, volte para Carteira ou Simular antes de confirmar.", "If something is wrong, go back to Balances or Preview before confirming."),
+        L("Com execução aprovada, o PIN é o único passo que movimenta saldo.", "When execution is approved, PIN is the only step that moves balance."),
         L("Em modo revisão, a tela valida o fluxo sem tirar dinheiro da conta.", "In review mode, the screen validates the flow without moving money from the account."),
       ],
     },
@@ -1089,13 +1173,13 @@ function BankOverviewPanel({
       ? L("Conectada", "Connected")
       : L("Entrar", "Sign in");
   const accountDetail = authenticated
-    ? L("Saldos protegidos por revisão e PIN.", "Balances protected by review and PIN.")
+    ? L("Saldos usados só depois de revisão.", "Balances used only after review.")
     : L("Entre para ver saldos reais.", "Sign in to see real balances.");
   const setupValue = configured && options.length
     ? `${options.length}`
     : L("Em preparo", "Setup");
   const setupDetail = configured && options.length
-    ? L("Opções disponíveis para simular.", "Options available to preview.")
+    ? L("Opções configuradas para revisão.", "Options configured for review.")
     : L("Configure o ambiente para liberar opções.", "Configure the environment to enable options.");
   const selectedValue = selectedOption
     ? profileName(selectedProfile, language)
@@ -1104,11 +1188,11 @@ function BankOverviewPanel({
     ? optionRateText(selectedOption, language)
     : L("Selecione uma opção disponível.", "Select an available option.");
   const confirmationValue = confirmationEnabled
-    ? L("PIN ativo", "PIN ready")
+    ? L("Execução aprovada", "Execution approved")
     : L("Modo revisão", "Review mode");
   const confirmationDetail = confirmationEnabled
     ? L("Confirmar com PIN movimenta saldo.", "Confirming with PIN moves balance.")
-    : L("Simula e prepara sem movimentar saldo.", "Previews and prepares without moving balance.");
+    : L("Simula sem movimentar saldo.", "Previews without moving balance.");
 
   return (
     <section className="grid gap-3 md:grid-cols-4" aria-label={L("Resumo bancário", "Banking summary")}>
@@ -1121,7 +1205,7 @@ function BankOverviewPanel({
       />
       <BankStatusCard
         icon={<PiggyBank className="h-5 w-5" aria-hidden="true" />}
-        label={L("Aplicações", "Yield options")}
+        label={L("Simulações", "Previews")}
         value={setupValue}
         detail={setupDetail}
         tone={configured && options.length ? "confirm" : "warn"}
@@ -1219,9 +1303,9 @@ function AccountPanel({
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {sessionLoading
-              ? L("Verificando sua sessão, saldos disponíveis e posição rendendo antes de liberar a revisão.", "Checking your session, available balances, and earning position before enabling the review.")
+              ? L("Verificando sua sessão, saldos disponíveis e posições antes de liberar a revisão.", "Checking your session, available balances, and positions before enabling the review.")
               : authenticated
-              ? L("Toque no saldo que você quer usar. A próxima etapa recebe essa moeda, mostra taxa disponível e calcula a simulação.", "Tap the balance you want to use. The next step receives that currency, shows the available rate, and calculates the preview.")
+              ? L("Toque no saldo que você quer usar. A próxima etapa recebe essa moeda, mostra APY estimado e calcula a simulação.", "Tap the balance you want to use. The next step receives that currency, shows estimated APY, and calculates the preview.")
               : L("Entre para carregar saldos reais. Sem conta conectada, a tela fica apenas em consulta e não prepara confirmação.", "Sign in to load real balances. Without a connected account, the screen remains view-only and does not prepare confirmation.")}
           </p>
         </div>
@@ -1238,7 +1322,7 @@ function AccountPanel({
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <MiniStat label={L("Saldos", "Balances")} value={sessionLoading ? L("Carregando", "Loading") : String(balanceItems.length)} detail={L("na carteira", "in account")} />
-        <MiniStat label={L("Com rendimento", "Earning-ready")} value={String(options.length)} detail={L("opções", "options")} />
+        <MiniStat label={L("Com simulação", "Preview-ready")} value={String(options.length)} detail={L("opções", "options")} />
       </div>
 
       <div className="mt-5 grid gap-2">
@@ -1388,13 +1472,13 @@ function YieldWorkspacePanel({
   const annualRateLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const projectionLabel = selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
-    ? L("Aplicar saldo", "Deposit balance")
-    : L("Resgatar para saldo", "Withdraw to balance");
+    ? L("Revisar entrada", "Review entry")
+    : L("Revisar saída", "Review exit");
   const actionDescription = action === "deposit"
-    ? L("O valor sai do saldo disponível e passa a compor a posição rendendo depois da confirmação.", "The amount leaves available balance and becomes an earning position after confirmation.")
-    : L("O valor sai da posição rendendo e volta para o saldo disponível depois da confirmação.", "The amount leaves the earning position and returns to available balance after confirmation.");
+    ? L("Prepara uma entrada na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares an entry into the selected option. In review mode, nothing leaves the account.")
+    : L("Prepara uma saída da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares an exit from the position back to available balance. In review mode, nothing leaves the account.");
   const tooltipFormatter = (value: unknown, name: unknown) => {
-    const label = String(name) === "earned" ? L("Rendimento", "Yield") : L("Saldo", "Balance");
+    const label = String(name) === "earned" ? L("Diferença estimada", "Estimated difference") : L("Saldo", "Balance");
     return [`${formatAmount(value, language)} ${profileShort}`, label];
   };
 
@@ -1404,12 +1488,12 @@ function YieldWorkspacePanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Plano de rendimento", "Yield plan")}
+            {L("Revisão de rendimento", "Yield review")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
-              ? L("Defina aplicar ou resgatar, informe o valor e gere uma revisão. A confirmação fica separada para você conferir taxa, projeção e impacto no saldo.", "Choose deposit or withdraw, enter the amount, and generate a review. Confirmation stays separate so you can check rate, projection, and balance impact.")
-              : L("Esse saldo ainda não tem rendimento ativo. Quando existir uma opção melhor para outra moeda, a tela sugere conversão antes da revisão.", "This balance does not have active yield yet. When another currency has a better option, the screen suggests conversion before review.")}
+              ? L("Defina entrada ou saída, informe o valor e gere uma revisão. A confirmação fica separada para você conferir APY estimado, projeção e impacto no saldo.", "Choose entry or exit, enter the amount, and generate a review. Confirmation stays separate so you can check estimated APY, projection, and balance impact.")
+              : L("Esse saldo ainda não tem opção ativa. Quando existir outra opção configurada, a tela sugere conversão para revisão.", "This balance does not have an active option yet. When another option is configured, the screen suggests conversion for review.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1455,21 +1539,21 @@ function YieldWorkspacePanel({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MiniStat label={L("Disponível", "Available")} value={accountBalanceLabel} detail={L("saldo da conta", "account balance")} />
-        <MiniStat label={L("Rendendo", "Earning")} value={earningBalanceLabel} detail={L("posição atual", "current position")} />
-        <MiniStat label={L("Taxa informada", "Reported rate")} value={annualRateLabel} detail={L("pode variar", "may vary")} />
+        <MiniStat label={L("Posição", "Position")} value={earningBalanceLabel} detail={L("posição atual", "current position")} />
+        <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} detail={L("histórico e variável", "historical and variable")} />
         <MiniStat label={L("Projeção 12m", "12m projection")} value={projectionLabel} detail={L("estimativa", "estimate")} />
       </div>
 
       {authenticated && !selectedHasYield ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
           <p className="font-black text-tts-gold">
-            {configured ? L("Sem rendimento para esta moeda", "No yield for this currency") : L("Rendimento ainda sem configuração", "Yield is not configured yet")}
+            {configured ? L("Sem opção para esta moeda", "No option for this currency") : L("Rendimento ainda sem configuração", "Yield is not configured yet")}
           </p>
           <p className="mt-1">
             {bestOption
               ? L(
-                  `Melhor opção disponível: ${profileName(bestProfile, language)} com ${optionRate(bestOption, language)} ao ano.`,
-                  `Best available option: ${profileName(bestProfile, language)} at ${optionRate(bestOption, language)} per year.`
+                  `Opção configurada para revisar: ${profileName(bestProfile, language)} com APY estimado ${optionRate(bestOption, language)}.`,
+                  `Configured option to review: ${profileName(bestProfile, language)} with estimated APY ${optionRate(bestOption, language)}.`
                 )
               : L("Configure as opções no backend para ativar esta tela.", "Configure backend options to activate this screen.")}
           </p>
@@ -1490,7 +1574,7 @@ function YieldWorkspacePanel({
                 className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-                {L("Aplicar", "Deposit")}
+                {L("Entrada", "Entry")}
               </button>
               <button
                 type="button"
@@ -1498,7 +1582,7 @@ function YieldWorkspacePanel({
                 className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "withdraw" ? "bg-tts-gold text-tts-deep" : "text-tts-muted"}`}
               >
                 <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
-                {L("Resgatar", "Withdraw")}
+                {L("Saída", "Exit")}
               </button>
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface p-3">
@@ -1602,7 +1686,7 @@ function YieldWorkspacePanel({
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <MiniStat label={L("Operação", "Operation")} value={actionTitle} />
                 <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
-                <MiniStat label={L("Taxa", "Rate")} value={annualRateLabel} />
+                <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} />
                 <MiniStat label={L("Segurança", "Security")} value={confirmationEnabled ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")} />
               </div>
               <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
@@ -1665,7 +1749,7 @@ function YieldWorkspacePanel({
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                    {L("Modo revisão: valida sem movimentar saldo.", "Review mode: validates without moving balance.")}
+                    {L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
                   </div>
                 )}
               </div>
@@ -1676,18 +1760,18 @@ function YieldWorkspacePanel({
                 </p>
                 <p className="border border-tts-border bg-tts-surface p-3">
                   <span className="block font-black text-tts-deep">{L("2. Revisão", "2. Review")}</span>
-                  {L("Mostra valor, ação, taxa e projeção antes do PIN.", "Shows amount, action, rate, and projection before PIN.")}
+                  {L("Mostra valor, ação, APY estimado e projeção antes do PIN.", "Shows amount, action, estimated APY, and projection before PIN.")}
                 </p>
                 <p className="border border-tts-border bg-tts-surface p-3">
                   <span className="block font-black text-tts-deep">{L("3. Registro", "3. Record")}</span>
-                  {L("Depois da confirmação, a operação fica registrada na conta.", "After confirmation, the operation is recorded in the account.")}
+                  {L("Depois da confirmação aprovada, a operação fica registrada na conta.", "After approved confirmation, the operation is recorded in the account.")}
                 </p>
               </div>
             </div>
 
             <div className="border border-tts-border bg-tts-bg p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-base font-black text-tts-deep">{L("Simulação com a taxa atual", "Preview with current rate")}</h3>
+                <h3 className="text-base font-black text-tts-deep">{L("Simulação com APY estimado", "Preview with estimated APY")}</h3>
                 <span className="text-xs font-bold text-tts-muted">{`${formatAmount(projectedEarned, language)} ${profileShort} ${L("estimado", "estimated")}`}</span>
               </div>
               <p className="mb-3 text-xs leading-5 text-tts-muted">

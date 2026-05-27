@@ -55,7 +55,7 @@ describe('public-error utility', () => {
     const message = publicErrorMessage('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.');
 
     expect(message).toContain('rendimento');
-    expect(message).toContain('PIN');
+    expect(message).toContain('compliance');
     expect(message).not.toMatch(/Defindex|DEFINDEX|ENABLE_EXECUTION|assinar e enviar/i);
   });
 

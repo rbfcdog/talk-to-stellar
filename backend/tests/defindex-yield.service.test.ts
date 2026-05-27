@@ -87,6 +87,7 @@ describe('DefindexYieldService', () => {
     process.env.DEFINDEX_API_KEY = 'sk_test';
     process.env.DEFINDEX_NETWORK = 'testnet';
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
 
     const runtime = DefindexYieldService.getRuntimeInfo();
@@ -98,9 +99,33 @@ describe('DefindexYieldService', () => {
       network_mismatch: false,
       execution_requested: true,
       execution_enabled: true,
+      compliance_approved: true,
+      compliance_mode: 'approved_execution',
       mainnet_execution_allowed: false,
     });
     expect(runtime.execution_blocked_reason).toBeUndefined();
+  });
+
+  it('keeps execution disabled until compliance approval is explicit', () => {
+    clearDefindexVaultEnv();
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.DEFINDEX_API_KEY = 'sk_test';
+    process.env.DEFINDEX_NETWORK = 'testnet';
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
+
+    const runtime = DefindexYieldService.getRuntimeInfo();
+
+    expect(runtime).toMatchObject({
+      configured: true,
+      network: 'testnet',
+      stellar_network: 'testnet',
+      execution_requested: true,
+      execution_enabled: false,
+      compliance_approved: false,
+      compliance_mode: 'review_only',
+    });
+    expect(runtime.execution_blocked_reason).toContain('DEFINDEX_COMPLIANCE_APPROVED=true');
   });
 
   it('does not enable mainnet execution from the general execution flag alone', () => {
@@ -109,6 +134,7 @@ describe('DefindexYieldService', () => {
     process.env.DEFINDEX_API_KEY = 'sk_test';
     process.env.DEFINDEX_NETWORK = 'mainnet';
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     process.env.DEFINDEX_USDC_VAULT = 'CUSDCVAULT';
 
     const runtime = DefindexYieldService.getRuntimeInfo();

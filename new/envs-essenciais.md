@@ -12,6 +12,7 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
@@ -19,7 +20,9 @@ DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
 CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 ```
 
-O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM. Para executar deposito/saque em testnet, use `DEFINDEX_ENABLE_EXECUTION=true`. Mainnet continua bloqueada enquanto `DEFINDEX_ALLOW_MAINNET_EXECUTION=false`.
+O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Defindex. Os vaults acima sao os contratos testnet encontrados/validados nesta sessao para USDC, CETES e XLM.
+
+Para executar deposito/saque em testnet, o backend agora exige duas travas ligadas: `DEFINDEX_ENABLE_EXECUTION=true` e `DEFINDEX_COMPLIANCE_APPROVED=true`. Mantenha `DEFINDEX_COMPLIANCE_APPROVED=false` ate haver aprovacao juridica/compliance formal para o ambiente e jurisdicoes atendidas. Mainnet continua bloqueada enquanto `DEFINDEX_ALLOW_MAINNET_EXECUTION=false`.
 
 Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, TESOURO aparece como real/reais; CETES aparece como rendimento Mexico. Nao recrie o asset `BRL`.
 
@@ -99,6 +102,7 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
 DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
@@ -146,7 +150,7 @@ await sdk.getVaultInfo(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTN
 await sdk.getVaultAPY(process.env.DEFINDEX_USDC_VAULT!, SupportedNetworks.TESTNET);
 ```
 
-Para testnet com execucao real, use `DEFINDEX_ENABLE_EXECUTION=true` depois de validar API key, vaults, APY, balance, XDR de deposito, XDR de saque e assinatura pela wallet. O backend so executa se `DEFINDEX_NETWORK` e `STELLAR_NETWORK` apontarem para a mesma rede. Para mainnet, alem disso, exige `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
+Para testnet com execucao real, use `DEFINDEX_ENABLE_EXECUTION=true` depois de validar API key, vaults, APY, balance, XDR de deposito, XDR de saque e assinatura pela wallet. Alem disso, defina `DEFINDEX_COMPLIANCE_APPROVED=true` somente apos revisar regulacao, termos, disclosures, AML/KYC, jurisdicoes e permissao para oferecer a funcionalidade. O backend so executa se `DEFINDEX_NETWORK` e `STELLAR_NETWORK` apontarem para a mesma rede. Para mainnet, alem disso, exige `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 
 Para EURC funcionar futuramente em producao/mainnet:
 

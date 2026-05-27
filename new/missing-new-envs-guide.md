@@ -94,6 +94,7 @@ DEFINDEX_BASE_URL=https://api.defindex.io
 DEFINDEX_NETWORK=testnet
 DEFINDEX_TIMEOUT_MS=30000
 DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=false
 DEFINDEX_ALLOW_MAINNET_EXECUTION=false
 
 # Preencha apenas os vaults C... que existem e foram validados na rede ativa.
@@ -114,7 +115,7 @@ Como preencher:
 4. Para gerar um bloco automaticamente com execucao testnet, rode `npm --prefix backend run defindex:env -- --network testnet --enable-execution`. Para arquivo separado, adicione `--write .env.defindex.testnet`.
 5. O script usa `@defindex/sdk`, registry publico e `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando existe vault. Se EURC/TESOURO nao aparecerem, nao configure yield desses assets.
 6. Valide com `healthCheck()`, `getVaultInfo()`, `getVaultAPY()` e `getVaultBalance()` antes de expor ao usuario.
-7. Use `DEFINDEX_ENABLE_EXECUTION=true` para executar deposit/withdraw em testnet depois de testar assinatura e liquidez. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
+7. Use `DEFINDEX_ENABLE_EXECUTION=true` para liberar execucao tecnica em testnet depois de testar assinatura e liquidez. O backend so envia se `DEFINDEX_COMPLIANCE_APPROVED=true` tambem estiver ligado apos aprovacao juridica/compliance. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 8. Use `DEFINDEX_VAULTS_JSON` so depois de validar outros assets. Por enquanto, priorize `DEFINDEX_USDC_VAULT`, `DEFINDEX_CETES_VAULT` e `DEFINDEX_XLM_VAULT` em testnet.
 
 ## Prioridade 3: passkey/smart account
@@ -173,6 +174,6 @@ JPY_ISSUER=
 2. `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_AGENT_API_URL`, `FRONTEND_URL` e `PUBLIC_APP_URL` apontam para dominios publicos reais.
 3. `CORS_ORIGINS` contem exatamente o dominio do frontend.
 4. `/yield`, `/convert`, `/money-cycle`, `/pix-on` e `/pix-off` abrem no frontend publico.
-5. Defindex usa `DEFINDEX_ENABLE_EXECUTION=true` para execucao em testnet depois de API key e vaults validados. Mainnet exige tambem `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
+5. Defindex usa `DEFINDEX_ENABLE_EXECUTION=true` para execucao tecnica em testnet depois de API key e vaults validados. Envio real tambem exige `DEFINDEX_COMPLIANCE_APPROVED=true`; mainnet exige ainda `DEFINDEX_ALLOW_MAINNET_EXECUTION=true`.
 6. Smart account fica com `PASSKEY_SMART_ACCOUNT_ENABLED=false` ate haver verifier P-256 implantado.
 7. Por enquanto exponha so `TESOURO,USDC,CETES,XLM`; EURC fica para public/mainnet e extras como `GBP_ISSUER` e `MXN_ISSUER` so entram depois de confirmar codigo real e liquidez/path.

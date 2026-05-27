@@ -203,6 +203,7 @@ describe('Defindex yield transaction flows', () => {
     ['XLM', YIELD_VAULTS.XLM],
   ] as const)('signs and submits prepared transaction XDR for %s when execution is enabled', async (assetCode, vaultAddress) => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
     jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SSECRET');
     jest.spyOn(DefindexYieldService, 'signXdr').mockReturnValue(`signed-${assetCode}-xdr`);

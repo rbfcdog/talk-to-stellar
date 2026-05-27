@@ -139,7 +139,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Available yield options: dollars, CETES, reais.',
+      message: 'Yield review options: dollars, CETES, reais.',
     }));
 
     const result = await graph.processInput(createState('show yield options', false));
@@ -148,7 +148,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Available yield options');
+    expect(result.response_message).toContain('Yield review options');
   });
 
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
@@ -157,7 +157,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisão pronta: guardar rendendo 250 reais.',
+      message: 'Revisão pronta: revisar entrada 250 reais.',
     }));
 
     const result = await graph.processInput(createState('guardar 250 reais rendendo'));
@@ -225,7 +225,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisão pronta: guardar rendendo 100 reais.',
+      message: 'Revisão pronta: revisar entrada 100 reais.',
     }));
 
     await graph.processInput(createState('confirmar rendimento de 100 reais'));
