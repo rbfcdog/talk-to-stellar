@@ -354,7 +354,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente. Você pode preparar a revisão, mas não movimentar saldo.", "PIN confirmation is not enabled in this environment yet. You can prepare the review, but not move funds.");
   }
   if (code === "yield_account_setup_required") {
-    return localCopy(language, "Revisão preparada. Esta conta ainda não está pronta para confirmar esta aplicação; escolha outra opção ou aguarde a configuração da moeda.", "Review prepared. This account is not ready to confirm this application yet; choose another option or wait for currency setup.");
+    return localCopy(language, "Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.");
   }
   if (code === "yield_execution_unavailable") {
     return localCopy(language, "Revisão preparada, mas a confirmação por PIN ainda não está disponível para esta opção. Tente outra opção ou tente novamente em alguns segundos.", "Review prepared, but PIN confirmation is not available for this option yet. Try another option or try again in a few seconds.");
@@ -1512,8 +1512,11 @@ function YieldWorkspacePanel({
   const canConfirm = canPrepare && confirmationAvailable && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
   const blockedCode = String(result?.execution_blocked_code || "").trim();
   const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
-    ? L("Revisão preparada. Esta conta ainda não está pronta para confirmar esta aplicação; escolha outra opção ou aguarde a configuração da moeda.", "Review prepared. This account is not ready to confirm this application yet; choose another option or wait for currency setup.")
+    ? L("Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
     : L("Revisão preparada em modo consulta. A confirmação por PIN ainda não está disponível para esta opção.", "Review prepared in view-only mode. PIN confirmation is not available for this option yet.");
+  const blockedActionLabel = blockedCode === "yield_account_setup_required"
+    ? L("Moeda aguardando ativação", "Currency awaiting activation")
+    : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.");
   const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
@@ -1828,7 +1831,7 @@ function YieldWorkspacePanel({
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                    {preparedExecutionBlocked ? preparedBlockedMessage : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
+                    {preparedExecutionBlocked ? blockedActionLabel : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
                   </div>
                 )}
               </div>
