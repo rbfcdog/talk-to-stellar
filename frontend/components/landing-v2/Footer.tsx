@@ -32,7 +32,7 @@ export function Footer() {
               </span>
             </div>
             <p className="max-w-xs text-sm leading-[1.65] text-white/55">
-              Conta por conversa para PIX, conversão multi-moeda, rendimento e
+              Conta por conversa para PIX, conversão multi-moeda, revisão com APY e
               retirada para sua chave PIX.
             </p>
           </div>

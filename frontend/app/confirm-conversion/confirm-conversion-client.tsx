@@ -310,7 +310,7 @@ export default function ConfirmConversionClient({
   })
   const chatPrompt = T(
     feedbackLanguage,
-    `quero manter ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""} rendendo`,
+    `quero revisar ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""} com APY estimado`,
     `keep ${nextDestinationAmount || "this balance"} ${nextDestinationAssetCode || ""} earning`
   ).trim()
   const chatUrl = buildActionUrl("/chat", { prompt: chatPrompt, lang: feedbackLanguage })
@@ -387,12 +387,12 @@ export default function ConfirmConversionClient({
 
             <div className="grid gap-3 md:grid-cols-3">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
-                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Manter rendendo", "Keep earning")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão no plano de rendimento.", "Use this conversion destination in the yield plan.")}</p>
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Revisar APY", "Review APY")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão na revisão com APY.", "Use this conversion destination in the APY review.")}</p>
               </a>
               <a href={moneyCycleUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Ciclo completo", "Full money cycle")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Entrar, render e sair para PIX em uma jornada.", "Add, earn, and send out to PIX in one journey.")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Entrar, revisar e sair para PIX em uma jornada.", "Add, review, and send out to PIX in one journey.")}</p>
               </a>
               <a href={chatUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Voltar ao chat", "Back to chat")}</p>

@@ -6,11 +6,11 @@ import { useLanguage } from '@/lib/i18n';
 const portugueseFaqs = [
   {
     question: "O que é o TalkToStellar?",
-    answer: "É uma conta conversacional para pedir saldo, usar PIX, converter moedas, deixar dinheiro rendendo e acompanhar comprovantes direto pelo WhatsApp, Telegram ou chat web."
+    answer: "É uma conta conversacional para pedir saldo, usar PIX, converter moedas, revisar APY e acompanhar comprovantes direto pelo WhatsApp, Telegram ou chat web."
   },
   {
-    question: "Consigo entrar, render e retirar em um fluxo só?",
-    answer: "Sim. Você pode pedir o ciclo completo: colocar dinheiro por PIX, escolher a melhor opção de rendimento disponível e retirar para uma chave PIX informada na hora."
+    question: "Consigo entrar, revisar e retirar em um fluxo só?",
+    answer: "Sim. Você pode pedir o ciclo completo: colocar dinheiro por PIX, revisar a opção disponível e retirar para uma chave PIX informada na hora."
   },
   {
     question: "Preciso baixar um aplicativo novo?",

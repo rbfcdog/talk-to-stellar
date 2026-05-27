@@ -51,19 +51,19 @@ describe('public-error utility', () => {
     expect(message).not.toMatch(/duplicate key|unique constraint/i);
   });
 
-  it('maps disabled yield execution without exposing env names', () => {
+  it('maps disabled APY review execution without exposing env names', () => {
     const message = publicErrorMessage('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.');
 
-    expect(message).toContain('rendimento');
+    expect(message).toContain('confirmacao');
     expect(message).toContain('compliance');
     expect(message).not.toMatch(/Defindex|DEFINDEX|ENABLE_EXECUTION|assinar e enviar/i);
   });
 
-  it('maps missing yield signing material without exposing vault internals', () => {
+  it('maps missing APY review signing material without exposing vault internals', () => {
     const message = publicErrorMessage('Wallet private key is not available in Vault for Defindex yield.');
 
     expect(message).toContain('conta');
-    expect(message).toContain('rendimento');
+    expect(message).toContain('operacao');
     expect(message).not.toMatch(/Wallet private key|Vault|Defindex|secret/i);
   });
 });

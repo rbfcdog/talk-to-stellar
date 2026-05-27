@@ -340,8 +340,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     {
       title: L("3. Depois", "3. Next"),
       body: L(
-        "Depois de revisar, você pode confirmar com PIN ou abrir uma revisão de rendimento para o saldo de destino. Nada muda na conta antes da confirmação.",
-        "After review, you can confirm with PIN or open a yield review for the destination balance. Nothing changes in the account before confirmation."
+        "Depois de revisar, você pode confirmar com PIN ou abrir uma revisão com APY para o saldo de destino. Nada muda na conta antes da confirmação.",
+        "After review, you can confirm with PIN or open an APY review for the destination balance. Nothing changes in the account before confirmation."
       ),
       icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
     },
@@ -546,7 +546,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     </a>
                     <a href={yieldUrl} className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2">
                       <PiggyBank className="h-4 w-4" aria-hidden="true" />
-                      {L("Revisar rendimento", "Review yield")}
+                      {L("Revisar APY", "Review APY")}
                     </a>
                   </div>
                 </div>
@@ -570,8 +570,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   </p>
                   <p className="mt-1 max-w-2xl text-xs leading-5 text-tts-muted">
                     {L(
-                      "A simulação de rendimento é histórica, variável e não representa garantia, recomendação de investimento ou depósito bancário.",
-                      "The yield preview is historical, variable, and is not a guarantee, investment advice, or bank deposit."
+                      "A simulação com APY é histórica, variável e não representa garantia, recomendação de investimento ou depósito bancário.",
+                      "The APY preview is historical, variable, and is not a guarantee, investment advice, or bank deposit."
                     )}
                   </p>
                 </div>
@@ -606,7 +606,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               </h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                 <ActionLink href={confirmReviewUrl} title={L("Confirmar conversão", "Confirm conversion")} body={L("Recalcula a rota real e abre a confirmação com PIN.", "Recalculates the live route and opens PIN confirmation.")} icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} />
-                <ActionLink href={yieldUrl} title={L("Revisar rendimento", "Review yield")} body={L("Use o destino da conversão para abrir uma simulação com APY estimado.", "Use the conversion destination to open a preview with estimated APY.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
+                <ActionLink href={yieldUrl} title={L("Revisar APY", "Review APY")} body={L("Use o destino da conversão para abrir uma simulação com APY estimado.", "Use the conversion destination to open a preview with estimated APY.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
               </div>
             </section>
           </section>

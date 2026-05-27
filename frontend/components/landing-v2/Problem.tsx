@@ -24,7 +24,7 @@ const PROBLEMS: ProblemCard[] = [
     figureSuffix: ' telas',
     title: 'Dinheiro espalhado',
     description:
-      'Entrada, conversão, rendimento e retirada normalmente ficam em lugares diferentes, com pouco contexto para decidir.',
+      'Entrada, conversão, revisão com APY e retirada normalmente ficam em lugares diferentes, com pouco contexto para decidir.',
   },
   {
     figure: '1',

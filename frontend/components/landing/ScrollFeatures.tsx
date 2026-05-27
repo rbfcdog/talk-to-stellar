@@ -62,14 +62,14 @@ export default function ScrollFeatures() {
       ]
     },
     {
-      title: L("3. Escolha rendimento", "3. Choose Yield"),
+      title: L("3. Revise APY", "3. Review APY"),
       description: L("Depois que o saldo entra, o assistente mostra opções por moeda e prepara guardar ou resgatar com revisão clara.", "After the balance arrives, the assistant shows earning options by currency and prepares save or withdraw with a clear review."),
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={PiggyBank} color="#00D2FF" delay={1} />,
       messages: [
-        { type: 'user', text: L('Quais opções de rendimento eu tenho?', 'Which earning options do I have?'), time: '09:50' },
+        { type: 'user', text: L('Quais opções com APY eu tenho?', 'Which APY options do I have?'), time: '09:50' },
         { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. Euros\n\nVocê revisa a taxa estimada antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. Euros\n\nYou review the estimated rate before confirming.'), time: '09:50' },
-        { type: 'user', text: L('Deixar 200 euros rendendo.', 'Keep 200 euros earning.'), time: '09:51' },
+        { type: 'user', text: L('Revisar 200 euros com APY.', 'Review 200 euros with APY.'), time: '09:51' },
       ]
     },
     {
