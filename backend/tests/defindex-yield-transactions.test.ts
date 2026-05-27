@@ -100,11 +100,41 @@ describe('Defindex yield transaction flows', () => {
     expect(balanceSpy).toHaveBeenCalledWith(vaultAddress, SESSION_CONTEXT.publicKey, 'testnet');
   });
 
+  it('prepares review data without building XDR when execution is not compliance-approved', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    delete process.env.DEFINDEX_COMPLIANCE_APPROVED;
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '12.3456789',
+      asset_code: 'USDC',
+      slippage_bps: 75,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      action: 'deposit',
+      amount: '12.3456789',
+      amount_units: 123456789,
+      vault: expect.objectContaining({ asset_code: 'USDC', vault_address: YIELD_VAULTS.USDC }),
+    });
+    expect(result).not.toHaveProperty('xdr');
+    expect(buildSpy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['USDC', YIELD_VAULTS.USDC],
     ['CETES', YIELD_VAULTS.CETES],
     ['XLM', YIELD_VAULTS.XLM],
   ] as const)('prepares deposit and withdraw transactions for %s', async (assetCode, vaultAddress) => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockImplementation(async (input) => ({
       xdr: `${input.action}-${assetCode}-xdr`,
       raw: { action: input.action, assetCode },
@@ -151,6 +181,8 @@ describe('Defindex yield transaction flows', () => {
   });
 
   it('normalizes testnet EURC yield requests to CETES', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
       xdr: 'deposit-cetes-xdr',
       raw: { action: 'deposit', assetCode: 'CETES' },

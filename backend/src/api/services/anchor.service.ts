@@ -3787,51 +3787,69 @@ export class AnchorService {
     invest?: boolean;
     slippage_bps?: string | number;
     slippageBps?: string | number;
-  }): Promise<{
-    success: true;
-    prepared: true;
-    public_key: string;
-    action: DefindexYieldAction;
-    amount: string;
-    amount_units: number;
-    vault: Record<string, unknown>;
-    xdr: string;
-    raw: unknown;
-  }> {
-    const context = await this.resolveSessionWallet(input);
-    const action = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
-      ? 'withdraw'
-      : 'deposit';
+	  }): Promise<{
+	    success: true;
+	    prepared: true;
+	    public_key: string;
+	    action: DefindexYieldAction;
+	    amount: string;
+	    amount_units: number;
+	    vault: Record<string, unknown>;
+	    review_only?: boolean;
+	    execution_ready?: boolean;
+	    execution_blocked_reason?: string;
+	    xdr?: string;
+	    raw?: unknown;
+	  }> {
+	    const runtime = DefindexYieldService.getRuntimeInfo();
+	    const context = await this.resolveSessionWallet(input);
+	    const action: DefindexYieldAction = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
+	      ? 'withdraw'
+	      : 'deposit';
     const amount = normalizeAmount(input.amount, 'amount');
     const vault = DefindexYieldService.requireVault(
       coalesceString(input.asset_code, input.assetCode),
       coalesceString(input.vault_address, input.vaultAddress),
     );
-    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
-    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
-    const prepared = await DefindexYieldService.buildVaultAction({
-      action,
-      vaultAddress: vault.vault_address,
+	    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
+	    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
+	    const reviewResponse = {
+	      success: true as const,
+	      prepared: true as const,
+	      public_key: context.publicKey,
+	      action,
+	      amount,
+	      amount_units: amountUnits,
+	      vault: {
+	        ...vault,
+	        display_asset_code: userFacingAssetCode(vault.asset_code),
+	      },
+	    };
+	    if (!runtime.execution_enabled) {
+	      return {
+	        ...reviewResponse,
+	        review_only: true,
+	        execution_ready: false,
+	        execution_blocked_reason: runtime.execution_blocked_reason ||
+	          'Defindex execution is disabled for this environment.',
+	      };
+	    }
+	    const prepared = await DefindexYieldService.buildVaultAction({
+	      action,
+	      vaultAddress: vault.vault_address,
       caller: context.publicKey,
       amountUnits,
       network: vault.network,
       invest: input.invest !== false,
-      slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
-    });
-    return {
-      success: true,
-      prepared: true,
-      public_key: context.publicKey,
-      action,
-      amount,
-      amount_units: amountUnits,
-      vault: {
-        ...vault,
-        display_asset_code: userFacingAssetCode(vault.asset_code),
-      },
-      xdr: prepared.xdr,
-      raw: prepared.raw,
-    };
+	      slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
+	    });
+	    return {
+	      ...reviewResponse,
+	      review_only: false,
+	      execution_ready: true,
+	      xdr: prepared.xdr,
+	      raw: prepared.raw,
+	    };
   }
 
   static async executeDefindexYieldForSession(input: RampSessionInput & {
