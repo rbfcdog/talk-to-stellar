@@ -66,4 +66,10 @@ describe('public-error utility', () => {
     expect(message).toContain('operacao');
     expect(message).not.toMatch(/Wallet private key|Vault|Defindex|secret/i);
   });
+
+  it('maps APY confirmation PIN and review-state failures to actionable messages', () => {
+    expect(publicErrorMessage('PIN da conta e obrigatorio para confirmar esta operacao.')).toContain('PIN');
+    expect(publicErrorMessage('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.')).toContain('Prepare a revisao');
+    expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('concluir a confirmacao');
+  });
 });

@@ -30,7 +30,7 @@ function yieldErrorPayload(error: any): Record<string, unknown> {
   return {
     success: false,
     code,
-    message: publicErrorMessage(error, 'Nao foi possivel atualizar o rendimento agora. Tente novamente em alguns segundos.'),
+    message: publicErrorMessage(error, 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.'),
   };
 }
 

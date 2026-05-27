@@ -296,9 +296,10 @@ interface ResolveWalletByEmailInput {
   email?: string;
 }
 
-function apiError(message: string, statusCode = 400): Error {
-  const error = new Error(message) as Error & { statusCode?: number };
+function apiError(message: string, statusCode = 400, code?: string): Error {
+  const error = new Error(message) as Error & { statusCode?: number; code?: string };
   error.statusCode = statusCode;
+  if (code) error.code = code;
   return error;
 }
 
@@ -1039,10 +1040,10 @@ export class AnchorService {
       input.passcode,
     );
     if (!/^\d{4,8}$/.test(pin)) {
-      throw apiError('PIN da wallet é obrigatório para confirmar esta operação.', 400);
+      throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
     }
     if (!context.sessionPinHash || !verifyWalletPin(pin, context.sessionPinHash).valid) {
-      throw apiError('PIN inválido. Tente novamente.', 401);
+      throw apiError('PIN invalido. Tente novamente.', 401, 'invalid_pin');
     }
     return pin;
   }
@@ -3879,15 +3880,16 @@ export class AnchorService {
     if (!runtime.execution_enabled) {
       throw apiError(
         runtime.execution_blocked_reason ||
-          'Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovação jurídica/compliance.',
-        403
+          'Confirmacao de APY desativada neste ambiente. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovacao juridica/compliance.',
+        403,
+        'yield_execution_disabled',
       );
     }
     const context = await this.resolveSessionWallet(input);
     const walletPin = this.requireWalletPin(input, context);
-    if (!walletPin) throw apiError('PIN da wallet é obrigatório para Defindex yield.', 400);
+    if (!walletPin) throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
     if (!context.vaultSecretId) {
-      throw apiError('Wallet private key is not available in Vault for Defindex yield.', 409);
+      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
     }
     const prepared = await this.prepareDefindexYieldForSession(input);
     const action = prepared.action;
@@ -3898,16 +3900,39 @@ export class AnchorService {
       coalesceString(input.vault_address, input.vaultAddress),
     );
     if (!prepared.execution_ready || !prepared.xdr) {
-      throw apiError('Defindex execution review is not ready. Prepare the operation again before confirming.', 409);
+      throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
     }
 
-    const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    const signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
-    const sent = await DefindexYieldService.sendVaultTransaction({
-      vaultAddress: vault.vault_address,
-      signedXdr,
-      network: vault.network,
-    });
+    let secret: string;
+    try {
+      secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
+    } catch (error) {
+      console.warn('[defindex] Could not read signing material:', debugErrorMessage(error));
+      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+    }
+    if (!/^S[A-Z2-7]{55}$/.test(secret)) {
+      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+    }
+
+    let signedXdr: string;
+    try {
+      signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
+    } catch (error) {
+      console.warn('[defindex] Could not sign prepared review:', debugErrorMessage(error));
+      throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
+    }
+
+    let sent: { hash: string; raw: any };
+    try {
+      sent = await DefindexYieldService.sendVaultTransaction({
+        vaultAddress: vault.vault_address,
+        signedXdr,
+        network: vault.network,
+      });
+    } catch (error) {
+      console.warn('[defindex] Could not submit transaction:', debugErrorMessage(error));
+      throw apiError('Falha de envio da transacao externa.', 502, 'execution_unavailable');
+    }
     await OperationRepository.create({
       user_id: context.userId,
       type: `DEFINDEX_YIELD_${action.toUpperCase()}`,

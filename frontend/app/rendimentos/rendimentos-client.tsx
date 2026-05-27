@@ -356,6 +356,15 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
   if (code === "account_signing_unavailable") {
     return localCopy(language, "Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more.");
   }
+  if (code === "missing_pin") {
+    return localCopy(language, "Digite o PIN da conta para confirmar.", "Enter the account PIN to confirm.");
+  }
+  if (code === "review_not_prepared") {
+    return localCopy(language, "Prepare a revisão novamente e confirme em seguida.", "Prepare the review again, then confirm.");
+  }
+  if (code === "execution_unavailable") {
+    return localCopy(language, "Não foi possível concluir a confirmação agora. Prepare uma nova revisão e tente novamente.", "Could not finish confirmation right now. Prepare a new review and try again.");
+  }
   if (code === "invalid_pin") {
     return localCopy(language, "Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again.");
   }
@@ -680,7 +689,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           pin,
           wallet_pin: pin,
         }),
-      });
+      }, 60000);
       setYieldResult(payload);
       setPin("");
       setApiState({ loading: false, message: L("Operação confirmada. Vamos atualizar seus saldos em instantes.", "Operation confirmed. We will update your balances shortly."), error: "" });
