@@ -2,6 +2,29 @@
 
 Versao curta para deploy. Isto nao repete envs basicos que o projeto ja usava, como `SUPABASE_*`, `OPENAI_API_KEY`, `STELLAR_*`, `JWT_SECRET` e `PIN_PEPPER`.
 
+## Gerador geral recomendado
+
+Para gerar envs consistentes para backend, frontend e Telegram, use:
+
+```bash
+npm run env:generate -- \
+  --frontend-url https://seu-frontend \
+  --backend-url https://seu-backend \
+  --telegram-url https://seu-telegram-service \
+  --write-dir .env.generated \
+  --force
+```
+
+Isso cria:
+
+```text
+.env.generated/backend.env
+.env.generated/frontend.env
+.env.generated/telegram.env
+```
+
+O guia completo fica em `new/env-geral-para-todos.md`.
+
 ## 0. O que ainda falta preencher para rendimento
 
 Para a tela `/yield` deixar de mostrar "aguardando opção", confirme estes envs no backend do deploy:
