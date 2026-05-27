@@ -7,6 +7,7 @@
     "build": "npm --prefix frontend ci && npm --prefix frontend run build",
     "frontend:build": "npm --prefix frontend run build",
     "backend:build": "npm --prefix backend run build",
+    "passkey:env": "node scripts/generate-passkey-env.mjs",
     "telegram:start": "npm --prefix telegram start"
   },
   "engines": {

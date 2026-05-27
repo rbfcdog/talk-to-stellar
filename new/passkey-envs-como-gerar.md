@@ -2,6 +2,45 @@
 
 Guia curto para preencher as variaveis novas de passkey. Para testar passkey simples, voce nao precisa de contrato OpenZeppelin.
 
+## 0. Gerar com script
+
+Use o script do repo para gerar o bloco correto a partir da URL exata do frontend:
+
+```bash
+npm run passkey:env -- --origin http://localhost:3000
+```
+
+Para producao:
+
+```bash
+npm run passkey:env -- --origin https://talk-to-stellar-owxg.vercel.app
+```
+
+Para salvar em arquivo local:
+
+```bash
+npm run passkey:env -- --origin https://talk-to-stellar-owxg.vercel.app --write .env.passkey
+```
+
+Se ja tiver verifier Soroban `C...` e context rule id criados na smart account:
+
+```bash
+npm run passkey:env -- --origin https://talk-to-stellar-owxg.vercel.app --verifier C... --context-rule-id 1
+```
+
+O script gera automaticamente:
+
+- `NEXT_PUBLIC_PASSKEY_ENABLED`
+- `PASSKEY_RP_ID`
+- `PASSKEY_ORIGIN`
+- `PASSKEY_RP_NAME`
+- `PASSKEY_CHALLENGE_TTL_SECONDS`
+- `PASSKEY_OPERATION_TIMEOUT_MS`
+- `PASSKEY_USER_VERIFICATION`
+- `PASSKEY_SMART_ACCOUNT_NETWORK`
+
+O script so liga `PASSKEY_SMART_ACCOUNT_ENABLED=true` quando voce passar `--verifier` e `--context-rule-id`. Sem isso, ele deixa smart account desligada, porque esses valores dependem de contrato on-chain real e nao podem ser inventados.
+
 ## 1. Localhost
 
 Use quando abrir o frontend em `http://localhost:3000`:
