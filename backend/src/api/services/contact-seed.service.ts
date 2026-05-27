@@ -26,6 +26,7 @@ export type InitialUsdcConversionResult = {
 type DefaultTrustlineSetupOptions = {
   deferAdditionalTrustlines?: boolean;
   skipAdditionalTrustlines?: boolean;
+  skipInitialUsdcConversion?: boolean;
 };
 
 export const STARTER_CONTACTS = [
@@ -85,6 +86,8 @@ export function repairLegacyStarterContactKey(publicKey: string): string {
 }
 
 export class ContactSeedService {
+  private static defaultTrustlineSetupLocks = new Map<string, Promise<any>>();
+
   static derivePixKey(userId: string, input?: {
     email?: string;
     phoneNumber?: string;
@@ -146,12 +149,37 @@ export class ContactSeedService {
     sessionId?: string | null,
     options: DefaultTrustlineSetupOptions = {},
   ) {
+    const lockKey = String(publicKey || '').trim();
+    const previous = this.defaultTrustlineSetupLocks.get(lockKey) || Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.createDefaultTrustlinesUnlocked(publicKey, secretKey, userId, sessionId, options));
+
+    if (lockKey) {
+      this.defaultTrustlineSetupLocks.set(lockKey, run);
+      run.finally(() => {
+        if (this.defaultTrustlineSetupLocks.get(lockKey) === run) {
+          this.defaultTrustlineSetupLocks.delete(lockKey);
+        }
+      }).catch(() => undefined);
+    }
+
+    return run;
+  }
+
+  private static async createDefaultTrustlinesUnlocked(
+    publicKey: string,
+    secretKey: string,
+    userId: string,
+    sessionId?: string | null,
+    options: DefaultTrustlineSetupOptions = {},
+  ) {
     let conversion: InitialUsdcConversionResult = { attempted: false, completed: false };
     const usdcIssuer = this.getHardcodedUsdcIssuer();
     const assets: string[] = [];
     const errors: string[] = [];
 
-    if (getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
+    if (!options.skipInitialUsdcConversion && getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
       const usdcTrustline = await StellarService.ensureTrustlineFromSecret({
         sourceSecret: secretKey,
         assetCode: 'USDC',
@@ -177,9 +205,13 @@ export class ContactSeedService {
     }
 
     if (options.deferAdditionalTrustlines) {
-      void this.createAdditionalDefaultTrustlines(publicKey, secretKey, userId).catch((error) => {
-        logger.warn(`[contact-seed] deferred default trustlines failed for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      setTimeout(() => {
+        void this.createDefaultTrustlines(publicKey, secretKey, userId, sessionId, {
+          skipInitialUsdcConversion: true,
+        }).catch((error) => {
+          logger.warn(`[contact-seed] deferred default trustlines failed for ${publicKey}: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }, 0);
       return {
         success: errors.length === 0,
         assets,

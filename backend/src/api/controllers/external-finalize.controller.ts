@@ -749,7 +749,6 @@ async function clearAgentLoginState(sessionId: string) {
         pending_conversion: null,
       },
       pending_payment: null,
-      pending_conversion: null,
       updated_at: new Date().toISOString(),
     })
     .eq('session_id', normalizedSessionId);

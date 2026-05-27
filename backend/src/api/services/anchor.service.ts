@@ -2984,6 +2984,18 @@ export class AnchorService {
       ? operationFinalAmount
       : brlFeeBridge.netAmount;
 
+    if (finalIsTesouro && operationFinalAmount) {
+      const userFacingTransaction = transaction as OnRampTransaction & Record<string, unknown>;
+      userFacingTransaction.toAmount = operationFinalAmount;
+      userFacingTransaction.finalAmount = operationFinalAmount;
+      userFacingTransaction.destinationAmount = operationFinalAmount;
+      userFacingTransaction.userFacingToAmount = operationFinalAmount;
+      userFacingTransaction.userFacingToCurrency = 'BRL';
+      userFacingTransaction.finalAssetCode = 'TESOURO';
+      userFacingTransaction.finalAssetIssuer = targetAsset.issuer;
+      userFacingTransaction.finalSettlementMode = 'stellar_asset';
+    }
+
     const operationContext = {
       provider: 'etherfuse',
       rail: 'pix',

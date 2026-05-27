@@ -35,7 +35,7 @@ export class OperationRepository {
   }
 
   static async update(id: string, updates: Partial<Operation>): Promise<Operation> {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('operations')
       .update(updates)
       .eq('id', id)
@@ -43,6 +43,31 @@ export class OperationRepository {
       .single();
 
     if (error) {
+      const duplicateStellarHash =
+        updates.stellar_transaction_hash &&
+        String(error.message || '').includes('ux_operations_stellar_tx_hash');
+
+      if (duplicateStellarHash) {
+        const { stellar_transaction_hash, ...compatibleUpdates } = updates as any;
+        const retry = await supabase
+          .from('operations')
+          .update(compatibleUpdates)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!retry.error && retry.data) {
+          console.warn(`Operation ${id} completed with an already-recorded Stellar hash; status was updated without duplicating the hash.`);
+          return retry.data;
+        }
+
+        const current = await this.findById(id);
+        if (current) {
+          console.warn(`Operation ${id} hit duplicate Stellar hash and could not be updated, but the submitted transaction should remain valid.`);
+          return current;
+        }
+      }
+
       console.error('Supabase error updating operation:', error.message);
       throw new Error('Failed to update operation record.');
     }

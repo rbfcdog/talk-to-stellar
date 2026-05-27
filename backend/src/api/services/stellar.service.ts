@@ -434,12 +434,62 @@ export class StellarService {
     const data = error?.response?.data;
     const resultCodes = data?.extras?.result_codes;
     const resultXdr = data?.extras?.result_xdr;
+    const timeoutHash = this.getHorizonSubmissionTimeoutHash(error);
+
+    if (timeoutHash) {
+      return `Horizon submission timed out after receiving hash ${timeoutHash}. Poll the transaction before resubmitting.`;
+    }
 
     if (resultCodes) {
       return `Horizon transaction failed: ${JSON.stringify(resultCodes)}${resultXdr ? ` result_xdr=${resultXdr}` : ''}`;
     }
 
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private static getHorizonSubmissionTimeoutHash(error: any): string {
+    const status = Number(error?.response?.status || 0);
+    const data = error?.response?.data;
+    const title = String(data?.title || '').toLowerCase();
+    const detail = String(data?.detail || '').toLowerCase();
+    const hash = String(data?.extras?.hash || '').trim();
+    if (status === 504 && hash && (title.includes('timeout') || detail.includes('timed out'))) {
+      return hash;
+    }
+    return '';
+  }
+
+  private static async waitForSubmittedTransaction(hash: string, attempts = 8, delayMs = 1500): Promise<any | null> {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await server.transactions().transaction(hash).call();
+      } catch (error: any) {
+        const status = Number(error?.response?.status || 0);
+        if (status && status !== 404) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return null;
+  }
+
+  private static async submitTransactionWithTimeoutRecovery(transaction: any): Promise<any> {
+    try {
+      return await server.submitTransaction(transaction);
+    } catch (error) {
+      const hash = this.getHorizonSubmissionTimeoutHash(error);
+      if (!hash) throw error;
+
+      const submitted = await this.waitForSubmittedTransaction(hash);
+      if (submitted) {
+        console.warn(`Horizon submission timed out but transaction was confirmed: ${hash}`);
+        return { ...submitted, hash: submitted.hash || hash };
+      }
+
+      console.warn(`Horizon submission timed out and transaction was not confirmed yet: ${hash}`);
+      throw error;
+    }
   }
 
   static async loadAccount(publicKey: string) {
@@ -628,13 +678,17 @@ export class StellarService {
             const sourceKeypair = Keypair.fromSecret(secretKey);
             transaction.sign(sourceKeypair);
 
-            const result = await server.submitTransaction(transaction);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
 
             if (operationId) {
-                await OperationRepository.update(operationId, {
-                    status: 'COMPLETED',
-                    stellar_transaction_hash: result.hash
-                });
+                try {
+                    await OperationRepository.update(operationId, {
+                        status: 'COMPLETED',
+                        stellar_transaction_hash: result.hash
+                    });
+                } catch (persistError) {
+                    console.warn('Warning: could not persist completed operation after submission:', persistError instanceof Error ? persistError.message : persistError);
+                }
             }
 
             return {
@@ -643,7 +697,7 @@ export class StellarService {
             };
 
         } catch (error) {
-            console.error('Error executing transaction:', error);
+            console.error('Error executing transaction:', this.getHorizonErrorMessage(error));
             const errorMessage = this.getHorizonErrorMessage(error);
             
             if (operationId) {
@@ -1052,7 +1106,7 @@ export class StellarService {
                 .build();
 
             transaction.sign(sourceKeypair);
-            const result = await server.submitTransaction(transaction);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
             return { success: true, existing: false, hash: result.hash };
         } catch (error) {
             const message = this.getHorizonErrorMessage(error);
@@ -1092,7 +1146,7 @@ export class StellarService {
 
             const transaction = builder.setTimeout(300).build();
             transaction.sign(sourceKeypair);
-            const result = await server.submitTransaction(transaction);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
             return { success: true, hash: result.hash };
         } catch (error) {
             return { success: false, error: this.getHorizonErrorMessage(error) };
@@ -1162,7 +1216,7 @@ export class StellarService {
 
             const transaction = builder.setTimeout(300).build();
             transaction.sign(sourceKeypair);
-            const result = await server.submitTransaction(transaction);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
             return { success: true, hash: result.hash, sourceAmount: bestPath.source_amount };
         } catch (error) {
             return { success: false, error: this.getHorizonErrorMessage(error) };
@@ -1227,7 +1281,7 @@ export class StellarService {
 
             const transaction = builder.setTimeout(300).build();
             transaction.sign(sourceKeypair);
-            const result = await server.submitTransaction(transaction);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
             return {
                 success: true,
                 hash: result.hash,
