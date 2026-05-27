@@ -2,7 +2,7 @@ import ConvertClient from "./convert-client";
 
 export const metadata = {
   title: "Convert balances",
-  description: "Choose source and destination balances, then continue in chat to review the quote.",
+  description: "Choose source and destination balances, then review the live route or PIX quote before PIN.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

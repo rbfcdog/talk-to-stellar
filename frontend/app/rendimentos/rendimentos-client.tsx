@@ -879,6 +879,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             onAmountChange={setAmount}
             amountPresets={amountPresets}
             selectedProfile={selectedProfile}
+            selectedCode={safeSelectedCode}
             selectedOption={selectedOption}
             selectedHasYield={selectedHasYield}
             bestOption={bestOption}
@@ -1443,6 +1444,7 @@ function YieldWorkspacePanel({
   onAmountChange,
   amountPresets,
   selectedProfile,
+  selectedCode,
   selectedOption,
   selectedHasYield,
   bestOption,
@@ -1477,6 +1479,7 @@ function YieldWorkspacePanel({
   onAmountChange: (amount: string) => void;
   amountPresets: string[];
   selectedProfile: MoneyProfile;
+  selectedCode: string;
   selectedOption: YieldOption | null;
   selectedHasYield: boolean;
   bestOption: YieldOption | null;
@@ -1508,6 +1511,22 @@ function YieldWorkspacePanel({
   const projectedEarned = projectionData[projectionData.length - 1]?.earned || 0;
   const profileShort = selectedProfile.short;
   const bestProfile = moneyProfile(bestOptionCode);
+  const selectedCodeNormalized = String(selectedCode || "").trim().toUpperCase();
+  const selectedHasIncompatibleTestAsset = configured && !selectedHasYield && selectedCodeNormalized === "USDC";
+  const unavailableTitle = selectedHasIncompatibleTestAsset
+    ? L("Dólares sem opção compatível neste testnet", "Dollars do not have a compatible option on this testnet")
+    : configured
+      ? L("Sem opção para esta moeda", "No option for this currency")
+      : L("Opções ainda sem configuração", "Options are not configured yet");
+  const unavailableDescription = selectedHasIncompatibleTestAsset
+    ? L(
+        "O saldo em dólares da sua conta está ativo, mas a opção USDC configurada no ambiente usa outra emissão de teste. Não precisa criar outra conta; configure um vault compatível com essa emissão ou escolha outra moeda disponível.",
+        "Your dollar balance is active, but the configured USDC option in this environment uses another test issuance. You do not need a new account; configure a vault compatible with this issuance or choose another available currency."
+      )
+    : L(
+        "Esse saldo ainda não tem opção ativa. Quando existir outra opção configurada, a tela sugere conversão para revisão.",
+        "This balance does not have an active option yet. When another option is configured, the screen suggests conversion for review."
+      );
   const hasPrepared = Boolean(result);
   const submitted = Boolean(result?.submitted || result?.hash);
   const preparedExecutionBlocked = Boolean(hasPrepared && result?.execution_ready === false);
@@ -1564,7 +1583,7 @@ function YieldWorkspacePanel({
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
               ? L("Defina entrada ou saída, informe o valor e gere uma revisão. A confirmação fica separada para você conferir APY estimado, projeção e impacto no saldo.", "Choose entry or exit, enter the amount, and generate a review. Confirmation stays separate so you can check estimated APY, projection, and balance impact.")
-              : L("Esse saldo ainda não tem opção ativa. Quando existir outra opção configurada, a tela sugere conversão para revisão.", "This balance does not have an active option yet. When another option is configured, the screen suggests conversion for review.")}
+              : unavailableDescription}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1617,11 +1636,11 @@ function YieldWorkspacePanel({
 
       {authenticated && !selectedHasYield ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
-          <p className="font-black text-tts-gold">
-            {configured ? L("Sem opção para esta moeda", "No option for this currency") : L("Opções ainda sem configuração", "Options are not configured yet")}
-          </p>
+          <p className="font-black text-tts-gold">{unavailableTitle}</p>
           <p className="mt-1">
-            {bestOption
+            {selectedHasIncompatibleTestAsset
+              ? unavailableDescription
+              : bestOption
               ? L(
                   `Opção configurada para revisar: ${profileName(bestProfile, language)} com APY estimado ${optionRate(bestOption, language)}.`,
                   `Configured option to review: ${profileName(bestProfile, language)} with estimated APY ${optionRate(bestOption, language)}.`
