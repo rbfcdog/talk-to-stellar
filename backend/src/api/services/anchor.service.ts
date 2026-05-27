@@ -31,6 +31,7 @@ import { PlatformFeeService } from './platform-fee.service';
 import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
+import { logger } from '../../utils/logger';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -636,6 +637,35 @@ function isDuplicateResourceError(error: unknown): boolean {
 
 function debugErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
+
+function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  if (text.length <= start + end + 3) return `${text.slice(0, 2)}...`;
+  return `${text.slice(0, start)}...${text.slice(-end)}`;
+}
+
+function defindexErrorFields(error: unknown): Record<string, unknown> {
+  const err = error as Error & { code?: unknown; statusCode?: unknown; status?: unknown };
+  return {
+    error_code: err?.code ? String(err.code) : undefined,
+    status: err?.statusCode || err?.status || undefined,
+    error: debugErrorMessage(error),
+  };
+}
+
+function logDefindex(level: 'debug' | 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
+  const safeFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (!key.startsWith('has_') && /pin|secret|token|xdr|raw/i.test(key)) {
+      safeFields[key] = '[redacted]';
+      continue;
+    }
+    safeFields[key] = value;
+  }
+  logger[level](`[defindex] event=${event} ${JSON.stringify(safeFields)}`);
 }
 
 function onboardingStepHasError(value: unknown): boolean {
@@ -3731,6 +3761,13 @@ export class AnchorService {
     vaults: Array<Record<string, unknown>>;
   }> {
     const runtime = DefindexYieldService.getRuntimeInfo();
+    logDefindex('info', 'status_start', {
+      network: runtime.network,
+      configured: runtime.configured,
+      api_key_configured: runtime.api_key_configured,
+      execution_enabled: runtime.execution_enabled,
+      vault_count: runtime.vaults.length,
+    });
     const vaults = await Promise.all(runtime.vaults.map(async (vault) => {
       const enriched: Record<string, unknown> = {
         ...vault,
@@ -3743,10 +3780,22 @@ export class AnchorService {
         enriched.apy_percent = coalesceString(apy?.apyPercent, apy?.apy_percent, apy?.apy);
         enriched.apy_period = coalesceString(apy?.period, apy?.calculationPeriod);
       } catch (error) {
+        logDefindex('warn', 'status_vault_apy_failed', {
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          network: vault.network,
+          ...defindexErrorFields(error),
+        });
         enriched.apy_error = debugErrorMessage(error);
       }
       return enriched;
     }));
+    logDefindex('info', 'status_success', {
+      network: runtime.network,
+      configured: runtime.configured,
+      returned_vault_count: vaults.length,
+      vault_assets: vaults.map((vault) => String(vault.asset_code || '')).filter(Boolean).join(','),
+    });
     return { success: true, runtime, vaults };
   }
 
@@ -3762,11 +3811,42 @@ export class AnchorService {
     balance: unknown;
   }> {
     const context = await this.resolveSessionWallet(input);
+    const assetCode = coalesceString(input.asset_code, input.assetCode);
+    const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
+    logDefindex('info', 'balance_start', {
+      session_id: maskLogValue(context.sessionId),
+      user_id: maskLogValue(context.userId),
+      public_key: maskLogValue(context.publicKey),
+      asset_code: assetCode || 'USDC',
+      requested_vault: maskLogValue(requestedVault),
+    });
     const vault = DefindexYieldService.requireVault(
-      coalesceString(input.asset_code, input.assetCode),
-      coalesceString(input.vault_address, input.vaultAddress),
+      assetCode,
+      requestedVault,
     );
-    const balance = await DefindexYieldService.getVaultBalance(vault.vault_address, context.publicKey, vault.network);
+    let balance: unknown;
+    try {
+      balance = await DefindexYieldService.getVaultBalance(vault.vault_address, context.publicKey, vault.network);
+    } catch (error) {
+      logDefindex('warn', 'balance_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        ...defindexErrorFields(error),
+      });
+      throw error;
+    }
+    logDefindex('info', 'balance_success', {
+      session_id: maskLogValue(context.sessionId),
+      user_id: maskLogValue(context.userId),
+      public_key: maskLogValue(context.publicKey),
+      asset_code: vault.asset_code,
+      vault_address: maskLogValue(vault.vault_address),
+      network: vault.network,
+    });
     return {
       success: true,
       public_key: context.publicKey,
@@ -3808,9 +3888,24 @@ export class AnchorService {
 	      ? 'withdraw'
 	      : 'deposit';
     const amount = normalizeAmount(input.amount, 'amount');
+    const assetCode = coalesceString(input.asset_code, input.assetCode);
+    const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
+    logDefindex('info', 'prepare_start', {
+      session_id: maskLogValue(context.sessionId),
+      user_id: maskLogValue(context.userId),
+      public_key: maskLogValue(context.publicKey),
+      action,
+      amount,
+      asset_code: assetCode || 'USDC',
+      requested_vault: maskLogValue(requestedVault),
+      network: runtime.network,
+      execution_enabled: runtime.execution_enabled,
+      execution_requested: runtime.execution_requested,
+      compliance_approved: runtime.compliance_approved,
+    });
     const vault = DefindexYieldService.requireVault(
-      coalesceString(input.asset_code, input.assetCode),
-      coalesceString(input.vault_address, input.vaultAddress),
+      assetCode,
+      requestedVault,
     );
 	    const amountUnits = DefindexYieldService.amountToContractUnits(amount);
 	    const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
@@ -3827,6 +3922,18 @@ export class AnchorService {
 	      },
 	    };
 	    if (!runtime.execution_enabled) {
+      logDefindex('info', 'prepare_review_only', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        blocked_reason: runtime.execution_blocked_reason,
+      });
 	      return {
 	        ...reviewResponse,
 	        review_only: true,
@@ -3835,15 +3942,45 @@ export class AnchorService {
 	          'Defindex execution is disabled for this environment.',
 	      };
 	    }
-	    const prepared = await DefindexYieldService.buildVaultAction({
-	      action,
-	      vaultAddress: vault.vault_address,
-      caller: context.publicKey,
-      amountUnits,
+    let prepared: { xdr: string; raw: any };
+    try {
+      prepared = await DefindexYieldService.buildVaultAction({
+        action,
+        vaultAddress: vault.vault_address,
+        caller: context.publicKey,
+        amountUnits,
+        network: vault.network,
+        invest: input.invest !== false,
+        slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
+      });
+    } catch (error) {
+      logDefindex('warn', 'prepare_build_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        slippage_bps: Number.isFinite(slippageBps) ? slippageBps : 100,
+        ...defindexErrorFields(error),
+      });
+      throw error;
+    }
+    logDefindex('info', 'prepare_success', {
+      session_id: maskLogValue(context.sessionId),
+      user_id: maskLogValue(context.userId),
+      public_key: maskLogValue(context.publicKey),
+      action,
+      amount,
+      amount_units: amountUnits,
+      asset_code: vault.asset_code,
+      vault_address: maskLogValue(vault.vault_address),
       network: vault.network,
-      invest: input.invest !== false,
-	      slippageBps: Number.isFinite(slippageBps) ? slippageBps : 100,
-	    });
+      has_xdr: Boolean(prepared.xdr),
+    });
 	    return {
 	      ...reviewResponse,
 	      review_only: false,
@@ -3877,7 +4014,25 @@ export class AnchorService {
     raw?: unknown;
   }> {
     const runtime = DefindexYieldService.getRuntimeInfo();
+    logDefindex('info', 'execute_start', {
+      action: String(input.action || 'deposit').trim().toLowerCase() === 'withdraw' ? 'withdraw' : 'deposit',
+      amount: coalesceString(input.amount),
+      asset_code: coalesceString(input.asset_code, input.assetCode, 'USDC'),
+      requested_vault: maskLogValue(coalesceString(input.vault_address, input.vaultAddress)),
+      network: runtime.network,
+      execution_enabled: runtime.execution_enabled,
+      execution_requested: runtime.execution_requested,
+      compliance_approved: runtime.compliance_approved,
+      has_pin: Boolean(coalesceString(input.pin, input.wallet_pin, input.walletPin, input.wallet_code, input.walletCode, input.passcode)),
+      has_unsigned_xdr: Boolean(coalesceString(input.unsigned_xdr, input.unsignedXdr)),
+    });
     if (!runtime.execution_enabled) {
+      logDefindex('warn', 'execute_blocked', {
+        network: runtime.network,
+        execution_requested: runtime.execution_requested,
+        compliance_approved: runtime.compliance_approved,
+        blocked_reason: runtime.execution_blocked_reason,
+      });
       throw apiError(
         runtime.execution_blocked_reason ||
           'Confirmacao de APY desativada neste ambiente. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovacao juridica/compliance.',
@@ -3889,6 +4044,11 @@ export class AnchorService {
     const walletPin = this.requireWalletPin(input, context);
     if (!walletPin) throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
     if (!context.vaultSecretId) {
+      logDefindex('warn', 'execute_missing_signing_material', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+      });
       throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
     }
     const prepared = await this.prepareDefindexYieldForSession(input);
@@ -3900,6 +4060,18 @@ export class AnchorService {
       coalesceString(input.vault_address, input.vaultAddress),
     );
     if (!prepared.execution_ready || !prepared.xdr) {
+      logDefindex('warn', 'execute_review_not_ready', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        execution_ready: prepared.execution_ready,
+      });
       throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
     }
 
@@ -3907,10 +4079,22 @@ export class AnchorService {
     try {
       secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
     } catch (error) {
-      console.warn('[defindex] Could not read signing material:', debugErrorMessage(error));
+      logDefindex('warn', 'execute_secret_read_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        vault_secret_id: maskLogValue(context.vaultSecretId),
+        ...defindexErrorFields(error),
+      });
       throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
     }
     if (!/^S[A-Z2-7]{55}$/.test(secret)) {
+      logDefindex('warn', 'execute_secret_invalid_format', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        vault_secret_id: maskLogValue(context.vaultSecretId),
+      });
       throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
     }
 
@@ -3918,21 +4102,66 @@ export class AnchorService {
     try {
       signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
     } catch (error) {
-      console.warn('[defindex] Could not sign prepared review:', debugErrorMessage(error));
+      logDefindex('warn', 'execute_sign_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        ...defindexErrorFields(error),
+      });
       throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
     }
 
     let sent: { hash: string; raw: any };
     try {
+      logDefindex('info', 'execute_submit_start', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+      });
       sent = await DefindexYieldService.sendVaultTransaction({
         vaultAddress: vault.vault_address,
         signedXdr,
         network: vault.network,
       });
     } catch (error) {
-      console.warn('[defindex] Could not submit transaction:', debugErrorMessage(error));
+      logDefindex('warn', 'execute_submit_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        ...defindexErrorFields(error),
+      });
       throw apiError('Falha de envio da transacao externa.', 502, 'execution_unavailable');
     }
+    logDefindex('info', 'execute_submit_success', {
+      session_id: maskLogValue(context.sessionId),
+      user_id: maskLogValue(context.userId),
+      public_key: maskLogValue(context.publicKey),
+      action,
+      amount,
+      amount_units: amountUnits,
+      asset_code: vault.asset_code,
+      vault_address: maskLogValue(vault.vault_address),
+      network: vault.network,
+      hash: maskLogValue(sent.hash, 10, 8),
+    });
     await OperationRepository.create({
       user_id: context.userId,
       type: `DEFINDEX_YIELD_${action.toUpperCase()}`,
@@ -3954,7 +4183,19 @@ export class AnchorService {
         raw_result: sent.raw,
       }),
     } as any).catch((error) => {
-      console.warn('[defindex] Could not persist yield operation:', debugErrorMessage(error));
+      logDefindex('warn', 'execute_operation_persist_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        hash: maskLogValue(sent.hash, 10, 8),
+        ...defindexErrorFields(error),
+      });
       return null;
     });
     return {

@@ -2,6 +2,7 @@ import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 import { stellarConfig } from '../../config/stellar';
 import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
+import { logger } from '../../utils/logger';
 
 export type DefindexNetwork = 'testnet' | 'mainnet';
 export type DefindexYieldAction = 'deposit' | 'withdraw';
@@ -48,6 +49,30 @@ function coalesceString(...values: unknown[]): string {
     if (text) return text;
   }
   return '';
+}
+
+function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  if (text.length <= start + end + 3) return `${text.slice(0, 2)}...`;
+  return `${text.slice(0, start)}...${text.slice(-end)}`;
+}
+
+function debugErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
+
+function logDefindexSdk(level: 'debug' | 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
+  const safeFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (!key.startsWith('has_') && /secret|token|xdr|raw/i.test(key)) {
+      safeFields[key] = '[redacted]';
+      continue;
+    }
+    safeFields[key] = value;
+  }
+  logger[level](`[defindex] event=${event} ${JSON.stringify(safeFields)}`);
 }
 
 function envFlag(name: string, fallback = false): boolean {
@@ -291,11 +316,41 @@ export class DefindexYieldService {
   }
 
   static async getVaultAPY(vaultAddress: string, network = defaultNetwork()): Promise<any> {
-    return this.sdk(network).getVaultAPY(vaultAddress, sdkNetwork(network));
+    try {
+      const result = await this.sdk(network).getVaultAPY(vaultAddress, sdkNetwork(network));
+      logDefindexSdk('debug', 'sdk_get_apy_success', {
+        vault_address: maskLogValue(vaultAddress),
+        network,
+      });
+      return result;
+    } catch (error) {
+      logDefindexSdk('warn', 'sdk_get_apy_failed', {
+        vault_address: maskLogValue(vaultAddress),
+        network,
+        error: debugErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
   static async getVaultBalance(vaultAddress: string, caller: string, network = defaultNetwork()): Promise<any> {
-    return this.sdk(network).getVaultBalance(vaultAddress, caller, sdkNetwork(network));
+    try {
+      const result = await this.sdk(network).getVaultBalance(vaultAddress, caller, sdkNetwork(network));
+      logDefindexSdk('info', 'sdk_get_balance_success', {
+        vault_address: maskLogValue(vaultAddress),
+        caller: maskLogValue(caller),
+        network,
+      });
+      return result;
+    } catch (error) {
+      logDefindexSdk('warn', 'sdk_get_balance_failed', {
+        vault_address: maskLogValue(vaultAddress),
+        caller: maskLogValue(caller),
+        network,
+        error: debugErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
   static async buildVaultAction(input: {
@@ -314,12 +369,41 @@ export class DefindexYieldService {
       caller: input.caller,
       slippageBps: Number.isFinite(input.slippageBps) ? input.slippageBps : 100,
     };
-    const raw = input.action === 'deposit'
-      ? await sdk.depositToVault(input.vaultAddress, { ...body, invest: input.invest !== false }, sdkNetwork(network))
-      : await sdk.withdrawFromVault(input.vaultAddress, body, sdkNetwork(network));
-    const xdr = extractXdr(raw);
-    if (!xdr) throw new Error('Defindex did not return an unsigned transaction XDR.');
-    return { xdr, raw };
+    logDefindexSdk('info', 'sdk_build_action_start', {
+      action: input.action,
+      vault_address: maskLogValue(input.vaultAddress),
+      caller: maskLogValue(input.caller),
+      amount_units: input.amountUnits,
+      network,
+      invest: input.invest !== false,
+      slippage_bps: body.slippageBps,
+    });
+    try {
+      const raw = input.action === 'deposit'
+        ? await sdk.depositToVault(input.vaultAddress, { ...body, invest: input.invest !== false }, sdkNetwork(network))
+        : await sdk.withdrawFromVault(input.vaultAddress, body, sdkNetwork(network));
+      const xdr = extractXdr(raw);
+      if (!xdr) throw new Error('Defindex did not return an unsigned transaction XDR.');
+      logDefindexSdk('info', 'sdk_build_action_success', {
+        action: input.action,
+        vault_address: maskLogValue(input.vaultAddress),
+        caller: maskLogValue(input.caller),
+        amount_units: input.amountUnits,
+        network,
+        has_xdr: true,
+      });
+      return { xdr, raw };
+    } catch (error) {
+      logDefindexSdk('warn', 'sdk_build_action_failed', {
+        action: input.action,
+        vault_address: maskLogValue(input.vaultAddress),
+        caller: maskLogValue(input.caller),
+        amount_units: input.amountUnits,
+        network,
+        error: debugErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
   static signXdr(unsignedXdr: string, secretKey: string): string {
@@ -334,7 +418,27 @@ export class DefindexYieldService {
     network?: DefindexNetwork;
   }): Promise<{ hash: string; raw: any }> {
     const network = input.network || defaultNetwork();
-    const raw = await this.sdk(network).sendTransaction(input.signedXdr, sdkNetwork(network));
-    return { hash: extractHash(raw), raw };
+    logDefindexSdk('info', 'sdk_send_transaction_start', {
+      vault_address: maskLogValue(input.vaultAddress),
+      network,
+      has_signed_xdr: Boolean(input.signedXdr),
+    });
+    try {
+      const raw = await this.sdk(network).sendTransaction(input.signedXdr, sdkNetwork(network));
+      const hash = extractHash(raw);
+      logDefindexSdk('info', 'sdk_send_transaction_success', {
+        vault_address: maskLogValue(input.vaultAddress),
+        network,
+        hash: maskLogValue(hash, 10, 8),
+      });
+      return { hash, raw };
+    } catch (error) {
+      logDefindexSdk('warn', 'sdk_send_transaction_failed', {
+        vault_address: maskLogValue(input.vaultAddress),
+        network,
+        error: debugErrorMessage(error),
+      });
+      throw error;
+    }
   }
 }
