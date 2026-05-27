@@ -3,6 +3,7 @@ import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 import { stellarConfig } from '../../config/stellar';
 import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
 import { logger } from '../../utils/logger';
+import { errorLogFields, errorLogMessage } from '../../utils/error-log';
 
 export type DefindexNetwork = 'testnet' | 'mainnet';
 export type DefindexYieldAction = 'deposit' | 'withdraw';
@@ -59,7 +60,7 @@ function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
 }
 
 function debugErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || 'Unknown error');
+  return errorLogMessage(error);
 }
 
 function logDefindexSdk(level: 'debug' | 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
@@ -327,7 +328,7 @@ export class DefindexYieldService {
       logDefindexSdk('warn', 'sdk_get_apy_failed', {
         vault_address: maskLogValue(vaultAddress),
         network,
-        error: debugErrorMessage(error),
+        ...errorLogFields(error),
       });
       throw error;
     }
@@ -347,7 +348,7 @@ export class DefindexYieldService {
         vault_address: maskLogValue(vaultAddress),
         caller: maskLogValue(caller),
         network,
-        error: debugErrorMessage(error),
+        ...errorLogFields(error),
       });
       throw error;
     }
@@ -400,7 +401,7 @@ export class DefindexYieldService {
         caller: maskLogValue(input.caller),
         amount_units: input.amountUnits,
         network,
-        error: debugErrorMessage(error),
+        ...errorLogFields(error),
       });
       throw error;
     }
@@ -436,7 +437,7 @@ export class DefindexYieldService {
       logDefindexSdk('warn', 'sdk_send_transaction_failed', {
         vault_address: maskLogValue(input.vaultAddress),
         network,
-        error: debugErrorMessage(error),
+        ...errorLogFields(error),
       });
       throw error;
     }

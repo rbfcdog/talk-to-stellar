@@ -32,6 +32,7 @@ import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.serv
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
 import { logger } from '../../utils/logger';
+import { errorLogFields, errorLogMessage } from '../../utils/error-log';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -638,7 +639,7 @@ function isDuplicateResourceError(error: unknown): boolean {
 }
 
 function debugErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || 'Unknown error');
+  return errorLogMessage(error);
 }
 
 function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
@@ -649,12 +650,7 @@ function maskLogValue(value: unknown, start = 6, end = 4): string | undefined {
 }
 
 function defindexErrorFields(error: unknown): Record<string, unknown> {
-  const err = error as Error & { code?: unknown; statusCode?: unknown; status?: unknown };
-  return {
-    error_code: err?.code ? String(err.code) : undefined,
-    status: err?.statusCode || err?.status || undefined,
-    error: debugErrorMessage(error),
-  };
+  return errorLogFields(error);
 }
 
 function defindexRequestId(input: RampSessionInput): string | undefined {

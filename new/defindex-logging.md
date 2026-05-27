@@ -107,6 +107,7 @@ Os logs incluem:
 - `error_code`;
 - `status`;
 - `error`.
+- `error_details` redigido quando o SDK/API retornar erro como objeto.
 
 O backend mascara:
 
@@ -115,6 +116,8 @@ O backend mascara:
 - secrets;
 - XDR;
 - raw payloads.
+
+Se aparecer `sdk_build_action_failed`, o campo mais importante agora e `error_details`. Ele deve mostrar a resposta redigida do SDK/API em vez de `[object Object]`.
 
 ## Como achar o erro do botao de revisao
 
