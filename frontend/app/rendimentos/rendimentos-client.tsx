@@ -354,7 +354,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente. Você pode preparar a revisão, mas não movimentar saldo.", "PIN confirmation is not enabled in this environment yet. You can prepare the review, but not move funds.");
   }
   if (code === "account_signing_unavailable") {
-    return localCopy(language, "Esta conta ainda não está pronta para assinar rendimento. Entre novamente e tente outra vez.", "This account is not ready to sign yield actions yet. Sign in again and try once more.");
+    return localCopy(language, "Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more.");
   }
   if (code === "invalid_pin") {
     return localCopy(language, "Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again.");
@@ -363,23 +363,23 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Saldo insuficiente para revisar esse valor. Ajuste o valor e tente novamente.", "Insufficient balance for this amount. Adjust the amount and try again.");
   }
   if (code === "yield_unavailable") {
-    return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
+    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
   }
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
   if (/pix/i.test(raw)) {
-    return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
+    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
   }
   if (/abort|timeout|timed out|demorou/i.test(raw)) {
     return localCopy(language, "A conexão demorou demais. Atualize para tentar de novo.", "The connection took too long. Refresh to try again.");
   }
   if (/session|login|unauthor|auth|token|jwt/i.test(raw)) {
-    return localCopy(language, "Entre na sua conta para ver saldos e preparar rendimentos.", "Sign in to see balances and prepare yield.");
+    return localCopy(language, "Entre na sua conta para ver saldos e preparar uma revisão.", "Sign in to see balances and prepare a review.");
   }
   if (/defindex|vault|xdr|horizon|stellar|mainnet|wallet|issuer|public key|secret|blockchain|crypto|cripto/i.test(raw)) {
     return localCopy(language, "Ainda não foi possível carregar essa parte. Confira a configuração do serviço e tente novamente.", "This section is not available yet. Check the service configuration and try again.");
   }
   return raw
-    .replace(/Defindex/gi, "serviço de rendimento")
+    .replace(/Defindex/gi, "serviço de revisão")
     .replace(/vault/gi, "opção")
     .replace(/wallet/gi, "conta")
     .replace(/asset/gi, "moeda");
@@ -495,8 +495,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     lang: language,
   }), [amount, bestOptionCode, safeSelectedCode, language]);
   const chatPrompt = language === "pt-BR"
-    ? `revisar rendimento de ${amount || "0"} ${profileName(selectedProfile, language)}`
-    : `review yield for ${amount || "0"} ${profileName(selectedProfile, language)}`;
+    ? `revisar ${amount || "0"} ${profileName(selectedProfile, language)} com APY estimado`
+    : `review ${amount || "0"} ${profileName(selectedProfile, language)} with estimated APY`;
   const amountPresets = useMemo(() => {
     const short = selectedProfile.short;
     if (short === "BRL") return ["50", "100", "500", "1000"];
@@ -590,7 +590,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       if (!nextSession.authenticated) {
         setBalances([]);
         setAccountPublicKey("");
-        setApiState({ loading: false, message: L("Entre para ver seus saldos e preparar rendimentos.", "Sign in to see balances and prepare yield."), error: "" });
+        setApiState({ loading: false, message: L("Entre para ver seus saldos e preparar uma revisão.", "Sign in to see balances and prepare a review."), error: "" });
         return;
       }
 
@@ -598,7 +598,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       setAccountPublicKey(String(accountPayload?.public_key || ""));
       setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
 
-      setApiState({ loading: false, message: L("Saldos e rendimentos atualizados.", "Balances and yield updated."), error: "" });
+      setApiState({ loading: false, message: L("Saldos e posições atualizados.", "Balances and positions updated."), error: "" });
     } catch (error) {
       if (isSessionUiError(error)) {
         setSession({ authenticated: false, loading: false, checked: true });
@@ -702,10 +702,10 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
-              {L("Rendimentos", "Yield")}
+              {L("Aplicações", "Applications")}
             </div>
             <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
-              {L("Simular opções de rendimento", "Review yield options")}
+              {L("Revisar opções com APY", "Review APY options")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
@@ -880,17 +880,17 @@ function YieldComplianceNotice({
   const blocked = executionBlockedReason && !confirmationEnabled;
 
   return (
-    <section className="border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6" aria-label={L("Aviso de rendimento", "Yield notice")}>
+    <section className="border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6" aria-label={L("Aviso de APY", "APY notice")}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="flex items-center gap-2 font-black text-tts-deep">
             <AlertTriangle className="h-4 w-4 text-tts-gold" aria-hidden="true" />
-            {L("Rendimento em revisão", "Yield in review")}
+            {L("Aplicação em revisão", "Application in review")}
           </p>
           <p className="mt-1 text-tts-muted">
             {L(
-              "APY estimado pela DeFindex, histórico e variável. Não é garantia, recomendação personalizada, renda fixa, poupança ou depósito bancário.",
-              "Estimated APY from DeFindex, historical and variable. Not guaranteed, not personalized advice, not fixed income, savings, or a bank deposit."
+              "APY estimado, histórico e variável. Não é garantia, recomendação personalizada, renda fixa, poupança ou depósito bancário.",
+              "Estimated APY, historical and variable. Not guaranteed, not personalized advice, not fixed income, savings, or a bank deposit."
             )}
           </p>
           {isTestnet ? (
@@ -1487,7 +1487,7 @@ function YieldWorkspacePanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Revisão de rendimento", "Yield review")}
+            {L("Revisão de aplicação", "Application review")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
@@ -1520,8 +1520,8 @@ function YieldWorkspacePanel({
           <p className="font-black text-tts-gold">{L("Entre para revisar com seus saldos", "Sign in to review with your balances")}</p>
           <p className="mt-1">
             {L(
-              "O rendimento é calculado a partir da sua conta. Depois de entrar, seus saldos aparecem aqui e você pode revisar antes de qualquer confirmação.",
-              "Yield is calculated from your account. After signing in, your balances appear here and you can review before any confirmation."
+              "A revisão usa os dados da sua conta. Depois de entrar, seus saldos aparecem aqui e você pode conferir antes de qualquer confirmação.",
+              "The review uses your account data. After signing in, your balances appear here and you can review before any confirmation."
             )}
           </p>
           <div className="mt-3 border border-tts-border bg-tts-surface p-3">
@@ -1546,7 +1546,7 @@ function YieldWorkspacePanel({
       {authenticated && !selectedHasYield ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
           <p className="font-black text-tts-gold">
-            {configured ? L("Sem opção para esta moeda", "No option for this currency") : L("Rendimento ainda sem configuração", "Yield is not configured yet")}
+            {configured ? L("Sem opção para esta moeda", "No option for this currency") : L("Opções ainda sem configuração", "Options are not configured yet")}
           </p>
           <p className="mt-1">
             {bestOption

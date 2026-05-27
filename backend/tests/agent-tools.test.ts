@@ -140,7 +140,7 @@ describe('Agent tool execution', () => {
     expect(mockDisableConversionRule).toHaveBeenCalledWith('rule-123');
   });
 
-  it('lists the current chat capabilities around PIX, multi-asset conversion, yield, and money cycle', async () => {
+  it('lists the current chat capabilities around PIX, multi-asset conversion, APY review, and money cycle', async () => {
     const output = await executeTool('get_intent_help', {});
     const parsed = JSON.parse(output);
 
@@ -149,11 +149,12 @@ describe('Agent tool execution', () => {
       'saldo',
       'PIX',
       'converter',
-      'rendimento',
+      'aplicação',
       'ciclo',
     ]));
     expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('ciclo completo');
+    expect(JSON.stringify(parsed)).not.toMatch(/rendimento|rendendo/i);
     expect(parsed.message).toContain('sair para meu PIX');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
   });
@@ -342,7 +343,7 @@ describe('Agent tool execution', () => {
       { currency: 'CETES', name: 'Mexico test option', estimated_apy: '8.75%', available: true },
       { currency: 'XLM', name: 'XLM', estimated_apy: '2.1%', available: true },
     ]);
-    expect(parsed.message).toContain('Yield review options');
+    expect(parsed.message).toContain('Options for review');
     expect(parsed.disclosure.toLowerCase()).toContain('not guaranteed');
     expect(JSON.stringify(parsed)).not.toMatch(/vault|TESOURO|XDR/i);
     expect(statusSpy).toHaveBeenCalledTimes(1);

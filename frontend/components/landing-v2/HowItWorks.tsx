@@ -28,9 +28,9 @@ const STEPS: Step[] = [
   },
   {
     number: '03',
-    title: 'Rendimento',
+    title: 'Revisão com APY',
     description:
-      'O saldo pode ir para uma opção de rendimento, com gráfico, revisão e ação de guardar ou resgatar.',
+      'O saldo pode ir para uma opção com APY estimado, com gráfico, revisão e ação de guardar ou resgatar.',
     emphasis: true,
   },
   {

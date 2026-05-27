@@ -359,24 +359,24 @@ function yieldActionLabel(action: 'deposit' | 'withdraw', language: 'pt-BR' | 'e
 function sanitizeYieldToolError(error: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
   const raw = error instanceof Error ? error.message : String(error || '');
   const fallback = language === 'en'
-    ? 'Yield is not available right now. Check the service setup and try again.'
-    : 'Rendimento indisponível agora. Confira a configuração do serviço e tente novamente.';
+    ? 'This review is not available right now. Check the service setup and try again.'
+    : 'Esta revisão não está disponível agora. Confira a configuração do serviço e tente novamente.';
   if (!raw.trim()) return fallback;
   if (/session|wallet|login|unauthor|auth|token|pin/i.test(raw)) {
     return language === 'en'
-      ? 'Sign in and confirm your PIN before using yield.'
-      : 'Entre na sua conta e confirme seu PIN antes de usar rendimento.';
+      ? 'Sign in and confirm your PIN before using this review.'
+      : 'Entre na sua conta e confirme seu PIN antes de usar esta revisão.';
   }
   if (/defindex.*desativad|execução defindex|execucao defindex|defindex_enable_execution|defindex_compliance_approved|compliance approval|yield.*execution.*(disabled|requires)|execution.*yield.*disabled/i.test(raw)) {
     return language === 'en'
-      ? 'Yield confirmation is in review mode for this environment. You can review the preview, but real execution requires compliance approval.'
-      : 'A confirmação de rendimento está em modo revisão neste ambiente. Você pode revisar a simulação, mas execução real exige aprovação de compliance.';
+      ? 'Confirmation is in review mode for this environment. You can review the preview, but real execution requires compliance approval.'
+      : 'A confirmação está em modo revisão neste ambiente. Você pode revisar a simulação, mas execução real exige aprovação de compliance.';
   }
   if (/defindex|vault|xdr|horizon|stellar|issuer|trustline|private key|secret|api key|network|contract/i.test(raw)) {
     return fallback;
   }
   return raw
-    .replace(/Defindex/gi, 'yield service')
+    .replace(/Defindex/gi, language === 'en' ? 'review service' : 'serviço de revisão')
     .replace(/vault/gi, 'option')
     .replace(/wallet/gi, language === 'en' ? 'account' : 'conta')
     .replace(/asset/gi, language === 'en' ? 'currency' : 'moeda')
@@ -834,7 +834,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_yield_options",
-    description: "List available user-facing yield review options and estimated historical APY. Use this for questions about rendimento, yield review, APY, or currencies that can be previewed. Do not present this as guaranteed return, investment advice, fixed income, savings account, or bank deposit.",
+    description: "List available user-facing APY review options and estimated historical APY. Use this for questions about APY, application review, or currencies that can be previewed. Do not present this as guaranteed return, investment advice, fixed income, savings account, or bank deposit.",
     parameters: {
       type: "object",
       properties: {
@@ -849,14 +849,14 @@ export const toolDefinitions = [
   },
   {
     name: "open_asset_interface",
-    description: "Return the frontend interface URL for the user's money action: bring money in, review yield options, or send money out to PIX. Use for broad multi-asset navigation intents such as trazer, revisar rendimento, mandar embora, add money, yield review, or withdraw to PIX.",
+    description: "Return the frontend interface URL for the user's money action: bring money in, review APY options, or send money out to PIX. Use for broad multi-asset navigation intents such as trazer, revisar APY, mandar embora, add money, APY review, or withdraw to PIX.",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
           enum: ["bring", "keep", "send_out"],
-          description: "bring opens PIX add-money, keep opens yield, send_out opens PIX withdrawal.",
+          description: "bring opens PIX add-money, keep opens APY review, send_out opens PIX withdrawal.",
         },
         amount: {
           type: "string",
@@ -885,7 +885,7 @@ export const toolDefinitions = [
   },
   {
     name: "open_money_cycle",
-    description: "Return the consolidated frontend URL for the full money cycle: add money by PIX, review an available yield option, then send it out to PIX. Use when the user asks to consolidate the complete in-review-out lifecycle. Do not describe any option as best investment or guaranteed.",
+    description: "Return the consolidated frontend URL for the full money cycle: add money by PIX, review an available APY option, then send it out to PIX. Use when the user asks to consolidate the complete in-review-out lifecycle. Do not describe any option as best investment or guaranteed.",
     parameters: {
       type: "object",
       properties: {
@@ -943,7 +943,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_yield_balance",
-    description: "Check how much the signed-in user currently has in a yield review option. Use for questions like 'quanto tenho rendendo', 'my yield balance', or balance in a reviewed option.",
+    description: "Check how much the signed-in user currently has in an APY review option. Use for questions about current reviewed balance or balance in a reviewed option.",
     parameters: {
       type: "object",
       properties: {
@@ -953,7 +953,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for APY review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         language: {
           type: "string",
@@ -966,7 +966,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_yield_action",
-    description: "Prepare a yield action for review without submitting money movement. Use before any confirmation for reviewing entry into yield or exit from yield.",
+    description: "Prepare an APY action for review without submitting money movement. Use before any confirmation for reviewing entry into or exit from the selected option.",
     parameters: {
       type: "object",
       properties: {
@@ -977,7 +977,7 @@ export const toolDefinitions = [
         action: {
           type: "string",
           enum: ["deposit", "withdraw"],
-          description: "deposit means prepare entry into a yield option; withdraw means prepare exit from a yield option.",
+          description: "deposit means prepare entry into an APY option; withdraw means prepare exit from an APY option.",
         },
         amount: {
           type: "string",
@@ -985,7 +985,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for APY review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         slippage_bps: {
           type: "number",
@@ -1002,7 +1002,7 @@ export const toolDefinitions = [
   },
   {
     name: "confirm_yield_action",
-    description: "Confirm and submit a previously reviewed yield action only if backend execution is enabled. Only use after the user clearly confirms and provides PIN; otherwise call prepare_yield_action first.",
+    description: "Confirm and submit a previously reviewed APY action only if backend execution is enabled. Only use after the user clearly confirms and provides PIN; otherwise call prepare_yield_action first.",
     parameters: {
       type: "object",
       properties: {
@@ -1013,7 +1013,7 @@ export const toolDefinitions = [
         action: {
           type: "string",
           enum: ["deposit", "withdraw"],
-          description: "deposit means entry into a yield option; withdraw means exit from a yield option.",
+          description: "deposit means entry into an APY option; withdraw means exit from an APY option.",
         },
         amount: {
           type: "string",
@@ -1021,7 +1021,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for yield, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for APY review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         pin: {
           type: "string",
@@ -2071,16 +2071,16 @@ function executeGetIntentHelp(): string {
       examples: ["melhor estimativa para converter reais"],
     },
     {
-      command: "rendimento",
+      command: "aplicação",
       intent: "yield",
       description: "Mostra opções para revisar APY estimado por moeda, posição atual e prepara entrada/saída com revisão.",
-      examples: ["revisar rendimento de 100 reais", "quanto tenho em posição cetes?"],
+      examples: ["revisar 100 reais com APY estimado", "quanto tenho em posição cetes?"],
     },
     {
       command: "ciclo",
       intent: "money_cycle",
-      description: "Abre o ciclo completo: colocar por PIX, revisar opção de rendimento e retirar para seu PIX.",
-      examples: ["injetar 500 reais, revisar rendimento e depois sair para meu PIX"],
+      description: "Abre o ciclo completo: colocar por PIX, revisar uma opção disponível e retirar para seu PIX.",
+      examples: ["injetar 500 reais, revisar APY e depois sair para meu PIX"],
     },
     {
       command: "melhor rota",
@@ -2135,8 +2135,8 @@ function executeGetIntentHelp(): string {
       "2) contatos: listar ou salvar destinatários.",
       "3) PIX: colocar dinheiro, retirar para uma chave PIX digitada na hora ou pagar um contato usando PIX.",
       "4) converter: trocar reais, dólares, CETES e moedas configuradas pela rota mais otimizada.",
-      "5) rendimento: revisar APY estimado por moeda, posição atual e preparar entrada/saída.",
-      "6) ciclo completo: colocar por PIX, revisar rendimento e sair para PIX em uma interface.",
+      "5) aplicação: revisar APY estimado por moeda, posição atual e preparar entrada/saída.",
+      "6) ciclo completo: colocar por PIX, revisar APY e sair para PIX em uma interface.",
       "7) enviar: fazer pagamento com confirmação segura da forma mais otimizada.",
       "8) melhor rota: descobrir o caminho mais otimizado para enviar/converter.",
       "9) histórico: revisar operações recentes.",
@@ -2154,8 +2154,8 @@ function executeGetIntentHelp(): string {
       "- \"colocar 100 reais via PIX\"",
       "- \"pagar Ana Silva com 100 reais via PIX\"",
       "- \"sacar 50 reais por PIX para user@example.com\"",
-      "- \"guardar 100 reais rendendo\"",
-      "- \"injetar 500 reais, deixar rendendo e depois sair para meu PIX\"",
+      "- \"revisar 100 reais com APY estimado\"",
+      "- \"injetar 500 reais, revisar APY e depois sair para meu PIX\"",
       "- \"converter 50 cetes para dólares\"",
       "- \"criar link de pagamento de 50 dólares\"",
       "- \"quanto economizei vs bancos?\"",
@@ -2261,15 +2261,15 @@ async function executeGetYieldOptions(input: any): Promise<string> {
     const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
     const isTestnet = String((status as any)?.runtime?.network || '').toLowerCase() === 'testnet';
     const disclosure = language === 'en'
-      ? `${isTestnet ? 'Testnet. ' : ''}Estimated historical APY from DeFindex. Not guaranteed, not investment advice, not fixed income, not a savings account, and not a bank deposit.`
-      : `${isTestnet ? 'Testnet. ' : ''}APY histórico estimado pela DeFindex. Não é garantia, recomendação de investimento, renda fixa, poupança ou depósito bancário.`;
+      ? `${isTestnet ? 'Testnet. ' : ''}Estimated historical APY. Not guaranteed, not investment advice, not fixed income, not a savings account, and not a bank deposit.`
+      : `${isTestnet ? 'Testnet. ' : ''}APY histórico estimado. Não é garantia, recomendação de investimento, renda fixa, poupança ou depósito bancário.`;
     const message = language === 'en'
       ? options.length
-        ? `Yield review options: ${options.map((option) => `${option.name}${option.estimated_apy ? ` (${option.estimated_apy} estimated APY)` : ''}`).join(', ')}.\n${disclosure}\n\nOpen the yield screen:\n${frontendUrl}`
-        : `Yield review options are not configured yet.\n${disclosure}\n\nOpen the yield screen:\n${frontendUrl}`
+        ? `Options for review: ${options.map((option) => `${option.name}${option.estimated_apy ? ` (${option.estimated_apy} estimated APY)` : ''}`).join(', ')}.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
+        : `Options for review are not configured yet.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
       : options.length
-        ? `Opções para revisar rendimento: ${options.map((option) => `${option.name}${option.estimated_apy ? ` (${option.estimated_apy} APY estimado)` : ''}`).join(', ')}.\n${disclosure}\n\nAbrir tela de rendimento:\n${frontendUrl}`
-        : `As opções para revisar rendimento ainda não foram configuradas.\n${disclosure}\n\nAbrir tela de rendimento:\n${frontendUrl}`;
+        ? `Opções para revisão: ${options.map((option) => `${option.name}${option.estimated_apy ? ` (${option.estimated_apy} APY estimado)` : ''}`).join(', ')}.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`
+        : `As opções para revisão ainda não foram configuradas.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`;
 
     return JSON.stringify({
       success: true,
@@ -2306,12 +2306,12 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
 	        ? 'Add money'
 	        : action === 'send_out'
 	          ? 'Send to PIX'
-	          : 'Review yield'
+	          : 'Review application'
 	      : action === 'bring'
 	        ? 'Trazer dinheiro'
 	        : action === 'send_out'
 	          ? 'Mandar para PIX'
-	          : 'Revisar rendimento';
+	          : 'Revisar aplicação';
 
     return JSON.stringify({
       success: true,
@@ -2354,8 +2354,8 @@ async function executeOpenMoneyCycle(input: any): Promise<string> {
       frontend_url: frontendUrl,
 	      steps: ['pix_on', 'yield', 'pix_off'],
 	      message: language === 'en'
-	        ? `The full money cycle is ready for ${displayAsset}: add by PIX, review an available yield option, then send out to PIX. Yield APY is estimated and not guaranteed.\n\nOpen:\n${frontendUrl}`
-	        : `O ciclo completo está pronto para ${displayAsset}: entrar por PIX, revisar uma opção de rendimento disponível e sair por PIX. O APY é estimado e não é garantido.\n\nAbra:\n${frontendUrl}`,
+	        ? `The full money cycle is ready for ${displayAsset}: add by PIX, review an available option, then send out to PIX. APY is estimated and not guaranteed.\n\nOpen:\n${frontendUrl}`
+	        : `O ciclo completo está pronto para ${displayAsset}: entrar por PIX, revisar uma opção disponível e sair por PIX. O APY é estimado e não é garantido.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2419,8 +2419,8 @@ async function executeGetYieldBalance(input: any): Promise<string> {
       balance: amount,
 	      frontend_url: frontendUrl,
 	      message: language === 'en'
-	        ? `Current reviewed position: ${amount} ${name}.\n\nOpen the yield screen:\n${frontendUrl}`
-	        : `Posição revisada atual: ${amount} ${name}.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
+	        ? `Current reviewed position: ${amount} ${name}.\n\nOpen review:\n${frontendUrl}`
+	        : `Posição revisada atual: ${amount} ${name}.\n\nAbrir revisão:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2462,8 +2462,8 @@ async function executePrepareYieldAction(input: any): Promise<string> {
         name,
       },
 	      message: language === 'en'
-	        ? `Review ready: ${actionText} ${amount} ${name}. Estimated APY is variable and not guaranteed. Confirm only after checking the amount.\n\nOpen the yield screen:\n${frontendUrl}`
-	        : `Revisão pronta: ${actionText} ${amount} ${name}. O APY estimado é variável e não é garantido. Confirme apenas depois de conferir o valor.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
+	        ? `Review ready: ${actionText} ${amount} ${name}. Estimated APY is variable and not guaranteed. Confirm only after checking the amount.\n\nOpen review:\n${frontendUrl}`
+	        : `Revisão pronta: ${actionText} ${amount} ${name}. O APY estimado é variável e não é garantido. Confirme apenas depois de conferir o valor.\n\nAbrir revisão:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2485,7 +2485,7 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       wallet_pin: input.wallet_pin || input.walletPin || input.pin,
     });
     if (!result?.success) {
-      throw new Error(result?.error || 'Yield confirmation was not accepted.');
+      throw new Error(result?.error || 'Review confirmation was not accepted.');
     }
     const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
     const amount = String(result?.amount || input.amount || '').trim();
@@ -2500,8 +2500,8 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       amount,
 	      frontend_url: frontendUrl,
 	      message: language === 'en'
-	        ? `Yield review request submitted for ${amount} ${name}. Your balances will update shortly.\n\nOpen the yield screen:\n${frontendUrl}`
-	        : `Pedido revisado de rendimento enviado para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir tela de rendimento:\n${frontendUrl}`,
+	        ? `Review request submitted for ${amount} ${name}. Your balances will update shortly.\n\nOpen review:\n${frontendUrl}`
+	        : `Pedido revisado enviado para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir revisão:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({

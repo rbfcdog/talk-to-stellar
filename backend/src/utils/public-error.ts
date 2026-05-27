@@ -68,11 +68,11 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'account_preparing':
       return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
     case 'yield_execution_disabled':
-      return 'A confirmacao de rendimento ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas execucao real exige aprovacao de compliance.';
+      return 'A confirmacao ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas execucao real exige aprovacao de compliance.';
     case 'account_signing_unavailable':
-      return 'Esta conta ainda nao esta pronta para assinar rendimento. Entre novamente e tente outra vez.';
+      return 'Esta conta ainda nao esta pronta para assinar esta operacao. Entre novamente e tente outra vez.';
     case 'yield_unavailable':
-      return 'Nao foi possivel atualizar o rendimento agora. Tente novamente em alguns segundos.';
+      return 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.';
     case 'invalid_pin':
       return 'Nao consegui validar o PIN. Confira e tente novamente.';
     case 'insufficient_balance':

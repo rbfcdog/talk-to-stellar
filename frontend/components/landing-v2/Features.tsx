@@ -22,9 +22,9 @@ const FEATURES: Feature[] = [
     ],
   },
   {
-    title: 'Rendimento guiado',
+    title: 'APY guiado',
     description:
-      'A experiência mostra opções por moeda, gráfico de rendimento e ação de guardar ou resgatar sem termos técnicos.',
+      'A experiência mostra opções por moeda, gráfico com APY estimado e ação de guardar ou resgatar sem termos técnicos.',
     snippetLines: [
       { key: 'intent', value: 'yield', type: 'string' },
       { key: 'asset', value: 'euro', type: 'string' },
@@ -58,7 +58,7 @@ export function Features() {
             Por que TalkToStellar
           </h2>
           <p className="max-w-xl text-sm leading-[1.65] text-tts-muted">
-            Três fluxos essenciais para o usuário entrar, converter, render e
+            Três fluxos essenciais para o usuário entrar, converter, revisar e
             sair sem trocar de contexto.
           </p>
         </motion.header>

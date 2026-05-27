@@ -2525,7 +2525,7 @@ export class AgentGraph {
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
-      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico yield in testnet and say TalkToStellar displays the available app balance.',
+      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico test option in testnet and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- Mini-menus must stay short: at most 5 actions, no technical terms, and no second welcome block if the user already received a login/onboarding completion message.',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
@@ -2533,7 +2533,7 @@ export class AgentGraph {
       '',
       '## YIELD UX',
       '- For rendimento, rendimentos, render, rentabilidade, yield, earning, guardar rendendo, or resgatar rendimento, use yield tools instead of free text.',
-      '- User-facing yield copy must say rendimento, yield, money, dollars, CETES/Mexico yield, or reais. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
+      '- User-facing copy for this flow must say revisão, aplicação, posição, APY estimado, dollars, CETES/opção México, or reais. Do not say rendimento or yield in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, APY internals, or Stellar.',
       '- Use get_yield_options for available currencies/rates, get_yield_balance for current earning balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "keep earning", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- For complete lifecycle requests like "injetar dinheiro, render e sair", "ciclo completo", or "add, earn, withdraw", use open_money_cycle so the user gets one consolidated interface.',
@@ -2542,7 +2542,7 @@ export class AgentGraph {
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
-      '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or CETES/Mexico yield according to the asset involved.',
+      '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or CETES/opção México according to the asset involved.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
       '- For BRL -> US$ net value, exchange-rate, fee, or received-amount questions, call get_conversion_preview or a quote tool. Never use a hardcoded exchange rate.',
@@ -3671,14 +3671,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     if (result.success) {
       state.response_message = result.message || this.text(
         language,
-        'Rendimento consultado.',
-        'Yield checked.'
+        'Revisão consultada.',
+        'Review checked.'
       );
     } else {
       state.response_message = this.text(
         language,
-        `Não consegui consultar rendimento agora: ${result.error || 'erro desconhecido'}`,
-        `I could not check yield right now: ${result.error || 'unknown error'}`
+        `Não consegui consultar a revisão agora: ${result.error || 'erro desconhecido'}`,
+        `I could not check the review right now: ${result.error || 'unknown error'}`
       );
     }
 

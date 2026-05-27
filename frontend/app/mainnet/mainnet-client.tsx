@@ -382,7 +382,7 @@ export default function MainnetClient() {
     try {
       const payload = await rampApi(`defindex/yield/balance?asset_code=${encodeURIComponent(selectedYieldVault.asset_code)}&vault_address=${encodeURIComponent(selectedYieldVault.vault_address)}`);
       setYieldBalance(payload);
-      setApiState({ loading: false, message: "Defindex balance refreshed.", error: "" });
+      setApiState({ loading: false, message: "Advanced position refreshed.", error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
     }
@@ -404,7 +404,7 @@ export default function MainnetClient() {
         }),
       });
       setYieldResult(payload);
-      setApiState({ loading: false, message: "Defindex XDR prepared for signing.", error: "" });
+      setApiState({ loading: false, message: "Advanced review prepared for signing.", error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
     }
@@ -429,7 +429,7 @@ export default function MainnetClient() {
       });
       setYieldResult(payload);
       setYieldPin("");
-      setApiState({ loading: false, message: "Defindex yield transaction submitted.", error: "" });
+      setApiState({ loading: false, message: "Advanced transaction submitted.", error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
     }
@@ -949,7 +949,7 @@ function DefindexYieldPanel({
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
             <BadgeDollarSign className="h-5 w-5 text-tts-confirm" />
-            Defindex yield
+            Advanced APY
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${configured ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>

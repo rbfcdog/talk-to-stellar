@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Chat",
-  description: "Chat with TalkToStellar for balances, PIX, conversions, yield, payments, and withdrawals.",
+  description: "Chat with TalkToStellar for balances, PIX, conversions, APY review, payments, and withdrawals.",
 }
 
 export default function ChatLayout({
