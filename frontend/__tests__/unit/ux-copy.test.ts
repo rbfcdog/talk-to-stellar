@@ -47,4 +47,17 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Segurança avançada");
     expect(text).not.toContain("Testar passkey e OpenZeppelin");
   });
+
+  it("keeps BRL visible while sending TESOURO as the backend settlement asset", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain('displayCode === "BRL" ? "TESOURO"');
+    expect(text).toContain("final_asset: settlementAssetCode(targetAsset)");
+    expect(text).toContain("auto_pay_asset_code: settlementAssetCode(autoPayAsset || targetAsset)");
+    expect(text).toContain("asset_code: requestedAutoPayAsset");
+    expect(text).toContain("source_asset_code: sourceAssetCode");
+    expect(text).toContain("display_source_asset_code: offRampInputAsset");
+    expect(text).not.toContain("final_asset: targetAsset");
+    expect(text).not.toMatch(/(^|[^\w])source_asset_code:\s*offRampInputAsset/);
+  });
 });
