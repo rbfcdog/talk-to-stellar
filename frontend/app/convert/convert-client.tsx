@@ -1,25 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRightLeft,
+  Banknote,
+  CheckCircle2,
   Coins,
-  PiggyBank,
   RefreshCw,
   ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
@@ -37,17 +25,6 @@ type AssetOption = {
   descriptionPt: string;
   descriptionEn: string;
   tone: string;
-  demoBrl: number;
-  annualRate: number;
-};
-
-type YieldStatus = {
-  vaults?: Array<{
-    asset_code?: string;
-    display_asset_code?: string;
-    apy_percent?: string;
-    apy?: Record<string, unknown>;
-  }>;
 };
 
 type SessionState = {
@@ -65,16 +42,14 @@ type BalanceLine = {
 const ASSETS: AssetOption[] = [
   {
     code: "BRL",
-    short: "BRL",
+    short: "R$",
     namePt: "Reais",
     nameEn: "Reais",
     promptPt: "reais",
     promptEn: "BRL",
     descriptionPt: "Saldo em reais da sua conta.",
     descriptionEn: "Reais balance in your account.",
-    tone: "border-tts-border bg-tts-surface text-tts-deep",
-    demoBrl: 1,
-    annualRate: 0.105,
+    tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
   },
   {
     code: "USDC",
@@ -83,37 +58,20 @@ const ASSETS: AssetOption[] = [
     nameEn: "Dollars",
     promptPt: "dólares",
     promptEn: "dollars",
-    descriptionPt: "Saldo em dólares da conta.",
-    descriptionEn: "Dollar balance in the account.",
+    descriptionPt: "Saldo em dólares da sua conta.",
+    descriptionEn: "Dollar balance in your account.",
     tone: "border-tts-confirm/50 bg-tts-confirm/10 text-tts-confirm",
-    demoBrl: 5.2,
-    annualRate: 0.045,
   },
   {
     code: "CETES",
-    short: "CETES",
+    short: "MXN",
     namePt: "Opção México (teste)",
     nameEn: "Mexico option (test)",
-    promptPt: "CETES",
-    promptEn: "CETES",
-    descriptionPt: "Opção testnet para simulação.",
-    descriptionEn: "Testnet option for preview.",
-    tone: "border-tts-gold/60 bg-tts-gold-bg text-tts-gold",
-    demoBrl: 0.3,
-    annualRate: 0.0875,
-  },
-  {
-    code: "XLM",
-    short: "XLM",
-    namePt: "Reserva da conta",
-    nameEn: "Account reserve",
-    promptPt: "XLM",
-    promptEn: "XLM",
-    descriptionPt: "Usado para manter a conta funcionando.",
-    descriptionEn: "Used to keep the account working.",
+    promptPt: "opção México",
+    promptEn: "Mexico option",
+    descriptionPt: "Opção de teste quando estiver disponível no ambiente.",
+    descriptionEn: "Test option when available in this environment.",
     tone: "border-tts-border2 bg-tts-surface text-tts-muted",
-    demoBrl: 0.7,
-    annualRate: 0,
   },
 ];
 
@@ -170,8 +128,7 @@ function buildUrl(path: string, params: Record<string, unknown>) {
 }
 
 function accountAssetCode(code: string) {
-  if (code === "BRL") return "TESOURO";
-  return code;
+  return code === "BRL" ? "TESOURO" : code;
 }
 
 function balanceForAsset(balances: BalanceLine[], code: string) {
@@ -185,6 +142,12 @@ function hasEnoughBalance(balance: BalanceLine | undefined, amount: number) {
   return Number.isFinite(available) && available >= amount;
 }
 
+function formatAssetAmount(amount: number, asset: AssetOption, language: AppLanguage) {
+  if (asset.code === "BRL") return `R$ ${formatDecimal(amount, language, 2)}`;
+  if (asset.code === "USDC") return `US$ ${formatDecimal(amount, language, 2)}`;
+  return `${formatDecimal(amount, language, 7)} ${asset.short}`;
+}
+
 async function accountApi(path: string) {
   const response = await fetch(`/api/ramp/${path}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -194,36 +157,13 @@ async function accountApi(path: string) {
   return payload;
 }
 
-function rateFromYieldOption(option: any) {
-  const raw = option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy;
-  const text = Array.isArray(raw) ? String(raw[0] || "") : String(raw || "");
-  const parsed = Number(text.replace("%", "").replace(",", "."));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed / 100 : null;
-}
-
-function buildProjectionData(amount: number, annualRate: number, language: AppLanguage) {
-  const monthlyRate = annualRate / 12;
-  return Array.from({ length: 13 }, (_, month) => {
-    const balance = amount * Math.pow(1 + monthlyRate, month);
-    return {
-      month,
-      label: month === 0 ? localCopy(language, "Hoje", "Today") : `${month}m`,
-      balance: Number(balance.toFixed(2)),
-      earned: Number(Math.max(0, balance - amount).toFixed(2)),
-    };
-  });
-}
-
 export default function ConvertClient({ initialQuery = "" }: { initialQuery?: string }) {
   const { language, setLanguage } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const appliedInitialQueryRef = useRef(false);
-  const [amount, setAmount] = useState("500");
-  const [sourceCode, setSourceCode] = useState("BRL");
-  const [destCode, setDestCode] = useState("USDC");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [safetyMode, setSafetyMode] = useState("balanced");
-  const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
+  const [amount, setAmount] = useState("10");
+  const [sourceCode, setSourceCode] = useState("USDC");
+  const [destCode, setDestCode] = useState("BRL");
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");
@@ -240,33 +180,24 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     if (parseAmount(queryAmount) > 0) setAmount(queryAmount);
     if (querySource) setSourceCode(normalizeAssetCode(querySource));
     if (queryDest) setDestCode(normalizeAssetCode(queryDest));
-    if (params.get("advanced") === "1" || params.get("advanced") === "true") setAdvancedOpen(true);
   }, [initialQuery, setLanguage]);
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      fetch("/api/ramp/defindex/yield/status", { cache: "no-store" })
-        .then((response) => response.json())
-        .catch(() => null),
-      getClientSession()
-        .then(async (sessionPayload) => {
-          if (!sessionPayload.authenticated) return { sessionPayload, balancesPayload: [] };
-          const accountPayload = await accountApi("etherfuse/wallet-balances").catch(() => ({ balances: [] }));
-          return { sessionPayload, balancesPayload: Array.isArray(accountPayload?.balances) ? accountPayload.balances : [] };
-        })
-        .catch(() => ({ sessionPayload: { authenticated: false }, balancesPayload: [] })),
-    ])
-      .then(([yieldPayload, accountPayload]) => {
+    getClientSession()
+      .then(async (sessionPayload) => {
+        if (!sessionPayload.authenticated) return { sessionPayload, balancesPayload: [] };
+        const accountPayload = await accountApi("etherfuse/wallet-balances").catch(() => ({ balances: [] }));
+        return { sessionPayload, balancesPayload: Array.isArray(accountPayload?.balances) ? accountPayload.balances : [] };
+      })
+      .then((accountPayload) => {
         if (!active) return;
-        setYieldStatus(yieldPayload);
         setSession(accountPayload.sessionPayload);
         setBalances(accountPayload.balancesPayload);
         setAccountStatus(accountPayload.sessionPayload.authenticated ? "ready" : "signed-out");
       })
       .catch(() => {
         if (!active) return;
-        setYieldStatus(null);
         setSession({ authenticated: false });
         setBalances([]);
         setAccountStatus("signed-out");
@@ -288,93 +219,92 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         ? L("Saldo não encontrado", "Balance not found")
         : L("Entre para consultar", "Sign in to check");
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
-  const estimatedDestination = numericAmount > 0
-    ? (numericAmount * sourceAsset.demoBrl) / destAsset.demoBrl
-    : 0;
-  const destinationYieldRate = useMemo(() => {
-    const option = (yieldStatus?.vaults || []).find((item) => {
-      const code = normalizeAssetCode(item.display_asset_code || item.asset_code);
-      return code === destAsset.code;
-    });
-    return rateFromYieldOption(option as any) ?? 0;
-  }, [destAsset, yieldStatus]);
-  const projectionData = useMemo(
-    () => buildProjectionData(estimatedDestination, destinationYieldRate, language),
-    [destinationYieldRate, estimatedDestination, language]
-  );
-  const earnedAfterYear = projectionData[projectionData.length - 1]?.earned || 0;
+  const sameAsset = sourceCode === destCode;
+  const brlCashOut = sourceCode === "USDC" && destCode === "BRL";
+  const brlCashIn = sourceCode === "BRL" && destCode === "USDC";
   const conversionPrompt = language === "pt-BR"
     ? `converter ${amount || "0"} ${assetPromptName(sourceAsset, language)} para ${assetPromptName(destAsset, language)}`
     : `convert ${amount || "0"} ${assetPromptName(sourceAsset, language)} to ${assetPromptName(destAsset, language)}`;
   const chatUrl = buildUrl("/chat", { prompt: conversionPrompt, lang: language });
-  const confirmReviewUrl = chatUrl;
-  const yieldUrl = buildUrl("/yield", {
-    asset: destAsset.code,
-    amount: estimatedDestination > 0 ? estimatedDestination.toFixed(2) : amount,
-    advanced: "1",
+  const pixOffUrl = buildUrl("/pix-off", {
+    mode: "offramp",
+    source_asset: sourceCode,
+    asset: sourceCode,
+    source_amount: amount,
+    amount,
+    currency: sourceCode,
     from: "convert",
     lang: language,
   });
-  const conversionRows = [
-    { label: L("Você troca", "You convert"), value: `${formatDecimal(numericAmount, language, 7)} ${sourceAsset.short}` },
-    { label: L("Você recebe", "You receive"), value: `${formatDecimal(estimatedDestination, language, 7)} ${destAsset.short}` },
-    { label: L("Prévia 12m estimada", "Estimated 12m preview"), value: `${formatDecimal(earnedAfterYear, language, 7)} ${destAsset.short}` },
-  ];
-  const howItWorksSteps = [
-    {
-      title: L("1. Origem", "1. Source"),
-      body: L(
-        "Escolha de qual saldo da conta a conversão sai. A tela mostra se o saldo parece suficiente antes de abrir qualquer confirmação.",
-        "Choose which account balance the conversion starts from. The screen shows whether the balance looks sufficient before opening any confirmation."
-      ),
-      icon: <WalletCards className="h-4 w-4" aria-hidden="true" />,
-    },
-    {
-      title: L("2. Destino", "2. Destination"),
-      body: L(
-        "Escolha para qual moeda quer ir e informe o valor. A prévia estima quanto chega, mas a rota real é recalculada na revisão final.",
-        "Choose the destination currency and enter the amount. The preview estimates what arrives, but the live route is recalculated in final review."
-      ),
-      icon: <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />,
-    },
-    {
-      title: L("3. Depois", "3. Next"),
-      body: L(
-        "Depois de revisar, você pode confirmar com PIN ou abrir uma revisão com APY para o saldo de destino. Nada muda na conta antes da confirmação.",
-        "After review, you can confirm with PIN or open an APY review for the destination balance. Nothing changes in the account before confirmation."
-      ),
-      icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
-    },
-  ];
+  const pixOnUrl = buildUrl("/pix-on", {
+    mode: "onramp",
+    receive_asset: "USDC",
+    source_asset: "BRL",
+    amount,
+    from: "convert",
+    lang: language,
+  });
+  const primaryHref = brlCashOut ? pixOffUrl : brlCashIn ? pixOnUrl : chatUrl;
+  const primaryLabel = brlCashOut
+    ? L("Abrir saída PIX", "Open PIX withdrawal")
+    : brlCashIn
+      ? L("Abrir entrada PIX", "Open PIX deposit")
+      : L("Revisar conversão", "Review conversion");
+  const routeTitle = brlCashOut
+    ? L("Dólar para R$ usa saída PIX", "Dollars to R$ uses PIX withdrawal")
+    : brlCashIn
+      ? L("R$ para dólar usa entrada PIX", "R$ to dollars uses PIX deposit")
+      : L("Conversão interna", "Internal conversion");
+  const routeDescription = brlCashOut
+    ? L(
+        "Neste ambiente, USDC para R$ não deve mostrar cotação interna falsa. A saída PIX calcula o valor em reais, taxas e destino antes do PIN.",
+        "In this environment, USDC to R$ should not show a fake internal quote. PIX withdrawal calculates BRL amount, fees, and destination before PIN."
+      )
+    : brlCashIn
+      ? L(
+          "Para colocar R$ na conta e receber saldo em dólares, use o PIX de entrada. A cotação real aparece antes de confirmar.",
+          "To bring R$ into the account and receive dollar balance, use PIX deposit. The live quote appears before confirmation."
+        )
+      : L(
+          "A próxima etapa pede a rota real ao backend. Se não existir caminho seguro, ela mostra a alternativa em vez de inventar preço.",
+          "The next step asks the backend for the live route. If there is no safe path, it shows the alternative instead of inventing a price."
+        );
+  const destinationValue = brlCashOut
+    ? L("Calculado na saída PIX", "Calculated in PIX withdrawal")
+    : brlCashIn
+      ? L("Calculado na entrada PIX", "Calculated in PIX deposit")
+      : L("Calculado na revisão", "Calculated in review");
+  const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
+  const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
+  const securityValue = sameAsset
+    ? L("Escolha moedas diferentes", "Choose different currencies")
+    : !session.authenticated
+      ? L("Entre para revisar", "Sign in to review")
+      : canProceed
+        ? L("Pronto para revisar", "Ready to review")
+        : L("Revise o saldo", "Review balance");
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
-              {L("Conversão de saldos", "Balance conversion")}
+              {L("Conversão", "Conversion")}
             </div>
             <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
-              {L("Converter dentro da conta", "Convert inside your account")}
+              {L("Trocar saldo sem surpresa", "Convert without surprises")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L(
-                "Escolha o saldo de origem, a moeda de destino e revise o impacto antes de confirmar.",
-                "Choose the source balance, destination currency, and review the impact before confirming."
+                "Escolha origem, destino e valor. Esta tela não estima câmbio localmente; a cotação real aparece na revisão ou no PIX antes do PIN.",
+                "Choose source, destination, and amount. This screen does not estimate FX locally; the live quote appears in review or PIX before PIN."
               )}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3 md:min-w-[480px]">
+          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
             <ReturnToChat prompt={conversionPrompt} />
-            <a
-              href={confirmReviewUrl}
-              className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
-            >
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              {L("Revisar conversão", "Review conversion")}
-            </a>
             <button
               type="button"
               onClick={() => setLanguage(language === "en" ? "pt-BR" : "en")}
@@ -387,229 +317,122 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         </header>
 
         <section className="grid gap-3 lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
-          {conversionRows.map((row) => (
-            <Metric key={row.label} label={row.label} value={row.value} detail={L("Prévia antes da confirmação", "Preview before confirmation")} />
-          ))}
+          <Metric label={L("Sai da conta", "Leaves account")} value={formatAssetAmount(numericAmount, sourceAsset, language)} detail={sourceBalanceDisplay} />
+          <Metric label={L("Destino", "Destination")} value={destinationValue} detail={`${destAsset.short} · ${assetName(destAsset, language)}`} />
+          <Metric
+            label={L("Segurança", "Security")}
+            value={securityValue}
+            detail={L("Nada muda antes do PIN.", "Nothing changes before PIN.")}
+          />
         </section>
 
-        <section className="border border-tts-confirm bg-tts-confirm/10 p-5" aria-label={L("Como funciona a conversão", "How conversion works")}>
-          <div className="flex flex-col gap-2">
+        <section className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <section className="border border-tts-border bg-tts-surface p-5">
             <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-              <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-              {L("Como funciona", "How it works")}
+              <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+              {L("Sua conta", "Your account")}
             </h2>
-            <p className="max-w-3xl text-sm leading-6 text-tts-muted">
-              {L(
-                "A conversão segue uma revisão simples: você escolhe origem e destino, vê uma prévia para entender o impacto e só confirma depois que a rota real for preparada.",
-                "Conversion follows a simple review: you choose source and destination, see a preview to understand the impact, and only confirm after the live route is prepared."
-              )}
+            <p className="mt-2 text-sm leading-6 text-tts-muted">
+              {L("Use os saldos da conta conectada. R$ aparece sempre como reais; a rota real é preparada antes do PIN.", "Use balances from the connected account. R$ always appears as reais; the live route is prepared before PIN.")}
             </p>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {howItWorksSteps.map((item) => (
-              <div key={item.title} className="border border-tts-border bg-tts-surface p-4">
-                <div className="flex items-center gap-2 text-sm font-black text-tts-deep">
-                  <span className="grid h-8 w-8 place-items-center border border-tts-confirm text-tts-confirm">
-                    {item.icon}
-                  </span>
-                  {item.title}
-                </div>
-                <p className="mt-2 text-sm leading-6 text-tts-muted">{item.body}</p>
+            <AccountStatusCard
+              state={accountStatus === "loading" ? "loading" : session.authenticated ? "connected" : "signed-out"}
+              ctaHref="/login?next=/convert"
+              compact
+              className="mt-4"
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <MiniStat label={L("Saldo de origem", "Source balance")} value={sourceBalanceDisplay} />
+              <MiniStat
+                label={L("Status", "Status")}
+                value={sourceBalance ? enoughBalance ? L("Saldo suficiente", "Enough balance") : L("Valor acima do saldo", "Amount above balance") : session.authenticated ? L("Saldo não encontrado", "Balance not found") : L("Entre para consultar", "Sign in to check")}
+              />
+            </div>
+          </section>
+
+          <section className="border border-tts-border bg-tts-surface p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+                  <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
+                  {L("Montar conversão", "Set up conversion")}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-tts-muted">
+                  {L("Informe quanto sai da moeda de origem. O valor de destino é calculado na próxima etapa.", "Enter how much leaves the source currency. The destination amount is calculated in the next step.")}
+                </p>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceCode(destCode);
+                  setDestCode(sourceCode);
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+              >
+                <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+                {L("Inverter", "Swap")}
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
+                {L("Valor que sai", "Amount leaving")}
+              </label>
+              <input
+                id="convert-amount"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
+                inputMode="decimal"
+                className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
+              />
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <AssetPicker title={L("De", "From")} selectedCode={sourceCode} otherCode={destCode} onSelect={setSourceCode} />
+              <AssetPicker title={L("Para", "To")} selectedCode={destCode} otherCode={sourceCode} onSelect={setDestCode} />
+            </div>
+          </section>
         </section>
 
-        <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="grid gap-6">
-            <section className="border border-tts-border bg-tts-surface p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                    <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                    {L("Saldos da conta", "Account balances")}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    {L("Escolha origem e destino. A revisão final usa cotação real antes do PIN.", "Choose source and destination. Final review uses a live quote before PIN.")}
-                  </p>
-                </div>
-              </div>
-
-              <AccountStatusCard
-                state={accountStatus === "loading" ? "loading" : session.authenticated ? "connected" : "signed-out"}
-                ctaHref="/login?next=/convert"
-                compact
-                className="mt-4"
-              />
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MiniStat label={L("Saldo de origem", "Source balance")} value={sourceBalanceDisplay} />
-                <MiniStat label={L("Estado", "Status")} value={sourceBalance ? enoughBalance ? L("Saldo suficiente", "Enough balance") : L("Revise o valor", "Review amount") : session.authenticated ? L("Saldo não encontrado", "Balance not found") : L("Entre para consultar", "Sign in to check")} />
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSourceCode(destCode);
-                    setDestCode(sourceCode);
-                  }}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-                >
-                  <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
-                  {L("Inverter", "Swap")}
-                </button>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <AssetPicker
-                  title={L("Converter de", "Convert from")}
-                  selectedCode={sourceCode}
-                  otherCode={destCode}
-                  onSelect={setSourceCode}
-                />
-                <AssetPicker
-                  title={L("Converter para", "Convert to")}
-                  selectedCode={destCode}
-                  otherCode={sourceCode}
-                  onSelect={setDestCode}
-                />
-              </div>
-            </section>
-
-            <section className="border border-tts-border bg-tts-surface p-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                    <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                    {L("Revisão da conversão", "Conversion review")}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-tts-muted">
-                    {L("Edite o valor e confira a troca antes de abrir a confirmação.", "Edit the amount and review the swap before opening confirmation.")}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-pressed={advancedOpen}
-                  onClick={() => setAdvancedOpen(!advancedOpen)}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-                >
-                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                  {advancedOpen ? L("Ocultar ajustes", "Hide settings") : L("Modo avançado", "Advanced mode")}
-                </button>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
-                <div>
-                  <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
-                    {L("Valor de origem", "Source amount")}
-                  </label>
-                  <input
-                    id="convert-amount"
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
-                    inputMode="decimal"
-                    className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
-                  />
-                  {advancedOpen ? (
-                    <div className="mt-4">
-                      <label className="block text-sm font-black text-tts-deep" htmlFor="convert-safety">
-                        {L("Preferência de execução", "Execution preference")}
-                      </label>
-                      <select
-                        id="convert-safety"
-                        value={safetyMode}
-                        onChange={(event) => setSafetyMode(event.target.value)}
-                        className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
-                      >
-                        <option value="balanced">{L("Equilibrada", "Balanced")}</option>
-                        <option value="strict">{L("Mais conservadora", "More conservative")}</option>
-                        <option value="fast">{L("Mais rápida", "Faster")}</option>
-                      </select>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="border border-tts-border bg-tts-bg p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Pedido preparado", "Prepared request")}</p>
-                  <p className="mt-2 break-words text-lg font-black text-tts-deep">{conversionPrompt}</p>
-                  <p className="mt-3 text-sm leading-6 text-tts-muted">
-                    {L(
-                      "A próxima etapa recalcula a rota real e só confirma depois do PIN.",
-                      "The next step recalculates the live route and only confirms after PIN."
-                    )}
-                  </p>
-                  <div className="mt-4 grid gap-2">
-                    <a href={confirmReviewUrl} className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90">
-                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                      {L("Revisar conversão", "Review conversion")}
-                    </a>
-                    <a href={yieldUrl} className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2">
-                      <PiggyBank className="h-4 w-4" aria-hidden="true" />
-                      {L("Revisar APY", "Review APY")}
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <section className="grid gap-6">
-            <section className="border border-tts-border bg-tts-surface p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                    <Sparkles className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                    {L("Impacto do destino", "Destination impact")}
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-                    {L(
-                      "Veja o valor estimado no destino e uma simulação com APY estimado, quando houver opção configurada.",
-                      "See the estimated destination value and a preview with estimated APY when an option is configured."
-                    )}
-                  </p>
-                  <p className="mt-1 max-w-2xl text-xs leading-5 text-tts-muted">
-                    {L(
-                      "A simulação com APY é histórica, variável e não representa garantia, recomendação de investimento ou depósito bancário.",
-                      "The APY preview is historical, variable, and is not a guarantee, investment advice, or bank deposit."
-                    )}
-                  </p>
-                </div>
-                <span className="inline-flex w-fit border border-tts-border bg-tts-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
-                  {destAsset.short} · {assetName(destAsset, language)}
-                </span>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <ProjectionChart
-                  title={L("Saldo projetado", "Projected balance")}
-                  data={projectionData}
-                  dataKey="balance"
-                  color="var(--tts-confirm)"
-                  asset={destAsset.short}
-                />
-                <ProjectionChart
-                  title={L("Diferença estimada", "Estimated difference")}
-                  data={projectionData.slice(1)}
-                  dataKey="earned"
-                  color="var(--tts-gold)"
-                  asset={destAsset.short}
-                  bar
-                />
-              </div>
-            </section>
-
-            <section className="border border-tts-border bg-tts-surface p-5">
+        <section className="border border-tts-confirm bg-tts-confirm/10 p-5">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-                <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                {L("Depois de revisar", "After review")}
+                {brlCashOut || brlCashIn ? <Banknote className="h-5 w-5 text-tts-confirm" aria-hidden="true" /> : <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />}
+                {routeTitle}
               </h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-                <ActionLink href={confirmReviewUrl} title={L("Confirmar conversão", "Confirm conversion")} body={L("Recalcula a rota real e abre a confirmação com PIN.", "Recalculates the live route and opens PIN confirmation.")} icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} />
-                <ActionLink href={yieldUrl} title={L("Revisar APY", "Review APY")} body={L("Use o destino da conversão para abrir uma simulação com APY estimado.", "Use the conversion destination to open a preview with estimated APY.")} icon={<PiggyBank className="h-4 w-4" aria-hidden="true" />} />
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <Step title={L("1. Valor", "1. Amount")} body={formatAssetAmount(numericAmount, sourceAsset, language)} />
+                <Step title={L("2. Cotação", "2. Quote")} body={destinationValue} />
+                <Step title={L("3. PIN", "3. PIN")} body={L("Só depois da revisão", "Only after review")} />
               </div>
-            </section>
-          </section>
+            </div>
+            <div className="border border-tts-border bg-tts-surface p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Próximo passo", "Next step")}</p>
+              <p className="mt-2 text-lg font-black text-tts-deep">{conversionPrompt}</p>
+              {sameAsset ? (
+                <p className="mt-3 text-sm leading-6 text-tts-muted">
+                  {L("Escolha moedas diferentes para continuar.", "Choose different currencies to continue.")}
+                </p>
+              ) : !canProceed ? (
+                <p className="mt-3 text-sm leading-6 text-tts-muted">
+                  {L("O valor parece maior que o saldo disponível. Ajuste antes de revisar.", "The amount looks higher than the available balance. Adjust it before reviewing.")}
+                </p>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-tts-muted">
+                  {L("A próxima tela calcula o valor final e mostra taxas antes de qualquer confirmação.", "The next screen calculates the final amount and shows fees before any confirmation.")}
+                </p>
+              )}
+              <a
+                href={canProceed ? primaryHref : "#convert-amount"}
+                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"}`}
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                {primaryLabel}
+              </a>
+            </div>
+          </div>
         </section>
       </section>
     </main>
@@ -631,7 +454,7 @@ function AssetPicker({
   return (
     <div>
       <h3 className="text-sm font-black text-tts-deep">{title}</h3>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2">
         {ASSETS.map((asset) => {
           const selected = asset.code === selectedCode;
           const paired = asset.code === otherCode;
@@ -640,7 +463,7 @@ function AssetPicker({
               key={`${title}-${asset.code}`}
               type="button"
               onClick={() => onSelect(asset.code)}
-              className={`min-h-[112px] border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
+              className={`min-h-[96px] border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
               <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${asset.tone}`}>
                 {asset.short}
@@ -655,60 +478,12 @@ function AssetPicker({
   );
 }
 
-function ProjectionChart({
-  title,
-  data,
-  dataKey,
-  color,
-  asset,
-  bar = false,
-}: {
-  title: string;
-  data: Array<{ label: string; balance: number; earned: number }>;
-  dataKey: "balance" | "earned";
-  color: string;
-  asset: string;
-  bar?: boolean;
-}) {
-  const { language } = useLanguage();
-  const formatter = (value: unknown) => [`${formatDecimal(Number(value), language, 7)} ${asset}`, title];
+function Step({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border border-tts-border bg-tts-bg p-4">
-      <h3 className="text-base font-black text-tts-deep">{title}</h3>
-      <div className="mt-3 h-[240px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          {bar ? (
-            <BarChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="var(--tts-border)" strokeDasharray="3 3" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} />
-              <YAxis tickLine={false} axisLine={false} width={58} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} tickFormatter={(value) => formatDecimal(Number(value), language, 2)} />
-              <Tooltip formatter={formatter} />
-              <Bar dataKey={dataKey} fill={color} name={dataKey} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          ) : (
-            <AreaChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="var(--tts-border)" strokeDasharray="3 3" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} />
-              <YAxis tickLine={false} axisLine={false} width={58} tick={{ fill: "var(--tts-muted)", fontSize: 12 }} tickFormatter={(value) => formatDecimal(Number(value), language, 2)} />
-              <Tooltip formatter={formatter} />
-              <Area type="monotone" dataKey={dataKey} stroke={color} fill={color} fillOpacity={0.16} strokeWidth={2} name={dataKey} />
-            </AreaChart>
-          )}
-        </ResponsiveContainer>
-      </div>
+    <div className="border border-tts-border bg-tts-surface p-3">
+      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{title}</p>
+      <p className="mt-1 text-sm font-black text-tts-deep">{body}</p>
     </div>
-  );
-}
-
-function ActionLink({ href, icon, title, body }: { href: string; icon: ReactNode; title: string; body: string }) {
-  return (
-    <a href={href} className="group border border-tts-border bg-tts-bg p-4 transition hover:border-tts-border2">
-      <span className="inline-flex h-9 w-9 items-center justify-center bg-tts-deep text-tts-surface">
-        {icon}
-      </span>
-      <span className="mt-3 block text-base font-black text-tts-deep">{title}</span>
-      <span className="mt-2 block text-sm leading-6 text-tts-muted">{body}</span>
-    </a>
   );
 }
 
@@ -721,7 +496,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+function Metric({ label, value, detail }: { label: string; value: string; detail: ReactNode }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
       <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
