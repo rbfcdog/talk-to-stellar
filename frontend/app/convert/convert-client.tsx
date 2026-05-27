@@ -22,6 +22,8 @@ import {
   Sparkles,
   WalletCards,
 } from "lucide-react";
+import { AccountStatusCard } from "@/components/shared/account-status";
+import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 
@@ -278,7 +280,13 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const destAsset = getAsset(destCode);
   const numericAmount = parseAmount(amount);
   const sourceBalance = balanceForAsset(balances, sourceCode);
-  const sourceBalanceDisplay = sourceBalance ? `${formatDecimal(Number(String(sourceBalance.balance || "0").replace(",", ".")), language, 7)} ${sourceAsset.short}` : L("A consultar", "Pending");
+  const sourceBalanceDisplay = sourceBalance
+    ? `${formatDecimal(Number(String(sourceBalance.balance || "0").replace(",", ".")), language, 7)} ${sourceAsset.short}`
+    : accountStatus === "loading"
+      ? L("Carregando saldo", "Loading balance")
+      : session.authenticated
+        ? L("Saldo não encontrado", "Balance not found")
+        : L("Entre para consultar", "Sign in to check");
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const estimatedDestination = numericAmount > 0
     ? (numericAmount * sourceAsset.demoBrl) / destAsset.demoBrl
@@ -358,7 +366,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               )}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
+          <div className="grid gap-2 sm:grid-cols-3 md:min-w-[480px]">
+            <ReturnToChat prompt={conversionPrompt} />
             <a
               href={confirmReviewUrl}
               className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
@@ -424,10 +433,14 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     {L("Escolha origem e destino. A revisão final usa cotação real antes do PIN.", "Choose source and destination. Final review uses a live quote before PIN.")}
                   </p>
                 </div>
-                <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${session.authenticated ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-                  {accountStatus === "loading" ? L("Carregando", "Loading") : session.authenticated ? L("Conectada", "Connected") : L("Sem conta", "No account")}
-                </span>
               </div>
+
+              <AccountStatusCard
+                state={accountStatus === "loading" ? "loading" : session.authenticated ? "connected" : "signed-out"}
+                ctaHref="/login?next=/convert"
+                compact
+                className="mt-4"
+              />
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <MiniStat label={L("Saldo de origem", "Source balance")} value={sourceBalanceDisplay} />
