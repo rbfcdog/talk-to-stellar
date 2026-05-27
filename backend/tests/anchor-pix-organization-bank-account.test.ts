@@ -153,7 +153,7 @@ describe('AnchorService PIX organization bank account routing', () => {
       sandbox_mock: true,
       fromAmount: '10',
       fromCurrency: 'BRL',
-      toAmount: '9.9300000',
+      toAmount: '9.93',
       toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
     expect(result.transaction.toAmount).not.toBe('8.65');
@@ -226,6 +226,83 @@ describe('AnchorService PIX organization bank account routing', () => {
       totalFeeAmount: '0.25',
     });
     expect((result.quote as any).userFacingToAmount).not.toBe('43.29');
+  });
+
+  it('keeps provider on-ramp orders user-facing at TESOURO equals real instead of raw provider units', async () => {
+    mockSandboxRuntime();
+
+    const anchor = {
+      getQuote: jest.fn().mockResolvedValue({
+        id: 'quote-provider-1',
+        fromCurrency: 'BRL',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        fromAmount: '10.05',
+        toAmount: '8.6997062',
+        exchangeRate: '0.8656424',
+        fee: '0.0201',
+        feeAmount: '0.0201',
+        feeBps: '20',
+        provider: 'etherfuse',
+      }),
+      createOnRamp: jest.fn().mockResolvedValue({
+        id: 'provider-onramp-1',
+        status: 'pending',
+        fromAmount: '10.05',
+        fromCurrency: 'BRL',
+        toAmount: '8.6997062',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'getActiveEtherfuseOrganizationBankAccountId').mockResolvedValue('pix-brl');
+    jest.spyOn(AnchorService as any, 'runSandboxProgrammaticOnboarding').mockResolvedValue({
+      bankAccountId: 'pix-brl',
+      cryptoWalletId: 'wallet-1',
+      steps: {
+        bank_account: { status: 'active', source: 'organization_account' },
+      },
+    });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(AnchorService as any, 'findActiveRampOperationByIntent').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'TESOURO',
+      asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    });
+    jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+
+    const result = await AnchorService.createOnRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      amount: '10.05',
+      final_asset: 'BRL',
+    });
+
+    expect(anchor.createOnRamp).toHaveBeenCalled();
+    expect(result.transaction).toMatchObject({
+      id: 'provider-onramp-1',
+      fromAmount: '10.05',
+      fromCurrency: 'BRL',
+      userFacingToCurrency: 'BRL',
+      finalAssetCode: 'TESOURO',
+      finalSettlementMode: 'stellar_asset',
+    });
+    expect(Number(result.transaction.toAmount)).toBeGreaterThan(9.9);
+    expect((result.transaction as any).userFacingToAmount).toBe(result.transaction.toAmount);
+    expect(result.transaction.toAmount).not.toBe('8.6997062');
   });
 
   it('keeps a dynamic PIX destination while ignoring local destination ids', async () => {
