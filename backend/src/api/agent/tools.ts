@@ -120,9 +120,7 @@ async function maybeRepairInitialFundingSweep(input: any, publicKey: string, bal
 
     const userId = await resolveToolUserId({ ...input, session_id: sessionId });
     const secretKey = await vaultService.getSecret(vaultSecretId);
-    await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId, {
-      deferAdditionalTrustlines: true,
-    });
+    await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
 
     const freshAccount = await stellarService.getAccount(publicKey);
     await walletRepo.updateBalance(sessionId, freshAccount.balances, freshAccount.sequence);

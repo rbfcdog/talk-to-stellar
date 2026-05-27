@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { supabase } from '../src/config/supabase';
 import { TrustlineService } from '../src/api/services/trustline.service';
-import VaultService from '../src/services/vault.service';
+import VaultService from '../src/api/services/core/vault.service';
 import { assertMainnetBulkMutationAllowed } from './stellar-script-safety';
 
 dotenv.config();

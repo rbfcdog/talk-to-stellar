@@ -373,9 +373,7 @@ export class ContactSeedService {
       user_id: contactUserId,
     });
 
-    await this.createDefaultTrustlines(generated.publicKey, generated.secret, contactUserId, sessionId, {
-      deferAdditionalTrustlines: true,
-    });
+    await this.createDefaultTrustlines(generated.publicKey, generated.secret, contactUserId, sessionId);
 
     return {
       userId: contactUserId,
