@@ -1,4 +1,4 @@
-import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Asset, Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { DefindexSDK, SupportedNetworks } from '@defindex/sdk';
 import { stellarConfig } from '../../config/stellar';
 import { getAssetIssuer, getStellarNetworkName, normalizeAssetCode, userFacingAssetCode } from '../../config/assets';
@@ -11,10 +11,18 @@ export type DefindexYieldAction = 'deposit' | 'withdraw';
 export type DefindexVaultConfig = {
   asset_code: string;
   asset_issuer?: string;
+  asset_contract?: string;
   vault_address: string;
   label: string;
   network: DefindexNetwork;
   enabled: boolean;
+};
+
+export type DefindexVaultAssetInfo = {
+  asset_code: string;
+  asset_issuer?: string;
+  asset_contract?: string;
+  source: 'vault_info' | 'configured';
 };
 
 export type DefindexRuntimeInfo = {
@@ -112,6 +120,23 @@ function normalizeVaultAsset(value: unknown): string {
   return normalized;
 }
 
+function extractIssuer(value: unknown): string {
+  const text = coalesceString(value);
+  const match = text.match(/G[A-Z2-7]{55}/);
+  return match?.[0] || '';
+}
+
+function configuredAssetContract(assetCode: unknown, assetIssuer?: unknown): string | undefined {
+  const code = normalizeVaultAsset(assetCode);
+  const issuer = coalesceString(assetIssuer, getAssetIssuer(code));
+  if (code === 'XLM' || !issuer) return undefined;
+  try {
+    return new Asset(code, issuer).contractId(stellarConfig.network);
+  } catch {
+    return undefined;
+  }
+}
+
 function parseVaultEntry(value: any, fallbackNetwork: DefindexNetwork): DefindexVaultConfig | null {
   const vaultAddress = coalesceString(value?.vault_address, value?.vaultAddress, value?.address, value?.contract_id, value?.contractId);
   const assetCode = normalizeVaultAsset(coalesceString(value?.asset_code, value?.assetCode, value?.asset, value?.code));
@@ -121,6 +146,7 @@ function parseVaultEntry(value: any, fallbackNetwork: DefindexNetwork): Defindex
   return {
     asset_code: assetCode,
     asset_issuer: coalesceString(value?.asset_issuer, value?.assetIssuer) || getAssetIssuer(assetCode),
+    asset_contract: coalesceString(value?.asset_contract, value?.assetContract),
     vault_address: vaultAddress,
     label: coalesceString(value?.label, value?.name, `${userFacingAssetCode(assetCode)} Yield Vault`),
     network,
@@ -192,6 +218,19 @@ function extractHash(payload: any): string {
   return coalesceString(payload?.txHash, payload?.hash, payload?.transaction_hash, payload?.transactionHash, payload?.id);
 }
 
+function assetInfoFromVaultInfo(vault: DefindexVaultConfig, info: any): DefindexVaultAssetInfo {
+  const assets = Array.isArray(info?.assets) ? info.assets : [];
+  const wanted = normalizeVaultAsset(vault.asset_code);
+  const match = assets.find((asset: any) => normalizeVaultAsset(asset?.symbol || asset?.code || asset?.name) === wanted) || assets[0];
+  const issuer = extractIssuer(match?.name) || extractIssuer(match?.symbol) || extractIssuer(match?.code);
+  return {
+    asset_code: wanted,
+    asset_issuer: issuer || vault.asset_issuer || getAssetIssuer(wanted),
+    asset_contract: coalesceString(match?.address, vault.asset_contract),
+    source: match ? 'vault_info' : 'configured',
+  };
+}
+
 function sdkNetwork(network?: DefindexNetwork): SupportedNetworks {
   return (network || defaultNetwork()) === 'mainnet'
     ? SupportedNetworks.MAINNET
@@ -199,6 +238,8 @@ function sdkNetwork(network?: DefindexNetwork): SupportedNetworks {
 }
 
 export class DefindexYieldService {
+  private static vaultAssetInfoCache = new Map<string, Promise<DefindexVaultAssetInfo>>();
+
   static getRuntimeInfo(): DefindexRuntimeInfo {
     const network = defaultNetwork();
     const stellarNetwork = stellarRuntimeNetwork();
@@ -314,6 +355,75 @@ export class DefindexYieldService {
 
   static async getVaultInfo(vaultAddress: string, network = defaultNetwork()): Promise<any> {
     return this.sdk(network).getVaultInfo(vaultAddress, sdkNetwork(network));
+  }
+
+  static async getVaultAssetInfo(vault: DefindexVaultConfig): Promise<DefindexVaultAssetInfo> {
+    const key = `${vault.network}:${vault.vault_address}:${vault.asset_code}`;
+    if (!this.vaultAssetInfoCache.has(key)) {
+      const run = this.getVaultInfo(vault.vault_address, vault.network)
+        .then((info) => assetInfoFromVaultInfo(vault, info))
+        .catch((error) => {
+          logDefindexSdk('warn', 'vault_asset_info_failed', {
+            asset_code: vault.asset_code,
+            vault_address: maskLogValue(vault.vault_address),
+            network: vault.network,
+            ...errorLogFields(error),
+          });
+          return {
+            asset_code: vault.asset_code,
+            asset_issuer: vault.asset_issuer || getAssetIssuer(vault.asset_code),
+            asset_contract: vault.asset_contract,
+            source: 'configured' as const,
+          };
+        });
+      this.vaultAssetInfoCache.set(key, run);
+    }
+    return this.vaultAssetInfoCache.get(key)!;
+  }
+
+  static async getVaultAssetCompatibility(vault: DefindexVaultConfig): Promise<{
+    compatible: boolean;
+    info: DefindexVaultAssetInfo;
+    configured_issuer?: string;
+    configured_contract?: string;
+    reason?: string;
+  }> {
+    const info = await this.getVaultAssetInfo(vault);
+    const configuredIssuer = getAssetIssuer(vault.asset_code);
+    const configuredContract = configuredAssetContract(vault.asset_code, configuredIssuer);
+    const vaultIssuer = coalesceString(info.asset_issuer);
+    const vaultContract = coalesceString(info.asset_contract);
+    const issuerMismatch = Boolean(vaultIssuer && configuredIssuer && vaultIssuer !== configuredIssuer);
+    const contractMismatch = Boolean(vaultContract && configuredContract && vaultContract !== configuredContract);
+    if (issuerMismatch || contractMismatch) {
+      return {
+        compatible: false,
+        info,
+        configured_issuer: configuredIssuer,
+        configured_contract: configuredContract,
+        reason: `Vault ${vault.asset_code} asset does not match configured ${vault.asset_code}.`,
+      };
+    }
+    return {
+      compatible: true,
+      info,
+      configured_issuer: configuredIssuer,
+      configured_contract: configuredContract,
+    };
+  }
+
+  static async getVaultTrustedAssets(): Promise<Array<{ code: string; issuer: string }>> {
+    const runtime = this.getRuntimeInfo();
+    const assets: Array<{ code: string; issuer: string }> = [];
+    for (const vault of runtime.vaults) {
+      if (vault.asset_code === 'XLM') continue;
+      const info = await this.getVaultAssetInfo(vault);
+      const issuer = coalesceString(info.asset_issuer, vault.asset_issuer, getAssetIssuer(vault.asset_code));
+      if (issuer) assets.push({ code: vault.asset_code, issuer });
+    }
+    return Array.from(
+      new Map(assets.map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
+    );
   }
 
   static async getVaultAPY(vaultAddress: string, network = defaultNetwork()): Promise<any> {

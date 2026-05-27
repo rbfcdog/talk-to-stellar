@@ -53,6 +53,17 @@ describe('Defindex yield transaction flows', () => {
     configureYieldEnv();
     jest.restoreAllMocks();
     jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue(SESSION_CONTEXT);
+    jest.spyOn(DefindexYieldService, 'getVaultAssetCompatibility').mockImplementation(async (vault: any) => ({
+      compatible: true,
+      info: {
+        asset_code: vault.asset_code,
+        asset_issuer: vault.asset_issuer,
+        asset_contract: vault.asset_contract,
+        source: 'configured',
+      },
+      configured_issuer: vault.asset_issuer,
+      configured_contract: vault.asset_contract,
+    }));
   });
 
   afterEach(() => {
@@ -242,6 +253,41 @@ describe('Defindex yield transaction flows', () => {
       caller: SESSION_CONTEXT.publicKey,
       amountUnits: 1000000000,
     }));
+  });
+
+  it('keeps review only when the configured vault uses a different asset issuer', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValueOnce({
+      compatible: false,
+      info: {
+        asset_code: 'USDC',
+        asset_issuer: 'GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56',
+        asset_contract: 'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU',
+        source: 'vault_info',
+      },
+      configured_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      configured_contract: 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
+    });
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'yield_asset_incompatible',
+      setup_required: false,
+    });
+    expect(buildSpy).not.toHaveBeenCalled();
   });
 
   it('blocks PIN execution with a clear code when review is account-setup only', async () => {
