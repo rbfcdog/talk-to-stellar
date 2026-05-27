@@ -233,11 +233,15 @@ describe('Defindex yield transaction flows', () => {
     ['USDC', YIELD_VAULTS.USDC],
     ['CETES', YIELD_VAULTS.CETES],
     ['XLM', YIELD_VAULTS.XLM],
-  ] as const)('signs and submits prepared transaction XDR for %s when execution is enabled', async (assetCode, vaultAddress) => {
+  ] as const)('builds, signs and submits server-prepared transaction XDR for %s when execution is enabled', async (assetCode, vaultAddress) => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
     jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SSECRET');
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
+      xdr: `server-prepared-${assetCode}-xdr`,
+      raw: { success: true, source: 'server' },
+    });
     jest.spyOn(DefindexYieldService, 'signXdr').mockReturnValue(`signed-${assetCode}-xdr`);
     const sendSpy = jest.spyOn(DefindexYieldService, 'sendVaultTransaction').mockResolvedValue({
       hash: `hash-${assetCode}`,
@@ -260,7 +264,7 @@ describe('Defindex yield transaction flows', () => {
       action: 'deposit',
       amount: '10',
       asset_code: assetCode,
-      unsigned_xdr: `unsigned-${assetCode}-xdr`,
+      unsigned_xdr: `client-provided-${assetCode}-xdr`,
       pin: '1234',
     });
 
@@ -273,7 +277,15 @@ describe('Defindex yield transaction flows', () => {
       hash: `hash-${assetCode}`,
       vault: expect.objectContaining({ asset_code: assetCode, vault_address: vaultAddress }),
     });
-    expect(DefindexYieldService.signXdr).toHaveBeenCalledWith(`unsigned-${assetCode}-xdr`, 'SSECRET');
+    expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'deposit',
+      vaultAddress,
+      caller: SESSION_CONTEXT.publicKey,
+      amountUnits: 100000000,
+      network: 'testnet',
+      invest: true,
+    }));
+    expect(DefindexYieldService.signXdr).toHaveBeenCalledWith(`server-prepared-${assetCode}-xdr`, 'SSECRET');
     expect(sendSpy).toHaveBeenCalledWith({
       vaultAddress,
       signedXdr: `signed-${assetCode}-xdr`,

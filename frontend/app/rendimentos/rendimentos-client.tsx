@@ -1450,7 +1450,8 @@ function YieldWorkspacePanel({
   const profileShort = selectedProfile.short;
   const bestProfile = moneyProfile(bestOptionCode);
   const hasPrepared = Boolean(result);
-  const canConfirm = canPrepare && confirmationEnabled && hasPrepared && pin.length >= 4 && !apiLoading;
+  const submitted = Boolean(result?.submitted || result?.hash);
+  const canConfirm = canPrepare && confirmationEnabled && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
   const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
@@ -1467,6 +1468,11 @@ function YieldWorkspacePanel({
   const actionTitle = action === "deposit"
     ? L("Revisar entrada", "Review entry")
     : L("Revisar saída", "Review exit");
+  const confirmLabel = submitted
+    ? L("Movimentação enviada", "Movement sent")
+    : action === "deposit"
+      ? L("Confirmar e investir", "Confirm and invest")
+      : L("Confirmar resgate", "Confirm withdrawal");
   const actionDescription = action === "deposit"
     ? L("Prepara uma entrada na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares an entry into the selected option. In review mode, nothing leaves the account.")
     : L("Prepara uma saída da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares an exit from the position back to available balance. In review mode, nothing leaves the account.");
@@ -1680,10 +1686,24 @@ function YieldWorkspacePanel({
                 <MiniStat label={L("Operação", "Operation")} value={actionTitle} />
                 <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
                 <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} />
-                <MiniStat label={L("Segurança", "Security")} value={confirmationEnabled ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")} />
+                <MiniStat
+                  label={L("Segurança", "Security")}
+                  value={submitted ? L("Enviado", "Sent") : confirmationEnabled ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")}
+                />
               </div>
               <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
-                {hasPrepared ? (
+                {submitted ? (
+                  <div>
+                    <p className="font-bold text-tts-confirm">
+                      {L("Movimentação enviada. A posição será atualizada assim que a rede confirmar.", "Movement sent. The position will update after network confirmation.")}
+                    </p>
+                    {result?.hash ? (
+                      <p className="mt-2 break-all font-mono-financial text-xs text-tts-muted">
+                        {L("Comprovante da rede", "Network receipt")}: {String(result.hash)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
                     {L("Revisão preparada. Confira taxa, valor e operação antes de confirmar.", "Review prepared. Check rate, amount, and operation before confirming.")}
                   </p>
@@ -1707,7 +1727,7 @@ function YieldWorkspacePanel({
                     onChange={(event) => onPinChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
                     inputMode="numeric"
                     type="password"
-                    disabled={!hasPrepared || apiLoading}
+                    disabled={!hasPrepared || submitted || apiLoading}
                     className="mt-3 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold disabled:cursor-not-allowed disabled:opacity-55"
                   />
                 </div>
@@ -1737,8 +1757,8 @@ function YieldWorkspacePanel({
                     disabled={!canConfirm}
                     className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                    {hasPrepared ? L("Confirmar com PIN", "Confirm with PIN") : L("Prepare primeiro", "Prepare first")}
+                    {submitted ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <LockKeyhole className="h-4 w-4" aria-hidden="true" />}
+                    {hasPrepared ? confirmLabel : L("Prepare primeiro", "Prepare first")}
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">

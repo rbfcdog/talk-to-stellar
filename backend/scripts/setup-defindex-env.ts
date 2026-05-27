@@ -157,6 +157,7 @@ function renderEnv(input: {
   baseUrl: string;
   timeoutMs: number;
   enableExecution: boolean;
+  complianceApproved: boolean;
   matches: Map<YieldAsset, MatchedVault>;
   factoryAddress?: string;
   warnings: string[];
@@ -172,6 +173,7 @@ function renderEnv(input: {
   lines.push('DEFINDEX_NETWORK=' + input.network);
   lines.push('DEFINDEX_TIMEOUT_MS=' + input.timeoutMs);
   lines.push('DEFINDEX_ENABLE_EXECUTION=' + (input.enableExecution ? 'true' : 'false'));
+  lines.push('DEFINDEX_COMPLIANCE_APPROVED=' + (input.complianceApproved ? 'true' : 'false'));
   lines.push('DEFINDEX_ALLOW_MAINNET_EXECUTION=false');
   lines.push('');
   for (const asset of renderAssets) {
@@ -221,7 +223,11 @@ async function main(): Promise<void> {
   const validateLimit = Number(argValue('--limit') || 40);
   const delayMs = Number(argValue('--delay-ms') || 250);
   const enableExecution = hasFlag('--enable-execution');
+  const complianceApproved = hasFlag('--compliance-approved');
   const warnings: string[] = [];
+  if (enableExecution && !complianceApproved) {
+    warnings.push('Execution will still stay in review mode until DEFINDEX_COMPLIANCE_APPROVED=true is set.');
+  }
   if (enableExecution && network === 'mainnet') {
     warnings.push('DEFINDEX_ENABLE_EXECUTION=true is not enough for mainnet. Backend also requires DEFINDEX_ALLOW_MAINNET_EXECUTION=true.');
   }
@@ -311,6 +317,7 @@ async function main(): Promise<void> {
     baseUrl,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
     enableExecution,
+    complianceApproved,
     matches,
     factoryAddress: factory?.address,
     warnings,
