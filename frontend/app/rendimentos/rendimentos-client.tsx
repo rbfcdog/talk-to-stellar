@@ -36,6 +36,8 @@ type ApiState = {
   error: string;
 };
 
+type YieldStep = "wallet" | "plan" | "review";
+
 type SessionState = {
   authenticated: boolean;
   sessionId?: string;
@@ -345,6 +347,9 @@ function buildProjectionData(amount: string, annualRate: number | null, language
 function sanitizeUiError(error: unknown, language: AppLanguage) {
   const raw = error instanceof Error ? error.message : String(error || "");
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
+  if (/pix/i.test(raw)) {
+    return localCopy(language, "Não foi possível atualizar o rendimento agora. Tente novamente em alguns segundos.", "Could not update yield right now. Try again in a few seconds.");
+  }
   if (/abort|timeout|timed out|demorou/i.test(raw)) {
     return localCopy(language, "A conexão demorou demais. Atualize para tentar de novo.", "The connection took too long. Refresh to try again.");
   }
@@ -359,6 +364,31 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     .replace(/vault/gi, "opção")
     .replace(/wallet/gi, "conta")
     .replace(/asset/gi, "moeda");
+}
+
+function extractYieldBalanceAmount(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number" || typeof value === "string") return String(value);
+  if (Array.isArray(value)) {
+    const first = value.map(extractYieldBalanceAmount).find(Boolean);
+    return first || "";
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct = [
+      record.balance,
+      record.totalBalance,
+      record.total_balance,
+      record.amount,
+      record.dfTokens,
+      record.df_tokens,
+      record.shares,
+      record.totalShares,
+      record.total_shares,
+    ].map(extractYieldBalanceAmount).find(Boolean);
+    if (direct) return direct;
+  }
+  return "";
 }
 
 function isSessionUiError(error: unknown) {
@@ -404,6 +434,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [activeStep, setActiveStep] = useState<YieldStep>("wallet");
+  const [showStepHelp, setShowStepHelp] = useState(false);
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
   const [yieldBalance, setYieldBalance] = useState<any | null>(null);
@@ -479,6 +511,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     if (queryFlow === "earn" || queryFlow === "yield" || queryFlow === "rendimento" || queryFlow === "keep") setAction("deposit");
     if (queryFlow === "withdraw" || queryFlow === "exit" || queryFlow === "saida" || queryFlow === "sair") {
       setAction("withdraw");
+    }
+    if (queryFlow === "earn" || queryFlow === "yield" || queryFlow === "rendimento" || queryFlow === "keep") {
+      setActiveStep("plan");
+    }
+    if (queryFlow === "review" || queryFlow === "revisao" || queryFlow === "confirm" || queryFlow === "confirmar") {
+      setActiveStep("review");
     }
     if (params.get("advanced") === "1" || params.get("advanced") === "true") setAdvancedOpen(true);
   }, [initialQuery]);
@@ -694,7 +732,20 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
           selectedOption={selectedOption}
         />
 
-        <section className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
+        <YieldStepNavigation
+          activeStep={activeStep}
+          onStepChange={(step) => {
+            setActiveStep(step);
+            setShowStepHelp(false);
+          }}
+          showHelp={showStepHelp}
+          onToggleHelp={() => setShowStepHelp((current) => !current)}
+        />
+
+        {showStepHelp ? <YieldStepHelp step={activeStep} /> : null}
+
+        <section>
+          {activeStep === "wallet" ? (
           <AccountPanel
             authenticated={session.authenticated}
             sessionLoading={sessionLoading}
@@ -707,10 +758,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
               setSelectedCode(code);
               setYieldBalance(null);
               setYieldResult(null);
+              setActiveStep("plan");
             }}
           />
-
+          ) : (
           <YieldWorkspacePanel
+            activeStep={activeStep}
             authenticated={session.authenticated}
             sessionLoading={sessionLoading}
             action={action}
@@ -739,9 +792,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             onPinChange={setPin}
             onPrepare={prepareYield}
             onConfirm={confirmYield}
+            onGoToWallet={() => setActiveStep("wallet")}
+            onGoToReview={() => setActiveStep("review")}
             convertToBestYieldHref={convertToBestYieldUrl}
             configured={configured}
           />
+          )}
         </section>
       </section>
     </main>
@@ -820,6 +876,117 @@ function YieldTutorialPanel({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function YieldStepNavigation({
+  activeStep,
+  onStepChange,
+  showHelp,
+  onToggleHelp,
+}: {
+  activeStep: YieldStep;
+  onStepChange: (step: YieldStep) => void;
+  showHelp: boolean;
+  onToggleHelp: () => void;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const steps: Array<{ key: YieldStep; label: string; description: string; icon: ReactNode }> = [
+    {
+      key: "wallet",
+      label: L("1. Carteira", "1. Balances"),
+      description: L("Escolha o saldo", "Choose balance"),
+      icon: <WalletCards className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      key: "plan",
+      label: L("2. Aplicar", "2. Deposit"),
+      description: L("Valor e taxa", "Amount and rate"),
+      icon: <PiggyBank className="h-4 w-4" aria-hidden="true" />,
+    },
+    {
+      key: "review",
+      label: L("3. Revisar", "3. Review"),
+      description: L("PIN ou modo revisão", "PIN or review mode"),
+      icon: <FileCheck2 className="h-4 w-4" aria-hidden="true" />,
+    },
+  ];
+
+  return (
+    <section className="border border-tts-border bg-tts-surface p-3">
+      <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {steps.map((step) => {
+            const active = step.key === activeStep;
+            return (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => onStepChange(step.key)}
+                className={`flex min-h-16 items-center gap-3 border p-3 text-left transition ${
+                  active ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"
+                }`}
+              >
+                <span className={`grid h-9 w-9 shrink-0 place-items-center border ${active ? "border-tts-confirm text-tts-confirm" : "border-tts-border text-tts-muted"}`}>
+                  {step.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-black text-tts-deep">{step.label}</span>
+                  <span className="mt-0.5 block text-xs text-tts-muted">{step.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={onToggleHelp}
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-bg px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+        >
+          <BookOpen className="h-4 w-4" aria-hidden="true" />
+          {showHelp ? L("Ocultar explicação", "Hide explanation") : L("Explicar etapa", "Explain step")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function YieldStepHelp({ step }: { step: YieldStep }) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const copy = {
+    wallet: {
+      title: L("Carteira", "Balances"),
+      body: L(
+        "Aqui você só escolhe de qual saldo quer partir. É como selecionar a conta de origem no banco. Depois disso, a próxima etapa monta a aplicação.",
+        "Here you only choose which balance to start from. It works like selecting the source account in a bank. The next step builds the deposit."
+      ),
+    },
+    plan: {
+      title: L("Aplicar ou resgatar", "Deposit or withdraw"),
+      body: L(
+        "Aqui ficam valor, ação e taxa. A tela ainda não confirma nada: ela prepara uma simulação clara para você revisar.",
+        "This is where amount, action, and rate live. The screen does not confirm anything yet: it prepares a clear preview for review."
+      ),
+    },
+    review: {
+      title: L("Revisão segura", "Secure review"),
+      body: L(
+        "Aqui você confere operação, valor, taxa e projeção. Se o ambiente estiver com PIN ativo, confirmar movimenta saldo; em modo revisão, só valida a preparação.",
+        "Here you check operation, amount, rate, and projection. If PIN is active, confirming moves balance; in review mode, it only validates preparation."
+      ),
+    },
+  }[step];
+
+  return (
+    <section className="border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6">
+      <h2 className="flex items-center gap-2 font-black text-tts-deep">
+        <BookOpen className="h-4 w-4 text-tts-gold" aria-hidden="true" />
+        {copy.title}
+      </h2>
+      <p className="mt-2 text-tts-muted">{copy.body}</p>
     </section>
   );
 }
@@ -1059,6 +1226,7 @@ function AccountPanel({
 }
 
 function YieldWorkspacePanel({
+  activeStep,
   authenticated,
   sessionLoading,
   action,
@@ -1087,9 +1255,12 @@ function YieldWorkspacePanel({
   onPinChange,
   onPrepare,
   onConfirm,
+  onGoToWallet,
+  onGoToReview,
   convertToBestYieldHref,
   configured,
 }: {
+  activeStep: "plan" | "review";
   authenticated: boolean;
   sessionLoading: boolean;
   action: "deposit" | "withdraw";
@@ -1118,6 +1289,8 @@ function YieldWorkspacePanel({
   onPinChange: (value: string) => void;
   onPrepare: () => void;
   onConfirm: () => void;
+  onGoToWallet: () => void;
+  onGoToReview: () => void;
   convertToBestYieldHref: string;
   configured: boolean;
 }) {
@@ -1129,6 +1302,7 @@ function YieldWorkspacePanel({
   const bestProfile = moneyProfile(bestOptionCode);
   const hasPrepared = Boolean(result);
   const canConfirm = canPrepare && confirmationEnabled && pin.length >= 4 && !apiLoading;
+  const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
     : balanceForSelected
@@ -1136,8 +1310,8 @@ function YieldWorkspacePanel({
       : L("Saldo não disponível", "Balance unavailable");
   const earningBalanceLabel = yieldBalanceLoading
     ? L("Carregando posição", "Loading position")
-    : yieldBalance?.balance
-      ? `${formatAmount(yieldBalance.balance, language)} ${profileShort}`
+    : earningBalanceAmount
+      ? `${formatAmount(earningBalanceAmount, language)} ${profileShort}`
       : L("Nada aplicado ainda", "Nothing deposited yet");
   const annualRateLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const projectionLabel = selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
@@ -1234,7 +1408,8 @@ function YieldWorkspacePanel({
           ) : null}
         </div>
       ) : authenticated ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
+        <div className="mt-5">
+          {activeStep === "plan" ? (
           <div className="border border-tts-border bg-tts-bg p-4">
             <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface p-1">
               <button
@@ -1343,24 +1518,20 @@ function YieldWorkspacePanel({
                 {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
                 {L("Preparar revisão", "Prepare review")}
               </button>
-              {confirmationEnabled ? (
-                <button
-                  type="button"
-                  onClick={onConfirm}
-                  disabled={!canConfirm}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                  {L("Confirmar com PIN", "Confirm with PIN")}
-                </button>
-              ) : (
-                <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                  {L("Modo revisão: valida sem movimentar saldo.", "Review mode: validates without moving balance.")}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={onGoToReview}
+                disabled={!selectedHasYield}
+                className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <FileCheck2 className="h-4 w-4" aria-hidden="true" />
+                {L("Ver revisão", "View review")}
+              </button>
             </div>
           </div>
+          ) : null}
 
+          {activeStep === "review" ? (
           <div className="grid gap-4">
             <div className="border border-tts-border bg-tts-bg p-4">
               <div className="flex items-start justify-between gap-3">
@@ -1385,6 +1556,40 @@ function YieldWorkspacePanel({
                   </p>
                 ) : (
                   <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>
+                )}
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={onGoToWallet}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+                >
+                  <WalletCards className="h-4 w-4" aria-hidden="true" />
+                  {L("Trocar saldo", "Change balance")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onPrepare}
+                  disabled={!canPrepare || apiLoading}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
+                  {L("Preparar", "Prepare")}
+                </button>
+                {confirmationEnabled ? (
+                  <button
+                    type="button"
+                    onClick={onConfirm}
+                    disabled={!canConfirm}
+                    className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                    {L("Confirmar com PIN", "Confirm with PIN")}
+                  </button>
+                ) : (
+                  <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
+                    {L("Modo revisão: valida sem movimentar saldo.", "Review mode: validates without moving balance.")}
+                  </div>
                 )}
               </div>
               <div className="mt-3 grid gap-2 text-xs leading-5 text-tts-muted sm:grid-cols-3">
@@ -1424,6 +1629,7 @@ function YieldWorkspacePanel({
               </div>
             </div>
           </div>
+          ) : null}
         </div>
       ) : null}
     </section>

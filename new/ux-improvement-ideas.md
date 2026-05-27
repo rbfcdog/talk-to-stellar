@@ -12,10 +12,23 @@ Mudancas aplicadas:
 - resumo superior com `Conta`, `Aplicacoes`, `Selecionado` e `Seguranca`;
 - linguagem de banco: `Carteira`, `Aplicar`, `Resgatar`, `Revisao segura`, `PIN ativo`, `Modo revisao`;
 - bloco de carteira separado do plano de rendimento;
+- navegacao por etapas separadas: `Carteira`, `Aplicar`, `Revisar`;
+- botao `Explicar etapa` com explicacao contextual de cada tela;
 - revisao em 3 etapas: saldo, revisao, registro;
 - simulacao com aviso de que taxa pode variar e nao e promessa de retorno;
 - estados vazios mais claros: `Saldo nao disponivel`, `Nada aplicado ainda`, `Taxa indisponivel`;
 - ambiente sem execucao aparece como `Modo revisao`, nao como erro.
+- erros genericos de PIX sao ocultados no contexto de rendimento e viram erro de rendimento;
+- payloads de saldo de rendimento em objeto sao convertidos para valor legivel, evitando `[object Object]`.
+
+Tela de diagnostico passkey/OpenZeppelin: `frontend/app/passkey-test/passkey-test-client.tsx`.
+
+Mudancas aplicadas:
+- pre-requisitos em cards: navegador, biometria local, conta e status;
+- fluxo de teste separado entre registro/login de passkey e status OpenZeppelin;
+- erros mostram causa provavel e proximo passo;
+- status OpenZeppelin diferencia `Somente metadata`, `Configuracao incompleta` e `Pronto para testar`;
+- dados tecnicos ficam recolhidos em `Dados tecnicos do ultimo teste`.
 
 Proximas melhorias para deixar ainda mais bancario:
 - extrato de rendimento com historico de aplicacoes/resgates;
