@@ -161,6 +161,8 @@ const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
 const vaultService = new VaultService(supabase);
 
+const IDENTITY_CONFLICT_MESSAGE = 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).';
+
 function verifyPinAgainstSession(pin: string, session: any) {
   return verifyWalletPinAgainstAny(pin, [
     session?.session_password_hash,
@@ -290,6 +292,7 @@ async function createExternalMappingsWithAliases(payload: {
   const normalizedProvider = normalizeExternalProvider(payload.provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
   const providers = externalProviderAliases(normalizedProvider);
+  const primaryProvider = providers.includes(normalizedProvider) ? normalizedProvider : providers[0];
 
   for (const provider of providers) {
     await externalRepo.createMapping({
@@ -297,9 +300,23 @@ async function createExternalMappingsWithAliases(payload: {
       provider_user_id: normalizedProviderUserId,
       session_id: payload.session_id,
       user_id: payload.user_id,
-      data: payload.data || undefined,
+      data: externalAliasData(payload.data || undefined, provider === primaryProvider),
     });
   }
+}
+
+function externalAliasData(data: Record<string, unknown> | undefined, keepIdentityFields: boolean): Record<string, unknown> | undefined {
+  if (!data) return undefined;
+  const clone = { ...data };
+  if (keepIdentityFields) return clone;
+
+  delete clone.email;
+  delete clone.phone_number;
+  delete clone.phoneNumber;
+  delete clone.whatsapp_number;
+  delete clone.whatsappNumber;
+  delete clone.cpf;
+  return clone;
 }
 
 type IdentityCollision = {
@@ -3235,7 +3252,7 @@ export default class ExternalFinalizeController {
       if (isUniqueViolation(error)) {
         return res.status(409).json({
           success: false,
-          message: 'Não foi possível concluir: já existe uma conta com os mesmos dados (email, telefone ou CPF).',
+          message: IDENTITY_CONFLICT_MESSAGE,
         });
       }
       return res.status(500).json({

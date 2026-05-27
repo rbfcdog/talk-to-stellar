@@ -29,6 +29,33 @@ const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
 const externalRepo = new ExternalRepository(supabase);
 
+const IDENTITY_CONFLICT_MESSAGE = 'Não foi possível concluir: já existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.';
+
+function isUniqueViolation(error: any): boolean {
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    code === '23505' ||
+    message.includes('duplicate key') ||
+    message.includes('unique constraint') ||
+    message.includes('violates unique') ||
+    message.includes('already exists')
+  );
+}
+
+function externalAliasData(data: Record<string, unknown> | undefined, keepIdentityFields: boolean): Record<string, unknown> {
+  const clone = { ...(data || {}) };
+  if (keepIdentityFields) return clone;
+
+  delete clone.email;
+  delete clone.phone_number;
+  delete clone.phoneNumber;
+  delete clone.whatsapp_number;
+  delete clone.whatsappNumber;
+  delete clone.cpf;
+  return clone;
+}
+
 async function createExternalMappingWithAliases(payload: {
   provider: string;
   provider_user_id: string;
@@ -39,13 +66,14 @@ async function createExternalMappingWithAliases(payload: {
   const normalizedProvider = normalizeExternalProvider(payload.provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
   const providers = externalProviderAliases(normalizedProvider);
+  const primaryProvider = providers.includes(normalizedProvider) ? normalizedProvider : providers[0];
   for (const provider of providers) {
     await externalRepo.createMapping({
       provider,
       provider_user_id: normalizedProviderUserId,
       session_id: payload.session_id,
       user_id: payload.user_id,
-      data: payload.data || {},
+      data: externalAliasData(payload.data, provider === primaryProvider),
     });
   }
 }
@@ -515,8 +543,13 @@ export class ExternalController {
         token,
       });
     } catch (error: any) {
-      const message = error?.message || String(error);
-      return res.status(500).json({ success: false, message });
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({ success: false, message: IDENTITY_CONFLICT_MESSAGE });
+      }
+      return res.status(500).json({
+        success: false,
+        message: publicErrorMessage(error, 'Não consegui concluir agora. Tente novamente em alguns segundos.'),
+      });
     }
   }
 
@@ -1025,8 +1058,13 @@ export class ExternalController {
         userId: String(session.user_id),
       });
     } catch (error: any) {
-      const message = error?.message || String(error);
-      return res.status(500).json({ success: false, message });
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({ success: false, message: IDENTITY_CONFLICT_MESSAGE });
+      }
+      return res.status(500).json({
+        success: false,
+        message: publicErrorMessage(error, 'Não consegui concluir agora. Tente novamente em alguns segundos.'),
+      });
     }
   }
 }

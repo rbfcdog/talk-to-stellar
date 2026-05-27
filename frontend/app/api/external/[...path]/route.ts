@@ -29,6 +29,32 @@ const PUBLIC_SHORT_LINK_PURPOSES = new Set([
   "confirm_payment_passkey_qr",
 ]);
 
+function looksLikeTechnicalError(value: unknown) {
+  return /duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505|schema cache|relation .* does not exist/i.test(
+    String(value || ""),
+  );
+}
+
+function sanitizeBackendErrorResponse(text: string, status: number, contentType: string) {
+  if (!contentType.includes("application/json") || status < 400) return null;
+
+  try {
+    const payload = JSON.parse(text || "{}");
+    const rawMessage = payload?.message || payload?.error || "";
+    if (!looksLikeTechnicalError(rawMessage)) return null;
+
+    return NextResponse.json(
+      {
+        ...payload,
+        ...publicErrorPayload(rawMessage, { code: payload?.code || "backend_error" }),
+      },
+      { status },
+    );
+  } catch {
+    return null;
+  }
+}
+
 function isLocalOrigin(origin: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
 }
@@ -112,6 +138,9 @@ async function proxy(req: NextRequest, path: string[]) {
   try {
     const res = await fetch(target, init);
     const text = await res.text();
+    const contentType = res.headers.get("content-type") || "application/json";
+    const sanitized = sanitizeBackendErrorResponse(text, res.status, contentType);
+    if (sanitized) return sanitized;
     return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
   } catch (error: any) {
     console.error("[external-proxy] request failed", { target, error: error?.message || error });

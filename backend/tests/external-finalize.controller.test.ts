@@ -269,6 +269,8 @@ describe('ExternalFinalizeController', () => {
     finalizeFindByProviderAndIdMock.mockResolvedValue(null);
     finalizeCreateMappingMock.mockResolvedValue(undefined);
     finalizeSupabaseFromMock.mockImplementation((table: string) => createSupabaseChain(table));
+    const externalRepository = require('../src/api/repository/core/external.repository');
+    externalRepository.externalProviderAliases.mockImplementation((provider: string) => [String(provider || '').trim().toLowerCase()]);
   });
 
   it('creates session, wallet and links the external account', async () => {
@@ -303,6 +305,57 @@ describe('ExternalFinalizeController', () => {
         userId: 'user@example.com',
       })
     );
+  });
+
+  it('does not duplicate phone identity data across WhatsApp provider aliases', async () => {
+    const jwt = require('jsonwebtoken');
+    const externalRepository = require('../src/api/repository/core/external.repository');
+    externalRepository.externalProviderAliases.mockImplementationOnce(() => ['whatsapp', 'phone']);
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_onboard',
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+    });
+
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'User Example',
+        email: 'user@example.com',
+        phone_number: '+55 11 99999-9999',
+        pin: '1234',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(2);
+    expect(finalizeCreateMappingMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        provider: 'whatsapp',
+        data: expect.objectContaining({
+          phone_number: '5511999999999',
+          whatsapp_number: '5511999999999',
+        }),
+      })
+    );
+    expect(finalizeCreateMappingMock.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        provider: 'phone',
+        data: expect.not.objectContaining({
+          phone_number: expect.anything(),
+          whatsapp_number: expect.anything(),
+          email: expect.anything(),
+          cpf: expect.anything(),
+        }),
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 
   it('confirms USDC payment with XLM source path payment', async () => {

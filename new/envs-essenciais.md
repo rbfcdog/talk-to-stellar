@@ -216,6 +216,9 @@ Aplicar nesta ordem:
 backend/migrations/20260510_wallet_pix_and_assets.sql
 backend/migrations/20260514_01_external_bank_accounts.sql
 backend/migrations/20260525_00_passkey_smart_accounts.sql
+backend/migrations/20260527_00_external_identity_indexes_sanitized.sql
 ```
+
+A migration de `20260527` evita que indices antigos de identidade exponham constraint do banco e corrige aliases WhatsApp/phone que duplicavam telefone em `external_accounts`.
 
 Se o banco for novo, aplique tambem as migrations base listadas em `new/session-env-and-migrations.md`.

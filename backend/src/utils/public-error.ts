@@ -28,6 +28,7 @@ export function publicErrorCode(error: unknown) {
   if (/(link|token).*(expired|expirad|used|utilizado|invalid|invalido)|invalid or expired link|already used|ja foi utilizado/.test(normalized)) return 'link_expired';
   if (/(session|sessao).*(expired|expirad|required|obrigator)|session_id|session_token|login required|unauthorized|internal authorization|invalid jwt|jwt/.test(normalized)) return 'session_expired';
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) return 'setup_unavailable';
+  if (/duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505/.test(normalized)) return 'identity_conflict';
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) return 'account_preparing';
   if (/(invalid|incorrect|wrong).*(pin)|pin.*(invalid|incorrect|wrong)|senha/.test(normalized)) return 'invalid_pin';
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
@@ -59,6 +60,8 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
       return 'Sua sessao expirou. Entre novamente para continuar.';
     case 'setup_unavailable':
       return 'Este ambiente ainda esta finalizando uma configuracao. Tente novamente em alguns segundos.';
+    case 'identity_conflict':
+      return 'Ja existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.';
     case 'account_preparing':
       return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
     case 'invalid_pin':

@@ -80,7 +80,10 @@ export class ExternalRepository {
       existing = null;
     }
 
-    const existingData = existing?.data && typeof existing.data === 'object' ? existing.data : {};
+    const existingIsSameProvider =
+      String(existing?.provider || '').toLowerCase() === normalizedProvider &&
+      String(existing?.provider_user_id || '') === normalizedProviderUserId;
+    const existingData = existingIsSameProvider && existing?.data && typeof existing.data === 'object' ? existing.data : {};
     const incomingData = payload.data && typeof payload.data === 'object' ? payload.data : {};
     const mergedData = {
       ...existingData,

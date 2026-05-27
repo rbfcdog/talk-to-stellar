@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { supabase } from '../../config/supabase'
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service'
 import { getRequiredJwtSecret } from '../../config/secrets'
+import { publicErrorMessage } from '../../utils/public-error'
 
 function getJwtSecret() {
   return getRequiredJwtSecret()
@@ -232,8 +233,10 @@ export default class ExternalValidateController {
 
       return res.status(200).json({ success: true, valid: true, payload })
     } catch (error: any) {
-      const message = error?.message || String(error)
-      return res.status(500).json({ success: false, message })
+      return res.status(500).json({
+        success: false,
+        message: publicErrorMessage(error, 'Não consegui validar esse link agora. Tente novamente em alguns segundos.'),
+      })
     }
   }
 }
