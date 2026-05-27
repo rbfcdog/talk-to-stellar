@@ -663,7 +663,7 @@ function classifyDefindexBuildFailure(error: unknown): {
   if (/missing\s*trustline|missingtrustline|trustline|trust line/.test(text)) {
     return {
       code: 'yield_account_setup_required',
-      reason: 'Revisao preparada. Esta conta ainda nao esta pronta para confirmar esta aplicacao; escolha outra opcao ou aguarde a configuracao da moeda.',
+      reason: 'Revisao preparada. Nao precisa criar outra conta; falta ativar esta moeda para confirmacao nesta conta. Tente novamente em alguns segundos ou escolha outra opcao.',
       setupRequired: true,
     };
   }

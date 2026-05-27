@@ -2,7 +2,7 @@ import { Keypair, Operation, Asset, Memo, Networks, TransactionBuilder } from '@
 import { server, stellarConfig } from '../../config/stellar';
 import { OperationRepository } from '../repository/operation.repository';
 import { Operation as OpType } from '../../types';
-import { getAssetIssuer, getStellarNetworkName, getTrustedPathAssetCodes } from '../../config/assets';
+import { getAssetIssuer, getStellarNetworkName, getTrustedPathAssetCodes, settlementAssetCode } from '../../config/assets';
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
 import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
@@ -150,24 +150,23 @@ function addAssetAmounts(...values: Array<string | number | undefined>): string 
 }
 
 function createAsset(input: AssetInput): Asset {
-    const code = String(input.code || '').toUpperCase();
+    const code = settlementAssetCode(input.code || '').toUpperCase();
     if (code === 'XLM' || code === 'NATIVE') {
         return Asset.native();
     }
 
-    if (!input.issuer) {
+    const resolvedIssuer = String(input.issuer || getAssetIssuer(code) || '').trim();
+    if (!resolvedIssuer) {
         throw new Error(`Asset issuer is required for ${code}.`);
     }
 
-    const issuer = String(input.issuer).trim();
-    
     // Validate that issuer is a valid Stellar public key
-    if (!isValidStellarPublicKey(issuer)) {
-        console.error(`Invalid issuer for ${code}: "${issuer}" (length: ${issuer.length})`);
-        throw new Error(`Asset issuer for ${code} is invalid: "${issuer}". Must be a valid Stellar public key (56 characters, starting with 'G').`);
+    if (!isValidStellarPublicKey(resolvedIssuer)) {
+        console.error(`Invalid issuer for ${code}: "${resolvedIssuer}" (length: ${resolvedIssuer.length})`);
+        throw new Error(`Asset issuer for ${code} is invalid: "${resolvedIssuer}". Must be a valid Stellar public key (56 characters, starting with 'G').`);
     }
 
-    return new Asset(code, issuer);
+    return new Asset(code, resolvedIssuer);
 }
 
 function assetCode(asset: Asset): string {
