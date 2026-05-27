@@ -288,6 +288,8 @@ After deploy:
 curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
 ```
 
+Expected: `{"ok":true,...}`. If this returns `401 Unauthorized`, fix `TELEGRAM_BOT_TOKEN` before testing anything else. Use the token from `@BotFather`, not the bot username, not a `bot...` URL, and not an old regenerated token.
+
 Then in Telegram:
 
 ```text
