@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { supabase } from '../src/config/supabase';
 import { getDefaultTrustedAssets } from '../src/config/assets';
 import { TrustlineService } from '../src/api/services/trustline.service';
+import { DefindexYieldService } from '../src/api/services/defindex-yield.service';
 import VaultService from '../src/api/services/core/vault.service';
 import { assertMainnetBulkMutationAllowed } from './stellar-script-safety';
 
@@ -71,12 +72,24 @@ async function loadUserIdsBySession(sessionIds: string[]): Promise<Map<string, s
   return userBySession;
 }
 
+async function loadTrustlineAssets(): Promise<Array<{ code: string; issuer: string }>> {
+  let vaultAssets: Array<{ code: string; issuer: string }> = [];
+  try {
+    vaultAssets = await DefindexYieldService.getVaultTrustedAssets();
+  } catch (error) {
+    console.warn(`Could not load Defindex vault assets for banner: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return Array.from(
+    new Map([...getDefaultTrustedAssets(), ...vaultAssets].map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
+  );
+}
+
 async function main(): Promise<void> {
   assertMainnetBulkMutationAllowed('backfill-trustlines-all-existing-wallets');
 
   const dryRun = process.argv.includes('--dry-run') || envFlag('TRUSTLINE_BACKFILL_DRY_RUN');
   const limit = Math.max(0, Number(argValue('--limit') || process.env.TRUSTLINE_BACKFILL_LIMIT || 0));
-  const assets = getDefaultTrustedAssets();
+  const assets = await loadTrustlineAssets();
 
   console.log('='.repeat(84));
   console.log(`Backfill trustlines for all existing wallets${dryRun ? ' (dry run)' : ''}`);

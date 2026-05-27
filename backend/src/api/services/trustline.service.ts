@@ -1,4 +1,5 @@
 import { StellarService } from './stellar.service';
+import { DefindexYieldService } from './defindex-yield.service';
 import { logger } from '../../utils/logger';
 import { getDefaultTrustedAssets, getStellarNetworkName } from '../../config/assets';
 
@@ -13,8 +14,17 @@ export class TrustlineService {
   private static trustlineSetupLocks = new Map<string, Promise<{ success: boolean; assets: string[]; errors: string[] }>>();
   private static ephemeralTestnetTopupSecret?: Promise<string>;
 
-  private static getDefaultTrustlineAssets(): Array<{ code: string; issuer: string }> {
-    return getDefaultTrustedAssets();
+  private static async getDefaultTrustlineAssets(): Promise<Array<{ code: string; issuer: string }>> {
+    const configured = getDefaultTrustedAssets();
+    let vaultAssets: Array<{ code: string; issuer: string }> = [];
+    try {
+      vaultAssets = await DefindexYieldService.getVaultTrustedAssets();
+    } catch (error) {
+      logger.warn(`[trustline] could not load Defindex vault assets for trustline setup: ${this.errorMessage(error)}`);
+    }
+    return Array.from(
+      new Map([...configured, ...vaultAssets].map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
+    );
   }
 
   private static sleep(ms: number): Promise<void> {
@@ -190,7 +200,7 @@ export class TrustlineService {
   private static async ensureAccountReadyForDefaultTrustlines(publicKey: string): Promise<ExistingTrustlineSnapshot> {
     let account = await this.loadAccountOrCreateTestnet(publicKey);
     let trustlines = this.trustlinesFromAccount(account);
-    const missingTrustlineCount = this.getDefaultTrustlineAssets()
+    const missingTrustlineCount = (await this.getDefaultTrustlineAssets())
       .filter((asset) => Boolean(asset.issuer) && !trustlines.has(this.trustlineKey(asset)))
       .length;
 
@@ -326,7 +336,7 @@ export class TrustlineService {
     const results = { success: true, assets: [] as string[], errors: [] as string[] };
     const { trustlines: existingTrustlines } = await this.ensureAccountReadyForDefaultTrustlines(publicKey);
 
-    for (const asset of this.getDefaultTrustlineAssets()) {
+    for (const asset of await this.getDefaultTrustlineAssets()) {
       const result = await this.createTrustline(publicKey, secretKey, userId, asset, existingTrustlines);
       if (result.success) {
         if (result.asset && !result.existing) results.assets.push(result.asset);

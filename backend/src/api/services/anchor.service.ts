@@ -654,7 +654,7 @@ function defindexErrorFields(error: unknown): Record<string, unknown> {
 }
 
 function classifyDefindexBuildFailure(error: unknown): {
-  code: 'yield_account_setup_required' | 'insufficient_balance' | 'yield_execution_unavailable';
+  code: 'yield_account_setup_required' | 'yield_asset_incompatible' | 'insufficient_balance' | 'yield_execution_unavailable';
   reason: string;
   setupRequired: boolean;
 } {
@@ -3817,6 +3817,30 @@ export class AnchorService {
       };
       if (!runtime.api_key_configured) return enriched;
       try {
+        const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
+        enriched.vault_asset = compatibility.info;
+        enriched.asset_compatible = compatibility.compatible;
+        if (!compatibility.compatible) {
+          enriched.unavailable_reason = 'Vault asset does not match the configured wallet asset for this environment.';
+          logDefindex('warn', 'status_vault_asset_incompatible', {
+            asset_code: vault.asset_code,
+            vault_address: maskLogValue(vault.vault_address),
+            network: vault.network,
+            vault_asset_issuer: maskLogValue(compatibility.info.asset_issuer),
+            configured_issuer: maskLogValue(compatibility.configured_issuer),
+            vault_asset_contract: maskLogValue(compatibility.info.asset_contract),
+            configured_contract: maskLogValue(compatibility.configured_contract),
+          });
+        }
+      } catch (error) {
+        logDefindex('warn', 'status_vault_asset_check_failed', {
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          network: vault.network,
+          ...defindexErrorFields(error),
+        });
+      }
+      try {
         const apy = await DefindexYieldService.getVaultAPY(vault.vault_address, runtime.network);
         enriched.apy = apy;
         enriched.apy_percent = coalesceString(apy?.apyPercent, apy?.apy_percent, apy?.apy);
@@ -3832,13 +3856,15 @@ export class AnchorService {
       }
       return enriched;
     }));
+    const availableVaults = vaults.filter((vault) => vault.asset_compatible !== false);
     logDefindex('info', 'status_success', {
       network: runtime.network,
       configured: runtime.configured,
-      returned_vault_count: vaults.length,
-      vault_assets: vaults.map((vault) => String(vault.asset_code || '')).filter(Boolean).join(','),
+      returned_vault_count: availableVaults.length,
+      filtered_vault_count: vaults.length - availableVaults.length,
+      vault_assets: availableVaults.map((vault) => String(vault.asset_code || '')).filter(Boolean).join(','),
     });
-    return { success: true, runtime, vaults };
+    return { success: true, runtime, vaults: availableVaults };
   }
 
   static async getDefindexYieldBalanceForSession(input: RampSessionInput & {
@@ -3990,6 +4016,34 @@ export class AnchorService {
         execution_blocked_reason: runtime.execution_blocked_reason ||
           'Defindex execution is disabled for this environment.',
         execution_blocked_code: 'yield_execution_disabled',
+        setup_required: false,
+      };
+    }
+    const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
+    if (!compatibility.compatible) {
+      const reason = 'Revisao preparada. Esta opcao de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opcao ou configure um vault compativel com esta moeda antes de confirmar.';
+      logDefindex('warn', 'prepare_vault_asset_incompatible', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        vault_asset_issuer: maskLogValue(compatibility.info.asset_issuer),
+        configured_issuer: maskLogValue(compatibility.configured_issuer),
+        vault_asset_contract: maskLogValue(compatibility.info.asset_contract),
+        configured_contract: maskLogValue(compatibility.configured_contract),
+      });
+      return {
+        ...reviewResponse,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: reason,
+        execution_blocked_code: 'yield_asset_incompatible',
         setup_required: false,
       };
     }

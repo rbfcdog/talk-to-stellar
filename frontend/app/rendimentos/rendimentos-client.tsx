@@ -356,6 +356,9 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
   if (code === "yield_account_setup_required") {
     return localCopy(language, "Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.");
   }
+  if (code === "yield_asset_incompatible") {
+    return localCopy(language, "Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde um vault compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible vault.");
+  }
   if (code === "yield_execution_unavailable") {
     return localCopy(language, "Revisão preparada, mas a confirmação por PIN ainda não está disponível para esta opção. Tente outra opção ou tente novamente em alguns segundos.", "Review prepared, but PIN confirmation is not available for this option yet. Try another option or try again in a few seconds.");
   }
@@ -1513,10 +1516,14 @@ function YieldWorkspacePanel({
   const blockedCode = String(result?.execution_blocked_code || "").trim();
   const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
     ? L("Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
-    : L("Revisão preparada em modo consulta. A confirmação por PIN ainda não está disponível para esta opção.", "Review prepared in view-only mode. PIN confirmation is not available for this option yet.");
+    : blockedCode === "yield_asset_incompatible"
+      ? L("Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde um vault compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible vault.")
+      : L("Revisão preparada em modo consulta. A confirmação por PIN ainda não está disponível para esta opção.", "Review prepared in view-only mode. PIN confirmation is not available for this option yet.");
   const blockedActionLabel = blockedCode === "yield_account_setup_required"
     ? L("Moeda aguardando ativação", "Currency awaiting activation")
-    : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.");
+    : blockedCode === "yield_asset_incompatible"
+      ? L("Opção incompatível", "Incompatible option")
+      : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.");
   const earningBalanceAmount = extractYieldBalanceAmount(yieldBalance?.balance ?? yieldBalance);
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
