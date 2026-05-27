@@ -1,5 +1,5 @@
 import { supabase } from '../src/config/supabase';
-import { VaultService } from '../src/services/vault.service';
+import VaultService from '../src/api/services/core/vault.service';
 import { TrustlineService } from '../src/api/services/trustline.service';
 import { assertMainnetBulkMutationAllowed } from './stellar-script-safety';
 
