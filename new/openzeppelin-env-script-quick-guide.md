@@ -18,6 +18,31 @@ Salvar em arquivo:
 npm run passkey:env -- --origin https://seu-frontend.com --write .env.passkey
 ```
 
+Gerar somente as tres envs de smart account:
+
+```bash
+npm run passkey:env -- --smart-account-only --network testnet
+```
+
+Saida:
+
+```env
+PASSKEY_SMART_ACCOUNT_NETWORK=testnet
+PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS=
+PASSKEY_SMART_ACCOUNT_DEFAULT_CONTEXT_RULE_ID=
+```
+
+Se voce ja tiver verifier e rule:
+
+```bash
+npm run passkey:env -- \
+  --smart-account-only \
+  --network testnet \
+  --verifier C... \
+  --context-rule-id 1 \
+  --write .env.openzeppelin
+```
+
 Com OpenZeppelin smart account ja implantada:
 
 ```bash

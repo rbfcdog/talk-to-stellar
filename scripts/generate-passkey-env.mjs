@@ -18,6 +18,8 @@ Usage:
   npm run passkey:env -- --origin http://localhost:3000
   npm run passkey:env -- --origin https://app.example.com
   npm run passkey:env -- --origin https://app.example.com --verifier C... --context-rule-id 1
+  npm run passkey:env -- --smart-account-only --network testnet
+  npm run passkey:env -- --smart-account-only --network testnet --verifier C... --context-rule-id 1
   npm run passkey:env -- --origin https://app.example.com --write .env.passkey
 
 Options:
@@ -29,19 +31,24 @@ Options:
   --network <network>         testnet|mainnet. Default: ${DEFAULTS.network}
   --verifier <C...>           Soroban WebAuthn/P-256 verifier contract address.
   --context-rule-id <id>      Existing OpenZeppelin smart account context rule id.
+  --smart-account-only        Output only PASSKEY_SMART_ACCOUNT_NETWORK, verifier, and context rule id.
   --write <path>              Write output to a file instead of stdout.
   --help                      Show this help.
 `;
 }
 
 function parseArgs(argv) {
-  const options = { ...DEFAULTS, verifier: "", contextRuleId: "", write: "" };
+  const options = { ...DEFAULTS, verifier: "", contextRuleId: "", write: "", smartAccountOnly: false };
   const positional = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--help" || arg === "-h") {
       options.help = true;
+      continue;
+    }
+    if (arg === "--smart-account-only") {
+      options.smartAccountOnly = true;
       continue;
     }
     if (arg.startsWith("--")) {
@@ -75,6 +82,7 @@ function assignOption(options, key, value) {
   else if (normalized === "network") options.network = value;
   else if (normalized === "verifier" || normalized === "p256-verifier" || normalized === "p256-verifier-address") options.verifier = value;
   else if (normalized === "context-rule-id" || normalized === "rule-id") options.contextRuleId = value;
+  else if (normalized === "smart-account-only") options.smartAccountOnly = ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
   else if (normalized === "write" || normalized === "out" || normalized === "output") options.write = value;
   else throw new Error(`Unknown option --${key}`);
 }
@@ -145,6 +153,15 @@ function validateOptions(options) {
 function buildEnv(options) {
   const { origin, rpId, isLocalhost } = parseOrigin(options.origin);
   validateOptions(options);
+
+  if (options.smartAccountOnly) {
+    return [
+      `PASSKEY_SMART_ACCOUNT_NETWORK=${options.network}`,
+      `PASSKEY_SMART_ACCOUNT_P256_VERIFIER_ADDRESS=${options.verifier}`,
+      `PASSKEY_SMART_ACCOUNT_DEFAULT_CONTEXT_RULE_ID=${options.contextRuleId}`,
+      "",
+    ].join("\n");
+  }
 
   const smartAccountReady = Boolean(options.verifier && options.contextRuleId);
   const smartAccountEnabled = smartAccountReady ? "true" : "false";
