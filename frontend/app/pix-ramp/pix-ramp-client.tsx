@@ -188,6 +188,16 @@ function userFacingAssetCode(code: unknown, fallback: TargetAsset = "BRL") {
   return canonicalAssetCode(code, fallback);
 }
 
+function settlementAssetCode(code: unknown, fallback: TargetAsset = "BRL") {
+  const displayCode = userFacingAssetCode(code, fallback);
+  return displayCode === "BRL" ? "TESOURO" : displayCode;
+}
+
+function optionalSettlementAssetCode(code: unknown) {
+  const raw = String(code || "").trim();
+  return raw ? settlementAssetCode(raw) : undefined;
+}
+
 function formatAsset(value: unknown, code = "BRL") {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${code}`;
@@ -1886,7 +1896,7 @@ export default function PixRampClient({
 
     const auth = await resolveWalletFromEmail();
     const requestedFinalAmount = transferFlow ? "" : desiredFinalAmount;
-    const requestedFinalAsset = requestedFinalAmount ? desiredFinalAsset : "";
+    const requestedFinalAsset = requestedFinalAmount ? settlementAssetCode(desiredFinalAsset) : "";
     const customerResult = getRampCustomerId(customerPayload) && getRampBankAccountId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
       email: rampEmail.trim().toLowerCase() || undefined,
@@ -1900,7 +1910,7 @@ export default function PixRampClient({
       direction: "onramp",
       from_currency: "BRL",
       to_currency: "TESOURO",
-      final_asset: targetAsset,
+      final_asset: settlementAssetCode(targetAsset),
       amount: amountBrl,
       desired_final_amount: requestedFinalAmount || undefined,
       desired_final_asset: requestedFinalAsset || undefined,
@@ -1960,13 +1970,13 @@ export default function PixRampClient({
         expected_to_amount: quoteForOrder?.toAmount || undefined,
         from_currency: "BRL",
         to_currency: "TESOURO",
-        final_asset: targetAsset,
+        final_asset: settlementAssetCode(targetAsset),
         desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
-        desired_final_asset: transferFlow ? undefined : desiredFinalAsset || undefined,
+        desired_final_asset: transferFlow ? undefined : optionalSettlementAssetCode(desiredFinalAsset),
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
-        auto_pay_asset_code: autoPayAsset || targetAsset,
+        auto_pay_asset_code: settlementAssetCode(autoPayAsset || targetAsset),
       }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
       if (payload?.quote) {
         setQuotePayload(payload);
@@ -2081,7 +2091,7 @@ export default function PixRampClient({
       throw new Error(transferRecipientBlocker || L("Escolha um contato salvo real antes de enviar.", "Choose a real saved contact before sending."));
     }
     const requestedAutoPayAmount = feeAdjustedAutoPayAmount || (autoPayAmount && autoPayAsset ? autoPayAmount : "");
-    const requestedAutoPayAsset = feeAdjustedAutoPayAsset || autoPayAsset || targetAsset;
+    const requestedAutoPayAsset = settlementAssetCode(feeAdjustedAutoPayAsset || autoPayAsset || targetAsset);
     const transferAmount = requestedAutoPayAmount || (targetAsset === "BRL"
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
       : String(completedTransaction?.finalAmount || finalReceivedAmount || completedTransaction?.toAmount || ""));
@@ -2112,9 +2122,9 @@ export default function PixRampClient({
       intent_id: atomicIntentKey,
       amount: amountBrl,
       to_currency: "TESOURO",
-      final_asset: targetAsset,
+      final_asset: settlementAssetCode(targetAsset),
       desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
-      desired_final_asset: transferFlow ? undefined : desiredFinalAsset || undefined,
+      desired_final_asset: transferFlow ? undefined : optionalSettlementAssetCode(desiredFinalAsset),
     }, "POST", auth, buildIdempotencyKey("test-onramp"));
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
@@ -2131,13 +2141,14 @@ export default function PixRampClient({
     const previewCustomerId = getRampCustomerId(customerResult);
     setCustomerPayload(customerResult);
     const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+    const sourceAssetCode = settlementAssetCode(offRampInputAsset);
     const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
       intent_id: atomicIntentKey,
       customer_id: previewCustomerId || undefined,
       amount: sourceAmount,
       source_amount: sourceAmount,
-      source_asset_code: offRampInputAsset,
-      amount_currency: offRampInputAsset,
+      source_asset_code: sourceAssetCode,
+      amount_currency: sourceAssetCode,
       fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
       target_currency: "BRL",
     }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
@@ -2156,6 +2167,7 @@ export default function PixRampClient({
       const bankAccount = offRampDestinationBankAccount;
       const providerFiatAccountId = getProviderFiatAccountId(bankAccount);
       const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+      const sourceAssetCode = settlementAssetCode(offRampInputAsset);
       const balancesBefore = await fetchBalances(auth);
       assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
       let previewPayload = offRampPreviewPayload;
@@ -2164,8 +2176,8 @@ export default function PixRampClient({
           intent_id: atomicIntentKey,
           amount: sourceAmount,
           source_amount: sourceAmount,
-          source_asset_code: offRampInputAsset,
-          amount_currency: offRampInputAsset,
+          source_asset_code: sourceAssetCode,
+          amount_currency: sourceAssetCode,
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
           target_currency: "BRL",
         }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
@@ -2186,7 +2198,8 @@ export default function PixRampClient({
             has_pin: true,
             pin_digits: pin.length,
             source_amount: sourceAmount,
-            source_asset_code: offRampInputAsset,
+            source_asset_code: sourceAssetCode,
+            display_source_asset_code: offRampInputAsset,
             available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
             fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
             destination_currency: "BRL",
@@ -2203,9 +2216,9 @@ export default function PixRampClient({
           quote_id: quoteId,
           amount: previewPayload?.amount_tesouro || sourceAmount,
           source_amount: sourceAmount,
-          source_asset_code: offRampInputAsset,
+          source_asset_code: sourceAssetCode,
           source_asset_issuer: previewPayload?.source_asset_issuer || undefined,
-          amount_currency: offRampInputAsset,
+          amount_currency: sourceAssetCode,
           fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
           target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
@@ -2259,7 +2272,8 @@ export default function PixRampClient({
         receipt_url: submitPayload?.receipt_url,
         final_transaction: finalStatusPayload?.transaction || statusPayload?.transaction || orderPayload?.transaction,
         source_amount: sourceAmount,
-        source_asset_code: offRampInputAsset,
+        source_asset_code: sourceAssetCode,
+        display_source_asset_code: offRampInputAsset,
         target_brl: previewPayload?.target_brl || previewPayload?.destination_amount,
         destination_amount: previewPayload?.destination_amount || previewPayload?.target_brl,
         destination_asset_code: "BRL",
