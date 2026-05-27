@@ -35,6 +35,7 @@ describe('Agent conversion UX', () => {
       .fn()
       .mockResolvedValueOnce('GUSDC')
       .mockResolvedValueOnce('GBRL');
+    graph.buildPixRampUrl = jest.fn().mockResolvedValue('https://app.example.com/pix-off?source_asset=USDC&source_amount=5');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: false,
@@ -56,8 +57,9 @@ describe('Agent conversion UX', () => {
       success: false,
     });
 
-    expect(result.success).toBe(false);
-    expect(result.response_message).toContain('rota segura');
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('saída por PIX');
+    expect(result.response_message).toContain('/pix-off?');
     expect(result.response_message).not.toContain('source_issuer');
     expect(result.response_message).not.toContain('dest_issuer');
     expect(result.response_message).not.toMatch(/trustline|liquidez|XLM|Horizon|XDR/i);
