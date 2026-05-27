@@ -38,7 +38,7 @@ type ApiState = {
   error: string;
 };
 
-type YieldApiError = Error & { code?: string };
+type YieldApiError = Error & { code?: string; requestId?: string; supportCode?: string };
 
 type YieldStep = "wallet" | "plan" | "review";
 
@@ -394,6 +394,21 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     .replace(/asset/gi, "moeda");
 }
 
+function uiErrorTrace(error: unknown, language: AppLanguage) {
+  if (!error || typeof error !== "object") return "";
+  const requestId = String((error as YieldApiError).requestId || "").trim();
+  const supportCode = String((error as YieldApiError).supportCode || "").trim();
+  const trace = requestId || supportCode;
+  if (!trace) return "";
+  return localCopy(language, `ID do erro: ${trace}`, `Error ID: ${trace}`);
+}
+
+function yieldUiError(error: unknown, language: AppLanguage) {
+  const message = sanitizeUiError(error, language);
+  const trace = uiErrorTrace(error, language);
+  return trace ? `${message}\n${trace}` : message;
+}
+
 function extractYieldBalanceAmount(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "number" || typeof value === "string") return String(value);
@@ -440,9 +455,13 @@ async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
     window.clearTimeout(timeout);
   });
   const payload = await response.json().catch(() => ({}));
+  const responseRequestId = response.headers.get("x-request-id") ||
+    String(payload?.request_id || payload?.requestId || "").trim();
   if (!response.ok || payload?.success === false) {
     const apiError = new Error(payload?.message || payload?.error || "Não foi possível preparar a solicitação.") as YieldApiError;
     if (payload?.code) apiError.code = String(payload.code);
+    if (responseRequestId) apiError.requestId = responseRequestId;
+    if (payload?.support_code || payload?.supportCode) apiError.supportCode = String(payload.support_code || payload.supportCode);
     throw apiError;
   }
   return payload;
@@ -568,7 +587,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             configured: false,
             api_key_configured: false,
             execution_enabled: false,
-            unavailable_reason: sanitizeUiError(error, language),
+            unavailable_reason: yieldUiError(error, language),
           },
           vaults: [],
       }));
@@ -614,7 +633,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       } else {
         setSession((current) => ({ ...current, loading: false, checked: true }));
       }
-      setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
+      setApiState({ loading: false, message: "", error: yieldUiError(error, language) });
     }
   }
 
@@ -665,7 +684,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       setActiveStep("review");
       setApiState({ loading: false, message: L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."), error: "" });
     } catch (error) {
-      setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
+      setApiState({ loading: false, message: "", error: yieldUiError(error, language) });
     }
   }
 
@@ -694,7 +713,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
       setPin("");
       setApiState({ loading: false, message: L("Operação confirmada. Vamos atualizar seus saldos em instantes.", "Operation confirmed. We will update your balances shortly."), error: "" });
     } catch (error) {
-      setApiState({ loading: false, message: "", error: sanitizeUiError(error, language) });
+      setApiState({ loading: false, message: "", error: yieldUiError(error, language) });
     }
   }
 
@@ -750,7 +769,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
             <div>
               <p className="font-black">{L("Precisa de atenção", "Needs attention")}</p>
-              <p className="mt-1">{apiState.error}</p>
+              <p className="mt-1 whitespace-pre-line">{apiState.error}</p>
             </div>
           </div>
         ) : null}

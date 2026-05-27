@@ -28,6 +28,27 @@ LOG_FILE=logs/backend.log
 
 Em Railway/Vercel/Render, normalmente basta olhar os logs do servico backend.
 
+## Se o backend nao mostrar nada
+
+A rota do frontend tambem registra o proxy que chama o backend:
+
+```text
+[ramp-proxy] defindex_start
+[ramp-proxy] defindex_response
+[ramp-proxy] defindex_response_failed
+```
+
+Esses logs aparecem no servico do frontend, por exemplo Vercel, nao no backend. Se a tela mostra erro e o backend nao registra `[defindex]`, procure primeiro por `[ramp-proxy]` no frontend.
+
+A tela tambem mostra um `ID do erro`. Use esse valor para correlacionar:
+
+```text
+request_id=ramp_...
+support_code=TTS-...
+```
+
+O mesmo `request_id` e enviado no header `X-Request-Id` para o backend e aparece nos logs `[defindex]`.
+
 ## Eventos principais
 
 Quando abre a tela:
