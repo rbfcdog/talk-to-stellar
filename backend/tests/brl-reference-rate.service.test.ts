@@ -4,11 +4,19 @@ jest.mock('../src/config/stellar', () => ({
   },
 }));
 
+jest.mock('../src/api/services/fiat-rate.service', () => ({
+  FiatRateService: {
+    getUsdBrlRate: jest.fn(),
+  },
+}));
+
 import { Asset } from '@stellar/stellar-sdk';
 import { server } from '../src/config/stellar';
 import { BrlReferenceRateService } from '../src/api/services/brl-reference-rate.service';
+import { FiatRateService } from '../src/api/services/fiat-rate.service';
 
 const strictSendPathsMock = server.strictSendPaths as jest.Mock;
+const getUsdBrlRateMock = FiatRateService.getUsdBrlRate as jest.Mock;
 
 describe('BrlReferenceRateService', () => {
   const originalEnv = { ...process.env };
@@ -22,6 +30,13 @@ describe('BrlReferenceRateService', () => {
     process.env.TESOURO_ISSUER = tesouroIssuer;
     process.env.BRL_USDC_REFERENCE_SAMPLE_USDC = '100';
     strictSendPathsMock.mockReset();
+    getUsdBrlRateMock.mockReset();
+    getUsdBrlRateMock.mockResolvedValue({
+      brlPerUsd: 5.13,
+      source: 'market:test:USD-BRL',
+      fetchedAt: '2026-05-27T12:00:00.000Z',
+      fallbackApplied: false,
+    });
   });
 
   afterAll(() => {

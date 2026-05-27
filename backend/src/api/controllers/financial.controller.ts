@@ -19,6 +19,10 @@ import { timingSafeEqualString } from '../../utils/password';
 import { publicErrorMessage } from '../../utils/public-error';
 import { mainnetWalletService } from '../services/mainnet-wallet.service';
 import { FiatRateService, FiatUsdBrlQuote } from '../services/fiat-rate.service';
+import {
+  computeUsdBrlMarketDeviationPct,
+  getUsdBrlMaxMarketDeviationPct,
+} from '../services/quote-rate-sanity.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -54,6 +58,7 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBr
   fallbackApplied: boolean;
   fallbackReason?: string;
   source?: string;
+  marketDeviationPct?: number;
 } {
   const fallbackRate = configuredUsdBrlFallback();
   const minRate = configuredPositiveNumber(
@@ -103,6 +108,20 @@ function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBr
       fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds',
       source: fallbackRate.source,
     };
+  }
+
+  if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
+    const deviationPct = computeUsdBrlMarketDeviationPct(rawBrlPerUsdc, marketQuote.brlPerUsd);
+    const maxDeviationPct = getUsdBrlMaxMarketDeviationPct();
+    if (deviationPct > maxDeviationPct) {
+      return {
+        brlPerUsdc: marketQuote.brlPerUsd,
+        fallbackApplied: true,
+        fallbackReason: 'brl_usdc_quote_deviates_from_usd_brl_market_reference',
+        source: marketQuote.source,
+        marketDeviationPct: deviationPct,
+      };
+    }
   }
 
   return {
@@ -235,6 +254,7 @@ export class FinancialController {
           fallback_reason: rate.fallbackReason,
           quote_failure_reason: quoteFailureReason || undefined,
           raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+          market_deviation_pct: rate.marketDeviationPct ? Number(rate.marketDeviationPct.toFixed(4)) : undefined,
           market_fetched_at: marketQuote?.fetchedAt,
         } : {}),
       },
@@ -335,6 +355,7 @@ export class FinancialController {
             fallback_reason: rate.fallbackReason,
             quote_failure_reason: quoteFailureReason || undefined,
             raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
+            market_deviation_pct: rate.marketDeviationPct ? Number(rate.marketDeviationPct.toFixed(4)) : undefined,
             market_fetched_at: marketQuote?.fetchedAt,
           } : {}),
         },
