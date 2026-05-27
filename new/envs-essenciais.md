@@ -69,6 +69,7 @@ NEXT_PUBLIC_PASSKEY_ENABLED=true
 ### Telegram
 
 ```env
+TELEGRAM_BOT_TOKEN=123456789:token-do-botfather
 TELEGRAM_AGENT_URL=https://seu-backend/api/agent/query
 TELEGRAM_WEBHOOK_URL=https://seu-telegram-service
 AGENT_INGEST_SECRET=mesmo-valor-do-backend
@@ -77,6 +78,14 @@ TELEGRAM_PROFILE_SETUP=true
 ```
 
 O `AGENT_INGEST_SECRET` precisa ser identico no backend e no Telegram. Esse foi o erro que derrubou o bot.
+
+Se o log mostrar `TelegramError: 401: Unauthorized` em `setWebhook`, `setMyProfilePhoto`, `setMyShortDescription`, `setMyDescription` ou `getMe`, o problema e o `TELEGRAM_BOT_TOKEN`: valor errado, token revogado/regenerado, username no lugar do token, prefixo `bot`, aspas ou espaco no valor. Teste no proprio ambiente do deploy:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
+```
+
+O resultado precisa ser `{"ok":true,...}`. Se vier `401 Unauthorized`, gere/copie novamente o token no `@BotFather` e atualize a env do Railway/servico Telegram. `TELEGRAM_PROFILE_SETUP=false` so desliga avatar/descricao; nao corrige token invalido.
 
 ## 2. Para rendimento real com Defindex
 

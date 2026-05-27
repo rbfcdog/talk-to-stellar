@@ -343,11 +343,87 @@ async function configureTelegramBotProfile({ botToken, fetchImpl = fetch, logger
   return result;
 }
 
+function normalizeTelegramBotToken(value) {
+  let token = String(value || '').trim();
+  if (!token) return '';
+
+  token = token.replace(/^['"`]+|['"`]+$/g, '').trim();
+
+  const botApiUrlMatch = token.match(/api\.telegram\.org\/bot([^/\s]+)/i);
+  if (botApiUrlMatch?.[1]) {
+    token = botApiUrlMatch[1];
+  }
+
+  return token.replace(/^bot/i, '').trim();
+}
+
+function maskTelegramBotToken(value) {
+  const token = normalizeTelegramBotToken(value);
+  if (!token) return '(empty)';
+
+  const [botId, secret = ''] = token.split(':');
+  const maskedId = botId.length > 6
+    ? `${botId.slice(0, 3)}...${botId.slice(-2)}`
+    : `${botId.slice(0, 2)}...`;
+  if (!secret) return `${maskedId}:missing-secret`;
+
+  const maskedSecret = secret.length > 8
+    ? `${secret.slice(0, 4)}...${secret.slice(-4)}`
+    : 'too-short';
+  return `${maskedId}:${maskedSecret}`;
+}
+
+function assertTelegramBotToken(value) {
+  const token = normalizeTelegramBotToken(value);
+  if (!token) {
+    throw new Error('TELEGRAM_BOT_TOKEN is required');
+  }
+  if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+    throw new Error(
+      'TELEGRAM_BOT_TOKEN is malformed. Use the exact token from @BotFather, format 123456789:ABC..., without "bot", quotes, spaces, URL, or @username.'
+    );
+  }
+  return token;
+}
+
+function isTelegramUnauthorizedError(error) {
+  const response = error?.response || error?.cause?.response;
+  const code = response?.error_code || response?.statusCode || response?.status;
+  const description = String(response?.description || error?.description || error?.message || '');
+  return Number(code) === 401 || /401|unauthorized/i.test(description);
+}
+
+async function verifyTelegramBotToken(bot, { botToken, logger = console, maxAttempts = 5 } = {}) {
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
+      const me = await bot.telegram.getMe();
+      logger.log?.(`[telegram] token verified for @${me?.username || me?.first_name || 'bot'}`);
+      return me;
+    } catch (error) {
+      if (isTelegramUnauthorizedError(error)) {
+        throw new Error(
+          `TELEGRAM_BOT_TOKEN was rejected by Telegram (401 Unauthorized). Set the exact current token from @BotFather in this deploy. Current env looks like ${maskTelegramBotToken(botToken)}.`
+        );
+      }
+
+      logger.error?.(`[telegram] getMe attempt ${attempt} failed:`, error && error.message ? error.message : error);
+      if (attempt >= maxAttempts) {
+        throw error;
+      }
+      const backoff = Math.min(1000 * 2 ** (attempt - 1), 10000);
+      logger.log?.(`[telegram] retrying getMe in ${backoff}ms`);
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+  throw new Error('Telegram getMe failed before returning bot identity');
+}
+
 async function main() {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = assertTelegramBotToken(process.env.TELEGRAM_BOT_TOKEN);
   const agentUrl = process.env.TELEGRAM_AGENT_URL || 'http://localhost:3001/api/agent/query';
   const mode = (process.env.TELEGRAM_BOT_MODE || 'polling').toLowerCase();
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'talktostellar_bot';
   const sessionPrefix = process.env.TELEGRAM_SESSION_PREFIX || 'telegram';
   const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH || '/webhook/telegram';
   const notifySecret = process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '';
@@ -359,15 +435,9 @@ async function main() {
     ''
   ).trim().replace(/\/$/, '');
 
-  if (!botToken) {
-    throw new Error('TELEGRAM_BOT_TOKEN is required');
-  }
-
   if (!ingestSecret) {
     throw new Error('AGENT_INGEST_SECRET is required (or configure INTERNAL_API_SECRET/TELEGRAM_NOTIFY_SECRET to match the backend value)');
   }
-
-  await configureTelegramBotProfile({ botToken, logger: console });
 
   const agentClient = createAgentClient({ agentUrl, ingestSecret });
   const backendBaseUrl = new URL(agentUrl).origin;
@@ -409,6 +479,10 @@ async function main() {
     backendBaseUrl,
     externalCheck,
   });
+  const telegramIdentity = await verifyTelegramBotToken(bot, { botToken, logger: console });
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || telegramIdentity?.username || 'talktostellar_bot';
+
+  await configureTelegramBotProfile({ botToken, logger: console });
 
   const healthPort = Number(process.env.TELEGRAM_HEALTH_PORT || 3005);
   let healthServer = null;
@@ -553,28 +627,6 @@ async function main() {
   } else {
     healthServer = createHealthServer({ port: healthPort, notify, notifySecret });
     await healthServer.start();
-
-    // Some environments experience intermittent network timeouts when Telegraf
-    // calls getMe during startup. Try getMe with retries/backoff before launch
-    // to avoid failing the whole process on transient ETIMEDOUT errors.
-    async function tryGetMeWithRetry(bot, maxAttempts = 5) {
-      let attempt = 0
-      while (attempt < maxAttempts) {
-        attempt += 1
-        try {
-          await bot.telegram.getMe()
-          return
-        } catch (err) {
-          console.error(`[telegram] getMe attempt ${attempt} failed:`, err && err.message ? err.message : err)
-          if (attempt >= maxAttempts) throw err
-          const backoff = Math.min(1000 * 2 ** (attempt - 1), 10000)
-          console.log(`[telegram] retrying getMe in ${backoff}ms`)
-          await new Promise((r) => setTimeout(r, backoff))
-        }
-      }
-    }
-
-    await tryGetMeWithRetry(bot)
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
     console.log(`Telegram bot started in polling mode as @${botUsername}`);
@@ -610,7 +662,12 @@ process.on('SIGINT', async () => {
 
 module.exports = {
   configureTelegramBotProfile,
+  assertTelegramBotToken,
+  isTelegramUnauthorizedError,
+  maskTelegramBotToken,
+  normalizeTelegramBotToken,
   resolveBotProfilePhotoPath,
   normalizeProfileDescription,
   setTelegramProfilePhoto,
+  verifyTelegramBotToken,
 };

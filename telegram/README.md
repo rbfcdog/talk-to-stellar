@@ -25,6 +25,18 @@ The bot derives the backend origin from `TELEGRAM_AGENT_URL` and calls `/api/ext
 
 If the sender does not yet have an account, the bot replies with a dynamic onboarding URL that points to the frontend `/create-account` page.
 
+### Token check
+
+`TelegramError: 401: Unauthorized` means Telegram rejected `TELEGRAM_BOT_TOKEN`. It is not a webhook URL or `AGENT_INGEST_SECRET` problem.
+
+Validate the exact value configured in the deploy environment:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
+```
+
+Expected result is `{"ok":true,...}`. If it returns 401, copy the current token from `@BotFather` again and set it without `bot`, quotes, spaces, URL, or `@username`.
+
 ## Bot avatar
 
 The adapter sets the Telegram bot profile on startup without sending the image in chat.

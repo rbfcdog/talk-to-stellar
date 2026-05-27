@@ -5,9 +5,13 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  assertTelegramBotToken,
   configureTelegramBotProfile,
+  maskTelegramBotToken,
   normalizeProfileDescription,
+  normalizeTelegramBotToken,
   resolveBotProfilePhotoPath,
+  verifyTelegramBotToken,
 } = require('../src/index');
 
 test('normalizeProfileDescription truncates long bot descriptions', () => {
@@ -20,6 +24,45 @@ test('resolveBotProfilePhotoPath defaults to bundled avatar asset', () => {
   const resolved = resolveBotProfilePhotoPath();
   assert.equal(path.basename(resolved), 'talktostellar-avatar.jpg');
   assert.ok(fs.existsSync(resolved));
+});
+
+test('normalizeTelegramBotToken accepts common copy/paste formats', () => {
+  const token = '123456789:abcdefghijklmnopqrstuvwxyzABCDE';
+  assert.equal(normalizeTelegramBotToken(` ${token} `), token);
+  assert.equal(normalizeTelegramBotToken(`"${token}"`), token);
+  assert.equal(normalizeTelegramBotToken(`bot${token}`), token);
+  assert.equal(normalizeTelegramBotToken(`https://api.telegram.org/bot${token}/getMe`), token);
+});
+
+test('assertTelegramBotToken rejects malformed deploy values', () => {
+  assert.equal(
+    assertTelegramBotToken('123456789:abcdefghijklmnopqrstuvwxyzABCDE'),
+    '123456789:abcdefghijklmnopqrstuvwxyzABCDE'
+  );
+  assert.throws(() => assertTelegramBotToken(''), /TELEGRAM_BOT_TOKEN is required/);
+  assert.throws(() => assertTelegramBotToken('@talktostellar_bot'), /malformed/);
+  assert.throws(() => assertTelegramBotToken('123456789'), /malformed/);
+  assert.doesNotMatch(maskTelegramBotToken('123456789:abcdefghijklmnopqrstuvwxyzABCDE'), /abcdefghijklmnopqrstuvwxyzABCDE/);
+});
+
+test('verifyTelegramBotToken turns Telegram 401 into an env-specific error', async () => {
+  const bot = {
+    telegram: {
+      getMe: async () => {
+        const error = new Error('401: Unauthorized');
+        error.response = { error_code: 401, description: 'Unauthorized' };
+        throw error;
+      },
+    },
+  };
+
+  await assert.rejects(
+    () => verifyTelegramBotToken(bot, {
+      botToken: '123456789:abcdefghijklmnopqrstuvwxyzABCDE',
+      logger: { log: () => {}, error: () => {} },
+    }),
+    /TELEGRAM_BOT_TOKEN was rejected by Telegram/
+  );
 });
 
 test('configureTelegramBotProfile sets photo and descriptions without chat messages', async () => {
