@@ -886,7 +886,7 @@ export class StellarService {
             }
         }
 
-        assertSaneBrlUsdcQuote({
+        await assertSaneBrlUsdcQuote({
             sourceAssetCode: assetCode(sourceAssetObj),
             destinationAssetCode: assetCode(destAssetObj),
             sourceAmount: bestPath.source_amount,
@@ -971,7 +971,7 @@ export class StellarService {
             }
         }
 
-        assertSaneBrlUsdcQuote({
+        await assertSaneBrlUsdcQuote({
             sourceAssetCode: assetCode(sourceAssetObj),
             destinationAssetCode: assetCode(destAssetObj),
             sourceAmount: effectiveSourceAmount,

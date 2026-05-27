@@ -121,7 +121,7 @@ export class BrlReferenceRateService {
       throw new Error('Configured BRL/USDC on-chain quote returned an invalid amount.');
     }
 
-    assertSaneBrlUsdcQuote({
+    await assertSaneBrlUsdcQuote({
       sourceAssetCode: input.sourceAssetCode,
       destinationAssetCode: input.destinationAssetCode,
       sourceAmount,

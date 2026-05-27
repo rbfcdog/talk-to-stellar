@@ -5,6 +5,7 @@ import { supabase } from '../../config/supabase'
 import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/quote-expiry.service'
 import { getRequiredJwtSecret } from '../../config/secrets'
 import { publicErrorMessage } from '../../utils/public-error'
+import { assertSaneBrlUsdcQuote } from '../services/quote-rate-sanity.service'
 
 function getJwtSecret() {
   return getRequiredJwtSecret()
@@ -159,6 +160,26 @@ export default class ExternalValidateController {
             message: quoteExpiryMessage(),
             payload,
           })
+        }
+
+        if (sub === 'external_conversion_confirm') {
+          try {
+            await assertSaneBrlUsdcQuote({
+              sourceAssetCode: payload?.source_asset_code || payload?.quote?.sourceAsset?.code || '',
+              destinationAssetCode: payload?.dest_asset_code || payload?.quote?.destinationAsset?.code || '',
+              sourceAmount: payload?.source_amount || payload?.quote?.sourceAmount || '',
+              destinationAmount: payload?.dest_amount || payload?.quote?.destinationAmount || '',
+              context: 'conversion confirmation link',
+            })
+          } catch (error) {
+            return res.status(400).json({
+              success: false,
+              valid: false,
+              invalidQuote: true,
+              message: publicErrorMessage(error, 'A cotação deste link mudou ou saiu da faixa segura. Solicite uma nova conversão.'),
+              payload,
+            })
+          }
         }
       }
 

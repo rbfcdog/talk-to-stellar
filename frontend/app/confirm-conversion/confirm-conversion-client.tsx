@@ -184,7 +184,7 @@ export default function ConfirmConversionClient({
           setValidation({
             success: false,
             valid: false,
-            payload: fallbackPayload,
+            payload: payload?.payload || fallbackPayload,
             message: publicConversionErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
           })
           return
@@ -282,7 +282,8 @@ export default function ConfirmConversionClient({
     }
   }
 
-  const payload = validation?.payload || decodeJwtPayload(token)
+  const linkInvalid = validation?.valid === false && Boolean(validation?.message)
+  const payload = linkInvalid ? {} : (validation?.payload || decodeJwtPayload(token))
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
@@ -369,6 +370,12 @@ export default function ConfirmConversionClient({
                 </motion.div>
               ))}
             </div>
+
+            {linkInvalid && (
+              <div className="border border-tts-error/40 bg-tts-error/10 p-4 text-sm text-tts-error">
+                {validation.message}
+              </div>
+            )}
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">

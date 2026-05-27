@@ -90,11 +90,20 @@ ENABLE_CETES_ASSET=true
 ENABLE_EURC_ASSET=false
 CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
 TTS_VISIBLE_ASSET_CODES=TESOURO,USDC,CETES,XLM
+
+# Trava de seguranca para conversao USDC <-> TESOURO/Real.
+BRL_USDC_QUOTE_SYMBOL=USDCBRL
+BRL_USDC_QUOTE_TIMEOUT_MS=8000
+USD_BRL_SANITY_MIN=3
+USD_BRL_SANITY_MAX=10
+USD_BRL_MAX_MARKET_DEVIATION_PCT=10
 ```
 
 EURC fica desligado em testnet porque nao ha issuer/vault EURC validado neste ambiente. Use CETES no lugar de EUR/EURC enquanto `STELLAR_NETWORK=TESTNET`.
 
 Use `TESOURO` no env, nao `BRL`. TESOURO e o asset real do produto para reais; a interface pode exibir como real/reais quando for o melhor texto para usuario.
+
+`USD_BRL_MAX_MARKET_DEVIATION_PCT=10` bloqueia rotas testnet ruins. Ex.: se a rota devolver `1 USDC = R$ 4,39` enquanto o mercado esta perto de `R$ 5,08`, o backend rejeita o link de confirmacao em vez de mostrar uma conversao enganosa.
 
 Gerar segredo:
 
