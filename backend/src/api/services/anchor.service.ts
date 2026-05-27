@@ -3889,21 +3889,20 @@ export class AnchorService {
     if (!context.vaultSecretId) {
       throw apiError('Wallet private key is not available in Vault for Defindex yield.', 409);
     }
-    const prepared = coalesceString(input.unsigned_xdr, input.unsignedXdr)
-      ? null
-      : await this.prepareDefindexYieldForSession(input);
-    const action = (prepared?.action || (String(input.action || 'deposit').trim().toLowerCase() === 'withdraw' ? 'withdraw' : 'deposit')) as DefindexYieldAction;
-    const amount = prepared?.amount || normalizeAmount(input.amount, 'amount');
-    const amountUnits = prepared?.amount_units || DefindexYieldService.amountToContractUnits(amount);
+    const prepared = await this.prepareDefindexYieldForSession(input);
+    const action = prepared.action;
+    const amount = prepared.amount;
+    const amountUnits = prepared.amount_units;
     const vault = DefindexYieldService.requireVault(
       coalesceString(input.asset_code, input.assetCode),
       coalesceString(input.vault_address, input.vaultAddress),
     );
-    const unsignedXdr = prepared?.xdr || coalesceString(input.unsigned_xdr, input.unsignedXdr);
-    if (!unsignedXdr) throw apiError('Defindex unsigned XDR is required.', 400);
+    if (!prepared.execution_ready || !prepared.xdr) {
+      throw apiError('Defindex execution review is not ready. Prepare the operation again before confirming.', 409);
+    }
 
     const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    const signedXdr = DefindexYieldService.signXdr(unsignedXdr, secret);
+    const signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
     const sent = await DefindexYieldService.sendVaultTransaction({
       vaultAddress: vault.vault_address,
       signedXdr,

@@ -24,6 +24,26 @@ O segredo que provavelmente ainda falta e `DEFINDEX_API_KEY`; ele vem da Definde
 
 Para executar deposito/saque em testnet, o backend agora exige duas travas ligadas: `DEFINDEX_ENABLE_EXECUTION=true` e `DEFINDEX_COMPLIANCE_APPROVED=true`. Mantenha `DEFINDEX_COMPLIANCE_APPROVED=false` ate haver aprovacao juridica/compliance formal para o ambiente e jurisdicoes atendidas. Mainnet continua bloqueada enquanto `DEFINDEX_ALLOW_MAINNET_EXECUTION=false`.
 
+Para fazer a movimentacao de fato em testnet, o bloco minimo fica assim:
+
+```env
+STELLAR_NETWORK=TESTNET
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+DEFINDEX_API_KEY=sk_...
+DEFINDEX_BASE_URL=https://api.defindex.io
+DEFINDEX_NETWORK=testnet
+DEFINDEX_TIMEOUT_MS=30000
+DEFINDEX_ENABLE_EXECUTION=true
+DEFINDEX_COMPLIANCE_APPROVED=true
+DEFINDEX_ALLOW_MAINNET_EXECUTION=false
+DEFINDEX_USDC_VAULT=CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN
+DEFINDEX_CETES_VAULT=CBIS5TEMTNNOTBE3WXPQUAGUEDYZZVIWAKTXEQCOUJ34OJJ3FJ5NLF2P
+DEFINDEX_XLM_VAULT=CCLV4H7WTLJQ7ATLHBBQV2WW3OINF3FOY5XZ7VPHZO7NH3D2ZS4GFSF6
+CETES_ISSUER_TESTNET=GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4
+```
+
+A conta do usuario tambem precisa estar criada no app, com PIN valido, secret da carteira salvo no vault do backend, saldo suficiente no asset escolhido e trustline/asset corretos para o vault. Sem isso, a tela prepara a revisao, mas a confirmacao com PIN vai falhar.
+
 Nao preencha `DEFINDEX_EURC_VAULT` nem `DEFINDEX_TESOURO_VAULT` em testnet enquanto nao houver vault validado. Na UX, TESOURO aparece como real/reais; CETES aparece como rendimento Mexico. Nao recrie o asset `BRL`.
 
 ## 1. Obrigatorias agora
@@ -130,6 +150,12 @@ Para gerar um arquivo separado:
 
 ```bash
 npm --prefix backend run defindex:env -- --network testnet --enable-execution --write .env.defindex.testnet
+```
+
+Para gerar o bloco ja com execucao real de testnet habilitada:
+
+```bash
+npm --prefix backend run defindex:env -- --network testnet --enable-execution --compliance-approved --write .env.defindex.testnet
 ```
 
 O script usa `@defindex/sdk` para health/factory, consulta o registry publico da Defindex e tenta descobrir vaults em `/vault/discover`. Ele so imprime `DEFINDEX_<ASSET>_VAULT` quando encontrou vault real. Se EURC ou TESOURO nao aparecerem, nao invente valor: significa que nenhum vault testnet validado foi encontrado automaticamente.
