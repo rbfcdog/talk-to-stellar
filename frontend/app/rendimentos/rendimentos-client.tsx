@@ -1191,7 +1191,7 @@ function BankOverviewPanel({
     ? L("Execução aprovada", "Execution approved")
     : L("Modo revisão", "Review mode");
   const confirmationDetail = confirmationEnabled
-    ? L("Confirmar com PIN movimenta saldo.", "Confirming with PIN moves balance.")
+    ? L("PIN executa a revisão aprovada.", "PIN submits the approved review.")
     : L("Simula sem movimentar saldo.", "Previews without moving balance.");
 
   return (
@@ -1501,7 +1501,7 @@ function YieldWorkspacePanel({
             {profileShort} · {profileName(selectedProfile, language)}
           </span>
           <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${confirmationEnabled ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-            {confirmationEnabled ? L("PIN ativo", "PIN ready") : L("Modo revisão", "Review mode")}
+            {confirmationEnabled ? L("Execução aprovada", "Execution approved") : L("Modo revisão", "Review mode")}
           </span>
         </div>
       </div>
