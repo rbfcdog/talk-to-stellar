@@ -50,6 +50,8 @@ interface RampSessionInput {
   intentId?: string;
   operation_key?: string;
   operationKey?: string;
+  request_id?: string;
+  requestId?: string;
   pin?: string;
   wallet_pin?: string;
   walletPin?: string;
@@ -653,6 +655,10 @@ function defindexErrorFields(error: unknown): Record<string, unknown> {
     status: err?.statusCode || err?.status || undefined,
     error: debugErrorMessage(error),
   };
+}
+
+function defindexRequestId(input: RampSessionInput): string | undefined {
+  return coalesceString(input.request_id, input.requestId) || undefined;
 }
 
 function logDefindex(level: 'debug' | 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
@@ -3814,6 +3820,7 @@ export class AnchorService {
     const assetCode = coalesceString(input.asset_code, input.assetCode);
     const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
     logDefindex('info', 'balance_start', {
+      request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
       user_id: maskLogValue(context.userId),
       public_key: maskLogValue(context.publicKey),
@@ -3829,6 +3836,7 @@ export class AnchorService {
       balance = await DefindexYieldService.getVaultBalance(vault.vault_address, context.publicKey, vault.network);
     } catch (error) {
       logDefindex('warn', 'balance_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -3840,6 +3848,7 @@ export class AnchorService {
       throw error;
     }
     logDefindex('info', 'balance_success', {
+      request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
       user_id: maskLogValue(context.userId),
       public_key: maskLogValue(context.publicKey),
@@ -3891,6 +3900,7 @@ export class AnchorService {
     const assetCode = coalesceString(input.asset_code, input.assetCode);
     const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
     logDefindex('info', 'prepare_start', {
+      request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
       user_id: maskLogValue(context.userId),
       public_key: maskLogValue(context.publicKey),
@@ -3923,6 +3933,7 @@ export class AnchorService {
 	    };
 	    if (!runtime.execution_enabled) {
       logDefindex('info', 'prepare_review_only', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -3955,6 +3966,7 @@ export class AnchorService {
       });
     } catch (error) {
       logDefindex('warn', 'prepare_build_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -3970,6 +3982,7 @@ export class AnchorService {
       throw error;
     }
     logDefindex('info', 'prepare_success', {
+      request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
       user_id: maskLogValue(context.userId),
       public_key: maskLogValue(context.publicKey),
@@ -4015,6 +4028,7 @@ export class AnchorService {
   }> {
     const runtime = DefindexYieldService.getRuntimeInfo();
     logDefindex('info', 'execute_start', {
+      request_id: defindexRequestId(input),
       action: String(input.action || 'deposit').trim().toLowerCase() === 'withdraw' ? 'withdraw' : 'deposit',
       amount: coalesceString(input.amount),
       asset_code: coalesceString(input.asset_code, input.assetCode, 'USDC'),
@@ -4028,6 +4042,7 @@ export class AnchorService {
     });
     if (!runtime.execution_enabled) {
       logDefindex('warn', 'execute_blocked', {
+        request_id: defindexRequestId(input),
         network: runtime.network,
         execution_requested: runtime.execution_requested,
         compliance_approved: runtime.compliance_approved,
@@ -4045,6 +4060,7 @@ export class AnchorService {
     if (!walletPin) throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
     if (!context.vaultSecretId) {
       logDefindex('warn', 'execute_missing_signing_material', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4061,6 +4077,7 @@ export class AnchorService {
     );
     if (!prepared.execution_ready || !prepared.xdr) {
       logDefindex('warn', 'execute_review_not_ready', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4080,6 +4097,7 @@ export class AnchorService {
       secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
     } catch (error) {
       logDefindex('warn', 'execute_secret_read_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4090,6 +4108,7 @@ export class AnchorService {
     }
     if (!/^S[A-Z2-7]{55}$/.test(secret)) {
       logDefindex('warn', 'execute_secret_invalid_format', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4103,6 +4122,7 @@ export class AnchorService {
       signedXdr = DefindexYieldService.signXdr(prepared.xdr, secret);
     } catch (error) {
       logDefindex('warn', 'execute_sign_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4120,6 +4140,7 @@ export class AnchorService {
     let sent: { hash: string; raw: any };
     try {
       logDefindex('info', 'execute_submit_start', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4137,6 +4158,7 @@ export class AnchorService {
       });
     } catch (error) {
       logDefindex('warn', 'execute_submit_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
@@ -4151,6 +4173,7 @@ export class AnchorService {
       throw apiError('Falha de envio da transacao externa.', 502, 'execution_unavailable');
     }
     logDefindex('info', 'execute_submit_success', {
+      request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
       user_id: maskLogValue(context.userId),
       public_key: maskLogValue(context.publicKey),
@@ -4184,6 +4207,7 @@ export class AnchorService {
       }),
     } as any).catch((error) => {
       logDefindex('warn', 'execute_operation_persist_failed', {
+        request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),

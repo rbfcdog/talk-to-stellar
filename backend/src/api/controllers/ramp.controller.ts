@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AnchorService } from '../services/anchor.service';
 import { timingSafeEqualString } from '../../utils/password';
-import { publicErrorCode, publicErrorMessage } from '../../utils/public-error';
+import { publicErrorCode, publicErrorMessage, publicErrorPayload } from '../../utils/public-error';
 import { logger } from '../../utils/logger';
 
 function statusFromError(error: any): number {
@@ -26,12 +26,18 @@ function errorPayload(error: any): Record<string, unknown> {
   return payload;
 }
 
-function yieldErrorPayload(error: any): Record<string, unknown> {
-  const code = publicErrorCode(error);
+function requestIdFromReq(req: Request): string {
+  return String(req.headers['x-request-id'] || req.headers['x-correlation-id'] || '').trim();
+}
+
+function yieldErrorPayload(error: any, req?: Request): Record<string, unknown> {
+  const requestId = req ? requestIdFromReq(req) : '';
   return {
-    success: false,
-    code,
-    message: publicErrorMessage(error, 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.'),
+    ...publicErrorPayload(error, {
+      includeSupportCode: true,
+      fallback: 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.',
+    }),
+    ...(requestId ? { request_id: requestId } : {}),
   };
 }
 
@@ -47,6 +53,7 @@ function logYieldRouteFailure(route: string, req: Request, error: any): void {
   const status = statusFromError(error);
   const source = { ...req.query, ...req.body, ...req.params } as Record<string, unknown>;
   logger.warn(`[defindex] event=route_failed ${JSON.stringify({
+    request_id: requestIdFromReq(req),
     route,
     method: req.method,
     status,
@@ -65,10 +72,12 @@ function requestInput(req: Request): Record<string, unknown> {
   const headerPin = String(req.headers['x-wallet-pin'] || req.headers['x-talktostellar-wallet-pin'] || '').trim();
   const headerSessionId = String(req.headers['x-session-id'] || req.headers['x-talktostellar-session-id'] || '').trim();
   const headerSessionToken = String(req.headers['x-session-token'] || req.headers['x-talktostellar-session-token'] || '').trim();
+  const requestId = requestIdFromReq(req);
   return {
     ...req.query,
     ...req.body,
     ...req.params,
+    ...(requestId ? { request_id: requestId } : {}),
     ...(headerSessionId ? { session_id: headerSessionId } : {}),
     ...(headerSessionToken ? { session_token: headerSessionToken } : {}),
     ...(headerPin ? { pin: headerPin, wallet_pin: headerPin } : {}),
@@ -153,7 +162,7 @@ export class RampController {
       res.status(200).json(result);
     } catch (error: any) {
       logYieldRouteFailure('status', _req, error);
-      res.status(statusFromError(error)).json(yieldErrorPayload(error));
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, _req));
     }
   }
 
@@ -163,7 +172,7 @@ export class RampController {
       res.status(200).json(result);
     } catch (error: any) {
       logYieldRouteFailure('balance', req, error);
-      res.status(statusFromError(error)).json(yieldErrorPayload(error));
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
     }
   }
 
@@ -173,7 +182,7 @@ export class RampController {
       res.status(200).json(result);
     } catch (error: any) {
       logYieldRouteFailure('prepare', req, error);
-      res.status(statusFromError(error)).json(yieldErrorPayload(error));
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
     }
   }
 
@@ -181,13 +190,13 @@ export class RampController {
     try {
       const result = await AnchorService.executeDefindexYieldForSession(requestInput(req));
       if (!result.success) {
-        res.status(400).json(yieldErrorPayload((result as any).error || result));
+        res.status(400).json(yieldErrorPayload((result as any).error || result, req));
         return;
       }
       res.status(200).json(result);
     } catch (error: any) {
       logYieldRouteFailure('execute', req, error);
-      res.status(statusFromError(error)).json(yieldErrorPayload(error));
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
     }
   }
 
