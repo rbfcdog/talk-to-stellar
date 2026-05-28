@@ -444,6 +444,169 @@ Técnico e operação:
 - [Infraestrutura Mainnet](docs/STELLAR_MAINNET_INFRASTRUCTURE.md)
 - [Deploy Evolution no Railway](docs/EVOLUTION_RAILWAY_DEPLOYMENT.md)
 
+## Apêndice De Negócio E Tecnologia
+
+Esta seção resume o projeto de um ponto de vista mais operacional: qual negócio o produto quer ser, quais fluxos já existem, como o sistema é montado e quais decisões precisam estar claras antes de produção.
+
+### Proposta Comercial
+
+TalkToStellar é uma camada de conversão, pagamento e evidência para usuários que começam em BRL e precisam chegar a USD, Pix, contatos ou uma public key externa sem operar infraestrutura cripto diretamente.
+
+O produto captura valor em três momentos:
+
+- antes da operação, mostrando cotação, taxa, destino e economia estimada;
+- durante a operação, reduzindo fricção com chat, links curtos, PIN e telas de revisão;
+- depois da operação, entregando histórico, comprovante e rastreabilidade.
+
+O diferencial não é apenas "usar Stellar". O diferencial é esconder a complexidade certa e revelar a informação financeira que importa: quanto sai, quanto chega, qual taxa foi paga e onde a operação pode ser auditada.
+
+### Personas Prioritárias
+
+| Persona | Dor principal | Valor entregue |
+| --- | --- | --- |
+| Usuário pessoa física | Converter BRL para USD sem comparar várias plataformas | Cotação clara, Pix, saldo, histórico e comprovante |
+| Freelancer ou creator | Receber/pagar em dólar com menos fricção | Fluxo conversacional, contatos e confirmação segura |
+| Pequena empresa | Reconciliar pagamentos e conversões recorrentes | Histórico, evidência e relatório operacional |
+| Produto fintech/API | Adicionar rota Pix -> USD sem construir tudo do zero | Backend modular, adapters e endpoints reaproveitáveis |
+
+### Fluxos Centrais Do Produto
+
+1. **Conta e sessão**
+   O usuário entra por chat, link ou web. O backend cria ou recupera sessão, carteira e estado de conversa. A sessão é protegida por token, cookies HttpOnly no frontend e validações no backend.
+
+2. **Saldo e histórico**
+   A experiência mostra saldos em linguagem simples e consulta histórico consolidado a partir de operações, logs de pagamento e comprovantes.
+
+3. **Pix on-ramp**
+   O usuário coloca reais por Pix. O sistema cria a intenção, acompanha status, atualiza saldo e mantém a experiência separada de detalhes técnicos do provedor.
+
+4. **Conversão**
+   O usuário escolhe origem, destino e valor. A tela de conversão pede rota real ao backend, mostra estimativa e só depois libera confirmação.
+
+5. **Pagamento para contato**
+   O usuário escolhe um contato salvo, revisa valor e destino, confirma com PIN e recebe comprovante. Isso evita envio para destinatários ambíguos.
+
+6. **Envio externo**
+   O usuário envia para uma public key externa em uma tela dedicada. A interface valida chave, saldo, destino e PIN antes de submeter.
+
+7. **Pix off-ramp**
+   O usuário informa uma chave Pix e revisa quanto sai do saldo e quanto chega em reais. Se faltar saldo, a tela deve oferecer conversão ou complemento por Pix.
+
+### Arquitetura Técnica
+
+O sistema é dividido em superfícies de experiência, orquestração financeira e infraestrutura de integração.
+
+| Camada | Responsabilidade | Diretórios principais |
+| --- | --- | --- |
+| Frontend | Telas web, confirmação, Pix, conversão, histórico, conta e UX de chat | `frontend/app`, `frontend/components`, `frontend/lib` |
+| Agente | Interpretação de intenção, escolha de tools e resposta conversacional | `backend/src/api/agent` |
+| Backend API | Sessão, carteira, pagamentos, conversão, Pix, recibos e auditoria | `backend/src/api` |
+| Stellar | XDR, assinatura, submit, path payment, saldos e evidência | `backend/src/api/services/stellar.service.ts` |
+| Provedores | Pix, WhatsApp, Telegram, e-mail, payout e integrações externas | `backend/src/integrations`, `telegram`, `evolution` |
+| Dados | Estado de sessão, carteiras, operações, contatos, links e comprovantes | Supabase/Postgres via repositories |
+
+Fluxo simplificado de uma operação:
+
+```text
+Mensagem ou tela web
+-> normalização de intenção e parâmetros
+-> criação de preview/cotação
+-> revisão em página dedicada
+-> PIN/passkey quando aplicável
+-> execução backend
+-> submit Stellar/provedor externo
+-> log transacional
+-> comprovante e resposta ao usuário
+```
+
+### Modelo De Dados Operacional
+
+As principais entidades do produto são:
+
+- `agent_sessions`: estado de sessão, usuário, canal e token;
+- `wallets`: carteira Stellar vinculada à sessão/usuário;
+- `contacts`: destinatários salvos e chaves de entrega;
+- `operations`: operações financeiras internas e status;
+- `payment_logs`: pagamentos, conversões, hashes e metadados de execução;
+- `payment_confirmations`: links de confirmação de uso único;
+- `short_links`: links públicos curtos com expiração;
+- `activity_feed`: histórico amigável para a interface;
+- `user_passkeys` e `passkey_challenges`: credenciais e desafios WebAuthn quando habilitados.
+
+Na prática, `operations` é a camada de controle operacional e `payment_logs` é a camada de evidência de pagamentos/conversões. As telas devem preferir dados consolidados e nunca expor erros crus do banco.
+
+### Segurança E Controles
+
+Controles já tratados ou previstos no desenho:
+
+- links assinados e expiráveis para onboarding, login e confirmação;
+- PIN obrigatório para confirmação sensível;
+- passkey/WebAuthn como caminho de autenticação forte;
+- cookies HttpOnly para sessão web;
+- `x-agent-ingest-secret` para proteger ingestão vinda de WhatsApp/Telegram;
+- idempotency key em operações mutáveis;
+- logs de auditoria para eventos críticos;
+- mensagens públicas sanitizadas para não expor schema, constraint ou stack trace;
+- Mainnet em modo read-only até existir signer e operação aprovada.
+
+### Integrações Externas
+
+| Integração | Uso atual | Observação |
+| --- | --- | --- |
+| Stellar SDK/Horizon | Conta, saldo, XDR, submit e histórico público | Testnet para execução; Mainnet read-only |
+| Supabase | Banco operacional, sessão, carteiras e logs | Precisa migrations aplicadas fora do startup |
+| Evolution API | WhatsApp | Requer instância e secrets alinhados |
+| Telegram/Telegraf | Bot Telegram | Token inválido gera `401 Unauthorized` no startup |
+| Etherfuse sandbox | Pix/on-ramp/off-ramp e assets sandbox | Produção exige parceiro e enquadramento regulatório |
+| SendGrid/e-mail | Confirmações e recuperação | Opcional conforme fluxo habilitado |
+
+### Critérios De Produção
+
+Antes de tratar o produto como operação financeira em produção, estes pontos precisam estar fechados:
+
+- parceiro Pix/FX/off-ramp regulado e contrato operacional;
+- KYC/KYB e screening adequados ao país do usuário;
+- limites por usuário, operação, dia e destino;
+- rotina de monitoramento, alerta e revisão manual;
+- reconciliação entre banco, provedor, Stellar e banco de dados;
+- política de chargeback/refund/erro operacional;
+- signer seguro, segregação de chaves e plano de recuperação;
+- termos, política de privacidade e disclosure de risco;
+- observabilidade com correlação entre `request_id`, sessão, operação e hash.
+
+### Métricas Que Importam
+
+Métricas de negócio:
+
+- volume convertido;
+- número de usuários ativos por canal;
+- taxa de conclusão de Pix, conversão e pagamento;
+- economia estimada entregue ao usuário;
+- receita por operação;
+- recorrência por usuário.
+
+Métricas técnicas:
+
+- erro por fluxo e por provedor;
+- tempo de cotação;
+- tempo até confirmação;
+- tempo até submit/settlement;
+- falhas de idempotência;
+- divergência de saldo;
+- taxa de links expirados ou usados duas vezes.
+
+### O Que Este Repo Não Deve Prometer Ainda
+
+Este repositório não deve ser apresentado como:
+
+- banco;
+- conta global regulada pronta;
+- remessa internacional irrestrita;
+- custodiante Mainnet sem controles adicionais;
+- substituto de compliance, KYC, parceiro Pix/FX ou parecer jurídico.
+
+O posicionamento correto é: produto full-stack vivo, com UX real e infraestrutura de conversão/pagamento em validação, pronto para evoluir para piloto regulado com parceiros.
+
 ## Resumo
 
 TalkToStellar está construindo uma rota conversacional BRL -> USD para o Brasil.
