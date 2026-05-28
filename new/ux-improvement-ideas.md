@@ -69,7 +69,7 @@ Melhoria:
 - Real/Reais para `TESOURO`;
 - Dolares para `USDC`;
 - Opcao Mexico em teste para `CETES` ate existir lastro/autorizacao real;
-- ocultar `XLM` em fluxo normal, mostrar apenas se for necessario como saldo operacional;
+- mostrar `XLM` como XLM quando esse saldo aparecer; nao usar rotulos paralelos para o usuario final;
 - nunca mostrar issuer, vault, trustline, XDR ou contrato na UX principal; DeFindex pode aparecer apenas como fonte do APY estimado/disclosure.
 
 Validacao:
