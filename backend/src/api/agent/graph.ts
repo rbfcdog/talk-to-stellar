@@ -149,20 +149,39 @@ export class AgentGraph {
     return hasSavingsCore && isKnownTemplate;
   }
 
-  private sanitizeAssistantResponse(content: string): string {
+  private sanitizeUserFacingTechnicalTerms(content: string, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    const yieldReplacement = language === 'en' ? 'investments' : 'dinheiro rendendo';
+    const reviewReplacement = language === 'en' ? 'investment review' : 'revisão de aplicação';
+
+    return String(content || '')
+      .split('\n')
+      .map((line) => {
+        if (/https?:\/\//i.test(line)) return line;
+        return line
+          .replace(/\bquero\s+ver\s+(?:o\s+)?yield\b/gi, language === 'en' ? 'I want to see investments' : 'quero ver dinheiro rendendo')
+          .replace(/\bver\s+(?:o\s+)?yield\b/gi, language === 'en' ? 'see investments' : 'ver dinheiro rendendo')
+          .replace(/\byield\s+options\b/gi, language === 'en' ? 'investment options' : 'opções de aplicação')
+          .replace(/\byield\s+review\b/gi, reviewReplacement)
+          .replace(/\byield\b/gi, yieldReplacement);
+      })
+      .join('\n');
+  }
+
+  private sanitizeAssistantResponse(content: string, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const linkSafe = this.sanitizeAssistantLinks(content);
-    if (this.isApprovedRichWhatsappMessage(linkSafe)) {
-      return linkSafe;
+    const productSafe = this.sanitizeUserFacingTechnicalTerms(linkSafe, language);
+    if (this.isApprovedRichWhatsappMessage(productSafe)) {
+      return productSafe;
     }
 
-    return linkSafe
+    return productSafe
       .replace(/[\u2705\u2713\u26A0\u2B07\uFE0F]/g, '')
       .replace(/\p{Extended_Pictographic}/gu, '')
       .trim();
   }
 
   private async saveAssistantResponse(state: AgentState): Promise<void> {
-    state.response_message = this.sanitizeAssistantResponse(state.response_message);
+    state.response_message = this.sanitizeAssistantResponse(state.response_message, this.getLanguage(state));
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
   }
 
@@ -2528,12 +2547,13 @@ export class AgentGraph {
       '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico test option in testnet and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- Mini-menus must stay short: at most 5 actions, no technical terms, and no second welcome block if the user already received a login/onboarding completion message.',
+      '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "dinheiro rendendo", "aplicação", "investimento" or "revisão de aplicação"; in English say "investments" or "investment review".',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
       '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',
       '## YIELD UX',
       '- For application/review intents, use yield tools instead of free text.',
-      '- User-facing copy for this flow must say revisão, aplicação, posição, dollars, CETES/opção México, or reais. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
+      '- User-facing copy for this flow must say revisão, aplicação, investimento, dinheiro rendendo, posição, dollars, CETES/opção México, or reais. Never use the word "yield" in user-facing text. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
       '- Use get_yield_options for available currencies, get_yield_balance for current reviewed balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "review", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- For complete lifecycle requests like "injetar dinheiro, revisar e sair", "ciclo completo", or "add, review, withdraw", use open_money_cycle so the user gets one consolidated interface.',
@@ -4650,7 +4670,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       ];
 
       const response = await this.llm.invoke(messages);
-      return this.sanitizeAssistantResponse(response.content as string);
+      return this.sanitizeAssistantResponse(response.content as string, language);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Fallback response generation failed: ${errorMessage}`);
