@@ -64,6 +64,24 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('ciclo completo');
   });
 
+  it('routes simple greetings to the full compact capability guide', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Posso ajudar com:\n1. Saldo e conta\n2. PIX\n3. Link de pagamento\n4. Aplicações\n5. Histórico',
+    }));
+
+    const result = await graph.processInput(createState('opa'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Link de pagamento');
+    expect(result.response_message).toContain('Aplicações');
+    expect(result.response_message).toContain('Histórico');
+  });
+
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');

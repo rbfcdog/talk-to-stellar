@@ -545,6 +545,7 @@ export class AgentGraph {
     return (
       normalized === 'ajuda' ||
       normalized === 'help' ||
+      normalized === 'menu' ||
       normalized.includes('principais comandos') ||
       normalized.includes('comandos disponiveis') ||
       normalized.includes('o que voce faz') ||
@@ -557,6 +558,15 @@ export class AgentGraph {
       normalized.includes('mostrar comandos') ||
       normalized.includes('mostre os comandos')
     );
+  }
+
+  private isSimpleGreetingRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/^\/+/, '')
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|fala|hello|hi|hey|start|menu)$/.test(normalized);
   }
 
   private assetCodeFromTextToken(value?: string): string {
@@ -2546,7 +2556,7 @@ export class AgentGraph {
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
       '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico test option in testnet and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
-      '- For first greetings, keep the mini-menu short. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use get_intent_help and show the compact full capability list.',
+      '- For first greetings, use get_intent_help and show the compact full capability list. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same compact full capability list.',
       '- Mini-menus must use no technical terms and no second welcome block if the user already received a login/onboarding completion message.',
       '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "dinheiro rendendo", "aplicação", "investimento" or "revisão de aplicação"; in English say "investments" or "investment review".',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
@@ -4402,6 +4412,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
+      const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
@@ -4426,7 +4437,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             ? IntentType.PAYMENT_LINK
             : wantsReceiptImage
               ? IntentType.HISTORY
-              : wantsIntentHelp
+              : wantsIntentHelp || wantsGreetingHelp
                 ? IntentType.GENERAL
                 : wantsRampHistory
                   ? IntentType.FINANCIAL_MEMORY
@@ -4503,7 +4514,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleReceiptImageRequest(state);
       }
 
-      if (wantsIntentHelp) {
+      if (wantsIntentHelp || wantsGreetingHelp) {
         return await this.handleIntentHelpRequest(state);
       }
 
