@@ -874,7 +874,7 @@ function unsafeSameSymbolConversionRatio(input: {
   }
 
   const ratio = destinationAmount / sourceAmount;
-  const minimumRatio = Math.max(0.01, Number(process.env.DEFINDEX_MIN_SAME_ASSET_CONVERSION_RATIO || 0.8));
+  const minimumRatio = Math.max(0.01, Number(process.env.DEFINDEX_MIN_SAME_ASSET_CONVERSION_RATIO || 0.98));
   return ratio < minimumRatio ? ratio : null;
 }
 
@@ -4607,6 +4607,32 @@ export class AnchorService {
       const destinationMin = coalesceString(conversion.destination_min);
       if (!sourceAsset || !destinationAsset || !destinationAmount || (!destinationMin && !sourceMax)) {
         throw apiError('A revisao precisa ser preparada novamente antes da confirmacao.', 409, 'review_not_prepared');
+      }
+      const unsafeRatio = unsafeSameSymbolConversionRatio({
+        sourceAsset,
+        destinationAsset,
+        sourceAmount,
+        destinationAmount,
+      });
+      if (unsafeRatio !== null) {
+        logDefindex('warn', 'execute_vault_asset_conversion_unsafe', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          action,
+          amount,
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          source_amount: sourceAmount,
+          destination_amount: destinationAmount,
+          same_symbol_ratio: unsafeRatio,
+        });
+        throw apiError(
+          'A conversao automatica entre duas emissoes desta moeda esta distorcida neste testnet. A confirmacao foi bloqueada para evitar perda de valor.',
+          409,
+          'yield_asset_conversion_unavailable',
+        );
       }
       const signingSecret = await readSigningSecret();
       logDefindex('info', 'execute_vault_asset_conversion_start', {
