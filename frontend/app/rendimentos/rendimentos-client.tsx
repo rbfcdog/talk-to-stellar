@@ -349,7 +349,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.");
   }
   if (code === "yield_asset_incompatible") {
-    return localCopy(language, "Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde um vault compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible vault.");
+    return localCopy(language, "Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.");
   }
   if (code === "yield_asset_conversion_required") {
     return localCopy(language, "Revisão preparada. Esta aplicação usa uma versão diferente da moeda neste testnet; falta saldo nessa versão antes de confirmar.", "Review prepared. This application uses a different testnet asset version; that version still needs balance before confirmation.");
@@ -478,7 +478,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const selectedOption = useMemo(() => {
     return options.find((item) => optionCode(item) === selectedCode) || null;
   }, [options, selectedCode]);
-  const actionableOption = selectedOption || bestOption;
+  const actionableOption = selectedOption;
   const configured = Boolean(yieldStatus?.runtime?.configured);
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
   const complianceApproved = Boolean(yieldStatus?.runtime?.compliance_approved);
@@ -490,7 +490,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const bestOptionCode = optionCode(bestOption);
   const actionableOptionCode = optionCode(actionableOption);
   const selectedHasDirectOption = Boolean(selectedOption);
-  const selectedHasYield = Boolean(actionableOption);
+  const selectedHasYield = Boolean(selectedOption);
   const autoRouteToOption = Boolean(actionableOption && actionableOptionCode && actionableOptionCode !== safeSelectedCode);
   const sessionLoading = Boolean(session.loading && !session.checked);
   const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && Number(String(amount).replace(",", ".")) > 0);
@@ -500,6 +500,13 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     source_asset: safeSelectedCode,
     dest_asset: bestOptionCode,
     from: "yield",
+    lang: language,
+  }), [amount, bestOptionCode, safeSelectedCode, language]);
+  const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", {
+    amount,
+    source_asset: safeSelectedCode,
+    dest_asset: bestOptionCode || "USDC",
+    from: "review",
     lang: language,
   }), [amount, bestOptionCode, safeSelectedCode, language]);
   const chatPrompt = language === "pt-BR"
@@ -826,6 +833,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             onConfirm={confirmYield}
             onGoToWallet={() => setActiveStep("wallet")}
             convertToBestYieldHref={convertToBestYieldUrl}
+            convertAssetsHref={convertAssetsUrl}
             configured={configured}
           />
         </section>
@@ -996,14 +1004,21 @@ function AccountPanel({
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const balanceItems: BalanceLine[] = balances.length
-    ? balances
-    : authenticated && options.length
-      ? options.map((option) => ({
-        asset_code: optionCode(option),
-        balance: "0",
-      }))
-      : [];
+  const configuredOptionCodes = useMemo(() => new Set(options.map((option) => optionCode(option)).filter(Boolean)), [options]);
+  const balanceItems = useMemo(() => options.map((option) => {
+    const code = optionCode(option);
+    const balance = balances.find((item) => normalizeUiAssetCode(item.asset_code) === code);
+    return {
+      asset_code: code,
+      asset_issuer: balance?.asset_issuer,
+      balance: balance?.balance || "0",
+      option,
+    };
+  }), [balances, options]);
+  const balancesWithoutVault = useMemo(() => balances.filter((item) => {
+    const code = normalizeUiAssetCode(item.asset_code);
+    return code && !configuredOptionCodes.has(code) && normalizeDecimal(item.balance) > 0;
+  }), [balances, configuredOptionCodes]);
 
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
@@ -1017,7 +1032,7 @@ function AccountPanel({
             {sessionLoading
               ? L("Carregando sua conta.", "Loading your account.")
               : authenticated
-              ? L("Toque em uma moeda. Se precisar, a tela prepara a conversão automaticamente.", "Tap a currency. If needed, the screen prepares conversion automatically.")
+              ? L("Toque em uma moeda com opção ativa. Outros saldos podem ser convertidos antes de investir.", "Tap a currency with an active option. Other balances can be converted before investing.")
               : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
           </p>
         </div>
@@ -1036,7 +1051,7 @@ function AccountPanel({
           const code = normalizeUiAssetCode(item.asset_code);
           const profile = moneyProfile(code);
           const selected = code === selectedCode;
-          const option = options.find((candidate) => optionCode(candidate) === code);
+          const option = item.option;
           return (
             <button
               key={`${code}-${item.asset_issuer || "default"}`}
@@ -1073,6 +1088,24 @@ function AccountPanel({
           </div>
         )}
       </div>
+
+      {authenticated && balancesWithoutVault.length ? (
+        <div className="mt-4 border border-tts-border bg-tts-bg p-3 text-xs leading-5 text-tts-muted">
+          <p className="font-black text-tts-deep">{L("Outros saldos", "Other balances")}</p>
+          <p className="mt-1">
+            {L(
+              "Estes saldos não aparecem como aplicação porque ainda não têm opção ativa neste ambiente.",
+              "These balances do not appear as application options because they do not have an active option in this environment yet."
+            )}
+          </p>
+          <p className="mt-2 font-bold">
+            {balancesWithoutVault.map((item) => {
+              const code = normalizeUiAssetCode(item.asset_code);
+              return `${formatAmount(item.balance, language)} ${moneyProfile(code).short}`;
+            }).join(" · ")}
+          </p>
+        </div>
+      ) : null}
 
       {!authenticated && !sessionLoading ? (
         <a href="/login?next=/review" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
@@ -1118,6 +1151,7 @@ function YieldWorkspacePanel({
   onConfirm,
   onGoToWallet,
   convertToBestYieldHref,
+  convertAssetsHref,
   configured,
 }: {
   activeStep: "plan" | "review";
@@ -1154,20 +1188,20 @@ function YieldWorkspacePanel({
   onConfirm: () => void;
   onGoToWallet: () => void;
   convertToBestYieldHref: string;
+  convertAssetsHref: string;
   configured: boolean;
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const profileShort = selectedProfile.short;
-  const bestProfile = moneyProfile(bestOptionCode);
   const targetProfile = moneyProfile(optionCode(selectedOption));
   const selectedNeedsWalletConversion = Boolean(autoRouteToOption || selectedOption?.requires_wallet_asset_conversion || result?.conversion_required);
   const unavailableTitle = configured
     ? L("Sem opção ativa para revisar", "No active option to review")
     : L("Opções ainda sem configuração", "Options are not configured yet");
   const unavailableDescription = L(
-    "Esse saldo ainda não encontrou uma opção configurada. Quando houver rota disponível, a revisão prepara a conversão automaticamente antes do PIN.",
-    "This balance did not find a configured option yet. When a route is available, the review prepares the conversion automatically before PIN."
+    "Esse saldo ainda não tem opção ativa neste ambiente. Use a conversão para trocar por uma moeda disponível e depois volte para investir.",
+    "This balance has no active option in this environment. Use conversion to switch into an available currency, then return to invest."
   );
   const routeDescription = !selectedHasDirectOption && autoRouteToOption && selectedOption
     ? L(
@@ -1186,7 +1220,7 @@ function YieldWorkspacePanel({
   const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
     ? L("Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
     : blockedCode === "yield_asset_incompatible"
-      ? L("Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde um vault compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible vault.")
+      ? L("Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.")
       : blockedCode === "yield_asset_conversion_required"
         ? L("Revisão preparada. Falta saldo na versão da moeda usada por esta aplicação antes de confirmar.", "Review prepared. The asset version used by this application still needs balance before confirmation.")
         : blockedCode === "yield_asset_conversion_unavailable"
@@ -1280,7 +1314,14 @@ function YieldWorkspacePanel({
         <MiniStat label={L("Valor revisado", "Reviewed amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <a
+          href={convertAssetsHref}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 sm:w-auto"
+        >
+          <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
+          {L("Converter ativos", "Convert assets")}
+        </a>
         <button
           type="button"
           aria-expanded={returnsOpen}
@@ -1314,14 +1355,14 @@ function YieldWorkspacePanel({
           <p className="mt-1">
             {bestOption
               ? L(
-                  `Opção configurada para revisar: ${profileName(bestProfile, language)}.`,
-                  `Configured option to review: ${profileName(bestProfile, language)}.`
+                  `Moedas com opção ativa agora: ${options.map((option) => profileName(moneyProfile(optionCode(option)), language)).join(", ")}.`,
+                  `Currencies with active options now: ${options.map((option) => profileName(moneyProfile(optionCode(option)), language)).join(", ")}.`
                 )
               : L("Configure as opções no backend para ativar esta tela.", "Configure backend options to activate this screen.")}
           </p>
           {bestOption ? (
-            <a href={convertToBestYieldHref} className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
-              {L("Converter e revisar", "Convert and review")}
+            <a href={convertToBestYieldHref || convertAssetsHref} className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+              {L("Converter para opção ativa", "Convert to an active option")}
             </a>
           ) : null}
         </div>

@@ -83,13 +83,14 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
 const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
-const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES"];
+const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
 const FIAT_FORMAT_ASSETS = new Set(["BRL", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
   BRL: "R$",
   USDC: "US$",
   USD: "US$",
   CETES: "CETES",
+  XLM: "XLM",
 };
 const ASSET_ALIASES: Record<string, TargetAsset> = {
   TESOURO: "BRL",
@@ -122,6 +123,16 @@ function parseConfiguredAssetList(value: unknown): TargetAsset[] {
 
 function uniqueAssets(values: TargetAsset[]) {
   return Array.from(new Set(values.map((asset) => canonicalAssetCode(asset)).filter(Boolean)));
+}
+
+function buildAppPath(path: string, params: Record<string, unknown>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const text = String(value ?? "").trim();
+    if (text) search.set(key, text);
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 const CONFIGURED_TARGET_ASSETS = parseConfiguredAssetList(
@@ -901,6 +912,23 @@ export default function PixRampClient({
     ? formatRampAsset(feeAdjustedAutoPayAmount, feeAdjustedAutoPayAsset)
     : autoPayDisplayAmount;
   const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
+  const offRampInsufficientBalance = Boolean(rampMode === "offramp" && /saldo insuficiente|insufficient balance/i.test(error));
+  const offRampAlternativeAsset = useMemo(() => {
+    const candidates = ["USDC", "CETES", "XLM", "BRL"].filter((asset) => asset !== offRampInputAsset);
+    return candidates.find((asset) => sumVisibleBalance(offRampBalancesBefore, asset) > 0.0000001) || "";
+  }, [offRampBalancesBefore, offRampInputAsset]);
+  const offRampAlternativeBalance = offRampAlternativeAsset
+    ? sumVisibleBalance(offRampBalancesBefore, offRampAlternativeAsset)
+    : 0;
+  const offRampConversionHref = buildAppPath("/convert", {
+    amount: offRampInputValue,
+    source_asset: offRampAlternativeAsset || offRampInputAsset,
+    dest_asset: "BRL",
+    destination_pix_key: normalizedOffRampPixKey,
+    next: "pix-off",
+    from: "pix-off",
+    lang: language,
+  });
   const order = statusPayload?.transaction || orderPayload?.transaction;
   const operationId = String(orderPayload?.operation_id || "");
   const orderId = String(order?.id || "");
@@ -2169,6 +2197,7 @@ export default function PixRampClient({
       const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
       const sourceAssetCode = settlementAssetCode(offRampInputAsset);
       const balancesBefore = await fetchBalances(auth);
+      setOffRampBalancesBefore(balancesBefore);
       assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
       let previewPayload = offRampPreviewPayload;
       if (!previewPayload?.quote?.id || !getRampCustomerId(previewPayload)) {
@@ -2493,6 +2522,36 @@ export default function PixRampClient({
         {error && (
           <section className="mt-5 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
             <p>{error}</p>
+            {offRampInsufficientBalance && (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <a
+                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep transition hover:bg-tts-error/90"
+                  href={offRampConversionHref}
+                >
+                  {L("Converter ativos", "Convert assets")}
+                </a>
+                {offRampAlternativeAsset ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-10 items-center justify-center rounded-full border border-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-error transition hover:bg-tts-error/10"
+                    onClick={() => {
+                      const currentAmount = parseHumanAmount(offRampInputValue);
+                      const nextAmount = Number.isFinite(currentAmount) && currentAmount > 0
+                        ? Math.min(currentAmount, offRampAlternativeBalance)
+                        : offRampAlternativeBalance;
+                      setTargetAsset(offRampAlternativeAsset);
+                      setOffRampFiatAmount("");
+                      setOffRampAmount(formatApiAmount(nextAmount || offRampAlternativeBalance));
+                      setOffRampPreviewPayload(null);
+                      setTemporaryOffRampTestResult(null);
+                      setError("");
+                    }}
+                  >
+                    {L(`Usar ${offRampAlternativeAsset} nesta retirada`, `Use ${offRampAlternativeAsset} for this withdrawal`)}
+                  </button>
+                ) : null}
+              </div>
+            )}
             {rampMode === "onramp" && !orderId && !operationLocked && /conta pix|pix account/i.test(error) && (
               <button
                 className="mt-3 inline-flex rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep transition hover:bg-tts-error/90 disabled:opacity-50"

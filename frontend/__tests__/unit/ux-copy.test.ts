@@ -65,4 +65,16 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("final_asset: targetAsset");
     expect(text).not.toMatch(/(^|[^\w])source_asset_code:\s*offRampInputAsset/);
   });
+
+  it("keeps application options tied to configured vaults and gives recovery actions for PIX shortage", () => {
+    const reviewText = source("app/rendimentos/rendimentos-client.tsx");
+    const pixText = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(reviewText).toContain("const actionableOption = selectedOption;");
+    expect(reviewText).toContain("Converter ativos");
+    expect(reviewText).toContain("não têm opção ativa");
+    expect(pixText).toContain("offRampInsufficientBalance");
+    expect(pixText).toContain("Converter ativos");
+    expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
+  });
 });

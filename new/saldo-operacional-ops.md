@@ -1,108 +1,42 @@
-# OPS / saldo operacional
+# XLM e reserva tecnica da conta
 
-## Resumo
+Este documento substitui a nomenclatura antiga usada para XLM. A UX principal deve mostrar `XLM` como `XLM`, sem criar um nome paralelo para o usuario.
 
-`OPS` e `saldo operacional` significam o mesmo item na UX atual: uma pequena reserva em `XLM` usada para manter a conta funcionando.
+## Regra atual
 
-Nao e uma nova moeda, nao e rendimento, nao e real, nao e dolar e nao deve ser apresentado como investimento. E o saldo tecnico que a conta precisa para pagar pequenas tarifas de rede e manter margem operacional.
+`XLM` e o ativo usado pela conta para pequenas tarifas de rede e reserva minima. Ele nao e uma moeda nova, nao e real, nao e dolar e nao deve ser apresentado como aplicacao.
 
-Em termos de produto, pense nele como o minimo que uma conta precisa para continuar ativa e conseguir executar operacoes.
-
-## Como aparece hoje no codigo
-
-Na tela de rendimento/carteira, `XLM` e mostrado para a pessoa como:
+Quando aparecer para usuario final, use:
 
 ```text
-Nome: Saldo operacional
-Atalho: OPS
-Descricao: Usado pelo sistema para pequenas tarifas.
+XLM
 ```
 
-Referencia: `frontend/app/rendimentos/rendimentos-client.tsx`.
-
-No agente, quando a pessoa fala `saldo operacional`, `XLM`, `lumen` ou `lumens`, o pedido e normalizado para `XLM`.
-
-Referencia: `backend/src/api/agent/graph.ts`.
-
-## Por que isso existe
-
-A conta precisa de uma reserva pequena para:
-
-1. Pagar tarifas pequenas de operacao.
-2. Evitar que a pessoa converta todo o saldo tecnico e deixe a conta sem capacidade de operar.
-3. Manter margem para transacoes, trustlines e manutencao operacional.
-
-Hoje, quando o usuario pede para converter todo o saldo operacional, o backend preserva uma reserva de `1.6 XLM`. Se depois da reserva nao sobra valor disponivel, a resposta correta e: `Esse saldo fica reservado para manter sua conta operacional.`
-
-## Como explicar para usuario
-
-Use linguagem simples:
+Se precisar explicar:
 
 ```text
-Esse saldo mantem sua conta funcionando. Ele cobre pequenas tarifas e uma reserva de seguranca para que transferencias, conversoes e revisoes possam ser processadas.
+Parte do XLM pode ficar reservada para manter a conta funcionando e pagar pequenas tarifas de rede.
 ```
 
-Versao curta:
+## O que evitar
 
-```text
-Reservado para manter sua conta funcionando.
-```
+Evite na interface principal:
 
-Se a pessoa perguntar se pode sacar ou converter:
+- nomes paralelos para XLM;
+- jargoes como gas, reserve tecnica, issuer, trustline ou XDR;
+- sugerir zerar todo o XLM;
+- tratar XLM como opcao automaticamente aplicavel se nao houver vault configurado.
 
-```text
-Uma parte pode ser usada se houver saldo acima da reserva minima. Mantemos uma pequena reserva para a conta continuar funcionando.
-```
+## Comportamento esperado
 
-## O que evitar na UX
+1. Se houver vault XLM configurado, XLM pode aparecer como opcao de aplicacao.
+2. Se nao houver vault XLM configurado, XLM aparece apenas como saldo convertivel, respeitando a reserva minima.
+3. Ao converter XLM, o backend deve preservar a reserva minima necessaria para a conta continuar operando.
+4. Se a pessoa tentar usar todo o XLM e isso afetar a reserva, a UX deve explicar que uma parte precisa ficar na conta.
 
-Evite mostrar para usuario comum:
+## Flags internas
 
-```text
-gas
-crypto fee
-Stellar reserve
-minimum balance
-network reserve
-```
-
-Esses termos podem aparecer em tela avancada, suporte tecnico, logs ou documentacao interna, mas nao deveriam ser a explicacao principal.
-
-Tambem evite tratar `OPS` como:
-
-1. Uma moeda nova.
-2. Um asset de investimento.
-3. Uma opcao de rendimento.
-4. Um saldo em reais.
-5. Um saldo livre para zerar completamente.
-
-## Recomendacao de UX
-
-O rótulo `OPS` e curto, mas pode confundir. Para telas voltadas ao usuario final, preferir:
-
-```text
-Saldo operacional
-```
-
-ou, em espacos compactos:
-
-```text
-Operacional
-```
-
-Mostrar `OPS` apenas como detalhe tecnico ou em telas internas. Em telas simples, o ideal e deixar esse saldo separado dos saldos principais e explicar que ele fica reservado para funcionamento da conta.
-
-Comportamento recomendado:
-
-1. Nao incluir saldo operacional nas recomendacoes de rendimento.
-2. Nao sugerir usar esse saldo em rendimento.
-3. Ao converter XLM/OPS, manter reserva minima.
-4. Se houver excesso acima da reserva, permitir converter apenas o excesso.
-5. Se nao houver excesso, explicar que o saldo esta reservado.
-
-## Diferenca entre OPS e ops de mocks
-
-Existe outro uso de `ops` no codigo:
+Algumas flags de teste podem conter `ops` no nome por razoes historicas:
 
 ```text
 ALLOW_OPS_MOCKS
@@ -110,23 +44,4 @@ TTS_ALLOW_OPS_MOCKS
 ops_mocks_allowed
 ```
 
-Esse `ops` significa `operacoes internas` ou `modo operador/teste`. Nao tem relacao com saldo operacional do usuario.
-
-Resumo da diferenca:
-
-| Termo | Significado |
-| --- | --- |
-| `OPS` na carteira | XLM mostrado como saldo operacional do usuario |
-| `saldo operacional` | Reserva da conta para funcionar |
-| `ALLOW_OPS_MOCKS` | Flag interna para permitir mocks de operacao/teste |
-| `ops_mocks_allowed` | Estado interno dizendo se mocks operacionais estao liberados |
-
-## Decisao de produto
-
-Para usuario final, o conceito correto e:
-
-```text
-Saldo operacional = reserva tecnica para manter a conta funcionando.
-```
-
-Ele deve existir, mas nao deve competir visualmente com reais, dolares, CETES ou posicoes de rendimento. A UX ideal e mostrar esse saldo apenas quando for relevante para explicar por que nem todo valor pode ser convertido, sacado ou usado.
+Essas flags sao internas e nao devem virar texto visivel para usuario.
