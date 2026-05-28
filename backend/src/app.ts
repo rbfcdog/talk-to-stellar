@@ -18,6 +18,7 @@ import webhooksRouter from './api/routes/webhooks.router';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
+import { EvolutionService } from './api/services/evolution.service';
 import {
   buildCorsOptions,
   globalRateLimit,
@@ -89,6 +90,7 @@ app.use('/webhooks', webhooksRouter);
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
+EvolutionService.startWebhookAutoConfiguration();
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

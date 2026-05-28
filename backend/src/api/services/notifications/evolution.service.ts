@@ -34,6 +34,8 @@ type EvolutionSendTextOptions = {
 
 type EvolutionSendTextBodyVariant = 'v2' | 'v1' | 'hybrid';
 
+let webhookAutoConfigurationStarted = false;
+
 class EvolutionSendTextError extends Error {
   status?: number;
   body?: unknown;
@@ -203,6 +205,27 @@ function sendableEvolutionInstance(value: unknown): string {
     return configuredInstanceName() || raw;
   }
   return raw || configuredInstance();
+}
+
+function isEnvDisabled(value: unknown): boolean {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no';
+}
+
+function shouldAutoConfigureEvolutionWebhook(): boolean {
+  if (isEnvDisabled(process.env.EVOLUTION_AUTO_CONFIGURE_WEBHOOK)) return false;
+  if (process.env.NODE_ENV === 'test' && String(process.env.EVOLUTION_AUTO_CONFIGURE_WEBHOOK || '').trim() === '') return false;
+  return true;
+}
+
+function maskWebhookUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.searchParams.has('secret')) url.searchParams.set('secret', '***');
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function normalizeAgentResponse(payload: any): string {
@@ -714,6 +737,68 @@ export class EvolutionService {
       webhookUrl,
       response: body,
     };
+  }
+
+  static startWebhookAutoConfiguration(): void {
+    if (webhookAutoConfigurationStarted) return;
+    webhookAutoConfigurationStarted = true;
+
+    if (!shouldAutoConfigureEvolutionWebhook()) {
+      logger.info('[evolution-webhook] auto configuration disabled by env');
+      return;
+    }
+
+    const missing = [
+      evolutionBaseUrl() ? '' : 'EVOLUTION_API_URL',
+      evolutionApiKey() ? '' : 'EVOLUTION_API_KEY',
+      configuredInstance() ? '' : 'EVOLUTION_INSTANCE',
+      publicBackendBaseUrl() ? '' : 'PUBLIC_BACKEND_URL',
+    ].filter(Boolean);
+
+    if (missing.length > 0) {
+      logger.warn(`[evolution-webhook] auto configuration skipped; missing ${missing.join(', ')}`);
+      return;
+    }
+
+    const reconcileIntervalMs = clampNumber(
+      process.env.EVOLUTION_WEBHOOK_RECONCILE_INTERVAL_MS,
+      60000,
+      60000,
+      3600000
+    );
+    const initialDelayMs = clampNumber(
+      process.env.EVOLUTION_WEBHOOK_CONFIGURE_INITIAL_DELAY_MS,
+      2000,
+      0,
+      60000
+    );
+    let running = false;
+
+    const configure = async (reason: 'startup' | 'periodic') => {
+      if (running) return;
+      running = true;
+      try {
+        const result = await this.configureWebhook();
+        logger.info(
+          `[evolution-webhook] configured on ${reason}: instance=${configuredInstance()} url=${maskWebhookUrl(result.webhookUrl)}`
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[evolution-webhook] auto configuration failed on ${reason}: ${message}`);
+      } finally {
+        running = false;
+      }
+    };
+
+    const startupTimer = setTimeout(() => {
+      void configure('startup');
+    }, initialDelayMs);
+    startupTimer.unref?.();
+
+    const interval = setInterval(() => {
+      void configure('periodic');
+    }, reconcileIntervalMs);
+    interval.unref?.();
   }
 
   private static async sendTextOnce(input: {

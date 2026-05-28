@@ -64,6 +64,36 @@ describe('EvolutionService', () => {
     expect(EvolutionService.verifyWebhookSecret('expected-secret')).toBe(true);
   });
 
+  it('configures the Evolution incoming message webhook for the backend URL', async () => {
+    process.env.PUBLIC_BACKEND_URL = 'https://api.example.com';
+    process.env.EVOLUTION_WEBHOOK_SECRET = 'webhook-secret';
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url, init] = args;
+      expect(String(url)).toBe('http://evolution.local/webhook/set/main');
+      expect((init as RequestInit).method).toBe('POST');
+      expect((init as RequestInit).headers).toMatchObject({
+        'Content-Type': 'application/json',
+        apikey: 'evolution-key',
+      });
+      const body = JSON.parse(String((init as RequestInit).body || '{}'));
+      expect(body).toMatchObject({
+        enabled: true,
+        url: 'https://api.example.com/api/evolution/webhook?secret=webhook-secret',
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      });
+      return new Response(JSON.stringify({ webhook: { enabled: true } }), { status: 201 });
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.configureWebhook()).resolves.toEqual(expect.objectContaining({
+      success: true,
+      webhookUrl: 'https://api.example.com/api/evolution/webhook?secret=webhook-secret',
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('forwards incoming WhatsApp text to the agent query endpoint and sends the agent reply', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
