@@ -429,6 +429,14 @@ function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCo
   return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
 }
 
+function isInsufficientBalanceText(value: unknown) {
+  const normalized = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return /saldo insuficiente|insufficient balance|not enough balance|complete o saldo/.test(normalized);
+}
+
 function assertSufficientVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset, requestedValue: unknown) {
   const requested = parseHumanAmount(requestedValue);
   if (!Number.isFinite(requested) || requested <= 0) {
@@ -912,7 +920,7 @@ export default function PixRampClient({
     ? formatRampAsset(feeAdjustedAutoPayAmount, feeAdjustedAutoPayAsset)
     : autoPayDisplayAmount;
   const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
-  const offRampInsufficientBalance = Boolean(rampMode === "offramp" && /saldo insuficiente|insufficient balance/i.test(error));
+  const offRampInsufficientBalance = Boolean(rampMode === "offramp" && isInsufficientBalanceText(error));
   const offRampAlternativeAsset = useMemo(() => {
     const candidates = ["USDC", "CETES", "XLM", "BRL"].filter((asset) => asset !== offRampInputAsset);
     return candidates.find((asset) => sumVisibleBalance(offRampBalancesBefore, asset) > 0.0000001) || "";
@@ -922,7 +930,7 @@ export default function PixRampClient({
     : 0;
   const offRampConversionHref = buildAppPath("/convert", {
     amount: offRampInputValue,
-    source_asset: offRampAlternativeAsset || offRampInputAsset,
+    source_asset: offRampAlternativeAsset,
     dest_asset: "BRL",
     destination_pix_key: normalizedOffRampPixKey,
     next: "pix-off",
@@ -2528,7 +2536,7 @@ export default function PixRampClient({
                   className="inline-flex min-h-10 items-center justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-deep transition hover:bg-tts-error/90"
                   href={offRampConversionHref}
                 >
-                  {L("Converter ativos", "Convert assets")}
+                  {L("Converter outro ativo para R$", "Convert another asset to R$")}
                 </a>
                 {offRampAlternativeAsset ? (
                   <button
