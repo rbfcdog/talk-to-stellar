@@ -263,6 +263,7 @@ describe('Defindex yield transaction flows', () => {
   it('blocks confirmation when the source balance is not enough for automatic conversion', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    process.env.DEFINDEX_ALLOW_TESTNET_SAME_SYMBOL_CONVERSION = 'true';
     (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValueOnce({
       compatible: true,
       info: {
@@ -308,6 +309,55 @@ describe('Defindex yield transaction flows', () => {
       setup_required: false,
       conversion_required: true,
     });
+    expect(quoteSpy).not.toHaveBeenCalled();
+    expect(buildSpy).not.toHaveBeenCalled();
+  });
+
+  it('blocks same-symbol cross-issuer conversion by default before quoting', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValueOnce({
+      compatible: true,
+      info: {
+        asset_code: 'USDC',
+        asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+        asset_contract: DEFINDEX_TESTNET_USDC_CONTRACT,
+        source: 'vault_info',
+      },
+      configured_issuer: CIRCLE_TESTNET_USDC_ISSUER,
+      configured_contract: 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
+      hardcoded_asset_override: true,
+      requires_wallet_asset_conversion: true,
+      wallet_source_asset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+      vault_deposit_asset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
+    });
+    const trustlineSpy = jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline');
+    const balanceSpy = jest.spyOn(StellarService, 'getAccountBalance');
+    const quoteSpy = jest.spyOn(StellarService, 'quoteStrictSendConversion');
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'yield_asset_conversion_unavailable',
+      conversion_required: true,
+      asset_conversion: expect.objectContaining({
+        conversion_mode: 'blocked_same_symbol_issuer_conversion',
+        route_sane: false,
+      }),
+    });
+    expect(trustlineSpy).not.toHaveBeenCalled();
+    expect(balanceSpy).not.toHaveBeenCalled();
     expect(quoteSpy).not.toHaveBeenCalled();
     expect(buildSpy).not.toHaveBeenCalled();
   });
@@ -400,6 +450,7 @@ describe('Defindex yield transaction flows', () => {
   it('blocks distorted same-symbol testnet conversion before depositing into Defindex', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    process.env.DEFINDEX_ALLOW_TESTNET_SAME_SYMBOL_CONVERSION = 'true';
     process.env.DEFINDEX_CONVERSION_SETTLE_MS = '0';
     const signingSecret = `S${'B'.repeat(55)}`;
     (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValue({
@@ -474,6 +525,7 @@ describe('Defindex yield transaction flows', () => {
   it('converts to the hardcoded Defindex USDC before executing when the route is safe', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    process.env.DEFINDEX_ALLOW_TESTNET_SAME_SYMBOL_CONVERSION = 'true';
     process.env.DEFINDEX_CONVERSION_SETTLE_MS = '0';
     const signingSecret = `S${'B'.repeat(55)}`;
     (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValue({
