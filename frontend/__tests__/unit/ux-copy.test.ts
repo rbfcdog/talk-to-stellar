@@ -81,7 +81,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).not.toContain("Estes saldos não aparecem");
     expect(returnsPage).toContain('view="returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
-    expect(pixText).toContain("Converter ativos");
+    expect(pixText).toContain("Converter outro ativo para R$");
+    expect(pixText).toContain("source_asset: offRampAlternativeAsset");
+    expect(pixText).not.toContain("source_asset: offRampAlternativeAsset || offRampInputAsset");
     expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
   });
 });
