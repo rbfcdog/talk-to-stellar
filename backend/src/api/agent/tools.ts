@@ -114,7 +114,7 @@ async function maybeRepairInitialFundingSweep(input: any, publicKey: string, bal
       return {
         attempted: true,
         completed: false,
-        error: 'Conta sem chave operacional para preparar o saldo inicial automaticamente.',
+        error: 'Conta sem chave disponível para preparar o saldo inicial automaticamente.',
       };
     }
 

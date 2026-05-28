@@ -30,10 +30,14 @@ describe("UX copy guardrails", () => {
       "Plano de rendimento",
       "Aplicar saldo",
       "Taxa informada",
+      "Projeção 12m",
       "PIN ativo",
       "A consultar",
       "Sem conta",
       "APY",
+      "Saldo operacional",
+      "Operational balance",
+      "OPS",
     ];
 
     for (const phrase of forbidden) {
