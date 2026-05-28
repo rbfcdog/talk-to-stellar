@@ -1595,37 +1595,84 @@ export default class ExternalFinalizeController {
         });
 
         const usesStrictSend = Boolean(String(source_amount || '').trim());
-        const quote = usesStrictSend
-          ? await StellarService.quoteStrictSendConversion({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              sourceAmount: String(source_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            })
-          : await StellarService.quotePathPayment({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              destAmount: String(dest_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            });
+        let quote: any = null;
+        let unsignedXdr = '';
+        try {
+          logger.info(`[external-finalize] event=conversion_prepare_start ${JSON.stringify({
+            request_id: requestId || undefined,
+            token_hash: maskLogValue(tokenHash, 10, 6),
+            session_id: maskLogValue(session_id),
+            source_asset_code: sourceAssetCode,
+            dest_asset_code: destAssetCode,
+            source_amount: String(source_amount || ''),
+            dest_amount: String(dest_amount || ''),
+            mode: usesStrictSend ? 'strict_send' : 'strict_receive',
+          })}`);
 
-        const unsignedXdr = usesStrictSend
-          ? await StellarService.buildStrictSendConversionXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              sourceAmount: String(source_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            })
-          : await StellarService.buildPathPaymentXdr({
-              sourcePublicKey: wallet.public_key,
-              destination: wallet.public_key,
-              destAmount: String(dest_amount).trim(),
-              sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
-              destAsset: { code: destAssetCode, issuer: destAssetIssuer },
-            });
+          quote = usesStrictSend
+            ? await StellarService.quoteStrictSendConversion({
+                sourcePublicKey: wallet.public_key,
+                destination: wallet.public_key,
+                sourceAmount: String(source_amount).trim(),
+                sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+                destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+              })
+            : await StellarService.quotePathPayment({
+                sourcePublicKey: wallet.public_key,
+                destination: wallet.public_key,
+                destAmount: String(dest_amount).trim(),
+                sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+                destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+              });
+
+          unsignedXdr = usesStrictSend
+            ? await StellarService.buildStrictSendConversionXdr({
+                sourcePublicKey: wallet.public_key,
+                destination: wallet.public_key,
+                sourceAmount: String(source_amount).trim(),
+                sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+                destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+                quote,
+              })
+            : await StellarService.buildPathPaymentXdr({
+                sourcePublicKey: wallet.public_key,
+                destination: wallet.public_key,
+                destAmount: String(dest_amount).trim(),
+                sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
+                destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+              });
+
+          logger.info(`[external-finalize] event=conversion_prepare_success ${JSON.stringify({
+            request_id: requestId || undefined,
+            token_hash: maskLogValue(tokenHash, 10, 6),
+            session_id: maskLogValue(session_id),
+            source_asset_code: quote?.sourceAsset?.code || sourceAssetCode,
+            dest_asset_code: quote?.destinationAsset?.code || destAssetCode,
+            source_amount: quote?.sourceAmount,
+            destination_amount: quote?.destinationAmount,
+            mode: usesStrictSend ? 'strict_send' : 'strict_receive',
+          })}`);
+        } catch (error: any) {
+          logger.warn(`[external-finalize] event=conversion_prepare_failed ${JSON.stringify({
+            request_id: requestId || undefined,
+            token_hash: maskLogValue(tokenHash, 10, 6),
+            session_id: maskLogValue(session_id),
+            source_asset_code: sourceAssetCode,
+            dest_asset_code: destAssetCode,
+            source_amount: String(source_amount || ''),
+            dest_amount: String(dest_amount || ''),
+            mode: usesStrictSend ? 'strict_send' : 'strict_receive',
+            code: publicErrorCode(error),
+            error: error?.message || String(error),
+          })}`);
+          return res.status(400).json({
+            ...publicErrorPayload(error, {
+              includeSupportCode: true,
+              fallback: 'Não consegui preparar essa conversão agora. Gere uma nova revisão e tente novamente.',
+            }),
+            ...(requestId ? { request_id: requestId } : {}),
+          });
+        }
 
         const secretKey = await vaultService.getSecret(String(wallet.vault_secret_id));
         const reservation = await reservePaymentTokenForExecution(tokenHash);
@@ -1713,6 +1760,17 @@ export default class ExternalFinalizeController {
         );
 
         if (!result.success) {
+          logger.warn(`[external-finalize] event=conversion_submit_failed ${JSON.stringify({
+            request_id: requestId || undefined,
+            token_hash: maskLogValue(tokenHash, 10, 6),
+            session_id: maskLogValue(session_id),
+            source_asset_code: quote?.sourceAsset?.code || sourceAssetCode,
+            dest_asset_code: quote?.destinationAsset?.code || destAssetCode,
+            source_amount: quote?.sourceAmount,
+            destination_amount: quote?.destinationAmount,
+            code: publicErrorCode(result.error || 'Could not submit conversion'),
+            error: result.error || 'Could not submit conversion',
+          })}`);
           await updatePaymentTokenStatus(
             tokenHash,
             undefined,
@@ -1750,8 +1808,11 @@ export default class ExternalFinalizeController {
           );
 
           return res.status(400).json({
-            success: false,
-            message: publicErrorMessage(result.error || 'Could not submit conversion', 'Não consegui concluir essa conversão agora. Tente novamente em alguns segundos.'),
+            ...publicErrorPayload(result.error || 'Could not submit conversion', {
+              includeSupportCode: true,
+              fallback: 'Não consegui concluir essa conversão agora. Gere uma nova revisão e tente novamente.',
+            }),
+            ...(requestId ? { request_id: requestId } : {}),
           });
         }
 

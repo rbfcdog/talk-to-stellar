@@ -38,6 +38,20 @@ describe("UX copy guardrails", () => {
     expect(financialRouter).toContain("conversion-confirmation");
   });
 
+  it("keeps conversion confirmation inside the web app with visible errors", () => {
+    const text = source("app/confirm-conversion/confirm-conversion-client.tsx");
+
+    expect(text).toContain('buildActionUrl("/transactions"');
+    expect(text).toContain("Conversão não concluída");
+    expect(text).toContain("visibleSupportCode");
+    expect(text).toContain("O resultado é salvo no histórico da conta.");
+    expect(text).not.toContain("Voltar ao chat");
+    expect(text).not.toContain("Back to chat");
+    expect(text).not.toContain('buildActionUrl("/chat"');
+    expect(text).not.toContain("enqueueWebChatFeedback");
+    expect(text).not.toContain("chat recebe");
+  });
+
   it("does not bring back the confusing yield wording that was removed", () => {
     const text = source("app/rendimentos/rendimentos-client.tsx");
     const forbidden = [
