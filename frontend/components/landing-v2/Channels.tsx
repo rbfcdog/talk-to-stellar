@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { MessageCircle, Send } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
@@ -16,6 +17,10 @@ const CHANNELS: Channel[] = [
   { name: 'Chat web', status: 'active' },
   { name: 'Modo avançado', status: 'active' },
 ]
+
+const WHATSAPP_URL =
+  'https://wa.me/5519981808102?text=Oi%2C%20quero%20usar%20o%20TalkToStellar.'
+const TELEGRAM_URL = 'https://t.me/TalkToStellarTLBot'
 
 const DOT_GRID_STYLE: React.CSSProperties = {
   backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
@@ -66,6 +71,25 @@ export function Channels() {
             <ChannelPill key={channel.name} channel={channel} index={i} />
           ))}
         </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <ChannelAction
+            href={TELEGRAM_URL}
+            icon={<Send className="h-5 w-5" aria-hidden="true" />}
+            title="TalkToStellar Telegram Bot"
+            handle="@TalkToStellarTLBot"
+            body="Abra o bot no Telegram para pedir saldo, converter e confirmar operações em telas seguras."
+            cta="Abrir Telegram"
+          />
+          <ChannelAction
+            href={WHATSAPP_URL}
+            icon={<MessageCircle className="h-5 w-5" aria-hidden="true" />}
+            title="WhatsApp TalkToStellar"
+            handle="+55 19 98180-8102"
+            body="Chame no WhatsApp e continue pelo canal que você já usa, com links de revisão antes do PIN."
+            cta="Abrir WhatsApp"
+          />
+        </div>
       </div>
     </section>
   )
@@ -92,5 +116,52 @@ function ChannelPill({ channel, index }: { channel: Channel; index: number }) {
         {isActive ? 'Ativo' : 'Em breve'}
       </Badge>
     </motion.div>
+  )
+}
+
+function ChannelAction({
+  href,
+  icon,
+  title,
+  handle,
+  body,
+  cta,
+}: {
+  href: string
+  icon: React.ReactNode
+  title: string
+  handle: string
+  body: string
+  cta: string
+}) {
+  return (
+    <motion.a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className="group grid min-h-[180px] gap-5 rounded-lg border border-white/10 bg-white/[0.06] p-5 transition hover:border-tts-gold/60 hover:bg-white/[0.09] md:grid-cols-[1fr_auto]"
+    >
+      <span className="flex flex-col gap-3">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-tts-gold-lt">
+          {icon}
+        </span>
+        <span>
+          <span className="block text-lg font-black text-white">{title}</span>
+          <span className="mt-1 block font-mono-financial text-xs font-bold text-tts-gold-lt">
+            {handle}
+          </span>
+        </span>
+        <span className="block max-w-lg text-sm leading-6 text-white/50">
+          {body}
+        </span>
+      </span>
+      <span className="inline-flex h-11 items-center justify-center self-end rounded-lg bg-tts-gold px-4 text-sm font-black text-tts-deep transition group-hover:bg-tts-gold-lt">
+        {cta}
+      </span>
+    </motion.a>
   )
 }
