@@ -245,11 +245,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const sameAsset = sourceCode === destCode;
   const primaryLabel = L("Calcular e revisar", "Calculate and review");
-  const routeTitle = L("Conversão interna", "Internal conversion");
-  const routeDescription = L(
-    "Ao continuar, o backend calcula a rota real e mostra a revisão nesta página. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
-    "When you continue, the backend calculates the live route and shows the review on this page. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
-  );
+  const routeTitle = L("Revisar conversão", "Review conversion");
+  const routeDescription = L("Cotação, taxas e PIN aparecem aqui.", "Quote, fees, and PIN appear here.");
   const destinationValue = L("Calculado na revisão", "Calculated in review");
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
@@ -311,13 +308,10 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               {L("Conversão", "Conversion")}
             </div>
             <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
-              {L("Trocar saldo sem surpresa", "Convert without surprises")}
+              {L("Converter", "Convert")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
-              {L(
-                "Escolha origem, destino e valor. Esta tela não estima câmbio localmente; a cotação real aparece na revisão ou no PIX antes do PIN.",
-                "Choose source, destination, and amount. This screen does not estimate FX locally; the live quote appears in review or PIX before PIN."
-              )}
+              {L("Escolha origem, destino e valor. O PIN vem depois da revisão.", "Choose source, destination, and amount. PIN comes after review.")}
             </p>
           </div>
           <div className="md:min-w-[180px]">
@@ -348,9 +342,6 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
               {L("Sua conta", "Your account")}
             </h2>
-            <p className="mt-2 text-sm leading-6 text-tts-muted">
-              {L("Use os saldos da conta conectada. R$ aparece sempre como reais; a rota real é preparada antes do PIN.", "Use balances from the connected account. R$ always appears as reais; the live route is prepared before PIN.")}
-            </p>
             <AccountStatusCard
               state={accountStatus === "loading" ? "loading" : session.authenticated ? "connected" : "signed-out"}
               ctaHref="/login?next=/convert"
@@ -371,11 +362,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               <div>
                 <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                   <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-                  {L("Montar conversão", "Set up conversion")}
+                  {L("Valor", "Amount")}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-tts-muted">
-                  {L("Informe quanto sai da moeda de origem. O valor de destino é calculado na próxima etapa.", "Enter how much leaves the source currency. The destination amount is calculated in the next step.")}
-                </p>
               </div>
               <button
                 type="button"

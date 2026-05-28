@@ -8,7 +8,6 @@ import {
   ArrowUpFromLine,
   BadgeCheck,
   BarChart3,
-  BookOpen,
   CheckCircle2,
   Coins,
   FileCheck2,
@@ -16,7 +15,6 @@ import {
   LockKeyhole,
   PiggyBank,
   RefreshCw,
-  SlidersHorizontal,
   TrendingUp,
   WalletCards,
 } from "lucide-react";
@@ -274,14 +272,6 @@ function optionCode(option?: YieldOption | null) {
   return String(option?.display_asset_code || option?.asset_code || "").trim().toUpperCase();
 }
 
-function optionTitle(option: YieldOption | null | undefined, language: AppLanguage) {
-  const profile = moneyProfile(optionCode(option));
-  if (profile.short === "BRL") return localCopy(language, "Reserva em reais", "Reais reserve");
-  if (profile.short === "USD") return localCopy(language, "Reserva em dólares", "Dollar reserve");
-  if (profile.short === "EUR") return localCopy(language, "Reserva em euros", "Euro reserve");
-  return profileName(profile, language);
-}
-
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   const parsed = Number(String(value || "0").replace(",", "."));
   if (!Number.isFinite(parsed)) return String(value || "0");
@@ -289,12 +279,6 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
     minimumFractionDigits: parsed > 0 && parsed < 1 ? 4 : 2,
     maximumFractionDigits: 7,
   }).format(parsed);
-}
-
-function optionRateText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
-  if (!option) return localCopy(language, "Não disponível", "Unavailable");
-  if (option.execution_available === false) return localCopy(language, "Bloqueada neste testnet", "Blocked in this testnet");
-  return localCopy(language, "Opção disponível", "Available option");
 }
 
 function optionExecutionBlocked(option: YieldOption | null | undefined) {
@@ -306,13 +290,6 @@ function formatReturnPercent(value: unknown, language: AppLanguage = "pt-BR") {
   const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
   if (!Number.isFinite(parsed)) return localCopy(language, "Indisponível", "Unavailable");
   return `${parsed.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
-}
-
-function optionReturnRate(option?: YieldOption | null) {
-  const raw = option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy;
-  const parsed = Number(String(Array.isArray(raw) ? raw[0] : raw || "").replace("%", "").replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return parsed / 100;
 }
 
 function optionReturnText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
@@ -353,23 +330,6 @@ function buildMoneyUrl(path: string, params: Record<string, unknown>) {
   }
   const query = search.toString();
   return query ? `${path}?${query}` : path;
-}
-
-function buildReturnChartData(amount: string, annualRate: number | null, language: AppLanguage) {
-  const principal = normalizeDecimal(amount);
-  const monthlyRate = annualRate === null ? 0 : annualRate / 12;
-  return Array.from({ length: 13 }, (_, month) => {
-    const projected = principal * Math.pow(1 + monthlyRate, month);
-    const earned = Math.max(0, projected - principal);
-    return {
-      month,
-      label: month === 0
-        ? localCopy(language, "Hoje", "Today")
-        : localCopy(language, `${month}m`, `${month}m`),
-      balance: Number(projected.toFixed(2)),
-      earned: Number(earned.toFixed(2)),
-    };
-  });
 }
 
 function sanitizeUiError(error: unknown, language: AppLanguage) {
@@ -511,7 +471,6 @@ export default function RendimentosClient({
   const [amount, setAmount] = useState("100");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
   const [activeStep, setActiveStep] = useState<YieldStep>("wallet");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
@@ -882,13 +841,10 @@ export default function RendimentosClient({
         <header className="flex flex-col gap-4 border-b border-tts-border pb-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="max-w-2xl text-2xl font-black tracking-tight text-tts-deep md:text-3xl">
-              {L("Aplicação", "Application")}
+              {L("Aplicar", "Apply")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-              {L(
-                "Escolha um saldo, informe o valor e revise antes do PIN. Se a opção usar outra emissão no testnet, o app só confirma quando houver uma rota segura.",
-                "Choose a balance, enter the amount, and review before PIN. If the option uses another testnet issuance, the app only confirms when a safe route exists."
-              )}
+              {L("Escolha moeda, valor e confirme com PIN.", "Choose currency, amount, and confirm with PIN.")}
             </p>
           </div>
 
@@ -898,16 +854,8 @@ export default function RendimentosClient({
               className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               <BarChart3 className="h-4 w-4" aria-hidden="true" />
-              {L("Investimentos atuais", "Current investments")}
+              {L("Posições", "Positions")}
             </a>
-            <button
-              type="button"
-              onClick={() => setShowTutorial((current) => !current)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-            >
-              <BookOpen className="h-4 w-4" aria-hidden="true" />
-              {showTutorial ? L("Ocultar guia", "Hide guide") : L("Como usar", "How to use")}
-            </button>
             <button
               type="button"
               onClick={refreshDashboard}
@@ -969,16 +917,6 @@ export default function RendimentosClient({
           executionBlockedReason={executionBlockedReason}
         />
 
-        {showTutorial ? (
-          <YieldTutorialPanel
-            hasOptions={options.length > 0}
-            authenticated={session.authenticated}
-            confirmationEnabled={confirmationEnabled}
-            isTestnet={isTestnetYield}
-            bestOption={bestOption}
-          />
-        ) : null}
-
         <section className="grid gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.4fr)]">
           <AccountPanel
             authenticated={session.authenticated}
@@ -1019,7 +957,6 @@ export default function RendimentosClient({
             confirmationEnabled={confirmationEnabled}
             apiLoading={apiState.loading}
             advancedOpen={advancedOpen}
-            onAdvancedOpenChange={setAdvancedOpen}
             variationBps={variationBps}
             onVariationBpsChange={setVariationBps}
             pin={pin}
@@ -1164,123 +1101,19 @@ function YieldComplianceNotice({
   const blocked = executionBlockedReason && !confirmationEnabled;
 
   return (
-    <section className="border border-tts-gold bg-tts-gold-bg p-3 text-sm leading-6" aria-label={L("Aviso de revisão", "Review notice")}>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <section className="border border-tts-border bg-tts-surface px-3 py-2 text-xs leading-5" aria-label={L("Aviso", "Notice")}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2 text-tts-muted">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-gold" aria-hidden="true" />
           <span>
-            {L(
-              "Somente revisão. Não é garantia nem depósito bancário.",
-              "Review only. Not guaranteed and not a bank deposit."
-            )}
-            {isTestnet ? ` ${L("Testnet.", "Testnet.")}` : ""}
-            {blocked ? ` ${L("Bloqueio atual", "Current block")}: ${executionBlockedReason}` : ""}
+            {isTestnet ? `${L("Testnet", "Testnet")} · ` : ""}
+            {L("sem garantia nem depósito bancário", "not guaranteed or a bank deposit")}
+            {blocked ? ` · ${executionBlockedReason}` : ""}
           </span>
         </p>
-        <span className={`inline-flex w-fit shrink-0 border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${complianceApproved ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-bg text-tts-gold"}`}>
+        <span className={`inline-flex w-fit shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${complianceApproved ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-bg text-tts-gold"}`}>
           {modeLabel}
         </span>
-      </div>
-    </section>
-  );
-}
-
-function YieldTutorialPanel({
-  hasOptions,
-  authenticated,
-  confirmationEnabled,
-  isTestnet,
-  bestOption,
-}: {
-  hasOptions: boolean;
-  authenticated: boolean;
-  confirmationEnabled: boolean;
-  isTestnet: boolean;
-  bestOption: YieldOption | null;
-}) {
-  const { language } = useLanguage();
-  const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const bestProfile = moneyProfile(optionCode(bestOption));
-  const steps = [
-    {
-      title: L("1. Conta", "1. Account"),
-      body: authenticated
-        ? L(
-            "A tela usa a conta conectada para buscar saldos disponíveis e posições já abertas. Você escolhe o saldo de origem antes de qualquer simulação.",
-            "The screen uses the connected account to load available balances and existing positions. You choose the source balance before any preview."
-          )
-        : L(
-            "Entre na conta para carregar saldos, posição e limites de revisão. Sem login, nada é preparado para confirmação.",
-            "Sign in to load balances, position, and review limits. Without sign-in, nothing is prepared for confirmation."
-          ),
-      ready: authenticated,
-    },
-    {
-      title: L("2. Simulação", "2. Preview"),
-      body: hasOptions
-        ? L(
-            `Opção disponível: ${profileName(bestProfile, language)}. Ela aparece porque já tem configuração para revisar a operação.`,
-            `Available option: ${profileName(bestProfile, language)}. It appears because it is configured for operation review.`
-          )
-        : L(
-            "Ainda não há opção configurada. A tela continua segura para consulta, mas não prepara operação até existir uma opção ativa.",
-            "No option is configured yet. The screen remains safe for viewing, but it will not prepare an operation until an active option exists."
-          ),
-      ready: hasOptions,
-    },
-    {
-      title: L("3. Revisão", "3. Review"),
-      body: confirmationEnabled
-        ? L(
-            "Depois da simulação, a revisão mostra operação e valor. Só o botão final com PIN movimenta saldo.",
-            "After the preview, the review shows operation and amount. Only the final PIN button moves balance."
-          )
-        : L(
-            "Modo revisão: você testa valor e operação sem movimentar saldo. Execução real fica bloqueada até aprovação de compliance.",
-            "Review mode: you test amount and operation without moving balance. Real execution stays blocked until compliance approval."
-          ),
-      ready: confirmationEnabled,
-    },
-  ];
-
-  return (
-    <section className="border border-tts-confirm bg-tts-confirm/10 p-5" aria-label={L("Primeiros passos", "First steps")}>
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
-            <BookOpen className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Como funciona", "How it works")}
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-            {L(
-              "Use de cima para baixo: confirme a conta, escolha um saldo, simule o valor e monte a revisão. O PIN fica no fim para evitar confirmação acidental.",
-              "Use it top to bottom: confirm the account, choose a balance, preview the amount, and build the review. PIN stays at the end to avoid accidental confirmation."
-            )}
-          </p>
-          {isTestnet ? (
-            <p className="mt-2 text-xs font-bold text-tts-muted">
-              {L("Como está em testnet, estes números servem para validar a experiência, não para decisão financeira real.", "Because this is testnet, these numbers validate the experience, not real financial decisions.")}
-            </p>
-          ) : null}
-        </div>
-        <a
-          href="#yield-plan"
-          className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
-        >
-          <PiggyBank className="h-4 w-4" aria-hidden="true" />
-          {L("Começar revisão", "Start review")}
-        </a>
-      </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        {steps.map((step) => (
-          <div key={step.title} className={`border p-4 ${step.ready ? "border-tts-confirm bg-tts-bg" : "border-tts-gold bg-tts-gold-bg"}`}>
-            <div className="flex items-center gap-2">
-              {step.ready ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4 text-tts-gold" aria-hidden="true" />}
-              <h3 className="text-sm font-black text-tts-deep">{step.title}</h3>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-tts-muted">{step.body}</p>
-          </div>
-        ))}
       </div>
     </section>
   );
@@ -1319,20 +1152,13 @@ function AccountPanel({
   }), [balances, options]);
 
   return (
-    <section className="border border-tts-border bg-tts-surface p-5">
+    <section className="border border-tts-border bg-tts-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-            {L("Escolha o saldo", "Choose balance")}
+            {L("Conta", "Account")}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-tts-muted">
-            {sessionLoading
-              ? L("Carregando sua conta.", "Loading your account.")
-              : authenticated
-              ? L("Toque em uma moeda com opção ativa.", "Tap a currency with an active option.")
-              : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
-          </p>
         </div>
       </div>
 
@@ -1349,27 +1175,18 @@ function AccountPanel({
           const code = normalizeUiAssetCode(item.asset_code);
           const profile = moneyProfile(code);
           const selected = code === selectedCode;
-          const option = item.option;
-          const blocked = optionExecutionBlocked(option);
           return (
             <button
               key={`${code}-${item.asset_issuer || "default"}`}
               type="button"
               onClick={() => onSelect(code)}
-              className={`grid min-h-20 grid-cols-[1fr_auto] items-center gap-3 border p-3 text-left transition ${selected ? blocked ? "border-tts-gold bg-tts-gold-bg" : "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
+              className={`grid min-h-16 grid-cols-[1fr_auto] items-center gap-3 border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
             >
               <span>
                 <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
                   {profile.short}
                 </span>
-                <span className="mt-2 block text-sm font-black text-tts-deep">{option ? optionTitle(option, language) : profileName(profile, language)}</span>
-                {option ? (
-                  <span className={`mt-1 block text-xs font-bold ${blocked ? "text-tts-gold" : "text-tts-confirm"}`}>
-                    {optionRateText(option, language)}
-                  </span>
-                ) : (
-                  <span className="mt-1 block text-xs text-tts-muted">{L("Conversão automática se houver rota", "Automatic conversion if a route exists")}</span>
-                )}
+                <span className="mt-2 block text-sm font-black text-tts-deep">{profileName(profile, language)}</span>
               </span>
               <span className="text-right">
                 <span className="block text-lg font-black text-tts-deep">{formatAmount(item.balance, language)}</span>
@@ -1422,7 +1239,6 @@ function YieldWorkspacePanel({
   confirmationEnabled,
   apiLoading,
   advancedOpen,
-  onAdvancedOpenChange,
   variationBps,
   onVariationBpsChange,
   pin,
@@ -1461,7 +1277,6 @@ function YieldWorkspacePanel({
   confirmationEnabled: boolean;
   apiLoading: boolean;
   advancedOpen: boolean;
-  onAdvancedOpenChange: (open: boolean) => void;
   variationBps: string;
   onVariationBpsChange: (value: string) => void;
   pin: string;
@@ -1485,10 +1300,7 @@ function YieldWorkspacePanel({
   const unavailableTitle = configured
     ? L("Sem opção ativa para revisar", "No active option to review")
     : L("Opções ainda sem configuração", "Options are not configured yet");
-  const unavailableDescription = L(
-    "Esse saldo ainda não tem opção ativa neste ambiente. Use a conversão para trocar por uma moeda disponível e depois volte para investir.",
-    "This balance has no active option in this environment. Use conversion to switch into an available currency, then return to invest."
-  );
+  const unavailableDescription = L("Sem opção ativa para esta moeda.", "No active option for this currency.");
   const routeDescription = selectedExecutionBlocked
     ? L(
         "Esta opção aceita outra emissão de dólar no ambiente de teste. Para investir saldo real de dólares, é preciso uma opção compatível com a mesma emissão da sua conta.",
@@ -1531,7 +1343,6 @@ function YieldWorkspacePanel({
       ? `${formatAmount(balanceForSelected.balance, language)} ${profileShort}`
       : L("Saldo não disponível", "Balance unavailable");
   const alternativeProfile = moneyProfile(alternativeConversionCode);
-  const optionAvailabilityLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const reviewAmountLabel = selectedOption ? `${formatAmount(amount || 0, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
     ? selectedExecutionBlocked ? L("Investir indisponível", "Invest unavailable") : L("Investir", "Invest")
@@ -1541,24 +1352,17 @@ function YieldWorkspacePanel({
     : action === "deposit"
       ? L("Confirmar investimento", "Confirm investment")
       : L("Confirmar retirada", "Confirm withdrawal");
-  const actionDescription = action === "deposit"
-    ? selectedExecutionBlocked
-      ? L("Esta opção está bloqueada para evitar que dólares reais sejam convertidos por uma rota testnet distorcida.", "This option is blocked to avoid sending real dollar balance through a distorted testnet route.")
-      : selectedNeedsWalletConversion
-      ? L("Confere a rota da moeda e só confirma se ela estiver segura. Nada sai sem PIN.", "Checks the asset route and only confirms when it is safe. Nothing moves without PIN.")
-      : L("Prepara o investimento na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares the investment into the selected option. In review mode, nothing leaves the account.")
-    : L("Prepara a retirada da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares withdrawal from the position back to available balance. In review mode, nothing leaves the account.");
   return (
     <section id="yield-plan" className="scroll-mt-6 border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <PiggyBank className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-            {L("Revisão de aplicação", "Application review")}
+            {activeStep === "review" ? L("Confirmar", "Confirm") : action === "deposit" ? L("Aplicar", "Apply") : L("Retirar", "Withdraw")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
-              ? routeDescription || L("Defina entrada ou saída, informe o valor e gere uma revisão. A confirmação fica separada para você conferir a operação e o impacto no saldo.", "Choose entry or exit, enter the amount, and generate a review. Confirmation stays separate so you can check the operation and balance impact.")
+              ? L("Informe o valor. O PIN vem só no final.", "Enter the amount. PIN comes only at the end.")
               : unavailableDescription}
           </p>
         </div>
@@ -1603,14 +1407,9 @@ function YieldWorkspacePanel({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <MiniStat label={L("Disponível", "Available")} value={accountBalanceLabel} detail={L("saldo da conta", "account balance")} />
-        <MiniStat
-          label={L("Opção", "Option")}
-          value={optionAvailabilityLabel}
-          detail={selectedExecutionBlocked ? L("não executa dinheiro real", "does not execute real balance") : L("disponível para revisão", "available for review")}
-        />
-        <MiniStat label={L("Valor revisado", "Reviewed amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
+        <MiniStat label={L("Valor", "Amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
       </div>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1637,15 +1436,15 @@ function YieldWorkspacePanel({
       {authenticated && selectedHasYield && selectedBalanceInsufficient ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-gold">
           <p className="font-black">
-            {L(`Saldo insuficiente em ${profileName(selectedProfile, language)}`, `Insufficient ${profileName(selectedProfile, language)} balance`)}
+            {L(`Falta saldo em ${profileName(selectedProfile, language)}`, `Not enough ${profileName(selectedProfile, language)}`)}
           </p>
           <p className="mt-1">
             {alternativeConversionCode
               ? L(
-                  `Você pode converter saldo em ${profileName(alternativeProfile, language)} para ${profileName(selectedProfile, language)} e voltar para revisar.`,
-                  `You can convert ${profileName(alternativeProfile, language)} balance to ${profileName(selectedProfile, language)} and return to review.`
+                  `Converta ${alternativeProfile.short} para ${selectedProfile.short} ou coloque via PIX.`,
+                  `Convert ${alternativeProfile.short} to ${selectedProfile.short} or add with PIX.`
                 )
-              : L("Abra a conversão para trocar outro ativo antes de revisar este valor.", "Open conversion to switch another asset before reviewing this amount.")}
+              : L("Converta outro ativo ou coloque via PIX.", "Convert another asset or add with PIX.")}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <a
@@ -1672,14 +1471,9 @@ function YieldWorkspacePanel({
       ) : null}
 
       {authenticated && selectedHasYield && routeDescription ? (
-        <div className={`mt-5 border p-4 text-sm leading-6 ${selectedExecutionBlocked ? "border-tts-gold bg-tts-gold-bg text-tts-gold" : "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"}`}>
-          <p className="font-black">
-            {selectedExecutionBlocked
-              ? L("Opção bloqueada para dinheiro real", "Option blocked for real balance")
-              : L("Rota checada antes da confirmação", "Route checked before confirmation")}
-          </p>
-          <p className="mt-1">{routeDescription}</p>
-        </div>
+        <p className={`mt-4 text-xs font-bold ${selectedExecutionBlocked ? "text-tts-gold" : "text-tts-muted"}`}>
+          {selectedExecutionBlocked ? L("Opção indisponível para confirmação.", "Option unavailable for confirmation.") : L("Rota segura checada antes do PIN.", "Safe route checked before PIN.")}
+        </p>
       ) : null}
 
       {authenticated && !selectedHasYield ? (
@@ -1723,7 +1517,6 @@ function YieldWorkspacePanel({
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface p-3">
               <p className="text-sm font-black text-tts-deep">{actionTitle}</p>
-              <p className="mt-1 text-xs leading-5 text-tts-muted">{actionDescription}</p>
             </div>
 
             <label className="mt-4 block text-sm font-black text-tts-deep" htmlFor="yield-amount">
@@ -1737,7 +1530,6 @@ function YieldWorkspacePanel({
                 onChange={(event) => onAmountChange(event.target.value.replace(/[^\d,.]/g, ""))}
                 inputMode="decimal"
                 className="min-h-12 flex-1 bg-transparent px-3 text-base font-bold text-tts-deep outline-none"
-                aria-describedby="yield-amount-help"
               />
             </div>
             <div className="mt-2 grid grid-cols-4 gap-2">
@@ -1752,20 +1544,6 @@ function YieldWorkspacePanel({
                 </button>
               ))}
             </div>
-            <p id="yield-amount-help" className="mt-2 text-xs leading-5 text-tts-muted">
-              {L("A revisão usa seus saldos da conta. Nada sai sem uma etapa de confirmação.", "Review uses your account balances. Nothing moves without a confirmation step.")}
-            </p>
-
-            <button
-              type="button"
-              aria-pressed={advancedOpen}
-              onClick={() => onAdvancedOpenChange(!advancedOpen)}
-              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border px-3 py-2 text-xs font-black text-tts-deep transition hover:border-tts-border2"
-            >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              {advancedOpen ? L("Ocultar ajustes", "Hide settings") : L("Ajustes", "Settings")}
-            </button>
-
             {advancedOpen ? (
               <div className="mt-4 border-t border-tts-border pt-4">
                 <label className="block text-sm font-black text-tts-deep" htmlFor="yield-variation">
@@ -1792,7 +1570,7 @@ function YieldWorkspacePanel({
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
-                {L("Preparar revisão", "Prepare review")}
+                {L("Revisar", "Review")}
               </button>
             </div>
           </div>
@@ -1803,21 +1581,13 @@ function YieldWorkspacePanel({
             <div className="border border-tts-border bg-tts-bg p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-black text-tts-deep">{L("Revisão segura", "Secure review")}</h3>
-                  <p className="mt-1 text-xs leading-5 text-tts-muted">
-                    {L("Confira a operação montada e o valor antes de qualquer confirmação.", "Check the assembled operation and amount before any confirmation.")}
-                  </p>
+                  <h3 className="text-base font-black text-tts-deep">{L("Revisão", "Review")}</h3>
                 </div>
                 <BadgeCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <MiniStat label={L("Operação", "Operation")} value={actionTitle} />
                 <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
-                <MiniStat label={L("Opção", "Option")} value={optionAvailabilityLabel} />
-                <MiniStat
-                  label={L("Segurança", "Security")}
-                  value={submitted ? L("Enviado", "Sent") : confirmationAvailable ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")}
-                />
               </div>
               <div className="mt-4 border border-tts-border bg-tts-surface p-4 text-sm leading-6 text-tts-muted">
                 {submitted ? (
@@ -1846,13 +1616,8 @@ function YieldWorkspacePanel({
               {confirmationAvailable ? (
                 <div className="mt-4 border border-tts-border bg-tts-surface p-4">
                   <label className="block text-sm font-black text-tts-deep" htmlFor="yield-pin-review">
-                    {L("PIN para confirmar", "PIN to confirm")}
+                    {L("PIN", "PIN")}
                   </label>
-                  <p className="mt-1 text-xs leading-5 text-tts-muted">
-                    {hasPrepared
-                      ? L("Digite o PIN apenas depois de conferir a revisão acima.", "Enter the PIN only after checking the review above.")
-                      : L("Primeiro prepare a revisão; depois o PIN libera a confirmação.", "Prepare the review first; then the PIN enables confirmation.")}
-                  </p>
                   <input
                     id="yield-pin-review"
                     value={pin}
@@ -1954,13 +1719,10 @@ function CurrentInvestmentsPage({
         <header className="flex flex-col gap-4 border-b border-tts-border pb-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="max-w-2xl text-2xl font-black tracking-tight text-tts-deep md:text-3xl">
-              {L("Investimentos atuais", "Current investments")}
+              {L("Posições", "Positions")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-              {L(
-                "Consulte quanto há aplicado agora em cada opção. Nova aplicação e confirmação ficam em outra tela.",
-                "Check how much is currently applied in each option. New applications and confirmation stay on another screen."
-              )}
+              {L("Veja quanto está aplicado agora.", "See what is currently applied.")}
             </p>
           </div>
 
@@ -1970,7 +1732,7 @@ function CurrentInvestmentsPage({
               className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
             >
               <PiggyBank className="h-4 w-4" aria-hidden="true" />
-              {L("Nova aplicação", "New application")}
+              {L("Aplicar", "Apply")}
             </a>
             <button
               type="button"
@@ -1999,20 +1761,20 @@ function CurrentInvestmentsPage({
             value={sessionLoading ? L("Verificando", "Checking") : session.authenticated ? L("Conectada", "Connected") : L("Entrar", "Sign in")}
             detail={accountPublicKey ? `ID: ${accountPublicKey.slice(0, 6)}...${accountPublicKey.slice(-5)}` : undefined}
           />
-          <MiniStat label={L("Opções consultadas", "Checked options")} value={String(availableOptions.length)} detail={L("ativas neste ambiente", "active in this environment")} />
+          <MiniStat label={L("Opções", "Options")} value={String(availableOptions.length)} detail={L("ativas", "active")} />
           <MiniStat
-            label={L("Com saldo aplicado", "With current balance")}
+            label={L("Com saldo", "With balance")}
             value={String(activePositions)}
             detail={anomalousPositions > 0
-              ? L(`${anomalousPositions} posição de teste separada`, `${anomalousPositions} separate test position`)
-              : L("posição maior que zero", "position above zero")}
+              ? L(`${anomalousPositions} ajuste`, `${anomalousPositions} adjustment`)
+              : L("maior que zero", "above zero")}
           />
         </section>
 
         {isTestnet ? (
-          <section className="border border-tts-gold bg-tts-gold-bg p-3 text-xs leading-5 text-tts-gold">
-            {L("Testnet: dados estimados e variáveis, usados só para acompanhamento técnico.", "Testnet: estimated and variable data, used only for technical tracking.")}
-          </section>
+          <p className="text-xs font-bold text-tts-muted">
+            {L("Testnet: dados estimados.", "Testnet: estimated data.")}
+          </p>
         ) : null}
 
         {!session.authenticated && !sessionLoading ? (
@@ -2067,8 +1829,6 @@ function InvestmentOptionCard({
   const positionAmount = normalizeDecimal(position?.amount || "0");
   const hasTestnetConversionAnomaly = isSuspiciousTestnetConversionPosition(option, position);
   const displayPositionAmount = hasTestnetConversionAnomaly ? 0 : positionAmount;
-  const projectionBase = displayPositionAmount > 0 ? String(displayPositionAmount) : amount;
-  const chartData = buildReturnChartData(projectionBase, optionReturnRate(option), language);
   const reviewHref = buildMoneyUrl("/review", {
     asset: code,
     amount: amount || "100",
@@ -2083,9 +1843,6 @@ function InvestmentOptionCard({
             {profile.short}
           </span>
           <h2 className="mt-2 text-lg font-black text-tts-deep">{profileName(profile, language)}</h2>
-          <p className="mt-1 text-xs leading-5 text-tts-muted">
-            {L("Consulta da posição atual nesta opção.", "Current position for this option.")}
-          </p>
         </div>
         <TrendingUp className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
       </div>
@@ -2109,17 +1866,14 @@ function InvestmentOptionCard({
           {hasPositionError
             ? position?.error
             : hasTestnetConversionAnomaly
-              ? L(`O vault reportou só ${formatAmount(positionAmount, language)} ${profile.short} após uma conversão testnet distorcida. Este valor foi separado da posição normal para não parecer um investimento válido.`, `The vault reported only ${formatAmount(positionAmount, language)} ${profile.short} after a distorted testnet conversion. This value is separated from the normal position so it does not look like a valid investment.`)
-              : L("Valor consultado diretamente da posição atual da conta.", "Value checked from the account's current position.")}
+              ? L(`Valor de teste separado: ${formatAmount(positionAmount, language)} ${profile.short}.`, `Separate test value: ${formatAmount(positionAmount, language)} ${profile.short}.`)
+              : L("Atualizado da conta.", "Updated from the account.")}
         </p>
       </div>
 
       {hasTestnetConversionAnomaly ? (
         <div className="mt-3 border border-tts-gold bg-tts-gold-bg p-3 text-xs leading-5 text-tts-gold">
-          {L(
-            "Esta posição veio de uma rota de teste antiga que converteu a moeda para outra emissão com perda forte. Novas confirmações distorcidas estão bloqueadas; para corrigir esta posição antiga, faça resgate/reparo técnico ou use uma nova opção compatível.",
-            "This position came from an old test route that converted the currency into another issuance with heavy loss. New distorted confirmations are blocked; to fix this old position, withdraw/repair it technically or use a compatible new option."
-          )}
+          {L("Ajuste técnico necessário nesta posição de teste.", "Technical adjustment needed for this test position.")}
         </div>
       ) : null}
 
@@ -2141,15 +1895,7 @@ function InvestmentOptionCard({
               ? L("conversão testnet distorcida", "distorted testnet conversion")
               : L("posição atual", "current position")}
         />
-        <MiniStat label={L("Taxa atual", "Current rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
-      </div>
-
-      <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between gap-3 text-xs text-tts-muted">
-          <span className="font-black uppercase tracking-[0.14em]">{L("Simulação separada", "Separate simulation")}</span>
-          <span>{L("não é posição atual", "not current position")}</span>
-        </div>
-        <ReturnLineChart data={chartData} currency={profile.short} />
+        <MiniStat label={L("Taxa", "Rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
       </div>
 
       <a
@@ -2157,73 +1903,9 @@ function InvestmentOptionCard({
         className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
       >
         <PiggyBank className="h-4 w-4" aria-hidden="true" />
-        {L("Nova aplicação nesta opção", "New application in this option")}
+        {L("Aplicar", "Apply")}
       </a>
     </article>
-  );
-}
-
-function ReturnLineChart({
-  data,
-  currency,
-}: {
-  data: Array<{ month: number; label: string; balance: number; earned: number }>;
-  currency: string;
-}) {
-  const { language } = useLanguage();
-  const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const width = 640;
-  const height = 220;
-  const paddingX = 32;
-  const paddingY = 26;
-  const values = data.map((item) => item.balance);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(1, max - min);
-  const points = data.map((item, index) => {
-    const x = paddingX + (index / Math.max(1, data.length - 1)) * (width - paddingX * 2);
-    const y = height - paddingY - ((item.balance - min) / span) * (height - paddingY * 2);
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
-  const areaPoints = `${paddingX},${height - paddingY} ${points} ${width - paddingX},${height - paddingY}`;
-  const last = data[data.length - 1];
-
-  return (
-    <div className="border border-tts-border bg-tts-surface p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
-            {L("Gráfico de simulação", "Simulation chart")}
-          </p>
-          <p className="mt-1 text-sm font-black text-tts-deep">
-            {last ? `${formatAmount(last.balance, language)} ${currency}` : `0 ${currency}`}
-          </p>
-        </div>
-        <span className="text-xs font-bold text-tts-muted">{L("12 meses", "12 months")}</span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-56 w-full" role="img" aria-label={L("Gráfico de simulação", "Simulation chart")}>
-        <defs>
-          <linearGradient id="returnAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        {[0, 1, 2, 3].map((line) => {
-          const y = paddingY + line * ((height - paddingY * 2) / 3);
-          return <line key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} className="stroke-tts-border" strokeWidth="1" />;
-        })}
-        <polygon points={areaPoints} className="fill-tts-confirm text-tts-confirm" opacity="0.28" />
-        <polyline points={points} fill="none" className="stroke-tts-confirm" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        {data.filter((item) => item.month % 3 === 0).map((item, index) => {
-          const x = paddingX + (item.month / Math.max(1, data.length - 1)) * (width - paddingX * 2);
-          return (
-            <text key={item.month} x={x} y={height - 6} textAnchor={index === 0 ? "start" : item.month === 12 ? "end" : "middle"} className="fill-tts-muted text-[11px] font-bold">
-              {item.label}
-            </text>
-          );
-        })}
-      </svg>
-    </div>
   );
 }
 
