@@ -11,12 +11,14 @@ const PUBLIC_SHORT_LINK_PURPOSES = new Set([
   'create_account_passkey_qr',
   'login_passkey_qr',
   'confirm_payment_passkey_qr',
+  'send_external_wallet',
 ]);
 
 const PUBLIC_SHORT_LINK_PATHS = [
   '/create-account',
   '/login',
   '/confirm-payment',
+  '/send-external',
 ];
 
 function splitCsv(value: unknown): string[] {
@@ -149,7 +151,7 @@ export class ShortLinkController {
       const includeSession = String(req.query.include_session || req.query.includeSession || '').trim() === '1';
       const canAttachSession = includeSession &&
         hasTrustedProxySecret(req) &&
-        ['pix_onramp', 'pix_offramp'].includes(String(record.purpose || '').trim().toLowerCase()) &&
+        ['pix_onramp', 'pix_offramp', 'send_external_wallet'].includes(String(record.purpose || '').trim().toLowerCase()) &&
         Boolean(record.session_id);
 
       if (!canAttachSession) {
