@@ -177,6 +177,36 @@ function assetIssuer(asset: Asset): string | undefined {
     return asset.isNative() ? undefined : asset.getIssuer();
 }
 
+function sameSymbolDifferentIssuer(sourceAsset: Asset, destinationAsset: Asset): boolean {
+    const sourceCode = assetCode(sourceAsset);
+    const destinationCode = assetCode(destinationAsset);
+    if (!sourceCode || sourceCode !== destinationCode) return false;
+    if (sourceCode === 'XLM') return false;
+    return String(assetIssuer(sourceAsset) || '') !== String(assetIssuer(destinationAsset) || '');
+}
+
+function assertSafeSameSymbolConversion(input: {
+    sourceAsset: Asset;
+    destinationAsset: Asset;
+    sourceAmount: string;
+    destinationAmount: string;
+    context: string;
+}) {
+    if (!sameSymbolDifferentIssuer(input.sourceAsset, input.destinationAsset)) return;
+
+    const sourceAmount = Number(String(input.sourceAmount || '0').replace(',', '.'));
+    const destinationAmount = Number(String(input.destinationAmount || '0').replace(',', '.'));
+    const minimumRatio = Math.max(0.01, Number(process.env.DEFINDEX_MIN_SAME_ASSET_CONVERSION_RATIO || 0.98));
+    const ratio = sourceAmount > 0 && destinationAmount > 0 ? destinationAmount / sourceAmount : 0;
+
+    if (!Number.isFinite(ratio) || ratio < minimumRatio) {
+        throw new Error(
+            `Unsafe same-symbol conversion blocked in ${input.context}: ` +
+            `${assetCode(input.sourceAsset)} source=${input.sourceAmount} destination=${input.destinationAmount} ratio=${ratio.toFixed(6)} minimum=${minimumRatio}.`
+        );
+    }
+}
+
 function buildNoPathDiagnostic(sourceAssetObj: Asset, destAssetObj: Asset, extraHints: string[] = []): string {
     const sourceCode = assetCode(sourceAssetObj);
     const destCode = assetCode(destAssetObj);
@@ -970,6 +1000,14 @@ export class StellarService {
             }
         }
 
+        assertSafeSameSymbolConversion({
+            sourceAsset: sourceAssetObj,
+            destinationAsset: destAssetObj,
+            sourceAmount: effectiveSourceAmount,
+            destinationAmount: String(bestPath.destination_amount),
+            context: 'strict-send path quote',
+        });
+
         await assertSaneBrlUsdcQuote({
             sourceAssetCode: assetCode(sourceAssetObj),
             destinationAssetCode: assetCode(destAssetObj),
@@ -1254,6 +1292,13 @@ export class StellarService {
 
             const bestPath = trustedPaths
                 .sort((a: any, b: any) => Number(b.destination_amount) - Number(a.destination_amount))[0];
+            assertSafeSameSymbolConversion({
+                sourceAsset: sourceAssetObj,
+                destinationAsset: destinationAssetObj,
+                sourceAmount: input.sourceAmount,
+                destinationAmount: String(bestPath.destination_amount),
+                context: 'strict-send submit',
+            });
             const destinationMin = (Number(bestPath.destination_amount) * 0.98).toFixed(7);
             const pathAssets = (bestPath.path || []).map((pathAsset: any) => {
                 if (pathAsset.asset_type === 'native') return Asset.native();

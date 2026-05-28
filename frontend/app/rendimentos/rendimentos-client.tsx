@@ -100,6 +100,15 @@ type PositionState = {
   raw?: unknown;
 };
 
+type YieldSuccessNotice = {
+  action: "deposit" | "withdraw";
+  reviewedAmount: string;
+  reviewedAsset: string;
+  vaultAmount?: string;
+  vaultAsset?: string;
+  hash?: string;
+};
+
 type MoneyProfile = {
   namePt: string;
   nameEn: string;
@@ -488,6 +497,7 @@ export default function RendimentosClient({
   const [pin, setPin] = useState("");
   const [positionBalances, setPositionBalances] = useState<Record<string, PositionState>>({});
   const [yieldResult, setYieldResult] = useState<any | null>(null);
+  const [successNotice, setSuccessNotice] = useState<YieldSuccessNotice | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
@@ -729,6 +739,14 @@ export default function RendimentosClient({
       }, 60000);
       setYieldResult(payload);
       setPin("");
+      setSuccessNotice({
+        action,
+        reviewedAmount: amount,
+        reviewedAsset: selectedProfile.short,
+        vaultAmount: String(payload?.amount || "").trim(),
+        vaultAsset: String(payload?.vault?.display_asset_code || payload?.vault?.asset_code || "").trim(),
+        hash: String(payload?.hash || "").trim(),
+      });
       setApiState({ loading: false, message: L("Operação confirmada. Vamos atualizar seus saldos em instantes.", "Operation confirmed. We will update your balances shortly."), error: "" });
     } catch (error) {
       setApiState({ loading: false, message: "", error: yieldUiError(error, language) });
@@ -802,6 +820,18 @@ export default function RendimentosClient({
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
+      {successNotice ? (
+        <YieldSuccessDialog
+          language={language}
+          notice={successNotice}
+          returnsHref={returnsUrl}
+          onClose={() => setSuccessNotice(null)}
+          onRefresh={() => {
+            setSuccessNotice(null);
+            refreshDashboard();
+          }}
+        />
+      ) : null}
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -936,6 +966,111 @@ export default function RendimentosClient({
         </section>
       </section>
     </main>
+  );
+}
+
+function YieldSuccessDialog({
+  language,
+  notice,
+  returnsHref,
+  onClose,
+  onRefresh,
+}: {
+  language: AppLanguage;
+  notice: YieldSuccessNotice;
+  returnsHref: string;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const isDeposit = notice.action === "deposit";
+  const title = isDeposit
+    ? L("Aplicação enviada", "Application sent")
+    : L("Resgate enviado", "Withdrawal sent");
+  const vaultAmount = normalizeDecimal(notice.vaultAmount || "0");
+  const reviewedAmount = normalizeDecimal(notice.reviewedAmount || "0");
+  const showVaultAmount = vaultAmount > 0 && Math.abs(vaultAmount - reviewedAmount) > 0.0000001;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="w-full max-w-lg border border-tts-border bg-tts-surface p-5 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-tts-confirm/15 text-tts-confirm">
+            <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">
+              {L("Confirmado", "Confirmed")}
+            </p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-tts-deep">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-tts-muted">
+              {L(
+                "A operação foi enviada para a rede. A posição pode levar alguns segundos para atualizar.",
+                "The operation was sent to the network. The position can take a few seconds to update."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <MiniStat
+            label={L("Valor revisado", "Reviewed amount")}
+            value={`${formatAmount(notice.reviewedAmount, language)} ${notice.reviewedAsset}`}
+          />
+          <MiniStat
+            label={L("Próximo passo", "Next step")}
+            value={L("Ver posição", "View position")}
+            detail={L("atualize em alguns segundos", "refresh in a few seconds")}
+          />
+        </div>
+
+        {showVaultAmount ? (
+          <div className="mt-4 border border-tts-gold bg-tts-gold-bg p-3 text-sm leading-6 text-tts-gold">
+            <p className="font-black">{L("Conversão de teste detectada", "Test conversion detected")}</p>
+            <p className="mt-1">
+              {L(
+                `O valor recebido pela opção foi ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. A interface mostra a posição reportada pelo vault.`,
+                `The amount received by the option was ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. The interface shows the position reported by the vault.`
+              )}
+            </p>
+          </div>
+        ) : null}
+
+        {notice.hash ? (
+          <div className="mt-4 border border-tts-border bg-tts-bg p-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">
+              {L("Comprovante da rede", "Network receipt")}
+            </p>
+            <p className="mt-2 break-all font-mono-financial text-xs text-tts-deep">{notice.hash}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <a
+            href={returnsHref}
+            className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface"
+          >
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            {L("Ver posições", "View positions")}
+          </a>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            {L("Atualizar", "Refresh")}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex min-h-11 items-center justify-center border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep"
+          >
+            {L("Fechar", "Close")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1784,6 +1919,7 @@ function InvestmentOptionCard({
   const code = optionCode(option);
   const profile = moneyProfile(code);
   const isLoadingPosition = Boolean(!position || position.loading);
+  const hasPositionError = Boolean(position?.error);
   const positionAmount = normalizeDecimal(position?.amount || "0");
   const projectionBase = positionAmount > 0 ? String(positionAmount) : amount;
   const chartData = buildReturnChartData(projectionBase, optionReturnRate(option), language);
@@ -1810,25 +1946,31 @@ function InvestmentOptionCard({
 
       <div className="mt-4 border border-tts-confirm bg-tts-confirm/10 p-4">
         <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-confirm">
-          {L("Aplicado agora", "Currently applied")}
+          {L("Posição atual", "Current position")}
         </p>
         <p className="mt-2 text-2xl font-black text-tts-deep">
           {isLoadingPosition
             ? L("Consultando", "Checking")
-            : positionAmount > 0
+            : hasPositionError
+              ? L("Consulta indisponível", "Unavailable")
+              : positionAmount > 0
               ? `${formatAmount(positionAmount, language)} ${profile.short}`
               : L("Nada aplicado agora", "Nothing applied now")}
         </p>
         <p className="mt-1 text-xs leading-5 text-tts-muted">
-          {position?.error || L("Valor consultado diretamente da posição atual da conta.", "Value checked from the account's current position.")}
+          {hasPositionError
+            ? position?.error
+            : option.requires_wallet_asset_conversion && positionAmount > 0
+              ? L("Valor reportado pelo vault depois da conversão automática de teste.", "Value reported by the vault after the automatic test conversion.")
+              : L("Valor consultado diretamente da posição atual da conta.", "Value checked from the account's current position.")}
         </p>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <MiniStat
           label={L("Status", "Status")}
-          value={isLoadingPosition ? L("Consultando", "Checking") : positionAmount > 0 ? L("Com saldo", "Has balance") : L("Sem posição", "No position")}
-          detail={position?.error || L("posição atual", "current position")}
+          value={isLoadingPosition ? L("Consultando", "Checking") : hasPositionError ? L("Tente atualizar", "Try refresh") : positionAmount > 0 ? L("Com saldo", "Has balance") : L("Sem posição", "No position")}
+          detail={hasPositionError ? L("consulta falhou", "check failed") : L("posição atual", "current position")}
         />
         <MiniStat label={L("Taxa atual", "Current rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
       </div>
