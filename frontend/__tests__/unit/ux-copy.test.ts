@@ -14,6 +14,7 @@ describe("UX copy guardrails", () => {
       "app/rendimentos/rendimentos-client.tsx",
       "app/convert/convert-client.tsx",
       "app/pix-ramp/pix-ramp-client.tsx",
+      "app/transactions/transactions-client.tsx",
       "app/passkey-test/passkey-test-client.tsx",
     ];
 
@@ -91,5 +92,17 @@ describe("UX copy guardrails", () => {
     expect(pixText).toContain("source_asset: offRampAlternativeAsset");
     expect(pixText).not.toContain("source_asset: offRampAlternativeAsset || offRampInputAsset");
     expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
+  });
+
+  it("keeps the transaction history as a full web page, not a chat-only list", () => {
+    const text = source("app/transactions/transactions-client.tsx");
+
+    expect(text).toContain("Todo histórico");
+    expect(text).toContain("Todas as transações");
+    expect(text).toContain("Veja entradas, envios, conversões, PIX e ajustes");
+    expect(text).toContain('const [period, setPeriod] = useState<PeriodMode>("all")');
+    expect(text).toContain("Buscar por contato, valor, moeda, PIX ou hash");
+    expect(text).not.toContain("Transactions for");
+    expect(text).not.toContain("Full list with person");
   });
 });

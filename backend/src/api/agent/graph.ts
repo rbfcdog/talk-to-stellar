@@ -3399,15 +3399,35 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         const formattedTransactions = transactions.length > 0
           ? transactions.map((transaction: any, index: number) => this.formatTransactionLine(transaction, index)).join('\n\n')
           : 'Nenhuma transação encontrada.';
+        const historyUrl = await this.buildTransactionsHistoryUrl(state);
 
         state.success = true;
-        state.response_message = `Últimas transações da sua conta:\n${formattedTransactions}`;
+        state.response_message = `Últimas transações da sua conta:\n${formattedTransactions}\n\nVer histórico completo:\n${historyUrl}`;
       }
     }
 
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
+  }
+
+  private async buildTransactionsHistoryUrl(state: AgentState): Promise<string> {
+    const language = this.getLanguage(state);
+    const url = new URL(`${this.getFrontendBaseUrl()}/transactions`);
+    url.searchParams.set('lang', language);
+    let finalUrl = url.toString();
+    try {
+      finalUrl = await this.externalService.shortenPublicUrl({
+        url: finalUrl,
+        purpose: 'transaction_history',
+        sessionId: state.session_id,
+        userId: String(state.session_data?.user_id || '').trim() || undefined,
+        expiresInHours: 24,
+      });
+    } catch (error) {
+      logger.warn(`[history-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return finalUrl;
   }
 
   private financialMemoryMode(message: string, allowNicknameSet = false): 'repeat_payment' | 'nickname_set' | 'nickname_lookup' | 'monthly_conversion' | 'average_quote' | 'monthly_received' | 'monthly_fees' | 'top_payer' | 'traditional_savings' | 'recipient_insights' | 'risk_alert' | 'treasury_advice' | 'summary' {

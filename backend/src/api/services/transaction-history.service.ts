@@ -265,7 +265,7 @@ export class TransactionHistoryService {
     limit?: number;
   }) {
     const ctx = await FinancialContextService.resolve({ sessionId: input.sessionId, userId: input.userId });
-    const limit = Math.min(Math.max(Number(input.limit || 60), 1), 200);
+    const limit = Math.min(Math.max(Number(input.limit || 60), 1), 500);
     const month = Number(input.month || 0);
     const year = Number(input.year || 0);
 
