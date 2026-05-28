@@ -20,7 +20,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
-import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -547,9 +546,6 @@ export default function RendimentosClient({
     asset: safeSelectedCode,
     lang: language,
   }), [amount, safeSelectedCode, language]);
-  const chatPrompt = language === "pt-BR"
-    ? `revisar ${amount || "0"} ${profileName(selectedProfile, language)}`
-    : `review ${amount || "0"} ${profileName(selectedProfile, language)}`;
   const amountPresets = useMemo(() => {
     const short = selectedProfile.short;
     if (short === "BRL") return ["50", "100", "500", "1000"];
@@ -813,7 +809,6 @@ export default function RendimentosClient({
         isTestnet={isTestnetYield}
         onRefresh={refreshDashboard}
         newApplicationUrl={newApplicationUrl}
-        chatPrompt={chatPrompt}
       />
     );
   }
@@ -847,7 +842,6 @@ export default function RendimentosClient({
           </div>
 
           <div className="flex flex-wrap gap-2 md:justify-end">
-            <ReturnToChat prompt={chatPrompt} />
             <a
               href={returnsUrl}
               className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
@@ -1790,7 +1784,6 @@ function CurrentInvestmentsPage({
   isTestnet,
   onRefresh,
   newApplicationUrl,
-  chatPrompt,
 }: {
   language: AppLanguage;
   session: SessionState;
@@ -1803,7 +1796,6 @@ function CurrentInvestmentsPage({
   isTestnet: boolean;
   onRefresh: () => void;
   newApplicationUrl: string;
-  chatPrompt: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const availableOptions = options.filter((option) => !option.apy_error);
@@ -1826,7 +1818,6 @@ function CurrentInvestmentsPage({
           </div>
 
           <div className="flex flex-wrap gap-2 md:justify-end">
-            <ReturnToChat prompt={chatPrompt} />
             <a
               href={newApplicationUrl}
               className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
