@@ -97,6 +97,7 @@ type PositionState = {
   amount: string;
   error: string;
   raw?: unknown;
+  anomaly?: "testnet_conversion_loss";
 };
 
 type YieldSuccessNotice = {
@@ -317,6 +318,12 @@ function normalizeDecimal(value: unknown) {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return parsed;
+}
+
+function isSuspiciousTestnetConversionPosition(option: YieldOption, position?: PositionState) {
+  if (!position || position.loading || position.error) return false;
+  const amount = normalizeDecimal(position.amount);
+  return Boolean(option.requires_wallet_asset_conversion && amount > 0 && amount < 1);
 }
 
 function normalizeUiAssetCode(value: unknown) {
@@ -1799,7 +1806,11 @@ function CurrentInvestmentsPage({
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const availableOptions = options.filter((option) => !option.apy_error);
-  const activePositions = Object.values(positionBalances).filter((position) => normalizeDecimal(position.amount) > 0).length;
+  const activePositions = availableOptions.filter((option) => {
+    const position = positionBalances[optionCode(option)];
+    return normalizeDecimal(position?.amount || "0") > 0 && !isSuspiciousTestnetConversionPosition(option, position);
+  }).length;
+  const anomalousPositions = availableOptions.filter((option) => isSuspiciousTestnetConversionPosition(option, positionBalances[optionCode(option)])).length;
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -1853,7 +1864,13 @@ function CurrentInvestmentsPage({
             detail={accountPublicKey ? `ID: ${accountPublicKey.slice(0, 6)}...${accountPublicKey.slice(-5)}` : undefined}
           />
           <MiniStat label={L("Opções consultadas", "Checked options")} value={String(availableOptions.length)} detail={L("ativas neste ambiente", "active in this environment")} />
-          <MiniStat label={L("Com saldo aplicado", "With current balance")} value={String(activePositions)} detail={L("posição maior que zero", "position above zero")} />
+          <MiniStat
+            label={L("Com saldo aplicado", "With current balance")}
+            value={String(activePositions)}
+            detail={anomalousPositions > 0
+              ? L(`${anomalousPositions} posição de teste separada`, `${anomalousPositions} separate test position`)
+              : L("posição maior que zero", "position above zero")}
+          />
         </section>
 
         {isTestnet ? (
@@ -1912,7 +1929,9 @@ function InvestmentOptionCard({
   const isLoadingPosition = Boolean(!position || position.loading);
   const hasPositionError = Boolean(position?.error);
   const positionAmount = normalizeDecimal(position?.amount || "0");
-  const projectionBase = positionAmount > 0 ? String(positionAmount) : amount;
+  const hasTestnetConversionAnomaly = isSuspiciousTestnetConversionPosition(option, position);
+  const displayPositionAmount = hasTestnetConversionAnomaly ? 0 : positionAmount;
+  const projectionBase = displayPositionAmount > 0 ? String(displayPositionAmount) : amount;
   const chartData = buildReturnChartData(projectionBase, optionReturnRate(option), language);
   const reviewHref = buildMoneyUrl("/review", {
     asset: code,
@@ -1944,24 +1963,47 @@ function InvestmentOptionCard({
             ? L("Consultando", "Checking")
             : hasPositionError
               ? L("Consulta indisponível", "Unavailable")
-              : positionAmount > 0
-              ? `${formatAmount(positionAmount, language)} ${profile.short}`
+              : hasTestnetConversionAnomaly
+              ? L("Ajuste necessário", "Needs adjustment")
+              : displayPositionAmount > 0
+              ? `${formatAmount(displayPositionAmount, language)} ${profile.short}`
               : L("Nada aplicado agora", "Nothing applied now")}
         </p>
         <p className="mt-1 text-xs leading-5 text-tts-muted">
           {hasPositionError
             ? position?.error
-            : option.requires_wallet_asset_conversion && positionAmount > 0
-              ? L("Valor reportado pelo vault depois da conversão automática de teste.", "Value reported by the vault after the automatic test conversion.")
+            : hasTestnetConversionAnomaly
+              ? L(`O vault reportou só ${formatAmount(positionAmount, language)} ${profile.short} após uma conversão testnet distorcida. Este valor foi separado da posição normal para não parecer um investimento válido.`, `The vault reported only ${formatAmount(positionAmount, language)} ${profile.short} after a distorted testnet conversion. This value is separated from the normal position so it does not look like a valid investment.`)
               : L("Valor consultado diretamente da posição atual da conta.", "Value checked from the account's current position.")}
         </p>
       </div>
 
+      {hasTestnetConversionAnomaly ? (
+        <div className="mt-3 border border-tts-gold bg-tts-gold-bg p-3 text-xs leading-5 text-tts-gold">
+          {L(
+            "Esta posição veio de uma rota de teste antiga que converteu a moeda para outra emissão com perda forte. Novas confirmações distorcidas estão bloqueadas; para corrigir esta posição antiga, faça resgate/reparo técnico ou use uma nova opção compatível.",
+            "This position came from an old test route that converted the currency into another issuance with heavy loss. New distorted confirmations are blocked; to fix this old position, withdraw/repair it technically or use a compatible new option."
+          )}
+        </div>
+      ) : null}
+
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <MiniStat
           label={L("Status", "Status")}
-          value={isLoadingPosition ? L("Consultando", "Checking") : hasPositionError ? L("Tente atualizar", "Try refresh") : positionAmount > 0 ? L("Com saldo", "Has balance") : L("Sem posição", "No position")}
-          detail={hasPositionError ? L("consulta falhou", "check failed") : L("posição atual", "current position")}
+          value={isLoadingPosition
+            ? L("Consultando", "Checking")
+            : hasPositionError
+              ? L("Tente atualizar", "Try refresh")
+              : hasTestnetConversionAnomaly
+                ? L("Separado", "Separated")
+                : displayPositionAmount > 0
+                  ? L("Com saldo", "Has balance")
+                  : L("Sem posição", "No position")}
+          detail={hasPositionError
+            ? L("consulta falhou", "check failed")
+            : hasTestnetConversionAnomaly
+              ? L("conversão testnet distorcida", "distorted testnet conversion")
+              : L("posição atual", "current position")}
         />
         <MiniStat label={L("Taxa atual", "Current rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
       </div>
