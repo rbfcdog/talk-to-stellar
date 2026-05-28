@@ -90,6 +90,15 @@ type YieldStatus = {
   vaults?: YieldOption[];
 };
 
+type RendimentosView = "application" | "returns";
+
+type PositionState = {
+  loading: boolean;
+  amount: string;
+  error: string;
+  raw?: unknown;
+};
+
 type MoneyProfile = {
   namePt: string;
   nameEn: string;
@@ -337,6 +346,55 @@ function buildReturnChartData(amount: string, annualRate: number | null, languag
   });
 }
 
+function extractPositionAmount(value: unknown): string {
+  if (value === null || value === undefined) return "0";
+  if (typeof value === "number" || typeof value === "string") {
+    const parsed = normalizeDecimal(value);
+    return Number.isFinite(parsed) ? String(parsed) : "0";
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const amount = extractPositionAmount(item);
+      if (normalizeDecimal(amount) > 0) return amount;
+    }
+    return "0";
+  }
+  if (typeof value !== "object") return "0";
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = [
+    "amount",
+    "balance",
+    "total",
+    "total_amount",
+    "totalAmount",
+    "underlying_balance",
+    "underlyingBalance",
+    "deposited",
+    "invested",
+    "shares",
+  ];
+
+  for (const key of preferredKeys) {
+    if (record[key] === undefined || record[key] === null) continue;
+    if (typeof record[key] === "object") {
+      const nested = extractPositionAmount(record[key]);
+      if (normalizeDecimal(nested) > 0) return nested;
+      continue;
+    }
+    const parsed = normalizeDecimal(record[key]);
+    if (Number.isFinite(parsed) && parsed > 0) return String(parsed);
+  }
+
+  for (const item of Object.values(record)) {
+    if (typeof item !== "object" || item === null) continue;
+    const nested = extractPositionAmount(item);
+    if (normalizeDecimal(nested) > 0) return nested;
+  }
+
+  return "0";
+}
+
 function sanitizeUiError(error: unknown, language: AppLanguage) {
   const code = typeof error === "object" && error && "code" in error
     ? String((error as { code?: unknown }).code || "").trim()
@@ -449,7 +507,15 @@ async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
   return payload;
 }
 
-export default function RendimentosClient({ initialLanguage, initialQuery }: { initialLanguage?: AppLanguage; initialQuery?: string } = {}) {
+export default function RendimentosClient({
+  initialLanguage,
+  initialQuery,
+  view = "application",
+}: {
+  initialLanguage?: AppLanguage;
+  initialQuery?: string;
+  view?: RendimentosView;
+} = {}) {
   const { language, setLanguage } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const appliedInitialLanguageRef = useRef(false);
@@ -468,7 +534,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [activeStep, setActiveStep] = useState<YieldStep>("wallet");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
-  const [returnsOpen, setReturnsOpen] = useState(false);
+  const [positionBalances, setPositionBalances] = useState<Record<string, PositionState>>({});
   const [yieldResult, setYieldResult] = useState<any | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
@@ -509,6 +575,16 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     from: "review",
     lang: language,
   }), [amount, bestOptionCode, safeSelectedCode, language]);
+  const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", {
+    amount,
+    asset: safeSelectedCode,
+    lang: language,
+  }), [amount, safeSelectedCode, language]);
+  const newApplicationUrl = useMemo(() => buildMoneyUrl("/review", {
+    amount,
+    asset: safeSelectedCode,
+    lang: language,
+  }), [amount, safeSelectedCode, language]);
   const chatPrompt = language === "pt-BR"
     ? `revisar ${amount || "0"} ${profileName(selectedProfile, language)}`
     : `review ${amount || "0"} ${profileName(selectedProfile, language)}`;
@@ -713,6 +789,65 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     refreshDashboard();
   }, []);
 
+  useEffect(() => {
+    if (view !== "returns" || !session.authenticated || !options.length) return;
+    let cancelled = false;
+    const initialEntries = Object.fromEntries(options.map((option) => [
+      optionCode(option),
+      { loading: true, amount: "0", error: "" },
+    ]));
+    setPositionBalances(initialEntries);
+
+    Promise.all(options.map(async (option) => {
+      const code = optionCode(option);
+      try {
+        const payload = await yieldApi(
+          `defindex/yield/balance?asset_code=${encodeURIComponent(option.asset_code)}&vault_address=${encodeURIComponent(option.vault_address)}`,
+          undefined,
+          22000
+        );
+        return [code, {
+          loading: false,
+          amount: extractPositionAmount(payload?.balance),
+          error: "",
+          raw: payload?.balance,
+        }] as const;
+      } catch (error) {
+        return [code, {
+          loading: false,
+          amount: "0",
+          error: sanitizeUiError(error, language),
+        }] as const;
+      }
+    })).then((entries) => {
+      if (cancelled) return;
+      setPositionBalances(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, session.authenticated, options, language]);
+
+  if (view === "returns") {
+    return (
+      <CurrentInvestmentsPage
+        language={language}
+        session={session}
+        sessionLoading={sessionLoading}
+        apiState={apiState}
+        accountPublicKey={accountPublicKey}
+        options={options}
+        amount={amount}
+        positionBalances={positionBalances}
+        isTestnet={isTestnetYield}
+        onRefresh={refreshDashboard}
+        newApplicationUrl={newApplicationUrl}
+        chatPrompt={chatPrompt}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
@@ -731,6 +866,13 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
 
           <div className="flex flex-wrap gap-2 md:justify-end">
             <ReturnToChat prompt={chatPrompt} />
+            <a
+              href={returnsUrl}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+            >
+              <BarChart3 className="h-4 w-4" aria-hidden="true" />
+              {L("Rendimentos atuais", "Current returns")}
+            </a>
             <button
               type="button"
               onClick={() => setShowTutorial((current) => !current)}
@@ -818,8 +960,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             bestOptionCode={bestOptionCode}
             balanceForSelected={balanceForSelected}
             result={yieldResult}
-            returnsOpen={returnsOpen}
-            onReturnsOpenChange={setReturnsOpen}
+            returnsHref={returnsUrl}
             canPrepare={canPrepare}
             confirmationEnabled={confirmationEnabled}
             apiLoading={apiState.loading}
@@ -1113,8 +1254,7 @@ function YieldWorkspacePanel({
   bestOptionCode,
   balanceForSelected,
   result,
-  returnsOpen,
-  onReturnsOpenChange,
+  returnsHref,
   canPrepare,
   confirmationEnabled,
   apiLoading,
@@ -1150,8 +1290,7 @@ function YieldWorkspacePanel({
   bestOptionCode: string;
   balanceForSelected?: BalanceLine;
   result: any | null;
-  returnsOpen: boolean;
-  onReturnsOpenChange: (open: boolean) => void;
+  returnsHref: string;
   canPrepare: boolean;
   confirmationEnabled: boolean;
   apiLoading: boolean;
@@ -1299,25 +1438,14 @@ function YieldWorkspacePanel({
           <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
           {L("Converter ativos", "Convert assets")}
         </a>
-        <button
-          type="button"
-          aria-expanded={returnsOpen}
-          onClick={() => onReturnsOpenChange(!returnsOpen)}
+        <a
+          href={returnsHref}
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 sm:w-auto"
         >
           <BarChart3 className="h-4 w-4" aria-hidden="true" />
-          {returnsOpen ? L("Ocultar rendimentos atuais", "Hide current returns") : L("Ver rendimentos atuais", "View current returns")}
-        </button>
+          {L("Ver rendimentos atuais", "View current returns")}
+        </a>
       </div>
-
-      {returnsOpen ? (
-        <CurrentReturnsPanel
-          amount={amount}
-          selectedOption={selectedOption}
-          selectedProfile={targetProfile}
-          options={options}
-        />
-      ) : null}
 
       {authenticated && selectedHasYield && routeDescription ? (
         <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4 text-sm leading-6 text-tts-confirm">
@@ -1551,75 +1679,196 @@ function YieldWorkspacePanel({
   );
 }
 
-function CurrentReturnsPanel({
-  amount,
-  selectedOption,
-  selectedProfile,
+function CurrentInvestmentsPage({
+  language,
+  session,
+  sessionLoading,
+  apiState,
+  accountPublicKey,
   options,
+  amount,
+  positionBalances,
+  isTestnet,
+  onRefresh,
+  newApplicationUrl,
+  chatPrompt,
 }: {
+  language: AppLanguage;
+  session: SessionState;
+  sessionLoading: boolean;
+  apiState: ApiState;
+  accountPublicKey: string;
   amount: string;
-  selectedOption: YieldOption | null;
-  selectedProfile: MoneyProfile;
   options: YieldOption[];
+  positionBalances: Record<string, PositionState>;
+  isTestnet: boolean;
+  onRefresh: () => void;
+  newApplicationUrl: string;
+  chatPrompt: string;
 }) {
-  const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const selectedRate = optionReturnRate(selectedOption);
-  const chartData = buildReturnChartData(amount, selectedRate, language);
-  const finalBalance = chartData[chartData.length - 1]?.balance || normalizeDecimal(amount);
-  const finalEarned = chartData[chartData.length - 1]?.earned || 0;
   const availableOptions = options.filter((option) => !option.apy_error);
+  const activePositions = Object.values(positionBalances).filter((position) => normalizeDecimal(position.amount) > 0).length;
 
   return (
-    <section className="mt-4 border border-tts-border bg-tts-bg p-4" aria-label={L("Rendimentos atuais", "Current returns")}>
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h3 className="flex items-center gap-2 text-base font-black text-tts-deep">
-            <TrendingUp className="h-4 w-4 text-tts-confirm" aria-hidden="true" />
-            {L("Rendimentos atuais", "Current returns")}
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-tts-muted">
-            {L(
-              "Dados informados pelo ambiente atual. Use esta área para acompanhar as opções; a confirmação continua separada por PIN.",
-              "Data provided by the current environment. Use this area to inspect options; confirmation stays separate behind PIN."
-            )}
-          </p>
-        </div>
-        <span className="inline-flex w-fit border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-gold">
-          {L("Testnet", "Testnet")}
-        </span>
-      </div>
+    <main className="min-h-screen bg-tts-bg text-tts-deep">
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-4 border-b border-tts-border pb-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="max-w-2xl text-2xl font-black tracking-tight text-tts-deep md:text-3xl">
+              {L("Investimentos atuais", "Current investments")}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
+              {L(
+                "Veja todas as opções ativas, posição atual e simulação separadas da tela de nova aplicação.",
+                "See every active option, current position, and simulation separately from the new application screen."
+              )}
+            </p>
+          </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <MiniStat label={L("Opção selecionada", "Selected option")} value={profileName(selectedProfile, language)} />
-        <MiniStat label={L("Rendimento atual", "Current return")} value={optionReturnText(selectedOption, language)} detail={L("estimado", "estimated")} />
-        <MiniStat label={L("Em 12 meses", "In 12 months")} value={`${formatAmount(finalBalance, language)} ${selectedProfile.short}`} detail={`+${formatAmount(finalEarned, language)} ${selectedProfile.short}`} />
-      </div>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <ReturnToChat prompt={chatPrompt} />
+            <a
+              href={newApplicationUrl}
+              className="inline-flex min-h-11 items-center justify-center gap-2 bg-tts-deep px-4 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+            >
+              <PiggyBank className="h-4 w-4" aria-hidden="true" />
+              {L("Nova aplicação", "New application")}
+            </a>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+            >
+              {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+              {L("Atualizar", "Refresh")}
+            </button>
+          </div>
+        </header>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.9fr)]">
-        <ReturnLineChart data={chartData} currency={selectedProfile.short} />
-        <div className="border border-tts-border bg-tts-surface p-3">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
-            {L("Opções disponíveis", "Available options")}
-          </p>
-          <div className="mt-3 grid gap-2">
-            {availableOptions.length ? availableOptions.map((option) => {
-              const profile = moneyProfile(optionCode(option));
-              return (
-                <div key={`${option.vault_address}-${option.asset_code}`} className="flex items-center justify-between gap-3 border border-tts-border bg-tts-bg px-3 py-2">
-                  <span className="min-w-0 truncate text-sm font-black text-tts-deep">{profileName(profile, language)}</span>
-                  <span className="shrink-0 text-sm font-black text-tts-confirm">{optionReturnText(option, language)}</span>
-                </div>
-              );
-            }) : (
+        {apiState.error ? (
+          <div className="flex items-start gap-3 border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error" role="alert">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-black">{L("Precisa de atenção", "Needs attention")}</p>
+              <p className="mt-1 whitespace-pre-line">{apiState.error}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="grid gap-3 sm:grid-cols-3">
+          <MiniStat
+            label={L("Conta", "Account")}
+            value={sessionLoading ? L("Verificando", "Checking") : session.authenticated ? L("Conectada", "Connected") : L("Entrar", "Sign in")}
+            detail={accountPublicKey ? `ID: ${accountPublicKey.slice(0, 6)}...${accountPublicKey.slice(-5)}` : undefined}
+          />
+          <MiniStat label={L("Opções ativas", "Active options")} value={String(availableOptions.length)} detail={L("configuradas para acompanhar", "configured to track")} />
+          <MiniStat label={L("Posições", "Positions")} value={String(activePositions)} detail={L("com valor aplicado", "with current balance")} />
+        </section>
+
+        {isTestnet ? (
+          <section className="border border-tts-gold bg-tts-gold-bg p-3 text-xs leading-5 text-tts-gold">
+            {L("Testnet: dados estimados e variáveis, usados só para acompanhamento técnico.", "Testnet: estimated and variable data, used only for technical tracking.")}
+          </section>
+        ) : null}
+
+        {!session.authenticated && !sessionLoading ? (
+          <section className="border border-tts-border bg-tts-surface p-5">
+            <AccountStatusCard
+              state="signed-out"
+              accountId=""
+              ctaHref="/login?next=/rendimentos"
+              compact
+            />
+          </section>
+        ) : null}
+
+        {session.authenticated ? (
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            {availableOptions.length ? availableOptions.map((option) => (
+              <InvestmentOptionCard
+                key={`${option.vault_address}-${option.asset_code}`}
+                option={option}
+                language={language}
+                amount={amount}
+                position={positionBalances[optionCode(option)]}
+              />
+            )) : (
               <p className="text-sm leading-6 text-tts-muted">
                 {L("Nenhuma opção disponível agora.", "No option available right now.")}
               </p>
             )}
-          </div>
+          </section>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+function InvestmentOptionCard({
+  option,
+  language,
+  amount,
+  position,
+}: {
+  option: YieldOption;
+  language: AppLanguage;
+  amount: string;
+  position?: PositionState;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const code = optionCode(option);
+  const profile = moneyProfile(code);
+  const positionAmount = normalizeDecimal(position?.amount || "0");
+  const projectionBase = positionAmount > 0 ? String(positionAmount) : amount;
+  const chartData = buildReturnChartData(projectionBase, optionReturnRate(option), language);
+  const finalBalance = chartData[chartData.length - 1]?.balance || normalizeDecimal(projectionBase);
+  const finalEarned = chartData[chartData.length - 1]?.earned || 0;
+  const reviewHref = buildMoneyUrl("/review", {
+    asset: code,
+    amount: amount || "100",
+    lang: language,
+  });
+
+  return (
+    <article className="border border-tts-border bg-tts-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
+            {profile.short}
+          </span>
+          <h2 className="mt-2 text-lg font-black text-tts-deep">{profileName(profile, language)}</h2>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">
+            {option.requires_wallet_asset_conversion
+              ? L("Pode preparar conversão automática antes da confirmação.", "Can prepare automatic conversion before confirmation.")
+              : L("Opção ativa para acompanhamento e nova aplicação.", "Active option for tracking and new application.")}
+          </p>
         </div>
+        <TrendingUp className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
       </div>
-    </section>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat
+          label={L("Posição atual", "Current position")}
+          value={position?.loading ? L("Carregando", "Loading") : `${formatAmount(positionAmount, language)} ${profile.short}`}
+          detail={position?.error || (positionAmount > 0 ? L("valor aplicado", "current balance") : L("Nada aplicado", "No position yet"))}
+        />
+        <MiniStat label={L("Rendimento atual", "Current return")} value={optionReturnText(option, language)} detail={L("estimado", "estimated")} />
+        <MiniStat label={L("Em 12 meses", "In 12 months")} value={`${formatAmount(finalBalance, language)} ${profile.short}`} detail={`+${formatAmount(finalEarned, language)} ${profile.short}`} />
+      </div>
+
+      <div className="mt-4">
+        <ReturnLineChart data={chartData} currency={profile.short} />
+      </div>
+
+      <a
+        href={reviewHref}
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+      >
+        <PiggyBank className="h-4 w-4" aria-hidden="true" />
+        {L("Nova aplicação nesta opção", "New application in this option")}
+      </a>
+    </article>
   );
 }
 
