@@ -69,12 +69,17 @@ describe("UX copy guardrails", () => {
   it("keeps application options tied to configured vaults and gives recovery actions for PIX shortage", () => {
     const reviewText = source("app/rendimentos/rendimentos-client.tsx");
     const pixText = source("app/pix-ramp/pix-ramp-client.tsx");
+    const returnsPage = source("app/rendimentos/page.tsx");
 
     expect(reviewText).toContain("const actionableOption = selectedOption;");
     expect(reviewText).toContain("Converter ativos");
+    expect(reviewText).toContain("href={returnsHref}");
+    expect(reviewText).toContain("CurrentInvestmentsPage");
+    expect(reviewText).not.toContain("returnsOpen");
     expect(reviewText).toContain("Toque em uma moeda com opção ativa.");
     expect(reviewText).not.toContain("Outros saldos");
     expect(reviewText).not.toContain("Estes saldos não aparecem");
+    expect(returnsPage).toContain('view="returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
     expect(pixText).toContain("Converter ativos");
     expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");

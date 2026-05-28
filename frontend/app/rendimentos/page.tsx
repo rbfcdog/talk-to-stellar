@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
+import RendimentosClient from "./rendimentos-client";
 
 export const metadata = {
-  title: "Review and balances",
-  description: "Review balances, currencies, options, PIX add, and PIX withdrawal.",
+  title: "Current investments",
+  description: "Track active options, positions, and current return simulations.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -25,5 +25,5 @@ export default async function RendimentosPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const query = serializeSearchParams(await Promise.resolve(searchParams || {}));
-  redirect(query ? `/review?${query}` : "/review");
+  return <RendimentosClient initialQuery={query} view="returns" />;
 }
