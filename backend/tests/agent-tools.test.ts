@@ -162,7 +162,9 @@ describe('Agent tool execution', () => {
     ]));
     expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('ciclo completo');
-    expect(parsed.message).toContain('Histórico, comprovantes, apelidos, contatos e PIN');
+    expect(parsed.message).toContain('Link de pagamento');
+    expect(parsed.message).toContain('Histórico, comprovantes e apelidos');
+    expect(parsed.message).toContain('Contatos, PIN e entrada com biometria');
     expect(JSON.stringify(parsed)).not.toMatch(/rendimento|rendendo|APY/i);
     expect(parsed.message).toContain('sair para meu PIX');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
