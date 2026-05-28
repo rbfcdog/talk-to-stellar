@@ -147,13 +147,22 @@ describe('Agent tool execution', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.commands.map((item: any) => item.command)).toEqual(expect.arrayContaining([
       'saldo',
+      'contatos',
+      'enviar',
       'PIX',
       'converter',
       'aplicação',
       'ciclo',
+      'melhor rota',
+      'histórico',
+      'comparativo de economia',
+      'apelido de transação',
+      'link de pagamento',
+      'PIN',
     ]));
     expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('ciclo completo');
+    expect(parsed.message).toContain('Histórico, comprovantes, apelidos, contatos e PIN');
     expect(JSON.stringify(parsed)).not.toMatch(/rendimento|rendendo|APY/i);
     expect(parsed.message).toContain('sair para meu PIX');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
