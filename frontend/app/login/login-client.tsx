@@ -75,6 +75,36 @@ function formatExternalIdentifier(provider: string, value: string): string {
   return raw
 }
 
+function normalizeLoginEmail(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : ""
+}
+
+function maskLoginEmail(value: string): string {
+  const email = normalizeLoginEmail(value)
+  if (!email) return value
+  const [name, domain] = email.split("@")
+  if (!name || !domain) return email
+  const visibleName = name.length <= 2 ? name[0] || "" : name.slice(0, 2)
+  return `${visibleName}${"*".repeat(Math.max(2, Math.min(6, name.length - visibleName.length)))}@${domain}`
+}
+
+function extractResolvedLogin(value: any): string {
+  const payload = value?.payload && typeof value.payload === "object" ? value.payload : value
+  return (
+    normalizeLoginEmail(value?.resolvedLogin) ||
+    normalizeLoginEmail(value?.email) ||
+    normalizeLoginEmail(value?.userId) ||
+    normalizeLoginEmail(value?.user_id) ||
+    normalizeLoginEmail(payload?.resolvedLogin) ||
+    normalizeLoginEmail(payload?.email) ||
+    normalizeLoginEmail(payload?.userId) ||
+    normalizeLoginEmail(payload?.user_id) ||
+    normalizeLoginEmail(payload?.ownerId) ||
+    normalizeLoginEmail(payload?.owner_id)
+  )
+}
+
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
 const PASSKEY_LOGIN_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 
@@ -95,13 +125,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   ).trim()
   const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
-  const useTelegramIdPinLogin = false
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Account"
   const externalIdentifierLabel = useMemo(
     () => formatExternalIdentifier(externalProvider, externalProviderUserId),
     [externalProvider, externalProviderUserId]
   )
   const [email, setEmail] = useState("")
+  const [externalResolvedLogin, setExternalResolvedLogin] = useState("")
   const [pin, setPin] = useState("")
   const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false)
   const [emailConfirmationCode, setEmailConfirmationCode] = useState("")
@@ -130,7 +160,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   function finishLogin(accountLabel?: string) {
-    const label = String(accountLabel || email.trim() || (useTelegramIdPinLogin ? externalIdentifierLabel : "") || "user").trim()
+    const label = String(accountLabel || externalResolvedLogin || email.trim() || "user").trim()
     enqueueWebChatFeedback(language === "pt-BR"
       ? `Login concluído.\nConta conectada: ${label}`
       : `Sign-in completed.\nConnected account: ${label}`)
@@ -170,6 +200,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       setEmail(emailFromQuery)
     }
   }, [emailFromQuery])
+
+  useEffect(() => {
+    const resolvedLogin = extractResolvedLogin(externalPayload)
+    if (!resolvedLogin) return
+    setExternalResolvedLogin(resolvedLogin)
+    setEmail(resolvedLogin)
+  }, [externalPayload])
 
   useEffect(() => {
     if (!hasExternalContext) return
@@ -257,6 +294,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         if (!response.ok || payload?.valid === false || isUsed || isExpired || message.toLowerCase().includes("já foi utilizado")) {
           redirectToUsed(message || "This link has already been used.")
         }
+        const resolvedLogin = extractResolvedLogin(payload)
+        if (resolvedLogin) {
+          setExternalResolvedLogin(resolvedLogin)
+          setEmail(resolvedLogin)
+        }
       } catch {
         redirectToUsed("Could not validate this link.")
       }
@@ -281,6 +323,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         const isExpired = Boolean(payload?.expired)
         if (!response.ok && (isUsed || isExpired || message.toLowerCase().includes("já foi utilizado"))) {
           redirectToUsed(message || "This link has already been used.")
+        }
+        const resolvedLogin = extractResolvedLogin(payload)
+        if (resolvedLogin) {
+          setExternalResolvedLogin(resolvedLogin)
+          setEmail(resolvedLogin)
         }
       } catch {
         // ignore intermittent polling errors
@@ -337,6 +384,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     setError("")
 
     try {
+      const loginEmail = externalResolvedLogin || email.trim()
       if (externalToken && !hasExternalContext) {
         throw new Error("Invalid external link. Return to Telegram and request a new access link.")
       }
@@ -348,7 +396,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           provider: hasExternalContext ? externalProvider : "web",
           provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
           token: hasExternalContext ? externalToken : undefined,
-          email,
+          email: loginEmail || undefined,
           pin,
           email_confirmation_code: emailConfirmationCode || undefined,
           language,
@@ -385,7 +433,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       markExternalLoginCompleted()
       setEmailConfirmationRequired(false)
       setEmailConfirmationCode("")
-      const resolvedLogin = String(payload?.email || payload?.userId || email.trim() || externalIdentifierLabel).trim()
+      const resolvedLogin = String(payload?.email || payload?.userId || loginEmail || externalIdentifierLabel).trim()
       if (resolvedLogin) {
         localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
       }
@@ -529,14 +577,18 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     )
   }
 
+  const loginEmail = externalResolvedLogin || email.trim()
   const pinSubmitDisabled =
     externalLinkUsed ||
     actionLockRef.current ||
     status === "pin" ||
     status === "passkey" ||
-    (!useTelegramIdPinLogin && !email.trim()) ||
+    !loginEmail ||
     !pin.trim() ||
     (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
+
+  const useExternalPinOnlyLogin = hasExternalContext && Boolean(externalResolvedLogin)
+  const displayedResolvedLogin = externalResolvedLogin ? maskLoginEmail(externalResolvedLogin) : ""
 
   return (
     <AuthShell
@@ -562,6 +614,9 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         <div className="rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-xs text-tts-deep">
           <p className="font-medium">{t("login_channel_detected")}: {externalProviderLabel}</p>
           <p className="mt-1 font-mono-financial text-tts-muted">{t("login_identifier")}: {externalIdentifierLabel}</p>
+          {displayedResolvedLogin && (
+            <p className="mt-1 font-mono-financial text-tts-muted">{t("login_linked_account")}: {displayedResolvedLogin}</p>
+          )}
         </div>
       )}
 
@@ -572,17 +627,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       )}
 
       <form className="flex flex-col gap-4" onSubmit={handlePinLogin}>
-        {useTelegramIdPinLogin ? (
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-tts-deep">{t("login_telegram_id")}</span>
-            <Input
-              value={externalIdentifierLabel}
-              type="text"
-              readOnly
-              disabled={externalLinkUsed}
-            />
-            <span className="text-[11px] text-tts-muted">{t("login_telegram_help")}</span>
-          </label>
+        {useExternalPinOnlyLogin ? (
+          <div className="rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-xs text-tts-deep">
+            <p className="font-medium">{t("login_pin_only_title")}</p>
+            <p className="mt-1 text-tts-muted">{t("login_pin_only_help", { provider: externalProviderLabel })}</p>
+          </div>
         ) : (
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-tts-deep">{t("login_email")}</span>
@@ -658,7 +707,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           onClick={() => {
             void handlePasskeyLogin();
           }}
-          disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !email.trim()}
+          disabled={externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey" || !(externalResolvedLogin || email.trim())}
           className="w-full"
         >
           <Fingerprint className="mr-2 h-4 w-4" />
