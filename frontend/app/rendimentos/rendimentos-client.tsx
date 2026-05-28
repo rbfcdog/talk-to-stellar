@@ -842,8 +842,8 @@ export default function RendimentosClient({
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
               {L(
-                "Escolha um saldo, informe o valor e revise antes do PIN. Se a moeda precisar ser trocada para a opção disponível, a conversão é preparada automaticamente.",
-                "Choose a balance, enter the amount, and review before PIN. If the currency must be swapped into the available option, conversion is prepared automatically."
+                "Escolha um saldo, informe o valor e revise antes do PIN. Se a opção usar outra emissão no testnet, o app só confirma quando houver uma rota segura.",
+                "Choose a balance, enter the amount, and review before PIN. If the option uses another testnet issuance, the app only confirms when a safe route exists."
               )}
             </p>
           </div>
@@ -1413,11 +1413,11 @@ function YieldWorkspacePanel({
   );
   const routeDescription = !selectedHasDirectOption && autoRouteToOption && selectedOption
     ? L(
-        `A revisão usa seu saldo em ${profileName(selectedProfile, language)} e prepara a conversão automática para ${profileName(targetProfile, language)} antes da confirmação.`,
-        `The review uses your ${profileName(selectedProfile, language)} balance and prepares automatic conversion to ${profileName(targetProfile, language)} before confirmation.`
+        `A revisão usa seu saldo em ${profileName(selectedProfile, language)} e só confirma a troca para ${profileName(targetProfile, language)} se o backend encontrar uma rota segura.`,
+        `The review uses your ${profileName(selectedProfile, language)} balance and only confirms the swap to ${profileName(targetProfile, language)} if the backend finds a safe route.`
       )
     : selectedNeedsWalletConversion
-      ? L("Esta opção usa uma emissão diferente no ambiente de teste. A revisão prepara a conversão automaticamente antes do PIN.", "This option uses a different issuance in the test environment. The review prepares conversion automatically before PIN.")
+      ? L("Esta opção usa uma emissão diferente no ambiente de teste. A confirmação só fica disponível se houver rota segura antes do PIN.", "This option uses a different issuance in the test environment. Confirmation is only available when a safe route exists before PIN.")
       : "";
   const hasPrepared = Boolean(result);
   const submitted = Boolean(result?.submitted || result?.hash);
@@ -1458,7 +1458,7 @@ function YieldWorkspacePanel({
       : L("Confirmar retirada", "Confirm withdrawal");
   const actionDescription = action === "deposit"
     ? selectedNeedsWalletConversion
-      ? L("Prepara a conversão automática e o investimento na opção selecionada. Nada sai sem PIN.", "Prepares automatic conversion and investment into the selected option. Nothing moves without PIN.")
+      ? L("Confere a rota da moeda e só confirma se ela estiver segura. Nada sai sem PIN.", "Checks the asset route and only confirms when it is safe. Nothing moves without PIN.")
       : L("Prepara o investimento na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares the investment into the selected option. In review mode, nothing leaves the account.")
     : L("Prepara a retirada da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares withdrawal from the position back to available balance. In review mode, nothing leaves the account.");
   return (

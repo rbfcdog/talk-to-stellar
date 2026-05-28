@@ -878,6 +878,11 @@ function unsafeSameSymbolConversionRatio(input: {
   return ratio < minimumRatio ? ratio : null;
 }
 
+function allowDefindexSameSymbolIssuerConversion(): boolean {
+  const raw = String(process.env.DEFINDEX_ALLOW_TESTNET_SAME_SYMBOL_CONVERSION || '').trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes';
+}
+
 function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: string } {
   const raw = coalesceString(...values) || 'TESOURO';
   const parsed = parseIssuedAssetIdentifier(raw);
@@ -4036,6 +4041,39 @@ export class AnchorService {
       };
     }
 
+    const sameSymbolDifferentIssuer =
+      normalizeAssetCode(walletSourceAsset.code) === normalizeAssetCode(vaultDepositAsset.code) &&
+      !sameIssuedAsset(walletSourceAsset, vaultDepositAsset);
+    if (sameSymbolDifferentIssuer && !allowDefindexSameSymbolIssuerConversion()) {
+      logDefindex('warn', 'prepare_vault_same_symbol_conversion_blocked', {
+        request_id: input.requestId,
+        session_id: maskLogValue(input.context.sessionId),
+        user_id: maskLogValue(input.context.userId),
+        public_key: maskLogValue(input.context.publicKey),
+        asset_code: input.vault.asset_code,
+        vault_address: maskLogValue(input.vault.vault_address),
+        source_asset_code: walletSourceAsset.code,
+        source_asset_issuer: maskLogValue(walletSourceAsset.issuer),
+        destination_asset_code: vaultDepositAsset.code,
+        destination_asset_issuer: maskLogValue(vaultDepositAsset.issuer),
+      });
+      return {
+        requiresConversion: true,
+        conversionReady: false,
+        executionBlockedCode: 'yield_asset_conversion_unavailable',
+        executionBlockedReason: 'Revisao preparada. Esta opcao usa outra emissao desta moeda no ambiente de teste. A confirmacao foi bloqueada para evitar conversao distorcida entre emissoes.',
+        setupRequired: false,
+        vaultDepositAsset,
+        walletSourceAsset,
+        conversionQuote: {
+          conversion_mode: 'blocked_same_symbol_issuer_conversion',
+          source_asset: walletSourceAsset,
+          destination_asset: vaultDepositAsset,
+          route_sane: false,
+        },
+      };
+    }
+
     let trustline: TrustlineResult | undefined;
     if (normalizeAssetCode(vaultDepositAsset.code) !== 'XLM') {
       try {
@@ -4614,6 +4652,32 @@ export class AnchorService {
         sourceAmount,
         destinationAmount,
       });
+      const sameSymbolDifferentIssuer =
+        normalizeAssetCode(sourceAsset.code) === normalizeAssetCode(destinationAsset.code) &&
+        !sameIssuedAsset(sourceAsset, destinationAsset);
+      if (sameSymbolDifferentIssuer && !allowDefindexSameSymbolIssuerConversion()) {
+        logDefindex('warn', 'execute_vault_same_symbol_conversion_blocked', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          action,
+          amount,
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          source_asset_code: sourceAsset.code,
+          source_asset_issuer: maskLogValue(sourceAsset.issuer),
+          destination_asset_code: destinationAsset.code,
+          destination_asset_issuer: maskLogValue(destinationAsset.issuer),
+          source_amount: sourceAmount,
+          destination_amount: destinationAmount,
+        });
+        throw apiError(
+          'A conversao automatica entre duas emissoes desta moeda esta bloqueada neste testnet para evitar perda de valor.',
+          409,
+          'yield_asset_conversion_unavailable',
+        );
+      }
       if (unsafeRatio !== null) {
         logDefindex('warn', 'execute_vault_asset_conversion_unsafe', {
           request_id: defindexRequestId(input),
