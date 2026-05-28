@@ -95,6 +95,55 @@ describe('Defindex yield transaction flows', () => {
     ]));
   });
 
+  it('marks same-symbol cross-issuer options as not executable in status', async () => {
+    (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockImplementation(async (vault: any) => {
+      if (vault.asset_code === 'USDC') {
+        return {
+          compatible: true,
+          info: {
+            asset_code: 'USDC',
+            asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+            asset_contract: DEFINDEX_TESTNET_USDC_CONTRACT,
+            source: 'vault_info',
+          },
+          configured_issuer: CIRCLE_TESTNET_USDC_ISSUER,
+          configured_contract: 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
+          hardcoded_asset_override: true,
+          requires_wallet_asset_conversion: true,
+          wallet_source_asset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+          vault_deposit_asset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
+        };
+      }
+      return {
+        compatible: true,
+        info: {
+          asset_code: vault.asset_code,
+          asset_issuer: vault.asset_issuer,
+          asset_contract: vault.asset_contract,
+          source: 'configured',
+        },
+        configured_issuer: vault.asset_issuer,
+        configured_contract: vault.asset_contract,
+        vault_deposit_asset: {
+          code: vault.asset_code,
+          issuer: vault.asset_issuer,
+          contract: vault.asset_contract,
+        },
+      };
+    });
+    jest.spyOn(DefindexYieldService, 'getVaultAPY').mockResolvedValue({ apy: 5.25, period: '7d' });
+
+    const status = await AnchorService.getDefindexYieldStatus();
+    const usdc = status.vaults.find((vault: any) => vault.asset_code === 'USDC') as any;
+
+    expect(usdc).toMatchObject({
+      asset_code: 'USDC',
+      requires_wallet_asset_conversion: true,
+      execution_available: false,
+      execution_blocked_code: 'yield_asset_conversion_unavailable',
+    });
+  });
+
   it.each([
     ['USDC', YIELD_VAULTS.USDC],
     ['CETES', YIELD_VAULTS.CETES],

@@ -2227,9 +2227,10 @@ async function executeGetYieldOptions(input: any): Promise<string> {
       return {
         currency,
         name: formatYieldAssetName(internalAssetCode, language),
-        available: !option.apy_error,
+        available: !option.apy_error && option.execution_available !== false,
       };
     });
+    const availableOptions = options.filter((option) => option.available);
 
     const configured = Boolean((status as any)?.runtime?.configured);
     const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
@@ -2239,10 +2240,10 @@ async function executeGetYieldOptions(input: any): Promise<string> {
       : `${isTestnet ? 'Testnet. ' : ''}Somente revisão. Não é recomendação de investimento, renda fixa, poupança ou depósito bancário.`;
     const message = language === 'en'
       ? options.length
-        ? `Options for review: ${options.map((option) => option.name).join(', ')}.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
+        ? `Options for review: ${availableOptions.map((option) => option.name).join(', ') || 'none available for confirmation right now'}.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
         : `Options for review are not configured yet.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
       : options.length
-        ? `Opções para revisão: ${options.map((option) => option.name).join(', ')}.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`
+        ? `Opções para revisão: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível para confirmação agora'}.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`
         : `As opções para revisão ainda não foram configuradas.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`;
 
     return JSON.stringify({

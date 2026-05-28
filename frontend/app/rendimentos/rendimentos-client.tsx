@@ -57,6 +57,10 @@ type YieldOption = {
   network: string;
   hardcoded_asset_override?: boolean;
   requires_wallet_asset_conversion?: boolean;
+  execution_available?: boolean;
+  execution_blocked_code?: string;
+  execution_blocked_reason?: string;
+  unavailable_reason?: string;
   wallet_source_asset?: { code?: string; issuer?: string };
   vault_deposit_asset?: { code?: string; issuer?: string; contract?: string };
   conversion_note?: string;
@@ -288,7 +292,12 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
 
 function optionRateText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
   if (!option) return localCopy(language, "Não disponível", "Unavailable");
+  if (option.execution_available === false) return localCopy(language, "Bloqueada neste testnet", "Blocked in this testnet");
   return localCopy(language, "Opção disponível", "Available option");
+}
+
+function optionExecutionBlocked(option: YieldOption | null | undefined) {
+  return Boolean(option && (option.execution_available === false || option.execution_blocked_code));
 }
 
 function formatReturnPercent(value: unknown, language: AppLanguage = "pt-BR") {
@@ -525,9 +534,10 @@ export default function RendimentosClient({
   const actionableOptionCode = optionCode(actionableOption);
   const selectedHasDirectOption = Boolean(selectedOption);
   const selectedHasYield = Boolean(selectedOption);
+  const selectedExecutionBlocked = optionExecutionBlocked(actionableOption);
   const autoRouteToOption = Boolean(actionableOption && actionableOptionCode && actionableOptionCode !== safeSelectedCode);
   const sessionLoading = Boolean(session.loading && !session.checked);
-  const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && Number(String(amount).replace(",", ".")) > 0);
+  const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const convertToBestYieldUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
@@ -1280,12 +1290,13 @@ function AccountPanel({
           const profile = moneyProfile(code);
           const selected = code === selectedCode;
           const option = item.option;
+          const blocked = optionExecutionBlocked(option);
           return (
             <button
               key={`${code}-${item.asset_issuer || "default"}`}
               type="button"
               onClick={() => onSelect(code)}
-              className={`grid min-h-20 grid-cols-[1fr_auto] items-center gap-3 border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
+              className={`grid min-h-20 grid-cols-[1fr_auto] items-center gap-3 border p-3 text-left transition ${selected ? blocked ? "border-tts-gold bg-tts-gold-bg" : "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"}`}
             >
               <span>
                 <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
@@ -1293,7 +1304,7 @@ function AccountPanel({
                 </span>
                 <span className="mt-2 block text-sm font-black text-tts-deep">{option ? optionTitle(option, language) : profileName(profile, language)}</span>
                 {option ? (
-                  <span className="mt-1 block text-xs font-bold text-tts-confirm">
+                  <span className={`mt-1 block text-xs font-bold ${blocked ? "text-tts-gold" : "text-tts-confirm"}`}>
                     {optionRateText(option, language)}
                   </span>
                 ) : (
@@ -1404,6 +1415,7 @@ function YieldWorkspacePanel({
   const profileShort = selectedProfile.short;
   const targetProfile = moneyProfile(optionCode(selectedOption));
   const selectedNeedsWalletConversion = Boolean(autoRouteToOption || selectedOption?.requires_wallet_asset_conversion || result?.conversion_required);
+  const selectedExecutionBlocked = optionExecutionBlocked(selectedOption);
   const unavailableTitle = configured
     ? L("Sem opção ativa para revisar", "No active option to review")
     : L("Opções ainda sem configuração", "Options are not configured yet");
@@ -1411,7 +1423,12 @@ function YieldWorkspacePanel({
     "Esse saldo ainda não tem opção ativa neste ambiente. Use a conversão para trocar por uma moeda disponível e depois volte para investir.",
     "This balance has no active option in this environment. Use conversion to switch into an available currency, then return to invest."
   );
-  const routeDescription = !selectedHasDirectOption && autoRouteToOption && selectedOption
+  const routeDescription = selectedExecutionBlocked
+    ? L(
+        "Esta opção aceita outra emissão de dólar no ambiente de teste. Para investir saldo real de dólares, é preciso uma opção compatível com a mesma emissão da sua conta.",
+        "This option accepts another dollar issuance in the test environment. To invest real dollar balance, a compatible option with the same account issuance is required."
+      )
+    : !selectedHasDirectOption && autoRouteToOption && selectedOption
     ? L(
         `A revisão usa seu saldo em ${profileName(selectedProfile, language)} e só confirma a troca para ${profileName(targetProfile, language)} se o backend encontrar uma rota segura.`,
         `The review uses your ${profileName(selectedProfile, language)} balance and only confirms the swap to ${profileName(targetProfile, language)} if the backend finds a safe route.`
@@ -1422,8 +1439,9 @@ function YieldWorkspacePanel({
   const hasPrepared = Boolean(result);
   const submitted = Boolean(result?.submitted || result?.hash);
   const preparedExecutionBlocked = Boolean(hasPrepared && result?.execution_ready === false);
-  const confirmationAvailable = confirmationEnabled && !preparedExecutionBlocked;
-  const canConfirm = canPrepare && confirmationAvailable && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
+  const confirmationAvailable = confirmationEnabled && !preparedExecutionBlocked && !selectedExecutionBlocked;
+  const canPrepareAction = canPrepare && !selectedExecutionBlocked;
+  const canConfirm = canPrepareAction && confirmationAvailable && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
   const blockedCode = String(result?.execution_blocked_code || "").trim();
   const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
     ? L("Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
@@ -1449,7 +1467,7 @@ function YieldWorkspacePanel({
   const optionAvailabilityLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const reviewAmountLabel = selectedOption ? `${formatAmount(amount || 0, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
-    ? L("Investir", "Invest")
+    ? selectedExecutionBlocked ? L("Investir indisponível", "Invest unavailable") : L("Investir", "Invest")
     : L("Retirar", "Withdraw");
   const confirmLabel = submitted
     ? L("Movimentação enviada", "Movement sent")
@@ -1457,7 +1475,9 @@ function YieldWorkspacePanel({
       ? L("Confirmar investimento", "Confirm investment")
       : L("Confirmar retirada", "Confirm withdrawal");
   const actionDescription = action === "deposit"
-    ? selectedNeedsWalletConversion
+    ? selectedExecutionBlocked
+      ? L("Esta opção está bloqueada para evitar que dólares reais sejam convertidos por uma rota testnet distorcida.", "This option is blocked to avoid sending real dollar balance through a distorted testnet route.")
+      : selectedNeedsWalletConversion
       ? L("Confere a rota da moeda e só confirma se ela estiver segura. Nada sai sem PIN.", "Checks the asset route and only confirms when it is safe. Nothing moves without PIN.")
       : L("Prepara o investimento na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares the investment into the selected option. In review mode, nothing leaves the account.")
     : L("Prepara a retirada da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares withdrawal from the position back to available balance. In review mode, nothing leaves the account.");
@@ -1518,7 +1538,11 @@ function YieldWorkspacePanel({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <MiniStat label={L("Disponível", "Available")} value={accountBalanceLabel} detail={L("saldo da conta", "account balance")} />
-        <MiniStat label={L("Opção", "Option")} value={optionAvailabilityLabel} detail={L("disponível para revisão", "available for review")} />
+        <MiniStat
+          label={L("Opção", "Option")}
+          value={optionAvailabilityLabel}
+          detail={selectedExecutionBlocked ? L("não executa dinheiro real", "does not execute real balance") : L("disponível para revisão", "available for review")}
+        />
         <MiniStat label={L("Valor revisado", "Reviewed amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
       </div>
 
@@ -1540,8 +1564,12 @@ function YieldWorkspacePanel({
       </div>
 
       {authenticated && selectedHasYield && routeDescription ? (
-        <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4 text-sm leading-6 text-tts-confirm">
-          <p className="font-black">{L("Conversão automática antes da confirmação", "Automatic conversion before confirmation")}</p>
+        <div className={`mt-5 border p-4 text-sm leading-6 ${selectedExecutionBlocked ? "border-tts-gold bg-tts-gold-bg text-tts-gold" : "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"}`}>
+          <p className="font-black">
+            {selectedExecutionBlocked
+              ? L("Opção bloqueada para dinheiro real", "Option blocked for real balance")
+              : L("Rota checada antes da confirmação", "Route checked before confirmation")}
+          </p>
           <p className="mt-1">{routeDescription}</p>
         </div>
       ) : null}
@@ -1652,7 +1680,7 @@ function YieldWorkspacePanel({
               <button
                 type="button"
                 onClick={onPrepare}
-                disabled={!canPrepare || apiLoading}
+                disabled={!canPrepareAction || apiLoading}
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
@@ -1740,7 +1768,7 @@ function YieldWorkspacePanel({
                 <button
                   type="button"
                   onClick={onPrepare}
-                  disabled={!canPrepare || apiLoading}
+                  disabled={!canPrepareAction || apiLoading}
                   className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
