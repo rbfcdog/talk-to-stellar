@@ -7,12 +7,14 @@ import { EconomyEngineService } from '../services/economy-engine.service';
 import { InvoiceService } from '../services/invoice.service';
 import { GlobalProfileService } from '../services/global-profile.service';
 import { TransactionHistoryService } from '../services/transaction-history.service';
+import { FinancialContextService } from '../services/financial-context.service';
+import { StellarService } from '../services/stellar.service';
 import { AgentRepository } from '../repository/core/agent.repository';
 import { supabase } from '../../config/supabase';
 import ExternalService from '../services/core/external.service';
-import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { getAssetIssuer, normalizeAssetCode, resolveConfiguredAsset } from '../../config/assets';
 import { isSessionExpired } from '../../utils/session-expiry';
-import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
+import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { PlatformFeeService } from '../services/platform-fee.service';
 import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
 import { timingSafeEqualString } from '../../utils/password';
@@ -23,6 +25,7 @@ import {
   computeUsdBrlMarketDeviationPct,
   getUsdBrlMaxMarketDeviationPct,
 } from '../services/quote-rate-sanity.service';
+import { attachQuoteExpiry, quoteTtlSeconds } from '../services/quote-expiry.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -155,6 +158,22 @@ function sessionTokenFromRequest(req: Request): string {
       bearer ||
       ''
   ).trim();
+}
+
+function formatConversionRouteChain(input: {
+  sourceAssetCode?: string;
+  destinationAssetCode?: string;
+  path?: Array<{ code?: string; asset_code?: string; type?: string; asset_type?: string }>;
+}): string {
+  const source = String(input.sourceAssetCode || '').trim().toUpperCase();
+  const destination = String(input.destinationAssetCode || '').trim().toUpperCase();
+  const hops = Array.isArray(input.path)
+    ? input.path
+      .map((item) => String(item?.code || item?.asset_code || '').trim().toUpperCase())
+      .filter(Boolean)
+    : [];
+  const chain = [source, ...hops, destination].filter(Boolean);
+  return chain.filter((asset, index) => index === 0 || asset !== chain[index - 1]).join(' -> ');
 }
 
 async function requireSessionAuth(req: Request, res: Response): Promise<{ sessionId: string; userId: string; session: any } | null> {
@@ -443,6 +462,102 @@ export class FinancialController {
       return res.status(200).json({ success: true, ...savings });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
+    }
+  }
+
+  static async createConversionConfirmation(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+
+      const sourceAmount = String(req.body?.source_amount || req.body?.sourceAmount || req.body?.amount || '')
+        .replace(',', '.')
+        .trim();
+      const sourceAmountNumber = toPositiveNumber(sourceAmount, 0);
+      if (sourceAmountNumber <= 0) {
+        return res.status(400).json({ success: false, message: 'Informe um valor válido para converter.' });
+      }
+
+      const sourceAssetCode = normalizeAssetCode(req.body?.source_asset_code || req.body?.sourceAssetCode || 'USDC');
+      const destAssetCode = normalizeAssetCode(req.body?.dest_asset_code || req.body?.destAssetCode || req.body?.destination_asset_code || 'BRL');
+      if (sourceAssetCode === destAssetCode) {
+        return res.status(400).json({ success: false, message: 'Escolha moedas diferentes para converter.' });
+      }
+
+      const context = await FinancialContextService.resolve({ sessionId: auth.sessionId, userId: auth.userId });
+      const sourcePublicKey = String((auth.session as any)?.public_key || context.walletPublicKey || '').trim();
+      if (!sourcePublicKey) {
+        return res.status(400).json({ success: false, message: 'Conta sem carteira ativa para conversão.' });
+      }
+
+      const sourceAsset = resolveConfiguredAsset(sourceAssetCode, req.body?.source_asset_issuer || req.body?.sourceAssetIssuer);
+      const destAsset = resolveConfiguredAsset(destAssetCode, req.body?.dest_asset_issuer || req.body?.destAssetIssuer || req.body?.destination_asset_issuer);
+      const quote = await StellarService.quoteStrictSendConversion({
+        sourcePublicKey,
+        destination: sourcePublicKey,
+        sourceAmount,
+        sourceAsset,
+        destAsset,
+      });
+
+      const networkFee = await formatNetworkFeeForCustomer(quote.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
+      const unifiedFee = buildUnifiedFeeDisplay({
+        networkFee,
+        platformFeeAmount: quote.platformFee?.feeAmount || null,
+        platformFeeAssetCode: quote.platformFee?.feeAssetCode || null,
+        sourceAssetCode: quote.sourceAsset?.code || sourceAsset.code,
+        destinationAssetCode: quote.destinationAsset?.code || destAsset.code,
+      });
+      const quoteWithExpiry = attachQuoteExpiry({
+        ...quote,
+        fee_display: unifiedFee.display,
+        fee_usdc: unifiedFee.fee_usdc,
+        fee_brl: unifiedFee.fee_brl,
+      });
+      const routeChain = formatConversionRouteChain({
+        sourceAssetCode: quote.sourceAsset?.code || sourceAsset.code,
+        destinationAssetCode: quote.destinationAsset?.code || destAsset.code,
+        path: quote.path || [],
+      });
+
+      const { token, url } = await externalService.createConversionConfirmUrlWithContext({
+        session_id: auth.sessionId,
+        owner_id: auth.userId,
+        source_amount: sourceAmount,
+        source_asset_code: sourceAsset.code,
+        source_asset_issuer: sourceAsset.issuer,
+        dest_amount: String(quote.destinationAmount || ''),
+        dest_asset_code: destAsset.code,
+        dest_asset_issuer: destAsset.issuer,
+        quote: quoteWithExpiry,
+      }, {
+        estimated_fee_display: unifiedFee.display,
+        estimated_fee_usdc: unifiedFee.fee_usdc || null,
+        estimated_fee_brl: unifiedFee.fee_brl || null,
+        estimated_platform_fee: null,
+        estimated_spread_fee: null,
+        route_chain: routeChain || null,
+        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
+        quote_issued_at: quoteWithExpiry.quote_issued_at || null,
+        quote_expires_at: quoteWithExpiry.quote_expires_at || null,
+        quote_ttl_seconds: quoteWithExpiry.quote_ttl_seconds || quoteTtlSeconds(),
+        language: req.body?.language || req.body?.lang || null,
+      });
+
+      return res.status(200).json({
+        success: true,
+        token,
+        url,
+        quote: quoteWithExpiry,
+        source_amount: sourceAmount,
+        source_asset_code: sourceAsset.code,
+        dest_amount: String(quote.destinationAmount || ''),
+        dest_asset_code: destAsset.code,
+        estimated_fee_display: unifiedFee.display,
+        route_chain: routeChain || null,
+      });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui preparar essa conversao agora. Tente novamente em alguns segundos.") });
     }
   }
 

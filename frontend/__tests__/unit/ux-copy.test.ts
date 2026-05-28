@@ -9,10 +9,9 @@ function source(path: string) {
 }
 
 describe("UX copy guardrails", () => {
-  it("keeps shared account and chat affordances on the main money screens", () => {
+  it("keeps shared account and chat affordances where the flow still returns to chat", () => {
     const screens = [
       "app/rendimentos/rendimentos-client.tsx",
-      "app/convert/convert-client.tsx",
       "app/pix-ramp/pix-ramp-client.tsx",
       "app/transactions/transactions-client.tsx",
       "app/passkey-test/passkey-test-client.tsx",
@@ -23,6 +22,20 @@ describe("UX copy guardrails", () => {
       expect(text, `${screen} should use the shared account status`).toContain("AccountStatusCard");
       expect(text, `${screen} should preserve a return path to chat`).toContain("ReturnToChat");
     }
+  });
+
+  it("keeps conversion review inside the web confirmation flow, not chat", () => {
+    const text = source("app/convert/convert-client.tsx");
+    const financialRouter = source("../backend/src/api/routes/financial.router.ts");
+
+    expect(text).toContain("AccountStatusCard");
+    expect(text).toContain("/api/financial/conversion-confirmation");
+    expect(text).toContain('buildUrl("/confirm-conversion"');
+    expect(text).toContain("Nada passa pelo chat");
+    expect(text).toContain("payload.token");
+    expect(text).not.toContain("ReturnToChat");
+    expect(text).not.toContain('buildUrl("/chat"');
+    expect(financialRouter).toContain("conversion-confirmation");
   });
 
   it("does not bring back the confusing yield wording that was removed", () => {
