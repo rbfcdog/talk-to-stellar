@@ -1004,7 +1004,6 @@ function AccountPanel({
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const configuredOptionCodes = useMemo(() => new Set(options.map((option) => optionCode(option)).filter(Boolean)), [options]);
   const balanceItems = useMemo(() => options.map((option) => {
     const code = optionCode(option);
     const balance = balances.find((item) => normalizeUiAssetCode(item.asset_code) === code);
@@ -1015,10 +1014,6 @@ function AccountPanel({
       option,
     };
   }), [balances, options]);
-  const balancesWithoutVault = useMemo(() => balances.filter((item) => {
-    const code = normalizeUiAssetCode(item.asset_code);
-    return code && !configuredOptionCodes.has(code) && normalizeDecimal(item.balance) > 0;
-  }), [balances, configuredOptionCodes]);
 
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
@@ -1032,7 +1027,7 @@ function AccountPanel({
             {sessionLoading
               ? L("Carregando sua conta.", "Loading your account.")
               : authenticated
-              ? L("Toque em uma moeda com opção ativa. Outros saldos podem ser convertidos antes de investir.", "Tap a currency with an active option. Other balances can be converted before investing.")
+              ? L("Toque em uma moeda com opção ativa.", "Tap a currency with an active option.")
               : L("Entre para carregar seus saldos.", "Sign in to load your balances.")}
           </p>
         </div>
@@ -1088,24 +1083,6 @@ function AccountPanel({
           </div>
         )}
       </div>
-
-      {authenticated && balancesWithoutVault.length ? (
-        <div className="mt-4 border border-tts-border bg-tts-bg p-3 text-xs leading-5 text-tts-muted">
-          <p className="font-black text-tts-deep">{L("Outros saldos", "Other balances")}</p>
-          <p className="mt-1">
-            {L(
-              "Estes saldos não aparecem como aplicação porque ainda não têm opção ativa neste ambiente.",
-              "These balances do not appear as application options because they do not have an active option in this environment yet."
-            )}
-          </p>
-          <p className="mt-2 font-bold">
-            {balancesWithoutVault.map((item) => {
-              const code = normalizeUiAssetCode(item.asset_code);
-              return `${formatAmount(item.balance, language)} ${moneyProfile(code).short}`;
-            }).join(" · ")}
-          </p>
-        </div>
-      ) : null}
 
       {!authenticated && !sessionLoading ? (
         <a href="/login?next=/review" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">

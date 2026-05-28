@@ -72,7 +72,9 @@ describe("UX copy guardrails", () => {
 
     expect(reviewText).toContain("const actionableOption = selectedOption;");
     expect(reviewText).toContain("Converter ativos");
-    expect(reviewText).toContain("não têm opção ativa");
+    expect(reviewText).toContain("Toque em uma moeda com opção ativa.");
+    expect(reviewText).not.toContain("Outros saldos");
+    expect(reviewText).not.toContain("Estes saldos não aparecem");
     expect(pixText).toContain("offRampInsufficientBalance");
     expect(pixText).toContain("Converter ativos");
     expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
