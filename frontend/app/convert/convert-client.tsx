@@ -74,6 +74,17 @@ const ASSETS: AssetOption[] = [
     descriptionEn: "Test option when available in this environment.",
     tone: "border-tts-border2 bg-tts-surface text-tts-muted",
   },
+  {
+    code: "XLM",
+    short: "XLM",
+    namePt: "XLM",
+    nameEn: "XLM",
+    promptPt: "XLM",
+    promptEn: "XLM",
+    descriptionPt: "Saldo XLM da conta para conversões internas.",
+    descriptionEn: "Account XLM balance for internal conversions.",
+    tone: "border-tts-border2 bg-tts-surface text-tts-deep",
+  },
 ];
 
 function localCopy(language: AppLanguage, pt: string, en: string) {
