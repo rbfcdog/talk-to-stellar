@@ -4509,7 +4509,7 @@ export class AnchorService {
       });
       throw apiError(
         runtime.execution_blocked_reason ||
-          'Confirmacao de APY desativada neste ambiente. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovacao juridica/compliance.',
+          'Confirmacao de revisao desativada neste ambiente. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovacao juridica/compliance.',
         403,
         'yield_execution_disabled',
       );

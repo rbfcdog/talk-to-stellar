@@ -16,7 +16,7 @@ const FAQS: FaqItem[] = [
   {
     question: 'O que posso pedir no chat?',
     answer:
-      'Você pode pedir saldo, colocar dinheiro com PIX, converter entre moedas, revisar APY por saldo, retirar para uma chave PIX e ver comprovantes.',
+      'Você pode pedir saldo, colocar dinheiro com PIX, converter entre moedas, revisar opções por saldo, retirar para uma chave PIX e ver comprovantes.',
   },
   {
     question: 'A chave PIX de saída é fixa?',
@@ -29,14 +29,14 @@ const FAQS: FaqItem[] = [
       'A experiência mostra reais, dólares, euros e as moedas extras configuradas no ambiente. Reais são tratados como reais na UX.',
   },
   {
-    question: 'Como funciona a revisão com APY?',
+    question: 'Como funciona a revisão?',
     answer:
-      'O usuário vê opções disponíveis por moeda, gráfico estimado e uma revisão antes de guardar ou resgatar. Retornos variam e não são prometidos como garantidos.',
+      'O usuário vê opções disponíveis por moeda e uma revisão antes de entrar ou sair. Nada é confirmado sem PIN.',
   },
   {
     question: 'Dá para fazer tudo em um fluxo?',
     answer:
-      'Sim. Peça algo como “injetar 500 reais, revisar APY e sair para meu PIX”. O agente abre a interface consolidada do ciclo do dinheiro.',
+      'Sim. Peça algo como “injetar 500 reais, revisar e sair para meu PIX”. O agente abre a interface consolidada do ciclo do dinheiro.',
   },
   {
     question: 'Preciso baixar app novo?',

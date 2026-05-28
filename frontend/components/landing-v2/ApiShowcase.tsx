@@ -68,7 +68,7 @@ export function ApiShowcase() {
           </h2>
           <p className="max-w-md text-sm leading-[1.65] text-tts-muted">
             O agente identifica o objetivo, chama a ferramenta correta e devolve
-            a tela certa: conversão, revisão com APY, PIX de entrada ou PIX de saída.
+            a tela certa: conversão, revisão, PIX de entrada ou PIX de saída.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button

@@ -28,7 +28,7 @@ export default function ProblemSection() {
           transition={{ delay: 0.1 }}
           className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light max-w-2xl mx-auto"
         >
-          {L("Em fluxos tradicionais, cada etapa fica em um lugar diferente. Aqui, você vê PIX, moedas, APY e retirada no mesmo caminho, sempre com revisão antes de confirmar.", "In traditional flows, each step lives somewhere else. Here, PIX, currencies, APY options, and withdrawal stay in one guided path with review before confirmation.")}
+          {L("Em fluxos tradicionais, cada etapa fica em um lugar diferente. Aqui, você vê PIX, moedas, revisão e retirada no mesmo caminho, sempre com revisão antes de confirmar.", "In traditional flows, each step lives somewhere else. Here, PIX, currencies, review, and withdrawal stay in one guided path with review before confirmation.")}
         </motion.p>
       </div>
 
@@ -97,7 +97,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Custo claro, sem surpresa.", "Real cost, no fine print.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              {L("Antes de confirmar, o TalkToStellar mostra taxa, valor de saída, valor que chega e opção com APY. A comparação fica simples e o usuário não precisa interpretar infraestrutura.", "Traditional providers often hide part of the cost in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the reais, dollars, and euros path clear.")}
+              {L("Antes de confirmar, o TalkToStellar mostra taxa, valor de saída, valor que chega e a opção escolhida. A comparação fica simples e o usuário não precisa interpretar infraestrutura.", "Traditional providers often hide part of the cost in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the reais, dollars, and euros path clear.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">

@@ -53,14 +53,14 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Guia rápido: saldo, PIX, converter, APY e ciclo completo.',
+      message: 'Guia rápido: saldo, PIX, converter, revisão e ciclo completo.',
     }));
 
     const result = await graph.processInput(createState('olá, o que você pode fazer?'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('APY');
+    expect(result.response_message).toContain('revisão');
     expect(result.response_message).toContain('ciclo completo');
   });
 
@@ -247,7 +247,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisar aplicação está pronto para CETES.\n\nAbra:\nhttps://app.example.com/yield?asset=CETES',
+      message: 'Revisar aplicação está pronto para CETES.\n\nAbra:\nhttps://app.example.com/review?asset=CETES',
     }));
 
     const result = await graph.processInput(createState('manter 50 cetes'));
@@ -261,7 +261,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/yield?asset=CETES');
+    expect(result.response_message).toContain('/review?asset=CETES');
   });
 
   it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {

@@ -96,7 +96,7 @@ function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
     if (path.endsWith("/confirm-payment")) return t("chat_link_payment");
     if (path.endsWith("/confirm-conversion")) return t("chat_link_conversion");
     if (path.endsWith("/convert")) return t("chat_link_convert");
-    if (path.endsWith("/yield")) return t("chat_link_yield");
+    if (path.endsWith("/yield") || path.endsWith("/review")) return t("chat_link_yield");
     if (path.endsWith("/money-cycle")) return t("chat_link_money_cycle");
     if (path.endsWith("/create-account")) return t("chat_link_account");
     if (path.endsWith("/change-pin")) return t("chat_link_pin");

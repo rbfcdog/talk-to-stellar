@@ -81,7 +81,7 @@ export default function PhoneMockup() {
               <p className="text-[15px] leading-snug">
                 {L("Oi. Eu sou o ", "Hi. I am ")}
                 <strong className="text-[#00D2FF]">TalkToStellar</strong>
-                {L(". Peça saldo, PIX, conversão, APY ou saída para seu PIX. Se precisar entrar, eu gero um link seguro.", ". Ask for balance, PIX, conversion, APY, or money out to your PIX. If you need to sign in, I create a secure link.")}
+                {L(". Peça saldo, PIX, conversão, revisão ou saída para seu PIX. Se precisar entrar, eu gero um link seguro.", ". Ask for balance, PIX, conversion, review, or money out to your PIX. If you need to sign in, I create a secure link.")}
               </p>
               <div className="text-right mt-1">
                 <span className="text-[10px] text-[#9BA4B5]">14:40</span>
@@ -99,7 +99,7 @@ export default function PhoneMockup() {
               className="self-end bg-[#00D87A] text-[#e9edef] px-3 py-2 rounded-2xl rounded-br-sm max-w-[85%] shadow-sm flex flex-col relative"
             >
               <p className="text-[15px] leading-snug">
-                {L("Quero colocar R$ 500, revisar APY e depois sair para meu PIX.", "I want to add R$500, review APY, then withdraw to my PIX.")}
+                {L("Quero colocar R$ 500, revisar e depois sair para meu PIX.", "I want to add R$500, review, then withdraw to my PIX.")}
               </p>
               <div className="flex items-center gap-1 self-end mt-1">
                 <span className="text-[10px] text-[#9BA4B5]">14:41</span>
@@ -121,7 +121,7 @@ export default function PhoneMockup() {
                 {L("Perfeito. Preparei o ciclo completo para ", "Done. I prepared the full cycle for ")}
                 <strong className="text-[#00D2FF]">R$ 500,00</strong>
                 . <br/>
-                {L("Etapas: PIX, APY e retirada", "Steps: PIX, APY, and withdrawal")}
+                {L("Etapas: PIX, revisão e retirada", "Steps: PIX, review, and withdrawal")}
                 . <br/><br/>
                 {L("Vou abrir um link para revisar e confirmar com PIN.", "I will open a link to review and confirm with PIN.")}
               </p>

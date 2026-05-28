@@ -33,6 +33,7 @@ describe("UX copy guardrails", () => {
       "PIN ativo",
       "A consultar",
       "Sem conta",
+      "APY",
     ];
 
     for (const phrase of forbidden) {

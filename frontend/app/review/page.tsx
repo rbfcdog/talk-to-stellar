@@ -1,8 +1,8 @@
 import RendimentosClient from "../rendimentos/rendimentos-client";
 
 export const metadata = {
-  title: "Money cycle",
-  description: "Add money with PIX, review it, and send it out to PIX.",
+  title: "Review and balances",
+  description: "Review balances, currencies, options, PIX add, and PIX withdrawal.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -20,11 +20,10 @@ function serializeSearchParams(searchParams?: SearchParams) {
       params.set(key, value);
     }
   }
-  params.set("cycle", "1");
   return params.toString();
 }
 
-export default async function MoneyCyclePage({
+export default async function ReviewPage({
   searchParams,
 }: {
   searchParams?: SearchParams | Promise<SearchParams>;

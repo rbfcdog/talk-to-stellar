@@ -1,15 +1,11 @@
-import RendimentosClient from "../rendimentos/rendimentos-client";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Yield and balances",
-  description: "Review balances, currencies, earning options, PIX add, and PIX withdrawal.",
+  title: "Review and balances",
+  description: "Review balances, currencies, options, PIX add, and PIX withdrawal.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
-
-async function resolveSearchParams(searchParams?: SearchParams | Promise<SearchParams>) {
-  return Promise.resolve(searchParams || {});
-}
 
 function serializeSearchParams(searchParams?: SearchParams) {
   const params = new URLSearchParams();
@@ -23,11 +19,12 @@ function serializeSearchParams(searchParams?: SearchParams) {
   return params.toString();
 }
 
-export default async function YieldPage({
+export default async function LegacyReviewPage({
   searchParams,
 }: {
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
-  const resolved = await resolveSearchParams(searchParams);
-  return <RendimentosClient initialQuery={serializeSearchParams(resolved)} />;
+  const resolved = await Promise.resolve(searchParams || {});
+  const query = serializeSearchParams(resolved);
+  redirect(query ? `/review?${query}` : "/review");
 }

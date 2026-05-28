@@ -51,7 +51,7 @@ describe('public-error utility', () => {
     expect(message).not.toMatch(/duplicate key|unique constraint/i);
   });
 
-  it('maps disabled APY review execution without exposing env names', () => {
+  it('maps disabled review execution without exposing env names', () => {
     const message = publicErrorMessage('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.');
 
     expect(message).toContain('confirmacao');
@@ -59,7 +59,7 @@ describe('public-error utility', () => {
     expect(message).not.toMatch(/Defindex|DEFINDEX|ENABLE_EXECUTION|assinar e enviar/i);
   });
 
-  it('maps missing APY review signing material without exposing vault internals', () => {
+  it('maps missing review signing material without exposing vault internals', () => {
     const message = publicErrorMessage('Wallet private key is not available in Vault for Defindex yield.');
 
     expect(message).toContain('conta');
@@ -67,7 +67,7 @@ describe('public-error utility', () => {
     expect(message).not.toMatch(/Wallet private key|Vault|Defindex|secret/i);
   });
 
-  it('maps APY confirmation PIN and review-state failures to actionable messages', () => {
+  it('maps confirmation PIN and review-state failures to actionable messages', () => {
     expect(publicErrorMessage('PIN da conta e obrigatorio para confirmar esta operacao.')).toContain('PIN');
     expect(publicErrorMessage('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.')).toContain('Prepare a revisao');
     expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('concluir a confirmacao');
