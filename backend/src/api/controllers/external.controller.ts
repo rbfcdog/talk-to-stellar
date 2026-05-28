@@ -68,13 +68,31 @@ async function createExternalMappingWithAliases(payload: {
   const providers = externalProviderAliases(normalizedProvider);
   const primaryProvider = providers.includes(normalizedProvider) ? normalizedProvider : providers[0];
   for (const provider of providers) {
-    await externalRepo.createMapping({
+    const keepIdentityFields = provider === primaryProvider;
+    const baseMapping = {
       provider,
       provider_user_id: normalizedProviderUserId,
       session_id: payload.session_id,
       user_id: payload.user_id,
-      data: externalAliasData(payload.data, provider === primaryProvider),
-    });
+    };
+    try {
+      await externalRepo.createMapping({
+        ...baseMapping,
+        data: externalAliasData(payload.data, keepIdentityFields),
+      });
+    } catch (error) {
+      if (!keepIdentityFields || !isUniqueViolation(error)) {
+        throw error;
+      }
+
+      // Some legacy WhatsApp/phone alias rows already own the phone identity
+      // fields in data. Keep the channel link idempotent and avoid duplicating
+      // those identity fields across aliases.
+      await externalRepo.createMapping({
+        ...baseMapping,
+        data: externalAliasData(payload.data, false),
+      });
+    }
   }
 }
 

@@ -3,6 +3,7 @@ const createOnboardUrlMock = jest.fn();
 const getWalletBySessionMock = jest.fn();
 const getSessionMock = jest.fn();
 const getUserPasskeysMock = jest.fn();
+const createExternalMappingMock = jest.fn();
 
 jest.mock('../src/config/supabase', () => ({
   supabase: {},
@@ -29,6 +30,24 @@ jest.mock('../src/api/repository/core/agent.repository', () => ({
   })),
 }));
 
+jest.mock('../src/api/repository/core/external.repository', () => ({
+  normalizeExternalProvider: jest.fn((provider: string) => String(provider || '').trim().toLowerCase()),
+  normalizeExternalProviderUserId: jest.fn((provider: string, providerUserId: string) => {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    const raw = String(providerUserId || '').trim();
+    return ['whatsapp', 'phone'].includes(normalizedProvider) ? raw.replace(/\D+/g, '') : raw;
+  }),
+  externalProviderAliases: jest.fn((provider: string) => {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    return ['whatsapp', 'phone'].includes(normalizedProvider) ? ['whatsapp', 'phone'] : [normalizedProvider];
+  }),
+  isPhoneProvider: jest.fn((provider: string) => ['whatsapp', 'phone'].includes(String(provider || '').trim().toLowerCase())),
+  ExternalRepository: jest.fn().mockImplementation(() => ({
+    createMapping: createExternalMappingMock,
+    findByProviderAndId: jest.fn(async () => null),
+  })),
+}));
+
 jest.mock('../src/api/services/core/passkey.service', () => ({
   __esModule: true,
   default: {
@@ -43,6 +62,8 @@ describe('ExternalController', () => {
     getWalletBySessionMock.mockReset();
     getSessionMock.mockReset();
     getUserPasskeysMock.mockReset();
+    createExternalMappingMock.mockReset();
+    createExternalMappingMock.mockResolvedValue({});
   });
 
   it('returns onboarding URL when external mapping exists but wallet is missing', async () => {
@@ -156,6 +177,61 @@ describe('ExternalController', () => {
         creationUrl: 'https://app.example.com/create-account?token=jwt-token',
       })
     );
+  });
+
+  it('does not fail login discovery when WhatsApp alias identity data already exists on another alias', async () => {
+    checkExternalAccountMock.mockResolvedValue({
+      session_id: 'session-123',
+      user_id: 'rodrigo@example.com',
+      data: { source: 'whatsapp' },
+    });
+    getWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-123',
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+    getSessionMock.mockResolvedValue({
+      session_id: 'session-123',
+      user_id: 'rodrigo@example.com',
+      email: 'rodrigo@example.com',
+      password_hash: 'hashed-pin',
+      last_activity: new Date().toISOString(),
+    });
+    createExternalMappingMock
+      .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "idx_external_accounts_data_phone_unique"'))
+      .mockResolvedValue({});
+
+    const { ExternalController } = await import('../src/api/controllers/external.controller');
+    const req = {
+      body: {
+        provider: 'whatsapp',
+        provider_user_id: '+55 19 99762-1114',
+        phone_number: '+55 19 99762-1114',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalController.checkAccount(req, res);
+
+    expect(createExternalMappingMock).toHaveBeenCalledTimes(3);
+    expect(createExternalMappingMock.mock.calls[0][0]).toEqual(expect.objectContaining({
+      provider: 'whatsapp',
+      data: expect.objectContaining({ phone_number: '5519997621114' }),
+    }));
+    expect(createExternalMappingMock.mock.calls[1][0]).toEqual(expect.objectContaining({
+      provider: 'whatsapp',
+      data: expect.not.objectContaining({ phone_number: expect.anything() }),
+    }));
+    expect(createExternalMappingMock.mock.calls[2][0]).toEqual(expect.objectContaining({
+      provider: 'phone',
+      data: expect.not.objectContaining({ phone_number: expect.anything() }),
+    }));
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      exists: true,
+      sessionId: 'session-123',
+      userId: 'rodrigo@example.com',
+    }));
   });
 });
 
