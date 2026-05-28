@@ -1198,7 +1198,7 @@ export class StellarService {
         destinationAmount: string;
         sourceMax: string;
         memoText?: string;
-    }): Promise<{ success: boolean; hash?: string; error?: string; sourceAmount?: string }> {
+    }): Promise<{ success: boolean; hash?: string; error?: string; sourceAmount?: string; destinationAmount?: string }> {
         try {
             const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
             await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
@@ -1214,7 +1214,11 @@ export class StellarService {
                 input.destinationAmount,
             ).call();
 
-            const candidates = Array.isArray(pathsResponse.records) ? pathsResponse.records : [];
+            const candidates = selectTrustedConversionPaths(
+                Array.isArray(pathsResponse.records) ? pathsResponse.records : [],
+                sourceAssetObj,
+                destinationAssetObj,
+            );
             if (candidates.length === 0) {
                 throw new Error(buildNoPathDiagnostic(sourceAssetObj, destinationAssetObj));
             }
@@ -1227,6 +1231,13 @@ export class StellarService {
             if (!bestPath) {
                 throw new Error(`No path found within sourceMax=${input.sourceMax} ${assetCode(sourceAssetObj)}.`);
             }
+            assertSafeSameSymbolConversion({
+                sourceAsset: sourceAssetObj,
+                destinationAsset: destinationAssetObj,
+                sourceAmount: String(bestPath.source_amount),
+                destinationAmount: input.destinationAmount,
+                context: 'strict-receive submit',
+            });
 
             const pathAssets = (bestPath.path || []).map((pathAsset: any) => {
                 if (pathAsset.asset_type === 'native') return Asset.native();
@@ -1254,7 +1265,7 @@ export class StellarService {
             const transaction = builder.setTimeout(300).build();
             transaction.sign(sourceKeypair);
             const result = await this.submitTransactionWithTimeoutRecovery(transaction);
-            return { success: true, hash: result.hash, sourceAmount: bestPath.source_amount };
+            return { success: true, hash: result.hash, sourceAmount: bestPath.source_amount, destinationAmount: input.destinationAmount };
         } catch (error) {
             return { success: false, error: this.getHorizonErrorMessage(error) };
         }
