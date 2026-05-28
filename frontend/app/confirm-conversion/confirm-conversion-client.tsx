@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
@@ -38,6 +37,9 @@ type ConfirmResponse = {
   }
   message?: string
   error?: string
+  code?: string
+  support_code?: string
+  request_id?: string
 }
 
 function decodeJwtPayload(token: string): any {
@@ -115,13 +117,6 @@ function formatRouteChainFromPayload(payload: any) {
   return compact.join(" -> ")
 }
 
-function getProviderLabel(provider?: string) {
-  const normalized = String(provider || "").trim().toLowerCase()
-  if (normalized === "telegram") return "Telegram"
-  if (normalized === "whatsapp" || normalized === "phone") return "WhatsApp"
-  return normalized ? normalized : ""
-}
-
 function buildActionUrl(path: string, params: Record<string, unknown>) {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -133,7 +128,14 @@ function buildActionUrl(path: string, params: Record<string, unknown>) {
 }
 
 function publicConversionErrorMessage(error: unknown, language: AppLanguage) {
-  return mapPublicError(error, language).message
+  const mapped = mapPublicError(error, language)
+  if (mapped.code === "link_expired") {
+    return T(language, "Essa confirmação expirou ou já foi usada. Abra uma nova revisão de conversão.", "This confirmation expired or was already used. Open a new conversion review.")
+  }
+  if (mapped.code === "quote_expired") {
+    return T(language, "A estimativa expirou. Volte para conversão e gere uma nova confirmação.", "The estimate expired. Return to conversion and create a new confirmation.")
+  }
+  return mapped.message
 }
 
 export default function ConfirmConversionClient({
@@ -198,11 +200,6 @@ export default function ConfirmConversionClient({
   }, [token])
 
   useEffect(() => {
-    if (!(status === "done" && result?.success)) return
-    closeIntermediatePage()
-  }, [status, result?.success])
-
-  useEffect(() => {
     if (status === "ready") {
       setProgressStartedAt(null)
       setProgressNow(Date.now())
@@ -246,26 +243,6 @@ export default function ConfirmConversionClient({
           error: publicConversionErrorMessage(payload?.message || payload?.error || "Failed to confirm conversion", feedbackLanguage),
         })
       setStatus(response.ok && payload?.success ? "done" : "error")
-      if (response.ok && payload?.success) {
-        const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
-        const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
-        const feedbackDestinationCode = normalizeAssetCode(String(payloadForFeedback?.dest_asset_code || payloadForFeedback?.destination_asset_code || payloadForFeedback?.quote?.destinationAsset?.code || ""))
-        const feedbackIsCrossAsset = Boolean(feedbackSourceCode && feedbackDestinationCode && feedbackSourceCode !== feedbackDestinationCode)
-        const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
-        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""), feedbackLanguage)
-        enqueueWebChatFeedback([
-          T(feedbackLanguage, "Conversão concluída da forma mais otimizada.", "Conversion completed with the most optimized route."),
-          payload.transferDetails?.sourceAmount
-            ? `${T(feedbackLanguage, "Origem debitada", "Source debited")}: ${formatAmount(payload.transferDetails.sourceAmount, payload.transferDetails.sourceAssetCode, feedbackLanguage)}`
-            : "",
-          payload.transferDetails?.destinationAmount
-            ? `${T(feedbackLanguage, "Destino recebido", "Destination received")}: ${formatAmount(payload.transferDetails.destinationAmount, payload.transferDetails.destinationAssetCode, feedbackLanguage)}`
-            : "",
-          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
-          payload.transferDetails?.feeDisplay ? `${T(feedbackLanguage, "Taxa", "Fee")}: ${payload.transferDetails.feeDisplay}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
-        ].filter(Boolean).join("\n"))
-      }
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false
       }
@@ -284,9 +261,6 @@ export default function ConfirmConversionClient({
 
   const linkInvalid = validation?.valid === false && Boolean(validation?.message)
   const payload = linkInvalid ? {} : (validation?.payload || decodeJwtPayload(token))
-  const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
-  const providerLabel = getProviderLabel(externalProvider)
-  const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "")
   const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "")
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
@@ -309,12 +283,10 @@ export default function ConfirmConversionClient({
     from: "confirm-conversion",
     lang: feedbackLanguage,
   })
-  const chatPrompt = T(
-    feedbackLanguage,
-    `quero revisar ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""}`,
-    `review ${nextDestinationAmount || "this balance"} ${nextDestinationAssetCode || ""}`
-  ).trim()
-  const chatUrl = buildActionUrl("/chat", { prompt: chatPrompt, lang: feedbackLanguage })
+  const transactionsUrl = buildActionUrl("/transactions", {
+    from: "confirm-conversion",
+    lang: feedbackLanguage,
+  })
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
   const routeChain = formatRouteChainFromPayload(payload)
@@ -340,12 +312,13 @@ export default function ConfirmConversionClient({
     },
     {
       label: T(feedbackLanguage, "Saldo atualizado", "Balance updated"),
-      detail: T(feedbackLanguage, "O resultado é salvo e o chat recebe a confirmação.", "The result is saved and chat receives confirmation."),
+      detail: T(feedbackLanguage, "O resultado é salvo no histórico da conta.", "The result is saved in the account history."),
     },
   ]
   const visibleError = result?.error || result?.message
     ? publicConversionErrorMessage(result?.error || result?.message, feedbackLanguage)
     : T(feedbackLanguage, "Não consegui confirmar essa conversão agora. Tente novamente em alguns segundos.", "I could not confirm this conversion right now. Try again in a few seconds.")
+  const visibleSupportCode = String(result?.support_code || result?.request_id || "").trim()
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -404,9 +377,9 @@ export default function ConfirmConversionClient({
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Ciclo completo", "Full money cycle")}</p>
                 <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Entrar, revisar e sair para PIX em uma jornada.", "Add, review, and send out to PIX in one journey.")}</p>
               </a>
-              <a href={chatUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
-                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Voltar ao chat", "Back to chat")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Peça o próximo passo em linguagem natural.", "Ask for the next step in natural language.")}</p>
+              <a href={transactionsUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Histórico", "History")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Veja conversões, PIX e ajustes da conta.", "Review conversions, PIX, and account adjustments.")}</p>
               </a>
             </div>
           </section>
@@ -431,6 +404,16 @@ export default function ConfirmConversionClient({
                   </p>
                 )}
               </div>
+
+              {status === "error" && (
+                <div className="border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
+                  <p className="font-black">{T(feedbackLanguage, "Conversão não concluída", "Conversion not completed")}</p>
+                  <p className="mt-2">{visibleError}</p>
+                  {visibleSupportCode && (
+                    <p className="mt-2 text-xs opacity-80">{T(feedbackLanguage, "ID do erro", "Error ID")}: {visibleSupportCode}</p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label htmlFor="pin" className="text-sm font-medium text-tts-deep">PIN</label>
@@ -462,8 +445,8 @@ export default function ConfirmConversionClient({
 	                title={T(feedbackLanguage, "Andamento da conversão", "Conversion progress")}
 	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra validação, rota e saldo.", "After confirmation, this screen shows validation, route, and balance.")}
 	                runningMessage={T(feedbackLanguage, "Conversão em andamento. Não clique de novo; a rota e sua conta estão sendo processadas.", "Conversion in progress. Do not click again; route and account are being processed.")}
-	                doneMessage={T(feedbackLanguage, "Conversão concluída. O saldo e o chat serão atualizados.", "Conversion completed. Balance and chat will be updated.")}
-	                errorMessage={T(feedbackLanguage, "A conversão parou antes de concluir. Leia o erro abaixo antes de tentar novamente.", "The conversion stopped before completion. Read the error below before trying again.")}
+	                doneMessage={T(feedbackLanguage, "Conversão concluída. O saldo foi atualizado.", "Conversion completed. Balance was updated.")}
+	                errorMessage={T(feedbackLanguage, "A conversão parou antes de concluir. Confira o erro destacado acima antes de tentar novamente.", "The conversion stopped before completion. Check the highlighted error above before trying again.")}
 	                steps={conversionProgressSteps}
 	              />
 	            </div>
@@ -492,11 +475,16 @@ export default function ConfirmConversionClient({
                   {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                     <p>{T(feedbackLanguage, "Economia estimada nesta operação", "Estimated savings on this operation")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
-                  {returnMessage && <p>{returnMessage}</p>}
-                  <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
               )}
-              {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-tts-error">{visibleError}</motion.p>}
+              {status === "error" && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 space-y-1 text-tts-error">
+                  <p>{visibleError}</p>
+                  {visibleSupportCode && (
+                    <p className="text-xs opacity-80">{T(feedbackLanguage, "ID do erro", "Error ID")}: {visibleSupportCode}</p>
+                  )}
+                </motion.div>
+              )}
               </AnimatePresence>
             </div>
           </section>
