@@ -24,11 +24,12 @@ function getBackendBaseUrl() {
   return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
 }
 
-const PUBLIC_SHORT_LINK_PATHS = ["/create-account", "/login", "/confirm-payment"];
+const PUBLIC_SHORT_LINK_PATHS = ["/create-account", "/login", "/confirm-payment", "/send-external"];
 const PUBLIC_SHORT_LINK_PURPOSES = new Set([
   "create_account_passkey_qr",
   "login_passkey_qr",
   "confirm_payment_passkey_qr",
+  "send_external_wallet",
 ]);
 
 function looksLikeTechnicalError(value: unknown) {
