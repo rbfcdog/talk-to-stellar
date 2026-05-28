@@ -2,15 +2,16 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   CheckCircle2,
   Coins,
+  Loader2,
   RefreshCw,
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
-import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 
@@ -104,10 +105,6 @@ function assetName(asset: AssetOption, language: AppLanguage) {
   return localCopy(language, asset.namePt, asset.nameEn);
 }
 
-function assetPromptName(asset: AssetOption, language: AppLanguage) {
-  return localCopy(language, asset.promptPt, asset.promptEn);
-}
-
 function assetDescription(asset: AssetOption, language: AppLanguage) {
   return localCopy(language, asset.descriptionPt, asset.descriptionEn);
 }
@@ -166,6 +163,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");
+  const [reviewStatus, setReviewStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [reviewError, setReviewError] = useState("");
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -219,16 +218,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         : L("Entre para consultar", "Sign in to check");
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const sameAsset = sourceCode === destCode;
-  const conversionPrompt = language === "pt-BR"
-    ? `converter ${amount || "0"} ${assetPromptName(sourceAsset, language)} para ${assetPromptName(destAsset, language)}`
-    : `convert ${amount || "0"} ${assetPromptName(sourceAsset, language)} to ${assetPromptName(destAsset, language)}`;
-  const chatUrl = buildUrl("/chat", { prompt: conversionPrompt, lang: language });
-  const primaryHref = chatUrl;
-  const primaryLabel = L("Revisar conversão", "Review conversion");
+  const primaryLabel = L("Calcular e revisar", "Calculate and review");
   const routeTitle = L("Conversão interna", "Internal conversion");
   const routeDescription = L(
-    "A próxima etapa pede a rota real ao backend. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
-    "The next step asks the backend for the live route. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
+    "Ao continuar, o backend calcula a rota real e abre a revisão de conversão. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
+    "When you continue, the backend calculates the live route and opens conversion review. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
   );
   const destinationValue = L("Calculado na revisão", "Calculated in review");
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
@@ -240,6 +234,38 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       : canProceed
         ? L("Pronto para revisar", "Ready to review")
         : L("Revise o saldo", "Review balance");
+
+  async function prepareConversionReview() {
+    if (!session.authenticated) {
+      window.location.href = buildUrl("/login", { next: "/convert", lang: language });
+      return;
+    }
+    if (!canProceed || reviewStatus === "loading") return;
+    setReviewStatus("loading");
+    setReviewError("");
+    try {
+      const response = await fetch("/api/financial/conversion-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_amount: String(amount || "").trim(),
+          source_asset_code: sourceCode,
+          dest_asset_code: destCode,
+          language,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || (!payload?.token && !payload?.url)) {
+        throw new Error(payload?.message || L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
+      }
+      window.location.href = payload?.token
+        ? buildUrl("/confirm-conversion", { token: payload.token, lang: language })
+        : String(payload.url);
+    } catch (error) {
+      setReviewStatus("error");
+      setReviewError(error instanceof Error ? error.message : L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
+    }
+  }
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -260,12 +286,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               )}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 md:min-w-[320px]">
-            <ReturnToChat prompt={conversionPrompt} />
+          <div className="md:min-w-[180px]">
             <button
               type="button"
               onClick={() => setLanguage(language === "en" ? "pt-BR" : "en")}
-              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               {language === "en" ? "Português" : "English"}
@@ -361,13 +386,15 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <Step title={L("1. Valor", "1. Amount")} body={formatAssetAmount(numericAmount, sourceAsset, language)} />
-                <Step title={L("2. Cotação", "2. Quote")} body={destinationValue} />
-                <Step title={L("3. PIN", "3. PIN")} body={L("Só depois da revisão", "Only after review")} />
-              </div>
+              <Step title={L("2. Revisão", "2. Review")} body={L("Abre a tela de confirmação", "Opens confirmation screen")} />
+              <Step title={L("3. PIN", "3. PIN")} body={L("Só depois da revisão", "Only after review")} />
             </div>
+          </div>
             <div className="border border-tts-border bg-tts-surface p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Próximo passo", "Next step")}</p>
-              <p className="mt-2 text-lg font-black text-tts-deep">{conversionPrompt}</p>
+              <p className="mt-2 text-lg font-black text-tts-deep">
+                {formatAssetAmount(numericAmount, sourceAsset, language)} → {assetName(destAsset, language)}
+              </p>
               {sameAsset ? (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
                   {L("Escolha moedas diferentes para continuar.", "Choose different currencies to continue.")}
@@ -378,16 +405,24 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </p>
               ) : (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
-                  {L("A próxima tela calcula o valor final e mostra taxas antes de qualquer confirmação.", "The next screen calculates the final amount and shows fees before any confirmation.")}
+                  {L("Vamos calcular a rota real e abrir a tela de confirmação. Nada passa pelo chat.", "We will calculate the live route and open the confirmation screen. Nothing goes through chat.")}
                 </p>
               )}
-              <a
-                href={canProceed ? primaryHref : "#convert-amount"}
-                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"}`}
+              {reviewStatus === "error" ? (
+                <div className="mt-4 flex gap-2 border border-tts-error bg-tts-error/10 p-3 text-sm leading-6 text-tts-error">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{reviewError}</span>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={prepareConversionReview}
+                disabled={!canProceed || reviewStatus === "loading"}
+                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
               >
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                {primaryLabel}
-              </a>
+                {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                {reviewStatus === "loading" ? L("Preparando revisão...", "Preparing review...") : primaryLabel}
+              </button>
             </div>
           </div>
         </section>

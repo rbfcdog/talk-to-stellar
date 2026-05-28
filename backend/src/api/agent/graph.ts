@@ -4180,8 +4180,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.response_message = state.success
           ? this.text(
               this.getLanguage(state),
-              `Abra a tela de conversão para escolher valor e moedas. Depois ela volta para o chat com a cotação pronta:\n\n${conversionInterface.frontend_url}`,
-              `Open the conversion screen to choose amount and currencies. It returns to chat with the quote ready:\n\n${conversionInterface.frontend_url}`
+              `Abra a tela de conversão para escolher valor e moedas. A revisão e o PIN acontecem na página de confirmação, sem voltar para o chat:\n\n${conversionInterface.frontend_url}`,
+              `Open the conversion screen to choose amount and currencies. Review and PIN happen on the confirmation page, without returning to chat:\n\n${conversionInterface.frontend_url}`
             )
           : (llmParsed.needs_clarification && llmParsed.clarification_question
               ? llmParsed.clarification_question

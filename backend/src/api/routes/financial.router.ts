@@ -6,6 +6,7 @@ const router = Router();
 router.get('/conversion-preview', FinancialController.getConversionPreview);
 router.get('/conversion-fees-preview', FinancialController.getConversionFeesPreview);
 router.get('/usdc-to-brl-preview', FinancialController.getUsdcToBrlPreview);
+router.post('/conversion-confirmation', FinancialController.createConversionConfirmation);
 
 router.get('/activity-feed/:session_id', FinancialController.getActivityFeed);
 router.get('/insights/:session_id', FinancialController.getInsights);
