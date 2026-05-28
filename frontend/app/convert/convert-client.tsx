@@ -14,6 +14,7 @@ import {
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
+import ConfirmConversionClient from "../confirm-conversion/confirm-conversion-client";
 
 type AssetOption = {
   code: string;
@@ -123,6 +124,18 @@ function buildUrl(path: string, params: Record<string, unknown>) {
   return query ? `${path}?${query}` : path;
 }
 
+function extractReviewTokenFromUrl(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://talktostellar.local";
+    const url = new URL(raw, base);
+    return String(url.searchParams.get("token") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function accountAssetCode(code: string) {
   return code === "BRL" ? "TESOURO" : code;
 }
@@ -165,6 +178,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "loading" | "error">("idle");
   const [reviewError, setReviewError] = useState("");
+  const [embeddedReviewToken, setEmbeddedReviewToken] = useState("");
+  const [embeddedReviewValidation, setEmbeddedReviewValidation] = useState<unknown | null>(null);
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -221,8 +236,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const primaryLabel = L("Calcular e revisar", "Calculate and review");
   const routeTitle = L("Conversão interna", "Internal conversion");
   const routeDescription = L(
-    "Ao continuar, o backend calcula a rota real e abre a revisão de conversão. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
-    "When you continue, the backend calculates the live route and opens conversion review. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
+    "Ao continuar, o backend calcula a rota real e mostra a revisão nesta página. R$ usa o saldo em reais da conta e continua aparecendo como R$ para você. Se não existir caminho seguro, o app não inventa preço.",
+    "When you continue, the backend calculates the live route and shows the review on this page. R$ uses the account's reais balance and remains displayed as R$ for you. If no safe route exists, the app does not invent a price."
   );
   const destinationValue = L("Calculado na revisão", "Calculated in review");
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
@@ -258,13 +273,21 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       if (!response.ok || !payload?.success || (!payload?.token && !payload?.url)) {
         throw new Error(payload?.message || L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
       }
-      window.location.href = payload?.token
-        ? buildUrl("/confirm-conversion", { token: payload.token, lang: language })
-        : String(payload.url);
+      const reviewToken = String(payload?.token || extractReviewTokenFromUrl(payload?.url) || "").trim();
+      if (!reviewToken) {
+        throw new Error(L("A revisão foi criada, mas o token de confirmação não veio na resposta.", "The review was created, but the confirmation token was missing."));
+      }
+      setEmbeddedReviewValidation(payload?.validation || null);
+      setEmbeddedReviewToken(reviewToken);
+      setReviewStatus("idle");
     } catch (error) {
       setReviewStatus("error");
       setReviewError(error instanceof Error ? error.message : L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
     }
+  }
+
+  if (embeddedReviewToken) {
+    return <ConfirmConversionClient initialToken={embeddedReviewToken} initialValidation={embeddedReviewValidation} />;
   }
 
   return (
@@ -386,7 +409,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <Step title={L("1. Valor", "1. Amount")} body={formatAssetAmount(numericAmount, sourceAsset, language)} />
-              <Step title={L("2. Revisão", "2. Review")} body={L("Abre a tela de confirmação", "Opens confirmation screen")} />
+              <Step title={L("2. Revisão", "2. Review")} body={L("Mostra a confirmação aqui", "Shows confirmation here")} />
               <Step title={L("3. PIN", "3. PIN")} body={L("Só depois da revisão", "Only after review")} />
             </div>
           </div>
@@ -405,7 +428,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </p>
               ) : (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
-                  {L("Vamos calcular a rota real e abrir a tela de confirmação. Nada passa pelo chat.", "We will calculate the live route and open the confirmation screen. Nothing goes through chat.")}
+                  {L("Vamos calcular a rota real e mostrar a confirmação aqui. Nada passa pelo chat.", "We will calculate the live route and show confirmation here. Nothing goes through chat.")}
                 </p>
               )}
               {reviewStatus === "error" ? (
