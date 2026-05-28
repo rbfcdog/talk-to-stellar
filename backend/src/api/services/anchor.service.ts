@@ -3899,14 +3899,28 @@ export class AnchorService {
             configured_contract: maskLogValue(compatibility.configured_contract),
           });
         } else if (compatibility.requires_wallet_asset_conversion) {
-          enriched.conversion_note = 'This testnet vault uses a distinct USDC issuance and requires a same-currency conversion before execution.';
+          const sameSymbolDifferentIssuer = compatibility.wallet_source_asset && compatibility.vault_deposit_asset &&
+            normalizeAssetCode(compatibility.wallet_source_asset.code) === normalizeAssetCode(compatibility.vault_deposit_asset.code) &&
+            !sameIssuedAsset(compatibility.wallet_source_asset, compatibility.vault_deposit_asset);
+          if (sameSymbolDifferentIssuer && !allowDefindexSameSymbolIssuerConversion()) {
+            enriched.execution_available = false;
+            enriched.execution_blocked_code = 'yield_asset_conversion_unavailable';
+            enriched.execution_blocked_reason = 'This option uses a different issuance of the same asset in testnet. Execution is blocked to avoid distorted same-asset conversion.';
+            enriched.unavailable_reason = 'Same-asset issuer conversion is blocked for this environment.';
+          } else {
+            enriched.execution_available = true;
+          }
+          enriched.conversion_note = 'This testnet vault uses a distinct asset issuance and requires conversion before execution.';
           logDefindex('info', 'status_vault_asset_conversion_required', {
             asset_code: vault.asset_code,
             vault_address: maskLogValue(vault.vault_address),
             network: vault.network,
             vault_asset_issuer: maskLogValue(compatibility.info.asset_issuer),
             configured_issuer: maskLogValue(compatibility.configured_issuer),
+            execution_available: enriched.execution_available,
           });
+        } else {
+          enriched.execution_available = true;
         }
       } catch (error) {
         logDefindex('warn', 'status_vault_asset_check_failed', {
