@@ -397,7 +397,7 @@ describe('Defindex yield transaction flows', () => {
     });
   });
 
-  it('converts to the hardcoded Defindex USDC before executing when the route is safe', async () => {
+  it('blocks distorted same-symbol testnet conversion before depositing into Defindex', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     process.env.DEFINDEX_CONVERSION_SETTLE_MS = '0';
@@ -454,6 +454,80 @@ describe('Defindex yield transaction flows', () => {
       xdr: 'server-prepared-defindex-usdc-xdr',
       raw: { success: true, source: 'server' },
     });
+
+    await expect(AnchorService.executeDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+      pin: '1234',
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'yield_asset_conversion_unavailable',
+    });
+
+    expect(conversionSpy).not.toHaveBeenCalled();
+    expect(buildSpy).not.toHaveBeenCalled();
+  });
+
+  it('converts to the hardcoded Defindex USDC before executing when the route is safe', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    process.env.DEFINDEX_CONVERSION_SETTLE_MS = '0';
+    const signingSecret = `S${'B'.repeat(55)}`;
+    (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValue({
+      compatible: true,
+      info: {
+        asset_code: 'USDC',
+        asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+        asset_contract: DEFINDEX_TESTNET_USDC_CONTRACT,
+        source: 'vault_info',
+      },
+      configured_issuer: CIRCLE_TESTNET_USDC_ISSUER,
+      configured_contract: 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
+      hardcoded_asset_override: true,
+      requires_wallet_asset_conversion: true,
+      wallet_source_asset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+      vault_deposit_asset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'USDC',
+      asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+    });
+    jest.spyOn(StellarService, 'getAccountBalance')
+      .mockResolvedValueOnce([
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '200' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '0' },
+      ] as any)
+      .mockResolvedValueOnce([
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '99' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '99' },
+      ] as any);
+    jest.spyOn(StellarService, 'quoteStrictSendConversion').mockResolvedValue({
+      sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+      destinationAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER },
+      sourceAmount: '100',
+      effectiveSourceAmount: '100',
+      destinationAmount: '99',
+      destinationMin: '98.0100000',
+      networkFeeXlm: '0.00001',
+      path: [],
+    } as any);
+    const conversionSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'conversion-hash',
+      destinationAmount: '99',
+      destinationMin: '98.0100000',
+    } as any);
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue(signingSecret);
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
+      xdr: 'server-prepared-defindex-usdc-xdr',
+      raw: { success: true, source: 'server' },
+    });
     jest.spyOn(DefindexYieldService, 'signXdr').mockReturnValue('signed-defindex-usdc-xdr');
     const sendSpy = jest.spyOn(DefindexYieldService, 'sendVaultTransaction').mockResolvedValue({
       hash: 'yield-hash',
@@ -464,7 +538,7 @@ describe('Defindex yield transaction flows', () => {
       user_id: SESSION_CONTEXT.userId,
       type: 'DEFINDEX_YIELD_DEPOSIT',
       status: 'COMPLETED',
-      amount: 100,
+      amount: 99,
       asset_code: 'USDC',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -483,7 +557,7 @@ describe('Defindex yield transaction flows', () => {
       success: true,
       submitted: true,
       hash: 'yield-hash',
-      amount: '0.4258',
+      amount: '99',
     });
     expect(conversionSpy).toHaveBeenCalledWith(expect.objectContaining({
       sourceSecret: signingSecret,
@@ -495,7 +569,7 @@ describe('Defindex yield transaction flows', () => {
     expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
       vaultAddress: YIELD_VAULTS.USDC,
       caller: SESSION_CONTEXT.publicKey,
-      amountUnits: 4258000,
+      amountUnits: 990000000,
     }));
     expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
       vaultAddress: YIELD_VAULTS.USDC,
