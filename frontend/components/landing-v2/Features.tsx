@@ -22,9 +22,9 @@ const FEATURES: Feature[] = [
     ],
   },
   {
-    title: 'APY guiado',
+    title: 'Revisão guiada',
     description:
-      'A experiência mostra opções por moeda, gráfico com APY estimado e ação de guardar ou resgatar sem termos técnicos.',
+      'A experiência mostra opções por moeda e ação de entrada ou saída sem termos técnicos.',
     snippetLines: [
       { key: 'intent', value: 'yield', type: 'string' },
       { key: 'asset', value: 'euro', type: 'string' },

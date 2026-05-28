@@ -265,33 +265,9 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   }).format(parsed);
 }
 
-function formatPercent(value: unknown, language: AppLanguage = "pt-BR") {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
-  if (!Number.isFinite(parsed)) return localCopy(language, "Taxa indisponível", "Rate unavailable");
-  return `${parsed.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
-}
-
-function optionRate(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
-  return formatPercent(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy, language);
-}
-
 function optionRateText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
-  if (!option) return localCopy(language, "Sem taxa disponível", "No rate available");
-  const rate = optionRate(option, language);
-  if (/indispon.vel|unavailable/i.test(rate)) return rate;
-  return localCopy(language, `APY estimado ${rate}`, `estimated APY ${rate}`);
-}
-
-function parseRate(value: unknown): number | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return parsed / 100;
-}
-
-function optionAnnualRate(option?: YieldOption | null) {
-  return parseRate(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy);
+  if (!option) return localCopy(language, "Não disponível", "Unavailable");
+  return localCopy(language, "Opção disponível", "Available option");
 }
 
 function normalizeDecimal(value: unknown) {
@@ -321,23 +297,6 @@ function buildMoneyUrl(path: string, params: Record<string, unknown>) {
   }
   const query = search.toString();
   return query ? `${path}?${query}` : path;
-}
-
-function buildProjectionData(amount: string, annualRate: number | null, language: AppLanguage) {
-  const principal = normalizeDecimal(amount);
-  const monthlyRate = annualRate === null ? 0 : annualRate / 12;
-  return Array.from({ length: 13 }, (_, month) => {
-    const projected = principal * Math.pow(1 + monthlyRate, month);
-    const earned = Math.max(0, projected - principal);
-    return {
-      month,
-      label: month === 0
-        ? localCopy(language, "Hoje", "Today")
-        : localCopy(language, `${month}m`, `${month}m`),
-      balance: Number(projected.toFixed(2)),
-      earned: Number(earned.toFixed(2)),
-    };
-  });
 }
 
 function sanitizeUiError(error: unknown, language: AppLanguage) {
@@ -497,10 +456,6 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const sessionLoading = Boolean(session.loading && !session.checked);
   const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
-  const projectionData = useMemo(
-    () => buildProjectionData(amount, optionAnnualRate(actionableOption), language),
-    [amount, actionableOption, language]
-  );
   const convertToBestYieldUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
     source_asset: safeSelectedCode,
@@ -509,8 +464,8 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
     lang: language,
   }), [amount, bestOptionCode, safeSelectedCode, language]);
   const chatPrompt = language === "pt-BR"
-    ? `revisar ${amount || "0"} ${profileName(selectedProfile, language)} com APY estimado`
-    : `review ${amount || "0"} ${profileName(selectedProfile, language)} with estimated APY`;
+    ? `revisar ${amount || "0"} ${profileName(selectedProfile, language)}`
+    : `review ${amount || "0"} ${profileName(selectedProfile, language)}`;
   const amountPresets = useMemo(() => {
     const short = selectedProfile.short;
     if (short === "BRL") return ["50", "100", "500", "1000"];
@@ -816,7 +771,6 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             bestOptionCode={bestOptionCode}
             balanceForSelected={balanceForSelected}
             result={yieldResult}
-            projectionData={projectionData}
             canPrepare={canPrepare}
             confirmationEnabled={confirmationEnabled}
             apiLoading={apiState.loading}
@@ -857,14 +811,14 @@ function YieldComplianceNotice({
   const blocked = executionBlockedReason && !confirmationEnabled;
 
   return (
-    <section className="border border-tts-gold bg-tts-gold-bg p-3 text-sm leading-6" aria-label={L("Aviso de APY", "APY notice")}>
+    <section className="border border-tts-gold bg-tts-gold-bg p-3 text-sm leading-6" aria-label={L("Aviso de revisão", "Review notice")}>
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <p className="flex items-start gap-2 text-tts-muted">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-gold" aria-hidden="true" />
           <span>
             {L(
-              "APY estimado e variável. Não é garantia nem depósito bancário.",
-              "Estimated and variable APY. Not guaranteed and not a bank deposit."
+              "Somente revisão. Não é garantia nem depósito bancário.",
+              "Review only. Not guaranteed and not a bank deposit."
             )}
             {isTestnet ? ` ${L("Testnet.", "Testnet.")}` : ""}
             {blocked ? ` ${L("Bloqueio atual", "Current block")}: ${executionBlockedReason}` : ""}
@@ -912,8 +866,8 @@ function YieldTutorialPanel({
       title: L("2. Simulação", "2. Preview"),
       body: hasOptions
         ? L(
-            `Opção disponível: ${profileName(bestProfile, language)}. Ela aparece porque já tem configuração para revisar APY estimado, projeção e operação.`,
-            `Available option: ${profileName(bestProfile, language)}. It appears because it is configured for estimated APY, projection, and operation review.`
+            `Opção disponível: ${profileName(bestProfile, language)}. Ela aparece porque já tem configuração para revisar a operação.`,
+            `Available option: ${profileName(bestProfile, language)}. It appears because it is configured for operation review.`
           )
         : L(
             "Ainda não há opção configurada. A tela continua segura para consulta, mas não prepara operação até existir uma opção ativa.",
@@ -925,12 +879,12 @@ function YieldTutorialPanel({
       title: L("3. Revisão", "3. Review"),
       body: confirmationEnabled
         ? L(
-            "Depois da simulação, a revisão mostra operação, valor, taxa e projeção. Só o botão final com PIN movimenta saldo.",
-            "After the preview, the review shows operation, amount, rate, and projection. Only the final PIN button moves balance."
+            "Depois da simulação, a revisão mostra operação e valor. Só o botão final com PIN movimenta saldo.",
+            "After the preview, the review shows operation and amount. Only the final PIN button moves balance."
           )
         : L(
-            "Modo revisão: você testa valor, APY estimado e projeção sem movimentar saldo. Execução real fica bloqueada até aprovação de compliance.",
-            "Review mode: you test amount, estimated APY, and projection without moving balance. Real execution stays blocked until compliance approval."
+            "Modo revisão: você testa valor e operação sem movimentar saldo. Execução real fica bloqueada até aprovação de compliance.",
+            "Review mode: you test amount and operation without moving balance. Real execution stays blocked until compliance approval."
           ),
       ready: confirmationEnabled,
     },
@@ -946,8 +900,8 @@ function YieldTutorialPanel({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
             {L(
-              "Use de cima para baixo: confirme a conta, escolha um saldo, simule com APY estimado e monte a revisão. O PIN fica no fim para evitar confirmação acidental.",
-              "Use it top to bottom: confirm the account, choose a balance, preview with estimated APY, and build the review. PIN stays at the end to avoid accidental confirmation."
+              "Use de cima para baixo: confirme a conta, escolha um saldo, simule o valor e monte a revisão. O PIN fica no fim para evitar confirmação acidental.",
+              "Use it top to bottom: confirm the account, choose a balance, preview the amount, and build the review. PIN stays at the end to avoid accidental confirmation."
             )}
           </p>
           {isTestnet ? (
@@ -1030,7 +984,7 @@ function AccountPanel({
       <AccountStatusCard
         state={sessionLoading ? "loading" : authenticated ? "connected" : "signed-out"}
         accountId={accountPublicKey}
-        ctaHref="/login?next=/yield"
+        ctaHref="/login?next=/review"
         compact
         className="mt-4"
       />
@@ -1079,7 +1033,7 @@ function AccountPanel({
       </div>
 
       {!authenticated && !sessionLoading ? (
-        <a href="/login?next=/yield" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
+        <a href="/login?next=/review" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
           {L("Entrar com segurança", "Sign in securely")}
         </a>
       ) : null}
@@ -1106,7 +1060,6 @@ function YieldWorkspacePanel({
   bestOptionCode,
   balanceForSelected,
   result,
-  projectionData,
   canPrepare,
   confirmationEnabled,
   apiLoading,
@@ -1140,7 +1093,6 @@ function YieldWorkspacePanel({
   bestOptionCode: string;
   balanceForSelected?: BalanceLine;
   result: any | null;
-  projectionData: Array<{ month: number; label: string; balance: number; earned: number }>;
   canPrepare: boolean;
   confirmationEnabled: boolean;
   apiLoading: boolean;
@@ -1158,7 +1110,6 @@ function YieldWorkspacePanel({
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const projectedEnd = projectionData[projectionData.length - 1]?.balance || normalizeDecimal(amount);
   const profileShort = selectedProfile.short;
   const bestProfile = moneyProfile(bestOptionCode);
   const targetProfile = moneyProfile(optionCode(selectedOption));
@@ -1205,16 +1156,16 @@ function YieldWorkspacePanel({
     : balanceForSelected
       ? `${formatAmount(balanceForSelected.balance, language)} ${profileShort}`
       : L("Saldo não disponível", "Balance unavailable");
-  const annualRateLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
-  const projectionLabel = selectedOption ? `${formatAmount(projectedEnd, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
+  const optionAvailabilityLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
+  const reviewAmountLabel = selectedOption ? `${formatAmount(amount || 0, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
     ? L("Revisar entrada", "Review entry")
     : L("Revisar saída", "Review exit");
   const confirmLabel = submitted
     ? L("Movimentação enviada", "Movement sent")
     : action === "deposit"
-      ? L("Confirmar e investir", "Confirm and invest")
-      : L("Confirmar resgate", "Confirm withdrawal");
+      ? L("Confirmar entrada", "Confirm entry")
+      : L("Confirmar saída", "Confirm exit");
   const actionDescription = action === "deposit"
     ? selectedNeedsWalletConversion
       ? L("Prepara a conversão automática e a entrada na opção selecionada. Nada sai sem PIN.", "Prepares automatic conversion and entry into the selected option. Nothing moves without PIN.")
@@ -1230,7 +1181,7 @@ function YieldWorkspacePanel({
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
             {selectedHasYield
-              ? routeDescription || L("Defina entrada ou saída, informe o valor e gere uma revisão. A confirmação fica separada para você conferir APY estimado, projeção e impacto no saldo.", "Choose entry or exit, enter the amount, and generate a review. Confirmation stays separate so you can check estimated APY, projection, and balance impact.")
+              ? routeDescription || L("Defina entrada ou saída, informe o valor e gere uma revisão. A confirmação fica separada para você conferir a operação e o impacto no saldo.", "Choose entry or exit, enter the amount, and generate a review. Confirmation stays separate so you can check the operation and balance impact.")
               : unavailableDescription}
           </p>
         </div>
@@ -1266,10 +1217,10 @@ function YieldWorkspacePanel({
           <div className="mt-3 border border-tts-border bg-tts-surface p-3">
             <p className="font-black text-tts-deep">{L("Revisão segura", "Secure review")}</p>
             <p className="mt-1 text-xs leading-5 text-tts-muted">
-              {L("A tela mostra valor, taxa e operação antes do PIN.", "The screen shows amount, rate, and operation before PIN.")}
+              {L("A tela mostra valor e operação antes do PIN.", "The screen shows amount and operation before PIN.")}
             </p>
           </div>
-          <a href="/login?next=/yield" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+          <a href="/login?next=/review" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
             {L("Entrar na conta", "Sign in")}
           </a>
         </div>
@@ -1277,8 +1228,8 @@ function YieldWorkspacePanel({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <MiniStat label={L("Disponível", "Available")} value={accountBalanceLabel} detail={L("saldo da conta", "account balance")} />
-        <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} detail={L("histórico e variável", "historical and variable")} />
-        <MiniStat label={L("Projeção 12m", "12m projection")} value={projectionLabel} detail={L("estimativa", "estimate")} />
+        <MiniStat label={L("Opção", "Option")} value={optionAvailabilityLabel} detail={L("disponível para revisão", "available for review")} />
+        <MiniStat label={L("Valor revisado", "Reviewed amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
       </div>
 
       {authenticated && selectedHasYield && routeDescription ? (
@@ -1294,8 +1245,8 @@ function YieldWorkspacePanel({
           <p className="mt-1">
             {bestOption
               ? L(
-                  `Opção configurada para revisar: ${profileName(bestProfile, language)} com APY estimado ${optionRate(bestOption, language)}.`,
-                  `Configured option to review: ${profileName(bestProfile, language)} with estimated APY ${optionRate(bestOption, language)}.`
+                  `Opção configurada para revisar: ${profileName(bestProfile, language)}.`,
+                  `Configured option to review: ${profileName(bestProfile, language)}.`
                 )
               : L("Configure as opções no backend para ativar esta tela.", "Configure backend options to activate this screen.")}
           </p>
@@ -1411,7 +1362,7 @@ function YieldWorkspacePanel({
                 <div>
                   <h3 className="text-base font-black text-tts-deep">{L("Revisão segura", "Secure review")}</h3>
                   <p className="mt-1 text-xs leading-5 text-tts-muted">
-                    {L("Confira a operação montada, o valor, a taxa e a projeção antes de qualquer confirmação.", "Check the assembled operation, amount, rate, and projection before any confirmation.")}
+                    {L("Confira a operação montada e o valor antes de qualquer confirmação.", "Check the assembled operation and amount before any confirmation.")}
                   </p>
                 </div>
                 <BadgeCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
@@ -1419,7 +1370,7 @@ function YieldWorkspacePanel({
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <MiniStat label={L("Operação", "Operation")} value={actionTitle} />
                 <MiniStat label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
-                <MiniStat label={L("APY estimado", "Estimated APY")} value={annualRateLabel} />
+                <MiniStat label={L("Opção", "Option")} value={optionAvailabilityLabel} />
                 <MiniStat
                   label={L("Segurança", "Security")}
                   value={submitted ? L("Enviado", "Sent") : confirmationAvailable ? L("PIN obrigatório", "PIN required") : L("Somente revisão", "Review only")}
@@ -1443,7 +1394,7 @@ function YieldWorkspacePanel({
                   </p>
                 ) : hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
-                    {L("Revisão preparada. Confira taxa, valor e operação antes de confirmar.", "Review prepared. Check rate, amount, and operation before confirming.")}
+                    {L("Revisão preparada. Confira valor e operação antes de confirmar.", "Review prepared. Check amount and operation before confirming.")}
                   </p>
                 ) : (
                   <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>

@@ -949,7 +949,7 @@ function DefindexYieldPanel({
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
             <BadgeDollarSign className="h-5 w-5 text-tts-confirm" />
-            Advanced APY
+            Advanced review
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${configured ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
@@ -1075,7 +1075,7 @@ function DefindexYieldPanel({
           <div className="border border-tts-border bg-black p-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <MiniStat label="Vault" value={selectedVault ? compactKey(selectedVault.vault_address) : "-"} />
-              <MiniStat label="APY" value={formatYieldApy(selectedApy)} />
+              <MiniStat label="Option" value={selectedApy ? "Configured" : "Unavailable"} />
               <MiniStat label="Asset" value={selectedVault?.display_asset_code || selectedVault?.asset_code || "-"} />
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface/[0.03] p-3">

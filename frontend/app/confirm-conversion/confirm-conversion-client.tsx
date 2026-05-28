@@ -294,7 +294,7 @@ export default function ConfirmConversionClient({
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const nextDestinationAssetCode = normalizeAssetCode(result?.transferDetails?.destinationAssetCode || destAssetCode || "")
   const nextDestinationAmount = String(result?.transferDetails?.destinationAmount || destAmount || "")
-  const keepEarningUrl = buildActionUrl("/yield", {
+  const keepEarningUrl = buildActionUrl("/review", {
     asset: nextDestinationAssetCode,
     amount: nextDestinationAmount,
     advanced: "1",
@@ -311,8 +311,8 @@ export default function ConfirmConversionClient({
   })
   const chatPrompt = T(
     feedbackLanguage,
-    `quero revisar ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""} com APY estimado`,
-    `keep ${nextDestinationAmount || "this balance"} ${nextDestinationAssetCode || ""} earning`
+    `quero revisar ${nextDestinationAmount || "esse saldo"} ${nextDestinationAssetCode || ""}`,
+    `review ${nextDestinationAmount || "this balance"} ${nextDestinationAssetCode || ""}`
   ).trim()
   const chatUrl = buildActionUrl("/chat", { prompt: chatPrompt, lang: feedbackLanguage })
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
@@ -397,8 +397,8 @@ export default function ConfirmConversionClient({
 
             <div className="grid gap-3 md:grid-cols-3">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
-                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Revisar APY", "Review APY")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão na revisão com APY.", "Use this conversion destination in the APY review.")}</p>
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Revisar opção", "Review option")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão na revisão.", "Use this conversion destination in the review.")}</p>
               </a>
               <a href={moneyCycleUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Ciclo completo", "Full money cycle")}</p>

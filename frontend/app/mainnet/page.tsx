@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Yield and balances",
-  description: "Review balances, currencies, earning options, PIX add, and PIX withdrawal.",
+  title: "Review and balances",
+  description: "Review balances, currencies, options, PIX add, and PIX withdrawal.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -25,5 +25,5 @@ export default async function MainnetPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const query = serializeSearchParams(await Promise.resolve(searchParams || {}));
-  redirect(query ? `/yield?${query}` : "/yield");
+  redirect(query ? `/review?${query}` : "/review");
 }

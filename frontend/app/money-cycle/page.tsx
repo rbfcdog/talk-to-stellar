@@ -2,7 +2,7 @@ import RendimentosClient from "../rendimentos/rendimentos-client";
 
 export const metadata = {
   title: "Money cycle",
-  description: "Add money with PIX, keep it earning, and send it out to PIX.",
+  description: "Add money with PIX, review it, and send it out to PIX.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
