@@ -391,6 +391,9 @@ export default function ConfirmConversionClient({
                 </p>
               </div>
             </div>
+            <p className="text-xs leading-5 text-tts-muted">
+              {T(feedbackLanguage, "Testnet: valores de conversão são estimados e podem variar.", "Testnet: conversion values are estimated and may vary.")}
+            </p>
 
             <div className="grid gap-3 md:grid-cols-3">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
@@ -414,6 +417,7 @@ export default function ConfirmConversionClient({
                 <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-tts-deep">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
                 <p className="text-tts-deep">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
+                <p className="mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
                 {showEstimatedFee && (
                   <p className="text-tts-deep">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeDisplay}</p>
                 )}
