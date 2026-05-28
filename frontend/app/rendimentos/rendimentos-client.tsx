@@ -1706,12 +1706,11 @@ function CurrentInvestmentsPage({
   newApplicationUrl: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const availableOptions = options.filter((option) => !option.apy_error);
+  const availableOptions = options.filter((option) => String(option.vault_address || "").trim());
   const activePositions = availableOptions.filter((option) => {
     const position = positionBalances[optionCode(option)];
     return normalizeDecimal(position?.amount || "0") > 0 && !isSuspiciousTestnetConversionPosition(option, position);
   }).length;
-  const anomalousPositions = availableOptions.filter((option) => isSuspiciousTestnetConversionPosition(option, positionBalances[optionCode(option)])).length;
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -1765,9 +1764,6 @@ function CurrentInvestmentsPage({
           <MiniStat
             label={L("Com saldo", "With balance")}
             value={String(activePositions)}
-            detail={anomalousPositions > 0
-              ? L(`${anomalousPositions} ajuste`, `${anomalousPositions} adjustment`)
-              : L("maior que zero", "above zero")}
           />
         </section>
 

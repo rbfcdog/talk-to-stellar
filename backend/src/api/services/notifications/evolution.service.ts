@@ -340,7 +340,7 @@ async function reserveEvolutionWebhookDedupe(input: {
 
 function shouldSendFailureFallback(): boolean {
   const value = String(process.env.EVOLUTION_SEND_FAILURE_FALLBACK || '').trim().toLowerCase();
-  return value === 'true' || value === '1';
+  return value !== 'false' && value !== '0';
 }
 
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -642,7 +642,7 @@ async function sendAgentQuery(input: {
     .digest('hex')}`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 120000));
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 45000));
   const ingestSecret = readAgentIngestSecret();
   try {
     const response = await fetch(agentQueryUrl(), {

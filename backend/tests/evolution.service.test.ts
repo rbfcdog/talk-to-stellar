@@ -436,7 +436,7 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.', { reliable: true });
   });
 
-  it('does not send a user-visible fallback when the agent request fails by default', async () => {
+  it('sends a short fallback when the agent request fails', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
       const normalizedUrl = String(url);
@@ -482,7 +482,12 @@ describe('EvolutionService', () => {
 
     await flushBackgroundWork();
 
-    expect(sendTextSpy).not.toHaveBeenCalled();
+    expect(sendTextSpy).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.',
+      { reliable: true }
+    );
   });
 
   it('deduplicates repeated Evolution delivery for the same text even when message ids differ', async () => {
