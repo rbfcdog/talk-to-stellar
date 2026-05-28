@@ -1465,6 +1465,14 @@ export const toolDefinitions = [
           type: "string",
           description: "External source channel when available.",
         },
+        return_to: {
+          type: "string",
+          description: "Internal frontend path to return to after confirmation, for example /transactions, /review, or /pix-ramp.",
+        },
+        return_source: {
+          type: "string",
+          description: "Frontend screen that originated this confirmation, for example pix, review, convert, transactions, or chat.",
+        },
       },
       required: ["amount", "destination", "session_id", "owner_id"],
     },
@@ -1522,6 +1530,14 @@ export const toolDefinitions = [
         source: {
           type: "string",
           description: "External source channel when available.",
+        },
+        return_to: {
+          type: "string",
+          description: "Internal frontend path to return to after confirmation, for example /rendimentos or /review.",
+        },
+        return_source: {
+          type: "string",
+          description: "Frontend screen that originated this confirmation, for example rendimentos, review, convert, pix, or chat.",
         },
       },
       required: ["session_id", "owner_id", "dest_amount", "source_asset_code", "dest_asset_code"],
@@ -3633,6 +3649,8 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       provider: String(input.provider || input.external_provider || '').trim() || null,
       provider_user_id: String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim() || null,
       source: String(input.source || input.external_source || input.provider || input.external_provider || '').trim() || null,
+      return_to: String(input.return_to || input.returnTo || '').trim() || null,
+      return_source: String(input.return_source || input.returnSource || input.from || '').trim() || null,
     });
 
     return JSON.stringify({
@@ -3724,6 +3742,8 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       provider: String(input.provider || input.external_provider || '').trim() || null,
       provider_user_id: String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim() || null,
       source: String(input.source || input.external_source || input.provider || input.external_provider || '').trim() || null,
+      return_to: String(input.return_to || input.returnTo || '').trim() || null,
+      return_source: String(input.return_source || input.returnSource || input.from || '').trim() || null,
     });
 
     return JSON.stringify({

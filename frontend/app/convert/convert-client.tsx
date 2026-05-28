@@ -14,6 +14,7 @@ import {
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
+import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target";
 import ConfirmConversionClient from "../confirm-conversion/confirm-conversion-client";
 
 type AssetOption = {
@@ -191,6 +192,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [reviewError, setReviewError] = useState("");
   const [embeddedReviewToken, setEmbeddedReviewToken] = useState("");
   const [embeddedReviewValidation, setEmbeddedReviewValidation] = useState<unknown | null>(null);
+  const [returnSource, setReturnSource] = useState("convert");
+  const [returnTo, setReturnTo] = useState("");
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -201,9 +204,13 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     const queryAmount = params.get("amount") || params.get("source_amount") || "";
     const querySource = params.get("source_asset") || params.get("source_asset_code") || params.get("from_asset") || "";
     const queryDest = params.get("dest_asset") || params.get("dest_asset_code") || params.get("to_asset") || "";
+    const queryReturnSource = params.get("from") || params.get("origin") || params.get("source") || "";
+    const queryReturnTo = params.get("return_to") || params.get("returnTo") || "";
     if (parseAmount(queryAmount) > 0) setAmount(queryAmount);
     if (querySource) setSourceCode(normalizeAssetCode(querySource));
     if (queryDest) setDestCode(normalizeAssetCode(queryDest));
+    if (queryReturnSource) setReturnSource(queryReturnSource);
+    if (queryReturnTo) setReturnTo(queryReturnTo);
   }, [initialQuery, setLanguage]);
 
   useEffect(() => {
@@ -257,6 +264,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       : canProceed
         ? L("Pronto para revisar", "Ready to review")
         : L("Revise o saldo", "Review balance");
+  const returnTarget: ReturnTarget = resolveReturnTarget({
+    language,
+    returnTo,
+    source: returnSource || "convert",
+    fallbackSource: "convert",
+  });
 
   async function prepareConversionReview() {
     if (!session.authenticated) {
@@ -275,6 +288,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           source_asset_code: sourceCode,
           dest_asset_code: destCode,
           language,
+          from: returnSource || "convert",
+          return_source: returnSource || "convert",
+          return_to: returnTarget.href,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -295,7 +311,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   }
 
   if (embeddedReviewToken) {
-    return <ConfirmConversionClient initialToken={embeddedReviewToken} initialValidation={embeddedReviewValidation} />;
+    return <ConfirmConversionClient initialToken={embeddedReviewToken} initialValidation={embeddedReviewValidation} initialReturnTarget={returnTarget} />;
   }
 
   return (

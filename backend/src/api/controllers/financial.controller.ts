@@ -531,6 +531,8 @@ export class FinancialController {
         dest_asset_issuer: destAsset.issuer,
         quote: quoteWithExpiry,
       }, {
+        return_to: String(req.body?.return_to || req.body?.returnTo || '').trim() || null,
+        return_source: String(req.body?.return_source || req.body?.returnSource || req.body?.from || req.body?.origin || '').trim() || null,
         estimated_fee_display: unifiedFee.display,
         estimated_fee_usdc: unifiedFee.fee_usdc || null,
         estimated_fee_brl: unifiedFee.fee_brl || null,
@@ -553,6 +555,8 @@ export class FinancialController {
         source_asset_code: sourceAsset.code,
         dest_amount: String(quote.destinationAmount || ''),
         dest_asset_code: destAsset.code,
+        return_to: String(req.body?.return_to || req.body?.returnTo || '').trim() || null,
+        return_source: String(req.body?.return_source || req.body?.returnSource || req.body?.from || req.body?.origin || '').trim() || null,
         estimated_fee_display: unifiedFee.display,
         route_chain: routeChain || null,
       });

@@ -8,6 +8,7 @@ import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
+import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
 
 type ValidationResult = {
   success?: boolean
@@ -141,9 +142,11 @@ function publicConversionErrorMessage(error: unknown, language: AppLanguage) {
 export default function ConfirmConversionClient({
   initialToken = '',
   initialValidation = null,
+  initialReturnTarget = null,
 }: {
   initialToken?: string
   initialValidation?: any
+  initialReturnTarget?: ReturnTarget | null
 }) {
   const searchParams = useSearchParams()
   const { language } = useLanguage()
@@ -154,6 +157,8 @@ export default function ConfirmConversionClient({
   const [completionProvider] = useState(() => String(searchParams.get("provider") || decodeJwtPayload(tokenFromUrl)?.provider || "").trim().toLowerCase())
   const [completionProviderUserId] = useState(() => String(searchParams.get("provider_user_id") || decodeJwtPayload(tokenFromUrl)?.provider_user_id || "").trim())
   const [completionSource] = useState(() => String(searchParams.get("source") || decodeJwtPayload(tokenFromUrl)?.source || completionProvider || "").trim().toLowerCase())
+  const [queryReturnTo] = useState(() => String(searchParams.get("return_to") || searchParams.get("returnTo") || "").trim())
+  const [queryReturnSource] = useState(() => String(searchParams.get("from") || searchParams.get("origin") || "").trim())
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
@@ -286,6 +291,12 @@ export default function ConfirmConversionClient({
   const transactionsUrl = buildActionUrl("/transactions", {
     from: "confirm-conversion",
     lang: feedbackLanguage,
+  })
+  const returnTarget = initialReturnTarget || resolveReturnTarget({
+    language: feedbackLanguage,
+    returnTo: payload.return_to || payload.returnTo || queryReturnTo,
+    source: payload.return_source || payload.returnSource || payload.from || queryReturnSource || payload.source || completionSource,
+    fallbackSource: "convert",
   })
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
@@ -475,6 +486,12 @@ export default function ConfirmConversionClient({
                   {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                     <p>{T(feedbackLanguage, "Economia estimada nesta operação", "Estimated savings on this operation")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
+                  <a
+                    href={returnTarget.href}
+                    className="mt-3 inline-flex w-full items-center justify-center bg-tts-deep px-4 py-3 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+                  >
+                    {returnTarget.label}
+                  </a>
                 </motion.div>
               )}
               {status === "error" && (

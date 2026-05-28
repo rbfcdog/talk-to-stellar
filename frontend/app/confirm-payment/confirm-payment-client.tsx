@@ -10,6 +10,7 @@ import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
+import { resolveReturnTarget } from "@/lib/return-target"
 
 type ValidationResult = {
   success?: boolean
@@ -404,6 +405,8 @@ export default function ConfirmPaymentClient({
   const [completionProvider] = useState(() => String(searchParams.get("provider") || decodeJwtPayload(tokenFromUrl)?.provider || "").trim().toLowerCase())
   const [completionProviderUserId] = useState(() => String(searchParams.get("provider_user_id") || decodeJwtPayload(tokenFromUrl)?.provider_user_id || "").trim())
   const [completionSource] = useState(() => String(searchParams.get("source") || decodeJwtPayload(tokenFromUrl)?.source || completionProvider || "").trim().toLowerCase())
+  const [queryReturnTo] = useState(() => String(searchParams.get("return_to") || searchParams.get("returnTo") || "").trim())
+  const [queryReturnSource] = useState(() => String(searchParams.get("from") || searchParams.get("origin") || "").trim())
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
@@ -814,6 +817,12 @@ export default function ConfirmPaymentClient({
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
+  const returnTarget = resolveReturnTarget({
+    language: feedbackLanguage,
+    returnTo: payload.return_to || payload.returnTo || queryReturnTo,
+    source: payload.return_source || payload.returnSource || payload.from || queryReturnSource || payload.source || completionSource || externalProvider,
+    fallbackSource: externalProvider || "chat",
+  })
   const assetCode = normalizeAssetCode(payload.asset_code || payload.assetCode || "")
   const amountLabel = formatPaymentAmount(payload.amount, assetCode)
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.quote?.sourceAsset?.code || "")
@@ -1082,6 +1091,12 @@ export default function ConfirmPaymentClient({
                       View receipt
                     </a>
                   )}
+                  <a
+                    href={returnTarget.href}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-deep px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep2"
+                  >
+                    {returnTarget.label}
+                  </a>
                   {result.receiptImageDataUrl && (
                     <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20">
                       <motion.img
