@@ -430,6 +430,30 @@ function getTokenUserId(payload: any): string {
   return normalizeEmailForCompare(String(payload?.user_id || payload?.userId || payload?.owner_id || payload?.ownerId || ''));
 }
 
+async function resolveTokenIdentityLock(payload: any): Promise<ExternalIdentityLock | null> {
+  const tokenSessionId = getTokenSessionId(payload);
+  const tokenUserId = getTokenUserId(payload);
+  let canonicalLogin = looksLikeEmail(tokenUserId) ? tokenUserId : '';
+
+  if (tokenSessionId) {
+    const tokenSession = await agentRepo.getSession(tokenSessionId);
+    if (tokenSession) {
+      canonicalLogin = resolveCanonicalSessionLogin(tokenSession) || canonicalLogin;
+      return {
+        sessionId: String((tokenSession as any)?.session_id || tokenSessionId),
+        userId: normalizeEmailForCompare(String((tokenSession as any)?.user_id || tokenUserId || '')) || undefined,
+        canonicalLogin: canonicalLogin || undefined,
+      };
+    }
+  }
+
+  if (!tokenUserId && !canonicalLogin) return null;
+  return {
+    userId: tokenUserId || undefined,
+    canonicalLogin: canonicalLogin || undefined,
+  };
+}
+
 export class ExternalController {
   // POST /api/external/check-account
   static async checkAccount(req: Request, res: Response) {
@@ -605,6 +629,12 @@ export class ExternalController {
 
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
       const isBrowserProvider = isBrowserExternalProvider(provider);
+      const tokenIdentity = externalPayload
+        ? await resolveTokenIdentityLock(externalPayload).catch(() => null)
+        : null;
+      if (!email && tokenIdentity?.canonicalLogin) {
+        email = tokenIdentity.canonicalLogin;
+      }
       const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, providerUserId);
       if (!email && identityLock?.canonicalLogin) {
         email = identityLock.canonicalLogin;
@@ -693,7 +723,7 @@ export class ExternalController {
         }
       }
 
-      if (!matched && provider === 'telegram' && externalPayload) {
+      if (!matched && !isBrowserProvider && externalPayload) {
         const tokenSessionId = getTokenSessionId(externalPayload);
         const tokenUserId = getTokenUserId(externalPayload);
         if (tokenSessionId) {
@@ -706,7 +736,7 @@ export class ExternalController {
               return res.status(409).json({
                 success: false,
                 notAssociated: true,
-                message: 'Este link do Telegram não pertence à conta vinculada.',
+                message: `Este link do ${providerLabel} não pertence à conta vinculada.`,
               });
             }
 

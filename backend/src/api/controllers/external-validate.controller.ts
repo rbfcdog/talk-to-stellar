@@ -6,6 +6,15 @@ import { getQuoteExpiry, isQuoteExpired, quoteExpiryMessage } from '../services/
 import { getRequiredJwtSecret } from '../../config/secrets'
 import { publicErrorMessage } from '../../utils/public-error'
 import { assertSaneBrlUsdcQuote } from '../services/quote-rate-sanity.service'
+import { AgentRepository } from '../repository/core/agent.repository'
+import {
+  ExternalRepository,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from '../repository/core/external.repository'
+
+const agentRepo = new AgentRepository(supabase)
+const externalRepo = new ExternalRepository(supabase)
 
 function getJwtSecret() {
   return getRequiredJwtSecret()
@@ -27,6 +36,90 @@ function isOnboardingProcessingStale(state: any): boolean {
   const lockAtMs = Date.parse(lockAtRaw)
   if (!Number.isFinite(lockAtMs)) return false
   return Date.now() - lockAtMs > ttlMs
+}
+
+function normalizeEmailForCompare(value?: string): string {
+  return String(value || '').trim().toLowerCase()
+}
+
+function looksLikeEmail(value?: string): boolean {
+  const normalized = normalizeEmailForCompare(value)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
+function resolveCanonicalSessionLogin(session: any): string {
+  const sessionEmail = normalizeEmailForCompare(session?.email)
+  if (sessionEmail) return sessionEmail
+  const sessionUserId = normalizeEmailForCompare(session?.user_id)
+  return looksLikeEmail(sessionUserId) ? sessionUserId : ''
+}
+
+function getTokenSessionId(payload: any): string {
+  return String(payload?.session_id || payload?.sessionId || '').trim()
+}
+
+function getTokenUserId(payload: any): string {
+  return normalizeEmailForCompare(String(payload?.user_id || payload?.userId || payload?.owner_id || payload?.ownerId || ''))
+}
+
+async function getSessionSafely(sessionId: string): Promise<any | null> {
+  if (!sessionId) return null
+  try {
+    return await agentRepo.getSession(sessionId)
+  } catch {
+    return null
+  }
+}
+
+async function resolveExternalLinkedLogin(payload: any): Promise<Record<string, unknown>> {
+  const provider = normalizeExternalProvider(String(payload?.provider || ''))
+  const providerUserId = normalizeExternalProviderUserId(provider, String(payload?.provider_user_id || ''))
+  const tokenSessionId = getTokenSessionId(payload)
+  const tokenUserId = getTokenUserId(payload)
+
+  let sessionId = tokenSessionId
+  let userId = tokenUserId
+  let canonicalLogin = looksLikeEmail(tokenUserId) ? tokenUserId : ''
+
+  const tokenSession = await getSessionSafely(tokenSessionId)
+  if (tokenSession) {
+    sessionId = String(tokenSession?.session_id || tokenSessionId)
+    userId = normalizeEmailForCompare(String(tokenSession?.user_id || tokenUserId || ''))
+    canonicalLogin = resolveCanonicalSessionLogin(tokenSession) || canonicalLogin
+  }
+
+  if (provider && providerUserId) {
+    try {
+      const mapping = await externalRepo.findByProviderAndId(provider, providerUserId)
+      const mappedSessionId = String(mapping?.session_id || '').trim()
+      const mappedUserId = normalizeEmailForCompare(String(mapping?.user_id || ''))
+      if (mappedSessionId) {
+        const mappedSession = await getSessionSafely(mappedSessionId)
+        if (mappedSession) {
+          sessionId = String(mappedSession?.session_id || mappedSessionId)
+          userId = normalizeEmailForCompare(String(mappedSession?.user_id || mappedUserId || userId || ''))
+          canonicalLogin = resolveCanonicalSessionLogin(mappedSession) || canonicalLogin
+        }
+      }
+      if (!canonicalLogin && looksLikeEmail(mappedUserId)) {
+        userId = mappedUserId
+        canonicalLogin = mappedUserId
+      }
+    } catch {
+      // Validation should still succeed if the token is valid but mapping lookup is temporarily unavailable.
+    }
+  }
+
+  if (!looksLikeEmail(canonicalLogin)) return {}
+
+  return {
+    externalLinked: true,
+    pinOnly: true,
+    email: canonicalLogin,
+    resolvedLogin: canonicalLogin,
+    userId: userId || canonicalLogin,
+    sessionId: sessionId || null,
+  }
 }
 
 async function readPaymentLinkState(hash: string) {
@@ -199,10 +292,12 @@ export default class ExternalValidateController {
         }
         if (String(state?.status || '').toLowerCase() === 'processing') {
           if (isOnboardingProcessingStale(state)) {
+            const externalLogin = await resolveExternalLinkedLogin(payload)
             return res.status(200).json({
               success: true,
               valid: true,
               payload,
+              ...externalLogin,
               staleProcessing: true,
               message: 'Foi detectado um processamento anterior interrompido. Você já pode tentar novamente.',
             })
@@ -252,7 +347,8 @@ export default class ExternalValidateController {
         }
       }
 
-      return res.status(200).json({ success: true, valid: true, payload })
+      const externalLogin = sub === 'external_onboard' ? await resolveExternalLinkedLogin(payload) : {}
+      return res.status(200).json({ success: true, valid: true, payload, ...externalLogin })
     } catch (error: any) {
       return res.status(500).json({
         success: false,
