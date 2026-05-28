@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { ReturnToChat } from "@/components/shared/return-to-chat";
+import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 
@@ -344,73 +345,6 @@ function buildReturnChartData(amount: string, annualRate: number | null, languag
       earned: Number(earned.toFixed(2)),
     };
   });
-}
-
-function extractPositionAmount(value: unknown): string {
-  if (value === null || value === undefined) return "0";
-  if (typeof value === "number" || typeof value === "string") {
-    const parsed = normalizeDecimal(value);
-    return Number.isFinite(parsed) ? String(parsed) : "0";
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const amount = extractPositionAmount(item);
-      if (normalizeDecimal(amount) > 0) return amount;
-    }
-    return "0";
-  }
-  if (typeof value !== "object") return "0";
-
-  const record = value as Record<string, unknown>;
-  const preferredKeys = [
-    "amount",
-    "balance",
-    "vault_balance",
-    "vaultBalance",
-    "vault_shares",
-    "vaultShares",
-    "total",
-    "total_amount",
-    "totalAmount",
-    "total_underlying",
-    "totalUnderlying",
-    "underlying_balance",
-    "underlyingBalance",
-    "underlying_amount",
-    "underlyingAmount",
-    "invested_amount",
-    "investedAmount",
-    "deposited",
-    "invested",
-    "managed_funds",
-    "managedFunds",
-    "total_managed_funds",
-    "totalManagedFunds",
-    "df_token_balance",
-    "dfTokenBalance",
-    "shares",
-    "shares_amount",
-    "sharesAmount",
-  ];
-
-  for (const key of preferredKeys) {
-    if (record[key] === undefined || record[key] === null) continue;
-    if (typeof record[key] === "object") {
-      const nested = extractPositionAmount(record[key]);
-      if (normalizeDecimal(nested) > 0) return nested;
-      continue;
-    }
-    const parsed = normalizeDecimal(record[key]);
-    if (Number.isFinite(parsed) && parsed > 0) return String(parsed);
-  }
-
-  for (const item of Object.values(record)) {
-    if (typeof item !== "object" || item === null) continue;
-    const nested = extractPositionAmount(item);
-    if (normalizeDecimal(nested) > 0) return nested;
-  }
-
-  return "0";
 }
 
 function sanitizeUiError(error: unknown, language: AppLanguage) {
@@ -826,7 +760,7 @@ export default function RendimentosClient({
         );
         return [code, {
           loading: false,
-          amount: extractPositionAmount(payload?.balance),
+          amount: extractDefindexPositionAmount(payload?.position || payload?.balance),
           error: "",
           raw: payload?.balance,
         }] as const;
@@ -921,8 +855,12 @@ export default function RendimentosClient({
         ) : null}
 
         {apiState.message ? (
-          <div className="sr-only" aria-live="polite">
-            {apiState.message}
+          <div className="flex items-start gap-3 border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm" role="status" aria-live="polite">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-black">{L("Status", "Status")}</p>
+              <p className="mt-1 whitespace-pre-line">{apiState.message}</p>
+            </div>
           </div>
         ) : null}
 
@@ -1679,8 +1617,16 @@ function YieldWorkspacePanel({
                     disabled={!canConfirm}
                     className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    {submitted ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <LockKeyhole className="h-4 w-4" aria-hidden="true" />}
-                    {hasPrepared ? confirmLabel : L("Prepare primeiro", "Prepare first")}
+                    {apiLoading && hasPrepared ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : submitted ? (
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {apiLoading && hasPrepared
+                      ? L("Confirmando...", "Confirming...")
+                      : hasPrepared ? confirmLabel : L("Prepare primeiro", "Prepare first")}
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">

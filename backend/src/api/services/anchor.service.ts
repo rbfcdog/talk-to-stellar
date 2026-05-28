@@ -856,6 +856,28 @@ function sameIssuedAsset(left: { code: string; issuer?: string }, right: { code:
   return String(left.issuer || getAssetIssuer(leftCode) || '') === String(right.issuer || getAssetIssuer(rightCode) || '');
 }
 
+function unsafeSameSymbolConversionRatio(input: {
+  sourceAsset: { code: string; issuer?: string };
+  destinationAsset: { code: string; issuer?: string };
+  sourceAmount: string;
+  destinationAmount: string;
+}): number | null {
+  const sourceCode = normalizeAssetCode(input.sourceAsset.code);
+  const destinationCode = normalizeAssetCode(input.destinationAsset.code);
+  if (!sourceCode || sourceCode !== destinationCode) return null;
+  if (sameIssuedAsset(input.sourceAsset, input.destinationAsset)) return null;
+
+  const sourceAmount = parseHumanAmountNumber(input.sourceAmount);
+  const destinationAmount = parseHumanAmountNumber(input.destinationAmount);
+  if (!Number.isFinite(sourceAmount) || sourceAmount <= 0 || !Number.isFinite(destinationAmount) || destinationAmount <= 0) {
+    return 0;
+  }
+
+  const ratio = destinationAmount / sourceAmount;
+  const minimumRatio = Math.max(0.01, Number(process.env.DEFINDEX_MIN_SAME_ASSET_CONVERSION_RATIO || 0.8));
+  return ratio < minimumRatio ? ratio : null;
+}
+
 function resolveRampFinalAsset(...values: unknown[]): { code: string; issuer?: string } {
   const raw = coalesceString(...values) || 'TESOURO';
   const parsed = parseIssuedAssetIdentifier(raw);
@@ -4109,8 +4131,14 @@ export class AnchorService {
         route_sane: true,
         path: quote.path,
       };
+      const unsafeRatio = unsafeSameSymbolConversionRatio({
+        sourceAsset: walletSourceAsset,
+        destinationAsset: vaultDepositAsset,
+        sourceAmount,
+        destinationAmount: quote.destinationAmount,
+      });
 
-      if (parseHumanAmountNumber(quote.destinationAmount) <= 0) {
+      if (parseHumanAmountNumber(quote.destinationAmount) <= 0 || unsafeRatio !== null) {
         logDefindex('warn', 'prepare_vault_asset_conversion_unsafe', {
           request_id: input.requestId,
           session_id: maskLogValue(input.context.sessionId),
@@ -4121,17 +4149,24 @@ export class AnchorService {
           source_amount: sourceAmount,
           destination_amount: quote.destinationAmount,
           source_available: formatDecimalAmount(sourceAvailable),
+          same_symbol_ratio: unsafeRatio,
         });
         return {
           requiresConversion: true,
           conversionReady: false,
           executionBlockedCode: 'yield_asset_conversion_unavailable',
-          executionBlockedReason: 'Revisao preparada. A rota para converter o saldo escolhido para esta aplicacao nao retornou valor suficiente agora.',
+          executionBlockedReason: unsafeRatio !== null
+            ? 'Revisao preparada. A rota de teste entre as duas emissoes desta moeda esta distorcida agora, entao a confirmacao foi bloqueada para evitar perda no valor convertido.'
+            : 'Revisao preparada. A rota para converter o saldo escolhido para esta aplicacao nao retornou valor suficiente agora.',
           setupRequired: false,
           trustline,
           vaultDepositAsset,
           walletSourceAsset,
-          conversionQuote,
+          conversionQuote: {
+            ...conversionQuote,
+            route_sane: false,
+            ...(unsafeRatio !== null ? { same_symbol_ratio: unsafeRatio } : {}),
+          },
         };
       }
 
