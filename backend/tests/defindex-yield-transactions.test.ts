@@ -34,6 +34,7 @@ function clearYieldEnv() {
   delete process.env.DEFINDEX_EURC_VAULT;
   delete process.env.DEFINDEX_TESOURO_VAULT;
   delete process.env.DEFINDEX_VAULTS_JSON;
+  delete process.env.DEFINDEX_ALLOW_TESTNET_SAME_SYMBOL_CONVERSION;
   delete process.env.CETES_ISSUER_TESTNET;
 }
 
@@ -95,7 +96,7 @@ describe('Defindex yield transaction flows', () => {
     ]));
   });
 
-  it('marks same-symbol cross-issuer options as not executable in status', async () => {
+  it('keeps same-symbol cross-issuer options executable while prepare validates the exact route', async () => {
     (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockImplementation(async (vault: any) => {
       if (vault.asset_code === 'USDC') {
         return {
@@ -139,9 +140,9 @@ describe('Defindex yield transaction flows', () => {
     expect(usdc).toMatchObject({
       asset_code: 'USDC',
       requires_wallet_asset_conversion: true,
-      execution_available: false,
-      execution_blocked_code: 'yield_asset_conversion_unavailable',
+      execution_available: true,
     });
+    expect(usdc.execution_blocked_code).toBeUndefined();
   });
 
   it.each([
@@ -338,7 +339,7 @@ describe('Defindex yield transaction flows', () => {
       { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '50' },
       { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '0' },
     ] as any);
-    const quoteSpy = jest.spyOn(StellarService, 'quoteStrictSendConversion');
+    const quoteSpy = jest.spyOn(StellarService, 'quotePathPayment');
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
 
     const result = await AnchorService.prepareDefindexYieldForSession({
@@ -362,7 +363,7 @@ describe('Defindex yield transaction flows', () => {
     expect(buildSpy).not.toHaveBeenCalled();
   });
 
-  it('blocks same-symbol cross-issuer conversion by default before quoting', async () => {
+  it('quotes same-symbol cross-issuer conversion and blocks when the exact vault amount is too expensive', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockResolvedValueOnce({
@@ -380,9 +381,27 @@ describe('Defindex yield transaction flows', () => {
       wallet_source_asset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
       vault_deposit_asset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
     });
-    const trustlineSpy = jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline');
-    const balanceSpy = jest.spyOn(StellarService, 'getAccountBalance');
-    const quoteSpy = jest.spyOn(StellarService, 'quoteStrictSendConversion');
+    const trustlineSpy = jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'USDC',
+      asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER,
+    });
+    const balanceSpy = jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '1000' },
+      { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '0' },
+    ] as any);
+    const quoteSpy = jest.spyOn(StellarService, 'quotePathPayment').mockResolvedValue({
+      sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+      destinationAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER },
+      destinationAmount: '100',
+      sourceAmount: '250',
+      sourceMax: '255',
+      pathSourceAmount: '250',
+      pathSourceMax: '255',
+      networkFeeXlm: '0.00001',
+      path: [],
+    } as any);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
 
     const result = await AnchorService.prepareDefindexYieldForSession({
@@ -401,13 +420,19 @@ describe('Defindex yield transaction flows', () => {
       execution_blocked_code: 'yield_asset_conversion_unavailable',
       conversion_required: true,
       asset_conversion: expect.objectContaining({
-        conversion_mode: 'blocked_same_symbol_issuer_conversion',
+        conversion_mode: 'strict_receive_vault_amount',
+        requested_vault_amount: '100',
+        source_max: '255',
         route_sane: false,
       }),
     });
-    expect(trustlineSpy).not.toHaveBeenCalled();
-    expect(balanceSpy).not.toHaveBeenCalled();
-    expect(quoteSpy).not.toHaveBeenCalled();
+    expect(trustlineSpy).toHaveBeenCalled();
+    expect(balanceSpy).toHaveBeenCalled();
+    expect(quoteSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
+      destAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
+      destAmount: '100',
+    }));
     expect(buildSpy).not.toHaveBeenCalled();
   });
 
@@ -533,21 +558,22 @@ describe('Defindex yield transaction flows', () => {
         { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '99' },
         { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '100' },
       ] as any);
-    jest.spyOn(StellarService, 'quoteStrictSendConversion').mockResolvedValue({
+    jest.spyOn(StellarService, 'quotePathPayment').mockResolvedValue({
       sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
       destinationAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER },
-      sourceAmount: '100',
-      effectiveSourceAmount: '100',
-      destinationAmount: '0.4258',
-      destinationMin: '0.4172840',
+      destinationAmount: '100',
+      sourceAmount: '23500',
+      sourceMax: '23970',
+      pathSourceAmount: '23500',
+      pathSourceMax: '23970',
       networkFeeXlm: '0.00001',
       path: [],
     } as any);
-    const conversionSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret').mockResolvedValue({
+    const conversionSpy = jest.spyOn(StellarService, 'submitStrictReceivePaymentFromSecret').mockResolvedValue({
       success: true,
       hash: 'conversion-hash',
-      destinationAmount: '0.4258',
-      destinationMin: '0.4172840',
+      sourceAmount: '23500',
+      destinationAmount: '100',
     } as any);
     jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue(signingSecret);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
@@ -608,21 +634,22 @@ describe('Defindex yield transaction flows', () => {
         { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '99' },
         { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: DEFINDEX_TESTNET_USDC_ISSUER, balance: '99' },
       ] as any);
-    jest.spyOn(StellarService, 'quoteStrictSendConversion').mockResolvedValue({
+    jest.spyOn(StellarService, 'quotePathPayment').mockResolvedValue({
       sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
       destinationAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER },
+      destinationAmount: '100',
       sourceAmount: '100',
-      effectiveSourceAmount: '100',
-      destinationAmount: '99',
-      destinationMin: '98.0100000',
+      sourceMax: '102',
+      pathSourceAmount: '100',
+      pathSourceMax: '102',
       networkFeeXlm: '0.00001',
       path: [],
     } as any);
-    const conversionSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret').mockResolvedValue({
+    const conversionSpy = jest.spyOn(StellarService, 'submitStrictReceivePaymentFromSecret').mockResolvedValue({
       success: true,
       hash: 'conversion-hash',
-      destinationAmount: '99',
-      destinationMin: '98.0100000',
+      sourceAmount: '100',
+      destinationAmount: '100',
     } as any);
     jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue(signingSecret);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
@@ -639,7 +666,7 @@ describe('Defindex yield transaction flows', () => {
       user_id: SESSION_CONTEXT.userId,
       type: 'DEFINDEX_YIELD_DEPOSIT',
       status: 'COMPLETED',
-      amount: 99,
+      amount: 100,
       asset_code: 'USDC',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -658,19 +685,20 @@ describe('Defindex yield transaction flows', () => {
       success: true,
       submitted: true,
       hash: 'yield-hash',
-      amount: '99',
+      amount: '100',
     });
     expect(conversionSpy).toHaveBeenCalledWith(expect.objectContaining({
       sourceSecret: signingSecret,
       destination: SESSION_CONTEXT.publicKey,
       sourceAsset: { code: 'USDC', issuer: CIRCLE_TESTNET_USDC_ISSUER },
       destinationAsset: { code: 'USDC', issuer: DEFINDEX_TESTNET_USDC_ISSUER, contract: DEFINDEX_TESTNET_USDC_CONTRACT },
-      sourceAmount: '100',
+      destinationAmount: '100',
+      sourceMax: '102',
     }));
     expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
       vaultAddress: YIELD_VAULTS.USDC,
       caller: SESSION_CONTEXT.publicKey,
-      amountUnits: 990000000,
+      amountUnits: 1000000000,
     }));
     expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
       vaultAddress: YIELD_VAULTS.USDC,
