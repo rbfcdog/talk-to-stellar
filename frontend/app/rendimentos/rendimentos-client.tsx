@@ -365,14 +365,32 @@ function extractPositionAmount(value: unknown): string {
   const preferredKeys = [
     "amount",
     "balance",
+    "vault_balance",
+    "vaultBalance",
+    "vault_shares",
+    "vaultShares",
     "total",
     "total_amount",
     "totalAmount",
+    "total_underlying",
+    "totalUnderlying",
     "underlying_balance",
     "underlyingBalance",
+    "underlying_amount",
+    "underlyingAmount",
+    "invested_amount",
+    "investedAmount",
     "deposited",
     "invested",
+    "managed_funds",
+    "managedFunds",
+    "total_managed_funds",
+    "totalManagedFunds",
+    "df_token_balance",
+    "dfTokenBalance",
     "shares",
+    "shares_amount",
+    "sharesAmount",
   ];
 
   for (const key of preferredKeys) {
@@ -871,7 +889,7 @@ export default function RendimentosClient({
               className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
             >
               <BarChart3 className="h-4 w-4" aria-hidden="true" />
-              {L("Rendimentos atuais", "Current returns")}
+              {L("Investimentos atuais", "Current investments")}
             </a>
             <button
               type="button"
@@ -1443,7 +1461,7 @@ function YieldWorkspacePanel({
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 sm:w-auto"
         >
           <BarChart3 className="h-4 w-4" aria-hidden="true" />
-          {L("Ver rendimentos atuais", "View current returns")}
+          {L("Ver investimentos atuais", "View current investments")}
         </a>
       </div>
 
@@ -1720,8 +1738,8 @@ function CurrentInvestmentsPage({
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
               {L(
-                "Veja todas as opções ativas, posição atual e simulação separadas da tela de nova aplicação.",
-                "See every active option, current position, and simulation separately from the new application screen."
+                "Consulte quanto há aplicado agora em cada opção. Nova aplicação e confirmação ficam em outra tela.",
+                "Check how much is currently applied in each option. New applications and confirmation stay on another screen."
               )}
             </p>
           </div>
@@ -1762,8 +1780,8 @@ function CurrentInvestmentsPage({
             value={sessionLoading ? L("Verificando", "Checking") : session.authenticated ? L("Conectada", "Connected") : L("Entrar", "Sign in")}
             detail={accountPublicKey ? `ID: ${accountPublicKey.slice(0, 6)}...${accountPublicKey.slice(-5)}` : undefined}
           />
-          <MiniStat label={L("Opções ativas", "Active options")} value={String(availableOptions.length)} detail={L("configuradas para acompanhar", "configured to track")} />
-          <MiniStat label={L("Posições", "Positions")} value={String(activePositions)} detail={L("com valor aplicado", "with current balance")} />
+          <MiniStat label={L("Opções consultadas", "Checked options")} value={String(availableOptions.length)} detail={L("ativas neste ambiente", "active in this environment")} />
+          <MiniStat label={L("Com saldo aplicado", "With current balance")} value={String(activePositions)} detail={L("posição maior que zero", "position above zero")} />
         </section>
 
         {isTestnet ? (
@@ -1791,7 +1809,7 @@ function CurrentInvestmentsPage({
                 option={option}
                 language={language}
                 amount={amount}
-                position={positionBalances[optionCode(option)]}
+                position={positionBalances[optionCode(option)] || { loading: true, amount: "0", error: "" }}
               />
             )) : (
               <p className="text-sm leading-6 text-tts-muted">
@@ -1819,11 +1837,10 @@ function InvestmentOptionCard({
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const code = optionCode(option);
   const profile = moneyProfile(code);
+  const isLoadingPosition = Boolean(!position || position.loading);
   const positionAmount = normalizeDecimal(position?.amount || "0");
   const projectionBase = positionAmount > 0 ? String(positionAmount) : amount;
   const chartData = buildReturnChartData(projectionBase, optionReturnRate(option), language);
-  const finalBalance = chartData[chartData.length - 1]?.balance || normalizeDecimal(projectionBase);
-  const finalEarned = chartData[chartData.length - 1]?.earned || 0;
   const reviewHref = buildMoneyUrl("/review", {
     asset: code,
     amount: amount || "100",
@@ -1839,25 +1856,42 @@ function InvestmentOptionCard({
           </span>
           <h2 className="mt-2 text-lg font-black text-tts-deep">{profileName(profile, language)}</h2>
           <p className="mt-1 text-xs leading-5 text-tts-muted">
-            {option.requires_wallet_asset_conversion
-              ? L("Pode preparar conversão automática antes da confirmação.", "Can prepare automatic conversion before confirmation.")
-              : L("Opção ativa para acompanhamento e nova aplicação.", "Active option for tracking and new application.")}
+            {L("Consulta da posição atual nesta opção.", "Current position for this option.")}
           </p>
         </div>
         <TrendingUp className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 border border-tts-confirm bg-tts-confirm/10 p-4">
+        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-confirm">
+          {L("Aplicado agora", "Currently applied")}
+        </p>
+        <p className="mt-2 text-2xl font-black text-tts-deep">
+          {isLoadingPosition
+            ? L("Consultando", "Checking")
+            : positionAmount > 0
+              ? `${formatAmount(positionAmount, language)} ${profile.short}`
+              : L("Nada aplicado agora", "Nothing applied now")}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-tts-muted">
+          {position?.error || L("Valor consultado diretamente da posição atual da conta.", "Value checked from the account's current position.")}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <MiniStat
-          label={L("Posição atual", "Current position")}
-          value={position?.loading ? L("Carregando", "Loading") : `${formatAmount(positionAmount, language)} ${profile.short}`}
-          detail={position?.error || (positionAmount > 0 ? L("valor aplicado", "current balance") : L("Nada aplicado", "No position yet"))}
+          label={L("Status", "Status")}
+          value={isLoadingPosition ? L("Consultando", "Checking") : positionAmount > 0 ? L("Com saldo", "Has balance") : L("Sem posição", "No position")}
+          detail={position?.error || L("posição atual", "current position")}
         />
-        <MiniStat label={L("Rendimento atual", "Current return")} value={optionReturnText(option, language)} detail={L("estimado", "estimated")} />
-        <MiniStat label={L("Em 12 meses", "In 12 months")} value={`${formatAmount(finalBalance, language)} ${profile.short}`} detail={`+${formatAmount(finalEarned, language)} ${profile.short}`} />
+        <MiniStat label={L("Taxa atual", "Current rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
       </div>
 
       <div className="mt-4">
+        <div className="mb-2 flex items-center justify-between gap-3 text-xs text-tts-muted">
+          <span className="font-black uppercase tracking-[0.14em]">{L("Simulação separada", "Separate simulation")}</span>
+          <span>{L("não é posição atual", "not current position")}</span>
+        </div>
         <ReturnLineChart data={chartData} currency={profile.short} />
       </div>
 
@@ -1910,7 +1944,7 @@ function ReturnLineChart({
         </div>
         <span className="text-xs font-bold text-tts-muted">{L("12 meses", "12 months")}</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-56 w-full" role="img" aria-label={L("Gráfico de rendimentos atuais", "Current returns chart")}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-56 w-full" role="img" aria-label={L("Gráfico de simulação", "Simulation chart")}>
         <defs>
           <linearGradient id="returnAreaGradient" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />

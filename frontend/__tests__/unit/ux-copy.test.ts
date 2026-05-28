@@ -38,6 +38,8 @@ describe("UX copy guardrails", () => {
       "Saldo operacional",
       "Operational balance",
       "OPS",
+      "Rendimentos atuais",
+      "Ver rendimentos atuais",
     ];
 
     for (const phrase of forbidden) {
@@ -75,6 +77,10 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Converter ativos");
     expect(reviewText).toContain("href={returnsHref}");
     expect(reviewText).toContain("CurrentInvestmentsPage");
+    expect(reviewText).toContain("Investimentos atuais");
+    expect(reviewText).toContain("Aplicado agora");
+    expect(reviewText).toContain("Nada aplicado agora");
+    expect(reviewText).toContain("Simulação separada");
     expect(reviewText).not.toContain("returnsOpen");
     expect(reviewText).toContain("Toque em uma moeda com opção ativa.");
     expect(reviewText).not.toContain("Outros saldos");
