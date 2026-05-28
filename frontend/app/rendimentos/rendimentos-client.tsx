@@ -547,7 +547,6 @@ export default function RendimentosClient({
   const requestedAmount = normalizeDecimal(amount);
   const selectedBalanceAmount = normalizeDecimal(balanceForSelected?.balance || "0");
   const selectedBalanceInsufficient = Boolean(
-    action === "deposit" &&
     session.authenticated &&
     requestedAmount > 0 &&
     (!balanceForSelected || selectedBalanceAmount + 0.0000001 < requestedAmount)
@@ -1617,10 +1616,14 @@ function YieldWorkspacePanel({
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <a
           href={convertAssetsHref}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 sm:w-auto"
+          className={`inline-flex min-h-11 w-full items-center justify-center gap-2 px-3 py-2 text-sm font-black transition sm:w-auto ${
+            selectedBalanceInsufficient
+              ? "border border-tts-gold bg-tts-gold text-tts-deep hover:bg-tts-gold/90"
+              : "border border-tts-border bg-tts-surface text-tts-deep hover:border-tts-border2"
+          }`}
         >
-          <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
-          {L("Converter ativos", "Convert assets")}
+          {selectedBalanceInsufficient ? <ArrowRightLeft className="h-4 w-4" aria-hidden="true" /> : <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />}
+          {selectedBalanceInsufficient ? L("Converter para continuar", "Convert to continue") : L("Converter ativos", "Convert assets")}
         </a>
         <a
           href={returnsHref}
