@@ -109,6 +109,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Aplicado agora");
     expect(reviewText).toContain("Nada aplicado agora");
     expect(reviewText).toContain("Simulação separada");
+    expect(reviewText).toContain("extractDefindexPositionAmount(payload?.position || payload?.balance)");
+    expect(reviewText).toContain("Confirmando...");
+    expect(reviewText).toContain('role="status"');
     expect(reviewText).not.toContain("returnsOpen");
     expect(reviewText).toContain("Toque em uma moeda com opção ativa.");
     expect(reviewText).not.toContain("Outros saldos");
