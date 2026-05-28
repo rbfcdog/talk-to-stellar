@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,
+  ArrowRightLeft,
   ArrowUpFromLine,
   BadgeCheck,
   BarChart3,
@@ -455,6 +456,10 @@ function isSessionUiError(error: unknown) {
   return /session|login|unauthor|auth|token|jwt/i.test(raw);
 }
 
+function isInsufficientBalanceNotice(message: string) {
+  return /saldo insuficiente|insufficient|not enough balance/i.test(String(message || ""));
+}
+
 async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -539,6 +544,29 @@ export default function RendimentosClient({
   const sessionLoading = Boolean(session.loading && !session.checked);
   const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
+  const requestedAmount = normalizeDecimal(amount);
+  const selectedBalanceAmount = normalizeDecimal(balanceForSelected?.balance || "0");
+  const selectedBalanceInsufficient = Boolean(
+    action === "deposit" &&
+    session.authenticated &&
+    requestedAmount > 0 &&
+    (!balanceForSelected || selectedBalanceAmount + 0.0000001 < requestedAmount)
+  );
+  const alternativeConversionBalance = useMemo(() => {
+    return [...balances]
+      .filter((item) => {
+        const code = normalizeUiAssetCode(item.asset_code);
+        return Boolean(code && code !== safeSelectedCode && normalizeDecimal(item.balance) > 0.0000001);
+      })
+      .sort((a, b) => normalizeDecimal(b.balance) - normalizeDecimal(a.balance))[0] || null;
+  }, [balances, safeSelectedCode]);
+  const alternativeConversionCode = normalizeUiAssetCode(alternativeConversionBalance?.asset_code);
+  const smartConvertSourceCode = selectedBalanceInsufficient
+    ? alternativeConversionCode || (safeSelectedCode === "BRL" ? "USDC" : "BRL")
+    : safeSelectedCode;
+  const smartConvertDestCode = selectedBalanceInsufficient
+    ? actionableOptionCode || safeSelectedCode || bestOptionCode || "USDC"
+    : bestOptionCode || actionableOptionCode || "USDC";
   const convertToBestYieldUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
     source_asset: safeSelectedCode,
@@ -548,11 +576,18 @@ export default function RendimentosClient({
   }), [amount, bestOptionCode, safeSelectedCode, language]);
   const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
-    source_asset: safeSelectedCode,
-    dest_asset: bestOptionCode || "USDC",
+    source_asset: smartConvertSourceCode,
+    dest_asset: smartConvertDestCode,
+    from: "review",
+    next: "review",
+    lang: language,
+  }), [amount, smartConvertDestCode, smartConvertSourceCode, language]);
+  const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", {
+    amount,
+    asset: "BRL",
     from: "review",
     lang: language,
-  }), [amount, bestOptionCode, safeSelectedCode, language]);
+  }), [amount, language]);
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", {
     amount,
     asset: safeSelectedCode,
@@ -891,6 +926,29 @@ export default function RendimentosClient({
             <div>
               <p className="font-black">{L("Precisa de atenção", "Needs attention")}</p>
               <p className="mt-1 whitespace-pre-line">{apiState.error}</p>
+              {isInsufficientBalanceNotice(apiState.error) ? (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <a
+                    href={convertAssetsUrl}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 bg-tts-error px-3 py-2 text-xs font-black text-tts-surface transition hover:bg-tts-error/90"
+                  >
+                    <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+                    {alternativeConversionCode
+                      ? L(
+                          `Converter ${moneyProfile(alternativeConversionCode).short} para ${profileName(selectedProfile, language)}`,
+                          `Convert ${moneyProfile(alternativeConversionCode).short} to ${profileName(selectedProfile, language)}`
+                        )
+                      : L("Abrir conversão de ativos", "Open asset conversion")}
+                  </a>
+                  <a
+                    href={pixTopUpUrl}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-error/40 bg-tts-surface px-3 py-2 text-xs font-black text-tts-error transition hover:border-tts-error"
+                  >
+                    <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+                    {L("Colocar via PIX", "Add with PIX")}
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -972,6 +1030,9 @@ export default function RendimentosClient({
             onGoToWallet={() => setActiveStep("wallet")}
             convertToBestYieldHref={convertToBestYieldUrl}
             convertAssetsHref={convertAssetsUrl}
+            pixTopUpHref={pixTopUpUrl}
+            selectedBalanceInsufficient={selectedBalanceInsufficient}
+            alternativeConversionCode={alternativeConversionCode}
             configured={configured}
           />
         </section>
@@ -1372,6 +1433,9 @@ function YieldWorkspacePanel({
   onGoToWallet,
   convertToBestYieldHref,
   convertAssetsHref,
+  pixTopUpHref,
+  selectedBalanceInsufficient,
+  alternativeConversionCode,
   configured,
 }: {
   activeStep: "plan" | "review";
@@ -1408,6 +1472,9 @@ function YieldWorkspacePanel({
   onGoToWallet: () => void;
   convertToBestYieldHref: string;
   convertAssetsHref: string;
+  pixTopUpHref: string;
+  selectedBalanceInsufficient: boolean;
+  alternativeConversionCode: string;
   configured: boolean;
 }) {
   const { language } = useLanguage();
@@ -1464,6 +1531,7 @@ function YieldWorkspacePanel({
     : balanceForSelected
       ? `${formatAmount(balanceForSelected.balance, language)} ${profileShort}`
       : L("Saldo não disponível", "Balance unavailable");
+  const alternativeProfile = moneyProfile(alternativeConversionCode);
   const optionAvailabilityLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const reviewAmountLabel = selectedOption ? `${formatAmount(amount || 0, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
@@ -1562,6 +1630,43 @@ function YieldWorkspacePanel({
           {L("Ver investimentos atuais", "View current investments")}
         </a>
       </div>
+
+      {authenticated && selectedHasYield && selectedBalanceInsufficient ? (
+        <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-gold">
+          <p className="font-black">
+            {L(`Saldo insuficiente em ${profileName(selectedProfile, language)}`, `Insufficient ${profileName(selectedProfile, language)} balance`)}
+          </p>
+          <p className="mt-1">
+            {alternativeConversionCode
+              ? L(
+                  `Você pode converter saldo em ${profileName(alternativeProfile, language)} para ${profileName(selectedProfile, language)} e voltar para revisar.`,
+                  `You can convert ${profileName(alternativeProfile, language)} balance to ${profileName(selectedProfile, language)} and return to review.`
+                )
+              : L("Abra a conversão para trocar outro ativo antes de revisar este valor.", "Open conversion to switch another asset before reviewing this amount.")}
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <a
+              href={convertAssetsHref}
+              className="inline-flex min-h-10 items-center justify-center gap-2 bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90"
+            >
+              <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+              {alternativeConversionCode
+                ? L(
+                    `Converter ${alternativeProfile.short} para ${selectedProfile.short}`,
+                    `Convert ${alternativeProfile.short} to ${selectedProfile.short}`
+                  )
+                : L("Abrir conversão", "Open conversion")}
+            </a>
+            <a
+              href={pixTopUpHref}
+              className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-gold bg-tts-surface px-3 py-2 text-xs font-black text-tts-gold transition hover:border-tts-border2"
+            >
+              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+              {L("Colocar via PIX", "Add with PIX")}
+            </a>
+          </div>
+        </div>
+      ) : null}
 
       {authenticated && selectedHasYield && routeDescription ? (
         <div className={`mt-5 border p-4 text-sm leading-6 ${selectedExecutionBlocked ? "border-tts-gold bg-tts-gold-bg text-tts-gold" : "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"}`}>
