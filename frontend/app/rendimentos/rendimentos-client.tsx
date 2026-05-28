@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   BadgeCheck,
+  BarChart3,
   BookOpen,
   CheckCircle2,
   Coins,
@@ -15,6 +16,7 @@ import {
   PiggyBank,
   RefreshCw,
   SlidersHorizontal,
+  TrendingUp,
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
@@ -211,11 +213,11 @@ const MONEY_PROFILES: Record<string, MoneyProfile> = {
     tone: "border-tts-border bg-tts-surface text-tts-deep",
   },
   XLM: {
-    namePt: "Saldo operacional",
-    nameEn: "Operational balance",
-    short: "OPS",
-    descriptionPt: "Usado pelo sistema para pequenas tarifas.",
-    descriptionEn: "Used by the service for small account costs.",
+    namePt: "XLM",
+    nameEn: "XLM",
+    short: "XLM",
+    descriptionPt: "Saldo em XLM da conta.",
+    descriptionEn: "XLM balance in the account.",
     tone: "border-tts-border2 bg-tts-surface/[0.6] text-tts-muted",
   },
 };
@@ -270,6 +272,25 @@ function optionRateText(option: YieldOption | null | undefined, language: AppLan
   return localCopy(language, "Opção disponível", "Available option");
 }
 
+function formatReturnPercent(value: unknown, language: AppLanguage = "pt-BR") {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
+  if (!Number.isFinite(parsed)) return localCopy(language, "Indisponível", "Unavailable");
+  return `${parsed.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+function optionReturnRate(option?: YieldOption | null) {
+  const raw = option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy;
+  const parsed = Number(String(Array.isArray(raw) ? raw[0] : raw || "").replace("%", "").replace(",", "."));
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed / 100;
+}
+
+function optionReturnText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
+  if (!option) return localCopy(language, "Indisponível", "Unavailable");
+  return formatReturnPercent(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy, language);
+}
+
 function normalizeDecimal(value: unknown) {
   const raw = String(value || "0").trim();
   const normalized = raw.includes(",")
@@ -297,6 +318,23 @@ function buildMoneyUrl(path: string, params: Record<string, unknown>) {
   }
   const query = search.toString();
   return query ? `${path}?${query}` : path;
+}
+
+function buildReturnChartData(amount: string, annualRate: number | null, language: AppLanguage) {
+  const principal = normalizeDecimal(amount);
+  const monthlyRate = annualRate === null ? 0 : annualRate / 12;
+  return Array.from({ length: 13 }, (_, month) => {
+    const projected = principal * Math.pow(1 + monthlyRate, month);
+    const earned = Math.max(0, projected - principal);
+    return {
+      month,
+      label: month === 0
+        ? localCopy(language, "Hoje", "Today")
+        : localCopy(language, `${month}m`, `${month}m`),
+      balance: Number(projected.toFixed(2)),
+      earned: Number(earned.toFixed(2)),
+    };
+  });
 }
 
 function sanitizeUiError(error: unknown, language: AppLanguage) {
@@ -430,6 +468,7 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
   const [activeStep, setActiveStep] = useState<YieldStep>("wallet");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
+  const [returnsOpen, setReturnsOpen] = useState(false);
   const [yieldResult, setYieldResult] = useState<any | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
 
@@ -768,9 +807,12 @@ export default function RendimentosClient({ initialLanguage, initialQuery }: { i
             selectedHasDirectOption={selectedHasDirectOption}
             autoRouteToOption={autoRouteToOption}
             bestOption={bestOption}
+            options={options}
             bestOptionCode={bestOptionCode}
             balanceForSelected={balanceForSelected}
             result={yieldResult}
+            returnsOpen={returnsOpen}
+            onReturnsOpenChange={setReturnsOpen}
             canPrepare={canPrepare}
             confirmationEnabled={confirmationEnabled}
             apiLoading={apiState.loading}
@@ -1057,9 +1099,12 @@ function YieldWorkspacePanel({
   selectedHasDirectOption,
   autoRouteToOption,
   bestOption,
+  options,
   bestOptionCode,
   balanceForSelected,
   result,
+  returnsOpen,
+  onReturnsOpenChange,
   canPrepare,
   confirmationEnabled,
   apiLoading,
@@ -1090,9 +1135,12 @@ function YieldWorkspacePanel({
   selectedHasDirectOption: boolean;
   autoRouteToOption: boolean;
   bestOption: YieldOption | null;
+  options: YieldOption[];
   bestOptionCode: string;
   balanceForSelected?: BalanceLine;
   result: any | null;
+  returnsOpen: boolean;
+  onReturnsOpenChange: (open: boolean) => void;
   canPrepare: boolean;
   confirmationEnabled: boolean;
   apiLoading: boolean;
@@ -1159,18 +1207,18 @@ function YieldWorkspacePanel({
   const optionAvailabilityLabel = selectedOption ? optionRateText(selectedOption, language) : L("Não disponível", "Unavailable");
   const reviewAmountLabel = selectedOption ? `${formatAmount(amount || 0, language)} ${profileShort}` : L("Escolha uma opção", "Choose an option");
   const actionTitle = action === "deposit"
-    ? L("Revisar entrada", "Review entry")
-    : L("Revisar saída", "Review exit");
+    ? L("Investir", "Invest")
+    : L("Retirar", "Withdraw");
   const confirmLabel = submitted
     ? L("Movimentação enviada", "Movement sent")
     : action === "deposit"
-      ? L("Confirmar entrada", "Confirm entry")
-      : L("Confirmar saída", "Confirm exit");
+      ? L("Confirmar investimento", "Confirm investment")
+      : L("Confirmar retirada", "Confirm withdrawal");
   const actionDescription = action === "deposit"
     ? selectedNeedsWalletConversion
-      ? L("Prepara a conversão automática e a entrada na opção selecionada. Nada sai sem PIN.", "Prepares automatic conversion and entry into the selected option. Nothing moves without PIN.")
-      : L("Prepara uma entrada na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares an entry into the selected option. In review mode, nothing leaves the account.")
-    : L("Prepara uma saída da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares an exit from the position back to available balance. In review mode, nothing leaves the account.");
+      ? L("Prepara a conversão automática e o investimento na opção selecionada. Nada sai sem PIN.", "Prepares automatic conversion and investment into the selected option. Nothing moves without PIN.")
+      : L("Prepara o investimento na opção selecionada. Em modo revisão, nada sai da conta.", "Prepares the investment into the selected option. In review mode, nothing leaves the account.")
+    : L("Prepara a retirada da posição para o saldo disponível. Em modo revisão, nada sai da conta.", "Prepares withdrawal from the position back to available balance. In review mode, nothing leaves the account.");
   return (
     <section id="yield-plan" className="scroll-mt-6 border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -1232,6 +1280,27 @@ function YieldWorkspacePanel({
         <MiniStat label={L("Valor revisado", "Reviewed amount")} value={reviewAmountLabel} detail={L("antes do PIN", "before PIN")} />
       </div>
 
+      <div className="mt-4">
+        <button
+          type="button"
+          aria-expanded={returnsOpen}
+          onClick={() => onReturnsOpenChange(!returnsOpen)}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 sm:w-auto"
+        >
+          <BarChart3 className="h-4 w-4" aria-hidden="true" />
+          {returnsOpen ? L("Ocultar rendimentos atuais", "Hide current returns") : L("Ver rendimentos atuais", "View current returns")}
+        </button>
+      </div>
+
+      {returnsOpen ? (
+        <CurrentReturnsPanel
+          amount={amount}
+          selectedOption={selectedOption}
+          selectedProfile={targetProfile}
+          options={options}
+        />
+      ) : null}
+
       {authenticated && selectedHasYield && routeDescription ? (
         <div className="mt-5 border border-tts-confirm bg-tts-confirm/10 p-4 text-sm leading-6 text-tts-confirm">
           <p className="font-black">{L("Conversão automática antes da confirmação", "Automatic conversion before confirmation")}</p>
@@ -1267,7 +1336,7 @@ function YieldWorkspacePanel({
                 className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "deposit" ? "bg-tts-confirm text-tts-deep" : "text-tts-muted"}`}
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-                {L("Entrada", "Entry")}
+                {L("Investir", "Invest")}
               </button>
               <button
                 type="button"
@@ -1275,7 +1344,7 @@ function YieldWorkspacePanel({
                 className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-black whitespace-nowrap ${action === "withdraw" ? "bg-tts-gold text-tts-deep" : "text-tts-muted"}`}
               >
                 <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
-                {L("Saída", "Exit")}
+                {L("Retirar", "Withdraw")}
               </button>
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface p-3">
@@ -1461,6 +1530,142 @@ function YieldWorkspacePanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CurrentReturnsPanel({
+  amount,
+  selectedOption,
+  selectedProfile,
+  options,
+}: {
+  amount: string;
+  selectedOption: YieldOption | null;
+  selectedProfile: MoneyProfile;
+  options: YieldOption[];
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const selectedRate = optionReturnRate(selectedOption);
+  const chartData = buildReturnChartData(amount, selectedRate, language);
+  const finalBalance = chartData[chartData.length - 1]?.balance || normalizeDecimal(amount);
+  const finalEarned = chartData[chartData.length - 1]?.earned || 0;
+  const availableOptions = options.filter((option) => !option.apy_error);
+
+  return (
+    <section className="mt-4 border border-tts-border bg-tts-bg p-4" aria-label={L("Rendimentos atuais", "Current returns")}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-black text-tts-deep">
+            <TrendingUp className="h-4 w-4 text-tts-confirm" aria-hidden="true" />
+            {L("Rendimentos atuais", "Current returns")}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">
+            {L(
+              "Dados informados pelo ambiente atual. Use esta área para acompanhar as opções; a confirmação continua separada por PIN.",
+              "Data provided by the current environment. Use this area to inspect options; confirmation stays separate behind PIN."
+            )}
+          </p>
+        </div>
+        <span className="inline-flex w-fit border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-tts-gold">
+          {L("Testnet", "Testnet")}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat label={L("Opção selecionada", "Selected option")} value={profileName(selectedProfile, language)} />
+        <MiniStat label={L("Rendimento atual", "Current return")} value={optionReturnText(selectedOption, language)} detail={L("estimado", "estimated")} />
+        <MiniStat label={L("Em 12 meses", "In 12 months")} value={`${formatAmount(finalBalance, language)} ${selectedProfile.short}`} detail={`+${formatAmount(finalEarned, language)} ${selectedProfile.short}`} />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.9fr)]">
+        <ReturnLineChart data={chartData} currency={selectedProfile.short} />
+        <div className="border border-tts-border bg-tts-surface p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
+            {L("Opções disponíveis", "Available options")}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {availableOptions.length ? availableOptions.map((option) => {
+              const profile = moneyProfile(optionCode(option));
+              return (
+                <div key={`${option.vault_address}-${option.asset_code}`} className="flex items-center justify-between gap-3 border border-tts-border bg-tts-bg px-3 py-2">
+                  <span className="min-w-0 truncate text-sm font-black text-tts-deep">{profileName(profile, language)}</span>
+                  <span className="shrink-0 text-sm font-black text-tts-confirm">{optionReturnText(option, language)}</span>
+                </div>
+              );
+            }) : (
+              <p className="text-sm leading-6 text-tts-muted">
+                {L("Nenhuma opção disponível agora.", "No option available right now.")}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReturnLineChart({
+  data,
+  currency,
+}: {
+  data: Array<{ month: number; label: string; balance: number; earned: number }>;
+  currency: string;
+}) {
+  const { language } = useLanguage();
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const width = 640;
+  const height = 220;
+  const paddingX = 32;
+  const paddingY = 26;
+  const values = data.map((item) => item.balance);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  const points = data.map((item, index) => {
+    const x = paddingX + (index / Math.max(1, data.length - 1)) * (width - paddingX * 2);
+    const y = height - paddingY - ((item.balance - min) / span) * (height - paddingY * 2);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+  const areaPoints = `${paddingX},${height - paddingY} ${points} ${width - paddingX},${height - paddingY}`;
+  const last = data[data.length - 1];
+
+  return (
+    <div className="border border-tts-border bg-tts-surface p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">
+            {L("Gráfico de simulação", "Simulation chart")}
+          </p>
+          <p className="mt-1 text-sm font-black text-tts-deep">
+            {last ? `${formatAmount(last.balance, language)} ${currency}` : `0 ${currency}`}
+          </p>
+        </div>
+        <span className="text-xs font-bold text-tts-muted">{L("12 meses", "12 months")}</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-56 w-full" role="img" aria-label={L("Gráfico de rendimentos atuais", "Current returns chart")}>
+        <defs>
+          <linearGradient id="returnAreaGradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2, 3].map((line) => {
+          const y = paddingY + line * ((height - paddingY * 2) / 3);
+          return <line key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} className="stroke-tts-border" strokeWidth="1" />;
+        })}
+        <polygon points={areaPoints} className="fill-tts-confirm text-tts-confirm" opacity="0.28" />
+        <polyline points={points} fill="none" className="stroke-tts-confirm" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {data.filter((item) => item.month % 3 === 0).map((item, index) => {
+          const x = paddingX + (item.month / Math.max(1, data.length - 1)) * (width - paddingX * 2);
+          return (
+            <text key={item.month} x={x} y={height - 6} textAnchor={index === 0 ? "start" : item.month === 12 ? "end" : "middle"} className="fill-tts-muted text-[11px] font-bold">
+              {item.label}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 

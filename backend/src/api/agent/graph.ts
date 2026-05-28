@@ -2252,7 +2252,7 @@ export class AgentGraph {
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
         '- Se o usuário usar euro/EUR/EURC em testnet, normalize para CETES. EUR/EURC fica apenas para public/mainnet.',
-        '- Se o usuário usar saldo operacional, XLM, lumen ou lumens, normalize para XLM.',
+        '- Se o usuário usar XLM, lumen ou lumens, normalize para XLM.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
         '',
@@ -2385,7 +2385,7 @@ export class AgentGraph {
         availableBalance: total.toFixed(7),
         keptReserve: keptReserve ? keptReserve.toFixed(7) : undefined,
         error: normalizedAsset === 'XLM'
-          ? 'Esse saldo fica reservado para manter sua conta operacional.'
+          ? 'Esse saldo em XLM fica reservado para manter sua conta ativa.'
           : `Você não tem saldo disponível em ${this.toUserFacingAssetCode(normalizedAsset)}.`,
       };
     }
