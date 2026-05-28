@@ -18,6 +18,23 @@ describe('Agent conversion UX', () => {
     jest.clearAllMocks();
   });
 
+  it('removes technical yield wording from public assistant copy', () => {
+    const repository = {
+      saveMessage: jest.fn().mockResolvedValue(undefined),
+      saveState: jest.fn().mockResolvedValue(undefined),
+    };
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'system prompt') as any;
+
+    const sanitized = graph.sanitizeAssistantResponse(
+      'Ver revisão/aplicação\nEx.: “quero ver o yield” ou “show yield options”',
+      'pt-BR'
+    );
+
+    expect(sanitized).toContain('quero ver dinheiro rendendo');
+    expect(sanitized).toContain('opções de aplicação');
+    expect(sanitized).not.toMatch(/\byield\b/i);
+  });
+
   it('does not send USDC to BRL conversion failures to PIX or expose routing internals', async () => {
     const repository = {
       saveMessage: jest.fn().mockResolvedValue(undefined),
