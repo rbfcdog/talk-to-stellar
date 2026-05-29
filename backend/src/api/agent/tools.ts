@@ -790,7 +790,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_intent_help",
-    description: "Mostra os principais comandos/intents disponíveis no TalkToStellar com explicações curtas em pt-BR.",
+    description: "Mostra todos os comandos e funcionalidades disponíveis no TalkToStellar com explicações completas em pt-BR. Use SEMPRE esta ferramenta quando o usuário pedir ajuda, lista de comandos, funcionalidades, o que pode fazer, ou equivalente.",
     parameters: {
       type: "object",
       properties: {},
