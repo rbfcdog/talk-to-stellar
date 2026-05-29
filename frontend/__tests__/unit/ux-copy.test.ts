@@ -28,6 +28,29 @@ describe("UX copy guardrails", () => {
     }
   });
 
+  it("keeps chat link labels mapped to product screens", () => {
+    const i18nText = source("lib/i18n.tsx");
+    const chatText = source("components/chat/chat-window.tsx");
+
+    expect(i18nText).toContain('chat_link_yield: "Abrir rendimentos"');
+    expect(i18nText).toContain('chat_link_profile: "Abrir perfil"');
+    expect(i18nText).toContain('chat_link_history: "Abrir histórico"');
+    expect(i18nText).toContain('chat_link_external_send: "Abrir envio externo"');
+    expect(chatText).toContain('path.endsWith("/rendimentos")');
+    expect(chatText).toContain('path.startsWith("/profile/")');
+    expect(chatText).toContain('path.endsWith("/transactions")');
+    expect(chatText).toContain('path.endsWith("/send-external")');
+  });
+
+  it("keeps compact account cards short", () => {
+    const text = source("components/shared/account-status.tsx");
+
+    expect(text).toContain("compactDetail");
+    expect(text).toContain("Conta pronta.");
+    expect(text).toContain("Entre para continuar.");
+    expect(text).toContain("compact ? copy.compactDetail : copy.detail");
+  });
+
   it("keeps conversion confirmation inside the web flow, not chat", () => {
     const text = source("app/convert/convert-client.tsx");
     const financialRouter = source("../backend/src/api/routes/financial.router.ts");

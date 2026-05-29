@@ -1015,7 +1015,13 @@ export class AgentGraph {
   } {
     const normalized = this.normalizeTextForIntent(text);
     const mentionsPix = /\bpix\b/.test(normalized);
+    const mentionsPixOffRampWording =
+      /\b(?:para|pra|pro|a)\s+fora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
+      /\bfora\s+(?:do|de|da)\s+pix\b/.test(normalized);
     const extractPixFundedPaymentRecipient = (): string => {
+      const isOffRampRecipientNoise = (value: string) =>
+        /\bfora\s+(?:do|de|da)\s+pix\b/.test(value) ||
+        /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(value);
       const stopAtFlowWords = (value: string) => String(value || '')
         .replace(/\s+\b(?:de|do|da)\s+(?:r\$\s*)?\d.*$/i, '')
         .replace(/\s+\b(?:na|no)\s+qual\b.*$/i, '')
@@ -1033,13 +1039,13 @@ export class AgentGraph {
 
       for (const pattern of patterns) {
         const candidate = stopAtFlowWords(normalized.match(pattern)?.[1] || '');
-        if (candidate) return candidate;
+        if (candidate && !isOffRampRecipientNoise(candidate)) return candidate;
       }
 
       const genericMatches = Array.from(normalized.matchAll(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/g));
       for (const match of genericMatches.reverse()) {
         const candidate = stopAtFlowWords(match[1] || '');
-        if (candidate && !/\b(?:minha conta|meu pix|meu banco|outro banco|conta externa)\b/.test(candidate)) {
+        if (candidate && !isOffRampRecipientNoise(candidate) && !/\b(?:minha conta|meu pix|meu banco|outro banco|conta externa)\b/.test(candidate)) {
           return candidate;
         }
       }
@@ -1048,6 +1054,7 @@ export class AgentGraph {
     };
     const pixFundedPaymentRecipient = extractPixFundedPaymentRecipient();
     const mentionsMoneyOutOfOwnAccount =
+      mentionsPixOffRampWording ||
       /\b(?:pra|para|pro)\s+fora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
       /\b(?:mandar|enviar|tirar|retirar|sacar)\b.*\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
       /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized);
@@ -2179,6 +2186,13 @@ export class AgentGraph {
       .replace(/\s+/g, ' ')
       .trim();
     if (!normalized) return false;
+
+    const asksToInitiateTransaction =
+      /\b(fazer|criar|montar|preparar|mandar|enviar|pagar|transferir|converter)\b.*\b(transacoes|transacao|operacoes|operacao|pagamento|transferencia)\b/.test(normalized) ||
+      /\b(transacoes|transacao|operacoes|operacao|pagamento|transferencia)\b.*\b(?:para|pra|pro|a)\b/.test(normalized);
+    const explicitlyAsksHistory =
+      /\b(historico|extrato|recibos|comprovantes|listar|mostrar|ver|consultar|minhas|meus)\b/.test(normalized);
+    if (asksToInitiateTransaction && !explicitlyAsksHistory) return false;
 
     const asksHistory =
       /\b(historico|extrato|transacoes|transacao|operacoes|operacao|movimentacoes|movimentacao|recibos|comprovantes)\b/.test(normalized) ||
@@ -4733,8 +4747,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.error = errorMessage;
       state.response_message = this.text(
         this.getLanguage(state),
-        "Não consegui concluir essa resposta agora. Tente de novo ou diga em uma frase: saldo, PIX, converter, aplicar, histórico ou contatos.",
-        "I could not complete that response right now. Try again or say one goal: balance, PIX, convert, apply, history, or contacts."
+        "Posso ajudar com conta, contatos, PIX, conversão, aplicação, pagamentos e histórico. Diga o objetivo em uma frase, por exemplo: saldo, sacar 100 reais para meu PIX, converter 50 reais para dólar ou ver histórico.",
+        "I can help with account, contacts, PIX, conversion, application, payments, and history. Say the goal in one sentence, for example: balance, withdraw 100 reais to my PIX, convert 50 reais to dollars, or show history."
       );
       return state;
     }
@@ -4784,8 +4798,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
       return this.text(
         language,
-        "Não consegui entender com segurança. Posso ajudar com contatos, saldo, PIX, conversão, aplicação, pagamentos e histórico.",
-        "I could not understand that safely. I can help with contacts, balance, PIX, conversion, application, payments, and history."
+        "Posso ajudar com conta, contatos, PIX, conversão, aplicação, pagamentos e histórico. Diga o objetivo em uma frase, por exemplo: saldo, sacar 100 reais para meu PIX, converter 50 reais para dólar ou ver histórico.",
+        "I can help with account, contacts, PIX, conversion, application, payments, and history. Say the goal in one sentence, for example: balance, withdraw 100 reais to my PIX, convert 50 reais to dollars, or show history."
       );
     }
   }

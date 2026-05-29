@@ -40,30 +40,35 @@ export function AccountStatusCard({
     loading: {
       title: L("Carregando conta", "Loading account"),
       detail: L("Conferindo sua sessão antes de mostrar saldos.", "Checking your session before showing balances."),
+      compactDetail: L("Conferindo sessão.", "Checking session."),
       icon: <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />,
       tone: "border-tts-gold bg-tts-gold-bg text-tts-gold",
     },
     connected: {
       title: L("Conta conectada", "Account connected"),
       detail: L("Pronto para conferir saldos e confirmar operações.", "Ready to check balances and confirm operations."),
+      compactDetail: L("Conta pronta.", "Account ready."),
       icon: <CheckCircle2 className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-confirm bg-tts-confirm/10 text-tts-confirm",
     },
     expired: {
       title: L("Sessão expirada", "Session expired"),
       detail: L("Entre novamente para continuar com segurança.", "Sign in again to continue securely."),
+      compactDetail: L("Entre novamente.", "Sign in again."),
       icon: <AlertTriangle className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-error bg-tts-error/10 text-tts-error",
     },
     "signed-out": {
       title: L("Precisa entrar", "Sign in needed"),
       detail: L("Entre para carregar saldos e confirmar operações.", "Sign in to load balances and confirm operations."),
+      compactDetail: L("Entre para continuar.", "Sign in to continue."),
       icon: <LogIn className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-gold bg-tts-gold-bg text-tts-gold",
     },
     unknown: {
       title: L("Conta", "Account"),
       detail: L("Atualize para conferir o estado da sessão.", "Refresh to check session status."),
+      compactDetail: L("Atualize a sessão.", "Refresh session."),
       icon: <WalletCards className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-border bg-tts-bg text-tts-muted",
     },
@@ -80,7 +85,7 @@ export function AccountStatusCard({
             {L("Sua conta", "Your account")}
           </p>
           <p className="mt-1 text-base font-black text-tts-deep">{title || copy.title}</p>
-          <p className="mt-1 text-xs leading-5 text-tts-muted">{detail || copy.detail}</p>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">{detail || (compact ? copy.compactDetail : copy.detail)}</p>
           {accountId ? (
             <p className="mt-2 truncate font-mono-financial text-xs font-bold text-tts-gold">
               {L("ID da conta", "Account ID")}: {shortAccount(accountId)}
