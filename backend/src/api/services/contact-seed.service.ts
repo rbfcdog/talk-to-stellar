@@ -80,6 +80,15 @@ function isLegacyStarterContact(contactName: string, publicKey: string): boolean
   return CURRENT_STATIC_CONTACT_KEYS[contactName] === publicKey || LEGACY_STATIC_CONTACT_KEYS[contactName] === publicKey;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableInitialUsdcConversionError(error: unknown): boolean {
+  const message = String(error || '').toLowerCase();
+  return /tx_bad_seq|bad_seq|timeout|timed out|temporar|try again|rate|504|503|502/.test(message);
+}
+
 export function repairLegacyStarterContactKey(publicKey: string): string {
   const match = STARTER_CONTACTS.find((contact) => LEGACY_STATIC_CONTACT_KEYS[contact.contact_name] === publicKey);
   return match ? CURRENT_STATIC_CONTACT_KEYS[match.contact_name] : publicKey;
@@ -265,8 +274,8 @@ export class ContactSeedService {
         };
       }
 
-      const sourceAmount = sourceAmountNumber.toFixed(7);
-      const result = await StellarService.submitStrictSendPaymentFromSecret({
+      let sourceAmount = sourceAmountNumber.toFixed(7);
+      let result = await StellarService.submitStrictSendPaymentFromSecret({
         sourceSecret: secretKey,
         destination: publicKey,
         sourceAsset: { code: 'XLM' },
@@ -274,6 +283,27 @@ export class ContactSeedService {
         destinationAsset: { code: 'USDC', issuer: usdcIssuer },
         memoText: 'INITIAL USDC',
       });
+
+      for (let attempt = 1; !result.success && attempt <= 2 && isRetryableInitialUsdcConversionError(result.error); attempt += 1) {
+        await sleep(750 * attempt);
+        const retryAccount = await StellarService.loadAccount(publicKey);
+        const retryXlmBalance = this.balanceAmount(retryAccount, (balance: any) => balance.asset_type === 'native');
+        const retryKeepXlm = this.minimumXlmToKeep(retryAccount);
+        const retrySourceAmountNumber = Math.floor((retryXlmBalance - retryKeepXlm) * 1e7) / 1e7;
+        if (!Number.isFinite(retrySourceAmountNumber) || retrySourceAmountNumber <= INITIAL_USDC_MIN_SOURCE_XLM) {
+          break;
+        }
+        sourceAmount = retrySourceAmountNumber.toFixed(7);
+        logger.info(`[contact-seed] retrying initial XLM->USDC sweep for ${publicKey} after ${result.error || 'retryable failure'} (attempt=${attempt + 1})`);
+        result = await StellarService.submitStrictSendPaymentFromSecret({
+          sourceSecret: secretKey,
+          destination: publicKey,
+          sourceAsset: { code: 'XLM' },
+          sourceAmount,
+          destinationAsset: { code: 'USDC', issuer: usdcIssuer },
+          memoText: 'INITIAL USDC',
+        });
+      }
 
       if (!result.success) {
         logger.warn(`[contact-seed] funding XLM->USDC sweep failed for ${publicKey}: ${result.error || 'unknown error'}`);

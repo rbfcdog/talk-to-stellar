@@ -846,11 +846,15 @@ export default function PixRampClient({
     autoPayAsset,
   ].join(":"))}`;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
-  const offRampInputValue = offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : offRampAmount;
-  const offRampDisplayAmount = offRampInputAsset === "BRL"
+  const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && offRampInputAsset !== "BRL" && offRampFiatAmount.trim());
+  const offRampInputValue = offRampExactReceiveBrl
+    ? offRampFiatAmount
+    : offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : offRampAmount;
+  const offRampDisplayAmount = offRampExactReceiveBrl || offRampInputAsset === "BRL"
     ? formatMoney(offRampInputValue || "0")
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
-  const offRampInputPrefix = friendlyAssetName(offRampInputAsset, language);
+  const offRampInputPrefix = offRampExactReceiveBrl ? "R$" : friendlyAssetName(offRampInputAsset, language);
+  const offRampInputUnit = offRampExactReceiveBrl ? "BRL" : offRampInputAsset;
   const offRampPixTargetAmount = String(
     temporaryOffRampTestResult?.target_brl ||
     temporaryOffRampTestResult?.destination_amount ||
@@ -1220,8 +1224,12 @@ export default function PixRampClient({
     const payAmount = normalizeHumanAmount(params.get("pay_amount") || "");
     const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
-    const offRampBrlAmount = mode === "offramp" && (fiatAmount || (amount && (!currency || currency === "BRL" || asset === "BRL")))
-      ? (fiatAmount || amount)
+    const offRampBrlAmount = mode === "offramp" && (
+      fiatAmount ||
+      (receiveAmount && receiveAsset === "BRL") ||
+      (amount && (!currency || currency === "BRL" || asset === "BRL"))
+    )
+      ? (fiatAmount || (receiveAsset === "BRL" ? receiveAmount : "") || amount)
       : "";
 
     setRampMode(mode);
@@ -1248,6 +1256,7 @@ export default function PixRampClient({
     }
     if (offRampBrlAmount) {
       setOffRampFiatAmount(offRampBrlAmount);
+      if (asset && asset !== "BRL" && asset !== "TESOURO") setOffRampAmount("");
       setOffRampAmountLocked(true);
     }
     if (mode === "offramp" && amount && (currency === "USDC" || asset === "USDC")) {
@@ -2175,16 +2184,22 @@ export default function PixRampClient({
     }, "POST", auth);
     const previewCustomerId = getRampCustomerId(customerResult);
     setCustomerPayload(customerResult);
-    const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+    const targetBrlAmount = normalizeHumanAmount(offRampFiatAmount.trim());
+    const sourceAmount = normalizeHumanAmount(
+      offRampExactReceiveBrl
+        ? ""
+        : offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim()
+    );
     const sourceAssetCode = settlementAssetCode(offRampInputAsset);
     const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
       intent_id: atomicIntentKey,
       customer_id: previewCustomerId || undefined,
-      amount: sourceAmount,
-      source_amount: sourceAmount,
+      amount: sourceAmount || targetBrlAmount,
+      source_amount: sourceAmount || undefined,
       source_asset_code: sourceAssetCode,
       amount_currency: sourceAssetCode,
-      fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+      fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
+      target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
       target_currency: "BRL",
     }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
@@ -2201,26 +2216,39 @@ export default function PixRampClient({
       }
       const bankAccount = offRampDestinationBankAccount;
       const providerFiatAccountId = getProviderFiatAccountId(bankAccount);
-      const sourceAmount = normalizeHumanAmount(offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim());
+      const targetBrlAmount = normalizeHumanAmount(offRampFiatAmount.trim());
+      const initialSourceAmount = normalizeHumanAmount(
+        offRampExactReceiveBrl
+          ? ""
+          : offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim()
+      );
       const sourceAssetCode = settlementAssetCode(offRampInputAsset);
       const balancesBefore = await fetchBalances(auth);
       setOffRampBalancesBefore(balancesBefore);
-      assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
+      if (initialSourceAmount) {
+        assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, initialSourceAmount);
+      }
       let previewPayload = offRampPreviewPayload;
       if (!previewPayload?.quote?.id || !getRampCustomerId(previewPayload)) {
         previewPayload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
           intent_id: atomicIntentKey,
-          amount: sourceAmount,
-          source_amount: sourceAmount,
+          amount: initialSourceAmount || targetBrlAmount,
+          source_amount: initialSourceAmount || undefined,
           source_asset_code: sourceAssetCode,
           amount_currency: sourceAssetCode,
-          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          fiat_amount: offRampInputAsset === "BRL" ? initialSourceAmount : targetBrlAmount || undefined,
+          target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
           target_currency: "BRL",
         }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
         setOffRampPreviewPayload(previewPayload);
         const nextCustomerPayload = mergeRampCustomerPayload(customerPayload, previewPayload);
         if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
       }
+      const sourceAmount = normalizeHumanAmount(String(previewPayload?.source_amount || initialSourceAmount || ""));
+      if (!sourceAmount) {
+        throw new Error(L("Não consegui calcular quanto sai da conta para essa retirada.", "I could not calculate how much leaves the account for this withdrawal."));
+      }
+      assertSufficientVisibleBalance(balancesBefore, offRampInputAsset, sourceAmount);
       const customerId = getRampCustomerId(previewPayload);
       const quoteId = String(previewPayload?.quote?.id || "").trim();
       if (!customerId || !quoteId) {
@@ -2237,7 +2265,8 @@ export default function PixRampClient({
             source_asset_code: sourceAssetCode,
             display_source_asset_code: offRampInputAsset,
             available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
-            fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+            fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
+            target_brl: offRampExactReceiveBrl ? targetBrlAmount : previewPayload?.target_brl,
             destination_currency: "BRL",
             destination_pix_key: bankAccount.pix_key,
             pix_key_type: bankAccount.pix_key_type,
@@ -2255,7 +2284,7 @@ export default function PixRampClient({
           source_asset_code: sourceAssetCode,
           source_asset_issuer: previewPayload?.source_asset_issuer || undefined,
           amount_currency: sourceAssetCode,
-          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : undefined,
+          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
           target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
           destination_pix_key: bankAccount.pix_key,
@@ -2648,12 +2677,16 @@ export default function PixRampClient({
                   placeholder="100"
                   disabled={offRampAmountLocked}
                   title={offRampAmountLocked ? L("Valor definido pelo chat", "Amount set by chat") : undefined}
-                  aria-label={L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
+                  aria-label={offRampExactReceiveBrl
+                    ? L("Valor em reais para receber via PIX", "Amount in BRL to receive through PIX")
+                    : L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
                   onChange={(event) => {
                     const next = event.target.value;
                     setOffRampPreviewPayload(null);
                     setTemporaryOffRampTestResult(null);
-                    if (offRampInputAsset === "BRL") {
+                    if (offRampExactReceiveBrl) {
+                      setOffRampFiatAmount(next);
+                    } else if (offRampInputAsset === "BRL") {
                       setOffRampFiatAmount(next);
                       setOffRampAmount(next);
                     } else {
@@ -2661,7 +2694,7 @@ export default function PixRampClient({
                     }
                   }}
                 />
-                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputAsset}</span>
+                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputUnit}</span>
               </div>
               {offRampAmountLocked && (
                 <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>

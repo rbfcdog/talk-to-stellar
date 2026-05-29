@@ -367,12 +367,18 @@ function externalChannelProviderUserId(input: RampSessionInput): string {
 
 function normalizeRampUserAsset(...values: unknown[]): { code: string; issuer?: string; identifier: string } {
   const raw = normalizeAssetCode(coalesceString(...values) || 'BRL');
-  const code = raw === 'TESOURO' ? 'BRL' : raw;
-  if (!['BRL', 'USDC'].includes(code)) {
-    throw apiError('PIX ramp only supports BRL or USDC as user-facing assets.', 400);
+  const userCode = raw === 'TESOURO' ? 'BRL' : raw;
+  const configured = new Set(['BRL', 'USDC', 'XLM', ...getUserFacingAssetCodes().map(userFacingAssetCode)]);
+  if (!configured.has(userCode)) {
+    throw apiError('Este ativo ainda não está disponível para PIX neste ambiente.', 400);
   }
-  const asset = resolveConfiguredAsset(code);
+  const asset = resolveConfiguredAsset(userCode);
   return { ...asset, identifier: assetIdentifier(asset) };
+}
+
+function isBrlSettlementAsset(asset: { code: string; issuer?: string }): boolean {
+  const code = settlementAssetCode(asset.code);
+  return code === 'TESOURO' || code === 'BRL';
 }
 
 function buildExternalBankAccountFields(context: SessionWalletContext) {
@@ -903,6 +909,96 @@ export class AnchorService {
 
   static getTesouroIdentifier(): string {
     return `TESOURO:${this.getTesouroIssuer()}`;
+  }
+
+  private static async resolveOffRampSourceForTarget(input: {
+    publicKey: string;
+    sourceAsset: { code: string; issuer?: string };
+    requestedSourceAmount?: string;
+    requestedTargetBrl?: string;
+  }): Promise<{
+    sourceAmount: string;
+    targetBrl: string;
+    estimatedTargetBrl: string;
+    targetReceiveMode: boolean;
+    sourceQuote?: Awaited<ReturnType<typeof StellarService.quotePathPayment>>;
+  }> {
+    const explicitSourceAmount = coalesceString(input.requestedSourceAmount);
+    const explicitTargetBrl = coalesceString(input.requestedTargetBrl);
+    const targetReceiveMode = Boolean(explicitTargetBrl);
+
+    if (targetReceiveMode) {
+      const targetBrl = normalizeAmount(explicitTargetBrl, 'target_brl');
+      if (isBrlSettlementAsset(input.sourceAsset)) {
+        return {
+          sourceAmount: explicitSourceAmount ? normalizeAmount(explicitSourceAmount, 'source_amount') : targetBrl,
+          targetBrl,
+          estimatedTargetBrl: targetBrl,
+          targetReceiveMode: true,
+        };
+      }
+
+      const quote = await StellarService.quotePathPayment({
+        sourcePublicKey: input.publicKey,
+        destination: input.publicKey,
+        sourceAsset: input.sourceAsset,
+        destAsset: { code: 'TESOURO', issuer: this.getTesouroIssuer() },
+        destAmount: targetBrl,
+      });
+
+      return {
+        sourceAmount: normalizeAmount(quote.sourceAmount, 'source_amount'),
+        targetBrl,
+        estimatedTargetBrl: targetBrl,
+        targetReceiveMode: true,
+        sourceQuote: quote,
+      };
+    }
+
+    const sourceAmount = normalizeAmount(explicitSourceAmount || '1', 'source_amount');
+    let estimatedTargetBrl = sourceAmount;
+    if (normalizeAssetCode(input.sourceAsset.code) === 'USDC') {
+      try {
+        const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(sourceAmount);
+        estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
+      } catch (error) {
+        const fallbackBrl = EconomyEngineService.estimateAmountInBrl({
+          amount: sourceAmount,
+          assetCode: input.sourceAsset.code,
+        });
+        if (!fallbackBrl) {
+          throw apiError('Não consegui calcular o valor em BRL para enviar ao seu PIX. Tente novamente em alguns segundos.', 409);
+        }
+        estimatedTargetBrl = toStellarAmount(fallbackBrl);
+        console.warn(`[ramp] BRL/USDC path unavailable for off-ramp; using configured fallback rate: ${debugErrorMessage(error)}`);
+      }
+    } else if (!isBrlSettlementAsset(input.sourceAsset)) {
+      const estimated = EconomyEngineService.estimateAmountInBrl({
+        amount: sourceAmount,
+        assetCode: input.sourceAsset.code,
+      });
+      if (estimated > 0) {
+        estimatedTargetBrl = toStellarAmount(estimated);
+      } else {
+        const quote = await StellarService.quotePathPayment({
+          sourcePublicKey: input.publicKey,
+          destination: input.publicKey,
+          sourceAsset: input.sourceAsset,
+          destAsset: { code: 'TESOURO', issuer: this.getTesouroIssuer() },
+          destAmount: '1',
+        });
+        const rate = parseHumanAmountNumber(quote.sourceAmount);
+        const source = parseHumanAmountNumber(sourceAmount);
+        estimatedTargetBrl = rate > 0 ? toStellarAmount(source / rate) : sourceAmount;
+      }
+    }
+
+    return {
+      sourceAmount,
+      targetBrl: estimatedTargetBrl,
+      estimatedTargetBrl,
+      targetReceiveMode: false,
+    };
   }
 
   private static decorateOnRampQuoteForFinalAsset(input: {
@@ -3464,7 +3560,12 @@ export class AnchorService {
       fiatAccountId = providerAccount?.id || '';
     }
     let transaction: OffRampTransaction;
-    const forceSandboxMock = this.getRuntimeInfo().sandbox && Boolean(input.force_sandbox_mock || input.forceSandboxMock);
+    const forceSandboxMock = this.getRuntimeInfo().sandbox && Boolean(
+      input.force_sandbox_mock ||
+      input.forceSandboxMock ||
+      dynamicPixKey ||
+      !isBrlSettlementAsset(sourceAsset)
+    );
     if (!fiatAccountId || forceSandboxMock) {
       if (!this.sandboxPixFallbackEnabled()) {
         throw apiError('Nenhuma conta PIX de retirada foi encontrada. Configure a chave PIX da conta e tente novamente.', 409);
@@ -3582,38 +3683,18 @@ export class AnchorService {
       input.to_amount,
       input.toAmount,
     );
-    const requestedSourceAmount = normalizeAmount(
-      coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'),
-      'amount',
-    );
-
-    let estimatedTargetBrl = requestedSourceAmount;
-    if (sourceAsset.code === 'USDC') {
-      try {
-        const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
-        estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
-      } catch (error) {
-        const fallbackBrl = EconomyEngineService.estimateAmountInBrl({
-          amount: requestedSourceAmount,
-          assetCode: 'USDC',
-        });
-        if (!fallbackBrl) {
-          throw apiError('Não consegui calcular o valor em BRL para estimar esta saída PIX.', 409);
-        }
-        estimatedTargetBrl = toStellarAmount(fallbackBrl);
-        console.warn(`[ramp] BRL/USDC path unavailable for off-ramp preview; using fallback rate: ${debugErrorMessage(error)}`);
-      }
-    } else if (sourceAsset.code !== 'BRL') {
-      estimatedTargetBrl = toStellarAmount(EconomyEngineService.estimateAmountInBrl({
-        amount: requestedSourceAmount,
-        assetCode: sourceAsset.code,
-      }));
-    }
-
-    const targetBrl = normalizeAmount(
-      requestedTargetBrl || estimatedTargetBrl,
-      sourceAsset.code === 'BRL' ? 'fiat_amount' : 'target_brl',
-    );
+    const sourcePlan = await this.resolveOffRampSourceForTarget({
+      publicKey: context.publicKey,
+      sourceAsset,
+      requestedSourceAmount: coalesceString(
+        input.source_amount,
+        input.sourceAmount,
+        requestedTargetBrl ? '' : input.amount,
+      ),
+      requestedTargetBrl,
+    });
+    const requestedSourceAmount = sourcePlan.sourceAmount;
+    const targetBrl = sourcePlan.targetBrl;
     const customerIdInput = coalesceString(input.customer_id, input.customerId);
     const customerResult = customerIdInput
       ? {
@@ -5158,34 +5239,19 @@ export class AnchorService {
       input.to_amount,
       input.toAmount,
     );
-    const requestedSourceAmount = normalizeAmount(coalesceString(input.source_amount, input.sourceAmount, input.amount, requestedTargetBrl, '1'), 'amount');
+    const sourcePlan = await this.resolveOffRampSourceForTarget({
+      publicKey: context.publicKey,
+      sourceAsset,
+      requestedSourceAmount: coalesceString(
+        input.source_amount,
+        input.sourceAmount,
+        requestedTargetBrl ? '' : input.amount,
+      ),
+      requestedTargetBrl,
+    });
+    const requestedSourceAmount = sourcePlan.sourceAmount;
     let amount = requestedSourceAmount;
-    let estimatedTargetBrl = requestedSourceAmount;
-    if (sourceAsset.code === 'USDC') {
-      try {
-        const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(requestedSourceAmount);
-        estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
-      } catch (error) {
-        const fallbackBrl = EconomyEngineService.estimateAmountInBrl({
-          amount: requestedSourceAmount,
-          assetCode: 'USDC',
-        });
-        if (!fallbackBrl) {
-          throw apiError('Não consegui calcular o valor em BRL para enviar ao seu PIX. Tente novamente em alguns segundos.', 409);
-        }
-        estimatedTargetBrl = toStellarAmount(fallbackBrl);
-        console.warn(`[ramp] BRL/USDC on-chain path unavailable for off-ramp; using configured fallback rate: ${debugErrorMessage(error)}`);
-      }
-    } else if (sourceAsset.code !== 'BRL') {
-      estimatedTargetBrl = toStellarAmount(EconomyEngineService.estimateAmountInBrl({
-        amount: requestedSourceAmount,
-        assetCode: sourceAsset.code,
-      }));
-    }
-    const targetBrl = normalizeAmount(
-      requestedTargetBrl || estimatedTargetBrl,
-      sourceAsset.code === 'BRL' ? 'fiat_amount' : 'target_brl',
-    );
+    const targetBrl = sourcePlan.targetBrl;
     const beforeRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesBefore = normalizeBalances(beforeRaw);
     assertSufficientBalance(balancesBefore, sourceAsset, requestedSourceAmount);
@@ -5282,7 +5348,7 @@ export class AnchorService {
 
     const afterRaw = await StellarService.getAccountBalance(context.publicKey);
     const balancesAfter = normalizeBalances(afterRaw);
-    const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, estimatedTargetBrl, requestedSourceAmount);
+    const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, sourcePlan.estimatedTargetBrl, requestedSourceAmount);
     const destinationAssetCode = 'BRL';
     const externalBank = (externalBankAccount || {}) as Record<string, unknown>;
     const bankLabel = coalesceString(
