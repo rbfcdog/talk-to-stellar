@@ -56,6 +56,16 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("chat recebe");
   });
 
+  it("closes the external send screen after successful confirmation", () => {
+    const text = source("app/send-external/send-external-client.tsx");
+
+    expect(text).toContain("closeIntermediatePage()");
+    expect(text).toContain("enqueueWebChatFeedback");
+    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).toContain("Envio externo concluído");
+    expect(text).toContain("Fechar");
+  });
+
   it("does not bring back the confusing yield wording that was removed", () => {
     const text = source("app/rendimentos/rendimentos-client.tsx");
     const forbidden = [

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { idempotentFetch } from "@/lib/idempotency"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
+import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 type InitialParams = {
   lang?: string
@@ -191,6 +192,14 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
       }
       setResult(payload)
       setPin("")
+      enqueueWebChatFeedback(
+        T(
+          language,
+          `Envio externo concluído.\nValor: ${formatAmount(payload.amount || amount, payload.asset || asset, language)}\nDestino: ${compactKey(payload.destination || destination)}`,
+          `External transfer sent.\nAmount: ${formatAmount(payload.amount || amount, payload.asset || asset, language)}\nDestination: ${compactKey(payload.destination || destination)}`
+        )
+      )
+      closeIntermediatePage()
     } catch (err) {
       setError(publicMessage(err, language))
     } finally {
@@ -237,17 +246,25 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
         )}
 
         {result?.success && (
-          <section className="rounded-lg border border-tts-confirm bg-tts-confirm p-4 text-sm text-tts-confirm">
+          <section className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
             <p className="font-bold">{T(language, "Envio concluído", "Transfer sent")}</p>
             <p className="mt-1">
               {formatAmount(result.amount || amount, result.asset || asset, language)} {" -> "} {compactKey(result.destination || destination)}
             </p>
             {result.tx_hash && <p className="mt-2 break-all font-mono text-xs">{result.tx_hash}</p>}
+            <p className="mt-2 font-semibold">{T(language, INTERMEDIATE_PAGE_CLOSE_COPY, "This screen closes automatically.")}</p>
             {result.receipt_url && (
               <a href={result.receipt_url} className="mt-3 inline-flex h-10 items-center rounded-lg bg-tts-deep px-4 text-sm font-bold text-tts-surface">
                 {T(language, "Abrir comprovante", "Open receipt")}
               </a>
             )}
+            <button
+              type="button"
+              onClick={() => closeIntermediatePage(0)}
+              className="mt-3 inline-flex h-10 items-center rounded-lg border border-tts-deep px-4 text-sm font-bold text-tts-deep"
+            >
+              {T(language, "Fechar", "Close")}
+            </button>
           </section>
         )}
 
