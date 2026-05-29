@@ -111,9 +111,9 @@ export default function PayAnyoneClient() {
   }, [sessionId])
 
   useEffect(() => {
-    if (status !== "done") return
+    if (status !== "done" || mode === "receive") return
     closeIntermediatePage()
-  }, [status])
+  }, [mode, status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -372,7 +372,11 @@ export default function PayAnyoneClient() {
 
           <div className="mt-5 rounded-lg border border-tts-border bg-tts-deep/20 p-4 text-sm">
             <p className="font-medium text-tts-surface">Link</p>
-            {status === "idle" && <p className="mt-2 text-tts-muted">The link appears here after authorization.</p>}
+            {status === "idle" && (
+              <p className="mt-2 text-tts-muted">
+                {isReceiveMode ? "The link appears here after creation." : "The link appears here after authorization."}
+              </p>
+            )}
             {status === "submitting" && <div className="mt-2 inline-flex items-center gap-2 text-tts-deep"><TypingDots />Generating secure link...</div>}
             {status === "error" && <p className="mt-2 text-tts-error">{result?.message || "Could not create the link."}</p>}
             <AnimatePresence mode="wait">
@@ -399,7 +403,9 @@ export default function PayAnyoneClient() {
                   </a>
                 </div>
                 <p className="text-tts-deep">{result.message}</p>
-                <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                <p className="text-xs text-tts-muted">
+                  {isReceiveMode ? "This page stays open so you can copy and share the link." : INTERMEDIATE_PAGE_CLOSE_COPY}
+                </p>
               </motion.div>
             )}
             </AnimatePresence>
