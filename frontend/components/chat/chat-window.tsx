@@ -96,13 +96,16 @@ function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
     if (path.endsWith("/confirm-payment")) return t("chat_link_payment");
     if (path.endsWith("/confirm-conversion")) return t("chat_link_conversion");
     if (path.endsWith("/convert")) return t("chat_link_convert");
-    if (path.endsWith("/yield") || path.endsWith("/review")) return t("chat_link_yield");
+    if (path.endsWith("/yield") || path.endsWith("/review") || path.endsWith("/rendimentos") || path.endsWith("/rendimento")) return t("chat_link_yield");
     if (path.endsWith("/money-cycle")) return t("chat_link_money_cycle");
     if (path.endsWith("/create-account")) return t("chat_link_account");
     if (path.endsWith("/change-pin")) return t("chat_link_pin");
     if (path.endsWith("/pay-anyone")) return t("chat_link_pay_anyone");
     if (path.endsWith("/claim-payment")) return t("chat_link_claim");
     if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return t("chat_link_pix");
+    if (path.endsWith("/transactions")) return t("chat_link_history");
+    if (path.startsWith("/profile/") || path.startsWith("/u/")) return t("chat_link_profile");
+    if (path.endsWith("/send-external")) return t("chat_link_external_send");
     if (url.hostname.includes("wa.me")) return t("chat_link_whatsapp");
     return t("chat_link_generic");
   } catch {
