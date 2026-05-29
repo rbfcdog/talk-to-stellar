@@ -132,6 +132,30 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Ver histórico completo');
   });
 
+  it('opens the user profile page for direct profile requests', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      profile: {
+        public_link: 'https://talk-to-stellar.test/u/eval',
+      },
+    }));
+
+    const result = await graph.processInput(createState('quero ver meu perfil'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_or_create_global_profile', {
+      session_id: 'eval-session',
+      user_id: 'eval-user',
+      display_name: 'eval@example.com',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Aqui está seu perfil');
+    expect(result.response_message).toContain('https://talk-to-stellar.test/u/eval');
+    expect(result.response_message).not.toContain('Não consegui entender');
+  });
+
   it('answers ambiguous best-route requests with guidance instead of generic fallback', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
