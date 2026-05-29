@@ -53,12 +53,12 @@ export default function Hero() {
               <a href="https://t.me/TalkToStellarTelegramBot" target="_blank" rel="noopener noreferrer"
                 className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 transition text-base font-semibold text-white"
               ><Send size={20} className="text-[#229ED9]" /> {t("hero", language, "btnTelegram")}</a>
-              <button onClick={() => document.getElementById("cta")?.scrollIntoView({ behavior: "smooth" })}
+              <a href="https://wa.me/5519981808102" target="_blank" rel="noopener noreferrer"
                 className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 transition text-base font-semibold text-white"
-              ><MessageCircle size={20} className="text-[#25D366]" /> {t("hero", language, "btnWhatsApp")}</button>
-              <button onClick={() => document.getElementById("simulator")?.scrollIntoView({ behavior: "smooth" })}
+              ><MessageCircle size={20} className="text-[#25D366]" /> {t("hero", language, "btnWhatsApp")}</a>
+              <a href="/chat"
                 className="flex w-full sm:w-auto items-center justify-center gap-2 px-8 py-4 rounded-xl bg-[#E59E25] text-black hover:bg-[#D48C1C] transition shadow-[0_0_20px_rgba(229,158,37,0.2)] text-base font-semibold"
-              ><Monitor size={20} /> {t("hero", language, "btnWebChat")}</button>
+              ><Monitor size={20} /> {t("hero", language, "btnWebChat")}</a>
             </motion.div>
             <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } } }}
               className="grid grid-cols-1 sm:grid-cols-2 gap-8 mt-8 pt-6 border-t border-white/[0.05]"
