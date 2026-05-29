@@ -82,7 +82,7 @@ function targetForSource(source: string, language?: string): ReturnTarget | null
   if (match(["money-cycle", "cycle", "ciclo"])) {
     return {
       href: withLanguage("/review", language),
-      label: copy(language, "Voltar à aplicação", "Back to review"),
+      label: copy(language, "Voltar à aplicação", "Back to application"),
       source: normalized,
     };
   }
@@ -98,7 +98,7 @@ function targetForSource(source: string, language?: string): ReturnTarget | null
   if (match(["chat", "whatsapp", "telegram", "phone", "evolution", "whatsapp-evolution"])) {
     return {
       href: withLanguage("/chat", language),
-      label: copy(language, "Voltar ao chat", "Back to chat"),
+      label: copy(language, "Abrir conversa", "Open chat"),
       source: normalized,
     };
   }

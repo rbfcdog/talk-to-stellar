@@ -350,31 +350,31 @@ function formatYieldAction(action: unknown): 'deposit' | 'withdraw' {
 }
 
 function yieldActionLabel(action: 'deposit' | 'withdraw', language: 'pt-BR' | 'en' = 'pt-BR'): string {
-  if (language === 'en') return action === 'withdraw' ? 'review exit' : 'review entry';
-  return action === 'withdraw' ? 'revisar saída' : 'revisar entrada';
+  if (language === 'en') return action === 'withdraw' ? 'withdraw' : 'apply';
+  return action === 'withdraw' ? 'retirar' : 'aplicar';
 }
 
 function sanitizeYieldToolError(error: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
   const raw = error instanceof Error ? error.message : String(error || '');
   const fallback = language === 'en'
-    ? 'This review is not available right now. Check the service setup and try again.'
-    : 'Esta revisão não está disponível agora. Confira a configuração do serviço e tente novamente.';
+    ? 'This application is not available right now. Try again in a few seconds.'
+    : 'Esta aplicação não está disponível agora. Tente novamente em alguns segundos.';
   if (!raw.trim()) return fallback;
   if (/session|wallet|login|unauthor|auth|token|pin/i.test(raw)) {
     return language === 'en'
-      ? 'Sign in and confirm your PIN before using this review.'
-      : 'Entre na sua conta e confirme seu PIN antes de usar esta revisão.';
+      ? 'Sign in and confirm your PIN before continuing.'
+      : 'Entre na sua conta e confirme seu PIN antes de continuar.';
   }
   if (/defindex.*desativad|execução defindex|execucao defindex|defindex_enable_execution|defindex_compliance_approved|compliance approval|yield.*execution.*(disabled|requires)|execution.*yield.*disabled/i.test(raw)) {
     return language === 'en'
-      ? 'Confirmation is in review mode for this environment. You can review the preview, but real execution requires compliance approval.'
-      : 'A confirmação está em modo revisão neste ambiente. Você pode revisar a simulação, mas execução real exige aprovação de compliance.';
+      ? 'Confirmation is view-only in this environment.'
+      : 'A confirmação está apenas para consulta neste ambiente.';
   }
   if (/defindex|vault|xdr|horizon|stellar|issuer|trustline|private key|secret|api key|network|contract/i.test(raw)) {
     return fallback;
   }
   return raw
-    .replace(/Defindex/gi, language === 'en' ? 'review service' : 'serviço de revisão')
+    .replace(/Defindex/gi, language === 'en' ? 'application service' : 'serviço de aplicação')
     .replace(/vault/gi, 'option')
     .replace(/wallet/gi, language === 'en' ? 'account' : 'conta')
     .replace(/asset/gi, language === 'en' ? 'currency' : 'moeda')
@@ -807,7 +807,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_yield_options",
-    description: "List available user-facing review options. Use this for questions about application review or currencies that can be previewed. Do not present this as guaranteed return, investment advice, fixed income, savings account, or bank deposit.",
+    description: "List available user-facing application options. Use this for questions about applying money or current supported currencies. Do not present this as guaranteed return, investment advice, fixed income, savings account, or bank deposit.",
     parameters: {
       type: "object",
       properties: {
@@ -822,14 +822,14 @@ export const toolDefinitions = [
   },
   {
     name: "open_asset_interface",
-    description: "Return the frontend interface URL for the user's money action: bring money in, review options, or send money out to PIX. Use for broad multi-asset navigation intents such as trazer, revisar, mandar embora, add money, review, or withdraw to PIX.",
+    description: "Return the frontend interface URL for the user's money action: bring money in, apply money, or send money out to PIX. Use for broad multi-asset navigation intents such as trazer, aplicar, mandar embora, add money, apply, or withdraw to PIX.",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
           enum: ["bring", "keep", "send_out"],
-          description: "bring opens PIX add-money, keep opens review, send_out opens PIX withdrawal.",
+          description: "bring opens PIX add-money, keep opens application, send_out opens PIX withdrawal.",
         },
         amount: {
           type: "string",
@@ -885,7 +885,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_yield_balance",
-    description: "Check how much the signed-in user currently has in a reviewed option. Use for questions about current reviewed balance or balance in a reviewed option.",
+    description: "Check how much the signed-in user currently has in an application option. Use for questions about current position in an option.",
     parameters: {
       type: "object",
       properties: {
@@ -895,7 +895,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         language: {
           type: "string",
@@ -908,7 +908,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_yield_action",
-    description: "Prepare an action for review without submitting money movement. Use before any confirmation for reviewing entry into or exit from the selected option.",
+    description: "Prepare an action for confirmation without submitting money movement. Use before any confirmation for entry into or exit from the selected option.",
     parameters: {
       type: "object",
       properties: {
@@ -927,7 +927,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         slippage_bps: {
           type: "number",
@@ -944,7 +944,7 @@ export const toolDefinitions = [
   },
   {
     name: "confirm_yield_action",
-    description: "Confirm and submit a previously reviewed action only if backend execution is enabled. Only use after the user clearly confirms and provides PIN; otherwise call prepare_yield_action first.",
+    description: "Confirm and submit a prepared action only if backend execution is enabled. Only use after the user clearly confirms and provides PIN; otherwise call prepare_yield_action first.",
     parameters: {
       type: "object",
       properties: {
@@ -2029,8 +2029,8 @@ function executeGetIntentHelp(): string {
     {
       command: "aplicação",
       intent: "yield",
-      description: "Mostra opções por moeda, posição atual e prepara entrada/saída com revisão.",
-      examples: ["revisar 100 reais", "quanto tenho em posição cetes?"],
+      description: "Mostra opções para aplicar dinheiro, posição atual e retirada.",
+      examples: ["quero aplicar 100 dólares", "quanto tenho em posição cetes?"],
     },
     {
       command: "melhor rota",
@@ -2191,15 +2191,15 @@ async function executeGetYieldOptions(input: any): Promise<string> {
     const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
     const isTestnet = String((status as any)?.runtime?.network || '').toLowerCase() === 'testnet';
     const disclosure = language === 'en'
-      ? (isTestnet ? 'Testnet environment.' : 'Review environment.')
-      : (isTestnet ? 'Ambiente testnet.' : 'Ambiente de revisão.');
+      ? (isTestnet ? 'Testnet environment.' : 'Application environment.')
+      : (isTestnet ? 'Ambiente testnet.' : 'Ambiente de aplicação.');
     const message = language === 'en'
       ? options.length
-        ? `Options for review: ${availableOptions.map((option) => option.name).join(', ') || 'none available for confirmation right now'}.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
-        : `Options for review are not configured yet.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
+        ? `Options to apply money: ${availableOptions.map((option) => option.name).join(', ') || 'none available right now'}.\n${disclosure}\n\nOpen:\n${frontendUrl}`
+        : `Application options are not configured yet.\n${disclosure}\n\nOpen:\n${frontendUrl}`
       : options.length
-        ? `Opções para revisão: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível para confirmação agora'}.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`
-        : `As opções para revisão ainda não foram configuradas.\n${disclosure}\n\nAbrir revisão:\n${frontendUrl}`;
+        ? `Opções para aplicar dinheiro: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível agora'}.\n${disclosure}\n\nAbrir:\n${frontendUrl}`
+        : `As opções de aplicação ainda não foram configuradas.\n${disclosure}\n\nAbrir:\n${frontendUrl}`;
 
     return JSON.stringify({
       success: true,
@@ -2236,12 +2236,12 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
 	        ? 'Add money'
 	        : action === 'send_out'
 	          ? 'Send to PIX'
-	          : 'Review application'
+              : 'Apply money'
 	      : action === 'bring'
 	        ? 'Trazer dinheiro'
 	        : action === 'send_out'
 	          ? 'Mandar para PIX'
-	          : 'Revisar aplicação';
+	          : 'Aplicar dinheiro';
 
     return JSON.stringify({
       success: true,
@@ -2284,8 +2284,8 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
       dest_asset_code: destDisplay,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `Conversion is ready to review: ${sourceAmount || 'amount'} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
-        : `Conversão pronta para revisar: ${sourceAmount || 'valor'} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`,
+        ? `Conversion is ready to confirm: ${sourceAmount || 'amount'} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
+        : `Conversão pronta para confirmar: ${sourceAmount || 'valor'} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2315,8 +2315,8 @@ async function executeGetYieldBalance(input: any): Promise<string> {
       balance: amount,
 	      frontend_url: frontendUrl,
 	      message: language === 'en'
-	        ? `Current reviewed position: ${amount} ${name}.\n\nOpen review:\n${frontendUrl}`
-	        : `Posição revisada atual: ${amount} ${name}.\n\nAbrir revisão:\n${frontendUrl}`,
+	        ? `Current position: ${amount} ${name}.\n\nOpen:\n${frontendUrl}`
+	        : `Posição atual: ${amount} ${name}.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2358,8 +2358,8 @@ async function executePrepareYieldAction(input: any): Promise<string> {
         name,
       },
 	      message: language === 'en'
-		        ? `Review ready: ${actionText} ${amount} ${name}. Confirm only after checking the amount and operation.\n\nOpen review:\n${frontendUrl}`
-		        : `Revisão pronta: ${actionText} ${amount} ${name}. Confirme apenas depois de conferir o valor e a operação.\n\nAbrir revisão:\n${frontendUrl}`,
+		        ? `Ready to confirm: ${actionText} ${amount} ${name}. Check amount and operation before PIN.\n\nOpen:\n${frontendUrl}`
+		        : `Pronto para confirmar: ${actionText} ${amount} ${name}. Confira valor e operação antes do PIN.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2381,7 +2381,7 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       wallet_pin: input.wallet_pin || input.walletPin || input.pin,
     });
     if (!result?.success) {
-      throw new Error(result?.error || 'Review confirmation was not accepted.');
+      throw new Error(result?.error || 'Application confirmation was not accepted.');
     }
     const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
     const amount = String(result?.amount || input.amount || '').trim();
@@ -2396,8 +2396,8 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       amount,
 	      frontend_url: frontendUrl,
 	      message: language === 'en'
-	        ? `Review request submitted for ${amount} ${name}. Your balances will update shortly.\n\nOpen review:\n${frontendUrl}`
-	        : `Pedido revisado enviado para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir revisão:\n${frontendUrl}`,
+	        ? `Application submitted for ${amount} ${name}. Your balances will update shortly.\n\nOpen:\n${frontendUrl}`
+	        : `Aplicação enviada para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({

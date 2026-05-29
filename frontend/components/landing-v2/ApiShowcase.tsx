@@ -18,12 +18,12 @@ interface JsonLine {
 
 const RESPONSE: JsonLine[] = [
   { value: '{', type: 'object-open' },
-  { key: 'intent', value: 'review', type: 'string', indent: 1 },
+  { key: 'intent', value: 'apply', type: 'string', indent: 1 },
   { key: 'amount', value: '500.00', type: 'number', indent: 1 },
   { key: 'asset', value: 'real', type: 'string', indent: 1 },
   { key: 'frontend_url', value: '/review?amount=500', type: 'string', indent: 1 },
   { key: 'pix_key_required', value: 'true', type: 'boolean', indent: 1 },
-  { key: 'review_before_pin', value: 'true', type: 'boolean', indent: 1 },
+  { key: 'confirmation_before_pin', value: 'true', type: 'boolean', indent: 1 },
   { value: '}', type: 'object-close' },
 ]
 
@@ -68,7 +68,7 @@ export function ApiShowcase() {
           </h2>
           <p className="max-w-md text-sm leading-[1.65] text-tts-muted">
             O agente identifica o objetivo, chama a ferramenta correta e devolve
-            a tela certa: conversão, revisão, PIX de entrada ou PIX de saída.
+            a tela certa: conversão, aplicação, PIX de entrada ou PIX de saída.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button

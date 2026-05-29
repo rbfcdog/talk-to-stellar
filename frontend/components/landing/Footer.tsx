@@ -23,7 +23,7 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-2 text-sm font-medium text-gray-300 bg-white/5 px-4 py-2 rounded-full border border-white/[0.03]">
-          {L("Criado para PIX, revisão e saída", "Built for PIX, review, and withdrawal")}
+          {L("Criado para PIX, aplicação e saída", "Built for PIX, application, and withdrawal")}
         </div>
 
       </div>

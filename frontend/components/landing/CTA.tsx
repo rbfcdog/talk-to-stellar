@@ -23,8 +23,8 @@ export default function CTA() {
         </h2>
         <p className="text-lg md:text-xl text-gray-300 mb-10 max-w-2xl relative z-10 leading-relaxed">
           {L(
-            "Escolha WhatsApp, Telegram ou chat web. Você traz dinheiro por PIX, converte, revisa, retira para seu PIX e acompanha tudo até o comprovante.",
-            "Choose WhatsApp, Telegram, or web chat. Add money with PIX, convert, review, withdraw to your PIX, and follow everything through the receipt."
+            "Escolha WhatsApp, Telegram ou chat web. Você traz dinheiro por PIX, converte, aplica, retira para seu PIX e acompanha tudo até o comprovante.",
+            "Choose WhatsApp, Telegram, or web chat. Add money with PIX, convert, apply, withdraw to your PIX, and follow everything through the receipt."
           )}
         </p>
         

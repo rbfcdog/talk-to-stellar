@@ -16,7 +16,7 @@ const FAQS: FaqItem[] = [
   {
     question: 'O que posso pedir no chat?',
     answer:
-      'Você pode pedir saldo, colocar dinheiro com PIX, converter entre moedas, revisar opções por saldo, retirar para uma chave PIX e ver comprovantes.',
+      'Você pode pedir contatos, saldo, colocar dinheiro com PIX, converter entre moedas, aplicar dinheiro, retirar para uma chave PIX e ver comprovantes.',
   },
   {
     question: 'A chave PIX de saída é fixa?',
@@ -29,9 +29,9 @@ const FAQS: FaqItem[] = [
       'A experiência mostra reais, dólares, euros e as moedas extras configuradas no ambiente. Reais são tratados como reais na UX.',
   },
   {
-    question: 'Como funciona a revisão?',
+    question: 'Como funciona a confirmação?',
     answer:
-      'O usuário vê opções disponíveis por moeda e uma revisão antes de entrar ou sair. Nada é confirmado sem PIN.',
+      'O usuário vê valor, moeda e ação antes de entrar ou sair. Nada é confirmado sem PIN.',
   },
   {
     question: 'Dá para fazer tudo em um fluxo?',

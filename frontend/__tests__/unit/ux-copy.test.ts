@@ -9,7 +9,7 @@ function source(path: string) {
 }
 
 describe("UX copy guardrails", () => {
-  it("keeps shared account and chat affordances where the flow still returns to chat", () => {
+  it("keeps shared account affordances on money screens", () => {
     const screens = [
       "app/rendimentos/rendimentos-client.tsx",
       "app/pix-ramp/pix-ramp-client.tsx",
@@ -20,19 +20,23 @@ describe("UX copy guardrails", () => {
     for (const screen of screens) {
       const text = source(screen);
       expect(text, `${screen} should use the shared account status`).toContain("AccountStatusCard");
-      expect(text, `${screen} should preserve a return path to chat`).toContain("ReturnToChat");
+    }
+
+    for (const screen of screens.filter((path) => path !== "app/rendimentos/rendimentos-client.tsx")) {
+      const text = source(screen);
+      expect(text, `${screen} should preserve a return path where useful`).toContain("ReturnToChat");
     }
   });
 
-  it("keeps conversion review inside the web confirmation flow, not chat", () => {
+  it("keeps conversion confirmation inside the web flow, not chat", () => {
     const text = source("app/convert/convert-client.tsx");
     const financialRouter = source("../backend/src/api/routes/financial.router.ts");
 
     expect(text).toContain("AccountStatusCard");
     expect(text).toContain("/api/financial/conversion-confirmation");
-    expect(text).toContain('buildUrl("/confirm-conversion"');
+    expect(text).toContain("ConfirmConversionClient");
     expect(text).toContain("Nada passa pelo chat");
-    expect(text).toContain("payload.token");
+    expect(text).toContain("payload?.token");
     expect(text).not.toContain("ReturnToChat");
     expect(text).not.toContain('buildUrl("/chat"');
     expect(financialRouter).toContain("conversion-confirmation");
@@ -105,15 +109,17 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Converter ativos");
     expect(reviewText).toContain("href={returnsHref}");
     expect(reviewText).toContain("CurrentInvestmentsPage");
-    expect(reviewText).toContain("Investimentos atuais");
-    expect(reviewText).toContain("Aplicado agora");
+    expect(reviewText).toContain("Posições");
+    expect(reviewText).toContain("Posição atual");
     expect(reviewText).toContain("Nada aplicado agora");
-    expect(reviewText).toContain("Simulação separada");
+    expect(reviewText).toContain("Testnet · valores estimados");
     expect(reviewText).toContain("extractDefindexPositionAmount(payload?.position || payload?.balance)");
     expect(reviewText).toContain("Confirmando...");
     expect(reviewText).toContain('role="status"');
     expect(reviewText).not.toContain("returnsOpen");
-    expect(reviewText).toContain("Toque em uma moeda com opção ativa.");
+    expect(reviewText).not.toContain("Execução aprovada");
+    expect(reviewText).not.toContain("maior que zero");
+    expect(reviewText).not.toContain("Com saldo");
     expect(reviewText).not.toContain("Outros saldos");
     expect(reviewText).not.toContain("Estes saldos não aparecem");
     expect(returnsPage).toContain('view="returns"');

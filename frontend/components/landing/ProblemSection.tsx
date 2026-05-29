@@ -18,7 +18,7 @@ export default function ProblemSection() {
           viewport={{ once: true }}
           className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-white leading-tight tracking-tight"
         >
-          {L("Entrar, render, converter e sair sem perder contexto.", "Add, earn, convert, and withdraw without losing context.")}
+          {L("Entrar, aplicar, converter e sair sem perder contexto.", "Add, apply, convert, and withdraw without losing context.")}
         </motion.h2>
         
         <motion.p 
@@ -28,7 +28,7 @@ export default function ProblemSection() {
           transition={{ delay: 0.1 }}
           className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light max-w-2xl mx-auto"
         >
-          {L("Em fluxos tradicionais, cada etapa fica em um lugar diferente. Aqui, você vê PIX, moedas, revisão e retirada no mesmo caminho, sempre com revisão antes de confirmar.", "In traditional flows, each step lives somewhere else. Here, PIX, currencies, review, and withdrawal stay in one guided path with review before confirmation.")}
+          {L("Em fluxos tradicionais, cada etapa fica em um lugar diferente. Aqui, você vê PIX, moedas, aplicação e retirada no mesmo caminho, sempre com confirmação antes do PIN.", "In traditional flows, each step lives somewhere else. Here, PIX, currencies, applications, and withdrawal stay in one guided path with confirmation before PIN.")}
         </motion.p>
       </div>
 
@@ -44,7 +44,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Decisão financeira com contexto.", "Financial decisions with context.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              {L("Em vez de telas confusas e termos técnicos, você vê o essencial: quanto entra, qual posição será revisada, quanto sai e qual é o próximo passo.", "Instead of confusing screens and technical terms, you get clear guidance for every operation: what enters, which position is reviewed, what leaves, and the next step to finish safely.")}
+              {L("Em vez de telas confusas e termos técnicos, você vê o essencial: quanto entra, qual posição será consultada, quanto sai e qual é o próximo passo.", "Instead of confusing screens and technical terms, you get clear guidance for every operation: what enters, which position is checked, what leaves, and the next step to finish safely.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -75,7 +75,7 @@ export default function ProblemSection() {
                       transition={{ delay: 0.5 }}
                       className="self-end bg-[#005c4b] text-[#e9edef] px-3 py-2.5 rounded-xl rounded-tr-sm text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.1)] max-w-[90%] leading-relaxed border border-[#005c4b] relative z-10"
                     >
-                      {L("Colocar R$5.000, revisar parte em euro e retirar para meu PIX depois.", "Add R$5,000, review part in euros, and withdraw to my PIX later.")}
+                      {L("Colocar R$5.000, aplicar parte em euro e retirar para meu PIX depois.", "Add R$5,000, apply part in euros, and withdraw to my PIX later.")}
                       <div className="flex items-center justify-end gap-1 mt-1 opacity-80">
                         <span className="text-[9px] text-white/70">09:42</span>
                         <CheckCheck className="w-3 h-3 text-[#4CA1EF]" />
@@ -166,7 +166,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Status claro até a saída.", "Clear status through withdrawal.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              {L("A operação acompanha o status do início ao fim e registra comprovantes para o usuário entender quando o valor entrou, foi revisado, saiu e chegou no PIX.", "The operation tracks status from start to finish and stores receipts so the user knows when money entered, was reviewed, left, and arrived in PIX.")}
+              {L("A operação acompanha o status do início ao fim e registra comprovantes para o usuário entender quando o valor entrou, foi aplicado, saiu e chegou no PIX.", "The operation tracks status from start to finish and stores receipts so the user knows when money entered, was applied, left, and arrived in PIX.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">

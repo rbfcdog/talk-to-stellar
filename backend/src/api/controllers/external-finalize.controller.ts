@@ -1668,7 +1668,7 @@ export default class ExternalFinalizeController {
           return res.status(400).json({
             ...publicErrorPayload(error, {
               includeSupportCode: true,
-              fallback: 'Não consegui preparar essa conversão agora. Gere uma nova revisão e tente novamente.',
+              fallback: 'Não consegui preparar essa conversão agora. Gere uma nova confirmação e tente novamente.',
             }),
             ...(requestId ? { request_id: requestId } : {}),
           });
@@ -1810,7 +1810,7 @@ export default class ExternalFinalizeController {
           return res.status(400).json({
             ...publicErrorPayload(result.error || 'Could not submit conversion', {
               includeSupportCode: true,
-              fallback: 'Não consegui concluir essa conversão agora. Gere uma nova revisão e tente novamente.',
+              fallback: 'Não consegui concluir essa conversão agora. Gere uma nova confirmação e tente novamente.',
             }),
             ...(requestId ? { request_id: requestId } : {}),
           });

@@ -3,7 +3,7 @@ import SendExternalClient from "./send-external-client"
 
 export const metadata: Metadata = {
   title: "Enviar para carteira externa",
-  description: "Revise e confirme um envio para uma public key externa.",
+  description: "Confira e confirme um envio para uma public key externa.",
 }
 
 type SearchParams = Record<string, string | string[] | undefined>

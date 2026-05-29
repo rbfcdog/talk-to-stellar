@@ -101,6 +101,26 @@ function receiptUrl(code: string): string {
   return `${appBaseUrl()}/receipt/${encodeURIComponent(code)}`;
 }
 
+function parseContext(value: unknown): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+  const text = normalizeKey(value as string);
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, any> : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeOperationStatus(value: unknown): string {
+  const status = normalizeKey(value as string).toUpperCase();
+  if (status === 'COMPLETED' || status === 'SUCCESS' || status === 'SUCCEEDED') return 'success';
+  if (status === 'FAILED' || status === 'ERROR') return 'failed';
+  if (status === 'PROCESSING' || status === 'PENDING') return 'pending';
+  return status ? status.toLowerCase() : 'pending';
+}
+
 type CounterpartyProfile = {
   public_key: string;
   name?: string | null;
@@ -183,6 +203,53 @@ export class TransactionHistoryService {
     }
 
     return Array.from(byCode.values());
+  }
+
+  private static async listOperationRows(input: {
+    sessionId: string;
+    userId: string;
+    month: number;
+    year: number;
+    limit: number;
+  }): Promise<any[]> {
+    const filters = [
+      { column: 'user_id', value: input.userId },
+      { column: 'source_session_id', value: input.sessionId },
+      { column: 'destination_session_id', value: input.sessionId },
+    ].filter((item) => item.value);
+    const byId = new Map<string, any>();
+
+    for (const filter of filters) {
+      let query = supabase
+        .from('operations')
+        .select('*')
+        .eq(filter.column, filter.value)
+        .order('created_at', { ascending: false })
+        .limit(input.limit);
+
+      if (Number.isFinite(input.month) && Number.isFinite(input.year) && input.month >= 1 && input.month <= 12 && input.year >= 2000) {
+        const start = new Date(Date.UTC(input.year, input.month - 1, 1, 0, 0, 0, 0)).toISOString();
+        const end = new Date(Date.UTC(input.year, input.month, 1, 0, 0, 0, 0)).toISOString();
+        query = query.gte('created_at', start).lt('created_at', end);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        const message = String(error.message || '').toLowerCase();
+        if (message.includes('operations') || message.includes('schema cache') || message.includes('does not exist') || message.includes(filter.column.toLowerCase())) {
+          continue;
+        }
+        throw new Error(`Falha ao carregar operações: ${error.message}`);
+      }
+
+      for (const row of data || []) {
+        const id = normalizeKey((row as any)?.id) || `${filter.column}:${normalizeKey((row as any)?.created_at)}`;
+        if (!id || byId.has(id)) continue;
+        byId.set(id, row);
+      }
+    }
+
+    return Array.from(byId.values());
   }
 
   private static async resolveCounterpartyProfiles(publicKeys: string[], sessionId: string, userId: string): Promise<Map<string, CounterpartyProfile>> {
@@ -369,6 +436,13 @@ export class TransactionHistoryService {
       year,
       limit,
     });
+    const operationRows = await this.listOperationRows({
+      sessionId: ctx.sessionId,
+      userId: ctx.userId,
+      month,
+      year,
+      limit,
+    });
     const networkRows = await this.listNetworkOperationRows({
       publicKey: ctx.walletPublicKey,
       month,
@@ -382,6 +456,7 @@ export class TransactionHistoryService {
         const metadata = (row?.metadata || {}) as Record<string, any>;
         return normalizeKey(metadata.destinationPublicKey || metadata.destination_public_key || metadata.counterpartyPublicKey || metadata.counterparty_public_key || metadata.counterpartyKey);
       }),
+      ...operationRows.map((row: any) => normalizeKey(row?.destination_key || row?.destination_public_key || row?.counterparty_public_key || row?.source_public_key)),
       ...networkRows.map((row: any) => operationCounterpartyKey(row, normalizeKey(ctx.walletPublicKey || ''))),
     ];
     const profiles = await this.resolveCounterpartyProfiles(destinationKeys, ctx.sessionId, ctx.userId);
@@ -480,8 +555,83 @@ export class TransactionHistoryService {
         };
       });
 
-    const knownNetworkIds = new Set(
+    const loggedOperationHashes = new Set(
       [...paymentTransactions, ...receiptTransactions]
+        .map((item: any) => normalizeKey(item.payment_hash || ''))
+        .filter(Boolean)
+    );
+    const operationTransactions = operationRows
+      .filter((row: any) => {
+        const hash = normalizeKey(row?.stellar_transaction_hash || row?.payment_hash || '');
+        return !hash || !loggedOperationHashes.has(hash);
+      })
+      .map((row: any) => {
+        const context = parseContext(row?.context);
+        const type = normalizeKey(row?.type || context.operation_type || 'operation');
+        const typeUpper = type.toUpperCase();
+        const hash = normalizeKey(row?.stellar_transaction_hash || context.stellar_transaction_hash || context.tx_hash || '');
+        const amount = normalizeKey(
+          row?.amount ??
+          context.amount ??
+          context.final_amount ??
+          context.destination_amount ??
+          context.source_amount ??
+          context.target_brl ??
+          ''
+        );
+        const assetCode = normalizeHistoryAssetCode(
+          row?.asset_code ||
+          context.final_asset_code ||
+          context.final_asset ||
+          context.destination_asset_code ||
+          context.source_asset_code ||
+          context.asset_code
+        );
+        const key = normalizeKey(row?.destination_key || context.destinationPublicKey || context.destination_public_key || context.counterpartyPublicKey || context.counterparty_public_key || '');
+        const sourceKey = normalizeKey(row?.source_public_key || context.source_public_key || '');
+        const counterpartyKey = hasPublicKey(key) ? key : sourceKey;
+        const profile = profiles.get(counterpartyKey);
+        const label = normalizeKey(context.counterpartyLabel || context.counterparty_label || context.destination_name || context.bank_label || profile?.name || '');
+        const identifier = key && !hasPublicKey(key)
+          ? key
+          : humanIdentifier({
+              email: profile?.email,
+              phone_number: profile?.phone_number,
+              cpf: profile?.cpf,
+              pix_key: profile?.pix_key,
+            });
+        const isInbound = /ONRAMP|RECEIVE|RECEIVED|CLAIM|WITHDRAW/.test(typeUpper) && !/OFFRAMP|PIX_OUT/.test(typeUpper);
+        const isOutbound = /OFFRAMP|SEND|PAYMENT|PIX_OUT|DEPOSIT/.test(typeUpper);
+        const receipt = normalizeKey(context.receipt_url || context.receiptUrl || '');
+
+        return {
+          id: `operation:${row?.id || hash || row?.created_at}`,
+          payment_hash: hash || null,
+          receipt_url: receipt || null,
+          status: normalizeOperationStatus(row?.status),
+          operation_type: type || null,
+          source_amount: isOutbound ? amount || null : null,
+          source_asset_code: isOutbound ? assetCode : null,
+          destination_amount: isInbound || !isOutbound ? amount || null : null,
+          destination_asset_code: isInbound || !isOutbound ? assetCode : null,
+          destination_public_key: hasPublicKey(counterpartyKey) ? counterpartyKey : null,
+          error_message: normalizeKey(context.error || context.error_message || ''),
+          context_message: normalizeKey(context.context_message || context.memo || context.description || ''),
+          created_at: row?.created_at || null,
+          completed_at: row?.updated_at || row?.created_at || null,
+          counterparty: {
+            name: label || (typeUpper.includes('PIX') ? 'PIX' : 'TalkToStellar'),
+            identifier: identifier || 'indisponível',
+            public_key: hasPublicKey(counterpartyKey) ? counterpartyKey : null,
+            user_id: profile?.user_id || null,
+            profile_url: profile?.profile_url || null,
+            short_profile_url: profile?.short_profile_url || profile?.profile_url || null,
+          },
+        };
+      });
+
+    const knownNetworkIds = new Set(
+      [...paymentTransactions, ...receiptTransactions, ...operationTransactions]
         .flatMap((item: any) => [normalizeKey(item.payment_hash || ''), normalizeKey(item.id || '')])
         .filter(Boolean)
     );
@@ -537,7 +687,7 @@ export class TransactionHistoryService {
         };
       });
 
-    const transactions = [...paymentTransactions, ...receiptTransactions, ...networkTransactions]
+    const transactions = [...paymentTransactions, ...receiptTransactions, ...operationTransactions, ...networkTransactions]
       .sort((a: any, b: any) => {
         const aTime = Date.parse(a.completed_at || a.created_at || '');
         const bTime = Date.parse(b.completed_at || b.created_at || '');

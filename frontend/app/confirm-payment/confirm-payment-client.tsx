@@ -897,15 +897,15 @@ export default function ConfirmPaymentClient({
               Payment Confirmation
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-surface md:text-6xl">
+              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-deep md:text-6xl">
                 Confirm this payment
               </h1>
               <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
-                Review the details below and enter your PIN to authorize the transfer.
+                Check the details below and enter your PIN to authorize the transfer.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-deep/20 p-2 text-xs">
-              {["Review", "Authorize", "Complete"].map((step, index) => {
+              {["Check", "Authorize", "Complete"].map((step, index) => {
                 const active = currentStep >= index + 1
                 return (
                   <motion.div

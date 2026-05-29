@@ -14,7 +14,7 @@ const FEATURES: Feature[] = [
   {
     title: 'Conversão multi-moeda',
     description:
-      'O chat entende reais, dólares, euros e moedas configuradas, abre a interface certa e mostra a revisão antes do PIN.',
+      'O chat entende reais, dólares, euros e moedas configuradas, abre a interface certa e mostra valores antes do PIN.',
     snippetLines: [
       { key: 'intent', value: 'convert', type: 'string' },
       { key: 'from', value: 'R$', type: 'string' },
@@ -22,13 +22,13 @@ const FEATURES: Feature[] = [
     ],
   },
   {
-    title: 'Revisão guiada',
+    title: 'Aplicar dinheiro',
     description:
       'A experiência mostra opções por moeda e ação de entrada ou saída sem termos técnicos.',
     snippetLines: [
-      { key: 'intent', value: 'yield', type: 'string' },
+      { key: 'intent', value: 'apply', type: 'string' },
       { key: 'asset', value: 'euro', type: 'string' },
-      { key: 'review_required', value: 'true', type: 'boolean' },
+      { key: 'pin_last', value: 'true', type: 'boolean' },
     ],
   },
   {
@@ -58,7 +58,7 @@ export function Features() {
             Por que TalkToStellar
           </h2>
           <p className="max-w-xl text-sm leading-[1.65] text-tts-muted">
-            Três fluxos essenciais para o usuário entrar, converter, revisar e
+            Três fluxos essenciais para o usuário entrar, converter, aplicar e
             retirar sem trocar de contexto.
           </p>
         </motion.header>

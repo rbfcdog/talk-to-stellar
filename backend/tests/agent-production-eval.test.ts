@@ -214,7 +214,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Options for review: dollars, CETES, reais.',
+      message: 'Options to apply money: dollars, CETES, reais.',
     }));
 
     const result = await graph.processInput(createState('show yield options', false));
@@ -223,7 +223,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Options for review');
+    expect(result.response_message).toContain('Options to apply money');
   });
 
   it('routes a plain investment request to application options', async () => {
@@ -232,7 +232,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Opções para revisão: dólares e XLM.\n\nAbrir revisão:\nhttps://app.example.com/review',
+      message: 'Opções para aplicar dinheiro: dólares e XLM.\n\nAbrir:\nhttps://app.example.com/review',
     }));
 
     const result = await graph.processInput(createState('quero investir'));
@@ -251,7 +251,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisão pronta: revisar entrada 250 reais.',
+      message: 'Pronto para confirmar: aplicar 250 reais.',
     }));
 
     const result = await graph.processInput(createState('guardar 250 reais rendendo'));
@@ -265,7 +265,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Revisão pronta');
+    expect(result.response_message).toContain('Pronto para confirmar');
   });
 
   it('routes yield balance checks to get_yield_balance for CETES', async () => {
@@ -319,7 +319,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisão pronta: revisar entrada 100 reais.',
+      message: 'Pronto para confirmar: aplicar 100 reais.',
     }));
 
     await graph.processInput(createState('confirmar rendimento de 100 reais'));
@@ -341,7 +341,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Revisar aplicação está pronto para CETES.\n\nAbra:\nhttps://app.example.com/review?asset=CETES',
+      message: 'Aplicar dinheiro está pronto para CETES.\n\nAbra:\nhttps://app.example.com/review?asset=CETES',
     }));
 
     const result = await graph.processInput(createState('manter 50 cetes'));

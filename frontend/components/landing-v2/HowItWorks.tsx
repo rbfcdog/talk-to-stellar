@@ -28,9 +28,9 @@ const STEPS: Step[] = [
   },
   {
     number: '03',
-    title: 'Revisão da opção',
+    title: 'Aplicar ou retirar',
     description:
-      'O saldo pode ir para uma opção configurada, com revisão e ação de entrada ou saída.',
+      'O saldo pode ir para uma opção configurada, sempre com confirmação antes do PIN.',
     emphasis: true,
   },
   {

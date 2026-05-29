@@ -86,7 +86,7 @@ export function Channels() {
             icon={<MessageCircle className="h-5 w-5" aria-hidden="true" />}
             title="WhatsApp TalkToStellar"
             handle="+55 19 98180-8102"
-            body="Chame no WhatsApp e continue pelo canal que você já usa, com links de revisão antes do PIN."
+            body="Chame no WhatsApp e continue pelo canal que você já usa, com links de confirmação antes do PIN."
             cta="Abrir WhatsApp"
           />
         </div>

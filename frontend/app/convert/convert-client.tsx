@@ -251,19 +251,19 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         : L("Entre para consultar", "Sign in to check");
   const enoughBalance = hasEnoughBalance(sourceBalance, numericAmount);
   const sameAsset = sourceCode === destCode;
-  const primaryLabel = L("Calcular e revisar", "Calculate and review");
-  const routeTitle = L("Revisar conversão", "Review conversion");
+  const primaryLabel = L("Calcular e confirmar", "Calculate and confirm");
+  const routeTitle = L("Confirmar conversão", "Confirm conversion");
   const routeDescription = L("Cotação, taxas e PIN aparecem aqui.", "Quote, fees, and PIN appear here.");
-  const destinationValue = L("Calculado na revisão", "Calculated in review");
+  const destinationValue = L("Calculado na confirmação", "Calculated on confirmation");
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
   const securityValue = sameAsset
     ? L("Escolha moedas diferentes", "Choose different currencies")
     : !session.authenticated
-      ? L("Entre para revisar", "Sign in to review")
+      ? L("Entre para confirmar", "Sign in to confirm")
       : canProceed
-        ? L("Pronto para revisar", "Ready to review")
-        : L("Revise o saldo", "Review balance");
+        ? L("Pronto para confirmar", "Ready to confirm")
+        : L("Confira o saldo", "Check balance");
   const returnTarget: ReturnTarget = resolveReturnTarget({
     language,
     returnTo,
@@ -295,18 +295,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || (!payload?.token && !payload?.url)) {
-        throw new Error(payload?.message || L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
+        throw new Error(payload?.message || L("Não foi possível preparar a confirmação agora.", "Could not prepare confirmation right now."));
       }
       const reviewToken = String(payload?.token || extractReviewTokenFromUrl(payload?.url) || "").trim();
       if (!reviewToken) {
-        throw new Error(L("A revisão foi criada, mas o token de confirmação não veio na resposta.", "The review was created, but the confirmation token was missing."));
+        throw new Error(L("A confirmação foi criada, mas o token não veio na resposta.", "The confirmation was created, but the token was missing."));
       }
       setEmbeddedReviewValidation(payload?.validation || null);
       setEmbeddedReviewToken(reviewToken);
       setReviewStatus("idle");
     } catch (error) {
       setReviewStatus("error");
-      setReviewError(error instanceof Error ? error.message : L("Não foi possível preparar a revisão agora.", "Could not prepare review right now."));
+      setReviewError(error instanceof Error ? error.message : L("Não foi possível preparar a confirmação agora.", "Could not prepare confirmation right now."));
     }
   }
 
@@ -327,7 +327,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               {L("Converter", "Convert")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
-              {L("Escolha origem, destino e valor. O PIN vem depois da revisão.", "Choose source, destination, and amount. PIN comes after review.")}
+              {L("Escolha origem, destino e valor. O PIN vem só no final.", "Choose source, destination, and amount. PIN comes only at the end.")}
             </p>
           </div>
           <div className="md:min-w-[180px]">
@@ -424,10 +424,10 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <Step title={L("1. Valor", "1. Amount")} body={formatAssetAmount(numericAmount, sourceAsset, language)} />
-              <Step title={L("2. Revisão", "2. Review")} body={L("Mostra a confirmação aqui", "Shows confirmation here")} />
-              <Step title={L("3. PIN", "3. PIN")} body={L("Só depois da revisão", "Only after review")} />
+                <Step title={L("2. Confirmação", "2. Confirmation")} body={L("Mostra valores e taxas aqui", "Shows amounts and fees here")} />
+                <Step title={L("3. PIN", "3. PIN")} body={L("Última etapa", "Final step")} />
+              </div>
             </div>
-          </div>
             <div className="border border-tts-border bg-tts-surface p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Próximo passo", "Next step")}</p>
               <p className="mt-2 text-lg font-black text-tts-deep">
@@ -439,7 +439,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </p>
               ) : !canProceed ? (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
-                  {L("O valor parece maior que o saldo disponível. Ajuste antes de revisar.", "The amount looks higher than the available balance. Adjust it before reviewing.")}
+                  {L("O valor parece maior que o saldo disponível. Ajuste antes de confirmar.", "The amount looks higher than the available balance. Adjust it before confirming.")}
                 </p>
               ) : (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
@@ -459,7 +459,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
               >
                 {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                {reviewStatus === "loading" ? L("Preparando revisão...", "Preparing review...") : primaryLabel}
+                {reviewStatus === "loading" ? L("Preparando confirmação...", "Preparing confirmation...") : primaryLabel}
               </button>
             </div>
           </div>

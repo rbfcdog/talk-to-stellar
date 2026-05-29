@@ -131,7 +131,7 @@ function buildActionUrl(path: string, params: Record<string, unknown>) {
 function publicConversionErrorMessage(error: unknown, language: AppLanguage) {
   const mapped = mapPublicError(error, language)
   if (mapped.code === "link_expired") {
-    return T(language, "Essa confirmação expirou ou já foi usada. Abra uma nova revisão de conversão.", "This confirmation expired or was already used. Open a new conversion review.")
+    return T(language, "Essa confirmação expirou ou já foi usada. Abra uma nova confirmação de conversão.", "This confirmation expired or was already used. Open a new conversion confirmation.")
   }
   if (mapped.code === "quote_expired") {
     return T(language, "A estimativa expirou. Volte para conversão e gere uma nova confirmação.", "The estimate expired. Return to conversion and create a new confirmation.")
@@ -336,11 +336,11 @@ export default function ConfirmConversionClient({
                 {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
-                {T(feedbackLanguage, "Revise os valores e digite seu PIN para concluir na sua conta.", "Review the details and enter your PIN to complete it in your account.")}
+                {T(feedbackLanguage, "Confira os valores e digite seu PIN para concluir na sua conta.", "Check the details and enter your PIN to complete it in your account.")}
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 border border-tts-border bg-tts-bg p-2 text-xs">
-              {[T(feedbackLanguage, "Revisar", "Review"), T(feedbackLanguage, "Autorizar", "Authorize"), T(feedbackLanguage, "Concluir", "Complete")].map((step, index) => (
+              {[T(feedbackLanguage, "Conferir", "Check"), T(feedbackLanguage, "Autorizar", "Authorize"), T(feedbackLanguage, "Concluir", "Complete")].map((step, index) => (
                 <motion.div key={step} layout className={`px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}>
                   {step}
                 </motion.div>
@@ -373,12 +373,12 @@ export default function ConfirmConversionClient({
 
             <div className="grid gap-3 md:grid-cols-2">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
-                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Revisar opção", "Review option")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão na revisão.", "Use this conversion destination in the review.")}</p>
+                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Aplicar destino", "Apply destination")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão em uma aplicação.", "Use this conversion destination in an application.")}</p>
               </a>
               <a href={transactionsUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Histórico", "History")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Veja conversões, PIX e ajustes da conta.", "Review conversions, PIX, and account adjustments.")}</p>
+                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Veja conversões, PIX e ajustes da conta.", "See conversions, PIX, and account adjustments.")}</p>
               </a>
             </div>
           </section>

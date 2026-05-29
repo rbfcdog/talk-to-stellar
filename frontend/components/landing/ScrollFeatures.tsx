@@ -62,14 +62,14 @@ export default function ScrollFeatures() {
       ]
     },
     {
-      title: L("3. Revise a opção", "3. Review the option"),
-      description: L("Depois que o saldo entra, o assistente mostra opções por moeda e prepara entrada ou saída com revisão clara.", "After the balance arrives, the assistant shows options by currency and prepares entry or exit with a clear review."),
+      title: L("3. Aplique ou retire", "3. Apply or withdraw"),
+      description: L("Depois que o saldo entra, o assistente mostra opções por moeda e prepara entrada ou saída com confirmação clara.", "After the balance arrives, the assistant shows options by currency and prepares entry or exit with clear confirmation."),
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={PiggyBank} color="#00D2FF" delay={1} />,
       messages: [
         { type: 'user', text: L('Quais opções eu tenho?', 'Which options do I have?'), time: '09:50' },
-        { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. Euros\n\nVocê revisa os valores antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. Euros\n\nYou review values before confirming.'), time: '09:50' },
-        { type: 'user', text: L('Revisar 200 euros.', 'Review 200 euros.'), time: '09:51' },
+        { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. Euros\n\nVocê confere os valores antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. Euros\n\nYou check values before confirming.'), time: '09:50' },
+        { type: 'user', text: L('Aplicar 200 euros.', 'Apply 200 euros.'), time: '09:51' },
       ]
     },
     {

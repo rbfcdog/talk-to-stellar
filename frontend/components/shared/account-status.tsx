@@ -45,7 +45,7 @@ export function AccountStatusCard({
     },
     connected: {
       title: L("Conta conectada", "Account connected"),
-      detail: L("Pronto para revisar saldos e confirmações.", "Ready to review balances and confirmations."),
+      detail: L("Pronto para conferir saldos e confirmar operações.", "Ready to check balances and confirm operations."),
       icon: <CheckCircle2 className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-confirm bg-tts-confirm/10 text-tts-confirm",
     },
@@ -57,7 +57,7 @@ export function AccountStatusCard({
     },
     "signed-out": {
       title: L("Precisa entrar", "Sign in needed"),
-      detail: L("Entre para carregar saldos e preparar revisões.", "Sign in to load balances and prepare reviews."),
+      detail: L("Entre para carregar saldos e confirmar operações.", "Sign in to load balances and confirm operations."),
       icon: <LogIn className="h-5 w-5" aria-hidden="true" />,
       tone: "border-tts-gold bg-tts-gold-bg text-tts-gold",
     },

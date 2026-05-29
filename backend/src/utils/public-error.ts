@@ -71,17 +71,17 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
     case 'account_preparing':
       return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
     case 'yield_execution_disabled':
-      return 'A confirmacao ainda nao esta ativada neste ambiente. Voce pode revisar a simulacao, mas execucao real exige aprovacao de compliance.';
+      return 'A confirmacao ainda nao esta ativada neste ambiente de teste. Voce pode consultar a tela, mas a execucao real esta bloqueada.';
     case 'account_signing_unavailable':
       return 'Esta conta ainda nao esta pronta para assinar esta operacao. Entre novamente e tente outra vez.';
     case 'missing_pin':
       return 'Digite o PIN da conta para confirmar.';
     case 'review_not_prepared':
-      return 'Prepare a revisao novamente e confirme em seguida.';
+      return 'Prepare a confirmacao novamente e confirme em seguida.';
     case 'execution_unavailable':
-      return 'Nao foi possivel concluir a confirmacao agora. Prepare uma nova revisao e tente novamente.';
+      return 'Nao foi possivel concluir a confirmacao agora. Prepare uma nova confirmacao e tente novamente.';
     case 'yield_unavailable':
-      return 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.';
+      return 'Nao foi possivel atualizar a aplicacao agora. Tente novamente em alguns segundos.';
     case 'invalid_pin':
       return 'Nao consegui validar o PIN. Confira e tente novamente.';
     case 'insufficient_balance':
