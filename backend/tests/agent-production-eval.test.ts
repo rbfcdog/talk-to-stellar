@@ -226,6 +226,25 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Options for review');
   });
 
+  it('routes a plain investment request to application options', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Opções para revisão: dólares e XLM.\n\nAbrir revisão:\nhttps://app.example.com/review',
+    }));
+
+    const result = await graph.processInput(createState('quero investir'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_yield_options', {
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('/review');
+    expect(result.response_message).not.toContain('/money-cycle');
+  });
+
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
@@ -360,28 +379,6 @@ describe('Agent production evals', () => {
     });
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('destination_pix_key');
-  });
-
-  it('routes legacy full-flow requests to the review interface', async () => {
-    const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
-
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      message: 'Revisão pronta para BRL.\n\nAbra:\nhttps://app.example.com/review?asset=BRL&amount=500',
-    }));
-
-    const result = await graph.processInput(createState('quero injetar 500 reais, deixar render e depois sair para user@example.com'));
-
-    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
-      session_id: 'eval-session',
-      action: 'keep',
-      amount: '500',
-      asset_code: 'BRL',
-      language: 'pt-BR',
-    });
-    expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/review?asset=BRL');
   });
 
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {
