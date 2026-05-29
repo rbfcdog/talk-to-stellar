@@ -4747,8 +4747,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.error = errorMessage;
       state.response_message = this.text(
         this.getLanguage(state),
-        "Posso ajudar com conta, contatos, PIX, conversão, aplicação, pagamentos e histórico. Diga o objetivo em uma frase, por exemplo: saldo, sacar 100 reais para meu PIX, converter 50 reais para dólar ou ver histórico.",
-        "I can help with account, contacts, PIX, conversion, application, payments, and history. Say the goal in one sentence, for example: balance, withdraw 100 reais to my PIX, convert 50 reais to dollars, or show history."
+        "Posso ajudar com contatos, saldo, PIX, conversão, enviar dinheiro, link de pagamento, aplicações, melhor rota, histórico e PIN. Diga o objetivo em uma frase, por exemplo: ver saldo, trazer 100 reais via PIX, converter 50 reais para dólar, ver aplicações ou abrir perfil.",
+        "I can help with contacts, balance, PIX, conversion, sending money, payment links, applications, best route, history, and PIN. Say the goal in one sentence, for example: show balance, bring 100 reais via PIX, convert 50 reais to dollars, view applications, or open profile."
       );
       return state;
     }
@@ -4798,8 +4798,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
       return this.text(
         language,
-        "Posso ajudar com conta, contatos, PIX, conversão, aplicação, pagamentos e histórico. Diga o objetivo em uma frase, por exemplo: saldo, sacar 100 reais para meu PIX, converter 50 reais para dólar ou ver histórico.",
-        "I can help with account, contacts, PIX, conversion, application, payments, and history. Say the goal in one sentence, for example: balance, withdraw 100 reais to my PIX, convert 50 reais to dollars, or show history."
+        "Posso ajudar com contatos, saldo, PIX, conversão, enviar dinheiro, link de pagamento, aplicações, melhor rota, histórico e PIN. Diga o objetivo em uma frase, por exemplo: ver saldo, trazer 100 reais via PIX, converter 50 reais para dólar, ver aplicações ou abrir perfil.",
+        "I can help with contacts, balance, PIX, conversion, sending money, payment links, applications, best route, history, and PIN. Say the goal in one sentence, for example: show balance, bring 100 reais via PIX, convert 50 reais to dollars, view applications, or open profile."
       );
     }
   }

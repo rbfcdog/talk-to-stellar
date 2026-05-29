@@ -1,25 +1,21 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { ArrowRight, Loader2, WalletCards } from "lucide-react"
-import { getClientSession } from "@/lib/session"
+import Link from "next/link"
+import { useParams } from "next/navigation"
+import { History, Loader2, Share2, UserCircle2, WalletCards } from "lucide-react"
 
 function displayName(profile: any, username: string) {
   return String(profile?.display_name || profile?.username || username || "TalkToStellar").trim()
 }
 
-export default function PublicReceivePage() {
-  const router = useRouter()
+export default function PublicProfilePage() {
   const params = useParams<{ username: string }>()
   const username = String(params?.username || "").trim()
   const [profile, setProfile] = useState<any>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [amount, setAmount] = useState("")
-  const [asset, setAsset] = useState("USDC")
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle")
-  const [submitMessage, setSubmitMessage] = useState("")
-  const submitLockRef = useRef(false)
+  const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -41,56 +37,26 @@ export default function PublicReceivePage() {
     loadProfile()
     return () => {
       active = false
+      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current)
     }
   }, [username])
 
   const name = displayName(profile, username)
+  const publicLink = String(profile?.public_link || "").trim()
+  const accountId = String(profile?.destination_identifier || profile?.identifier || username || "").trim()
 
-  async function handlePayNow() {
-    if (submitLockRef.current) return
-    submitLockRef.current = true
-    setSubmitStatus("submitting")
-    setSubmitMessage("")
-
-    try {
-      const { sessionId, authenticated } = await getClientSession()
-      const normalizedAmount = amount.trim().replace(",", ".")
-      if (!normalizedAmount || !Number.isFinite(Number(normalizedAmount)) || Number(normalizedAmount) <= 0) {
-        throw new Error("Enter an amount greater than zero.")
-      }
-
-      if (!sessionId || !authenticated) {
-        const next = `/u/${encodeURIComponent(username)}`
-        router.push(`/login?next=${encodeURIComponent(next)}`)
-        return
-      }
-
-      const response = await fetch(`/api/financial/u/${encodeURIComponent(username)}/pay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          amount: normalizedAmount,
-          asset_code: asset,
-        }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload?.success || !payload?.url) {
-        throw new Error(payload?.message || "Could not start the payment now.")
-      }
-
-      window.location.href = String(payload.url)
-    } catch (error) {
-      setSubmitStatus("error")
-      setSubmitMessage(error instanceof Error ? error.message : "Failed to start payment.")
-      submitLockRef.current = false
-    }
+  async function copyLink() {
+    if (!publicLink) return
+    await navigator.clipboard.writeText(publicLink)
+    setCopied(true)
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500)
   }
 
   if (status === "loading") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
-        <p className="text-sm text-tts-deep">Loading payment link...</p>
+        <p className="text-sm text-tts-deep">Carregando perfil...</p>
       </main>
     )
   }
@@ -99,8 +65,8 @@ export default function PublicReceivePage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
         <section className="w-full max-w-md rounded-lg border border-tts-border bg-tts-surface p-6">
-          <h1 className="text-2xl font-semibold text-tts-surface">Link not found</h1>
-          <p className="mt-3 text-sm text-tts-deep">Check the address or ask the recipient for a new link.</p>
+          <h1 className="text-2xl font-semibold text-tts-surface">Perfil não encontrado</h1>
+          <p className="mt-3 text-sm text-tts-deep">Confira o endereço ou peça um novo link público.</p>
         </section>
       </main>
     )
@@ -108,64 +74,83 @@ export default function PublicReceivePage() {
 
   return (
     <main className="min-h-screen bg-tts-bg px-4 py-10 text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-xl items-center">
-        <section className="w-full rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl sm:p-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
-            <WalletCards className="h-4 w-4" />
-            Payment link
+      <div className="mx-auto grid min-h-screen w-full max-w-5xl items-center gap-8 md:grid-cols-[1.1fr_0.9fr]">
+        <section className="space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-gold">
+            <UserCircle2 className="h-4 w-4" />
+            Perfil global
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-tts-surface">Pay {name}</h1>
-          <p className="mt-3 text-sm leading-6 text-tts-deep">
-            Enter the amount and continue to authorize the payment from your TalkToStellar account.
-          </p>
+          <div className="space-y-3">
+            <h1 className="text-4xl font-semibold text-tts-surface md:text-6xl">{name}</h1>
+            <p className="max-w-2xl text-base leading-7 text-tts-deep">
+              Conta pública para receber, acompanhar saldos e acessar ações rápidas sem abrir a tela de pagamento.
+            </p>
+          </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px]">
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-tts-deep">Amount</span>
-              <input
-                value={amount}
-                onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
-                inputMode="decimal"
-                placeholder="500"
-                className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none placeholder:text-tts-muted focus:border-tts-confirm"
-              />
-            </label>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-tts-deep">Currency</span>
-              <select
-                value={asset}
-                onChange={(event) => setAsset(event.target.value)}
-                className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none focus:border-tts-confirm"
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Link público</p>
+              <p className="mt-2 text-sm font-semibold text-tts-surface">{publicLink ? "Ativo" : "Indisponível"}</p>
+            </div>
+            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Identificador</p>
+              <p className="mt-2 break-all text-sm font-semibold text-tts-surface">{accountId || "indisponível"}</p>
+            </div>
+            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Recebimento</p>
+              <p className="mt-2 text-sm font-semibold text-tts-surface">{String(profile?.destination_public_key || "").trim() ? "Pronto" : "Indisponível"}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {publicLink && (
+              <button
+                type="button"
+                onClick={copyLink}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-2 text-sm font-semibold text-tts-deep transition hover:bg-tts-surface"
               >
-                <option value="USDC">US$</option>
-                <option value="BRL">R$</option>
-                <option value="CETES">CETES</option>
-              </select>
-            </label>
+                <Share2 className="h-4 w-4" />
+                {copied ? "Link copiado" : "Copiar link"}
+              </button>
+            )}
+            <Link
+              href="/transactions"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep/90"
+            >
+              <History className="h-4 w-4" />
+              Ver histórico
+            </Link>
+            <Link
+              href={`/pay-anyone?mode=receive&recipient=${encodeURIComponent(name)}`}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-sm font-semibold text-tts-confirm transition hover:bg-tts-confirm/20"
+            >
+              <WalletCards className="h-4 w-4" />
+              Criar link de recebimento
+            </Link>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
+          <div className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-tts-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Perfil público
           </div>
 
-          <button
-            type="button"
-            onClick={handlePayNow}
-            disabled={submitStatus === "submitting" || submitLockRef.current}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitStatus === "submitting" ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generating confirmation...
-              </>
-            ) : (
-              <>
-                Continue payment
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-          {submitStatus === "error" && submitMessage && (
-            <p className="mt-3 text-sm text-tts-error">{submitMessage}</p>
-          )}
+          <div className="space-y-3">
+            <div className="rounded-lg border border-tts-border bg-tts-bg p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Resumo</p>
+              <p className="mt-2 text-sm leading-6 text-tts-deep">
+                Este perfil mostra informações públicas da conta e os atalhos para receber, pagar e acompanhar histórico.
+              </p>
+            </div>
+            <div className="rounded-lg border border-tts-border bg-tts-bg p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
+              <p className="mt-2 break-all text-sm font-semibold text-tts-surface">
+                {String(profile?.destination_public_key || "indisponível")}
+              </p>
+            </div>
+          </div>
         </section>
       </div>
     </main>

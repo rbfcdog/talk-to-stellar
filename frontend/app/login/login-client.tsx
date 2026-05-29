@@ -6,11 +6,17 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { Fingerprint, LogIn, MessageCircle, Send } from "lucide-react"
+import { Chrome, Fingerprint, LogIn, MessageCircle, Send } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
 import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+
+declare global {
+  interface Window {
+    google?: any
+  }
+}
 
 function generateBrowserId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -107,6 +113,7 @@ function extractResolvedLogin(value: any): string {
 
 const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
 const PASSKEY_LOGIN_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
+const GOOGLE_LOGIN_ENABLED = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID)
 
 export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()
@@ -140,8 +147,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [qrTargetUrl, setQrTargetUrl] = useState("")
   const [loginDone, setLoginDone] = useState(false)
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
+  const [googleLoginError, setGoogleLoginError] = useState("")
+  const [googleScriptReady, setGoogleScriptReady] = useState(false)
   const actionLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
+  const googleButtonRef = useRef<HTMLDivElement | null>(null)
 
   function redirectToUsed(customMessage?: string) {
     const params = new URLSearchParams()
@@ -548,6 +558,86 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     void handlePasskeyLogin()
   }, [requestedAuthMethod, email, externalLinkUsed, status])
 
+  useEffect(() => {
+    if (!GOOGLE_LOGIN_ENABLED) return
+    if (typeof window === "undefined") return
+    if (window.google?.accounts?.id) {
+      setGoogleScriptReady(true)
+      return
+    }
+
+    const scriptId = "google-identity-client"
+    if (document.getElementById(scriptId)) return
+
+    const script = document.createElement("script")
+    script.id = scriptId
+    script.src = "https://accounts.google.com/gsi/client"
+    script.async = true
+    script.defer = true
+    script.onload = () => setGoogleScriptReady(true)
+    script.onerror = () => setGoogleLoginError(language === "pt-BR" ? "Não foi possível carregar o login do Google." : "Could not load Google sign-in.")
+    document.head.appendChild(script)
+
+    return () => {
+      // Keep the script cached for the next login page visit.
+    }
+  }, [language])
+
+  useEffect(() => {
+    if (!GOOGLE_LOGIN_ENABLED || !googleScriptReady) return
+    if (!googleButtonRef.current) return
+    if (!window.google?.accounts?.id) return
+
+    const clientId = String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "").trim()
+    if (!clientId) return
+
+    googleButtonRef.current.innerHTML = ""
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response: { credential?: string }) => {
+        if (actionLockRef.current) return
+        const credential = String(response?.credential || "").trim()
+        if (!credential) {
+          setGoogleLoginError(language === "pt-BR" ? "Não foi possível validar sua conta Google." : "Could not validate your Google account.")
+          return
+        }
+
+        actionLockRef.current = true
+        setStatus("idle")
+        setGoogleLoginError("")
+
+        try {
+          const authResponse = await idempotentFetch("/api/auth/google", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ credential, language }),
+          })
+          const payload = await authResponse.json().catch(() => ({}))
+          if (!authResponse.ok || !payload?.success) {
+            throw new Error(payload?.message || "Google sign-in failed.")
+          }
+
+          saveClientSession()
+          const resolvedLogin = String(payload?.email || payload?.user_id || payload?.display_name || "user").trim()
+          if (resolvedLogin) {
+            localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+          }
+          finishLogin(resolvedLogin)
+        } catch (error) {
+          actionLockRef.current = false
+          setGoogleLoginError(error instanceof Error ? error.message : "Google sign-in failed.")
+        }
+      },
+    })
+    window.google.accounts.id.renderButton(googleButtonRef.current, {
+      theme: "outline",
+      size: "large",
+      text: language === "pt-BR" ? "signin_with" : "signin_with",
+      width: googleButtonRef.current.clientWidth,
+      shape: "rectangular",
+    })
+  }, [googleScriptReady, language])
+
   if (loginDone) {
     return (
       <AuthShell
@@ -713,6 +803,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           <Fingerprint className="mr-2 h-4 w-4" />
           {status === "passkey" ? t("login_passkey_loading") : t("login_passkey_submit")}
         </Button>
+      )}
+
+      {GOOGLE_LOGIN_ENABLED && (
+        <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-tts-muted">
+            <Chrome className="h-4 w-4" />
+            {language === "pt-BR" ? "Entrar com Google" : "Sign in with Google"}
+          </div>
+          <div ref={googleButtonRef} className="min-h-12 w-full" />
+          {googleLoginError && (
+            <p className="mt-3 text-xs text-tts-error">{googleLoginError}</p>
+          )}
+        </div>
       )}
 
       {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && (

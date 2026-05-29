@@ -29,9 +29,9 @@ const englishDictionary: Dictionary = {
     theme_dark_short: "Dark",
     theme_light_short: "Light",
     chat_agent_welcome:
-      "Hi, this is TalkToStellar.\n\nI can help with contacts, balance, PIX, payments, conversions and applications.\n\nExamples:\n1. contacts\n2. balance\n3. add 10 reais with PIX\n4. convert 500 reais to euros\n5. apply 200 dollars\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
+      "Hi, this is TalkToStellar.\n\nI can help with contacts, balance, PIX, sending, payment links, conversions, applications, best route, history and PIN.\n\nExamples:\n1. contacts\n2. balance\n3. add 10 reais with PIX\n4. convert 500 reais to euros\n5. apply 200 dollars\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
     chat_search_placeholder: "Search account contacts...",
-    chat_sidebar_preview: "Hi. I can help with contacts, balance, PIX, conversion, applications, and money out.",
+    chat_sidebar_preview: "Hi. I can help with contacts, balance, PIX, conversion, sending, applications, and history.",
     chat_input_placeholder: "Type: convert 500 reais to euros, apply dollars, or withdraw to PIX",
     chat_wait_session: "Give me a moment while I start the session...",
     chat_api_error: "I could not connect to the service right now. Try again in a few seconds.",
@@ -126,9 +126,9 @@ const portugueseDictionary: Dictionary = {
     theme_dark_short: "Escuro",
     theme_light_short: "Claro",
     chat_agent_welcome:
-      "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com contatos, saldo, PIX, pagamentos, conversões e aplicações.\n\nExemplos:\n1. contatos\n2. saldo\n3. colocar 10 reais via PIX\n4. converter 500 reais para euros\n5. aplicar 200 dólares\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
+      "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com contatos, saldo, PIX, envio, link de pagamento, conversões, aplicações, melhor rota, histórico e PIN.\n\nExemplos:\n1. contatos\n2. saldo\n3. colocar 10 reais via PIX\n4. converter 500 reais para euros\n5. aplicar 200 dólares\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
     chat_search_placeholder: "Buscar contatos da conta...",
-    chat_sidebar_preview: "Oi. Posso ajudar com contatos, saldo, PIX, conversão, aplicação e saída.",
+    chat_sidebar_preview: "Oi. Posso ajudar com contatos, saldo, PIX, conversão, envio, aplicação e histórico.",
     chat_input_placeholder: "Digite: converter 500 reais para euros, aplicar dólares ou retirar para PIX",
     chat_wait_session: "Só um momento enquanto inicio a sessão...",
     chat_api_error: "Não consegui conectar ao serviço agora. Tente novamente em alguns segundos.",
