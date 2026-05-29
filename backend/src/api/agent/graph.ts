@@ -485,6 +485,13 @@ export class AgentGraph {
       .toLowerCase();
   }
 
+  private normalizeHistoryIntentText(text: string): string {
+    return this.normalizeTextForIntent(text)
+      .replace(/\bhistoric[p0]?\b/g, 'historico')
+      .replace(/\bhist[o0]ric[p0]?\b/g, 'historico')
+      .replace(/\bhistori[ck]o\b/g, 'historico');
+  }
+
   private isPaymentLinkRequest(text: string): boolean {
     const normalized = this.normalizeTextForIntent(text);
     const asksForLink =
@@ -566,7 +573,7 @@ export class AgentGraph {
       .replace(/[!?.,;:]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    return /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|fala|hello|hi|hey|start|menu)$/.test(normalized);
+    return /^(o+i+|ola+a*|opa+a*|bom dia+|boa tarde+|boa noite+|e ai+|fala+a*|hello+|hi+|hey+|start|menu)$/.test(normalized);
   }
 
   private assetCodeFromTextToken(value?: string): string {
@@ -2051,21 +2058,41 @@ export class AgentGraph {
   }
 
   private isRampHistoryRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
+    const normalized = this.normalizeHistoryIntentText(text);
     const mentionsRamp = /\b(pix|deposit|deposito|depositei|depositou|sacar|saque|saquei|sacou|retirada|retirei|ramp|onramp|offramp)\b/.test(normalized);
-    const asksAmount = /\b(quanto|total|historico|histórico|mes|mês|maio|hoje|depositei|saquei|movimentei)\b/.test(normalized);
+    const asksAmount = /\b(quanto|total|historico|mes|maio|hoje|depositei|saquei|movimentei)\b/.test(normalized);
     return mentionsRamp && asksAmount && (
       /\bquanto\s+(?:eu\s+)?(?:depositei|sacei|saquei|retirei)\b/.test(normalized) ||
-      /\b(?:depositos|depósitos|saques|retiradas)\s+(?:do|no|esse|este)\s+(?:mes|mês)\b/.test(normalized) ||
+      /\b(?:depositos|saques|retiradas)\s+(?:do|no|esse|este)\s+(?:mes)\b/.test(normalized) ||
       /\bhistorico\s+(?:de\s+)?(?:pix|ramp|depositos|saques)\b/.test(normalized)
     );
   }
 
   private rampHistoryPeriodFromText(text: string): 'month' | 'today' | 'lifetime' {
-    const normalized = this.normalizeTextForIntent(text);
+    const normalized = this.normalizeHistoryIntentText(text);
     if (/\bhoje\b/.test(normalized)) return 'today';
-    if (/\b(total|sempre|todo\s+historico|histórico\s+todo|desde\s+o\s+inicio)\b/.test(normalized)) return 'lifetime';
+    if (/\b(total|sempre|todo\s+historico|historico\s+todo|desde\s+o\s+inicio)\b/.test(normalized)) return 'lifetime';
     return 'month';
+  }
+
+  private isTransactionHistoryRequest(text: string): boolean {
+    const normalized = this.normalizeHistoryIntentText(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+
+    const asksHistory =
+      /\b(historico|extrato|transacoes|transacao|operacoes|operacao|movimentacoes|movimentacao|recibos|comprovantes)\b/.test(normalized) ||
+      normalized.includes('meu historic');
+    if (!asksHistory) return false;
+
+    const onlySavings =
+      normalized.includes('economia') ||
+      normalized.includes('economizei') ||
+      normalized.includes('savings') ||
+      normalized.includes('metodos tradicionais');
+    return !onlySavings;
   }
 
   private async handleRampHistoryRequest(state: AgentState): Promise<AgentState> {
@@ -4414,6 +4441,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
+      const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
@@ -4441,6 +4469,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                 ? IntentType.GENERAL
                 : wantsRampHistory
                   ? IntentType.FINANCIAL_MEMORY
+                  : wantsTransactionHistory
+                    ? IntentType.HISTORY
                   : savingsCalculator || wantsAnnualSavingsSummary
                     ? IntentType.FINANCIAL_MEMORY
                     : deterministicExternalWallet.is_external_wallet
@@ -4522,6 +4552,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleRampHistoryRequest(state);
       }
 
+      if (wantsTransactionHistory) {
+        return await this.handleHistoryCheck(state);
+      }
+
       if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
         return await this.handlePixRampRequest(state);
       }
@@ -4599,6 +4633,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (state.action_type === ActionType.LIST_CONTACTS) {
         return await this.handleContactsRequest(state);
+      }
+
+      if (state.action_type === ActionType.GET_HISTORY) {
+        return await this.handleHistoryCheck(state);
       }
 
       try {
