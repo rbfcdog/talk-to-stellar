@@ -173,6 +173,20 @@ function searchableText(item: TransactionItem) {
   ].join(" ").toLowerCase()
 }
 
+function publicKeyProfileUrl(publicKey?: string | null) {
+  const key = String(publicKey || "").trim()
+  return /^G[A-Z2-7]{55}$/i.test(key) ? `/profile/${encodeURIComponent(key)}` : ""
+}
+
+function transactionProfileUrl(item: TransactionItem) {
+  const directUrl = publicKeyProfileUrl(item.counterparty?.public_key)
+  if (directUrl) return directUrl
+
+  const fallbackUrl = String(item.counterparty?.short_profile_url || item.counterparty?.profile_url || "").trim()
+  if (!fallbackUrl || /\/receipt\//i.test(fallbackUrl)) return ""
+  return fallbackUrl
+}
+
 export default function TransactionsClient() {
   const today = useMemo(() => new Date(), [])
   const [sessionId, setSessionId] = useState("")
@@ -452,7 +466,7 @@ function StatePanel({ icon, title, detail, action }: { icon: ReactNode; title: s
 
 function TransactionRow({ item }: { item: TransactionItem }) {
   const classification = classifyTransaction(item)
-  const profileUrl = String(item.counterparty?.short_profile_url || item.counterparty?.profile_url || "").trim()
+  const profileUrl = transactionProfileUrl(item)
   const receiptUrl = String(item.receipt_url || "").trim()
   const hash = compactHash(item.payment_hash)
   const date = formatWhen(item.completed_at || item.created_at)

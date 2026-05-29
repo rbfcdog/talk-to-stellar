@@ -109,7 +109,10 @@ describe('TransactionHistoryService', () => {
         identifier: '5595280606751',
       },
     });
-    expect(result.transactions[0].counterparty.short_profile_url).toContain('/receipt/receipt-1');
+    const receiptTransaction = result.transactions[0] as any;
+    expect(receiptTransaction.receipt_url).toContain('/receipt/receipt-1');
+    expect(receiptTransaction.counterparty.profile_url).toBeNull();
+    expect(receiptTransaction.counterparty.short_profile_url).toBeNull();
   });
 
   it('merges Stellar network operations with internal payment logs for the web history page', async () => {
