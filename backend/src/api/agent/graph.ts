@@ -2753,6 +2753,9 @@ Respond ONLY with the intent name. Examples:
 - "see transactions list" -> history
 - "quanto rende?" -> yield
 - "show yield options" -> yield
+- "quero investir" -> yield
+- "quero aplicar dinheiro" -> yield
+- "ver investimentos" -> yield
 - "guardar 100 reais rendendo" -> yield
 - "withdraw my yield" -> yield
 - "manda pro João de novo" -> financial_memory
@@ -3667,7 +3670,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const normalized = this.normalizeTextForIntent(raw);
     const hasYieldKeyword =
       /\b(yield|earning|earnings|apy|income|interest)\b/.test(normalized) ||
-      /\b(rendimento|rendimentos|render|rendendo|rentabilidade|juros|renda)\b/.test(normalized);
+      /\b(rendimento|rendimentos|render|rendendo|rentabilidade|juros|renda|investir|investimento|investimentos|aplicar|aplicacao|aplicacoes)\b/.test(normalized);
 
     const hasYieldAction =
       /\b(guardar|aplicar|investir|deixar|poupar|save|deposit|put|resgatar|retirar|sacar|withdraw|redeem)\b/.test(normalized) &&
@@ -3834,74 +3837,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       asset_code: this.assetCodeFromTextToken(assetMatch?.[1]) || '',
       destination_pix_key: destinationPixKey,
     };
-  }
-
-  private extractMoneyCycleIntentFromText(message: string): {
-    is_money_cycle: boolean;
-    amount: string;
-    asset_code: string;
-    destination_pix_key?: string;
-  } {
-    const raw = String(message || '');
-    const normalized = this.normalizeTextForIntent(raw);
-    const mentionsCycle =
-      normalized.includes('ciclo completo') ||
-      normalized.includes('ciclo do dinheiro') ||
-      normalized.includes('ciclo de dinheiro') ||
-      normalized.includes('fluxo completo') ||
-      normalized.includes('jornada completa') ||
-      normalized.includes('entrada rendimento saida') ||
-      normalized.includes('entrada render saida') ||
-      /\b(injetar|entrar|trazer|adicionar|colocar|add)\b.*\b(render|rendendo|rendimento|yield|earning|earn)\b.*\b(sair|saida|retirar|sacar|withdraw|pix)\b/.test(normalized) ||
-      /\b(add|bring)\b.*\b(earn|earning|yield)\b.*\b(withdraw|send out|cash out|pix)\b/.test(normalized);
-
-    if (!mentionsCycle) {
-      return { is_money_cycle: false, amount: '', asset_code: '' };
-    }
-
-    const amountNumber = parseHumanAmountNumber(raw);
-    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
-    const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
-      raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
-      '';
-
-    return {
-      is_money_cycle: true,
-      amount,
-      asset_code: this.assetCodeFromTextToken(assetMatch?.[1]) || '',
-      destination_pix_key: destinationPixKey,
-    };
-  }
-
-  private async handleMoneyCycleRequest(state: AgentState, intent: ReturnType<AgentGraph['extractMoneyCycleIntentFromText']>): Promise<AgentState> {
-    const language = this.getLanguage(state);
-    const resultRaw = await executeTool('open_asset_interface', {
-      session_id: state.session_id,
-      action: 'keep',
-      amount: intent.amount,
-      asset_code: intent.asset_code || 'BRL',
-      language,
-    });
-
-    let result: any;
-    try {
-      result = JSON.parse(resultRaw);
-    } catch {
-      result = { success: false, error: 'Failed to parse money cycle tool response' };
-    }
-
-    state.success = Boolean(result.success);
-    state.response_message = result.success
-      ? result.message
-      : this.text(
-          language,
-          `Não consegui abrir a aplicação agora: ${result.error || 'erro desconhecido'}`,
-          `I could not open the review right now: ${result.error || 'unknown error'}`
-        );
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
   }
 
   private async handleAssetInterfaceRequest(state: AgentState, intent: ReturnType<AgentGraph['extractAssetInterfaceIntentFromText']>): Promise<AgentState> {
@@ -4486,7 +4421,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const wantsBestRouteGuidance = this.isBestRouteGuidanceRequest(state.current_input);
       const deterministicYield = this.extractYieldIntentFromText(state.current_input);
-      const deterministicMoneyCycle = this.extractMoneyCycleIntentFromText(state.current_input);
       const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
@@ -4514,8 +4448,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                           ? IntentType.FINANCIAL_MEMORY
                           : deterministicPixRamp.is_pix_ramp
                             ? IntentType.PIX
-                            : deterministicMoneyCycle.is_money_cycle
-                              ? IntentType.YIELD
                             : deterministicYield.is_yield
                               ? IntentType.YIELD
                               : deterministicAssetInterface.is_asset_interface
@@ -4601,10 +4533,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
         return await this.handlePixRampRequest(state);
-      }
-
-      if (deterministicMoneyCycle.is_money_cycle) {
-        return await this.handleMoneyCycleRequest(state, deterministicMoneyCycle);
       }
 
       if (state.action_type === ActionType.MANAGE_YIELD && deterministicYield.is_yield) {
