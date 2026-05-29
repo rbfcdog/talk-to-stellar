@@ -54,7 +54,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Guia rápido: contatos, saldo, PIX, converter e aplicação.',
+      message: 'Guia rápido: contatos, saldo, PIX, converter e rendimentos.',
     }));
 
     const result = await graph.processInput(createState('olá, o que você pode fazer?'));
@@ -62,8 +62,26 @@ describe('Agent production evals', () => {
     expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('contatos');
-    expect(result.response_message).toContain('aplicação');
+    expect(result.response_message).toContain('rendimentos');
     expect(result.response_message).not.toContain('ciclo completo');
+  });
+
+  it('routes typo capability questions from WhatsApp-style text to the help tool', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Posso ajudar com contatos, saldo, PIX, conversão, rendimentos, pagamentos e histórico.',
+    }));
+
+    const result = await graph.processInput(createState('o que possso fazer por aqui?'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('contatos');
+    expect(result.response_message).toContain('rendimentos');
+    expect(result.response_message).not.toContain('Não consegui entender');
   });
 
   it('routes simple greetings to the full compact capability guide', async () => {
