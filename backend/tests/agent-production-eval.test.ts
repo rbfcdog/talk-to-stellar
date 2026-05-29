@@ -113,6 +113,31 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Ver histórico completo');
   });
 
+  it('answers ambiguous best-route requests with guidance instead of generic fallback', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    const result = await graph.processInput(createState('qual a melhor rota agota?'));
+
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('valor, moeda e destino');
+    expect(result.response_message).toContain('melhor rota para converter 100 USDC para BRL');
+    expect(result.response_message).not.toContain('Desculpe');
+  });
+
+  it('routes menu item 8 to best-route guidance before savings summaries', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    const result = await graph.processInput(createState('8. Melhor rota, cotação, taxas e economia'));
+
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Eu analiso a melhor rota');
+    expect(result.response_message).toContain('valor final, taxa e caminho');
+  });
+
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
