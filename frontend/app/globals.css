@@ -415,3 +415,54 @@
     color: #111111 !important;
   }
 }
+
+/* ─── Landing Reluca custom styles ─── */
+.text-gradient {
+  background: linear-gradient(to right, var(--color-neon-blue, #E59E25), var(--color-vivid-purple, #D48C1C));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-gradient-custom {
+  background: linear-gradient(to right, var(--color-neon-blue, #E59E25), var(--color-vivid-purple, #D48C1C));
+}
+
+.border-gradient-card {
+  position: relative;
+  background: #121212;
+  background-clip: padding-box;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+}
+
+.border-gradient-card::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: -1;
+  margin: -1px;
+  border-radius: inherit;
+  background: linear-gradient(to right, rgba(229, 158, 37, 0.5), rgba(212, 140, 28, 0.5));
+}
+
+.glow-gradient {
+  box-shadow: 0 0 40px rgba(229, 158, 37, 0.15), 0 0 40px rgba(212, 140, 28, 0.15);
+}
+
+.bg-dotted-pattern {
+  background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@keyframes spin_10s_linear_infinite {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin_10s_linear_infinite_reverse {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+

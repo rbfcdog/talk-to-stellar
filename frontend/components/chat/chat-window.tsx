@@ -463,6 +463,12 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       });
       if (!response.ok) return;
       const data = await response.json();
+      if (data?.loginRequired || data?.onboardingRequired || data?.reason === "session_expired") {
+        browserSessionExpiredRef.current = true;
+        setBrowserSessionExpired(true);
+        appendExpiredSessionNotice();
+        return;
+      }
       if (data.session_id && data.session_id !== resolvedSessionId && typeof window !== "undefined") {
         sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
         setSessionId(data.session_id);

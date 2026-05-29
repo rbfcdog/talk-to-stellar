@@ -173,6 +173,8 @@ export default function CreateAccountClient({
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en
   const searchParams = useSearchParams()
   const tokenFromUrl = useMemo(() => searchParams.get("token") || initialToken || "", [searchParams, initialToken])
+  const emailFromUrl = useMemo(() => String(searchParams.get("email") || "").trim(), [searchParams])
+  const nameFromUrl = useMemo(() => String(searchParams.get("name") || "").trim(), [searchParams])
   const rawNextPath = searchParams.get("next") || "/chat"
   const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
   const forceNewAccount = searchParams.get("force_new") === "1" || searchParams.get("new_account") === "1"
@@ -444,6 +446,18 @@ export default function CreateAccountClient({
       setToken(tokenFromUrl)
     }
   }, [tokenFromUrl])
+
+  useEffect(() => {
+    if (emailFromUrl) {
+      setEmail(emailFromUrl)
+    }
+  }, [emailFromUrl])
+
+  useEffect(() => {
+    if (nameFromUrl) {
+      setName(nameFromUrl)
+    }
+  }, [nameFromUrl])
 
   useEffect(() => {
     async function validateToken() {

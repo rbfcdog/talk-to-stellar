@@ -124,6 +124,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
     ? rawNextPath
     : ""
+  const loginSource = String(searchParams.get("source") || searchParams.get("from") || searchParams.get("origin") || "").trim().toLowerCase()
+  const returnToChat = loginSource === "chat"
   const externalToken = searchParams.get("token") || ""
   const externalPayload = useMemo(() => decodeJwtPayload(externalToken), [externalToken])
   const externalProvider = String(externalPayload?.provider || searchParams.get("provider") || "").trim().toLowerCase()
@@ -175,9 +177,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       ? `Login concluído.\nConta conectada: ${label}`
       : `Sign-in completed.\nConnected account: ${label}`)
     setLoginDone(true)
-    if (nextPath) {
+    const targetPath = returnToChat ? "/chat" : nextPath
+    if (targetPath) {
       window.setTimeout(() => {
-        window.location.replace(nextPath)
+        window.location.replace(targetPath)
       }, 450)
       return
     }
@@ -617,6 +620,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             throw new Error(payload?.message || "Google sign-in failed.")
           }
 
+          if (payload?.requires_pin_setup || payload?.needs_pin_setup || payload?.needsPinSetup) {
+            const params = new URLSearchParams()
+            const googleEmail = String(payload?.email || payload?.user_id || "").trim()
+            const googleName = String(payload?.display_name || payload?.name || "").trim()
+            if (googleEmail) params.set("email", googleEmail)
+            if (googleName) params.set("name", googleName)
+            params.set("force_new", "1")
+            params.set("context", "google-login")
+            if (nextPath) params.set("next", nextPath)
+            window.location.replace(`/create-account?${params.toString()}`)
+            return
+          }
+
           saveClientSession()
           const resolvedLogin = String(payload?.email || payload?.user_id || payload?.display_name || "user").trim()
           if (resolvedLogin) {
@@ -650,14 +666,24 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
                 : t("login_connected_account")}
             </p>
             <p className="mt-3 text-sm leading-relaxed text-tts-muted">
-              {nextPath
-                ? t("login_continue_operation")
-                : hasExternalContext
-                  ? t("login_back_to_channel", { provider: externalProviderLabel })
-                  : t("login_done")}
+              {returnToChat
+                ? language === "pt-BR"
+                  ? "Retornando para o chat."
+                  : "Returning to chat."
+                : nextPath
+                  ? t("login_continue_operation")
+                  : hasExternalContext
+                    ? t("login_back_to_channel", { provider: externalProviderLabel })
+                    : t("login_done")}
             </p>
             <p className="mt-2 text-xs text-tts-muted">
-              {nextPath ? t("login_opening_operation") : INTERMEDIATE_PAGE_CLOSE_COPY}
+              {returnToChat
+                ? language === "pt-BR"
+                  ? "O chat será reaberto automaticamente."
+                  : "The chat will reopen automatically."
+                : nextPath
+                  ? t("login_opening_operation")
+                  : INTERMEDIATE_PAGE_CLOSE_COPY}
             </p>
           </>
         }

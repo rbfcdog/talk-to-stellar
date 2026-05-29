@@ -1,29 +1,27 @@
-import { ApiShowcase } from '@/components/landing-v2/ApiShowcase'
-import { Channels } from '@/components/landing-v2/Channels'
-import { Faq } from '@/components/landing-v2/Faq'
-import { Features } from '@/components/landing-v2/Features'
-import { FinalCta } from '@/components/landing-v2/FinalCta'
-import { Footer } from '@/components/landing-v2/Footer'
-import { ForWho } from '@/components/landing-v2/ForWho'
-import { Hero } from '@/components/landing-v2/Hero'
-import { HowItWorks } from '@/components/landing-v2/HowItWorks'
-import { Navbar } from '@/components/landing-v2/Navbar'
-import { Problem } from '@/components/landing-v2/Problem'
+import Navbar from "@/components/landing-reluca/Navbar"
+import Hero from "@/components/landing-reluca/Hero"
+import ProblemSection from "@/components/landing-reluca/ProblemSection"
+import SolutionSection from "@/components/landing-reluca/SolutionSection"
+import Pathfinding from "@/components/landing-reluca/Pathfinding"
+import SimulatorSection from "@/components/landing-reluca/SimulatorSection"
+import ScrollFeatures from "@/components/landing-reluca/ScrollFeatures"
+import FAQSection from "@/components/landing-reluca/FAQSection"
+import CTA from "@/components/landing-reluca/CTA"
+import Footer from "@/components/landing-reluca/Footer"
 
 export default function HomePage() {
   return (
-    <div id="top">
+    <div className="min-h-screen bg-[#080808] text-white selection:bg-[#E59E25]/30 selection:text-white font-sans">
       <Navbar />
-      <main>
+      <main className="relative z-10 flex flex-col items-center w-full">
         <Hero />
-        <ForWho />
-        <Problem />
-        <Features />
-        <HowItWorks />
-        <Channels />
-        <ApiShowcase />
-        <Faq />
-        <FinalCta />
+        <ProblemSection />
+        <SolutionSection />
+        <Pathfinding />
+        <SimulatorSection />
+        <ScrollFeatures />
+        <FAQSection />
+        <CTA />
       </main>
       <Footer />
     </div>

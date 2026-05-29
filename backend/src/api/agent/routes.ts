@@ -673,7 +673,7 @@ export function createAgentRoutes(
             const { url } = await externalService.createLoginUrlWithShortLink("web", providerUserId, {
               sessionId: String(existing.session_id || requestedSessionId || '').trim() || undefined,
               userId: String(existing.user_id || '').trim() || undefined,
-              source: "web",
+              source: "chat",
               language: requestLanguage,
             });
             return res.status(200).json({
