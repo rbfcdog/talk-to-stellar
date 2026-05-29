@@ -338,22 +338,22 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     : "";
   const raw = error instanceof Error ? error.message : String(error || "");
   if (code === "yield_execution_disabled") {
-    return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente. Você pode preparar a revisão, mas não movimentar saldo.", "PIN confirmation is not enabled in this environment yet. You can prepare the review, but not move funds.");
+    return localCopy(language, "A confirmação com PIN ainda não está ativada neste ambiente.", "PIN confirmation is not enabled in this environment yet.");
   }
   if (code === "yield_account_setup_required") {
-    return localCopy(language, "Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.");
+    return localCopy(language, "Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.");
   }
   if (code === "yield_asset_incompatible") {
-    return localCopy(language, "Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.");
+    return localCopy(language, "Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.");
   }
   if (code === "yield_asset_conversion_required") {
-    return localCopy(language, "Revisão preparada. Esta aplicação usa uma versão diferente da moeda neste testnet; falta saldo nessa versão antes de confirmar.", "Review prepared. This application uses a different testnet asset version; that version still needs balance before confirmation.");
+    return localCopy(language, "Esta aplicação usa uma versão diferente da moeda neste testnet; falta saldo nessa versão antes de confirmar.", "This application uses a different testnet asset version; that version still needs balance before confirmation.");
   }
   if (code === "yield_asset_conversion_unavailable") {
-    return localCopy(language, "Revisão preparada, mas a rota segura para converter o saldo da conta para a moeda usada nesta aplicação não está disponível agora.", "Review prepared, but the safe route to convert the account balance into the asset used by this application is not available right now.");
+    return localCopy(language, "A rota segura para converter o saldo da conta para a moeda usada nesta aplicação não está disponível agora.", "The safe route to convert the account balance into the asset used by this application is not available right now.");
   }
   if (code === "yield_execution_unavailable") {
-    return localCopy(language, "Revisão preparada, mas a confirmação por PIN ainda não está disponível para esta opção. Tente outra opção ou tente novamente em alguns segundos.", "Review prepared, but PIN confirmation is not available for this option yet. Try another option or try again in a few seconds.");
+    return localCopy(language, "A confirmação por PIN ainda não está disponível para esta opção. Tente outra opção ou tente novamente em alguns segundos.", "PIN confirmation is not available for this option yet. Try another option or try again in a few seconds.");
   }
   if (code === "account_signing_unavailable") {
     return localCopy(language, "Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more.");
@@ -362,10 +362,10 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Digite o PIN da conta para confirmar.", "Enter the account PIN to confirm.");
   }
   if (code === "review_not_prepared") {
-    return localCopy(language, "Prepare a revisão novamente e confirme em seguida.", "Prepare the review again, then confirm.");
+    return localCopy(language, "Toque em Investir novamente e confirme em seguida.", "Tap Invest again, then confirm.");
   }
   if (code === "execution_unavailable") {
-    return localCopy(language, "Não foi possível concluir a confirmação agora. Prepare uma nova revisão e tente novamente.", "Could not finish confirmation right now. Prepare a new review and try again.");
+    return localCopy(language, "Não foi possível concluir a confirmação agora. Toque em Investir novamente e tente de novo.", "Could not finish confirmation right now. Tap Invest again and try again.");
   }
   if (code === "invalid_pin") {
     return localCopy(language, "Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again.");
@@ -387,7 +387,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "A conexão demorou demais. Atualize para tentar de novo.", "The connection took too long. Refresh to try again.");
   }
   if (/session|login|unauthor|auth|token|jwt/i.test(raw)) {
-    return localCopy(language, "Entre na sua conta para ver saldos e preparar uma revisão.", "Sign in to see balances and prepare a review.");
+    return localCopy(language, "Entre na sua conta para ver saldos e investir.", "Sign in to see balances and invest.");
   }
   if (/defindex|vault|xdr|horizon|stellar|mainnet|wallet|issuer|public key|secret|blockchain|crypto|cripto/i.test(raw)) {
     return localCopy(language, "Ainda não foi possível carregar essa parte. Confira a configuração do serviço e tente novamente.", "This section is not available yet. Check the service configuration and try again.");
@@ -491,7 +491,6 @@ export default function RendimentosClient({
   const actionableOption = selectedOption;
   const configured = Boolean(yieldStatus?.runtime?.configured);
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
-  const complianceApproved = Boolean(yieldStatus?.runtime?.compliance_approved);
   const yieldNetwork = String(yieldStatus?.runtime?.network || "").toLowerCase();
   const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
   const executionBlockedReason = String(yieldStatus?.runtime?.execution_blocked_reason || "");
@@ -652,7 +651,7 @@ export default function RendimentosClient({
       if (!nextSession.authenticated) {
         setBalances([]);
         setAccountPublicKey("");
-        setApiState({ loading: false, message: L("Entre para ver seus saldos e preparar uma revisão.", "Sign in to see balances and prepare a review."), error: "" });
+        setApiState({ loading: false, message: L("Entre para ver seus saldos e investir.", "Sign in to see balances and invest."), error: "" });
         return;
       }
 
@@ -701,10 +700,10 @@ export default function RendimentosClient({
       setApiState({
         loading: false,
         message: payload?.execution_ready === false
-          ? blockedMessage || L("Revisão preparada em modo consulta. Nenhum saldo será movimentado.", "Review prepared in view-only mode. No funds will move.")
+          ? blockedMessage || L("Esta opção está em modo consulta. Nenhum saldo será movimentado.", "This option is in view-only mode. No funds will move.")
           : payload?.conversion_required
-            ? L("Revisão pronta. O PIN também prepara a conversão segura para a versão usada nesta aplicação.", "Review ready. The PIN also prepares the safe conversion into the version used by this application.")
-          : L("Revisão pronta. Confira tudo antes de confirmar.", "Review ready. Check everything before confirming."),
+            ? L("Investimento pronto para confirmar. O PIN também valida a conversão segura para a versão usada nesta aplicação.", "Investment ready to confirm. PIN also validates the safe conversion into the version used by this application.")
+          : L("Investimento pronto para confirmar. Confira tudo antes do PIN.", "Investment ready to confirm. Check everything before PIN."),
         error: "",
       });
     } catch (error) {
@@ -716,7 +715,7 @@ export default function RendimentosClient({
     if (!actionableOption) return;
     if (!yieldResult) {
       setActiveStep("review");
-      setApiState({ loading: false, message: "", error: L("Prepare a revisão antes de confirmar com PIN.", "Prepare the review before confirming with PIN.") });
+      setApiState({ loading: false, message: "", error: L("Toque em Investir antes de confirmar com PIN.", "Tap Invest before confirming with PIN.") });
       return;
     }
     if (yieldResult?.execution_ready === false) {
@@ -915,8 +914,6 @@ export default function RendimentosClient({
 
         <YieldComplianceNotice
           isTestnet={isTestnetYield}
-          complianceApproved={complianceApproved}
-          confirmationEnabled={confirmationEnabled}
           executionBlockedReason={executionBlockedReason}
         />
 
@@ -1087,37 +1084,24 @@ function YieldSuccessDialog({
 
 function YieldComplianceNotice({
   isTestnet,
-  complianceApproved,
-  confirmationEnabled,
   executionBlockedReason,
 }: {
   isTestnet: boolean;
-  complianceApproved: boolean;
-  confirmationEnabled: boolean;
   executionBlockedReason: string;
 }) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const modeLabel = confirmationEnabled
-    ? L("Execução aprovada", "Execution approved")
-    : L("Somente revisão", "Review only");
-  const blocked = executionBlockedReason && !confirmationEnabled;
+  const blocked = Boolean(executionBlockedReason);
 
   return (
     <section className="border border-tts-border bg-tts-surface px-3 py-2 text-xs leading-5" aria-label={L("Aviso", "Notice")}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="flex items-start gap-2 text-tts-muted">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-gold" aria-hidden="true" />
-          <span>
-            {isTestnet ? `${L("Testnet", "Testnet")} · ` : ""}
-            {L("sem garantia nem depósito bancário", "not guaranteed or a bank deposit")}
-            {blocked ? ` · ${executionBlockedReason}` : ""}
-          </span>
-        </p>
-        <span className={`inline-flex w-fit shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${complianceApproved ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-bg text-tts-gold"}`}>
-          {modeLabel}
+      <p className="flex items-start gap-2 text-tts-muted">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-gold" aria-hidden="true" />
+        <span>
+          {isTestnet ? L("Ambiente testnet", "Testnet environment") : L("Ambiente de revisão", "Review environment")}
+          {blocked ? ` · ${executionBlockedReason}` : ""}
         </span>
-      </div>
+      </p>
     </section>
   );
 }
@@ -1325,14 +1309,14 @@ function YieldWorkspacePanel({
   const canConfirm = canPrepareAction && confirmationAvailable && hasPrepared && !submitted && pin.length >= 4 && !apiLoading;
   const blockedCode = String(result?.execution_blocked_code || "").trim();
   const preparedBlockedMessage = blockedCode === "yield_account_setup_required"
-    ? L("Revisão preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "Review prepared. You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
+    ? L("Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.", "You do not need a new account; this currency still needs to be activated for confirmation on this account. Try again in a few seconds or choose another option.")
     : blockedCode === "yield_asset_incompatible"
-      ? L("Revisão preparada. Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "Review prepared. This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.")
+      ? L("Esta opção de teste usa outra emissão da moeda selecionada. Escolha outra opção ou aguarde uma opção compatível.", "This test option uses another issuance of the selected currency. Choose another option or wait for a compatible option.")
       : blockedCode === "yield_asset_conversion_required"
-        ? L("Revisão preparada. Falta saldo na versão da moeda usada por esta aplicação antes de confirmar.", "Review prepared. The asset version used by this application still needs balance before confirmation.")
+        ? L("Falta saldo na versão da moeda usada por esta aplicação antes de confirmar.", "The asset version used by this application still needs balance before confirmation.")
         : blockedCode === "yield_asset_conversion_unavailable"
-          ? L("Revisão preparada, mas a rota segura entre o saldo da conta e a aplicação não está disponível agora.", "Review prepared, but the safe route between the account balance and the application is not available right now.")
-          : L("Revisão preparada em modo consulta. A confirmação por PIN ainda não está disponível para esta opção.", "Review prepared in view-only mode. PIN confirmation is not available for this option yet.");
+          ? L("A rota segura entre o saldo da conta e a aplicação não está disponível agora.", "The safe route between the account balance and the application is not available right now.")
+          : L("Esta opção está em modo consulta. A confirmação por PIN ainda não está disponível.", "This option is in view-only mode. PIN confirmation is not available yet.");
   const blockedActionLabel = blockedCode === "yield_account_setup_required"
     ? L("Moeda aguardando ativação", "Currency awaiting activation")
     : blockedCode === "yield_asset_incompatible"
@@ -1372,9 +1356,6 @@ function YieldWorkspacePanel({
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedProfile.tone}`}>
             {profileShort} · {profileName(selectedProfile, language)}
-          </span>
-          <span className={`inline-flex w-fit border px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${confirmationAvailable ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
-            {confirmationAvailable ? L("Execução aprovada", "Execution approved") : L("Só revisão", "Review only")}
           </span>
         </div>
       </div>
@@ -1573,7 +1554,7 @@ function YieldWorkspacePanel({
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
-                {L("Revisar", "Review")}
+                {action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")}
               </button>
             </div>
           </div>
@@ -1610,10 +1591,10 @@ function YieldWorkspacePanel({
                   </p>
                 ) : hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
-                    {L("Revisão preparada. Confira valor e operação antes de confirmar.", "Review prepared. Check amount and operation before confirming.")}
+                    {L("Investimento pronto para confirmar. Confira valor e operação antes do PIN.", "Investment ready to confirm. Check amount and operation before PIN.")}
                   </p>
                 ) : (
-                  <p>{L("Prepare a revisão para validar a operação com sua conta.", "Prepare the review to validate the operation with your account.")}</p>
+                  <p>{L("Toque em Investir para validar a operação com sua conta.", "Tap Invest to validate the operation with your account.")}</p>
                 )}
               </div>
               {confirmationAvailable ? (
@@ -1632,7 +1613,7 @@ function YieldWorkspacePanel({
                   />
                 </div>
               ) : null}
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={onGoToWallet}
@@ -1640,15 +1621,6 @@ function YieldWorkspacePanel({
                 >
                   <WalletCards className="h-4 w-4" aria-hidden="true" />
                   {L("Trocar saldo", "Change balance")}
-                </button>
-                <button
-                  type="button"
-                  onClick={onPrepare}
-                  disabled={!canPrepareAction || apiLoading}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {apiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck2 className="h-4 w-4" aria-hidden="true" />}
-                  {L("Preparar", "Prepare")}
                 </button>
                 {confirmationAvailable ? (
                   <button
@@ -1666,7 +1638,7 @@ function YieldWorkspacePanel({
                     )}
                     {apiLoading && hasPrepared
                       ? L("Confirmando...", "Confirming...")
-                      : hasPrepared ? confirmLabel : L("Prepare primeiro", "Prepare first")}
+                      : hasPrepared ? confirmLabel : L("Investir primeiro", "Invest first")}
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">

@@ -2191,8 +2191,8 @@ async function executeGetYieldOptions(input: any): Promise<string> {
     const confirmationAvailable = Boolean((status as any)?.runtime?.execution_enabled);
     const isTestnet = String((status as any)?.runtime?.network || '').toLowerCase() === 'testnet';
     const disclosure = language === 'en'
-      ? `${isTestnet ? 'Testnet. ' : ''}Preview only. Not investment advice, fixed income, a savings account, or a bank deposit.`
-      : `${isTestnet ? 'Testnet. ' : ''}Somente revisão. Não é recomendação de investimento, renda fixa, poupança ou depósito bancário.`;
+      ? (isTestnet ? 'Testnet environment.' : 'Review environment.')
+      : (isTestnet ? 'Ambiente testnet.' : 'Ambiente de revisão.');
     const message = language === 'en'
       ? options.length
         ? `Options for review: ${availableOptions.map((option) => option.name).join(', ') || 'none available for confirmation right now'}.\n${disclosure}\n\nOpen review:\n${frontendUrl}`
