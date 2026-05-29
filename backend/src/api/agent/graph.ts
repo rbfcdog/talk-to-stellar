@@ -550,6 +550,20 @@ export class AgentGraph {
     return selfRef || viewVerb || normalized === 'perfil' || normalized === 'profile';
   }
 
+  private isContactsRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+
+    const mentionsContacts = /\b(contato|contatos|destinatario|destinatarios|beneficiario|beneficiarios|favorito|favoritos|salvo|salvos)\b/.test(normalized);
+    if (!mentionsContacts) return false;
+
+    const listOrManageVerb = /\b(ver|listar|mostrar|consultar|abrir|quais|quem|meu|minha|meus|minhas|adicionar|adiciona|salvar|salva|incluir|inclui|cadastrar|cadastra|add)\b/.test(normalized);
+    return listOrManageVerb || normalized === 'contatos' || normalized === 'contactos';
+  }
+
   private async handleOwnProfileRequest(state: AgentState): Promise<AgentState> {
     const language = this.getLanguage(state);
     const displayName = String(state.session_data?.email || state.session_data?.user_id || '').trim();
@@ -2828,6 +2842,9 @@ Respond ONLY with the intent name. Examples:
 - "listar transações" -> history
 - "show transaction history" -> history
 - "see transactions list" -> history
+- "quero ver meus contatos" -> contacts
+- "listar contatos" -> contacts
+- "mostrar meus destinatários" -> contacts
 - "quanto rende?" -> yield
 - "show yield options" -> yield
 - "quero investir" -> yield
@@ -2997,6 +3014,45 @@ Prefer 'contacts' when the user asks about contact list, account contacts, favor
   }
 
   private async handleContactsRequest(state: AgentState): Promise<AgentState> {
+    const normalized = this.normalizeTextForIntent(state.current_input)
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const shouldListOnly =
+      /\b(ver|listar|mostrar|consultar|abrir|quais|quem)\b/.test(normalized) &&
+      /\b(contato|contatos|destinatario|destinatarios|beneficiario|beneficiarios|favorito|favoritos|salvo|salvos)\b/.test(normalized);
+
+    if (shouldListOnly) {
+      const resultRaw = await executeTool('list_contacts', {
+        session_id: state.session_id,
+        user_id: state.session_data?.user_id,
+      });
+
+      let toolResult: any;
+      try {
+        toolResult = JSON.parse(resultRaw);
+      } catch {
+        toolResult = { success: false, error: 'Failed to parse list_contacts response' };
+      }
+
+      if (!toolResult.success) {
+        state.success = false;
+        state.response_message = `Não consegui listar seus contatos: ${toolResult.error || 'erro desconhecido'}`;
+      } else {
+        const contacts = Array.isArray(toolResult.contacts) ? toolResult.contacts : [];
+        state.success = true;
+        state.response_message = contacts.length
+          ? `Seus destinatários:\n${contacts.map((contact: any, index: number) => {
+              return this.formatContactListLine(contact, index);
+            }).join('\n')}`
+          : 'Você ainda não tem destinatários salvos.';
+      }
+
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
     const contactIntent = await this.extractContactIntentWithLlm(state.current_input);
     const contactKey = String(contactIntent.contact_key || '').trim();
 
@@ -4504,6 +4560,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.current_input,
         this.hasPendingNicknamePrompt(state)
       );
+      const deterministicContacts = this.isContactsRequest(state.current_input);
       state.detected_intent = this.isDirectLoginRequest(state.current_input)
         ? IntentType.LOGIN
         : this.isDirectOnboardingRequest(state.current_input)
@@ -4536,6 +4593,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                                     ? IntentType.FINANCIAL_MEMORY
                                     : deterministicFinancialMemory
                                       ? IntentType.FINANCIAL_MEMORY
+                                      : deterministicContacts
+                                        ? IntentType.CONTACTS
                                       : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
@@ -4605,6 +4664,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (wantsTransactionHistory) {
         return await this.handleHistoryCheck(state);
+      }
+
+      if (deterministicContacts) {
+        return await this.handleContactsRequest(state);
       }
 
       if (deterministicBestRouteEstimate) {
