@@ -14,6 +14,7 @@ against the current TalkToStellar codebase.
 | --- | --- |
 | `current-implementation-audit.md` | Full audit of what is implemented today, what is partially implemented, and what is not implemented yet. |
 | `sow-deliverable-gap-matrix.md` | Deliverable-by-deliverable matrix against the three scoped Instawards deliverables. |
+| `external-integrations-needed.md` | External providers, credentials, webhooks, and sandbox access needed to complete or evidence the SOW. |
 | `evidence-map.md` | Where reviewers can find code, routes, database tables, tests, screenshots, logs, transaction evidence, and demo artifacts. |
 | `30-day-execution-plan.md` | Practical execution plan to close the remaining SOW gaps in a 30-day sprint. |
 | `risk-and-compliance-notes.md` | Explicit boundaries around sandbox behavior, mocks, testnet, mainnet validation, payout providers, and regulated activity. |
