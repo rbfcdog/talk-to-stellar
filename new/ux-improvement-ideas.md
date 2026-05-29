@@ -1,350 +1,289 @@
-# Ideias para melhorar a UX
+# Backlog de UX - TalkToStellar
 
-Este documento lista melhorias possiveis para a experiencia nova do app: chat, rendimento, conversao, PIX, passkey e ciclo completo do dinheiro. A prioridade e reduzir confusao, diminuir cliques e deixar claro quando algo esta em teste, em revisao ou pronto para executar.
+Objetivo: deixar o app parecido com um banco simples: poucas escolhas por tela, linguagem curta, valor claro antes do PIN e sempre um proximo passo quando algo nao puder continuar.
 
-## Atualizacao: UX de rendimento em modo revisao
+Este documento substitui a lista longa anterior por um backlog mais facil de executar. Use como criterio de produto antes de abrir novas telas ou mudar copy.
 
-Arquivo principal implementado: `frontend/app/rendimentos/rendimentos-client.tsx`.
+## Principios
 
-Objetivo: a tela `/yield` deve parecer uma revisao financeira simples de carteira + simulacao + confirmacao, sem vender a experiencia como deposito bancario, poupanca, renda fixa, investimento garantido ou recomendacao personalizada.
+1. Uma acao principal por tela.
+2. Dinheiro primeiro, tecnologia depois.
+3. PIN e sempre a ultima etapa.
+4. Se algo falhar, mostrar recuperacao, nao beco sem saida.
+5. Testnet deve ser mencionada de forma curta, sem parecer produto quebrado.
 
-Mudancas aplicadas:
-- resumo superior com `Conta`, `Simulacoes`, `Selecionado` e `Seguranca`;
-- linguagem de revisao: `Carteira`, `Simular`, `Entrada`, `Saida`, `Revisao segura`, `Modo revisao`;
-- bloco de carteira separado do plano de rendimento;
-- navegacao por etapas separadas: `Carteira`, `Simular`, `Revisar`;
-- botao `Explicar etapa` com explicacao contextual de cada tela;
-- revisao em 3 etapas: saldo, revisao, registro;
-- simulacao com aviso de que APY e historico, estimado, variavel e nao e promessa de retorno;
-- estados vazios mais claros: `Saldo nao disponivel`, `Nada aplicado ainda`, `APY indisponivel`;
-- ambiente sem execucao aparece como `Modo revisao`, nao como erro.
-- erros genericos de PIX sao ocultados no contexto de rendimento e viram erro de rendimento;
-- payloads de saldo de rendimento em objeto sao convertidos para valor legivel, evitando `[object Object]`.
-
-Atualizacao de compliance aplicada:
-- aviso fixo de que APY nao e garantia, recomendacao personalizada, renda fixa, poupanca ou deposito bancario;
-- testnet aparece como teste tecnico;
-- `DEFINDEX_ENABLE_EXECUTION=true` nao basta para executar; tambem precisa `DEFINDEX_COMPLIANCE_APPROVED=true`;
-- `/convert` nao usa APY fallback estatico para simular rendimento;
-- o agente nao deve chamar a opcao de "melhor investimento" nem ranquear por maior APY.
-
-Tela de diagnostico passkey/OpenZeppelin: `frontend/app/passkey-test/passkey-test-client.tsx`.
-
-Mudancas aplicadas:
-- pre-requisitos em cards: navegador, biometria local, conta e status;
-- fluxo de teste separado entre registro/login de passkey e status OpenZeppelin;
-- erros mostram causa provavel e proximo passo;
-- status OpenZeppelin diferencia `Somente metadata`, `Configuracao incompleta` e `Pronto para testar`;
-- dados tecnicos ficam recolhidos em `Dados tecnicos do ultimo teste`.
-
-Proximas melhorias:
-- extrato de rendimento com historico de entradas/saidas revisadas;
-- comprovante visual apos confirmacao;
-- seletor de prazo simples: 1 mes, 6 meses, 12 meses;
-- estado `Conta em analise` quando KYC/compliance impedir execucao;
-- alerta de risco/regulacao em linguagem curta antes do PIN;
-- componente unico de `Resumo da conta` usado tambem em `/convert` e `/money-cycle`;
-- teste Playwright com screenshots desktop/mobile e varredura de termos tecnicos bloqueados.
-
-## Prioridade 1: clareza imediata
-
-### 1. Estado unico de conta em todas as telas
-
-Problema: algumas telas mostram "sem conta", "carregando", "a consultar" ou "entre" de formas diferentes.
-
-Melhoria:
-- criar um componente unico de status da conta;
-- estados: `Carregando conta`, `Conta conectada`, `Sessao expirada`, `Precisa entrar`;
-- usar o mesmo bloco em `/yield`, `/convert`, `/pix-on`, `/pix-off`, `/money-cycle` e `/passkey-test`.
-
-Validacao:
-- usuario logado nunca deve ver "Sem conta" durante carregamento;
-- usuario deslogado deve ver um unico CTA claro: `Entrar`.
-
-### 2. Linguagem unica para moedas
-
-Problema: o sistema tem nomes internos como `USDC`, `CETES`, `TESOURO`, `XLM`, mas o usuario deveria ver nomes simples.
-
-Melhoria:
-- Real/Reais para `TESOURO`;
-- Dolares para `USDC`;
-- Opcao Mexico em teste para `CETES` ate existir lastro/autorizacao real;
-- mostrar `XLM` como XLM quando esse saldo aparecer; nao usar rotulos paralelos para o usuario final;
-- nunca mostrar issuer, vault, trustline, XDR ou contrato na UX principal; DeFindex pode aparecer apenas como fonte do APY estimado/disclosure.
-
-Validacao:
-- varrer texto renderizado das telas e chat contra termos tecnicos bloqueados;
-- screenshot mobile e desktop para garantir que labels cabem.
-
-### 3. Explicar "teste" sem parecer erro
-
-Problema: quando `DEFINDEX_ENABLE_EXECUTION=false`, a tela pode parecer quebrada.
-
-Melhoria:
-- trocar "confirmacao desligada" por um estado de produto: `Modo revisao`;
-- mostrar: `Voce pode simular e revisar. Execucao real ainda esta bloqueada neste ambiente.`;
-- se `DEFINDEX_ENABLE_EXECUTION=true` e `DEFINDEX_COMPLIANCE_APPROVED=true`, mudar para `Execucao aprovada`.
-
-Validacao:
-- em testnet/revisao, usuario entende que nada saiu da conta;
-- em execucao, usuario entende que PIN movimenta saldo.
-
-## Prioridade 2: fluxo de rendimento
-
-### 4. Rendimento em 3 passos
-
-Problema: a tela de rendimento ainda tem muitos detalhes ao mesmo tempo.
-
-Melhoria:
-1. Escolher saldo.
-2. Ver APY estimado disponivel.
-3. Revisar e confirmar.
-
-Detalhes avancados devem ficar colapsados:
-- margem de seguranca;
-- vault/status tecnico;
-- JSON de resposta;
-- metadados de teste.
-
-Validacao:
-- usuario consegue chegar em "Revisar" com no maximo 2 cliques depois de abrir `/yield`;
-- sem conta, o unico caminho principal e entrar.
-
-### 5. Melhor copia para rendimento
-
-Evitar:
-- "melhor investimento";
-- "garantido";
-- "sem risco";
-- "rende X% garantido";
-- "APY real" em testnet.
+## Termos na interface
 
 Usar:
-- `taxa informada pelo ambiente de teste`;
-- `estimativa`;
-- `revise antes de confirmar`;
-- `a taxa pode variar`;
-- `nada sai sem PIN`.
+- dinheiro rendendo
+- aplicar
+- retirar
+- converter
+- comprovante
+- conta conectada
+- estimado em testnet
 
-Validacao:
-- copiar esse padrao para chat e frontend;
-- manter consistencia com `new/yield-apy-regulation.md`.
+Evitar na UX principal:
+- yield
+- vault
+- issuer
+- trustline
+- XDR
+- smart contract
+- DeFindex
+- OpenZeppelin
+- melhor investimento
+- renda fixa
+- poupanca
+- garantia
 
-### 6. Projecao mais honesta
+Excecao: documentos tecnicos, logs, ferramentas internas e telas de diagnostico.
 
-Problema: grafico de rendimento pode parecer promessa.
+## Prioridade visual
 
-Melhoria:
-- titulo: `Simulacao com APY estimado`;
-- incluir seletor simples: `1 mes`, `6 meses`, `12 meses`;
-- mostrar o valor inicial e diferenca estimada separadamente;
-- texto curto: `Nao e promessa de retorno`.
+Ordem que o usuario deve perceber em qualquer tela:
 
-Validacao:
-- em testnet, grafico nunca usa linguagem de investimento garantido.
+1. Quanto tenho.
+2. O que quero fazer.
+3. Quanto vai sair ou entrar.
+4. Qual taxa/cotacao estimada.
+5. Confirmar com PIN.
+6. Ver comprovante ou proximo passo.
 
-## Prioridade 3: chat integrado
+Se uma informacao nao ajuda nessas etapas, esconder em detalhes, comprovante ou area tecnica.
 
-### 7. Tool calls abrirem interfaces com contexto preservado
+## P0 - Corrigir primeiro
 
-Problema: o chat abre telas, mas a pessoa pode perder moeda/valor/chave.
+| Item | Problema | UX esperada | Criterio de aceite |
+| --- | --- | --- | --- |
+| Historico completo | A pagina pode mostrar menos operacoes que o chat. | Mostrar entradas, saidas, conversoes, PIX e ajustes na mesma linha do tempo. | O total da pagina bate com as ultimas operacoes retornadas pelo backend. |
+| Perfil no historico | Botao Perfil pode abrir comprovante. | Comprovante abre recibo; Perfil abre perfil global. | Nenhum link de Perfil contem `/receipt/`. |
+| WhatsApp lento | Mensagem chega, mas resposta demora ou cai em erro generico. | Resposta curta rapida para intencoes simples; erro com acao clara. | "saldo", "historico", "investir", "melhor rota" respondem sem erro generico. |
+| Melhor rota | Frase sem valor pode quebrar fluxo. | LLM deve perguntar origem, destino e valor quando faltar dado. | "qual a melhor rota?" retorna pergunta objetiva, nao erro. |
+| Aplicacao sem saldo | Tela mostra erro, mas nao ajuda a resolver. | Mostrar converter, adicionar via PIX ou escolher outro saldo. | Saldo insuficiente sempre tem CTA principal de recuperacao. |
 
-Melhoria:
-- toda tool que abre UI deve enviar `amount`, `asset`, `intent`, `destination_pix_key` quando existir;
-- `/yield`, `/convert`, `/pix-on`, `/pix-off` e `/money-cycle` devem preservar esses parametros;
-- cada tela deve ter um botao discreto `Voltar ao chat` com o pedido original.
+## P1 - Fluxos principais
 
-Validacao:
-- pedir no chat: `converter 100 dolares para rendimento`;
-- a tela abre com 100 e moeda correta.
+### 1. Conta e saldo
 
-### 8. Chat responder com resumo acionavel
+Estado unico em todas as paginas:
+- carregando
+- conectada
+- precisa entrar
+- sessao expirada
 
-Problema: respostas podem ser longas ou pouco operacionais.
+Copy recomendada:
+- `Conta conectada`
+- `Entre para continuar`
+- `Sessao expirada. Entre novamente.`
 
-Melhoria:
-- formato curto:
-  - o que entendi;
-  - proximo passo;
-  - botao/link principal;
-- evitar menus grandes depois que a intencao ja esta clara.
+Nao repetir badges como `Execucao aprovada` em varios pontos da mesma tela. Um unico status no topo basta.
 
-Exemplo:
-`Entendi: voce quer revisar rendimento para 100 dolares. Abri a revisao com sua conta. Nada sera confirmado sem PIN.`
+### 2. PIX
 
-Validacao:
-- testes de LLM para rendimento, conversao, PIX e passkey.
+Entrada por PIX:
+- valor
+- taxa estimada
+- total a pagar
+- QR/copia e cola
+- status
 
-## Prioridade 4: conversao e ciclo interno
+Retirada por PIX:
+- chave PIX
+- saldo usado
+- valor que chega
+- taxa
+- PIN
 
-### 9. Conversao ligada ao rendimento
+Quando faltar saldo:
+- CTA principal: `Converter saldo e retirar`
+- CTA secundario: `Adicionar via PIX`
+- CTA terciario: `Alterar valor`
 
-Problema: usuario pode nao entender quando precisa converter antes de render.
+### 3. Conversao
 
-Melhoria:
-- se a moeda escolhida nao tem rendimento, mostrar uma recomendacao operacional:
-  `Esse saldo ainda nao tem opcao de rendimento aqui. Voce pode converter para Dolares ou Opcao Mexico em teste e revisar.`
-- CTA unico: `Converter e revisar`.
+Tela deve fazer tudo nela mesma:
+- informar valor, origem e destino
+- calcular revisao na pagina
+- pedir PIN na mesma jornada
+- mostrar comprovante e botao de retorno para a origem
 
-Validacao:
-- selecionar Real sem vault em testnet mostra caminho claro, nao erro.
+Nao voltar para chat quando a pessoa clicar em revisar conversao.
 
-### 10. Ciclo do dinheiro em uma tela
+Copy minima:
+- `Converter`
+- `Voce envia`
+- `Voce recebe`
+- `Cotacao estimada em testnet`
+- `Confirmar com PIN`
 
-Problema: PIX entrada, rendimento e PIX saida podem parecer tres produtos diferentes.
+### 4. Aplicar dinheiro
 
-Melhoria:
-- `/money-cycle` deve mostrar um fluxo linear:
-  1. adicionar dinheiro;
-  2. revisar rendimento;
-  3. retirar;
-- manter valor, moeda e chave PIX no mesmo contexto;
-- mostrar apenas uma acao principal por etapa.
+Separar duas telas:
 
-Validacao:
-- usuario nao precisa voltar ao chat para completar o ciclo.
+1. Nova aplicacao
+   - escolher saldo
+   - informar valor
+   - revisar
+   - confirmar com PIN
 
-## Prioridade 5: PIX
+2. Posicoes atuais
+   - mostrar quanto ha aplicado agora
+   - mostrar variacao/estimativa separada
+   - botao para nova aplicacao
 
-### 11. Mostrar taxa e conversao antes do PIN
+Nao misturar grafico de simulacao dentro da tela de confirmar aplicacao. O grafico pertence a posicoes atuais ou simulacao separada.
 
-Problema: diferencas como 50 -> 43 confundem muito.
+### 5. Historico
 
-Melhoria:
-- nunca mostrar conversao TESOURO/Real que nao seja 1:1 na UX;
-- mostrar taxa separada:
-  - `Voce paga`;
-  - `Taxa`;
-  - `Recebe/envia`;
-- se houver rota indireta, explicar em linguagem simples antes do PIN.
+Pagina deve parecer extrato bancario:
+- lista por data
+- icone simples por tipo
+- valor destacado
+- contraparte abaixo
+- status pequeno
+- acoes: `Comprovante`, `Perfil`
 
-Validacao:
-- Real/TESOURO sempre aparece 1:1 para usuario;
-- nenhuma tela mostra asset `BRL` separado.
+Filtros essenciais:
+- todos
+- entradas
+- saidas
+- conversoes
+- pendentes
 
-### 12. Chave PIX dinamica com memoria local
+Nao mostrar JSON, hash inteiro ou tipo tecnico como informacao principal.
 
-Problema: saida precisa pedir chave PIX no momento certo.
+## P2 - Chat e assistente
 
-Melhoria:
-- campo de chave PIX sempre perto do botao de retirada;
-- detectar tipo: email, CPF/CNPJ, telefone, aleatoria;
-- permitir salvar apelido do destino depois da primeira retirada.
+### Resposta curta padrao
 
-Validacao:
-- `/pix-off?destination_pix_key=user%40example.com` preenche automaticamente;
-- sem chave, tela pede antes do PIN.
+Formato:
 
-## Prioridade 6: passkey
+```text
+Entendi: [acao].
+Proximo passo: [link ou pergunta curta].
+Nada sai sem PIN.
+```
 
-### 13. Passkey como alternativa simples ao PIN
+Quando faltar informacao:
 
-Problema: passkey pode parecer recurso tecnico.
+```text
+Para calcular a melhor rota, me diga:
+valor, moeda de origem e moeda de destino.
+Ex.: converter 100 dolares para reais.
+```
 
-Melhoria:
-- texto principal: `Entrar com biometria`;
-- "Passkey" aparece so como detalhe secundario;
-- fluxo deve mostrar:
-  - aparelho suporta;
-  - conta conectada;
-  - biometria ativa;
-  - ultimo teste validado.
+### Menu inicial
 
-Validacao:
-- `/passkey-test` mostra se WebAuthn e biometria estao disponiveis;
-- erro de dominio explica `PASSKEY_RP_ID` e `PASSKEY_ORIGIN`.
+Contatos devem aparecer cedo porque sao parte central do app.
 
-### 14. Smart account OpenZeppelin como diagnostico, nao UX principal
+Texto sugerido:
 
-Problema: smart account e linguagem tecnica.
+```text
+Posso ajudar com:
+1. Contatos e envio para pessoas salvas
+2. Saldo e conta
+3. PIX para entrar ou retirar dinheiro
+4. Converter moedas
+5. Aplicar dinheiro ou ver posicoes
+6. Historico e comprovantes
+7. Link de pagamento
+8. Melhor rota e taxas
+9. PIN e entrada por biometria
 
-Melhoria:
-- na UX principal, chamar de `seguranca avancada`;
-- manter `/passkey-test` para diagnostico tecnico;
-- mostrar verifier, P-256 e metadata so em tela de teste/admin.
+Ex.: "enviar 10 dolares para Ana", "converter 100 reais", "ver historico".
+```
 
-Validacao:
-- chat e telas de usuario normal nao mencionam OpenZeppelin, P-256 ou smart account.
+### Intencoes que nao podem falhar
 
-## Prioridade 7: confiabilidade percebida
+Essas frases devem cair em LLM/roteamento flexivel, nao regex fragil:
+- `quero investir`
+- `quero ver dinheiro rendendo`
+- `qual a melhor rota`
+- `trazer dinheiro via pix`
+- `sacar para meu pix`
+- `ver historico`
+- `mandar dinheiro para Ana`
 
-### 15. Timeouts com recuperacao
+## P3 - Polimento visual
 
-Problema: carregamento infinito quebra confianca.
+Direcao visual:
+- fundo limpo
+- cards so para informacao repetida ou bloco de acao real
+- botoes primarios escuros e claros conforme tema
+- bordas discretas
+- textos curtos
+- numeros com bastante respiro
+- mobile primeiro
 
-Melhoria:
-- toda chamada critica deve ter timeout;
-- apos timeout, mostrar:
-  - `Tentar novamente`;
-  - `Voltar ao chat`;
-  - suporte/codigo de erro se houver.
+Evitar:
+- muitos badges na mesma dobra
+- cards dentro de cards
+- titulos longos
+- explicacoes repetidas
+- blocos tecnicos antes da acao
 
-Validacao:
-- simular backend lento e confirmar que a tela sai do loading.
+## Componentes a padronizar
 
-### 16. Estados vazios uteis
+| Componente | Usado em | Regra |
+| --- | --- | --- |
+| `AccountStatusCard` | Todas as paginas autenticadas | Mostrar uma vez por tela. |
+| `MoneySummary` | PIX, conversao, aplicar | Valor enviado, taxa, valor recebido. |
+| `PinConfirmBox` | Pagamento, conversao, PIX, aplicar | Sempre depois da revisao. |
+| `RecoveryActions` | Erros recuperaveis | Converter, adicionar via PIX, alterar valor. |
+| `ReceiptActions` | Sucesso | Comprovante, perfil, voltar para origem. |
+| `Timeline` | Historico e status | Etapas com labels curtos. |
 
-Problema: "A consultar" e pouco claro.
+## Quick wins
 
-Melhoria:
-- trocar por estados especificos:
-  - `Carregando saldo`;
-  - `Saldo ainda nao disponivel`;
-  - `Conta sem essa moeda`;
-  - `Rendimento nao configurado neste ambiente`.
+1. Remover repeticao de `Execucao aprovada`.
+2. Trocar "revisao" por "confirmar" quando for acao do usuario.
+3. Trocar "yield" por "dinheiro rendendo" ou "aplicar".
+4. Colocar `Contatos` no topo do menu do chat.
+5. Em conversao concluida, mostrar `Voltar para [origem]`.
+6. Em PIX sem saldo, mostrar `Converter saldo e retirar`.
+7. Ocultar "outros saldos" quando nao ha acao clara.
+8. No historico, truncar hash e deixar no detalhe/comprovante.
+9. Nao mostrar BRL/TESOURO como aplicacao sem vault configurado.
+10. Mostrar XLM como XLM, sem apelido tecnico ou paralelo.
 
-Validacao:
-- nenhuma tela principal deve ficar com mais de um "A consultar" sem explicacao.
+## Testes de UX
 
-## Prioridade 8: testes de UX
+Automatizar com Playwright:
 
-### 17. Suite Playwright por fluxo
+1. `/transactions` mostra mais de uma operacao quando backend retorna varias.
+2. Botao `Perfil` nunca aponta para `/receipt/`.
+3. `/convert` revisa e confirma sem voltar para `/chat`.
+4. `/pix-off` com saldo insuficiente mostra CTA de conversao.
+5. `/review` nao repete `Execucao aprovada`.
+6. `/review` mostra somente moedas com opcao ativa.
+7. Chat entende `qual a melhor rota` e pede dados faltantes.
+8. Chat entende `quero investir` e abre a tela correta.
+9. Mobile nao tem texto cortado nos botoes principais.
+10. Tema claro e escuro preservam contraste em PIX e conversao.
 
-Adicionar testes para:
-- login -> `/yield` mostra conta conectada;
-- chat -> tool call de rendimento abre `/yield` com valor;
-- converter -> rendimento preserva valor/moeda;
-- PIX off-ramp pede chave PIX se estiver ausente;
-- passkey-test mostra status WebAuthn e botao de registro;
-- desktop e mobile.
+## Metricas
 
-### 18. Teste automatico de termos bloqueados
-
-Bloquear na UX principal:
-- Defindex;
-- vault;
-- issuer;
-- trustline;
-- XDR;
-- Stellar;
-- blockchain;
-- OpenZeppelin;
-- P-256;
-- smart account.
-
-Excecao:
-- `/passkey-test` pode mostrar OpenZeppelin/P-256/smart account;
-- documentos tecnicos em `new/` podem mostrar os termos.
-
-## Ordem sugerida de implementacao
-
-1. Unificar estado de conta e loading.
-2. Reduzir `/yield` para 3 passos.
-3. Melhorar conversao quando moeda nao tem rendimento.
-4. Padronizar copia de rendimento e simulacao.
-5. Adicionar Playwright para `/yield`, `/convert`, `/money-cycle` e `/passkey-test`.
-6. Criar teste de termos bloqueados para telas principais.
-7. Mover detalhes tecnicos para telas de diagnostico/admin.
+Medir:
+- tempo ate o botao principal aparecer
+- cliques ate confirmar com PIN
+- taxa de erro por tela
+- abandono em saldo insuficiente
+- uso de `Converter saldo e retirar`
+- mensagens que caem em erro generico
+- comprovantes abertos apos sucesso
 
 ## Criterio de pronto
 
-A UX nova esta boa quando uma pessoa consegue:
+A UX esta boa quando uma pessoa consegue:
 
-1. Entrar na conta sem entender termos tecnicos.
-2. Ver saldos com nomes simples.
-3. Escolher um saldo para rendimento.
-4. Revisar simulacao, taxa e valor antes do PIN.
-5. Converter se a moeda escolhida nao tiver rendimento.
-6. Retirar por PIX informando a chave na hora.
-7. Usar biometria/passkey sem precisar entender OpenZeppelin.
-8. Voltar ao chat sem perder o contexto.
+1. Entrar sem preencher e-mail se o canal ja esta vinculado.
+2. Ver saldo e historico sem termos tecnicos.
+3. Enviar para contato salvo.
+4. Trazer dinheiro por PIX.
+5. Converter moedas na propria pagina.
+6. Aplicar dinheiro apenas em opcoes ativas.
+7. Ver posicoes atuais separadas de simulacao.
+8. Retirar para PIX com alternativa quando faltar saldo.
+9. Confirmar tudo so no final com PIN.
+10. Receber comprovante e voltar para a origem.
