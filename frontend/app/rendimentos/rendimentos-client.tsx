@@ -674,7 +674,7 @@ export default function RendimentosClient({
       setAccountPublicKey(String(accountPayload?.public_key || ""));
       setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
 
-      setApiState({ loading: false, message: L("Saldos e posições atualizados.", "Balances and positions updated."), error: "" });
+      setApiState({ loading: false, message: "", error: "" });
     } catch (error) {
       if (isSessionUiError(error)) {
         setSession({ authenticated: false, loading: false, checked: true });
