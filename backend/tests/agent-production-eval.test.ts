@@ -54,15 +54,16 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Guia rápido: saldo, PIX, converter, revisão e ciclo completo.',
+      message: 'Guia rápido: contatos, saldo, PIX, converter e aplicação.',
     }));
 
     const result = await graph.processInput(createState('olá, o que você pode fazer?'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('revisão');
-    expect(result.response_message).toContain('ciclo completo');
+    expect(result.response_message).toContain('contatos');
+    expect(result.response_message).toContain('aplicação');
+    expect(result.response_message).not.toContain('ciclo completo');
   });
 
   it('routes simple greetings to the full compact capability guide', async () => {
@@ -361,26 +362,26 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('destination_pix_key');
   });
 
-  it('routes full money-cycle requests to open_money_cycle', async () => {
+  it('routes legacy full-flow requests to the review interface', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'O ciclo completo está pronto para BRL.\n\nAbra:\nhttps://app.example.com/money-cycle?asset=BRL&destination_pix_key=user%40example.com',
+      message: 'Revisão pronta para BRL.\n\nAbra:\nhttps://app.example.com/review?asset=BRL&amount=500',
     }));
 
     const result = await graph.processInput(createState('quero injetar 500 reais, deixar render e depois sair para user@example.com'));
 
-    expect(executeToolMock).toHaveBeenCalledWith('open_money_cycle', {
+    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
       session_id: 'eval-session',
+      action: 'keep',
       amount: '500',
       asset_code: 'BRL',
-      destination_pix_key: 'user@example.com',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/money-cycle?asset=BRL');
+    expect(result.response_message).toContain('/review?asset=BRL');
   });
 
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {

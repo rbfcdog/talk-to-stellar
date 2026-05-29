@@ -1,8 +1,8 @@
-import RendimentosClient from "../rendimentos/rendimentos-client";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Money cycle",
-  description: "Add money with PIX, review it, and send it out to PIX.",
+  title: "Aplicação",
+  description: "Revise uma aplicação antes de confirmar com PIN.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -11,17 +11,18 @@ async function resolveSearchParams(searchParams?: SearchParams | Promise<SearchP
   return Promise.resolve(searchParams || {});
 }
 
-function serializeSearchParams(searchParams?: SearchParams) {
+function reviewUrl(searchParams?: SearchParams) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams || {})) {
+    if (key === "cycle") continue;
     if (Array.isArray(value)) {
       for (const item of value) params.append(key, item);
     } else if (value !== undefined) {
       params.set(key, value);
     }
   }
-  params.set("cycle", "1");
-  return params.toString();
+  const query = params.toString();
+  return query ? `/review?${query}` : "/review";
 }
 
 export default async function MoneyCyclePage({
@@ -30,5 +31,5 @@ export default async function MoneyCyclePage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await resolveSearchParams(searchParams);
-  return <RendimentosClient initialQuery={serializeSearchParams(resolved)} />;
+  redirect(reviewUrl(resolved));
 }

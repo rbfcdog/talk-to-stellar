@@ -376,6 +376,9 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
   if (code === "yield_unavailable") {
     return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
   }
+  if (code === "service_timeout" || /application failed to respond|failed to respond|service timeout/i.test(raw)) {
+    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
+  }
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
   if (/pix/i.test(raw)) {
     return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");

@@ -36,7 +36,7 @@ const FEATURES: Feature[] = [
     description:
       'Entrada por PIX, retirada para uma chave PIX digitada na hora e comprovante no mesmo fluxo de chat.',
     snippetLines: [
-      { key: 'intent', value: 'money_cycle', type: 'string' },
+      { key: 'intent', value: 'pix', type: 'string' },
       { key: 'pix_key_dynamic', value: 'true', type: 'boolean' },
       { key: 'receipt', value: 'chat', type: 'string' },
     ],
@@ -59,7 +59,7 @@ export function Features() {
           </h2>
           <p className="max-w-xl text-sm leading-[1.65] text-tts-muted">
             Três fluxos essenciais para o usuário entrar, converter, revisar e
-            sair sem trocar de contexto.
+            retirar sem trocar de contexto.
           </p>
         </motion.header>
 

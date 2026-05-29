@@ -36,7 +36,7 @@ const FAQS: FaqItem[] = [
   {
     question: 'Dá para fazer tudo em um fluxo?',
     answer:
-      'Sim. Peça algo como “injetar 500 reais, revisar e sair para meu PIX”. O agente abre a interface consolidada do ciclo do dinheiro.',
+      'Sim. Peça em linguagem natural o que quer fazer. O agente abre a tela certa para PIX, conversão, aplicação ou retirada.',
   },
   {
     question: 'Preciso baixar app novo?',

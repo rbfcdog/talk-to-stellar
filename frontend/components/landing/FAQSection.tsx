@@ -9,8 +9,8 @@ const portugueseFaqs = [
     answer: "É uma conta conversacional para pedir saldo, usar PIX, converter moedas, revisar opções e acompanhar comprovantes direto pelo WhatsApp, Telegram ou chat web."
   },
   {
-    question: "Consigo entrar, revisar e retirar em um fluxo só?",
-    answer: "Sim. Você pode pedir o ciclo completo: colocar dinheiro por PIX, revisar a opção disponível e retirar para uma chave PIX informada na hora."
+    question: "Consigo usar PIX, revisar e retirar?",
+    answer: "Sim. Você pode colocar dinheiro por PIX, revisar uma opção disponível e depois retirar para uma chave PIX informada na hora."
   },
   {
     question: "Preciso baixar um aplicativo novo?",
@@ -36,8 +36,8 @@ const englishFaqs = [
     answer: "TalkToStellar is a conversational account for checking balance, using PIX, converting currencies, reviewing options, and tracking receipts through WhatsApp, Telegram, or web chat."
   },
   {
-    question: "Can I add, review, and withdraw in one flow?",
-    answer: "Yes. You can ask for the full money cycle: add money with PIX, choose an available option, and withdraw to a PIX key entered at the moment."
+    question: "Can I add money, review, and withdraw?",
+    answer: "Yes. You can add money with PIX, choose an available option, and withdraw to a PIX key entered at the moment."
   },
   {
     question: "Do I need to download a new app?",

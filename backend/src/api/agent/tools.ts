@@ -402,38 +402,13 @@ function buildYieldFrontendUrl(input: {
   amount?: unknown;
   assetCode?: unknown;
   language?: 'pt-BR' | 'en';
-  cycle?: boolean;
 }): string {
   return buildFrontendInterfaceUrl({
-    path: input.cycle ? '/money-cycle' : '/review',
+    path: '/review',
     params: {
       action: input.action || 'deposit',
       amount: input.amount,
       asset: frontendAssetCode(input.assetCode || 'USDC'),
-      advanced: '1',
-      cycle: input.cycle ? '1' : '',
-      from: 'chat',
-      lang: input.language || 'pt-BR',
-    },
-  });
-}
-
-function buildMoneyCycleFrontendUrl(input: {
-  amount?: unknown;
-  assetCode?: unknown;
-  destinationPixKey?: unknown;
-  language?: 'pt-BR' | 'en';
-}): string {
-  const asset = frontendAssetCode(input.assetCode || 'BRL');
-  const amount = String(input.amount || '').trim();
-  return buildFrontendInterfaceUrl({
-    path: '/money-cycle',
-    params: {
-      cycle: '1',
-      action: 'deposit',
-      asset,
-      amount,
-      destination_pix_key: input.destinationPixKey,
       advanced: '1',
       from: 'chat',
       lang: input.language || 'pt-BR',
@@ -479,7 +454,7 @@ function buildMoneyInterfaceUrl(input: {
   const language = input.language || 'pt-BR';
 
   if (action === 'keep') {
-    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language, cycle: true });
+    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language });
   }
 
   if (action === 'send_out') {
@@ -879,37 +854,6 @@ export const toolDefinitions = [
         },
       },
       required: ["action"],
-    },
-  },
-  {
-    name: "open_money_cycle",
-    description: "Return the consolidated frontend URL for the full money cycle: add money by PIX, review an available option, then send it out to PIX. Use when the user asks to consolidate the complete in-review-out lifecycle. Do not describe any option as best investment or guaranteed.",
-    parameters: {
-      type: "object",
-      properties: {
-        amount: {
-          type: "string",
-          description: "Optional amount to prefill across the cycle.",
-        },
-        asset_code: {
-          type: "string",
-          description: "User-facing currency. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
-        },
-        destination_pix_key: {
-          type: "string",
-          description: "Optional PIX key typed by the user for the exit step. Never invent it.",
-        },
-        session_id: {
-          type: "string",
-          description: "Current chat session ID, when available.",
-        },
-        language: {
-          type: "string",
-          enum: ["pt-BR", "en"],
-          description: "Response language for the user-facing message.",
-        },
-      },
-      required: [],
     },
   },
   {
@@ -1940,8 +1884,6 @@ export async function executeTool(
         return await executeGetYieldOptions(toolInput);
       case "open_asset_interface":
         return await executeOpenAssetInterface(toolInput);
-      case "open_money_cycle":
-        return await executeOpenMoneyCycle(toolInput);
       case "open_conversion_interface":
         return await executeOpenConversionInterface(toolInput);
       case "get_yield_balance":
@@ -2091,12 +2033,6 @@ function executeGetIntentHelp(): string {
       examples: ["revisar 100 reais", "quanto tenho em posição cetes?"],
     },
     {
-      command: "ciclo",
-      intent: "money_cycle",
-      description: "Abre o ciclo completo: colocar por PIX, revisar uma opção disponível e retirar para seu PIX.",
-      examples: ["injetar 500 reais, revisar e depois sair para meu PIX"],
-    },
-    {
       command: "melhor rota",
       intent: "best_route",
       description: "Mostra automaticamente a melhor rota para enviar ou converter com menor custo efetivo.",
@@ -2152,10 +2088,9 @@ function executeGetIntentHelp(): string {
       "5. Converter R$, US$, CETES e moedas configuradas",
       "6. Link de pagamento para cobrar ou receber",
       "7. Aplicações: nova aplicação, posição atual ou retirada",
-      "8. Ciclo completo: PIX, aplicação e sair para meu PIX",
-      "9. Melhor rota, cotação, taxas e economia",
-      "10. Histórico, comprovantes e apelidos",
-      "11. PIN e entrada com biometria",
+      "8. Melhor rota, cotação, taxas e economia",
+      "9. Histórico, comprovantes e apelidos",
+      "10. PIN e entrada com biometria",
       "",
       "Exemplos:",
       "- \"enviar 10 dólares para Ana da forma mais otimizada\"",
@@ -2317,40 +2252,6 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       message: language === 'en'
         ? `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
         : `${actionLabel} está pronto para ${displayAsset}.\n\nAbra:\n${frontendUrl}`,
-    });
-  } catch (error) {
-    return JSON.stringify({
-      success: false,
-      error: sanitizeYieldToolError(error, language),
-    });
-  }
-}
-
-async function executeOpenMoneyCycle(input: any): Promise<string> {
-  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
-  try {
-    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'BRL');
-    const destinationPixKey = input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey;
-    const frontendUrl = buildMoneyCycleFrontendUrl({
-      amount: input.amount,
-      assetCode,
-      destinationPixKey,
-      language,
-    });
-    const displayAsset = frontendAssetCode(assetCode);
-    const amount = String(input.amount || '').trim();
-
-    return JSON.stringify({
-      success: true,
-      action: 'money_cycle',
-      asset_code: displayAsset,
-      amount: amount || null,
-      destination_pix_key: String(destinationPixKey || '').trim() || null,
-      frontend_url: frontendUrl,
-	      steps: ['pix_on', 'yield', 'pix_off'],
-	      message: language === 'en'
-	        ? `The full money cycle is ready for ${displayAsset}: add by PIX, review an available option, then send out to PIX.\n\nOpen:\n${frontendUrl}`
-	        : `O ciclo completo está pronto para ${displayAsset}: entrar por PIX, revisar uma opção disponível e sair por PIX.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({

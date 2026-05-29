@@ -280,14 +280,6 @@ export default function ConfirmConversionClient({
     from: "confirm-conversion",
     lang: feedbackLanguage,
   })
-  const moneyCycleUrl = buildActionUrl("/money-cycle", {
-    asset: nextDestinationAssetCode,
-    amount: nextDestinationAmount,
-    advanced: "1",
-    cycle: "1",
-    from: "confirm-conversion",
-    lang: feedbackLanguage,
-  })
   const transactionsUrl = buildActionUrl("/transactions", {
     from: "confirm-conversion",
     lang: feedbackLanguage,
@@ -379,14 +371,10 @@ export default function ConfirmConversionClient({
               {T(feedbackLanguage, "Testnet: valores de conversão são estimados e podem variar.", "Testnet: conversion values are estimated and may vary.")}
             </p>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Revisar opção", "Review option")}</p>
                 <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão na revisão.", "Use this conversion destination in the review.")}</p>
-              </a>
-              <a href={moneyCycleUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
-                <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Ciclo completo", "Full money cycle")}</p>
-                <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Entrar, revisar e sair para PIX em uma jornada.", "Add, review, and send out to PIX in one journey.")}</p>
               </a>
               <a href={transactionsUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Histórico", "History")}</p>
