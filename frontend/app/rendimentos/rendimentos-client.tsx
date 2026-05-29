@@ -100,6 +100,7 @@ type PositionState = {
   amount: string;
   error: string;
   raw?: unknown;
+  source?: string;
   anomaly?: "testnet_conversion_loss";
 };
 
@@ -803,6 +804,7 @@ export default function RendimentosClient({
           amount: extractDefindexPositionAmount(payload?.position || payload?.balance),
           error: "",
           raw: payload?.balance,
+          source: String(payload?.balance_source || payload?.balance?.source || ""),
         }] as const;
       } catch (error) {
         return [code, {
@@ -1903,6 +1905,7 @@ function InvestmentOptionCard({
   const profile = moneyProfile(code);
   const isLoadingPosition = Boolean(!position || position.loading);
   const hasPositionError = Boolean(position?.error);
+  const isHistoryFallback = position?.source === "operation_history_fallback";
   const positionAmount = normalizeDecimal(position?.amount || "0");
   const hasTestnetConversionAnomaly = isSuspiciousTestnetConversionPosition(option, position);
   const displayPositionAmount = positionAmountForDisplay(option, position);
@@ -1951,6 +1954,8 @@ function InvestmentOptionCard({
             ? position?.error
             : hasTestnetConversionAnomaly
               ? L(`Valor isolado em testnet: ${formatAmount(positionAmount, language)} ${profile.short}.`, `Isolated testnet value: ${formatAmount(positionAmount, language)} ${profile.short}.`)
+              : isHistoryFallback
+              ? L("Atualizado pelo histórico da conta enquanto a consulta direta sincroniza.", "Updated from account history while the direct check syncs.")
           : L("Atualizado da conta.", "Updated from the account.")}
         </p>
       </div>
