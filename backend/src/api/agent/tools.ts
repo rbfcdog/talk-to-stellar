@@ -1998,16 +1998,16 @@ export async function executeTool(
 function executeGetIntentHelp(): string {
   const commands = [
     {
+      command: "contatos",
+      intent: "contacts",
+      description: "Lista ou salva destinatários da conta e ajuda a escolher quem recebe.",
+      examples: ["listar contatos", "adiciona Ana pelo email ana@example.com"],
+    },
+    {
       command: "saldo",
       intent: "balance",
       description: "Mostra o saldo disponível em R$, US$, CETES e moedas configuradas.",
       examples: ["ver saldo", "qual meu saldo em cetes?"],
-    },
-    {
-      command: "contatos",
-      intent: "contacts",
-      description: "Lista ou salva destinatários da conta.",
-      examples: ["listar contatos", "adiciona Ana pelo email ana@example.com"],
     },
     {
       command: "enviar",
@@ -2024,13 +2024,13 @@ function executeGetIntentHelp(): string {
     {
       command: "rota",
       intent: "price_quote",
-      description: "Mostra a melhor estimativa antes de confirmar uma conversão.",
+      description: "Mostra a melhor cotação antes de confirmar uma conversão.",
       examples: ["melhor estimativa para converter reais"],
     },
     {
       command: "rendimentos",
       intent: "yield",
-      description: "Mostra opções de rendimentos, posição atual e retirada.",
+      description: "Mostra opções de aplicação, posição atual e retirada.",
       examples: ["quero aplicar 100 dólares", "ver rendimentos atuais"],
     },
     {
@@ -2052,6 +2052,12 @@ function executeGetIntentHelp(): string {
       examples: ["ver histórico", "últimas transações"],
     },
     {
+      command: "perfil",
+      intent: "general",
+      description: "Mostra o perfil da conta, dados públicos e saldos relacionados.",
+      examples: ["ver meu perfil", "abrir perfil da conta"],
+    },
+    {
       command: "comparativo de economia",
       intent: "savings_comparison",
       description: "Compara o que você pagou aqui vs estimativa de bancos/métodos tradicionais.",
@@ -2066,7 +2072,7 @@ function executeGetIntentHelp(): string {
     {
       command: "link de pagamento",
       intent: "payment_link",
-      description: "Cria um link para alguém receber ou pagar sem escolher um contato antes.",
+      description: "Cria um link para receber ou cobrar sem escolher contato antes.",
       examples: ["criar link de pagamento de 20 dólares"],
     },
     {

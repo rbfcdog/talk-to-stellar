@@ -7,6 +7,7 @@ import { createAgentRoutes } from './api/agent/routes';
 import { logger } from './utils/logger';
 import { runMigrations } from './utils/migrate';
 import externalRouter from './api/routes/external.router';
+import authRouter from './api/routes/auth.router';
 import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
@@ -50,7 +51,7 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(globalRateLimit);
-app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing'], sensitiveRateLimit);
+app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing', '/api/auth'], sensitiveRateLimit);
 app.use(idempotencyMiddleware);
 
 app.get('/health', (req, res) => {
@@ -74,6 +75,7 @@ app.use('/api/actions', actionsRouter);
 
 // Register external provider routes (e.g., telegram)
 app.use('/api/external', externalRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/passkeys', passkeyRouter);
 
 // Register security routes (PIN reset, etc)
