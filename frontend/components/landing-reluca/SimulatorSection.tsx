@@ -60,9 +60,9 @@ export default function SimulatorSection() {
           </div>
         </div>
         <div className="space-y-6 relative z-10 w-full mt-8">
-          <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}
-            className="w-full bg-[#E59E25] text-slate-950 font-bold text-lg py-4 rounded-xl hover:bg-cyan-300 transition-colors shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-          >{t("simulator", language, "sendNow")}</button>
+          <a href="/chat"
+            className="block w-full bg-[#E59E25] text-slate-950 font-bold text-lg py-4 rounded-xl hover:bg-cyan-300 transition-colors shadow-[0_0_20px_rgba(34,211,238,0.2)] text-center"
+          >{t("simulator", language, "sendNow")}</a>
         </div>
       </motion.div>
       <div className="w-full max-w-5xl mx-auto px-4 mt-16">

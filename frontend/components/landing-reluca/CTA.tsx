@@ -25,12 +25,12 @@ export default function CTA() {
             <a href="https://t.me/TalkToStellarTelegramBot" target="_blank" rel="noopener noreferrer"
               className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-[#D48C1C] px-8 py-4 text-sm font-bold text-black transition hover:bg-[#E59E25]"
             ><Send className="h-4 w-4" /> <span>Telegram</span></a>
-            <button
+            <a href="https://wa.me/5519981808102" target="_blank" rel="noopener noreferrer"
               className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-transparent border border-white/10 px-8 py-4 text-sm font-bold text-white transition hover:bg-white/5"
-            ><MessageCircle className="h-4 w-4 text-[#E59E25]" /> <span>{language === "pt-BR" ? "WhatsApp" : "WhatsApp"}</span></button>
-            <button onClick={() => document.getElementById("simulator")?.scrollIntoView({ behavior: "smooth" })}
+            ><MessageCircle className="h-4 w-4 text-[#E59E25]" /> <span>{language === "pt-BR" ? "WhatsApp" : "WhatsApp"}</span></a>
+            <a href="/chat"
               className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/[0.05] px-8 py-4 text-sm font-bold text-white transition hover:bg-white/10"
-            ><Monitor className="h-4 w-4 text-[#D48C1C]" /> <span>{language === "pt-BR" ? "Abrir chat web" : "Open web chat"}</span></button>
+            ><Monitor className="h-4 w-4 text-[#D48C1C]" /> <span>{language === "pt-BR" ? "Abrir chat web" : "Open web chat"}</span></a>
           </motion.div>
         </div>
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
