@@ -35,7 +35,7 @@ function yieldErrorPayload(error: any, req?: Request): Record<string, unknown> {
   return {
     ...publicErrorPayload(error, {
       includeSupportCode: true,
-      fallback: 'Nao foi possivel atualizar a revisao agora. Tente novamente em alguns segundos.',
+      fallback: 'Nao foi possivel atualizar a aplicacao agora. Tente novamente em alguns segundos.',
     }),
     ...(requestId ? { request_id: requestId } : {}),
   };

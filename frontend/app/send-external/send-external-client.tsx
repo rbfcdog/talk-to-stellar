@@ -202,8 +202,8 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                 {T(
                   language,
-                  "Revise a public key completa, o saldo disponível e confirme só depois com PIN.",
-                  "Review the full public key, available balance, and confirm only after that with PIN."
+                  "Confira a public key completa, o saldo disponível e confirme só depois com PIN.",
+                  "Check the full public key, available balance, and confirm only after that with PIN."
                 )}
               </p>
             </div>
@@ -288,7 +288,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   className="h-12 rounded-lg border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none transition focus:border-tts-gold"
-                  placeholder={T(language, "Digite depois de revisar", "Enter after review")}
+                  placeholder={T(language, "Digite na confirmação", "Enter at confirmation")}
                 />
               </label>
 
@@ -304,7 +304,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
           </section>
 
           <aside className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
-            <h2 className="text-base font-bold text-tts-deep">{T(language, "Revisão", "Review")}</h2>
+            <h2 className="text-base font-bold text-tts-deep">{T(language, "Confirmação", "Confirmation")}</h2>
             <dl className="mt-4 grid gap-3 text-sm">
               <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
                 <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">{T(language, "Origem", "Source")}</dt>
@@ -350,7 +350,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
 
             <div className="mt-4 grid gap-2">
               <Link href="/chat" className="inline-flex h-10 items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
-                {T(language, "Voltar ao chat", "Back to chat")}
+                {T(language, "Abrir conversa", "Open chat")}
               </Link>
               <Link href={`/pix-off?asset=${encodeURIComponent(asset)}&lang=${encodeURIComponent(language)}`} className="inline-flex h-10 items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
                 {T(language, "Enviar por PIX", "Send by PIX")}

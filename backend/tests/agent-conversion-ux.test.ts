@@ -26,7 +26,7 @@ describe('Agent conversion UX', () => {
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'system prompt') as any;
 
     const sanitized = graph.sanitizeAssistantResponse(
-      'Ver revisão/aplicação\nEx.: “quero ver o yield” ou “show yield options”',
+      'Ver aplicação\nEx.: “quero ver o yield” ou “show yield options”',
       'pt-BR'
     );
 

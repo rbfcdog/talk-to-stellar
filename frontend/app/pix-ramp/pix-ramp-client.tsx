@@ -2502,7 +2502,7 @@ export default function PixRampClient({
             <AccountStatusCard
               state={!sessionReady ? "loading" : hasSession ? "connected" : "signed-out"}
               ctaHref={loginHref || "/login"}
-              detail={hasSession ? L("Sua conta está pronta para revisar este PIX.", "Your account is ready to review this PIX.") : undefined}
+              detail={hasSession ? L("Sua conta está pronta para confirmar este PIX.", "Your account is ready to confirm this PIX.") : undefined}
               compact
               className="bg-tts-bg/70"
             />

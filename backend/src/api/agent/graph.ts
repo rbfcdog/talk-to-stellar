@@ -151,7 +151,7 @@ export class AgentGraph {
 
   private sanitizeUserFacingTechnicalTerms(content: string, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const yieldReplacement = language === 'en' ? 'investments' : 'dinheiro rendendo';
-    const reviewReplacement = language === 'en' ? 'investment review' : 'revisão de aplicação';
+    const reviewReplacement = language === 'en' ? 'application' : 'aplicação';
 
     return String(content || '')
       .split('\n')
@@ -793,12 +793,12 @@ export class AgentGraph {
       language,
       [
         'Esse envio é para uma conta externa, fora do ecossistema TalkToStellar.',
-        'Por segurança, a confirmação acontece em uma tela dedicada com revisão da chave completa e autenticação.',
+        'Por segurança, a confirmação acontece em uma tela dedicada com chave completa e autenticação.',
         `Abra o link:\n\n${finalUrl}`,
       ].join('\n\n'),
       [
         'This is an external account transfer outside the TalkToStellar ecosystem.',
-        'For safety, confirmation happens on a dedicated page with full key review and authentication.',
+        'For safety, confirmation happens on a dedicated page with the full key and authentication.',
         `Open the link:\n\n${finalUrl}`,
       ].join('\n\n')
     );
@@ -1721,6 +1721,33 @@ export class AgentGraph {
     return this.isOptimizedRouteRequest(text);
   }
 
+  private bestRouteGuidanceText(language: 'pt-BR' | 'en'): string {
+    return this.text(
+      language,
+      [
+        'Eu analiso a melhor rota quando você informa valor, moeda e destino.',
+        'Para calcular, me diga valor, moeda de origem e moeda de destino.',
+        '',
+        'Exemplos:',
+        '- melhor rota para converter 100 USDC para BRL',
+        '- melhor rota para enviar 50 reais para Ana',
+        '- cotação de 200 reais para dólares',
+        '',
+        'Eu mostro valor final, taxa e caminho antes de qualquer PIN.',
+      ].join('\n'),
+      [
+        'To calculate the best route, tell me amount, source currency, and destination currency.',
+        '',
+        'Examples:',
+        '- best route to convert 100 USDC to BRL',
+        '- best route to send 50 reais to Ana',
+        '- quote 200 reais to dollars',
+        '',
+        'I show final amount and fee before any PIN.',
+      ].join('\n')
+    );
+  }
+
   private isGenericRecipientReference(value: unknown): boolean {
     const normalized = this.normalizeTextForIntent(String(value || ''));
     if (!normalized) return true;
@@ -1840,29 +1867,7 @@ export class AgentGraph {
   private async handleBestRouteGuidanceRequest(state: AgentState): Promise<AgentState> {
     const language = this.getLanguage(state);
     state.success = true;
-    state.response_message = this.text(
-      language,
-      [
-        'Eu analiso a melhor rota quando você informa valor, moeda e destino.',
-        '',
-        'Exemplos:',
-        '- melhor rota para converter 100 USDC para BRL',
-        '- melhor rota para enviar 50 reais para Ana',
-        '- cotação de 200 reais para dólares',
-        '',
-        'Com isso eu calculo valor final, taxa e caminho antes de qualquer PIN.',
-      ].join('\n'),
-      [
-        'I can analyze the best route when you include amount, asset, and destination.',
-        '',
-        'Examples:',
-        '- best route to convert 100 USDC to BRL',
-        '- best route to send 50 reais to Ana',
-        '- quote 200 reais to dollars',
-        '',
-        'Then I calculate final amount, fees, and route before any PIN.',
-      ].join('\n')
-    );
+    state.response_message = this.bestRouteGuidanceText(language);
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -2620,17 +2625,17 @@ export class AgentGraph {
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- For first greetings, use get_intent_help and show the compact full capability list. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same compact full capability list.',
       '- Mini-menus must use no technical terms and no second welcome block if the user already received a login/onboarding completion message.',
-      '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "dinheiro rendendo", "aplicação", "investimento" or "revisão de aplicação"; in English say "investments" or "investment review".',
+      '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "dinheiro rendendo", "aplicação", "investimento" or "posição"; in English say "investments", "application", or "position".',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
       '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',
       '## YIELD UX',
-      '- For application/review intents, use yield tools instead of free text.',
-      '- User-facing copy for this flow must say revisão, aplicação, investimento, dinheiro rendendo, posição, dollars, CETES/opção México, or reais. Never use the word "yield" in user-facing text. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
-      '- Use get_yield_options for available currencies, get_yield_balance for current reviewed balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
-      '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "review", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
+      '- For application intents, use yield tools instead of free text.',
+      '- User-facing copy for this flow must say aplicação, investimento, dinheiro rendendo, posição, dollars, CETES/opção México, or reais. Never use the word "yield" in user-facing text. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
+      '- Use get_yield_options for available currencies, get_yield_balance for current position, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
+      '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "apply", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- Do not discuss returns/rates publicly. Say only that the user reviews value and operation before confirming.',
-      '- In English, route users to /review for the visual review page. Do not route users to legacy localized routes.',
+      '- In English, route users to /review for the application page. Do not route users to legacy localized routes.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -3230,7 +3235,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       logger.error(`[Agent] Wallet creation failed: ${errorMessage}`);
       state.success = false;
       state.error = errorMessage;
-      state.response_message = `Desculpe, houve um erro ao criar sua conta: ${errorMessage}`;
+      state.response_message = `Não consegui criar sua conta agora: ${errorMessage}`;
       await this.saveAssistantResponse(state);
       return state;
     }
@@ -3786,14 +3791,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     if (result.success) {
       state.response_message = result.message || this.text(
         language,
-        'Revisão consultada.',
-        'Review checked.'
+        'Aplicação consultada.',
+        'Application checked.'
       );
     } else {
       state.response_message = this.text(
         language,
-        `Não consegui consultar a revisão agora: ${result.error || 'erro desconhecido'}`,
-        `I could not check the review right now: ${result.error || 'unknown error'}`
+        `Não consegui consultar a aplicação agora: ${result.error || 'erro desconhecido'}`,
+        `I could not check the application right now: ${result.error || 'unknown error'}`
       );
     }
 
@@ -4207,8 +4212,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.response_message = state.success
           ? this.text(
               this.getLanguage(state),
-              `Abra a tela de conversão para escolher valor e moedas. A revisão e o PIN acontecem na página de confirmação, sem voltar para o chat:\n\n${conversionInterface.frontend_url}`,
-              `Open the conversion screen to choose amount and currencies. Review and PIN happen on the confirmation page, without returning to chat:\n\n${conversionInterface.frontend_url}`
+              `Abra a tela de conversão para escolher valor e moedas. A confirmação e o PIN acontecem na própria página:\n\n${conversionInterface.frontend_url}`,
+              `Open the conversion screen to choose amount and currencies. Confirmation and PIN happen on the page:\n\n${conversionInterface.frontend_url}`
             )
           : (llmParsed.needs_clarification && llmParsed.clarification_question
               ? llmParsed.clarification_question
@@ -4663,8 +4668,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.error = errorMessage;
       state.response_message = this.text(
         this.getLanguage(state),
-        "Desculpe, houve um erro ao processar sua mensagem. Tente novamente.",
-        "Sorry, there was an error processing your message. Try again."
+        "Não consegui concluir essa resposta agora. Tente de novo ou diga em uma frase: saldo, PIX, converter, aplicar, histórico ou contatos.",
+        "I could not complete that response right now. Try again or say one goal: balance, PIX, convert, apply, history, or contacts."
       );
       return state;
     }
@@ -4695,7 +4700,28 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Fallback response generation failed: ${errorMessage}`);
-      return this.text(language, "Desculpe, não consegui processar sua mensagem.", "Sorry, I could not process your message.");
+      if (this.isBestRouteGuidanceRequest(input)) {
+        return this.bestRouteGuidanceText(language);
+      }
+      const yieldIntent = this.extractYieldIntentFromText(input);
+      if (yieldIntent.is_yield) {
+        const url = new URL('/review', this.getFrontendBaseUrl());
+        url.searchParams.set('action', yieldIntent.action);
+        if (yieldIntent.amount) url.searchParams.set('amount', yieldIntent.amount);
+        if (yieldIntent.asset_code) url.searchParams.set('asset', yieldIntent.asset_code);
+        url.searchParams.set('from', 'chat');
+        url.searchParams.set('lang', language);
+        return this.text(
+          language,
+          `Abra a tela para aplicar dinheiro ou ver posições:\n${url.toString()}\n\nNada sai sem PIN.`,
+          `Open the page to apply money or view positions:\n${url.toString()}\n\nNothing moves without PIN.`
+        );
+      }
+      return this.text(
+        language,
+        "Não consegui entender com segurança. Posso ajudar com contatos, saldo, PIX, conversão, aplicação, pagamentos e histórico.",
+        "I could not understand that safely. I can help with contacts, balance, PIX, conversion, application, payments, and history."
+      );
     }
   }
 

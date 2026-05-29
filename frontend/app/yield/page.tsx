@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Review and balances",
-  description: "Review balances, currencies, options, PIX add, and PIX withdrawal.",
+  title: "Aplicação e saldos",
+  description: "Confira saldos, escolha uma opção, converta moedas, use PIX e confirme com PIN.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

@@ -25,7 +25,7 @@ export function ReturnToChat({ prompt, href, label, className }: ReturnToChatPro
       )}
     >
       <MessageCircle className="h-4 w-4" aria-hidden="true" />
-      {label || L("Voltar ao chat", "Back to chat")}
+      {label || L("Abrir conversa", "Open chat")}
     </a>
   );
 }

@@ -285,18 +285,6 @@ function optionExecutionBlocked(option: YieldOption | null | undefined) {
   return Boolean(option && (option.execution_available === false || option.execution_blocked_code));
 }
 
-function formatReturnPercent(value: unknown, language: AppLanguage = "pt-BR") {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number(String(raw || "").replace("%", "").replace(",", "."));
-  if (!Number.isFinite(parsed)) return localCopy(language, "Indisponível", "Unavailable");
-  return `${parsed.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
-}
-
-function optionReturnText(option: YieldOption | null | undefined, language: AppLanguage = "pt-BR") {
-  if (!option) return localCopy(language, "Indisponível", "Unavailable");
-  return formatReturnPercent(option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy, language);
-}
-
 function normalizeDecimal(value: unknown) {
   const raw = String(value || "0").trim();
   const normalized = raw.includes(",")
@@ -374,14 +362,14 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Saldo insuficiente para revisar esse valor. Ajuste o valor e tente novamente.", "Insufficient balance for this amount. Adjust the amount and try again.");
   }
   if (code === "yield_unavailable") {
-    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
+    return localCopy(language, "Não foi possível atualizar a aplicação agora. Tente novamente em alguns segundos.", "Could not update the application right now. Try again in a few seconds.");
   }
   if (code === "service_timeout" || /application failed to respond|failed to respond|service timeout/i.test(raw)) {
-    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
+    return localCopy(language, "Não foi possível atualizar a aplicação agora. Tente novamente em alguns segundos.", "Could not update the application right now. Try again in a few seconds.");
   }
   if (!raw.trim()) return localCopy(language, "Não foi possível concluir agora. Tente novamente.", "Could not finish right now. Try again.");
   if (/pix/i.test(raw)) {
-    return localCopy(language, "Não foi possível atualizar a revisão agora. Tente novamente em alguns segundos.", "Could not update the review right now. Try again in a few seconds.");
+    return localCopy(language, "Não foi possível atualizar a aplicação agora. Tente novamente em alguns segundos.", "Could not update the application right now. Try again in a few seconds.");
   }
   if (/abort|timeout|timed out|demorou/i.test(raw)) {
     return localCopy(language, "A conexão demorou demais. Atualize para tentar de novo.", "The connection took too long. Refresh to try again.");
@@ -393,7 +381,7 @@ function sanitizeUiError(error: unknown, language: AppLanguage) {
     return localCopy(language, "Ainda não foi possível carregar essa parte. Confira a configuração do serviço e tente novamente.", "This section is not available yet. Check the service configuration and try again.");
   }
   return raw
-    .replace(/Defindex/gi, "serviço de revisão")
+    .replace(/Defindex/gi, "serviço de aplicação")
     .replace(/vault/gi, "opção")
     .replace(/wallet/gi, "conta")
     .replace(/asset/gi, "moeda");
@@ -725,7 +713,7 @@ export default function RendimentosClient({
         loading: false,
         message: blockedCode
           ? sanitizeUiError({ code: blockedCode, message: yieldResult?.execution_blocked_reason }, language)
-          : L("Esta revisão está apenas para consulta. Escolha outra opção ou prepare novamente mais tarde.", "This review is view-only. Choose another option or prepare again later."),
+          : L("Esta aplicação está apenas para consulta. Escolha outra opção ou tente novamente mais tarde.", "This application is view-only. Choose another option or try again later."),
         error: "",
       });
       return;
@@ -1022,7 +1010,7 @@ function YieldSuccessDialog({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <MiniStat
-            label={L("Valor revisado", "Reviewed amount")}
+            label={L("Valor", "Amount")}
             value={`${formatAmount(notice.reviewedAmount, language)} ${notice.reviewedAsset}`}
           />
           <MiniStat
@@ -1037,8 +1025,8 @@ function YieldSuccessDialog({
             <p className="font-black">{L("Conversão de teste detectada", "Test conversion detected")}</p>
             <p className="mt-1">
               {L(
-                `O valor recebido pela opção foi ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. A interface mostra a posição reportada pelo vault.`,
-                `The amount received by the option was ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. The interface shows the position reported by the vault.`
+                `O valor recebido pela opção foi ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. A posição atual pode aparecer diferente em testnet.`,
+                `The amount received by the option was ${formatAmount(notice.vaultAmount, language)} ${notice.vaultAsset || notice.reviewedAsset}. The current position can look different on testnet.`
               )}
             </p>
           </div>
@@ -1098,8 +1086,8 @@ function YieldComplianceNotice({
       <p className="flex items-start gap-2 text-tts-muted">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-gold" aria-hidden="true" />
         <span>
-          {isTestnet ? L("Ambiente testnet", "Testnet environment") : L("Ambiente de revisão", "Review environment")}
-          {blocked ? ` · ${executionBlockedReason}` : ""}
+          {isTestnet ? L("Testnet · valores estimados", "Testnet · estimated values") : L("Ambiente ativo", "Active environment")}
+          {blocked ? ` · ${L("somente consulta", "view only")}` : ""}
         </span>
       </p>
     </section>
@@ -1144,7 +1132,7 @@ function AccountPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
             <Coins className="h-5 w-5 text-tts-gold" aria-hidden="true" />
-            {L("Conta", "Account")}
+            {L("Saldos", "Balances")}
           </h2>
         </div>
       </div>
@@ -1285,21 +1273,21 @@ function YieldWorkspacePanel({
   const selectedNeedsWalletConversion = Boolean(autoRouteToOption || selectedOption?.requires_wallet_asset_conversion || result?.conversion_required);
   const selectedExecutionBlocked = optionExecutionBlocked(selectedOption);
   const unavailableTitle = configured
-    ? L("Sem opção ativa para revisar", "No active option to review")
+    ? L("Sem opção ativa", "No active option")
     : L("Opções ainda sem configuração", "Options are not configured yet");
   const unavailableDescription = L("Sem opção ativa para esta moeda.", "No active option for this currency.");
   const routeDescription = selectedExecutionBlocked
     ? L(
-        "Esta opção aceita outra emissão de dólar no ambiente de teste. Para investir saldo real de dólares, é preciso uma opção compatível com a mesma emissão da sua conta.",
-        "This option accepts another dollar issuance in the test environment. To invest real dollar balance, a compatible option with the same account issuance is required."
+        "Esta opção ainda não está disponível para confirmar neste ambiente de teste.",
+        "This option is not available for confirmation in this test environment yet."
       )
     : !selectedHasDirectOption && autoRouteToOption && selectedOption
     ? L(
-        `A revisão usa seu saldo em ${profileName(selectedProfile, language)} e só confirma a troca para ${profileName(targetProfile, language)} se o backend encontrar uma rota segura.`,
-        `The review uses your ${profileName(selectedProfile, language)} balance and only confirms the swap to ${profileName(targetProfile, language)} if the backend finds a safe route.`
+        `A aplicação usa seu saldo em ${profileName(selectedProfile, language)} e só confirma a troca para ${profileName(targetProfile, language)} se houver rota segura.`,
+        `The application uses your ${profileName(selectedProfile, language)} balance and only confirms the swap to ${profileName(targetProfile, language)} when there is a safe route.`
       )
     : selectedNeedsWalletConversion
-      ? L("Esta opção usa uma emissão diferente no ambiente de teste. A confirmação só fica disponível se houver rota segura antes do PIN.", "This option uses a different issuance in the test environment. Confirmation is only available when a safe route exists before PIN.")
+      ? L("A confirmação só aparece quando houver rota segura entre seu saldo e esta opção.", "Confirmation only appears when there is a safe route between your balance and this option.")
       : "";
   const hasPrepared = Boolean(result);
   const submitted = Boolean(result?.submitted || result?.hash);
@@ -1316,14 +1304,14 @@ function YieldWorkspacePanel({
         ? L("Falta saldo na versão da moeda usada por esta aplicação antes de confirmar.", "The asset version used by this application still needs balance before confirmation.")
         : blockedCode === "yield_asset_conversion_unavailable"
           ? L("A rota segura entre o saldo da conta e a aplicação não está disponível agora.", "The safe route between the account balance and the application is not available right now.")
-          : L("Esta opção está em modo consulta. A confirmação por PIN ainda não está disponível.", "This option is in view-only mode. PIN confirmation is not available yet.");
+          : L("Esta opção está apenas para consulta. A confirmação por PIN ainda não está disponível.", "This option is view-only. PIN confirmation is not available yet.");
   const blockedActionLabel = blockedCode === "yield_account_setup_required"
     ? L("Moeda aguardando ativação", "Currency awaiting activation")
     : blockedCode === "yield_asset_incompatible"
       ? L("Opção incompatível", "Incompatible option")
       : blockedCode === "yield_asset_conversion_required" || blockedCode === "yield_asset_conversion_unavailable"
         ? L("Conversão aguardando rota segura", "Conversion awaiting safe route")
-        : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.");
+        : L("Somente consulta", "View only");
   const accountBalanceLabel = sessionLoading
     ? L("Carregando saldo", "Loading balance")
     : balanceForSelected
@@ -1372,15 +1360,15 @@ function YieldWorkspacePanel({
         </div>
       ) : !authenticated ? (
         <div className="mt-5 border border-tts-gold bg-tts-gold-bg p-4 text-sm leading-6 text-tts-muted">
-          <p className="font-black text-tts-gold">{L("Entre para revisar com seus saldos", "Sign in to review with your balances")}</p>
+          <p className="font-black text-tts-gold">{L("Entre para usar seus saldos", "Sign in to use your balances")}</p>
           <p className="mt-1">
             {L(
-              "A revisão usa os dados da sua conta. Depois de entrar, seus saldos aparecem aqui e você pode conferir antes de qualquer confirmação.",
-              "The review uses your account data. After signing in, your balances appear here and you can review before any confirmation."
+              "Depois de entrar, seus saldos aparecem aqui e você confere tudo antes do PIN.",
+              "After signing in, your balances appear here and you check everything before PIN."
             )}
           </p>
           <div className="mt-3 border border-tts-border bg-tts-surface p-3">
-            <p className="font-black text-tts-deep">{L("Revisão segura", "Secure review")}</p>
+            <p className="font-black text-tts-deep">{L("Confirmação segura", "Secure confirmation")}</p>
             <p className="mt-1 text-xs leading-5 text-tts-muted">
               {L("A tela mostra valor e operação antes do PIN.", "The screen shows amount and operation before PIN.")}
             </p>
@@ -1456,7 +1444,7 @@ function YieldWorkspacePanel({
 
       {authenticated && selectedHasYield && routeDescription ? (
         <p className={`mt-4 text-xs font-bold ${selectedExecutionBlocked ? "text-tts-gold" : "text-tts-muted"}`}>
-          {selectedExecutionBlocked ? L("Opção indisponível para confirmação.", "Option unavailable for confirmation.") : L("Rota segura checada antes do PIN.", "Safe route checked before PIN.")}
+          {routeDescription}
         </p>
       ) : null}
 
@@ -1565,7 +1553,7 @@ function YieldWorkspacePanel({
             <div className="border border-tts-border bg-tts-bg p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-black text-tts-deep">{L("Revisão", "Review")}</h3>
+                  <h3 className="text-base font-black text-tts-deep">{L("Confirmação", "Confirmation")}</h3>
                 </div>
                 <BadgeCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
               </div>
@@ -1591,7 +1579,7 @@ function YieldWorkspacePanel({
                   </p>
                 ) : hasPrepared ? (
                   <p className="font-bold text-tts-confirm">
-                    {L("Investimento pronto para confirmar. Confira valor e operação antes do PIN.", "Investment ready to confirm. Check amount and operation before PIN.")}
+                    {L("Pronto para confirmar. Confira valor e operação antes do PIN.", "Ready to confirm. Check amount and operation before PIN.")}
                   </p>
                 ) : (
                   <p>{L("Toque em Investir para validar a operação com sua conta.", "Tap Invest to validate the operation with your account.")}</p>
@@ -1642,7 +1630,7 @@ function YieldWorkspacePanel({
                   </button>
                 ) : (
                   <div className="flex min-h-12 items-center border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-bold leading-5 text-tts-gold">
-                    {preparedExecutionBlocked ? blockedActionLabel : L("Modo revisão: sem movimentar saldo.", "Review mode: no funds move.")}
+                    {preparedExecutionBlocked ? blockedActionLabel : L("Somente consulta", "View only")}
                   </div>
                 )}
               </div>
@@ -1682,10 +1670,6 @@ function CurrentInvestmentsPage({
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const availableOptions = options.filter((option) => String(option.vault_address || "").trim());
-  const activePositions = availableOptions.filter((option) => {
-    const position = positionBalances[optionCode(option)];
-    return normalizeDecimal(position?.amount || "0") > 0 && !isSuspiciousTestnetConversionPosition(option, position);
-  }).length;
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -1729,17 +1713,13 @@ function CurrentInvestmentsPage({
           </div>
         ) : null}
 
-        <section className="grid gap-3 sm:grid-cols-3">
+        <section className="grid gap-3 sm:grid-cols-2">
           <MiniStat
             label={L("Conta", "Account")}
             value={sessionLoading ? L("Verificando", "Checking") : session.authenticated ? L("Conectada", "Connected") : L("Entrar", "Sign in")}
             detail={accountPublicKey ? `ID: ${accountPublicKey.slice(0, 6)}...${accountPublicKey.slice(-5)}` : undefined}
           />
           <MiniStat label={L("Opções", "Options")} value={String(availableOptions.length)} detail={L("ativas", "active")} />
-          <MiniStat
-            label={L("Com saldo", "With balance")}
-            value={String(activePositions)}
-          />
         </section>
 
         {isTestnet ? (
@@ -1837,37 +1817,16 @@ function InvestmentOptionCard({
           {hasPositionError
             ? position?.error
             : hasTestnetConversionAnomaly
-              ? L(`Valor de teste separado: ${formatAmount(positionAmount, language)} ${profile.short}.`, `Separate test value: ${formatAmount(positionAmount, language)} ${profile.short}.`)
+              ? L(`Valor isolado em testnet: ${formatAmount(positionAmount, language)} ${profile.short}.`, `Isolated testnet value: ${formatAmount(positionAmount, language)} ${profile.short}.`)
               : L("Atualizado da conta.", "Updated from the account.")}
         </p>
       </div>
 
       {hasTestnetConversionAnomaly ? (
         <div className="mt-3 border border-tts-gold bg-tts-gold-bg p-3 text-xs leading-5 text-tts-gold">
-          {L("Ajuste técnico necessário nesta posição de teste.", "Technical adjustment needed for this test position.")}
+          {L("Esta posição precisa de ajuste no ambiente de teste.", "This position needs adjustment in the test environment.")}
         </div>
       ) : null}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <MiniStat
-          label={L("Status", "Status")}
-          value={isLoadingPosition
-            ? L("Consultando", "Checking")
-            : hasPositionError
-              ? L("Tente atualizar", "Try refresh")
-              : hasTestnetConversionAnomaly
-                ? L("Separado", "Separated")
-                : displayPositionAmount > 0
-                  ? L("Com saldo", "Has balance")
-                  : L("Sem posição", "No position")}
-          detail={hasPositionError
-            ? L("consulta falhou", "check failed")
-            : hasTestnetConversionAnomaly
-              ? L("conversão testnet distorcida", "distorted testnet conversion")
-              : L("posição atual", "current position")}
-        />
-        <MiniStat label={L("Taxa", "Rate")} value={optionReturnText(option, language)} detail={L("estimada", "estimated")} />
-      </div>
 
       <a
         href={reviewHref}

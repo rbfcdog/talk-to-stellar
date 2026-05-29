@@ -27,7 +27,7 @@ export default function SolutionSection() {
             transition={{ delay: 0.1 }}
             className="text-lg md:text-xl text-[#9BA4B5] leading-relaxed font-light mt-6 max-w-2xl mx-auto"
           >
-            {L("PIX, moedas, revisão e retirada com a clareza e a simplicidade de uma conversa.", "PIX, currencies, reviews, and withdrawals with the clarity and simplicity of the experience you already know.")}
+            {L("PIX, moedas, aplicação e retirada com a clareza e a simplicidade de uma conversa.", "PIX, currencies, applications, and withdrawals with the clarity and simplicity of the experience you already know.")}
           </motion.p>
         </div>
 
@@ -46,7 +46,7 @@ export default function SolutionSection() {
               {L("Seu dinheiro com mais caminhos.", "Your money with more paths.")}
             </h3>
             <p className="text-lg text-[#9BA4B5] leading-relaxed mb-8">
-              {L("Coloque dinheiro com PIX, escolha a moeda, revise e retire para seu PIX quando quiser, com menos etapas manuais e mais visibilidade.", "Add money with PIX, choose a currency, review, and withdraw to your PIX when you want, with fewer manual steps and more visibility.")}
+              {L("Coloque dinheiro com PIX, escolha a moeda, aplique ou retire para seu PIX quando quiser, com menos etapas manuais e mais visibilidade.", "Add money with PIX, choose a currency, apply or withdraw to your PIX when you want, with fewer manual steps and more visibility.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 relative h-[300px] rounded-2xl overflow-hidden border border-white/[0.03] bg-[#162032]">
@@ -88,22 +88,22 @@ export default function SolutionSection() {
               {L("Tudo onde você já conversa.", "Everything where you already chat.")}
             </h3>
             <p className="text-lg text-[#9BA4B5] leading-relaxed">
-              {L("WhatsApp e Telegram já fazem parte do seu dia. Você diz se quer trazer, converter, revisar ou retirar, e o assistente organiza a operação com valor, destino e confirmação.", "WhatsApp and Telegram are already part of your day. Say whether you want to add, convert, review, or withdraw, and the assistant structures the operation through the most optimized available route.")}
+              {L("WhatsApp e Telegram já fazem parte do seu dia. Você diz se quer trazer, converter, aplicar ou retirar, e o assistente organiza a operação com valor, destino e confirmação.", "WhatsApp and Telegram are already part of your day. Say whether you want to add, convert, apply, or withdraw, and the assistant structures the operation through the most optimized available route.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 relative h-[300px] rounded-2xl overflow-hidden border border-white/[0.03] bg-[#162032] flex items-center justify-center">
             {/* Chat Bubble Mockup */}
              <div className="space-y-4 w-full px-6">
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tr-sm p-4 max-w-[80%] self-end ml-auto text-sm text-slate-200">
-                  {L("Colocar R$ 500, converter para euros e revisar.", "Add R$500, convert to euros, and review.")}
+                  {L("Colocar R$ 500, converter para euros e aplicar.", "Add R$500, convert to euros, and apply.")}
                 </div>
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tl-sm p-4 max-w-[85%] text-sm text-slate-200 flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] shadow-[#00D2FF]/5">
                    <p>{L("Pronto. Encontrei a melhor rota para você.", "Done. I found the most optimized route.")}</p>
                    <div className="bg-[#162032] p-3 rounded-xl border border-white/[0.03]">
-                      <p className="text-xs text-[#9BA4B5]">{L("Valor para revisar", "Amount to review")}</p>
+                      <p className="text-xs text-[#9BA4B5]">{L("Valor para aplicar", "Amount to apply")}</p>
                       <p className="text-lg font-bold text-[#00D2FF]">€ 92,00</p>
                    </div>
-                   <button className="bg-[#4CA1EF] text-white font-medium py-2 rounded-lg mt-1 text-xs uppercase tracking-wider w-full">{L("Revisar", "Review")}</button>
+                   <button className="bg-[#4CA1EF] text-white font-medium py-2 rounded-lg mt-1 text-xs uppercase tracking-wider w-full">{L("Aplicar", "Apply")}</button>
                 </div>
              </div>
           </div>

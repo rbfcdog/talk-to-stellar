@@ -663,20 +663,20 @@ function classifyDefindexBuildFailure(error: unknown): {
   if (/missing\s*trustline|missingtrustline|trustline|trust line/.test(text)) {
     return {
       code: 'yield_account_setup_required',
-      reason: 'Revisao preparada. Nao precisa criar outra conta; falta ativar esta moeda para confirmacao nesta conta. Tente novamente em alguns segundos ou escolha outra opcao.',
+      reason: 'Aplicacao preparada. Nao precisa criar outra conta; falta ativar esta moeda para confirmacao nesta conta. Tente novamente em alguns segundos ou escolha outra opcao.',
       setupRequired: true,
     };
   }
   if (/insufficient|underfunded|not enough|saldo|balance/.test(text)) {
     return {
       code: 'insufficient_balance',
-      reason: 'Revisao preparada, mas o saldo disponivel nao e suficiente para confirmar este valor.',
+      reason: 'Aplicacao preparada, mas o saldo disponivel nao e suficiente para confirmar este valor.',
       setupRequired: false,
     };
   }
   return {
     code: 'yield_execution_unavailable',
-    reason: 'Revisao preparada. A confirmacao por PIN ainda nao esta disponivel para esta opcao; tente novamente em alguns segundos ou escolha outra opcao.',
+    reason: 'Aplicacao preparada. A confirmacao por PIN ainda nao esta disponivel para esta opcao; tente novamente em alguns segundos ou escolha outra opcao.',
     setupRequired: false,
   };
 }
@@ -4071,7 +4071,7 @@ export class AnchorService {
           requiresConversion: true,
           conversionReady: false,
           executionBlockedCode: 'yield_account_setup_required',
-          executionBlockedReason: 'Revisao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+          executionBlockedReason: 'Aplicacao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
           setupRequired: true,
           vaultDepositAsset,
           walletSourceAsset,
@@ -4084,7 +4084,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'yield_account_setup_required',
-        executionBlockedReason: 'Revisao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+        executionBlockedReason: 'Aplicacao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
         setupRequired: true,
         trustline,
         vaultDepositAsset,
@@ -4100,7 +4100,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'insufficient_balance',
-        executionBlockedReason: 'Revisao preparada, mas o saldo disponivel nao e suficiente para converter e confirmar este valor.',
+        executionBlockedReason: 'Aplicacao preparada, mas o saldo disponivel nao e suficiente para converter e confirmar este valor.',
         setupRequired: false,
         trustline,
         vaultDepositAsset,
@@ -4167,8 +4167,8 @@ export class AnchorService {
           conversionReady: false,
           executionBlockedCode: 'yield_asset_conversion_unavailable',
           executionBlockedReason: sourceAvailable + 0.0000001 < sameCodeSanity.sourceMax
-            ? 'Revisao preparada, mas o saldo disponivel nao cobre a margem de seguranca para converter e confirmar este valor.'
-            : 'Revisao preparada. A rota de teste entre as duas emissoes desta moeda esta distorcida agora, entao a confirmacao foi bloqueada para evitar perda no valor convertido.',
+            ? 'Aplicacao preparada, mas o saldo disponivel nao cobre a margem de seguranca para converter e confirmar este valor.'
+            : 'Aplicacao preparada. A rota de teste entre as duas emissoes desta moeda esta distorcida agora, entao a confirmacao foi bloqueada para evitar perda no valor convertido.',
           setupRequired: false,
           trustline,
           vaultDepositAsset,
@@ -4205,7 +4205,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'yield_asset_conversion_unavailable',
-        executionBlockedReason: 'Revisao preparada. A rota para converter o saldo escolhido para esta aplicacao nao esta disponivel agora.',
+        executionBlockedReason: 'Aplicacao preparada. A rota para converter o saldo escolhido para esta aplicacao nao esta disponivel agora.',
         setupRequired: false,
         trustline,
         vaultDepositAsset,
@@ -4350,7 +4350,7 @@ export class AnchorService {
     }
     const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
     if (!compatibility.compatible) {
-      const reason = 'Revisao preparada. Esta opcao de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opcao ou configure um vault compativel com esta moeda antes de confirmar.';
+      const reason = 'Aplicacao preparada. Esta opcao de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opcao ou aguarde uma opcao compativel antes de confirmar.';
       logDefindex('warn', 'prepare_vault_asset_incompatible', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -4556,7 +4556,7 @@ export class AnchorService {
       });
       throw apiError(
         runtime.execution_blocked_reason ||
-          'Confirmacao de revisao desativada neste ambiente. Configure DEFINDEX_ENABLE_EXECUTION=true e DEFINDEX_COMPLIANCE_APPROVED=true somente depois da aprovacao juridica/compliance.',
+          'Confirmacao de aplicacao desativada neste ambiente.',
         403,
         'yield_execution_disabled',
       );
@@ -4618,7 +4618,7 @@ export class AnchorService {
       const sourceMax = coalesceString(conversion.source_max, conversion.path_source_max);
       const destinationMin = coalesceString(conversion.destination_min);
       if (!sourceAsset || !destinationAsset || !destinationAmount || (!destinationMin && !sourceMax)) {
-        throw apiError('A revisao precisa ser preparada novamente antes da confirmacao.', 409, 'review_not_prepared');
+        throw apiError('A confirmacao precisa ser preparada novamente.', 409, 'review_not_prepared');
       }
       const unsafeRatio = unsafeSameSymbolConversionRatio({
         sourceAsset,
@@ -4731,7 +4731,7 @@ export class AnchorService {
       const blockedCode = coalesceString((prepared as any).execution_blocked_code, 'yield_execution_unavailable');
       const blockedReason = coalesceString(
         prepared.execution_blocked_reason,
-        'A confirmacao por PIN ainda nao esta disponivel para esta revisao.',
+        'A confirmacao por PIN ainda nao esta disponivel para esta aplicacao.',
       );
       logDefindex('warn', 'execute_review_not_ready', {
         request_id: defindexRequestId(input),
@@ -4769,7 +4769,7 @@ export class AnchorService {
         network: vault.network,
         ...defindexErrorFields(error),
       });
-      throw apiError('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
+      throw apiError('A confirmacao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
     }
 
     let sent: { hash: string; raw: any };

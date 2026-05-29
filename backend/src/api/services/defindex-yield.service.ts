@@ -358,10 +358,10 @@ export class DefindexYieldService {
   static requireVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig {
     const runtime = this.getRuntimeInfo();
     if (!runtime.api_key_configured) {
-      throw new Error('DEFINDEX_API_KEY is required for review operations.');
+      throw new Error('DEFINDEX_API_KEY is required for application operations.');
     }
     if (runtime.network_mismatch) {
-      throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before review operations.`);
+      throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before application operations.`);
     }
     const vault = this.resolveVault(assetCode, vaultAddress);
     if (!vault) {

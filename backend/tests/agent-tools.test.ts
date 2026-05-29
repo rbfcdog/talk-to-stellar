@@ -353,7 +353,7 @@ describe('Agent tool execution', () => {
       { currency: 'CETES', name: 'Mexico test option', available: true },
       { currency: 'XLM', name: 'XLM', available: true },
     ]);
-    expect(parsed.message).toContain('Options for review');
+    expect(parsed.message).toContain('Options to apply money');
     expect(parsed.disclosure.toLowerCase()).toContain('testnet');
     expect(parsed.disclosure.toLowerCase()).not.toMatch(/investment advice|fixed income|savings account|bank deposit/);
     expect(JSON.stringify(parsed)).not.toMatch(/APY|estimated_apy/i);
@@ -391,7 +391,7 @@ describe('Agent tool execution', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.review).toMatchObject({
-      action: 'review entry',
+      action: 'apply',
       amount: '100',
       currency: 'BRL',
       name: 'reais',
@@ -470,7 +470,7 @@ describe('Agent tool execution', () => {
     expect(parsed.frontend_url).toContain('amount=500');
     expect(parsed.frontend_url).toContain('source_asset=BRL');
     expect(parsed.frontend_url).toContain('dest_asset=CETES');
-    expect(parsed.message).toContain('Conversion is ready to review');
+    expect(parsed.message).toContain('Conversion is ready to confirm');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|issuer|trustline|XDR/i);
   });
 
@@ -491,8 +491,8 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toContain('review mode');
-    expect(parsed.error).toContain('compliance approval');
+    expect(parsed.error).toContain('view-only');
+    expect(parsed.error).toContain('environment');
     expect(parsed.error).not.toMatch(/Defindex|DEFINDEX|XDR|vault/i);
   });
 

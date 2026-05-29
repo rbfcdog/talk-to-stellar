@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Aplicação",
-  description: "Revise uma aplicação antes de confirmar com PIN.",
+  description: "Escolha uma opção e confirme com PIN.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

@@ -117,6 +117,14 @@ function classifyTransaction(item: TransactionItem): {
   if (status && !["success", "completed", "done"].includes(status)) {
     return { kind: "pending", label: "Em andamento", tone: "border-tts-gold bg-tts-gold-bg text-tts-gold" }
   }
+  if (op.includes("defindex") || op.includes("yield") || op.includes("application")) {
+    const isWithdrawal = op.includes("withdraw") || op.includes("redeem")
+    return {
+      kind: "conversion",
+      label: isWithdrawal ? "Retirada de aplicação" : "Aplicação",
+      tone: "border-tts-gold bg-tts-gold-bg text-tts-gold",
+    }
+  }
   if (op.includes("receive") || op.includes("received") || op.includes("claim")) {
     return { kind: "in", label: "Recebimento", tone: "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" }
   }
@@ -130,6 +138,22 @@ function classifyTransaction(item: TransactionItem): {
     return { kind: "out", label: "Envio", tone: "border-tts-border bg-tts-bg text-tts-muted" }
   }
   return { kind: "conversion", label: "Ajuste interno", tone: "border-tts-border bg-tts-bg text-tts-muted" }
+}
+
+function operationTypeLabel(value?: string | null) {
+  const op = String(value || "").trim().toLowerCase()
+  if (!op) return ""
+  if (op.includes("defindex") || op.includes("yield") || op.includes("application")) {
+    return op.includes("withdraw") || op.includes("redeem") ? "retirada de aplicação" : "aplicação"
+  }
+  if (op.includes("pix_in") || op.includes("onramp")) return "PIX entrada"
+  if (op.includes("pix_out") || op.includes("offramp")) return "PIX saída"
+  if (op.includes("conversion") || op.includes("swap") || op.includes("path_payment")) return "conversão"
+  if (op.includes("payment") || op.includes("send")) return "pagamento"
+  if (op.includes("receive") || op.includes("claim")) return "recebimento"
+  if (op.includes("deposit")) return "entrada"
+  if (op.includes("withdraw")) return "retirada"
+  return op.replace(/_/g, " ")
 }
 
 function TransactionIcon({ kind }: { kind: Exclude<KindFilter, "all"> }) {
@@ -179,12 +203,12 @@ function publicKeyProfileUrl(publicKey?: string | null) {
 }
 
 function transactionProfileUrl(item: TransactionItem) {
+  const fallbackUrl = String(item.counterparty?.short_profile_url || item.counterparty?.profile_url || "").trim()
+  if (fallbackUrl && !/\/receipt\/|\/receipts\/|\/api\/external\/receipts\//i.test(fallbackUrl)) return fallbackUrl
+
   const directUrl = publicKeyProfileUrl(item.counterparty?.public_key)
   if (directUrl) return directUrl
-
-  const fallbackUrl = String(item.counterparty?.short_profile_url || item.counterparty?.profile_url || "").trim()
-  if (!fallbackUrl || /\/receipt\//i.test(fallbackUrl)) return ""
-  return fallbackUrl
+  return ""
 }
 
 export default function TransactionsClient() {
@@ -466,6 +490,7 @@ function StatePanel({ icon, title, detail, action }: { icon: ReactNode; title: s
 
 function TransactionRow({ item }: { item: TransactionItem }) {
   const classification = classifyTransaction(item)
+  const operationLabel = operationTypeLabel(item.operation_type)
   const profileUrl = transactionProfileUrl(item)
   const receiptUrl = String(item.receipt_url || "").trim()
   const hash = compactHash(item.payment_hash)
@@ -494,9 +519,9 @@ function TransactionRow({ item }: { item: TransactionItem }) {
           <span className="border border-tts-border bg-tts-bg px-2 py-1 text-xs font-black text-tts-deep">
             {statusLabel(item.status)}
           </span>
-          {item.operation_type ? (
+          {operationLabel ? (
             <span className="border border-tts-border bg-tts-bg px-2 py-1 text-xs font-bold text-tts-muted">
-              {String(item.operation_type).replace(/_/g, " ")}
+              {operationLabel}
             </span>
           ) : null}
         </div>
@@ -531,8 +556,6 @@ function TransactionRow({ item }: { item: TransactionItem }) {
           {profileUrl ? (
             <a
               href={profileUrl}
-              target="_blank"
-              rel="noreferrer"
               className="inline-flex min-h-9 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep transition hover:border-tts-border2"
             >
               Perfil
