@@ -2809,7 +2809,7 @@ export class AgentGraph {
       '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
       '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico test option in testnet and say TalkToStellar displays the available app balance.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
-      '- For first greetings, use get_intent_help and show the compact full capability list. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same compact full capability list.',
+      '- For first greetings, use get_intent_help and show the full capability list with one short explanatory line per area. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same fuller capability list.',
       '- Mini-menus must use no technical terms and no second welcome block if the user already received a login/onboarding completion message.',
       '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "rendimentos", "dinheiro rendendo", "investimento" or "posição"; in English say "earnings", "investments", or "position".',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
