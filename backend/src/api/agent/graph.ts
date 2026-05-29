@@ -2567,7 +2567,83 @@ export class AgentGraph {
   }
 
   private async prependContactsContext(messages: BaseMessage[], userId?: string): Promise<BaseMessage[]> {
-    return messages;
+    if (!userId) {
+      return messages;
+    }
+
+    try {
+      const contacts = await this.fetchContacts(userId);
+      if (!contacts.length) {
+        return messages;
+      }
+
+      const contactNames = contacts
+        .map((contact: any) => String(contact?.display_label || contact?.contact_name || contact?.name || '').trim())
+        .filter(Boolean)
+        .slice(0, 8);
+
+      const contextMessage = new SystemMessage({
+        content: [
+          '## CONTEXT OF SAVED CONTACTS',
+          `The user has ${contacts.length} saved contacts.`,
+          contactNames.length ? `Known names: ${contactNames.join(', ')}.` : 'No contact names were resolved.',
+          'If the message asks to see, list, show, open, or review saved recipients, beneficiaries, favorites, or contacts, classify it as contacts.',
+        ].join(' '),
+      });
+
+      return [messages[0], contextMessage, ...messages.slice(1)];
+    } catch (error) {
+      logger.debug(`[prependContactsContext] Error: ${error instanceof Error ? error.message : String(error)}`);
+      return messages;
+    }
+  }
+
+  private isContactsRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[^\w\s@.+-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) {
+      return false;
+    }
+
+    return (
+      /\b(contatos?|destinat[aá]ri(?:o|os)?|favorit(?:o|os)?|salv(?:o|os)?|agenda)\b/.test(normalized) ||
+      normalized === 'contatos' ||
+      normalized === 'meus contatos' ||
+      normalized === 'contatos salvos' ||
+      normalized === 'meus destinatarios' ||
+      normalized === 'destinatarios salvos' ||
+      normalized === 'meus favoritos'
+    );
+  }
+
+  private extractContactIntentFromText(userMessage: string): {
+    action?: 'add' | 'list';
+    contact_key?: string;
+    contact_name?: string;
+    needs_clarification?: boolean;
+    clarification_question?: string;
+  } | null {
+    const normalized = this.normalizeTextForIntent(userMessage)
+      .replace(/[^\w\s@.+-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized || !this.isContactsRequest(normalized)) {
+      return null;
+    }
+
+    const listVerb = /\b(ver|mostrar|listar|abrir|consultar|exibir|quem|quais|cade|cad[eê]|revisar|olhar)\b/.test(normalized);
+    const directList = /^(meus contatos|contatos|contatos salvos|meus destinatarios|destinatarios salvos|meus favoritos)$/.test(normalized);
+    const addVerb = /\b(adicion|salv|inclu|cadastr|novo contato|criar contato)\b/.test(normalized);
+
+    if (directList || (listVerb && !addVerb)) {
+      return { action: 'list' };
+    }
+
+    return null;
   }
 
   private maskPublicKey(publicKey?: string): string {
@@ -2985,8 +3061,40 @@ If the message is short and obviously about contacts, choose contacts instead of
   }
 
   private async handleContactsRequest(state: AgentState): Promise<AgentState> {
-    const contactIntent = await this.extractContactIntentWithLlm(state.current_input);
+    const localContactIntent = this.extractContactIntentFromText(state.current_input);
+    const contactIntent = localContactIntent || await this.extractContactIntentWithLlm(state.current_input);
     const contactKey = String(contactIntent.contact_key || '').trim();
+
+    if (contactIntent.action === 'list') {
+      const resultRaw = await executeTool('list_contacts', {
+        session_id: state.session_id,
+        user_id: state.session_data?.user_id,
+      });
+
+      let toolResult: any;
+      try {
+        toolResult = JSON.parse(resultRaw);
+      } catch {
+        toolResult = { success: false, error: 'Failed to parse list_contacts response' };
+      }
+
+      if (!toolResult.success) {
+        state.success = false;
+        state.response_message = `Não consegui listar seus contatos: ${toolResult.error || 'erro desconhecido'}`;
+      } else {
+        const contacts = Array.isArray(toolResult.contacts) ? toolResult.contacts : [];
+        state.success = true;
+        state.response_message = contacts.length
+          ? `Seus destinatários:\n${contacts.map((contact: any, index: number) => {
+              return this.formatContactListLine(contact, index);
+            }).join('\n')}`
+          : 'Você ainda não tem destinatários salvos.';
+      }
+
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
 
     if (contactIntent.needs_clarification) {
       state.success = false;
@@ -4477,6 +4585,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
+      const wantsContacts = this.isContactsRequest(state.current_input);
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
       const fixedSavings = this.fixedSavingsIntent(state.current_input);
@@ -4524,6 +4633,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                                   ? IntentType.FINANCIAL_MEMORY
                                     : deterministicFinancialMemory
                                       ? IntentType.FINANCIAL_MEMORY
+                                      : wantsContacts
+                                        ? IntentType.CONTACTS
                                       : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 

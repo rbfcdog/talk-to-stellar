@@ -84,6 +84,38 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Não consegui entender');
   });
 
+  it('lists saved contacts for direct contacts requests without the generic help fallback', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      contacts: [
+        {
+          contact_name: 'Ana Silva',
+          pix_key: 'ana@pix',
+          history: {
+            tx_count: 2,
+            last_amount_label: 'R$ 100',
+          },
+        },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meus contatos'));
+
+    expect(executeToolMock.mock.calls.filter(([name]) => name === 'list_contacts')).toHaveLength(1);
+    expect(executeToolMock.mock.calls.some(([name, args]) => (
+      name === 'list_contacts' &&
+      args?.session_id === 'eval-session' &&
+      args?.user_id === 'eval-user'
+    ))).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Seus destinatários');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('histórico: 2 envio(s)');
+  });
+
   it('routes simple greetings to the full compact capability guide', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
