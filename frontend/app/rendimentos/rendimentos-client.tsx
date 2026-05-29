@@ -334,10 +334,9 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
     const amt = normalizeDecimal(pos?.amount || "0");
     return { option: o, code, profile: moneyProfile(code), amount: amt, loading: Boolean(!pos || pos.loading), error: String(pos?.error || ""), rate: optionRatePercent(o) };
   });
-  const activeRows = rows.filter((r) => r.amount > 0);
-  const totalInvested = activeRows.reduce((s, r) => s + r.amount, 0);
   const bestApy = Math.max(...rows.map((r) => r.rate), 0);
   const bestApyLabel = rows.find((r) => r.rate >= bestApy);
+  const usdRow = rows.find((r) => r.profile.short === "USD");
 
   return (
     <div className="space-y-6">
@@ -351,7 +350,7 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
       ) : (
         <>
           <div className="grid grid-cols-3 gap-4">
-            <StatCard label={L("Investido", "Invested")} value={totalInvested > 0 ? `${formatAmount(totalInvested, language)}` : L("—", "—")} sub={L("saldo total", "total balance")} />
+            <StatCard label={L("USD", "USD")} value={usdRow && usdRow.amount > 0 ? `${formatAmount(usdRow.amount, language)} USD` : L("—", "—")} sub={usdRow && usdRow.rate > 0 ? `${usdRow.rate.toFixed(2)}% APY` : ""} />
             <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
             <StatCard label={L("Melhor taxa", "Best APY")} value={bestApy > 0 ? `${bestApy.toFixed(2)}%` : L("—", "—")} sub={bestApyLabel?.profile.short || ""} />
           </div>
