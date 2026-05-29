@@ -534,6 +534,56 @@ export class AgentGraph {
     return asksForLink && receiveRef && selfRef;
   }
 
+  private isOwnProfileRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+    const asksForProfile = /\b(perfil|profile)\b/.test(normalized);
+    if (!asksForProfile) return false;
+    if (/\b(contato|cliente|destinatario|beneficiario|outra pessoa|alguem)\b/.test(normalized)) {
+      return false;
+    }
+    const selfRef = /\b(meu|minha|meus|minhas|pra mim|para mim|my|mine|own)\b/.test(normalized);
+    const viewVerb = /\b(ver|ve|abrir|mostrar|consultar|olhar|acessar|show|open|see|view)\b/.test(normalized);
+    return selfRef || viewVerb || normalized === 'perfil' || normalized === 'profile';
+  }
+
+  private async handleOwnProfileRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const displayName = String(state.session_data?.email || state.session_data?.user_id || '').trim();
+    const resultRaw = await executeTool('get_or_create_global_profile', {
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      display_name: displayName,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: this.text(language, 'Não consegui abrir seu perfil agora.', 'I could not open your profile right now.') };
+    }
+
+    const fallbackProfileUrl = state.session_data?.public_key
+      ? `${this.getFrontendBaseUrl()}/profile/${encodeURIComponent(state.session_data.public_key)}`
+      : '';
+    const link = String(result?.profile?.public_link || result?.profile?.profile_url || fallbackProfileUrl).trim();
+
+    state.success = Boolean(link);
+    state.response_message = link
+      ? this.text(
+          language,
+          `Aqui está seu perfil:\n\n${link}`,
+          `Here is your profile:\n\n${link}`
+        )
+      : String(result?.error || this.text(language, 'Não consegui abrir seu perfil agora.', 'I could not open your profile right now.'));
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private isReceiptImageRequest(text: string): boolean {
     const normalized = this.normalizeTextForIntent(text);
     const wantsReceipt = normalized.includes('recibo') || normalized.includes('comprovante');
@@ -4420,6 +4470,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
+      const wantsOwnProfile = this.isOwnProfileRequest(state.current_input);
       const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
       const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
@@ -4447,29 +4498,31 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             ? IntentType.PAYMENT_LINK
             : wantsReceiptImage
               ? IntentType.HISTORY
-              : wantsIntentHelp || wantsGreetingHelp
+              : wantsOwnProfile
                 ? IntentType.GENERAL
-                : wantsRampHistory
-                  ? IntentType.FINANCIAL_MEMORY
-                  : wantsTransactionHistory
-                    ? IntentType.HISTORY
-                    : deterministicExternalWallet.is_external_wallet
-                      ? IntentType.PAYMENT
-                      : deterministicBestRouteEstimate || wantsBestRouteGuidance
-                        ? IntentType.PRICE_QUOTE
-                        : savingsCalculator || wantsAnnualSavingsSummary
-                          ? IntentType.FINANCIAL_MEMORY
-                          : deterministicPixRamp.is_pix_ramp
-                            ? IntentType.PIX
-                            : deterministicYield.is_yield
-                              ? IntentType.YIELD
-                              : deterministicAssetInterface.is_asset_interface
-                                ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
-                                : fixedSavings
-                                  ? IntentType.FINANCIAL_MEMORY
-                                  : deterministicFinancialMemory
+                : wantsIntentHelp || wantsGreetingHelp
+                  ? IntentType.GENERAL
+                  : wantsRampHistory
+                    ? IntentType.FINANCIAL_MEMORY
+                    : wantsTransactionHistory
+                      ? IntentType.HISTORY
+                      : deterministicExternalWallet.is_external_wallet
+                        ? IntentType.PAYMENT
+                        : deterministicBestRouteEstimate || wantsBestRouteGuidance
+                          ? IntentType.PRICE_QUOTE
+                          : savingsCalculator || wantsAnnualSavingsSummary
+                            ? IntentType.FINANCIAL_MEMORY
+                            : deterministicPixRamp.is_pix_ramp
+                              ? IntentType.PIX
+                              : deterministicYield.is_yield
+                                ? IntentType.YIELD
+                                : deterministicAssetInterface.is_asset_interface
+                                  ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
+                                  : fixedSavings
                                     ? IntentType.FINANCIAL_MEMORY
-                                    : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                                    : deterministicFinancialMemory
+                                      ? IntentType.FINANCIAL_MEMORY
+                                      : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -4522,6 +4575,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (wantsReceiptImage) {
         return await this.handleReceiptImageRequest(state);
+      }
+
+      if (hasActiveWallet && wantsOwnProfile) {
+        return await this.handleOwnProfileRequest(state);
       }
 
       if (wantsIntentHelp || wantsGreetingHelp) {
