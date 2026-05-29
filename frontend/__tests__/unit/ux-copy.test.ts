@@ -22,9 +22,9 @@ describe("UX copy guardrails", () => {
       expect(text, `${screen} should use the shared account status`).toContain("AccountStatusCard");
     }
 
-    for (const screen of screens.filter((path) => path !== "app/rendimentos/rendimentos-client.tsx")) {
+    for (const screen of screens) {
       const text = source(screen);
-      expect(text, `${screen} should preserve a return path where useful`).toContain("ReturnToChat");
+      expect(text, `${screen} should not expose chat-only return buttons`).not.toContain("ReturnToChat");
     }
   });
 
@@ -109,6 +109,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Converter ativos");
     expect(reviewText).toContain("href={returnsHref}");
     expect(reviewText).toContain("CurrentInvestmentsPage");
+    expect(reviewText).toContain("PortfolioOverview");
+    expect(reviewText).toContain("Distribuição visual");
+    expect(reviewText).toContain("Simulação visual");
     expect(reviewText).toContain("Posições");
     expect(reviewText).toContain("Posição atual");
     expect(reviewText).toContain("Nada aplicado agora");

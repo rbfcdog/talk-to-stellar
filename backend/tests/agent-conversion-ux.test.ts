@@ -31,7 +31,7 @@ describe('Agent conversion UX', () => {
     );
 
     expect(sanitized).toContain('quero ver dinheiro rendendo');
-    expect(sanitized).toContain('opções de aplicação');
+    expect(sanitized).toContain('opções de rendimentos');
     expect(sanitized).not.toMatch(/\byield\b/i);
   });
 

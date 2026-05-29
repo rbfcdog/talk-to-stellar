@@ -26,5 +26,5 @@ export default async function LegacyReviewPage({
 }) {
   const resolved = await Promise.resolve(searchParams || {});
   const query = serializeSearchParams(resolved);
-  redirect(query ? `/review?${query}` : "/review");
+  redirect(query ? `/rendimentos?${query}` : "/rendimentos");
 }

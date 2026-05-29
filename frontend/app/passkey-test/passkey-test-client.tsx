@@ -20,7 +20,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
-import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { getClientSession, saveClientSession } from "@/lib/session";
 
 type SessionSnapshot = {
@@ -334,8 +333,7 @@ export default function PasskeyTestClient() {
                 Use esta tela para validar se este aparelho consegue registrar e usar biometria na sua conta. Se algo falhar, a tela mostra a causa provável e o próximo passo.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
-              <ReturnToChat prompt="testar entrada com biometria" />
+            <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[360px]">
               <ActionButton
                 variant="secondary"
                 onClick={refreshSession}

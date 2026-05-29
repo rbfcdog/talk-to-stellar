@@ -25,5 +25,5 @@ export default async function MainnetPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const query = serializeSearchParams(await Promise.resolve(searchParams || {}));
-  redirect(query ? `/review?${query}` : "/review");
+  redirect(query ? `/rendimentos?${query}` : "/rendimentos");
 }

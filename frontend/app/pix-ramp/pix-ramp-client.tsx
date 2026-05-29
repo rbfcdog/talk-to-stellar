@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { AccountStatusCard } from "@/components/shared/account-status";
-import { ReturnToChat } from "@/components/shared/return-to-chat";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -2338,13 +2337,6 @@ export default function PixRampClient({
   const successTransaction = rampMode === "offramp"
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
     : order;
-  const pixChatPrompt = rampMode === "onramp"
-    ? language === "pt-BR"
-      ? `acompanhar PIX de entrada de ${formatMoney(amountBrl)}`
-      : `follow PIX money in for ${formatMoney(amountBrl)}`
-    : language === "pt-BR"
-      ? `acompanhar retirada PIX de ${offRampDisplayAmount}`
-      : `follow PIX withdrawal for ${offRampDisplayAmount}`;
   const onRampReceiptUrl = String(
     statusPayload?.receipt_url ||
     statusPayload?.transaction?.receipt_url ||
@@ -2368,7 +2360,6 @@ export default function PixRampClient({
               }`}>
                 PIX
               </div>
-              <ReturnToChat prompt={pixChatPrompt} className="bg-tts-bg/80" />
             </div>
             <div className="space-y-4">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-deep md:text-6xl">
@@ -3380,12 +3371,15 @@ function RampFeeBridge({
   const ttsTransactionFeeCurrency = estimate.ttsTransactionFeeCurrency;
   const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
   const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
-  const feeValue = `${feeAmount > 0 ? "-" : ""}${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)}`;
-  const ttsFeeValue = `${ttsTransactionFeeAmount > 0 ? "-" : ""}${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
+  const feeValue = formatQuoteAmount(feeAmount.toFixed(7), feeCurrency);
+  const ttsFeeValue = formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency);
   const sameFeeCurrency = feeCurrency === ttsTransactionFeeCurrency;
+  const mixedFeeCurrencies = !sameFeeCurrency && feeAmount > 0 && ttsTransactionFeeAmount > 0;
   const totalFeeDisplay = sameFeeCurrency
     ? `${formatQuoteAmount((feeAmount + ttsTransactionFeeAmount).toFixed(7), feeCurrency)}`
-    : `${formatQuoteAmount(feeAmount.toFixed(7), feeCurrency)} + ${formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency)}`;
+    : mode === "offramp"
+      ? ttsFeeValue
+      : `${feeValue} + ${ttsFeeValue}`;
   const feeTitle = mode === "onramp"
     ? L("Resumo do PIX", "PIX summary")
     : L("Resumo da retirada", "Withdrawal summary");
@@ -3409,11 +3403,15 @@ function RampFeeBridge({
       <div className="mt-4 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">{L("Taxa total", "Total fee")}</p>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">
+              {mixedFeeCurrencies && mode === "offramp" ? L("Taxa da conta", "Account fee") : L("Taxa total", "Total fee")}
+            </p>
             <p className="mt-1 text-2xl font-black text-tts-confirm">{totalFeeDisplay}</p>
           </div>
           <p className="max-w-sm text-xs font-bold leading-5 text-tts-confirm">
-            {L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
+            {mixedFeeCurrencies && mode === "offramp"
+              ? L("A taxa em R$ já está abatida no valor que chega no PIX. Nada é confirmado antes do PIN.", "The BRL fee is already deducted from the PIX payout. Nothing is confirmed before the PIN.")
+              : L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
           </p>
         </div>
       </div>
@@ -3427,7 +3425,9 @@ function RampFeeBridge({
         <div className="rounded-2xl bg-tts-surface p-3">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Taxa", "Fee")}</p>
           <p className="mt-2 text-lg font-black text-tts-deep">{totalFeeDisplay}</p>
-          <p className="mt-1 text-xs font-bold text-tts-muted">{L("descontada nesta operação", "deducted in this operation")}</p>
+          <p className="mt-1 text-xs font-bold text-tts-muted">
+            {mixedFeeCurrencies && mode === "offramp" ? L("taxa do app; PIX já vem líquido", "app fee; PIX already arrives net") : L("descontada nesta operação", "deducted in this operation")}
+          </p>
         </div>
         <div className="rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">{destinationLabel}</p>

@@ -119,6 +119,13 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
+  if (/tesouro_distributor|sandbox pix settlement|sandbox.*settlement/.test(normalized)) {
+    return {
+      code: "pix_sandbox_settlement_unavailable",
+      message: copy(language, "A retirada PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.", "The testnet PIX withdrawal is still finishing setup. Try again in a few seconds."),
+    };
+  }
+
   if (/timeout|timed out|abort|aborted|operation was aborted|fetch failed|network|econn|service unavailable|failed to fetch|gateway timeout|etimedout/.test(normalized)) {
     return {
       code: "service_timeout",

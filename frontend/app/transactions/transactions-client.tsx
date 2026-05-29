@@ -17,7 +17,6 @@ import {
   Wallet2,
 } from "lucide-react"
 import { AccountStatusCard } from "@/components/shared/account-status"
-import { ReturnToChat } from "@/components/shared/return-to-chat"
 import { getClientSession } from "@/lib/session"
 
 type TransactionItem = {
@@ -315,7 +314,6 @@ export default function TransactionsClient() {
           </div>
 
           <div className="no-print flex flex-wrap gap-2 lg:justify-end">
-            <ReturnToChat prompt="ver saldo atual" />
             <button
               type="button"
               onClick={exportPdf}

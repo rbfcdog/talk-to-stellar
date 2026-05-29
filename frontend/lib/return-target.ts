@@ -97,8 +97,8 @@ function targetForSource(source: string, language?: string): ReturnTarget | null
 
   if (match(["chat", "whatsapp", "telegram", "phone", "evolution", "whatsapp-evolution"])) {
     return {
-      href: withLanguage("/chat", language),
-      label: copy(language, "Abrir conversa", "Open chat"),
+      href: withLanguage("/transactions", language),
+      label: copy(language, "Ver histórico", "View history"),
       source: normalized,
     };
   }
