@@ -354,7 +354,8 @@ describe('Agent tool execution', () => {
       { currency: 'XLM', name: 'XLM', available: true },
     ]);
     expect(parsed.message).toContain('Options for review');
-    expect(parsed.disclosure.toLowerCase()).toContain('preview only');
+    expect(parsed.disclosure.toLowerCase()).toContain('testnet');
+    expect(parsed.disclosure.toLowerCase()).not.toMatch(/investment advice|fixed income|savings account|bank deposit/);
     expect(JSON.stringify(parsed)).not.toMatch(/APY|estimated_apy/i);
     expect(JSON.stringify(parsed)).not.toMatch(/vault|TESOURO|XDR/i);
     expect(statusSpy).toHaveBeenCalledTimes(1);
