@@ -548,7 +548,11 @@ export class AgentGraph {
   }
 
   private isIntentHelpRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/([a-z])\1{2,}/g, '$1$1')
+      .replace(/\s+/g, ' ')
+      .trim();
     return (
       normalized === 'ajuda' ||
       normalized === 'help' ||
@@ -557,9 +561,13 @@ export class AgentGraph {
       normalized.includes('comandos disponiveis') ||
       normalized.includes('o que voce faz') ||
       normalized.includes('o que voce pode fazer') ||
+      normalized.includes('o que posso fazer') ||
+      normalized.includes('o que da para fazer') ||
       normalized.includes('o que tu pode fazer') ||
       normalized.includes('o que da pra fazer') ||
       normalized.includes('o que consigo fazer') ||
+      normalized.includes('o que tem por aqui') ||
+      normalized.includes('o que faco por aqui') ||
       normalized.includes('what can you do') ||
       normalized.includes('como usar') ||
       normalized.includes('mostrar comandos') ||
