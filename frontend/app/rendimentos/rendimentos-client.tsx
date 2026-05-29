@@ -1825,7 +1825,7 @@ function PortfolioOverview({
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const visibleRows = rows.filter((row) => row.amount > 0);
-  const visualTotal = visibleRows.reduce((sum, row) => sum + row.amount, 0);
+  const distributionTotal = visibleRows.reduce((sum, row) => sum + row.amount, 0);
   const readyRows = rows.filter((row) => !row.loading && !row.error).length;
 
   return (
@@ -1853,14 +1853,14 @@ function PortfolioOverview({
 
         <div className="border-t border-tts-border bg-tts-bg/60 p-5 lg:border-l lg:border-t-0">
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-tts-muted">
-            {L("Distribuição visual", "Visual distribution")}
+            {L("Distribuição", "Distribution")}
           </p>
           <div className="mt-4 flex h-4 overflow-hidden rounded-full border border-tts-border bg-tts-surface">
-            {visibleRows.length && visualTotal > 0 ? visibleRows.map((row, index) => (
+            {visibleRows.length && distributionTotal > 0 ? visibleRows.map((row, index) => (
               <div
                 key={`${row.code}-${index}`}
                 className={index % 2 === 0 ? "bg-tts-confirm" : "bg-tts-gold"}
-                style={{ width: `${Math.max(8, (row.amount / visualTotal) * 100)}%` }}
+                style={{ width: `${Math.max(8, (row.amount / distributionTotal) * 100)}%` }}
                 title={`${row.profile.short}: ${formatAmount(row.amount, language)}`}
               />
             )) : (
@@ -1881,7 +1881,7 @@ function PortfolioOverview({
             ))}
           </div>
           <p className="mt-4 text-xs leading-5 text-tts-muted">
-            {L("Comparação visual por quantidade de cada moeda, não por valor em reais.", "Visual comparison by asset quantity, not by BRL value.")}
+            {L("Comparação por quantidade de cada moeda, não por valor em reais.", "Comparison by asset quantity, not by BRL value.")}
           </p>
         </div>
       </div>
@@ -1971,7 +1971,7 @@ function InvestmentOptionCard({
         <div className="border border-tts-border bg-tts-bg p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">
-              {L("Simulação visual", "Visual simulation")}
+              {L("Simulação", "Simulation")}
             </p>
             <span className="text-xs font-black text-tts-confirm">12m</span>
           </div>
