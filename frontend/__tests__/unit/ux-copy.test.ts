@@ -108,6 +108,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("const actionableOption = selectedOption;");
     expect(reviewText).toContain("Converter ativos");
     expect(reviewText).toContain("href={returnsHref}");
+    expect(reviewText).toContain('view: "application"');
+    expect(reviewText).toContain('action: "deposit"');
+    expect(reviewText).toContain('view: "returns"');
     expect(reviewText).toContain("CurrentInvestmentsPage");
     expect(reviewText).toContain("PortfolioOverview");
     expect(reviewText).toContain("Distribuição visual");
@@ -126,7 +129,10 @@ describe("UX copy guardrails", () => {
     expect(reviewText).not.toContain("Com saldo");
     expect(reviewText).not.toContain("Outros saldos");
     expect(reviewText).not.toContain("Estes saldos não aparecem");
-    expect(returnsPage).toContain('view="returns"');
+    expect(returnsPage).toContain("resolvedView");
+    expect(returnsPage).toContain('view={resolvedView}');
+    expect(returnsPage).toContain('"application"');
+    expect(returnsPage).toContain('"returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
     expect(pixText).toContain("Converter outro ativo para R$");
     expect(pixText).toContain("source_asset: offRampAlternativeAsset");

@@ -398,6 +398,7 @@ describe('Agent tool execution', () => {
       name: 'reais',
     });
     expect(parsed.frontend_url).toContain('/rendimentos?');
+    expect(parsed.frontend_url).toContain('view=application');
     expect(parsed.frontend_url).toContain('asset=BRL');
     expect(parsed.frontend_url).toContain('amount=100');
     expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -423,6 +424,7 @@ describe('Agent tool execution', () => {
 
     expect(keep.success).toBe(true);
     expect(keep.frontend_url).toContain('/rendimentos?');
+    expect(keep.frontend_url).toContain('view=application');
     expect(keep.frontend_url).toContain('asset=CETES');
     expect(keep.frontend_url).toContain('amount=50');
 

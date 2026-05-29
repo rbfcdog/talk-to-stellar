@@ -19,11 +19,23 @@ function serializeSearchParams(searchParams?: SearchParams) {
   return params.toString();
 }
 
+function firstParam(searchParams: SearchParams, key: string) {
+  const value = searchParams[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function RendimentosPage({
   searchParams,
 }: {
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
-  const query = serializeSearchParams(await Promise.resolve(searchParams || {}));
-  return <RendimentosClient initialQuery={query} view="returns" />;
+  const resolved = await Promise.resolve(searchParams || {});
+  const viewParam = String(firstParam(resolved, "view") || firstParam(resolved, "screen") || "").toLowerCase();
+  const actionParam = String(firstParam(resolved, "action") || "").toLowerCase();
+  const applicationViews = new Set(["application", "apply", "aplicar", "investir", "nova"]);
+  const resolvedView = applicationViews.has(viewParam) || (viewParam !== "returns" && ["deposit", "withdraw"].includes(actionParam))
+    ? "application"
+    : "returns";
+
+  return <RendimentosClient initialQuery={serializeSearchParams(resolved)} view={resolvedView} />;
 }
