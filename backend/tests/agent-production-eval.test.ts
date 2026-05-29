@@ -45,6 +45,7 @@ describe('Agent production evals', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.DISABLE_SHORT_LINKS = '1';
   });
 
   it('routes broad capability questions to the deterministic help tool', async () => {
@@ -73,13 +74,43 @@ describe('Agent production evals', () => {
       message: 'Posso ajudar com:\n1. Saldo e conta\n2. PIX\n3. Link de pagamento\n4. Aplicações\n5. Histórico',
     }));
 
-    const result = await graph.processInput(createState('opa'));
+    const result = await graph.processInput(createState('olaaa'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('Link de pagamento');
     expect(result.response_message).toContain('Aplicações');
     expect(result.response_message).toContain('Histórico');
+  });
+
+  it('routes typo transaction history requests without falling back to the LLM', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      transactions: [
+        {
+          direction: 'received',
+          amount: '10.00',
+          asset: 'USDC',
+          counterparty: 'Ana Silva',
+          date: '2026-05-28T12:00:00.000Z',
+        },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meu historicp'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_transaction_history', {
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      user_id: 'eval-user',
+      limit: 10,
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Últimas transações');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('Ver histórico completo');
   });
 
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
