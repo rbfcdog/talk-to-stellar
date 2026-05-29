@@ -50,7 +50,7 @@ export default function Hero() {
             <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } } }}
               className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-4 mt-4"
             >
-              <a href="https://t.me/TalkToStellarTelegramBot" target="_blank" rel="noopener noreferrer"
+              <a href="https://t.me/TalkToStellarTLBot" target="_blank" rel="noopener noreferrer"
                 className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 transition text-base font-semibold text-white"
               ><Send size={20} className="text-[#229ED9]" /> {t("hero", language, "btnTelegram")}</a>
               <a href="https://wa.me/5519981808102" target="_blank" rel="noopener noreferrer"

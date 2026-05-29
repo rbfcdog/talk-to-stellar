@@ -22,7 +22,7 @@ export default function CTA() {
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}
             className="flex flex-col sm:flex-row flex-wrap gap-4 mt-6 w-full sm:w-auto"
           >
-            <a href="https://t.me/TalkToStellarTelegramBot" target="_blank" rel="noopener noreferrer"
+            <a href="https://t.me/TalkToStellarTLBot" target="_blank" rel="noopener noreferrer"
               className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-[#D48C1C] px-8 py-4 text-sm font-bold text-black transition hover:bg-[#E59E25]"
             ><Send className="h-4 w-4" /> <span>Telegram</span></a>
             <a href="https://wa.me/5519981808102" target="_blank" rel="noopener noreferrer"
