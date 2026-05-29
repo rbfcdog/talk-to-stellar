@@ -37,6 +37,17 @@ const getExternalCheckAccountUrl = () => {
   return `${getBackendBaseUrl()}/api/external/check-account`;
 };
 
+function isExpectedSessionAuthFailure(status: number, body: string): boolean {
+  if (status === 401 || status === 403 || status === 410) return true;
+  const normalized = String(body || "").toLowerCase();
+  return (
+    normalized.includes("session expired") ||
+    normalized.includes("sessao expirou") ||
+    normalized.includes("sessão expirou") ||
+    normalized.includes("invalid or expired session")
+  );
+}
+
 const WEB_SESSION_LOOKUP_TTL_MS = 5000;
 const webSessionLookupCache = new Map<string, { sessionId: string | null; expiresAt: number }>();
 
@@ -140,6 +151,18 @@ export async function POST(req: Request) {
 
     if (!agentApiResponse.ok) {
       const errorText = await agentApiResponse.text();
+      if (isExpectedSessionAuthFailure(agentApiResponse.status, errorText)) {
+        return NextResponse.json({
+          content: errorText,
+          session_id: sessionId,
+          action: null,
+          intent: null,
+          onboardingRequired: true,
+          loginRequired: true,
+          reason: "session_expired",
+          success: true,
+        });
+      }
       throw new Error(`Agent API Error: ${errorText}`);
     }
 
@@ -201,6 +224,22 @@ export async function GET(req: Request) {
 
     if (!agentApiResponse.ok) {
       const errorText = await agentApiResponse.text();
+      if (isExpectedSessionAuthFailure(agentApiResponse.status, errorText)) {
+        return NextResponse.json(
+          {
+            session_id: resolvedSessionId,
+            messages: [],
+            loginRequired: true,
+            onboardingRequired: true,
+            reason: "session_expired",
+          },
+          {
+            headers: {
+              "Cache-Control": "no-store, no-cache, must-revalidate",
+            },
+          }
+        );
+      }
       throw new Error(`Agent API Error: ${errorText}`);
     }
 

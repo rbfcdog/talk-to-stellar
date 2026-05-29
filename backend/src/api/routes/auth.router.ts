@@ -80,6 +80,18 @@ router.post("/google", async (req, res) => {
     }
 
     const existing = await findReusableSession(email);
+    if (!existing) {
+      return res.status(200).json({
+        success: true,
+        provider: "google",
+        requires_pin_setup: true,
+        email,
+        user_id: email,
+        display_name: displayName,
+        message: "Google account not linked yet. Create your PIN to finish sign-in.",
+      });
+    }
+
     const sessionId = String(existing?.session_id || uuidv4()).trim();
     const sessionToken = crypto.randomUUID();
     const userId = String(existing?.user_id || email).trim();

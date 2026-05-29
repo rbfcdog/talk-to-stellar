@@ -2632,7 +2632,10 @@ export class AgentGraph {
       .trim();
 
     if (!normalized || !this.isContactsRequest(normalized)) {
-      return null;
+      const addVerbFallback = /\b(adicion(?:a|ar|e)?|salv(?:a|ar|e)?|inclu(?:i|ir|a)?|cadastr(?:a|ar|e)?|novo contato|criar contato|coloc(?:a|ar|e)?|guardar|registrar)\b/.test(normalized);
+      if (!addVerbFallback) {
+        return null;
+      }
     }
 
     const listVerb = /\b(ver|mostrar|listar|abrir|consultar|exibir|quem|quais|cade|cad[eê]|revisar|olhar)\b/.test(normalized);
@@ -2650,7 +2653,7 @@ export class AgentGraph {
       const pixKeyMatch = normalized.match(/\b(?:pix\s*[:=]\s*)?([\w.+-]+@[\w-]+(?:\.[\w-]+)+|\+?\d[\d\s().-]{7,}\d|G[A-Z2-7]{55})\b/i)?.[1]?.trim();
 
       const contactKey = publicKeyMatch || emailMatch || phoneMatch || pixKeyMatch || '';
-      const addTargetMatch = /\b(?:nos?|meus|minha)\s+contatos?\b/i.test(normalized) || /\b(?:salvar|adicionar|incluir|cadastrar|registrar)\s+(.+)$/i.test(normalized);
+      const addTargetMatch = /\b(?:nos?|meus|minha)\s+contatos?\b/i.test(normalized) || /\b(?:salvar|adicionar|incluir|cadastrar|registrar)\s+(.+)$/i.test(normalized) || Boolean(contactKey);
 
       if (!contactKey || !addTargetMatch) {
         return {
