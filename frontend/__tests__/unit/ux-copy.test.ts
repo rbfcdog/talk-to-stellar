@@ -120,6 +120,8 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Nada aplicado agora");
     expect(reviewText).toContain("Testnet · valores estimados");
     expect(reviewText).toContain("extractDefindexPositionAmount(payload?.position || payload?.balance)");
+    expect(reviewText).toContain("operation_history_fallback");
+    expect(reviewText).toContain("Atualizado pelo histórico da conta");
     expect(reviewText).toContain("Confirmando...");
     expect(reviewText).toContain('role="status"');
     expect(reviewText).not.toContain("returnsOpen");

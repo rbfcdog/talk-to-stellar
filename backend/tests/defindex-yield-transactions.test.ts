@@ -166,6 +166,50 @@ describe('Defindex yield transaction flows', () => {
     expect(balanceSpy).toHaveBeenCalledWith(vaultAddress, SESSION_CONTEXT.publicKey, 'testnet');
   });
 
+  it('falls back to completed operation history when the vault balance provider is unavailable', async () => {
+    jest.spyOn(DefindexYieldService, 'getVaultBalance').mockRejectedValue(new Error('Defindex balance temporarily unavailable'));
+    jest.spyOn(OperationRepository, 'findByUserId').mockResolvedValue([
+      {
+        id: 'deposit-1',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_DEPOSIT',
+        status: 'COMPLETED',
+        amount: 100,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: YIELD_VAULTS.USDC }),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'withdraw-1',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_WITHDRAW',
+        status: 'COMPLETED',
+        amount: 40,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: YIELD_VAULTS.USDC }),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ] as any);
+
+    const result = await AnchorService.getDefindexYieldBalanceForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      asset_code: 'USDC',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.balance_source).toBe('operation_history_fallback');
+    expect(result.provider_unavailable).toBe(true);
+    expect(result.balance).toMatchObject({
+      amount_decimal: '60',
+      source: 'operation_history_fallback',
+    });
+  });
+
   it('prepares review data without building XDR when execution is not compliance-approved', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     delete process.env.DEFINDEX_COMPLIANCE_APPROVED;

@@ -3971,6 +3971,8 @@ export class AnchorService {
     public_key: string;
     vault: Record<string, unknown>;
     balance: unknown;
+    balance_source?: string;
+    provider_unavailable?: boolean;
   }> {
     const context = await this.resolveSessionWallet(input);
     const assetCode = coalesceString(input.asset_code, input.assetCode);
@@ -4001,6 +4003,33 @@ export class AnchorService {
         network: vault.network,
         ...defindexErrorFields(error),
       });
+      const fallback = await this.getDefindexOperationPositionFallback(context, vault);
+      if (fallback) {
+        logDefindex('info', 'balance_operation_history_fallback', {
+          request_id: defindexRequestId(input),
+          session_id: maskLogValue(context.sessionId),
+          user_id: maskLogValue(context.userId),
+          public_key: maskLogValue(context.publicKey),
+          asset_code: vault.asset_code,
+          vault_address: maskLogValue(vault.vault_address),
+          operation_count: fallback.operationCount,
+          amount: fallback.amount,
+        });
+        return {
+          success: true,
+          public_key: context.publicKey,
+          vault: {
+            ...vault,
+            display_asset_code: userFacingAssetCode(vault.asset_code),
+          },
+          balance: {
+            amount_decimal: fallback.amount,
+            source: 'operation_history_fallback',
+          },
+          balance_source: 'operation_history_fallback',
+          provider_unavailable: true,
+        };
+      }
       throw error;
     }
     logDefindex('info', 'balance_success', {
@@ -4020,6 +4049,53 @@ export class AnchorService {
         display_asset_code: userFacingAssetCode(vault.asset_code),
       },
       balance,
+    };
+  }
+
+  private static async getDefindexOperationPositionFallback(
+    context: SessionWalletContext,
+    vault: ReturnType<typeof DefindexYieldService.requireVault>,
+  ): Promise<{ amount: string; operationCount: number } | null> {
+    let operations: Awaited<ReturnType<typeof OperationRepository.findByUserId>>;
+    try {
+      operations = await OperationRepository.findByUserId(context.userId);
+    } catch (error) {
+      logDefindex('warn', 'balance_operation_history_fallback_failed', {
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        ...defindexErrorFields(error),
+      });
+      return null;
+    }
+
+    let total = 0;
+    let operationCount = 0;
+    for (const operation of operations || []) {
+      const type = String(operation?.type || '').toUpperCase();
+      if (!type.startsWith('DEFINDEX_YIELD_')) continue;
+      const status = String(operation?.status || '').toUpperCase();
+      if (!['COMPLETED', 'SUCCESS'].includes(status)) continue;
+      if (normalizeAssetCode(operation?.asset_code) !== normalizeAssetCode(vault.asset_code)) continue;
+      if (operation?.source_public_key && String(operation.source_public_key) !== context.publicKey) continue;
+      if (!operation?.source_public_key && operation?.source_session_id && String(operation.source_session_id) !== context.sessionId) continue;
+
+      const operationContext = parseOperationContext(operation?.context);
+      const operationVault = coalesceString(operationContext.vault_address, operationContext.vaultAddress);
+      if (operationVault && operationVault !== vault.vault_address) continue;
+
+      const amount = parseHumanAmountNumber(operation?.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      operationCount += 1;
+      total += type.includes('WITHDRAW') ? -amount : amount;
+    }
+
+    if (operationCount <= 0) return null;
+    return {
+      amount: formatDecimalAmount(Math.max(0, total)),
+      operationCount,
     };
   }
 
