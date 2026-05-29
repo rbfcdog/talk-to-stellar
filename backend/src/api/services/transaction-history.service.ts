@@ -2,6 +2,7 @@ import { supabase } from '../../config/supabase';
 import { FinancialContextService } from './financial-context.service';
 import ExternalService from './core/external.service';
 import { StellarService } from './stellar.service';
+import { getStellarService } from './core/stellar.service';
 
 function normalizeKey(value: string): string {
   return String(value || '').trim();
@@ -9,6 +10,53 @@ function normalizeKey(value: string): string {
 
 function hasPublicKey(value: string): boolean {
   return /^G[A-Z2-7]{55}$/i.test(String(value || '').trim());
+}
+
+function normalizeHistoryAssetCode(value: unknown): string {
+  const code = String(value || '').trim().toUpperCase();
+  if (!code || code === 'NATIVE') return 'XLM';
+  if (code === 'USD') return 'USDC';
+  return code;
+}
+
+function operationAssetCode(operation: any, prefix = ''): string {
+  const field = (name: string) => prefix ? `${prefix}_${name}` : name;
+  const assetType = String(operation?.[field('asset_type')] || '').trim().toLowerCase();
+  if (assetType === 'native') return 'XLM';
+  return normalizeHistoryAssetCode(
+    operation?.[field('asset_code')] ||
+      operation?.asset_code ||
+      operation?.selling_asset_code ||
+      operation?.buying_asset_code ||
+      operation?.asset_type
+  );
+}
+
+function operationCounterpartyKey(operation: any, ownPublicKey: string): string {
+  const from = normalizeKey(operation?.from || operation?.source_account || operation?.funder || operation?.source);
+  const to = normalizeKey(operation?.to || operation?.account || operation?.into || operation?.trustor);
+  if (to === ownPublicKey) return from;
+  if (from === ownPublicKey) return to;
+  return normalizeKey(operation?.account || operation?.source_account || operation?.from || operation?.to);
+}
+
+function operationDirection(operation: any, ownPublicKey: string): 'received' | 'sent' | 'related' {
+  const from = normalizeKey(operation?.from || operation?.source_account || operation?.funder || operation?.source);
+  const to = normalizeKey(operation?.to || operation?.account || operation?.into || operation?.trustor);
+  if (to === ownPublicKey) return 'received';
+  if (from === ownPublicKey || normalizeKey(operation?.source_account) === ownPublicKey) return 'sent';
+  return 'related';
+}
+
+function operationAmount(operation: any): string | null {
+  const raw =
+    operation?.amount ||
+    operation?.starting_balance ||
+    operation?.source_amount ||
+    operation?.amount_in ||
+    operation?.amount_out ||
+    '';
+  return normalizeKey(raw) || null;
 }
 
 function appBaseUrl(): string {
@@ -67,6 +115,33 @@ type CounterpartyProfile = {
 };
 
 export class TransactionHistoryService {
+  private static async listNetworkOperationRows(input: {
+    publicKey?: string;
+    month: number;
+    year: number;
+    limit: number;
+  }): Promise<any[]> {
+    const publicKey = normalizeKey(input.publicKey || '');
+    if (!hasPublicKey(publicKey)) return [];
+
+    try {
+      const networkLimit = Math.min(Math.max(Number(input.limit || 60), 1), 200);
+      const rows = await getStellarService().getOperationHistory(publicKey, networkLimit);
+      if (!Number.isFinite(input.month) || !Number.isFinite(input.year) || input.month < 1 || input.month > 12 || input.year < 2000) {
+        return rows;
+      }
+
+      const start = Date.UTC(input.year, input.month - 1, 1, 0, 0, 0, 0);
+      const end = Date.UTC(input.year, input.month, 1, 0, 0, 0, 0);
+      return rows.filter((row: any) => {
+        const timestamp = Date.parse(row?.created_at || '');
+        return Number.isFinite(timestamp) && timestamp >= start && timestamp < end;
+      });
+    } catch {
+      return [];
+    }
+  }
+
   private static async listReceiptRows(input: {
     sessionId: string;
     userId: string;
@@ -294,6 +369,12 @@ export class TransactionHistoryService {
       year,
       limit,
     });
+    const networkRows = await this.listNetworkOperationRows({
+      publicKey: ctx.walletPublicKey,
+      month,
+      year,
+      limit,
+    });
 
     const destinationKeys = [
       ...(rows || []).map((row: any) => normalizeKey(row?.destination_public_key)),
@@ -301,6 +382,7 @@ export class TransactionHistoryService {
         const metadata = (row?.metadata || {}) as Record<string, any>;
         return normalizeKey(metadata.destinationPublicKey || metadata.destination_public_key || metadata.counterpartyPublicKey || metadata.counterparty_public_key || metadata.counterpartyKey);
       }),
+      ...networkRows.map((row: any) => operationCounterpartyKey(row, normalizeKey(ctx.walletPublicKey || ''))),
     ];
     const profiles = await this.resolveCounterpartyProfiles(destinationKeys, ctx.sessionId, ctx.userId);
 
@@ -398,7 +480,64 @@ export class TransactionHistoryService {
         };
       });
 
-    const transactions = [...paymentTransactions, ...receiptTransactions]
+    const knownNetworkIds = new Set(
+      [...paymentTransactions, ...receiptTransactions]
+        .flatMap((item: any) => [normalizeKey(item.payment_hash || ''), normalizeKey(item.id || '')])
+        .filter(Boolean)
+    );
+    const ownPublicKey = normalizeKey(ctx.walletPublicKey || '');
+    const networkTransactions = networkRows
+      .filter((row: any) => {
+        const hash = normalizeKey(row?.transaction_hash || row?.transaction_hash_attr || '');
+        const id = normalizeKey(row?.id || row?.paging_token || '');
+        return (!hash || !knownNetworkIds.has(hash)) && (!id || !knownNetworkIds.has(id));
+      })
+      .map((row: any) => {
+        const direction = operationDirection(row, ownPublicKey);
+        const counterpartyKey = operationCounterpartyKey(row, ownPublicKey);
+        const profile = profiles.get(counterpartyKey);
+        const amount = operationAmount(row);
+        const assetCode = operationAssetCode(row);
+        const type = normalizeKey(row?.type || 'stellar_operation');
+        const operationType =
+          direction === 'received' ? `${type}_received` :
+          direction === 'sent' ? `${type}_sent` :
+          type || 'stellar_operation';
+        const displayName = normalizeKey(profile?.name || '');
+        const identifier = humanIdentifier({
+          email: profile?.email,
+          phone_number: profile?.phone_number,
+          cpf: profile?.cpf,
+          pix_key: profile?.pix_key,
+        });
+
+        return {
+          id: `stellar:${row?.id || row?.paging_token || row?.transaction_hash || row?.created_at}`,
+          payment_hash: row?.transaction_hash || null,
+          receipt_url: null,
+          status: 'success',
+          operation_type: operationType,
+          source_amount: direction === 'sent' || direction === 'related' ? amount : null,
+          source_asset_code: direction === 'sent' || direction === 'related' ? assetCode : null,
+          destination_amount: direction === 'received' ? amount : null,
+          destination_asset_code: direction === 'received' ? assetCode : null,
+          destination_public_key: hasPublicKey(counterpartyKey) ? counterpartyKey : null,
+          error_message: null,
+          context_message: null,
+          created_at: row?.created_at || null,
+          completed_at: row?.created_at || null,
+          counterparty: {
+            name: displayName || 'Destinatário',
+            identifier,
+            public_key: hasPublicKey(counterpartyKey) ? counterpartyKey : null,
+            user_id: profile?.user_id || null,
+            profile_url: profile?.profile_url || null,
+            short_profile_url: profile?.short_profile_url || profile?.profile_url || null,
+          },
+        };
+      });
+
+    const transactions = [...paymentTransactions, ...receiptTransactions, ...networkTransactions]
       .sort((a: any, b: any) => {
         const aTime = Date.parse(a.completed_at || a.created_at || '');
         const bTime = Date.parse(b.completed_at || b.created_at || '');
