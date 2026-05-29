@@ -1228,9 +1228,38 @@ export class AnchorService {
     }
 
     const wallet = await walletRepository.getWalletBySession(sessionId);
-    const publicKey = coalesceString(session.public_key, wallet?.public_key);
+    let publicKey = coalesceString(session.public_key, wallet?.public_key);
+
+    if (!publicKey) {
+      const userEmail = coalesceString(session.email);
+      if (userEmail) {
+        const { data: sessionByEmail } = await supabase
+          .from('agent_sessions')
+          .select('public_key')
+          .ilike('email', userEmail)
+          .not('public_key', 'is', null)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        publicKey = coalesceString(sessionByEmail?.public_key);
+      }
+    }
+
     if (!publicKey) {
       throw apiError('This TalkToStellar session does not have an active wallet.', 409);
+    }
+
+    let resolvedWallet = wallet;
+    if (!resolvedWallet) {
+      try {
+        await walletRepository.saveWallet({
+          session_id: sessionId,
+          public_key: publicKey,
+        });
+        resolvedWallet = { session_id: sessionId, public_key: publicKey };
+      } catch (saveError) {
+        logger.warn('[resolve-session-wallet] failed to auto-create wallet record:', saveError instanceof Error ? saveError.message : String(saveError));
+      }
     }
 
     return {
@@ -1239,9 +1268,9 @@ export class AnchorService {
       userId: coalesceString(session.user_id) || sessionId,
       email: coalesceString(session.email) || undefined,
       publicKey,
-      vaultSecretId: coalesceString(wallet?.vault_secret_id) || undefined,
+      vaultSecretId: coalesceString(resolvedWallet?.vault_secret_id) || undefined,
       sessionPinHash: coalesceString((session as any).session_password_hash, (session as any).password_hash) || undefined,
-      wallet,
+      wallet: resolvedWallet,
     };
   }
 
