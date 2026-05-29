@@ -1717,6 +1717,10 @@ export class AgentGraph {
     return /\b(melhor rota|rota mais otimizada|rota otimizada|rota mais barata|melhor caminho)\b/.test(normalized);
   }
 
+  private isBestRouteGuidanceRequest(text: string): boolean {
+    return this.isOptimizedRouteRequest(text);
+  }
+
   private isGenericRecipientReference(value: unknown): boolean {
     const normalized = this.normalizeTextForIntent(String(value || ''));
     if (!normalized) return true;
@@ -1828,6 +1832,37 @@ export class AgentGraph {
       validityLine,
       'Para finalizar, me envie o nome salvo, e-mail, CPF, telefone ou chave PIX do destinatário.',
     ].join('\n');
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handleBestRouteGuidanceRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    state.success = true;
+    state.response_message = this.text(
+      language,
+      [
+        'Eu analiso a melhor rota quando você informa valor, moeda e destino.',
+        '',
+        'Exemplos:',
+        '- melhor rota para converter 100 USDC para BRL',
+        '- melhor rota para enviar 50 reais para Ana',
+        '- cotação de 200 reais para dólares',
+        '',
+        'Com isso eu calculo valor final, taxa e caminho antes de qualquer PIN.',
+      ].join('\n'),
+      [
+        'I can analyze the best route when you include amount, asset, and destination.',
+        '',
+        'Examples:',
+        '- best route to convert 100 USDC to BRL',
+        '- best route to send 50 reais to Ana',
+        '- quote 200 reais to dollars',
+        '',
+        'Then I calculate final amount, fees, and route before any PIN.',
+      ].join('\n')
+    );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -4450,6 +4485,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const deterministicPixRamp = resumedPixRamp || extractedPixRamp;
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
+      const wantsBestRouteGuidance = this.isBestRouteGuidanceRequest(state.current_input);
       const deterministicYield = this.extractYieldIntentFromText(state.current_input);
       const deterministicMoneyCycle = this.extractMoneyCycleIntentFromText(state.current_input);
       const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
@@ -4471,25 +4507,25 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                   ? IntentType.FINANCIAL_MEMORY
                   : wantsTransactionHistory
                     ? IntentType.HISTORY
-                  : savingsCalculator || wantsAnnualSavingsSummary
-                    ? IntentType.FINANCIAL_MEMORY
                     : deterministicExternalWallet.is_external_wallet
                       ? IntentType.PAYMENT
-                      : deterministicBestRouteEstimate
-                        ? IntentType.PAYMENT
-                        : deterministicPixRamp.is_pix_ramp
-                          ? IntentType.PIX
-                          : deterministicMoneyCycle.is_money_cycle
-                            ? IntentType.YIELD
-                          : deterministicYield.is_yield
-                            ? IntentType.YIELD
-                            : deterministicAssetInterface.is_asset_interface
-                              ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
-                              : fixedSavings
-                                ? IntentType.FINANCIAL_MEMORY
-                                : deterministicFinancialMemory
+                      : deterministicBestRouteEstimate || wantsBestRouteGuidance
+                        ? IntentType.PRICE_QUOTE
+                        : savingsCalculator || wantsAnnualSavingsSummary
+                          ? IntentType.FINANCIAL_MEMORY
+                          : deterministicPixRamp.is_pix_ramp
+                            ? IntentType.PIX
+                            : deterministicMoneyCycle.is_money_cycle
+                              ? IntentType.YIELD
+                            : deterministicYield.is_yield
+                              ? IntentType.YIELD
+                              : deterministicAssetInterface.is_asset_interface
+                                ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
+                                : fixedSavings
                                   ? IntentType.FINANCIAL_MEMORY
-                                  : await this.detectIntent(state.current_input, state.session_data?.user_id);
+                                  : deterministicFinancialMemory
+                                    ? IntentType.FINANCIAL_MEMORY
+                                    : await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -4554,6 +4590,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (wantsTransactionHistory) {
         return await this.handleHistoryCheck(state);
+      }
+
+      if (deterministicBestRouteEstimate) {
+        return await this.handleGenericBestRouteEstimate(state, deterministicBestRouteEstimate);
+      }
+
+      if (wantsBestRouteGuidance) {
+        return await this.handleBestRouteGuidanceRequest(state);
       }
 
       if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
