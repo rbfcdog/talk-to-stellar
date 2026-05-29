@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { History, Loader2, Share2, UserCircle2, WalletCards } from "lucide-react"
+import { ArrowUpRight, Copy, History, Loader2, UserCircle2 } from "lucide-react"
 
 function displayName(profile: any, username: string) {
   return String(profile?.display_name || profile?.username || username || "TalkToStellar").trim()
@@ -44,6 +44,8 @@ export default function PublicProfilePage() {
   const name = displayName(profile, username)
   const publicLink = String(profile?.public_link || "").trim()
   const accountId = String(profile?.destination_identifier || profile?.identifier || username || "").trim()
+  const publicKey = String(profile?.destination_public_key || "").trim()
+  const displayInitial = useMemo(() => (name || "T").slice(0, 1).toUpperCase(), [name])
 
   async function copyLink() {
     if (!publicLink) return
@@ -73,81 +75,100 @@ export default function PublicProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg px-4 py-10 text-tts-deep">
-      <div className="mx-auto grid min-h-screen w-full max-w-5xl items-center gap-8 md:grid-cols-[1.1fr_0.9fr]">
+    <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:py-10">
+      <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 md:grid-cols-[1.12fr_0.88fr]">
         <section className="space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-gold">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tts-gold">
             <UserCircle2 className="h-4 w-4" />
             Perfil global
           </div>
 
-          <div className="space-y-3">
-            <h1 className="text-4xl font-semibold text-tts-surface md:text-6xl">{name}</h1>
-            <p className="max-w-2xl text-base leading-7 text-tts-deep">
-              Conta pública para receber, acompanhar saldos e acessar ações rápidas sem abrir a tela de pagamento.
-            </p>
-          </div>
+          <div className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-6 shadow-2xl md:p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-tts-border bg-tts-bg text-lg font-bold text-tts-surface">
+                {displayInitial}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-3xl font-semibold leading-tight text-tts-surface md:text-5xl">{name}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-deep md:text-base">
+                  Conta pública para receber, acompanhar saldos e acessar ações rápidas sem abrir a tela de pagamento.
+                </p>
+              </div>
+            </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Link público</p>
-              <p className="mt-2 text-sm font-semibold text-tts-surface">{publicLink ? "Ativo" : "Indisponível"}</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Link público</p>
+                <p className="mt-2 text-sm font-semibold text-tts-surface">{publicLink ? "Ativo" : "Indisponível"}</p>
+              </div>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Identificador</p>
+                <p className="mt-2 break-all text-sm font-semibold text-tts-surface">{accountId || "indisponível"}</p>
+              </div>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Recebimento</p>
+                <p className="mt-2 text-sm font-semibold text-tts-surface">{publicKey ? "Pronto" : "Indisponível"}</p>
+              </div>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Identificador</p>
-              <p className="mt-2 break-all text-sm font-semibold text-tts-surface">{accountId || "indisponível"}</p>
-            </div>
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Recebimento</p>
-              <p className="mt-2 text-sm font-semibold text-tts-surface">{String(profile?.destination_public_key || "").trim() ? "Pronto" : "Indisponível"}</p>
-            </div>
-          </div>
 
-          <div className="flex flex-wrap gap-3">
-            {publicLink && (
-              <button
-                type="button"
-                onClick={copyLink}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-2 text-sm font-semibold text-tts-deep transition hover:bg-tts-surface"
+            <div className="mt-6 flex flex-wrap gap-3">
+              {publicLink && (
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-bg px-4 py-2 text-sm font-semibold text-tts-deep transition hover:bg-tts-surface"
+                >
+                  <Copy className="h-4 w-4" />
+                  {copied ? "Link copiado" : "Copiar link"}
+                </button>
+              )}
+              <Link
+                href="/transactions"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep/90"
               >
-                <Share2 className="h-4 w-4" />
-                {copied ? "Link copiado" : "Copiar link"}
-              </button>
-            )}
-            <Link
-              href="/transactions"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep/90"
-            >
-              <History className="h-4 w-4" />
-              Ver histórico
-            </Link>
-            <Link
-              href={`/pay-anyone?mode=receive&recipient=${encodeURIComponent(name)}`}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-sm font-semibold text-tts-confirm transition hover:bg-tts-confirm/20"
-            >
-              <WalletCards className="h-4 w-4" />
-              Criar link de recebimento
-            </Link>
+                <History className="h-4 w-4" />
+                Ver histórico
+              </Link>
+              <Link
+                href={`/pay-anyone?mode=receive&recipient=${encodeURIComponent(name)}`}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-sm font-semibold text-tts-confirm transition hover:bg-tts-confirm/20"
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                Criar link de recebimento
+              </Link>
+            </div>
           </div>
         </section>
 
-        <section className="rounded-lg border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
-          <div className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-tts-muted">
+        <section className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
+          <div className="mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-tts-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Perfil público
+            Visão rápida
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-lg border border-tts-border bg-tts-bg p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Resumo</p>
+            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Resumo</p>
               <p className="mt-2 text-sm leading-6 text-tts-deep">
-                Este perfil mostra informações públicas da conta e os atalhos para receber, pagar e acompanhar histórico.
+                Perfil público com atalhos para receber, copiar o link e abrir o histórico sem cair em pagamento.
               </p>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-bg p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
+            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
               <p className="mt-2 break-all text-sm font-semibold text-tts-surface">
-                {String(profile?.destination_public_key || "indisponível")}
+                {publicKey || "indisponível"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Ação principal</p>
+              <p className="mt-2 text-sm text-tts-deep">
+                O link acima pode ser compartilhado. Quem abrir entra na conta certa de recebimento.
+              </p>
+            </div>
+            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Acesso rápido</p>
+              <p className="mt-2 text-sm text-tts-deep">
+                Use o histórico para conferir entradas e o link público para receber sem pedir dados de novo.
               </p>
             </div>
           </div>
