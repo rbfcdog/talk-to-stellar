@@ -124,6 +124,8 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Atualizado pelo histórico da conta");
     expect(reviewText).toContain("Confirmando...");
     expect(reviewText).toContain('role="status"');
+    expect(reviewText).not.toContain("Saldos e posições atualizados");
+    expect(reviewText).not.toContain("Balances and positions updated");
     expect(reviewText).not.toContain("returnsOpen");
     expect(reviewText).not.toContain("Execução aprovada");
     expect(reviewText).not.toContain("posiçãoões");
