@@ -2637,10 +2637,48 @@ export class AgentGraph {
 
     const listVerb = /\b(ver|mostrar|listar|abrir|consultar|exibir|quem|quais|cade|cad[eê]|revisar|olhar)\b/.test(normalized);
     const directList = /^(meus contatos|contatos|contatos salvos|meus destinatarios|destinatarios salvos|meus favoritos)$/.test(normalized);
-    const addVerb = /\b(adicion|salv|inclu|cadastr|novo contato|criar contato)\b/.test(normalized);
+    const addVerb = /\b(adicion(?:a|ar|e)?|salv(?:a|ar|e)?|inclu(?:i|ir|a)?|cadastr(?:a|ar|e)?|novo contato|criar contato|coloc(?:a|ar|e)?|guardar|registrar)\b/.test(normalized);
 
     if (directList || (listVerb && !addVerb)) {
       return { action: 'list' };
+    }
+
+    if (addVerb) {
+      const publicKeyMatch = normalized.match(/\bG[A-Z2-7]{55}\b/i)?.[0]?.trim();
+      const emailMatch = normalized.match(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/i)?.[0]?.trim();
+      const phoneMatch = normalized.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.replace(/\D+/g, '');
+      const pixKeyMatch = normalized.match(/\b(?:pix\s*[:=]\s*)?([\w.+-]+@[\w-]+(?:\.[\w-]+)+|\+?\d[\d\s().-]{7,}\d|G[A-Z2-7]{55})\b/i)?.[1]?.trim();
+
+      const contactKey = publicKeyMatch || emailMatch || phoneMatch || pixKeyMatch || '';
+      const addTargetMatch = /\b(?:nos?|meus|minha)\s+contatos?\b/i.test(normalized) || /\b(?:salvar|adicionar|incluir|cadastrar|registrar)\s+(.+)$/i.test(normalized);
+
+      if (!contactKey || !addTargetMatch) {
+        return {
+          action: 'add',
+          contact_key: contactKey,
+          contact_name: '',
+          needs_clarification: !contactKey,
+          clarification_question: !contactKey
+            ? 'Me diga a chave, email, telefone ou public key do contato.'
+            : '',
+        };
+      }
+
+      const contactName = normalized
+        .replace(publicKeyMatch || '', '')
+        .replace(emailMatch || '', '')
+        .replace(phoneMatch || '', '')
+        .replace(/\b(?:adicion(?:a|e|ar)?|salv(?:a|e|ar)?|inclu(?:i|ir|a)?|cadastr(?:a|e|ar)?|coloc(?:a|ar)?|guardar|registrar|quero|gostaria|preciso|desejo|pode|poderia|por favor|favor|nos?|meus|minha|contatos?|contato|novo contato|criar contato)\b/g, ' ')
+        .replace(/[\s,.;:!?]+/g, ' ')
+        .trim();
+
+      return {
+        action: 'add',
+        contact_key: contactKey,
+        contact_name: contactName,
+        needs_clarification: false,
+        clarification_question: '',
+      };
     }
 
     return null;
@@ -4043,7 +4081,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     return state;
   }
 
-  private savingsCalculatorIntent(message: string): null | { brlAmount: string } {
+  private savingsCalculatorIntent(message: string): any {
     const raw = String(message || '');
     const normalized = this.normalizeTextForIntent(raw);
     const asksCost =
@@ -4070,7 +4108,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       brlAmount: Number.isFinite(amount) && amount > 0 ? String(amount) : '',
     };
   }
-
   private wantsAnnualSavingsSummary(message: string): boolean {
     const normalized = this.normalizeTextForIntent(message);
     return (
@@ -4085,7 +4122,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     );
   }
 
-  private async handleSavingsCalculatorIntent(state: AgentState, intent: { brlAmount: string }): Promise<AgentState> {
+  private async handleSavingsCalculatorIntent(state: AgentState, intent: any): Promise<AgentState> {
     const resultRaw = await executeTool('show_savings_calculator', {
       brl_amount: intent.brlAmount,
     });
@@ -4500,6 +4537,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
+
   }
 
   private async handlePriceQuoteRequest(state: AgentState): Promise<AgentState> {
@@ -4585,6 +4623,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
       const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
+      const localContactIntent = this.extractContactIntentFromText(state.current_input);
       const wantsContacts = this.isContactsRequest(state.current_input);
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
@@ -4627,7 +4666,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
                               ? IntentType.PIX
                               : deterministicYield.is_yield
                                 ? IntentType.YIELD
-                                : deterministicAssetInterface.is_asset_interface
+                                : deterministicAssetInterface.is_asset_interface && localContactIntent?.action !== 'add'
                                   ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
                                   : fixedSavings
                                   ? IntentType.FINANCIAL_MEMORY
@@ -4643,6 +4682,12 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         "user",
         this.sanitizeUserMessage(state.current_input)
       );
+
+      if (localContactIntent?.action === 'add') {
+        state.detected_intent = IntentType.CONTACTS;
+        state.action_type = ActionType.LIST_CONTACTS;
+        return await this.handleContactsRequest(state);
+      }
 
       const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
       if (savingsCalculator) {
