@@ -140,7 +140,7 @@ describe('Agent tool execution', () => {
     expect(mockDisableConversionRule).toHaveBeenCalledWith('rule-123');
   });
 
-  it('lists the current chat capabilities around PIX, multi-asset conversion, review, and money cycle', async () => {
+  it('lists the current chat capabilities around PIX, multi-asset conversion, review, and contacts', async () => {
     const output = await executeTool('get_intent_help', {});
     const parsed = JSON.parse(output);
 
@@ -152,7 +152,6 @@ describe('Agent tool execution', () => {
       'PIX',
       'converter',
       'aplicação',
-      'ciclo',
       'melhor rota',
       'histórico',
       'comparativo de economia',
@@ -162,12 +161,11 @@ describe('Agent tool execution', () => {
     ]));
     expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('1. Contatos');
-    expect(parsed.message).toContain('Ciclo completo');
     expect(parsed.message).toContain('Link de pagamento');
     expect(parsed.message).toContain('Histórico, comprovantes e apelidos');
     expect(parsed.message).toContain('PIN e entrada com biometria');
     expect(JSON.stringify(parsed)).not.toMatch(/rendimento|rendendo|APY/i);
-    expect(parsed.message).toContain('sair para meu PIX');
+    expect(parsed.message).not.toMatch(/ciclo completo|money cycle|sair para meu PIX/i);
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
   });
 
@@ -422,7 +420,7 @@ describe('Agent tool execution', () => {
     const keep = JSON.parse(keepOutput);
 
     expect(keep.success).toBe(true);
-    expect(keep.frontend_url).toContain('/money-cycle?');
+    expect(keep.frontend_url).toContain('/review?');
     expect(keep.frontend_url).toContain('asset=CETES');
     expect(keep.frontend_url).toContain('amount=50');
 
@@ -441,7 +439,7 @@ describe('Agent tool execution', () => {
     expect(sendOut.message).toContain('Mandar para PIX');
   });
 
-  it('opens the consolidated money cycle interface', async () => {
+  it('does not expose the deprecated money cycle interface', async () => {
     const output = await executeTool('open_money_cycle', {
       amount: '500',
       asset_code: 'BRL',
@@ -450,14 +448,8 @@ describe('Agent tool execution', () => {
     });
     const parsed = JSON.parse(output);
 
-    expect(parsed.success).toBe(true);
-    expect(parsed.frontend_url).toContain('/money-cycle?');
-    expect(parsed.frontend_url).toContain('cycle=1');
-    expect(parsed.frontend_url).toContain('asset=BRL');
-    expect(parsed.frontend_url).toContain('amount=500');
-    expect(parsed.frontend_url).toContain('destination_pix_key=user%40example.com');
-    expect(parsed.steps).toEqual(['pix_on', 'yield', 'pix_off']);
-    expect(parsed.message).toContain('ciclo completo');
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Unknown tool');
   });
 
   it('opens the conversion interface with multi-asset defaults from chat', async () => {

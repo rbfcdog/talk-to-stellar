@@ -61,7 +61,7 @@ export function Problem() {
         >
           <TerminalEyebrow command="tts diagnose --market BRL --segment cross-border" />
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-[-0.022em] text-tts-deep md:text-4xl">
-            O que trava o ciclo do dinheiro hoje.
+            O que trava dinheiro global hoje.
           </h2>
         </motion.header>
 

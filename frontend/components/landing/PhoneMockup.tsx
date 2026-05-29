@@ -118,7 +118,7 @@ export default function PhoneMockup() {
               className="self-start bg-[#162032] text-[#e9edef] px-3 py-2 rounded-2xl rounded-bl-sm max-w-[85%] shadow-sm relative flex flex-col"
             >
               <p className="text-[15px] leading-snug">
-                {L("Perfeito. Preparei o ciclo completo para ", "Done. I prepared the full cycle for ")}
+                {L("Perfeito. Preparei a revisão para ", "Done. I prepared the review for ")}
                 <strong className="text-[#00D2FF]">R$ 500,00</strong>
                 . <br/>
                 {L("Etapas: PIX, revisão e retirada", "Steps: PIX, review, and withdrawal")}

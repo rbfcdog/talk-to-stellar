@@ -54,7 +54,7 @@ export function HowItWorks() {
           className="flex flex-col gap-3"
         >
           <h2 className="max-w-2xl text-[32px] font-extrabold tracking-[-0.022em] text-tts-deep">
-            O ciclo completo em quatro passos.
+            Da entrada ao comprovante em quatro passos.
           </h2>
         </motion.header>
 

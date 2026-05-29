@@ -18,10 +18,10 @@ interface JsonLine {
 
 const RESPONSE: JsonLine[] = [
   { value: '{', type: 'object-open' },
-  { key: 'intent', value: 'money_cycle', type: 'string', indent: 1 },
+  { key: 'intent', value: 'review', type: 'string', indent: 1 },
   { key: 'amount', value: '500.00', type: 'number', indent: 1 },
   { key: 'asset', value: 'real', type: 'string', indent: 1 },
-  { key: 'frontend_url', value: '/money-cycle?amount=500', type: 'string', indent: 1 },
+  { key: 'frontend_url', value: '/review?amount=500', type: 'string', indent: 1 },
   { key: 'pix_key_required', value: 'true', type: 'boolean', indent: 1 },
   { key: 'review_before_pin', value: 'true', type: 'boolean', indent: 1 },
   { value: '}', type: 'object-close' },
@@ -82,8 +82,8 @@ export function ApiShowcase() {
               variant="outline"
               className="h-11 border-tts-border bg-tts-surface px-5 text-sm text-tts-deep hover:bg-tts-bg"
             >
-              <a href="/money-cycle">
-                Abrir ciclo
+              <a href="/review">
+                Abrir aplicação
                 <ArrowRight className="ml-1 h-4 w-4" />
               </a>
             </Button>

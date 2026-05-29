@@ -2596,7 +2596,7 @@ export class AgentGraph {
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
-      '- For balances, contacts, history, payments, conversions, PIX, application reviews, money-cycle, reset PIN, and logout, prefer tools over free text.',
+      '- For balances, contacts, history, payments, conversions, PIX, application reviews, reset PIN, and logout, prefer tools over free text.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
@@ -2629,7 +2629,6 @@ export class AgentGraph {
       '- User-facing copy for this flow must say revisão, aplicação, investimento, dinheiro rendendo, posição, dollars, CETES/opção México, or reais. Never use the word "yield" in user-facing text. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
       '- Use get_yield_options for available currencies, get_yield_balance for current reviewed balance, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "review", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
-      '- For complete lifecycle requests like "injetar dinheiro, revisar e sair", "ciclo completo", or "add, review, withdraw", use open_money_cycle so the user gets one consolidated interface.',
       '- Do not discuss returns/rates publicly. Say only that the user reviews value and operation before confirming.',
       '- In English, route users to /review for the visual review page. Do not route users to legacy localized routes.',
       '',
@@ -3877,11 +3876,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
   private async handleMoneyCycleRequest(state: AgentState, intent: ReturnType<AgentGraph['extractMoneyCycleIntentFromText']>): Promise<AgentState> {
     const language = this.getLanguage(state);
-    const resultRaw = await executeTool('open_money_cycle', {
+    const resultRaw = await executeTool('open_asset_interface', {
       session_id: state.session_id,
+      action: 'keep',
       amount: intent.amount,
       asset_code: intent.asset_code || 'BRL',
-      destination_pix_key: intent.destination_pix_key,
       language,
     });
 
@@ -3897,8 +3896,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       ? result.message
       : this.text(
           language,
-          `Não consegui abrir o ciclo completo agora: ${result.error || 'erro desconhecido'}`,
-          `I could not open the full money cycle right now: ${result.error || 'unknown error'}`
+          `Não consegui abrir a aplicação agora: ${result.error || 'erro desconhecido'}`,
+          `I could not open the review right now: ${result.error || 'unknown error'}`
         );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);

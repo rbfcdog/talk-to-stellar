@@ -81,8 +81,8 @@ function targetForSource(source: string, language?: string): ReturnTarget | null
 
   if (match(["money-cycle", "cycle", "ciclo"])) {
     return {
-      href: withLanguage("/money-cycle", language),
-      label: copy(language, "Voltar ao ciclo", "Back to cycle"),
+      href: withLanguage("/review", language),
+      label: copy(language, "Voltar à aplicação", "Back to review"),
       source: normalized,
     };
   }

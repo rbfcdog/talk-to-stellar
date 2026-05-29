@@ -1,8 +1,6 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
-
 import { Button } from '@/components/ui/button'
 import { TerminalEyebrow } from '@/components/ui/terminal-eyebrow'
 
@@ -64,9 +62,8 @@ export function FinalCta() {
             variant="outline"
             className="h-12 border-white/20 bg-white/5 px-6 text-sm text-white hover:bg-white/10"
           >
-            <a href="/money-cycle">
-              Ver ciclo completo
-              <ArrowRight className="ml-1 h-4 w-4" />
+            <a href="/review">
+              Ver aplicação
             </a>
           </Button>
         </div>
