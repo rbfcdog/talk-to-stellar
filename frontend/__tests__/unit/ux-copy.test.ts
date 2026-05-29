@@ -121,6 +121,7 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain('role="status"');
     expect(reviewText).not.toContain("returnsOpen");
     expect(reviewText).not.toContain("Execução aprovada");
+    expect(reviewText).not.toContain("posiçãoões");
     expect(reviewText).not.toContain("maior que zero");
     expect(reviewText).not.toContain("Com saldo");
     expect(reviewText).not.toContain("Outros saldos");
