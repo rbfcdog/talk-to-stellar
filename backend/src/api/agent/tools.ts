@@ -406,6 +406,7 @@ function buildYieldFrontendUrl(input: {
   return buildFrontendInterfaceUrl({
     path: '/rendimentos',
     params: {
+      view: 'application',
       action: input.action || 'deposit',
       amount: input.amount,
       asset: frontendAssetCode(input.assetCode || 'USDC'),

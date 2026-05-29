@@ -560,11 +560,14 @@ export default function RendimentosClient({
     lang: language,
   }), [amount, language]);
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", {
+    view: "returns",
     amount,
     asset: safeSelectedCode,
     lang: language,
   }), [amount, safeSelectedCode, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", {
+    view: "application",
+    action: "deposit",
     amount,
     asset: safeSelectedCode,
     lang: language,
@@ -1907,6 +1910,8 @@ function InvestmentOptionCard({
   const sparkValues = sparklineValues(displayPositionAmount, ratePercent);
   const sparkMax = Math.max(...sparkValues);
   const reviewHref = buildMoneyUrl("/rendimentos", {
+    view: "application",
+    action: "deposit",
     asset: code,
     amount: amount || "100",
     lang: language,
