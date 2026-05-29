@@ -40,6 +40,7 @@ export function publicErrorCode(error: unknown) {
   if (/defindex|yield confirmation|yield operation|yield service|rendimento/.test(normalized)) return 'yield_unavailable';
   if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) return 'recipient_not_found';
   if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) return 'pix_account_not_ready';
+  if (/tesouro_distributor|sandbox pix settlement|sandbox.*settlement/.test(normalized)) return 'pix_sandbox_settlement_unavailable';
   if (/uuid parsing|json deserialize error|accountregistration/.test(normalized)) return 'pix_account_not_ready';
   if (/timeout|timed out|abort|aborted|operation was aborted|fetch failed|network|econn|service unavailable|failed to fetch|gateway timeout|etimedout/.test(normalized)) return 'service_timeout';
   if (/nao consegui encontrar uma rota segura|nao foi encontrado caminho|não foi encontrado caminho|nenhum caminho encontrado|sem rota|no path|path not found|liquidez|source_issuer|dest_issuer|issuer=|_issuer|trustline|horizon|path payment|strictsend|strict send|xdr|dex/.test(normalized)) return 'conversion_route_unavailable';
@@ -90,6 +91,8 @@ export function publicErrorMessage(error: unknown, fallback = 'Nao consegui conc
       return 'Esse destinatario nao esta nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
     case 'pix_account_not_ready':
       return 'Sua conta PIX ainda esta sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
+    case 'pix_sandbox_settlement_unavailable':
+      return 'A retirada PIX em testnet ainda esta finalizando a configuracao. Tente novamente em alguns segundos.';
     case 'service_timeout':
       return 'A operacao demorou demais. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':

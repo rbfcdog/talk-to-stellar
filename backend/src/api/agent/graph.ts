@@ -151,7 +151,7 @@ export class AgentGraph {
 
   private sanitizeUserFacingTechnicalTerms(content: string, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const yieldReplacement = language === 'en' ? 'investments' : 'dinheiro rendendo';
-    const reviewReplacement = language === 'en' ? 'application' : 'aplicação';
+    const reviewReplacement = language === 'en' ? 'earnings' : 'rendimentos';
 
     return String(content || '')
       .split('\n')
@@ -160,7 +160,7 @@ export class AgentGraph {
         return line
           .replace(/\bquero\s+ver\s+(?:o\s+)?yield\b/gi, language === 'en' ? 'I want to see investments' : 'quero ver dinheiro rendendo')
           .replace(/\bver\s+(?:o\s+)?yield\b/gi, language === 'en' ? 'see investments' : 'ver dinheiro rendendo')
-          .replace(/\byield\s+options\b/gi, language === 'en' ? 'investment options' : 'opções de aplicação')
+          .replace(/\byield\s+options\b/gi, language === 'en' ? 'earnings options' : 'opções de rendimentos')
           .replace(/\byield\s+review\b/gi, reviewReplacement)
           .replace(/\byield\b/gi, yieldReplacement);
       })
@@ -2601,7 +2601,7 @@ export class AgentGraph {
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
-      '- For balances, contacts, history, payments, conversions, PIX, application reviews, reset PIN, and logout, prefer tools over free text.',
+      '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, and logout, prefer tools over free text.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
@@ -2625,17 +2625,17 @@ export class AgentGraph {
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- For first greetings, use get_intent_help and show the compact full capability list. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same compact full capability list.',
       '- Mini-menus must use no technical terms and no second welcome block if the user already received a login/onboarding completion message.',
-      '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "dinheiro rendendo", "aplicação", "investimento" or "posição"; in English say "investments", "application", or "position".',
+      '- Never use the technical word "yield" in user-facing copy or examples. In pt-BR say "rendimentos", "dinheiro rendendo", "investimento" or "posição"; in English say "earnings", "investments", or "position".',
       '- If a quote, confirmation, or payment link is expired, stop the old flow and generate a fresh quote/link. Never reuse expired numbers.',
       '- Map internal/provider errors to user-safe recovery text. Do not expose SQL, schema cache, API JSON, Friendbot, Horizon, issuer, trustline, liquidity diagnostics, stack traces, or provider credentials.',
       '',
       '## YIELD UX',
-      '- For application intents, use yield tools instead of free text.',
+      '- For earnings/investment intents, use yield tools instead of free text.',
       '- User-facing copy for this flow must say aplicação, investimento, dinheiro rendendo, posição, dollars, CETES/opção México, or reais. Never use the word "yield" in user-facing text. Do not use public return-rate wording in user-facing text. Never mention Defindex, vault, contract, XDR, blockchain, issuer, trustline, Horizon, internals, or Stellar.',
       '- Use get_yield_options for available currencies, get_yield_balance for current position, prepare_yield_action before confirmation, and confirm_yield_action only after explicit confirmation plus PIN.',
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "apply", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- Do not discuss returns/rates publicly. Say only that the user reviews value and operation before confirming.',
-      '- In English, route users to /review for the application page. Do not route users to legacy localized routes.',
+      '- Route users to /rendimentos for the earnings/application page. Do not route users to legacy localized routes.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -4705,7 +4705,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
       const yieldIntent = this.extractYieldIntentFromText(input);
       if (yieldIntent.is_yield) {
-        const url = new URL('/review', this.getFrontendBaseUrl());
+        const url = new URL('/rendimentos', this.getFrontendBaseUrl());
         url.searchParams.set('action', yieldIntent.action);
         if (yieldIntent.amount) url.searchParams.set('amount', yieldIntent.amount);
         if (yieldIntent.asset_code) url.searchParams.set('asset', yieldIntent.asset_code);
@@ -4713,8 +4713,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         url.searchParams.set('lang', language);
         return this.text(
           language,
-          `Abra a tela para aplicar dinheiro ou ver posições:\n${url.toString()}\n\nNada sai sem PIN.`,
-          `Open the page to apply money or view positions:\n${url.toString()}\n\nNothing moves without PIN.`
+          `Abra rendimentos para aplicar dinheiro ou ver posições:\n${url.toString()}\n\nNada sai sem PIN.`,
+          `Open earnings to apply money or view positions:\n${url.toString()}\n\nNothing moves without PIN.`
         );
       }
       return this.text(

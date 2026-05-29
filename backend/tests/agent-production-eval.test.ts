@@ -214,7 +214,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Options to apply money: dollars, CETES, reais.',
+      message: 'Earnings options: dollars, CETES, reais.',
     }));
 
     const result = await graph.processInput(createState('show yield options', false));
@@ -223,7 +223,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Options to apply money');
+    expect(result.response_message).toContain('Earnings options');
   });
 
   it('routes a plain investment request to application options', async () => {
@@ -232,7 +232,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Opções para aplicar dinheiro: dólares e XLM.\n\nAbrir:\nhttps://app.example.com/review',
+      message: 'Opções de rendimentos: dólares e XLM.\n\nAbrir rendimentos:\nhttps://app.example.com/rendimentos',
     }));
 
     const result = await graph.processInput(createState('quero investir'));
@@ -241,7 +241,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/review');
+    expect(result.response_message).toContain('/rendimentos');
     expect(result.response_message).not.toContain('/money-cycle');
   });
 
@@ -341,7 +341,7 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Aplicar dinheiro está pronto para CETES.\n\nAbra:\nhttps://app.example.com/review?asset=CETES',
+      message: 'Abrir rendimentos para CETES.\n\nAbrir:\nhttps://app.example.com/rendimentos?asset=CETES',
     }));
 
     const result = await graph.processInput(createState('manter 50 cetes'));
@@ -355,7 +355,7 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/review?asset=CETES');
+    expect(result.response_message).toContain('/rendimentos?asset=CETES');
   });
 
   it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {

@@ -45,6 +45,9 @@ function T(language: AppLanguage, pt: string, en: string) {
 function normalizeAsset(value?: string) {
   const asset = String(value || "USDC").trim().toUpperCase()
   if (asset === "USD") return "USDC"
+  if (["BRL", "REAL", "REAIS", "R$"].includes(asset)) return "BRL"
+  if (asset === "TESOURO") return "BRL"
+  if (asset === "CETES") return "CETES"
   if (asset === "XLM") return "XLM"
   return "USDC"
 }
@@ -76,7 +79,15 @@ function formatAmount(value: string | undefined, asset: string, language: AppLan
       maximumFractionDigits: 7,
     }).format(amount)
   }
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 7 }).format(amount)} XLM`
+  if (asset === "BRL") {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 7,
+    }).format(amount)
+  }
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 7 }).format(amount)} ${asset}`
 }
 
 function publicMessage(error: unknown, language: AppLanguage) {
@@ -273,7 +284,9 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                     onChange={(event) => setAsset(normalizeAsset(event.target.value))}
                     className="h-12 rounded-lg border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold"
                   >
-                    <option value="USDC">USDC</option>
+                    <option value="USDC">{T(language, "Dólares", "Dollars")} · USDC</option>
+                    <option value="BRL">{T(language, "Reais", "Brazilian reais")} · BRL</option>
+                    <option value="CETES">CETES</option>
                     <option value="XLM">XLM</option>
                   </select>
                 </label>
@@ -349,9 +362,6 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
             </div>
 
             <div className="mt-4 grid gap-2">
-              <Link href="/chat" className="inline-flex h-10 items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
-                {T(language, "Abrir conversa", "Open chat")}
-              </Link>
               <Link href={`/pix-off?asset=${encodeURIComponent(asset)}&lang=${encodeURIComponent(language)}`} className="inline-flex h-10 items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
                 {T(language, "Enviar por PIX", "Send by PIX")}
               </Link>

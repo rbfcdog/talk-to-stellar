@@ -353,7 +353,7 @@ describe('Agent tool execution', () => {
       { currency: 'CETES', name: 'Mexico test option', available: true },
       { currency: 'XLM', name: 'XLM', available: true },
     ]);
-    expect(parsed.message).toContain('Options to apply money');
+    expect(parsed.message).toContain('Earnings options');
     expect(parsed.disclosure.toLowerCase()).toContain('testnet');
     expect(parsed.disclosure.toLowerCase()).not.toMatch(/investment advice|fixed income|savings account|bank deposit/);
     expect(JSON.stringify(parsed)).not.toMatch(/APY|estimated_apy/i);
@@ -396,7 +396,7 @@ describe('Agent tool execution', () => {
       currency: 'BRL',
       name: 'reais',
     });
-    expect(parsed.frontend_url).toContain('/review?');
+    expect(parsed.frontend_url).toContain('/rendimentos?');
     expect(parsed.frontend_url).toContain('asset=BRL');
     expect(parsed.frontend_url).toContain('amount=100');
     expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -421,7 +421,7 @@ describe('Agent tool execution', () => {
     const keep = JSON.parse(keepOutput);
 
     expect(keep.success).toBe(true);
-    expect(keep.frontend_url).toContain('/review?');
+    expect(keep.frontend_url).toContain('/rendimentos?');
     expect(keep.frontend_url).toContain('asset=CETES');
     expect(keep.frontend_url).toContain('amount=50');
 

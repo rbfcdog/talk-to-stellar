@@ -16,6 +16,7 @@ import {
   getUserFacingAssetCodes,
   normalizeAssetCode,
   resolveConfiguredAsset,
+  settlementAssetCode,
   userFacingAssetCode,
 } from '../../config/assets';
 import { AgentRepository } from '../repository/core/agent.repository';
@@ -1366,12 +1367,13 @@ export class AnchorService {
       const userFacingFinalAsset = normalizeAssetCode(record.finalAssetCode) === 'TESOURO'
         ? 'BRL'
         : (record.finalAssetCode || 'BRL');
+      const settlementFinalAsset = settlementAssetCode(record.finalAssetCode || userFacingFinalAsset);
       let balanceContext = '';
       try {
         const balances = normalizeBalances(await StellarService.getAccountBalance(record.publicKey));
         const updated = balances.find((balance) => (
-          normalizeAssetCode(balance.asset_code) === normalizeAssetCode(userFacingFinalAsset) &&
-          (normalizeAssetCode(userFacingFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(userFacingFinalAsset, balance.asset_issuer))
+          normalizeAssetCode(balance.asset_code) === normalizeAssetCode(settlementFinalAsset) &&
+          (normalizeAssetCode(settlementFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(settlementFinalAsset, balance.asset_issuer))
         ));
         if (updated?.balance) {
           balanceContext = ` Saldo atualizado: ${formatDisplayAmount(updated.balance, userFacingFinalAsset)}.`;
@@ -2078,7 +2080,7 @@ export class AnchorService {
           'TESOURO_DISTRIBUTOR_SECRET is not configured; sandbox PIX completed in ledger simulation mode.',
         );
       }
-      return this.failSandboxOnRamp(record, 'TESOURO_DISTRIBUTOR_SECRET is required for sandbox PIX settlement.');
+      return this.failSandboxOnRamp(record, 'Sandbox PIX settlement is not configured in this test environment.');
     }
 
     const destinationAmount = toStellarAmount(record.destinationAmount);
@@ -2092,7 +2094,7 @@ export class AnchorService {
       return {
         publicKey,
         success: false,
-        error: 'TESOURO_DISTRIBUTOR_PUBLIC and TESOURO_DISTRIBUTOR_SECRET are required for sandbox PIX settlement.',
+        error: 'Sandbox PIX settlement is not configured in this test environment.',
       };
     }
 
@@ -2190,6 +2192,23 @@ export class AnchorService {
     assertSufficientBalance(currentBalances, sourceAsset, debitAmount);
     const collector = await this.ensureSandboxCollectorTrustline(sourceAsset);
     if (!collector.success || !collector.publicKey) {
+      if (this.sandboxLedgerSettlementEnabled()) {
+        const pseudoHash = `sandbox-offramp-${crypto.randomUUID().replace(/-/g, '')}`;
+        record.transaction.status = 'completed' as any;
+        record.transaction.updatedAt = new Date().toISOString();
+        record.submitHash = pseudoHash;
+        record.transaction.stellarTxHash = pseudoHash;
+        record.transaction.toAmount = record.destinationBrl || record.targetBrl || record.transaction.toAmount;
+        record.transaction.toCurrency = 'BRL';
+        (record.transaction as any).metadata = {
+          ...((record.transaction as any).metadata || {}),
+          sandbox_ledger_settlement: true,
+          final_settlement_mode: 'sandbox_ledger_no_distributor',
+          settlement_note: collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`,
+        };
+        await this.updateRampOperationStatus(record.operationId || input.operationId, 'COMPLETED');
+        return { success: true, order_id: input.orderId, hash: pseudoHash };
+      }
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
       record.submitError = collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`;

@@ -49,11 +49,15 @@ export function buildUsedQuoteLabel(input: {
   const destinationIsReal = destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
 
   if (sourceIsReal && destinationAsset === 'USDC') {
-    return `Cotação usada: 1 US$ = R$ ${trimFixed(sourceAmount / destinationAmount, 6)}`;
+    const rate = sourceAmount / destinationAmount;
+    if (rate > 0 && rate < 2) return 'Cotação usada: ambiente testnet; valor sem câmbio real';
+    return `Cotação usada: 1 US$ = R$ ${trimFixed(rate, 6)}`;
   }
 
   if (sourceAsset === 'USDC' && destinationIsReal) {
-    return `Cotação usada: 1 US$ = R$ ${trimFixed(destinationAmount / sourceAmount, 6)}`;
+    const rate = destinationAmount / sourceAmount;
+    if (rate > 0 && rate < 2) return 'Cotação usada: ambiente testnet; valor sem câmbio real';
+    return `Cotação usada: 1 US$ = R$ ${trimFixed(rate, 6)}`;
   }
 
   const sourceLabel = formatCustomerAssetAmount(String(sourceAmountRaw || ''), sourceAsset);

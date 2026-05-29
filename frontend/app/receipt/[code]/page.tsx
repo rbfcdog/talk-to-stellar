@@ -1,9 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { useParams } from "next/navigation"
-import { Download, ExternalLink } from "lucide-react"
+import { Download } from "lucide-react"
 
 function inferFileName(imageUrl: string) {
   if (imageUrl.startsWith("data:image/png")) return "talktostellar-receipt.png"
@@ -18,15 +17,8 @@ function ReceiptFallback() {
       <section className="max-w-lg rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur">
         <h1 className="text-2xl font-semibold text-tts-surface">Receipt not found</h1>
         <p className="mt-3 text-sm leading-6 text-tts-deep">
-          This link may have expired. Open the receipt from the web chat conversation.
+          This link may have expired. Open the receipt from your transaction history.
         </p>
-        <Link
-          href="/chat"
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
-        >
-          <ExternalLink className="h-4 w-4" />
-          Back to chat
-        </Link>
       </section>
     </main>
   )
@@ -96,13 +88,6 @@ export default function ReceiptByCodePage() {
                 <Download className="h-4 w-4" />
                 Download image
               </a>
-              <Link
-                href="/chat"
-                className="inline-flex items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Back to chat
-              </Link>
             </div>
           </div>
 

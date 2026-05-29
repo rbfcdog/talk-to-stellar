@@ -295,6 +295,29 @@ function normalizeDecimal(value: unknown) {
   return parsed;
 }
 
+function optionRatePercent(option?: YieldOption | null) {
+  const raw = option?.apy_percent || option?.apy?.apyPercent || option?.apy?.apy_percent || option?.apy?.apy || option?.apy_period || "";
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number(String(value || "").replace("%", "").replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function formatPercent(value: number, language: AppLanguage) {
+  if (!Number.isFinite(value) || value <= 0) return localCopy(language, "Indisponível", "Unavailable");
+  return `${value.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+function positionAmountForDisplay(option: YieldOption, position?: PositionState) {
+  const amount = normalizeDecimal(position?.amount || "0");
+  return isSuspiciousTestnetConversionPosition(option, position) ? 0 : amount;
+}
+
+function sparklineValues(baseAmount: number, ratePercent: number) {
+  const base = baseAmount > 0 ? baseAmount : 1;
+  const rate = Math.max(0.01, ratePercent / 100);
+  return Array.from({ length: 8 }, (_, index) => base * (1 + rate * (index / 7)));
+}
+
 function isSuspiciousTestnetConversionPosition(option: YieldOption, position?: PositionState) {
   if (!position || position.loading || position.error) return false;
   const amount = normalizeDecimal(position.amount);
@@ -541,7 +564,7 @@ export default function RendimentosClient({
     asset: safeSelectedCode,
     lang: language,
   }), [amount, safeSelectedCode, language]);
-  const newApplicationUrl = useMemo(() => buildMoneyUrl("/review", {
+  const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", {
     amount,
     asset: safeSelectedCode,
     lang: language,
@@ -1140,7 +1163,7 @@ function AccountPanel({
       <AccountStatusCard
         state={sessionLoading ? "loading" : authenticated ? "connected" : "signed-out"}
         accountId={accountPublicKey}
-        ctaHref="/login?next=/review"
+        ctaHref="/login?next=/rendimentos"
         compact
         className="mt-4"
       />
@@ -1181,7 +1204,7 @@ function AccountPanel({
       </div>
 
       {!authenticated && !sessionLoading ? (
-        <a href="/login?next=/review" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
+        <a href="/login?next=/rendimentos" className="mt-4 inline-flex min-h-11 w-full items-center justify-center bg-tts-deep px-3 py-2 text-sm font-black text-tts-surface transition hover:bg-tts-deep2">
           {L("Entrar com segurança", "Sign in securely")}
         </a>
       ) : null}
@@ -1373,7 +1396,7 @@ function YieldWorkspacePanel({
               {L("A tela mostra valor e operação antes do PIN.", "The screen shows amount and operation before PIN.")}
             </p>
           </div>
-          <a href="/login?next=/review" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
+          <a href="/login?next=/rendimentos" className="mt-3 inline-flex min-h-10 items-center justify-center bg-tts-gold px-3 py-2 text-xs font-black text-tts-deep transition hover:bg-tts-gold/90">
             {L("Entrar na conta", "Sign in")}
           </a>
         </div>
@@ -1670,6 +1693,20 @@ function CurrentInvestmentsPage({
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const availableOptions = options.filter((option) => String(option.vault_address || "").trim());
+  const positionRows = availableOptions.map((option) => {
+    const code = optionCode(option);
+    const position = positionBalances[code];
+    return {
+      option,
+      code,
+      profile: moneyProfile(code),
+      amount: positionAmountForDisplay(option, position),
+      loading: Boolean(!position || position.loading),
+      error: String(position?.error || ""),
+    };
+  });
+  const activeRows = positionRows.filter((row) => row.amount > 0);
+  const largestRow = activeRows.reduce<typeof activeRows[number] | null>((best, row) => (!best || row.amount > best.amount ? row : best), null);
 
   return (
     <main className="min-h-screen bg-tts-bg text-tts-deep">
@@ -1722,6 +1759,15 @@ function CurrentInvestmentsPage({
           <MiniStat label={L("Opções", "Options")} value={String(availableOptions.length)} detail={L("ativas", "active")} />
         </section>
 
+        {session.authenticated ? (
+          <PortfolioOverview
+            language={language}
+            rows={positionRows}
+            activeCount={activeRows.length}
+            largestLabel={largestRow ? `${formatAmount(largestRow.amount, language)} ${largestRow.profile.short}` : L("Sem posição", "No position")}
+          />
+        ) : null}
+
         {isTestnet ? (
           <p className="text-xs font-bold text-tts-muted">
             {L("Testnet: dados estimados.", "Testnet: estimated data.")}
@@ -1761,6 +1807,83 @@ function CurrentInvestmentsPage({
   );
 }
 
+function PortfolioOverview({
+  language,
+  rows,
+  activeCount,
+  largestLabel,
+}: {
+  language: AppLanguage;
+  rows: Array<{ option: YieldOption; code: string; profile: MoneyProfile; amount: number; loading: boolean; error: string }>;
+  activeCount: number;
+  largestLabel: string;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const visibleRows = rows.filter((row) => row.amount > 0);
+  const visualTotal = visibleRows.reduce((sum, row) => sum + row.amount, 0);
+  const readyRows = rows.filter((row) => !row.loading && !row.error).length;
+
+  return (
+    <section className="overflow-hidden border border-tts-border bg-tts-surface">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+        <div className="p-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-tts-muted">
+            {L("Visão geral", "Overview")}
+          </p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-tts-deep">
+            {activeCount > 0
+              ? L(`${activeCount} posição${activeCount === 1 ? "" : "ões"} ativa${activeCount === 1 ? "" : "s"}`, `${activeCount} active position${activeCount === 1 ? "" : "s"}`)
+              : L("Nenhuma posição ativa", "No active positions")}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-tts-muted">
+            {L("Acompanhe as opções configuradas, posição atual e evolução simulada do ambiente.", "Track configured options, current position, and simulated environment movement.")}
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <MiniStat label={L("Maior posição", "Largest position")} value={largestLabel} />
+            <MiniStat label={L("Opções prontas", "Ready options")} value={`${readyRows}/${rows.length || 0}`} />
+            <MiniStat label={L("Ambiente", "Environment")} value={L("Testnet", "Testnet")} detail={L("valores estimados", "estimated values")} />
+          </div>
+        </div>
+
+        <div className="border-t border-tts-border bg-tts-bg/60 p-5 lg:border-l lg:border-t-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-tts-muted">
+            {L("Distribuição visual", "Visual distribution")}
+          </p>
+          <div className="mt-4 flex h-4 overflow-hidden rounded-full border border-tts-border bg-tts-surface">
+            {visibleRows.length && visualTotal > 0 ? visibleRows.map((row, index) => (
+              <div
+                key={`${row.code}-${index}`}
+                className={index % 2 === 0 ? "bg-tts-confirm" : "bg-tts-gold"}
+                style={{ width: `${Math.max(8, (row.amount / visualTotal) * 100)}%` }}
+                title={`${row.profile.short}: ${formatAmount(row.amount, language)}`}
+              />
+            )) : (
+              <div className="w-full bg-tts-border" />
+            )}
+          </div>
+          <div className="mt-4 grid gap-2">
+            {(visibleRows.length ? visibleRows : rows).slice(0, 4).map((row, index) => (
+              <div key={`${row.code}-legend-${index}`} className="flex items-center justify-between gap-3 text-sm">
+                <span className="inline-flex items-center gap-2 font-black text-tts-deep">
+                  <span className={`h-2.5 w-2.5 rounded-full ${index % 2 === 0 ? "bg-tts-confirm" : "bg-tts-gold"}`} />
+                  {row.profile.short}
+                </span>
+                <span className="font-semibold text-tts-muted">
+                  {row.amount > 0 ? `${formatAmount(row.amount, language)} ${row.profile.short}` : L("sem posição", "no position")}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs leading-5 text-tts-muted">
+            {L("Comparação visual por quantidade de cada moeda, não por valor em reais.", "Visual comparison by asset quantity, not by BRL value.")}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function InvestmentOptionCard({
   option,
   language,
@@ -1779,15 +1902,20 @@ function InvestmentOptionCard({
   const hasPositionError = Boolean(position?.error);
   const positionAmount = normalizeDecimal(position?.amount || "0");
   const hasTestnetConversionAnomaly = isSuspiciousTestnetConversionPosition(option, position);
-  const displayPositionAmount = hasTestnetConversionAnomaly ? 0 : positionAmount;
-  const reviewHref = buildMoneyUrl("/review", {
+  const displayPositionAmount = positionAmountForDisplay(option, position);
+  const ratePercent = optionRatePercent(option);
+  const sparkValues = sparklineValues(displayPositionAmount, ratePercent);
+  const sparkMax = Math.max(...sparkValues);
+  const reviewHref = buildMoneyUrl("/rendimentos", {
     asset: code,
     amount: amount || "100",
     lang: language,
   });
 
   return (
-    <article className="border border-tts-border bg-tts-surface p-4">
+    <article className="overflow-hidden border border-tts-border bg-tts-surface">
+      <div className="h-1.5 bg-gradient-to-r from-tts-confirm via-tts-gold to-tts-deep" />
+      <div className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${profile.tone}`}>
@@ -1818,8 +1946,36 @@ function InvestmentOptionCard({
             ? position?.error
             : hasTestnetConversionAnomaly
               ? L(`Valor isolado em testnet: ${formatAmount(positionAmount, language)} ${profile.short}.`, `Isolated testnet value: ${formatAmount(positionAmount, language)} ${profile.short}.`)
-              : L("Atualizado da conta.", "Updated from the account.")}
+          : L("Atualizado da conta.", "Updated from the account.")}
         </p>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-[0.8fr_1.2fr]">
+        <div className="border border-tts-border bg-tts-bg p-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">
+            {L("Taxa estimada", "Estimated rate")}
+          </p>
+          <p className="mt-2 text-xl font-black text-tts-deep">{formatPercent(ratePercent, language)}</p>
+          <p className="mt-1 text-xs leading-5 text-tts-muted">{L("ambiente atual", "current environment")}</p>
+        </div>
+        <div className="border border-tts-border bg-tts-bg p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">
+              {L("Simulação visual", "Visual simulation")}
+            </p>
+            <span className="text-xs font-black text-tts-confirm">12m</span>
+          </div>
+          <div className="mt-3 flex h-20 items-end gap-1.5">
+            {sparkValues.map((value, index) => (
+              <span
+                key={`${code}-spark-${index}`}
+                className="flex-1 rounded-t-sm bg-tts-confirm/80"
+                style={{ height: `${Math.max(14, (value / sparkMax) * 100)}%` }}
+                title={`${formatAmount(value, language)} ${profile.short}`}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       {hasTestnetConversionAnomaly ? (
@@ -1835,6 +1991,7 @@ function InvestmentOptionCard({
         <PiggyBank className="h-4 w-4" aria-hidden="true" />
         {L("Aplicar", "Apply")}
       </a>
+      </div>
     </article>
   );
 }

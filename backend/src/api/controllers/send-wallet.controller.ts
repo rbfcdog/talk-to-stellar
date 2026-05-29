@@ -7,7 +7,7 @@ import { VaultService } from '../services/core/vault.service';
 import PasskeyService from '../services/core/passkey.service';
 import { StellarService } from '../services/stellar.service';
 import { PaymentReceiptService } from '../services/payment-receipt.service';
-import { getAssetIssuer, normalizeAssetCode } from '../../config/assets';
+import { getAssetIssuer, getUserFacingAssetCodes, normalizeAssetCode, settlementAssetCode, userFacingAssetCode } from '../../config/assets';
 import { DEFAULT_NETWORK_FEE_XLM, formatNetworkFeeForCustomer } from '../../utils/fee-display';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { buildOperationFingerprint } from '../services/core/idempotency.service';
@@ -130,7 +130,7 @@ export default class SendWalletController {
     const sessionId = String(req.body?.session_id || '').trim();
     const destination = String(req.body?.destination || '').trim();
     const amountRaw = String(req.body?.amount || '').replace(',', '.').trim();
-    const asset = normalizeAssetCode(req.body?.asset || 'USDC');
+    const asset = settlementAssetCode(req.body?.asset || 'USDC');
     const assetIssuer = getAssetIssuer(asset, req.body?.asset_issuer);
     const preview = Boolean(req.body?.preview);
     const executionId = String(req.body?.execution_id || req.headers['idempotency-key'] || '').trim();
@@ -138,7 +138,10 @@ export default class SendWalletController {
     try {
       if (!sessionId) return res.status(400).json({ success: false, error: 'Sessão obrigatória.' });
       if (!isValidStellarPublicKey(destination)) return res.status(400).json({ success: false, error: 'Endereço inválido' });
-      if (!['USDC', 'XLM'].includes(asset)) return res.status(400).json({ success: false, error: 'Ativo inválido. Use USDC ou XLM.' });
+      const allowedAssets = Array.from(new Set(['XLM', ...getUserFacingAssetCodes().map((code) => settlementAssetCode(code))]));
+      if (!allowedAssets.includes(asset)) {
+        return res.status(400).json({ success: false, error: `Ativo inválido. Use ${allowedAssets.map((code) => userFacingAssetCode(code)).join(', ')}.` });
+      }
       if (asset !== 'XLM' && !assetIssuer) return res.status(400).json({ success: false, error: `${asset}_ISSUER não está configurado no backend.` });
 
       const [session, wallet] = await Promise.all([
@@ -189,10 +192,10 @@ export default class SendWalletController {
       if (destinationMissing && amount < 1) {
         return res.status(400).json({ success: false, error: 'Esta conta ainda não existe na rede. O envio criará a conta mas requer mínimo de 1 XLM.' });
       }
-      if (asset === 'USDC' && destinationState.exists && !hasTrustline(destinationState.account, asset, assetIssuer)) {
+      if (asset !== 'XLM' && destinationState.exists && !hasTrustline(destinationState.account, asset, assetIssuer)) {
         return res.status(400).json({
           success: false,
-          error: 'A carteira de destino não aceita USDC. Tente enviar XLM ou peça ao destinatário para configurar a conta.',
+          error: `A carteira de destino não aceita ${userFacingAssetCode(asset)}. Tente enviar XLM ou peça ao destinatário para configurar a conta.`,
         });
       }
 

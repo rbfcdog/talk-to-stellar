@@ -566,9 +566,6 @@ export default function MainnetClient() {
               <div className="mt-5 border border-tts-border bg-black p-4 text-sm text-tts-deep">
                 Browser login is required before attaching a Mainnet wallet.
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <a href="/chat" className="inline-flex min-h-10 items-center justify-center bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep">
-                    Open chat
-                  </a>
                   <a href="/login" className="inline-flex min-h-10 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
                     Browser login
                   </a>
@@ -855,9 +852,6 @@ function TestnetRailPanel({
           </a>
           <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
             PIX out
-          </a>
-          <a href="/chat" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
-            Chat
           </a>
         </div>
       </div>

@@ -426,24 +426,6 @@ cd backend
 npm run eval:agent
 ```
 
-## Documentação
-
-Produto e demo:
-
-- [Guia de demo de usuários](docs/USER_DEMO_GUIDE.md)
-- [Walkthrough técnico de anchor/testnet](docs/ANCHOR_TESTNET_VIDEO_WALKTHROUGH.md)
-- [Guia da interface de settlement institucional](docs/INSTITUTION_SETTLEMENT_INTERFACE_GUIDE.md)
-- [Pitch deck inicial de 7 slides](docs/PITCH_DECK_7_SLIDES_INITIAL.md)
-
-Técnico e operação:
-
-- [Estado atual de features](docs/PROJECT_FEATURE_STATE_FOR_AI_REVIEW_20260523.md)
-- [Resumo do sistema de taxas](docs/SISTEMA_DE_TAXAS_RESUMO.md)
-- [Scan de superfícies mockadas](docs/MOCKED_SURFACES_FULL_REPO_SCAN_20260523.md)
-- [Estratégia de BRL na Stellar](docs/BRL_ASSET_STRATEGY_STELLAR.md)
-- [Infraestrutura Mainnet](docs/STELLAR_MAINNET_INFRASTRUCTURE.md)
-- [Deploy Evolution no Railway](docs/EVOLUTION_RAILWAY_DEPLOYMENT.md)
-
 ## Apêndice De Negócio E Tecnologia
 
 Esta seção resume o projeto de um ponto de vista mais operacional: qual negócio o produto quer ser, quais fluxos já existem, como o sistema é montado e quais decisões precisam estar claras antes de produção.

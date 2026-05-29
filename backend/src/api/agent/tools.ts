@@ -404,7 +404,7 @@ function buildYieldFrontendUrl(input: {
   language?: 'pt-BR' | 'en';
 }): string {
   return buildFrontendInterfaceUrl({
-    path: '/review',
+    path: '/rendimentos',
     params: {
       action: input.action || 'deposit',
       amount: input.amount,
@@ -963,7 +963,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for review, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for rendimentos, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
         },
         pin: {
           type: "string",
@@ -1411,11 +1411,11 @@ export const toolDefinitions = [
         },
         return_to: {
           type: "string",
-          description: "Internal frontend path to return to after confirmation, for example /transactions, /review, or /pix-ramp.",
+          description: "Internal frontend path to return to after confirmation, for example /transactions, /rendimentos, or /pix-ramp.",
         },
         return_source: {
           type: "string",
-          description: "Frontend screen that originated this confirmation, for example pix, review, convert, transactions, or chat.",
+          description: "Frontend screen that originated this confirmation, for example pix, rendimentos, convert, transactions, or chat.",
         },
       },
       required: ["amount", "destination", "session_id", "owner_id"],
@@ -1477,11 +1477,11 @@ export const toolDefinitions = [
         },
         return_to: {
           type: "string",
-          description: "Internal frontend path to return to after confirmation, for example /rendimentos or /review.",
+          description: "Internal frontend path to return to after confirmation, for example /rendimentos.",
         },
         return_source: {
           type: "string",
-          description: "Frontend screen that originated this confirmation, for example rendimentos, review, convert, pix, or chat.",
+          description: "Frontend screen that originated this confirmation, for example rendimentos, convert, pix, or chat.",
         },
       },
       required: ["session_id", "owner_id", "dest_amount", "source_asset_code", "dest_asset_code"],
@@ -2195,11 +2195,11 @@ async function executeGetYieldOptions(input: any): Promise<string> {
       : (isTestnet ? 'Ambiente testnet.' : 'Ambiente de aplicação.');
     const message = language === 'en'
       ? options.length
-        ? `Options to apply money: ${availableOptions.map((option) => option.name).join(', ') || 'none available right now'}.\n${disclosure}\n\nOpen:\n${frontendUrl}`
-        : `Application options are not configured yet.\n${disclosure}\n\nOpen:\n${frontendUrl}`
+        ? `Earnings options: ${availableOptions.map((option) => option.name).join(', ') || 'none available right now'}.\n${disclosure}\n\nOpen earnings:\n${frontendUrl}`
+        : `Earnings options are not configured yet.\n${disclosure}\n\nOpen earnings:\n${frontendUrl}`
       : options.length
-        ? `Opções para aplicar dinheiro: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível agora'}.\n${disclosure}\n\nAbrir:\n${frontendUrl}`
-        : `As opções de aplicação ainda não foram configuradas.\n${disclosure}\n\nAbrir:\n${frontendUrl}`;
+        ? `Opções de rendimentos: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível agora'}.\n${disclosure}\n\nAbrir rendimentos:\n${frontendUrl}`
+        : `As opções de rendimentos ainda não foram configuradas.\n${disclosure}\n\nAbrir rendimentos:\n${frontendUrl}`;
 
     return JSON.stringify({
       success: true,
@@ -2241,7 +2241,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
 	        ? 'Trazer dinheiro'
 	        : action === 'send_out'
 	          ? 'Mandar para PIX'
-	          : 'Aplicar dinheiro';
+	          : 'Abrir rendimentos';
 
     return JSON.stringify({
       success: true,
@@ -2251,7 +2251,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       frontend_url: frontendUrl,
       message: language === 'en'
         ? `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
-        : `${actionLabel} está pronto para ${displayAsset}.\n\nAbra:\n${frontendUrl}`,
+        : `${actionLabel} para ${displayAsset}.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({

@@ -22,7 +22,7 @@ function reviewUrl(searchParams?: SearchParams) {
     }
   }
   const query = params.toString();
-  return query ? `/review?${query}` : "/review";
+  return query ? `/rendimentos?${query}` : "/rendimentos";
 }
 
 export default async function MoneyCyclePage({
