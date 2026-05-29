@@ -474,8 +474,8 @@ export class TransactionHistoryService {
             identifier: identifier || (url ? 'comprovante disponível' : 'indisponível'),
             public_key: hasPublicKey(key) ? key : null,
             user_id: profile?.user_id || null,
-            profile_url: profile?.profile_url || url || null,
-            short_profile_url: profile?.short_profile_url || profile?.profile_url || url || null,
+            profile_url: profile?.profile_url || null,
+            short_profile_url: profile?.short_profile_url || profile?.profile_url || null,
           },
         };
       });
