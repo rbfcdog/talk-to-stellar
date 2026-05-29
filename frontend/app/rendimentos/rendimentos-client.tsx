@@ -1832,7 +1832,7 @@ function PortfolioOverview({
           </p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-tts-deep">
             {activeCount > 0
-              ? L(`${activeCount} posição${activeCount === 1 ? "" : "ões"} ativa${activeCount === 1 ? "" : "s"}`, `${activeCount} active position${activeCount === 1 ? "" : "s"}`)
+              ? L(`${activeCount} ${activeCount === 1 ? "posição ativa" : "posições ativas"}`, `${activeCount} active position${activeCount === 1 ? "" : "s"}`)
               : L("Nenhuma posição ativa", "No active positions")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-tts-muted">
