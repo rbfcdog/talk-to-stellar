@@ -5,11 +5,12 @@ jest.mock('../src/api/agent/tools', () => ({
 
 import fs from 'fs';
 import path from 'path';
-import { AgentGraph } from '../src/api/agent/graph';
+import { AgentGraph as AgentGraphClass } from '../src/api/agent/graph';
 import { executeTool } from '../src/api/agent/tools';
 import { ActionType, AgentState, IntentType } from '../src/api/agent/types';
 
 const executeToolMock = executeTool as jest.Mock;
+const AgentGraph: any = AgentGraphClass;
 
 function createRepository() {
   return {
@@ -114,6 +115,34 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Seus destinatários');
     expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('histórico: 2 envio(s)');
+  });
+
+  it('adds a new contact when the user asks to add an email to contacts', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      contact: {
+        contact_name: '',
+        pix_key: 'rodrigobfdog@gmail.com',
+      },
+      contact_profile: {
+        email: 'rodrigobfdog@gmail.com',
+      },
+    }));
+
+    const result = await graph.processInput(createState('quero adicionar rodrigobfdog@gmail.com nos contatos'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('add_contact', {
+      session_id: 'eval-session',
+      user_id: 'eval-user',
+      contact_name: '',
+      contact_key: 'rodrigobfdog@gmail.com',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Contato adicionado com sucesso');
+    expect(result.response_message).toContain('rodrigobfdog@gmail.com');
   });
 
   it('routes simple greetings to the full compact capability guide', async () => {
