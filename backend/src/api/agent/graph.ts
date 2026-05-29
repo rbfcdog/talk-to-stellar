@@ -2816,76 +2816,61 @@ export class AgentGraph {
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
-Analyze the user message and classify it into ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, or general
 
-Respond ONLY with the intent name. Examples:
+Classify the user message into ONE and only ONE of these intents:
+login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, general
+
+Return only the intent label. No punctuation. No explanation. No extra words.
+
+Priority rules:
+1. If the user asks to see, list, show, open, or manage saved recipients, beneficiaries, favorites, or account contacts, the intent is contacts.
+2. If the user asks for saldo, money available, account balance, or what they have now, the intent is balance.
+3. If the user asks for transaction history, receipts, recent operations, or comprovantes, the intent is history.
+4. If the user asks to bring money in or out through PIX, the intent is pix.
+5. If the user asks to convert assets or exchange R$, US$, or CETES, the intent is conversion.
+6. If the user asks for a quote, rate, estimate, or best pricing before confirming, the intent is price_quote.
+7. If the user asks to invest, apply, view positions, or manage earnings, the intent is yield.
+8. If the user asks to create a payment link or shareable payment page, the intent is payment_link.
+9. If the user asks to send money to a specific recipient, the intent is payment.
+10. If the user asks to create, log in to, or connect an account, the intent is wallet or onboard.
+
+Strong contact examples that must be contacts:
+- "quero ver meus contatos" -> contacts
+- "ver contatos" -> contacts
+- "listar contatos" -> contacts
+- "mostrar meus destinatários" -> contacts
+- "abrir meus favoritos" -> contacts
+- "quais contatos eu tenho salvo" -> contacts
+- "meus contatos" -> contacts
+- "contatos salvos" -> contacts
+- "destinatários salvos" -> contacts
+
+Other examples:
 - "Check my balance" -> balance
 - "ver saldo" -> balance
 - "qual meu saldo atual?" -> balance
-- "see current balance" -> balance
 - "ver transações" -> history
 - "listar transações" -> history
 - "show transaction history" -> history
-- "see transactions list" -> history
-- "quero ver meus contatos" -> contacts
-- "listar contatos" -> contacts
-- "mostrar meus destinatários" -> contacts
-- "quanto rende?" -> yield
-- "show yield options" -> yield
 - "quero investir" -> yield
 - "quero aplicar dinheiro" -> yield
 - "ver investimentos" -> yield
-- "guardar 100 reais rendendo" -> yield
-- "withdraw my yield" -> yield
-- "manda pro João de novo" -> financial_memory
-- "usa o mesmo pagamento de ontem" -> financial_memory
-- "quanto eu já converti esse mês?" -> financial_memory
-- "qual foi minha média de cotação?" -> financial_memory
-- "quanto recebi esse mês?" -> financial_memory
-- "quanto perdi em taxas?" -> financial_memory
-- "qual cliente mais me paga?" -> financial_memory
-- "quanto economizei em relação a métodos tradicionais?" -> financial_memory
-- "quanto custa enviar 5000 reais?" -> financial_memory
-- "vale a pena comparado com o banco?" -> financial_memory
-- "resumo do ano de economia" -> financial_memory
-- "seu saldo em reais perdeu 3% esse mes frente ao dolar" -> financial_memory
-- "deseja proteger parte do saldo?" -> financial_memory
-- "modo ai treasury" -> financial_memory
-- "melhor moeda e melhor momento para converter" -> financial_memory
 - "converter dolares para reais" -> conversion
 - "quero converter 3 usdc pra brl" -> conversion
 - "trocar 10 usdc por brl" -> conversion
-- "convert assets" -> conversion
 - "qual a melhor estimativa entre real e dólar digital" -> price_quote
 - "estimativa brl usdc agora" -> price_quote
-- "Send 100 XLM" -> balance
-- "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
-- "quero criar um link de transacao de 10 usdc" -> payment_link
-- "gerar link de pagamento de 15 dólares" -> payment_link
-- "cria um link para alguém receber 20 usdc" -> payment_link
-- "quero pagar com pix para colocar 100 reais na conta" -> pix
 - "quero mandar 5 brl pra ana por pix" -> pix
-- "quero fazer uma transacao pra ana silva de 100 brl na qual eu pago via pix" -> pix
-- "quero colocar 100 brl pra minha conta via pix e fazer essa transacao direto pra ana silva" -> pix
 - "quero trazer 100 brl pra minha conta via pix" -> pix
 - "depositar 150 reais via pix" -> pix
 - "sacar 20 reais por pix" -> pix
-- "sacar 100 reais para minha conta bancaria via pix" -> pix
-- "tirar dinheiro para minha conta bancaria via pix" -> pix
-- "quero mandar 10 usdc pra fora da minha conta" -> pix
-- "rodrigobfcdog@gmail.com nos meus contatos" -> contacts
-- "Create account" -> onboard
-- "Connect account" -> wallet
-- "I need an account" -> wallet
-- "Entrar na conta" -> wallet
-- "Importar conta existente" -> wallet
+- "quero criar um link de transacao de 10 usdc" -> payment_link
+- "gerar link de pagamento de 15 dólares" -> payment_link
+- "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
 - "Sair da conta" -> wallet_logout
 - "Desconectar conta" -> wallet_logout
 
-Prioritize 'payment_link' when the user asks to create/generate a payment/transaction link, especially when no recipient or saved contact is provided.
-Prioritize 'wallet' for messages about creating/generating accounts or getting started.
-Prefer 'contacts' when the user asks about contact list, account contacts, favorites, or saved beneficiaries.`;
+If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.`;
 
       const response = await this.llm.invoke(await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
