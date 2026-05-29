@@ -22,6 +22,9 @@ type EvolutionWebhookResult = {
 };
 
 type AgentResponse = {
+  success?: boolean;
+  intent?: string;
+  action?: string;
   message: string;
   raw: any;
 };
@@ -236,6 +239,91 @@ function normalizeAgentResponse(payload: any): string {
     payload?.reply ||
     ''
   ).trim() || 'Nao consegui gerar uma resposta agora. Tente novamente em alguns segundos.';
+}
+
+function isGenericAgentReply(value: string): boolean {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return true;
+  return (
+    normalized.includes('nao consegui processar sua mensagem') ||
+    normalized.includes('desculpe, nao consegui processar sua mensagem') ||
+    normalized.includes('nao consegui entender com seguranca') ||
+    normalized.includes('posso ajudar com:') ||
+    normalized.includes('diga o objetivo em uma frase') ||
+    normalized.includes('diga seu objetivo em uma frase') ||
+    normalized === 'nao consegui gerar uma resposta agora. tente novamente em alguns segundos.'
+  );
+}
+
+function buildEvolutionFallbackReply(intent?: string): string {
+  const normalizedIntent = String(intent || '').trim().toLowerCase();
+  if (normalizedIntent === 'contacts') {
+    return 'Posso listar seus contatos ou ajudar a salvar um novo. Diga: "quero ver meus contatos" ou "adicionar Ana ao meu contato".';
+  }
+  if (normalizedIntent === 'balance') {
+    return 'Posso mostrar seu saldo agora. Diga: "ver saldo".';
+  }
+  if (normalizedIntent === 'history') {
+    return 'Posso mostrar seu histórico e comprovantes. Diga: "ver histórico".';
+  }
+  if (normalizedIntent === 'pix') {
+    return 'Posso ajudar com PIX de entrada, saída ou pagamento. Diga: "trazer 100 reais via PIX" ou "sacar 50 reais para meu PIX".';
+  }
+  if (normalizedIntent === 'payment_link') {
+    return 'Posso criar um link de pagamento para receber ou cobrar. Diga: "criar link de pagamento de 50 dólares".';
+  }
+  if (normalizedIntent === 'conversion') {
+    return 'Posso converter entre R$, US$ e CETES. Diga: "converter 200 reais para dólar".';
+  }
+  if (normalizedIntent === 'yield') {
+    return 'Posso abrir a área de aplicações e posições. Diga: "quero investir".';
+  }
+  if (normalizedIntent === 'wallet' || normalizedIntent === 'onboard' || normalizedIntent === 'login') {
+    return 'Posso ajudar com acesso, conta e início de uso. Diga: "entrar na conta" ou "criar conta".';
+  }
+  return [
+    'Posso ajudar com:',
+    '1. Contatos',
+    '2. Saldo',
+    '3. PIX',
+    '4. Conversão',
+    '5. Enviar dinheiro',
+    '6. Link de pagamento',
+    '7. Aplicações',
+    '8. Histórico',
+    '9. Perfil',
+    '10. PIN',
+    '',
+    'Diga o que quer fazer em uma frase curta.'
+  ].join('\n');
+}
+
+function buildUsefulEvolutionReply(response: AgentResponse): string {
+  const message = String(response.message || '').trim();
+  if (!isGenericAgentReply(message)) return message;
+
+  const intent = String(response.intent || response.raw?.intent || '').trim();
+  if (intent) return buildEvolutionFallbackReply(intent);
+
+  const action = String(response.action || response.raw?.action || '').trim().toLowerCase();
+  if (action.includes('contact')) return buildEvolutionFallbackReply('contacts');
+  if (action.includes('history')) return buildEvolutionFallbackReply('history');
+  if (action.includes('balance')) return buildEvolutionFallbackReply('balance');
+  if (action.includes('pix')) return buildEvolutionFallbackReply('pix');
+  if (action.includes('payment')) return buildEvolutionFallbackReply('payment_link');
+  if (action.includes('convert')) return buildEvolutionFallbackReply('conversion');
+  if (action.includes('yield') || action.includes('invest')) return buildEvolutionFallbackReply('yield');
+  if (action.includes('wallet') || action.includes('login') || action.includes('onboard')) {
+    return buildEvolutionFallbackReply('wallet');
+  }
+
+  return buildEvolutionFallbackReply();
 }
 
 function cleanupProcessedMessages() {
@@ -684,8 +772,11 @@ async function sendAgentQuery(input: {
       throw new Error(`Agent API Error: ${response.status} ${errorText}`);
     }
 
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch(() => ({})) as any;
     return {
+      success: body?.success,
+      intent: body?.intent,
+      action: body?.action,
       message: normalizeAgentResponse(body),
       raw: body,
     };
@@ -1028,7 +1119,7 @@ export class EvolutionService {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
         if (!shouldSendFailureFallback()) return;
-        void this.sendText(instance, recipient, 'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.', { reliable: true })
+        void this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true })
           .catch((sendError) => {
             const sendMessage = sendError instanceof Error ? sendError.message : String(sendError);
             logger.warn(`[evolution-webhook] failed to send fallback reply to ***${recipient.slice(-4)}: ${sendMessage}`);
@@ -1067,8 +1158,9 @@ export class EvolutionService {
       instanceId: input.instanceId,
       messageId: input.messageId,
     });
+    const replyText = buildUsefulEvolutionReply(response);
     try {
-      await this.sendText(input.instance, input.recipient, response.message, { reliable: true });
+      await this.sendText(input.instance, input.recipient, replyText, { reliable: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[evolution-webhook] generated agent reply but Evolution sendText failed for ***${input.recipient.slice(-4)}: ${message}`);
