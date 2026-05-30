@@ -1752,7 +1752,7 @@ export const toolDefinitions = [
         },
         contact_name: {
           type: "string",
-          description: "Name for the contact",
+          description: "IGNORADO — o nome é sempre resolvido do banco de dados. Não preencher.",
         },
         public_key: {
           type: "string",
@@ -6023,12 +6023,7 @@ async function executeAddContact(input: any): Promise<string> {
       throw new Error('Informe uma chave válida (pública, transferência, e-mail ou telefone) já cadastrada.');
     }
 
-    const rawName = String(input.contact_name || '').trim().toLowerCase();
-    const fillerWords = new Set(['o', 'a', 'os', 'as', 'de', 'da', 'do', 'para', 'pra', 'pro', 'no', 'na', 'em', 'com', 'um', 'uma', 'uns', 'umas']);
-    const isFillerName = !rawName || rawName.length < 3 || fillerWords.has(rawName);
-    const contactName = isFillerName
-      ? String(resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim()
-      : String(input.contact_name).trim();
+    const contactName = String(resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim();
 
     const { data, error } = await supabase
       .from("contacts")
