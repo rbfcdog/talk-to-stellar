@@ -151,7 +151,6 @@ export class ShortLinkController {
       const includeSession = String(req.query.include_session || req.query.includeSession || '').trim() === '1';
       const canAttachSession = includeSession &&
         hasTrustedProxySecret(req) &&
-        ['pix_onramp', 'pix_offramp', 'send_external_wallet'].includes(String(record.purpose || '').trim().toLowerCase()) &&
         Boolean(record.session_id);
 
       if (!canAttachSession) {
