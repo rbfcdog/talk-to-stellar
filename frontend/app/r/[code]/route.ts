@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeSessionSource, setSessionCookies } from "@/lib/server-session";
 
+function getBackendBaseUrl() {
+  const raw =
+    process.env.BACKEND_URL ||
+    process.env.AGENT_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_AGENT_API_URL ||
+    "http://localhost:3001";
+
+  return raw
+    .replace(/\/api\/agent\/query\/?$/, "")
+    .replace(/\/api\/agent\/?$/, "")
+    .replace(/\/api\/?$/, "")
+    .replace(/\/$/, "");
+}
+
 function sourceFromPayload(payload: any): string {
   const direct =
     payload?.session_source ||
@@ -29,20 +44,39 @@ function sourceFromPayload(payload: any): string {
   }
 }
 
+async function resolveShortLinkPayload(req: NextRequest, encodedCode: string) {
+  const internalSecret = String(process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "").trim();
+  const directHeaders: Record<string, string> = {};
+  if (internalSecret) directHeaders["x-internal-api-secret"] = internalSecret;
+
+  const direct = await fetch(
+    `${getBackendBaseUrl()}/api/external/short-links/${encodedCode}?include_session=1`,
+    {
+      cache: "no-store",
+      headers: directHeaders,
+    },
+  ).catch(() => null as any);
+  const directPayload = await direct?.json().catch(() => ({}));
+  if (direct?.ok && directPayload?.url) return directPayload;
+
+  const proxied = await fetch(
+    `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`,
+    { cache: "no-store" },
+  ).catch(() => null as any);
+  const proxiedPayload = await proxied?.json().catch(() => ({}));
+  if (proxied?.ok && proxiedPayload?.url) return proxiedPayload;
+  return null;
+}
+
 export async function GET(req: NextRequest, context: { params: Promise<{ code: string }> }) {
   const params = await context.params;
   const rawCode = String(params.code || "").trim();
   const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
   const encodedCode = encodeURIComponent(code);
 
-  const response = await fetch(
-    `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`,
-    { cache: "no-store" },
-  ).catch(() => null as any);
+  const payload = await resolveShortLinkPayload(req, encodedCode);
 
-  const payload = await response?.json().catch(() => ({}));
-
-  if (!response?.ok || !payload?.url) {
+  if (!payload?.url) {
     return NextResponse.redirect(new URL("/chat", req.url));
   }
 
