@@ -4005,7 +4005,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       };
     } else {
       toolName = 'get_yield_options';
-      toolInput = { language };
+      toolInput = { session_id: state.session_id, ...sessionAuth, language };
     }
 
     const resultRaw = await executeTool(toolName, toolInput);
