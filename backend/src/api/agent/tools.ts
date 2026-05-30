@@ -397,6 +397,19 @@ function buildFrontendInterfaceUrl(input: {
   return url.toString();
 }
 
+async function shortenYieldUrl(rawUrl: string, purpose: string, sessionId?: string): Promise<string> {
+  if (!sessionId) return rawUrl;
+  try {
+    return await new ExternalService(supabase as any).shortenPublicUrl({
+      url: rawUrl, purpose, sessionId, expiresInHours: 24,
+    });
+  } catch {
+    const withSession = new URL(rawUrl);
+    withSession.searchParams.set('session_id', sessionId);
+    return withSession.toString();
+  }
+}
+
 function buildYieldFrontendUrl(input: {
   action?: 'deposit' | 'withdraw';
   amount?: unknown;
@@ -2173,7 +2186,9 @@ async function executeGetYieldOptions(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
     const status = await AnchorService.getDefindexYieldStatus();
-    const frontendUrl = buildYieldFrontendUrl({ language });
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildYieldFrontendUrl({ language });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
     const options = (Array.isArray(status.vaults) ? status.vaults : []).map((option: any) => {
       const internalAssetCode = normalizeYieldAssetInput(option.asset_code || option.display_asset_code);
       const currency = yieldCurrencyCode(internalAssetCode);
@@ -2230,18 +2245,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       language,
     });
     const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
-    let frontendUrl = rawUrl;
-    if (sessionId) {
-      try {
-        frontendUrl = await new ExternalService(supabase as any).shortenPublicUrl({
-          url: rawUrl, purpose, sessionId, expiresInHours: 24,
-        });
-      } catch {
-        const withSession = new URL(rawUrl);
-        withSession.searchParams.set('session_id', sessionId);
-        frontendUrl = withSession.toString();
-      }
-    }
+    const frontendUrl = await shortenYieldUrl(rawUrl, purpose, sessionId);
     const displayAsset = frontendAssetCode(assetCode);
 	    const actionLabel = language === 'en'
 	      ? action === 'bring'
@@ -2279,12 +2283,14 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
     const sourceAsset = normalizeYieldAssetInput(input.source_asset_code || input.sourceAssetCode || input.from_asset || input.fromAsset || 'BRL');
     const destAsset = normalizeYieldAssetInput(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || 'USDC');
     const sourceAmount = String(input.source_amount || input.sourceAmount || input.amount || '').trim();
-    const frontendUrl = buildConversionFrontendUrl({
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildConversionFrontendUrl({
       sourceAmount,
       sourceAssetCode: sourceAsset,
       destAssetCode: destAsset,
       language,
     });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'convert', sessionId);
     const sourceDisplay = frontendAssetCode(sourceAsset);
     const destDisplay = frontendAssetCode(destAsset);
 
@@ -2311,7 +2317,9 @@ async function executeGetYieldBalance(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
     const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
-    const frontendUrl = buildYieldFrontendUrl({ assetCode, language });
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildYieldFrontendUrl({ assetCode, language });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
     const result: any = await AnchorService.getDefindexYieldBalanceForSession({
       ...input,
       asset_code: assetCode,
@@ -2352,7 +2360,9 @@ async function executePrepareYieldAction(input: any): Promise<string> {
     const amount = String(result?.amount || input.amount || '').trim();
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
     const actionText = yieldActionLabel(action, language);
-    const frontendUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
 
     return JSON.stringify({
       success: true,
@@ -2398,7 +2408,9 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
     const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
     const amount = String(result?.amount || input.amount || '').trim();
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
-    const frontendUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
 
     return JSON.stringify({
       success: Boolean(result?.success),
