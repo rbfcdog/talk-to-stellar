@@ -334,8 +334,6 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
     const amt = normalizeDecimal(pos?.amount || "0");
     return { option: o, code, profile: moneyProfile(code), amount: amt, loading: Boolean(!pos || pos.loading), error: String(pos?.error || ""), rate: optionRatePercent(o) };
   });
-  const bestApy = Math.max(...rows.map((r) => r.rate), 0);
-  const bestApyLabel = rows.find((r) => r.rate >= bestApy);
   const usdRow = rows.find((r) => r.profile.short === "USD");
 
   return (
@@ -352,7 +350,6 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
           <div className="grid grid-cols-3 gap-4">
             <StatCard label={L("USD", "USD")} value={usdRow && usdRow.amount > 0 ? `${formatAmount(usdRow.amount, language)} USD` : L("—", "—")} sub={usdRow && usdRow.rate > 0 ? `${usdRow.rate.toFixed(2)}% APY` : ""} />
             <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
-            <StatCard label={L("Melhor taxa", "Best APY")} value={bestApy > 0 ? `${bestApy.toFixed(2)}%` : L("—", "—")} sub={bestApyLabel?.profile.short || ""} />
           </div>
 
           {rows.map((row) => {
@@ -367,7 +364,6 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold">{row.loading ? L("...", "...") : row.error ? L("—", "—") : `${formatAmount(row.amount, language)} ${row.profile.short}`}</p>
-                    <p className="text-xs text-tts-muted">{row.rate > 0 ? `${row.rate.toFixed(2)}% APY` : L("taxa indisponível", "rate unavailable")}</p>
                   </div>
                 </div>
                 {row.amount > 0 && row.rate > 0 && (
