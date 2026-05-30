@@ -2946,17 +2946,18 @@ login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance,
 Return only the intent label. No punctuation. No explanation. No extra words.
 
 Priority rules:
-1. If the user asks to see, list, show, open, or manage saved recipients, beneficiaries, favorites, or account contacts, the intent is contacts.
-2. If the user asks for saldo, money available, account balance, or what they have now, the intent is balance.
-3. If the user asks for transaction history, receipts, recent operations, or comprovantes, the intent is history.
-4. If the user asks to bring money in or out through PIX, the intent is pix.
-5. If the user asks to convert assets or exchange R$, US$, or CETES, the intent is conversion.
-6. If the user asks for a quote, rate, estimate, or best pricing before confirming, the intent is price_quote.
-7. If the user asks to invest, apply, view positions, or manage earnings, the intent is yield.
-8. If the user asks to create a payment link or shareable payment page, the intent is payment_link.
-9. If the user asks to send money to a specific recipient, the intent is payment.
-10. If the user asks to create, log in to, or connect an account, the intent is wallet or onboard.
-11. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
+1. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
+2. If the user asks to send money, mandar dinheiro, transfer, pay someone, the intent is payment.
+3. If the user asks to bring money, deposit, colocar, trazer, or use PIX to add funds, the intent is pix.
+4. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, or off-ramp, the intent is pix.
+5. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
+6. If the user asks for balance, saldo, or what they have, the intent is balance.
+7. If the user asks for transaction history or receipts, the intent is history.
+8. If the user asks to convert or exchange assets, the intent is conversion.
+9. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
+10. If the user asks for quotes, rates, or estimates, the intent is price_quote.
+11. If the user asks to create a payment link, the intent is payment_link.
+12. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
 
 Strong contact examples that must be contacts:
 - "quero ver meus contatos" -> contacts
@@ -2970,41 +2971,28 @@ Strong contact examples that must be contacts:
 - "destinatários salvos" -> contacts
 
 Other examples:
+- "mandar dinheiro pra alguem" -> payment
+- "quero mandar 10 reais pra rodrigo" -> payment
+- "enviar 50 dolares para Ana" -> payment
+- "mandar pra fora 100 reais via pix" -> pix
+- "mandar pra fora" -> pix
+- "sacar 50 reais" -> pix
+- "retirar dinheiro" -> pix
+- "colocar dinheiro via pix" -> pix
+- "trazer 100 reais" -> pix
+- "depositar via pix" -> pix
+- "quero mandar 5 brl pra ana por pix" -> pix
 - "Check my balance" -> balance
 - "ver saldo" -> balance
 - "qual meu saldo atual?" -> balance
 - "ver transações" -> history
-- "listar transações" -> history
-- "show transaction history" -> history
 - "quero investir" -> yield
 - "quero aplicar dinheiro" -> yield
-- "ver investimentos" -> yield
 - "converter dolares para reais" -> conversion
-- "quero converter 3 usdc pra brl" -> conversion
-- "trocar 10 usdc por brl" -> conversion
-- "qual a melhor estimativa entre real e dólar digital" -> price_quote
-- "estimativa brl usdc agora" -> price_quote
-- "quero mandar 5 brl pra ana por pix" -> pix
-- "quero trazer 100 brl pra minha conta via pix" -> pix
-- "depositar 150 reais via pix" -> pix
-- "sacar 20 reais por pix" -> pix
-- "quero criar um link de transacao de 10 usdc" -> payment_link
-- "gerar link de pagamento de 15 dólares" -> payment_link
-- "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
+- "quero criar um link de pagamento" -> payment_link
 - "quero sair da conta" -> wallet_logout
 - "deslogar" -> wallet_logout
-- "quero deslogar" -> wallet_logout
-- "deslogar dessa conta" -> wallet_logout
-- "deslogar dessa comta" -> wallet_logout
-- "quero deslogar dessa comta" -> wallet_logout
-- "sair da conta" -> wallet_logout
-- "desconectar" -> wallet_logout
-- "encerrar sessao" -> wallet_logout
-- "logoff" -> wallet_logout
 - "logout" -> wallet_logout
-- "sign out" -> wallet_logout
-- "log out" -> wallet_logout
-- IMPORTANTE: "deslogar" (mesmo escrito errado como "deslogar dessa comta") SEMPRE deve ser wallet_logout, nunca general.
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.`;
 
@@ -4640,63 +4628,27 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
-      const wantsOwnProfile = this.isOwnProfileRequest(state.current_input);
-      const wantsIntentHelp = this.isIntentHelpRequest(state.current_input);
-      const wantsGreetingHelp = this.isSimpleGreetingRequest(state.current_input);
-      const wantsRampHistory = this.isRampHistoryRequest(state.current_input);
       const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
       const localContactIntent = this.extractContactIntentFromText(state.current_input);
-      const wantsContacts = this.isContactsRequest(state.current_input);
-      const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
-      const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
-      const fixedSavings = this.fixedSavingsIntent(state.current_input);
       const extractedPixRamp = this.extractPixRampIntentFromText(state.current_input);
-      const resumedPixRamp = extractedPixRamp.is_pix_ramp ? null : this.resumePendingPixRampIntent(state);
-      const deterministicPixRamp = resumedPixRamp || extractedPixRamp;
+      const deterministicYield = this.extractYieldIntentFromText(state.current_input);
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
-      const wantsBestRouteGuidance = this.isBestRouteGuidanceRequest(state.current_input);
-      const deterministicYield = this.extractYieldIntentFromText(state.current_input);
+      const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
+      const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
       const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
       );
-      state.detected_intent = this.isDirectLoginRequest(state.current_input)
-        ? IntentType.LOGIN
-        : this.isDirectOnboardingRequest(state.current_input)
-          ? IntentType.ONBOARD
-          : this.isPaymentLinkRequest(state.current_input)
-            ? IntentType.PAYMENT_LINK
-            : wantsReceiptImage
-              ? IntentType.HISTORY
-              : wantsOwnProfile
-                ? IntentType.GENERAL
-                : wantsIntentHelp || wantsGreetingHelp
-                  ? IntentType.GENERAL
-                  : wantsRampHistory
-                    ? IntentType.FINANCIAL_MEMORY
-                    : wantsTransactionHistory
-                      ? IntentType.HISTORY
-                      : deterministicExternalWallet.is_external_wallet
-                        ? IntentType.PAYMENT
-                        : deterministicBestRouteEstimate || wantsBestRouteGuidance
-                          ? IntentType.PRICE_QUOTE
-                          : savingsCalculator || wantsAnnualSavingsSummary
-                            ? IntentType.FINANCIAL_MEMORY
-                            : deterministicPixRamp.is_pix_ramp
-                              ? IntentType.PIX
-                              : deterministicYield.is_yield
-                                ? IntentType.YIELD
-                                : deterministicAssetInterface.is_asset_interface && localContactIntent?.action !== 'add'
-                                  ? (deterministicAssetInterface.action === 'keep' ? IntentType.YIELD : IntentType.PIX)
-                                  : fixedSavings
-                                  ? IntentType.FINANCIAL_MEMORY
-                                    : deterministicFinancialMemory
-                                      ? IntentType.FINANCIAL_MEMORY
-                                      : wantsContacts
-                                        ? IntentType.CONTACTS
-                                      : await this.detectIntent(state.current_input, state.session_data?.user_id);
+
+      const urgentIntents = wantsReceiptImage ? IntentType.HISTORY
+        : wantsTransactionHistory ? IntentType.HISTORY
+        : localContactIntent?.action === 'add' ? IntentType.CONTACTS
+        : this.isContactsRequest(state.current_input) ? IntentType.CONTACTS
+        : null;
+
+      state.detected_intent = urgentIntents || await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
@@ -4757,15 +4709,15 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleReceiptImageRequest(state);
       }
 
-      if (hasActiveWallet && wantsOwnProfile) {
+      if (hasActiveWallet && this.isOwnProfileRequest(state.current_input)) {
         return await this.handleOwnProfileRequest(state);
       }
 
-      if (wantsIntentHelp || wantsGreetingHelp) {
+      if (this.isIntentHelpRequest(state.current_input) || this.isSimpleGreetingRequest(state.current_input)) {
         return await this.handleIntentHelpRequest(state);
       }
 
-      if (wantsRampHistory) {
+      if (this.isRampHistoryRequest(state.current_input)) {
         return await this.handleRampHistoryRequest(state);
       }
 
@@ -4777,11 +4729,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleGenericBestRouteEstimate(state, deterministicBestRouteEstimate);
       }
 
-      if (wantsBestRouteGuidance) {
+      if (this.isBestRouteGuidanceRequest(state.current_input)) {
         return await this.handleBestRouteGuidanceRequest(state);
       }
 
-      if (state.action_type === ActionType.INITIATE_PIX && deterministicPixRamp.is_pix_ramp) {
+      if (state.action_type === ActionType.INITIATE_PIX && extractedPixRamp.is_pix_ramp) {
         return await this.handlePixRampRequest(state);
       }
 
@@ -4807,6 +4759,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleAnnualSavingsSummaryIntent(state);
       }
 
+      const fixedSavings = this.fixedSavingsIntent(state.current_input);
       if (fixedSavings) {
         return await this.handleFixedSavingsIntent(state, fixedSavings);
       }
