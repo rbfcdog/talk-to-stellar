@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setSessionCookies } from "@/lib/server-session";
+import { normalizeSessionSource, setSessionCookies } from "@/lib/server-session";
+
+function sourceFromPayload(payload: any): string {
+  const direct =
+    payload?.session_source ||
+    payload?.sessionSource ||
+    payload?.source ||
+    payload?.provider ||
+    payload?.external_source ||
+    payload?.externalSource ||
+    payload?.external_provider ||
+    payload?.externalProvider ||
+    "";
+  const normalized = normalizeSessionSource(direct);
+  if (normalized) return normalized;
+
+  try {
+    const target = new URL(String(payload?.url || ""));
+    return normalizeSessionSource(
+      target.searchParams.get("provider") ||
+        target.searchParams.get("source") ||
+        target.searchParams.get("external_source") ||
+        target.searchParams.get("channel") ||
+        "",
+    );
+  } catch {
+    return "";
+  }
+}
 
 export async function GET(req: NextRequest, context: { params: Promise<{ code: string }> }) {
   const params = await context.params;
@@ -22,6 +50,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   setSessionCookies(redirect, {
     sessionId: String(payload.session_id || payload.sessionId || "").trim(),
     sessionToken: String(payload.session_token || payload.sessionToken || "").trim(),
+    sessionSource: sourceFromPayload(payload),
   });
   return redirect;
 }
