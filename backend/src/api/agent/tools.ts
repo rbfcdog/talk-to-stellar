@@ -2230,9 +2230,18 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       language,
     });
     const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
-    const frontendUrl = sessionId
-      ? await new ExternalService(supabase as any).shortenPublicUrl({ url: rawUrl, purpose, sessionId, expiresInHours: 24 }).catch(() => rawUrl)
-      : rawUrl;
+    let frontendUrl = rawUrl;
+    if (sessionId) {
+      try {
+        frontendUrl = await new ExternalService(supabase as any).shortenPublicUrl({
+          url: rawUrl, purpose, sessionId, expiresInHours: 24,
+        });
+      } catch {
+        const withSession = new URL(rawUrl);
+        withSession.searchParams.set('session_id', sessionId);
+        frontendUrl = withSession.toString();
+      }
+    }
     const displayAsset = frontendAssetCode(assetCode);
 	    const actionLabel = language === 'en'
 	      ? action === 'bring'
