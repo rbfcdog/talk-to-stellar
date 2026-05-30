@@ -525,6 +525,11 @@ export function createAgentRoutes(
     res: Response,
     next: NextFunction
   ) => {
+    req.setTimeout(30000, () => {
+      if (!res.headersSent) {
+        res.status(504).json({ success: false, error: 'Agent query timed out. Try again in a few seconds.' });
+      }
+    });
     try {
       const { query, session_id, source, metadata } = req.body;
       let requestSessionToken = readSessionToken(req);
