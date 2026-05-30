@@ -58,6 +58,8 @@ export class AgentGraph {
       openAIApiKey: openaiApiKey,
       temperature: parseFloat(process.env.TEMPERATURE || "0.1"),
       modelName: process.env.OPENAI_MODEL || "gpt-4o",
+      timeout: 25000,
+      maxRetries: 1,
     });
 
     logger.info("Agent initialized with Stellar tools available");
