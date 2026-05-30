@@ -276,6 +276,7 @@ export default function RendimentosClient({
         <div className="flex border-b border-tts-border mb-6">
           <div className={tabClass("returns")} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</div>
           <div className={tabClass("apply")} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</div>
+          <a href="/logout" className="ml-auto px-3 py-3 text-xs font-bold text-tts-muted hover:text-tts-error transition">{L("Sair", "Logout")}</a>
         </div>
 
         {apiState.error && (
