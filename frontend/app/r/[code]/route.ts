@@ -1,45 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setSessionCookies } from "@/lib/server-session";
 
-function getBackendBaseUrl() {
-  const fromBackend = process.env.BACKEND_URL;
-  if (fromBackend) return fromBackend.replace(/\/$/, "");
-
-  const fromAgent = process.env.AGENT_API_URL;
-  if (fromAgent) return fromAgent.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
-
-  const fromPublic =
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_AGENT_API_URL ||
-    "";
-
-  if (!fromPublic) return "http://localhost:3001";
-  return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
-}
-
 export async function GET(req: NextRequest, context: { params: Promise<{ code: string }> }) {
   const params = await context.params;
   const rawCode = String(params.code || "").trim();
   const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
   const encodedCode = encodeURIComponent(code);
 
-  const internalSecret = process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "";
-
-  // Resolve directly from the backend so this route can install an HttpOnly
-  // session cookie before redirecting to PIX/chat flows.
-  let response = await fetch(`${getBackendBaseUrl()}/api/external/short-links/${encodedCode}?include_session=1`, {
-    cache: "no-store",
-    headers: {
-      ...(internalSecret ? { "x-internal-api-secret": internalSecret } : {}),
-    },
-  }).catch(() => null as any);
-
-  // Fallback: same-origin proxy without session installation.
-  if (!response || !response.ok) {
-    response = await fetch(`${req.nextUrl.origin}/api/external/short-links/${encodedCode}`, {
-      cache: "no-store",
-    }).catch(() => null as any);
-  }
+  const response = await fetch(
+    `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`,
+    { cache: "no-store" },
+  ).catch(() => null as any);
 
   const payload = await response?.json().catch(() => ({}));
 
