@@ -4835,7 +4835,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
         // Format conversation history
         const conversationHistory = state.messages
-          .slice(-5) // Keep last 5 turns for context
+          .slice(-10) // Keep last 10 turns for conversation context
           .map((m) =>
             m.role === "user"
               ? new HumanMessage({ content: m.content })
@@ -4902,7 +4902,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         new SystemMessage({
           content: this.buildSystemPrompt(language),
         }),
-        ...previousMessages.slice(-3).map((m) =>
+        ...previousMessages.slice(-6).map((m) =>
           m.role === "user"
             ? new HumanMessage({ content: m.content })
             : new AIMessage({ content: m.content })
@@ -4933,24 +4933,23 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         );
       }
       const ni = input.toLowerCase();
-      const isHelpLike = /\b(que|quais|qual|como|oq|what)\b.*\b(faz|fazer|faco|pode|posso|consigo|consegue|conseg|podes|podemos)\b/i.test(ni) ||
-        /\b(ajuda|help|menu|comandos|funcionalidades|capacidad|habilidad|recursos)\b/i.test(ni) ||
-        /\b(o\s+que\s+voce\s+faz|o\s+que\s+vc\s+faz|oq\s+faz|oq\s+vc\s+faz)/i.test(ni);
-      if (isHelpLike) {
-        try {
-          const helpRaw = await executeTool('get_intent_help', {});
-          const helpParsed = JSON.parse(helpRaw);
-          return helpParsed?.message || 'Posso ajudar com contatos, saldo, PIX, conversão, envio, aplicações e mais. Diga o que deseja fazer.';
-        } catch { /* fallthrough */ }
+      const lastUserMsg = previousMessages.filter(m => m.role === 'user').pop()?.content || '';
+      const fullCtx = (lastUserMsg + ' ' + ni).toLowerCase();
+      if (fullCtx.includes('pix') || fullCtx.includes('pi,') || fullCtx.includes('pi ')) {
+        if (fullCtx.includes('fora') || fullCtx.includes('sacar') || fullCtx.includes('retirar')) {
+          const offUrl = new URL('/pix-off', this.getFrontendBaseUrl());
+          offUrl.searchParams.set('from', 'chat'); offUrl.searchParams.set('lang', language); offUrl.searchParams.set('autostart', '1');
+          return `Abrir PIX (saída):\n${offUrl.toString()}`;
+        }
+        const onUrl = new URL('/pix-on', this.getFrontendBaseUrl());
+        onUrl.searchParams.set('from', 'chat'); onUrl.searchParams.set('lang', language); onUrl.searchParams.set('autostart', '1');
+        return `Abrir PIX (entrada):\n${onUrl.toString()}`;
       }
-      const hint = ni.includes('mandar') || ni.includes('enviar') || ni.includes('pagar')
-        ? 'Para enviar dinheiro, preciso saber: valor, moeda e para quem (contato salvo ou chave).'
-        : ni.includes('saldo') || ni.includes('quanto')
-          ? 'Veja seu saldo em /rendimentos ou peça no chat.'
-          : ni.includes('pix')
-            ? 'Para PIX, diga se e para trazer reais ou retirar.'
-            : 'Pode repetir o que deseja fazer? Tente ser mais direto.';
-      return `Nao entendi completamente. ${hint}`;
+      if (fullCtx.includes('mandar') || fullCtx.includes('enviar') || fullCtx.includes('pagar'))
+        return `Para enviar dinheiro, preciso saber: valor, moeda e para quem. Exemplo: mandar 50 dolares para Ana.`;
+      if (fullCtx.includes('saldo') || fullCtx.includes('quanto'))
+        return `Veja seu saldo em /rendimentos ou peça no chat.`;
+      return `Nao entendi completamente. Pode repetir o que deseja fazer?`;
     }
   }
 
