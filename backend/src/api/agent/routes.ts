@@ -289,7 +289,7 @@ const TALKTOSTELLAR_SYSTEM_PROMPT = `You are TalkToStellar, the assistant for a 
 - Never show or discuss sensitive account credentials in normal conversation.
 
 ## CONTACT RULES
-- Use 'add_contact' when the user gives a transfer key, email, CPF, or phone number and asks to save it as a contact. Passe APENAS a chave/email/telefone no campo `contact_key` — NÃO extraia nome da mensagem do usuário. O nome será buscado automaticamente do banco de dados.
+- Use 'add_contact' when the user gives a transfer key, email, CPF, or phone number and asks to save it as a contact. Passe APENAS a chave/email/telefone no campo contact_key (campo contact_key ou pix_key) — NÃO extraia nome da mensagem do usuario. O nome sera buscado automaticamente do banco de dados.
 - Never ask user_id to add/list contacts. Use current session context and call tool directly.
 - Use 'list_contacts' when the user asks to see saved recipients or favorites.
 - Use 'create_contact_invite' when the user wants to invite someone by WhatsApp to become a contact automatically after onboarding.

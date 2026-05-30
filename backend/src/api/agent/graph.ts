@@ -2988,6 +2988,9 @@ Other examples:
 - "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
 - "Sair da conta" -> wallet_logout
 - "Desconectar conta" -> wallet_logout
+- "Deslogar" -> wallet_logout
+- "quero deslogar" -> wallet_logout
+- "deslogar da conta" -> wallet_logout
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.`;
 
