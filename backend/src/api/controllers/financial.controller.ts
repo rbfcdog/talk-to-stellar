@@ -492,13 +492,27 @@ export class FinancialController {
 
       const sourceAsset = resolveConfiguredAsset(sourceAssetCode, req.body?.source_asset_issuer || req.body?.sourceAssetIssuer);
       const destAsset = resolveConfiguredAsset(destAssetCode, req.body?.dest_asset_issuer || req.body?.destAssetIssuer || req.body?.destination_asset_issuer);
-      const quote = await StellarService.quoteStrictSendConversion({
-        sourcePublicKey,
-        destination: sourcePublicKey,
-        sourceAmount,
-        sourceAsset,
-        destAsset,
-      });
+      const destAmountRaw = String(req.body?.dest_amount || req.body?.destAmount || '').replace(',', '.').trim();
+      const destAmountNumber = toPositiveNumber(destAmountRaw, 0);
+      const useStrictReceive = destAmountNumber > 0 && sourceAmountNumber <= 0;
+
+      const quote = useStrictReceive
+        ? await StellarService.quotePathPayment({
+            sourcePublicKey,
+            destination: sourcePublicKey,
+            sourceAsset,
+            destAsset,
+            destAmount: destAmountRaw,
+          })
+        : await StellarService.quoteStrictSendConversion({
+            sourcePublicKey,
+            destination: sourcePublicKey,
+            sourceAmount,
+            sourceAsset,
+            destAsset,
+          });
+
+      const effectiveSourceAmount = useStrictReceive ? quote.sourceAmount : sourceAmount;
 
       const networkFee = await formatNetworkFeeForCustomer(quote.networkFeeXlm || DEFAULT_NETWORK_FEE_XLM);
       const unifiedFee = buildUnifiedFeeDisplay({
@@ -523,7 +537,7 @@ export class FinancialController {
       const { token, url } = await externalService.createConversionConfirmUrlWithContext({
         session_id: auth.sessionId,
         owner_id: auth.userId,
-        source_amount: sourceAmount,
+        source_amount: effectiveSourceAmount,
         source_asset_code: sourceAsset.code,
         source_asset_issuer: sourceAsset.issuer,
         dest_amount: String(quote.destinationAmount || ''),
