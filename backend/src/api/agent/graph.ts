@@ -19,6 +19,46 @@ import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/am
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
+const INTENT_CLASSIFIER_TOOL_NAME = 'classify_talktostellar_intent';
+const INTENT_CLASSIFIER_TOOLS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: INTENT_CLASSIFIER_TOOL_NAME,
+      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action.',
+      parameters: {
+        type: 'object',
+        properties: {
+          intent: {
+            type: 'string',
+            enum: [
+              'login',
+              'onboard',
+              'wallet',
+              'wallet_logout',
+              'contacts',
+              'payment',
+              'payment_link',
+              'balance',
+              'history',
+              'financial_memory',
+              'conversion',
+              'price_quote',
+              'pix',
+              'yield',
+              'general',
+            ],
+          },
+          confidence: {
+            type: 'number',
+            description: 'Classifier confidence from 0 to 1.',
+          },
+        },
+        required: ['intent', 'confidence'],
+      },
+    },
+  },
+];
 
 function ensureHttpProtocol(value: string): string {
   const trimmed = String(value || '').trim();
@@ -111,12 +151,31 @@ export class AgentGraph {
     logger.debug(`[extractToolCalls] Raw tool_calls: ${JSON.stringify(calls)}`);
     logger.debug(`[extractToolCalls] Response keys: ${JSON.stringify(Object.keys(response || {}))}`);
     logger.debug(`[extractToolCalls] Additional kwargs keys: ${JSON.stringify(Object.keys(response?.additional_kwargs || {}))}`);
+    const parseArgs = (value: any): Record<string, any> => {
+      if (!value) return {};
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+      return typeof value === 'object' ? value : {};
+    };
+
     const result = Array.isArray(calls)
-      ? calls.map((call: any) => ({
-          id: call.id || call.tool_call_id,
-          name: call.name,
-          args: call.args || call.arguments || call.input || {},
-        }))
+      ? calls
+          .map((call: any) => {
+            const name = call.name || call.function?.name || call.toolName || call.tool_name || '';
+            const args = parseArgs(call.args || call.arguments || call.input || call.function?.arguments);
+            return {
+              id: call.id || call.tool_call_id,
+              name,
+              args,
+            };
+          })
+          .filter((call) => call.name)
       : [];
     logger.debug(`[extractToolCalls] Mapped tool calls: ${JSON.stringify(result)}`);
     return result;
@@ -3120,10 +3179,39 @@ If the message is short and obviously about contacts, choose contacts instead of
 
 IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
 
-      const response = await this.llm.invoke(await this.prependContactsContext([
+      const messages = await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
         new HumanMessage({ content: message }),
-      ], userId));
+      ], userId);
+
+      const maybeBind = (this.llm as any).bindTools;
+      if (typeof maybeBind === 'function') {
+        try {
+          const toolAwareClassifier = maybeBind.call(this.llm, INTENT_CLASSIFIER_TOOLS as any, {
+            tool_choice: {
+              type: 'function',
+              function: { name: INTENT_CLASSIFIER_TOOL_NAME },
+            },
+          } as any);
+          const toolResponse = await toolAwareClassifier.invoke(messages);
+          const classifierCall = this.extractToolCalls(toolResponse)
+            .find((call) => call.name === INTENT_CLASSIFIER_TOOL_NAME);
+          const toolIntent = this.intentFromLabel(
+            classifierCall?.args?.intent ||
+            classifierCall?.args?.detected_intent ||
+            classifierCall?.args?.label
+          );
+          if (toolIntent) {
+            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
+            return toolIntent;
+          }
+          logger.warn(`[Agent] Intent classifier tool returned no usable call: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
+        } catch (toolError) {
+          logger.warn(`[Agent] Intent classifier tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+        }
+      }
+
+      const response = await this.llm.invoke(messages);
 
       const detectedIntent = this.parseIntentFromLlmOutput(response.content) || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
@@ -4750,6 +4838,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         : wantsTransactionHistory ? IntentType.HISTORY
         : localContactIntent?.action === 'add' ? IntentType.CONTACTS
         : this.isContactsRequest(state.current_input) ? IntentType.CONTACTS
+        : deterministicYield.is_yield ? IntentType.YIELD
         : /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/i.test(state.current_input) ||
           /\b(?:sacar|retirar|tirar|saque)\b.*\bpix\b/i.test(state.current_input) ||
           /\bmandar\s+(?:pra|para|pro|a)\s+fora\b/i.test(state.current_input)
