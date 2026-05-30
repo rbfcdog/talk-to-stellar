@@ -134,6 +134,11 @@ export default function RendimentosClient({
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const [tab, setTab] = useState<"returns" | "apply">(initialView === "application" ? "apply" : "returns");
+
+  useEffect(() => {
+    const next = initialView === "application" ? "apply" : "returns";
+    if (tab !== next) setTab(next);
+  }, [initialView]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
   const [balances, setBalances] = useState<BalanceLine[]>([]);

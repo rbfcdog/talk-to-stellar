@@ -604,21 +604,25 @@ export class AgentGraph {
       .replace(/([a-z])\1{2,}/g, '$1$1')
       .replace(/\s+/g, ' ')
       .trim();
+    const fuzzy = normalized
+      .replace(/([a-z])\1+/g, '$1$1')
+      .replace(/consguee|consegui|consegu|conseg|consego/gi, 'consegue')
+      .replace(/voce?e?|vc/gi, 'voce')
+      .replace(/faze?|fazer|faco/gi, 'fazer')
+      .trim();
     return (
       normalized === 'ajuda' ||
       normalized === 'help' ||
       normalized === 'menu' ||
+      fuzzy.includes('o que fazer') ||
+      fuzzy.includes('oq fazer') ||
+      fuzzy.includes('que pode fazer') ||
+      fuzzy.includes('que consegue fazer') ||
+      fuzzy.includes('que da para fazer') ||
+      fuzzy.includes('que da pra fazer') ||
+      fuzzy.includes('como funciona') ||
       normalized.includes('principais comandos') ||
       normalized.includes('comandos disponiveis') ||
-      normalized.includes('o que voce faz') ||
-      normalized.includes('o que voce pode fazer') ||
-      normalized.includes('o que posso fazer') ||
-      normalized.includes('o que da para fazer') ||
-      normalized.includes('o que tu pode fazer') ||
-      normalized.includes('o que da pra fazer') ||
-      normalized.includes('o que consigo fazer') ||
-      normalized.includes('o que tem por aqui') ||
-      normalized.includes('o que faco por aqui') ||
       normalized.includes('what can you do') ||
       normalized.includes('como usar') ||
       normalized.includes('mostrar comandos') ||
@@ -3001,7 +3005,9 @@ Other examples:
 - "deslogar" -> wallet_logout
 - "logout" -> wallet_logout
 
-If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.`;
+If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.
+
+IMPORTANT: Handle typos gracefully. "consguee", "consege", "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
 
       const response = await this.llm.invoke(await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
@@ -4927,6 +4933,16 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         );
       }
       const ni = input.toLowerCase();
+      const isHelpLike = /\b(que|quais|qual|como|oq|what)\b.*\b(faz|fazer|faco|pode|posso|consigo|consegue|conseg|podes|podemos)\b/i.test(ni) ||
+        /\b(ajuda|help|menu|comandos|funcionalidades|capacidad|habilidad|recursos)\b/i.test(ni) ||
+        /\b(o\s+que\s+voce\s+faz|o\s+que\s+vc\s+faz|oq\s+faz|oq\s+vc\s+faz)/i.test(ni);
+      if (isHelpLike) {
+        try {
+          const helpRaw = await executeTool('get_intent_help', {});
+          const helpParsed = JSON.parse(helpRaw);
+          return helpParsed?.message || 'Posso ajudar com contatos, saldo, PIX, conversão, envio, aplicações e mais. Diga o que deseja fazer.';
+        } catch { /* fallthrough */ }
+      }
       const hint = ni.includes('mandar') || ni.includes('enviar') || ni.includes('pagar')
         ? 'Para enviar dinheiro, preciso saber: valor, moeda e para quem (contato salvo ou chave).'
         : ni.includes('saldo') || ni.includes('quanto')
