@@ -1134,8 +1134,8 @@ export class AgentGraph {
     const fundAndPayAsset = mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL';
     return {
       is_pix_ramp: true,
-      direction: wantsOffRamp && !wantsOnRamp ? 'offramp' : 'onramp',
-      flow: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? 'fund_and_pay' : 'fund_wallet',
+      direction: wantsOffRamp ? 'offramp' : 'onramp',
+      flow: wantsPixFundedPayment && !wantsOffRamp ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined,
       amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : 'BRL',
       asset_code: wantsOffRamp && !wantsOnRamp
@@ -1262,10 +1262,18 @@ export class AgentGraph {
       : (this.resumePendingPixRampIntent(state) || extractedIntent);
     const language = this.getLanguage(state);
     if (!intent.is_pix_ramp) {
-      state.pending_pix_ramp = undefined;
-      state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
-      state.success = false;
-      state.response_message = this.text(language, 'Você quer colocar dinheiro via PIX na conta ou retirar dinheiro para PIX?', 'Do you want to add money to your account with PIX or withdraw money to your PIX?');
+      const onRampUrl = new URL(`/pix-on`, this.getFrontendBaseUrl());
+      onRampUrl.searchParams.set('from', 'chat');
+      onRampUrl.searchParams.set('lang', language);
+      const offRampUrl = new URL(`/pix-off`, this.getFrontendBaseUrl());
+      offRampUrl.searchParams.set('from', 'chat');
+      offRampUrl.searchParams.set('lang', language);
+      state.success = true;
+      state.response_message = this.text(
+        language,
+        `Abra para PIX (entrada ou saída):\n\nEntrada: ${onRampUrl.toString()}\nSaída: ${offRampUrl.toString()}\n\nEscolha o que precisa na página.`,
+        `Open for PIX (in or out):\n\nIn: ${onRampUrl.toString()}\nOut: ${offRampUrl.toString()}\n\nChoose what you need on the page.`
+      );
     } else if (!intent.amount) {
       const pendingPixRamp = {
         direction: intent.direction,
@@ -4733,7 +4741,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleBestRouteGuidanceRequest(state);
       }
 
-      if (state.action_type === ActionType.INITIATE_PIX && extractedPixRamp.is_pix_ramp) {
+      if (state.action_type === ActionType.INITIATE_PIX) {
         return await this.handlePixRampRequest(state);
       }
 
