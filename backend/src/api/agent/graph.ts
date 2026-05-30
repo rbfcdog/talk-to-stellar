@@ -4653,6 +4653,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         : wantsTransactionHistory ? IntentType.HISTORY
         : localContactIntent?.action === 'add' ? IntentType.CONTACTS
         : this.isContactsRequest(state.current_input) ? IntentType.CONTACTS
+        : /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/i.test(state.current_input) ||
+          /\b(?:sacar|retirar|tirar|saque)\b.*\bpix\b/i.test(state.current_input) ||
+          /\bmandar\s+(?:pra|para|pro|a)\s+fora\b/i.test(state.current_input)
+        ? IntentType.PIX
         : null;
 
       state.detected_intent = urgentIntents || await this.detectIntent(state.current_input, state.session_data?.user_id);
