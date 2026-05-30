@@ -25,7 +25,7 @@ const INTENT_CLASSIFIER_TOOLS = [
     type: 'function' as const,
     function: {
       name: INTENT_CLASSIFIER_TOOL_NAME,
-      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action.',
+      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber.',
       parameters: {
         type: 'object',
         properties: {
@@ -3031,6 +3031,19 @@ export class AgentGraph {
       conversion: IntentType.CONVERSION,
       price_quote: IntentType.PRICE_QUOTE,
       pix: IntentType.PIX,
+      pix_onramp: IntentType.PIX,
+      pix_offramp: IntentType.PIX,
+      pix_transfer: IntentType.PIX,
+      pix_payment: IntentType.PIX,
+      pix_send: IntentType.PIX,
+      pix_deposit: IntentType.PIX,
+      pix_withdraw: IntentType.PIX,
+      onramp: IntentType.PIX,
+      offramp: IntentType.PIX,
+      withdraw: IntentType.PIX,
+      withdrawal: IntentType.PIX,
+      saque: IntentType.PIX,
+      retirada: IntentType.PIX,
       yield: IntentType.YIELD,
       general: IntentType.GENERAL,
       contact: IntentType.CONTACTS,
@@ -3100,12 +3113,12 @@ export class AgentGraph {
     if (directIntent) return directIntent;
 
     const match = withoutFence.toLowerCase().match(
-      /\b(wallet_logout|payment_link|financial_memory|price_quote|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
+      /\b(wallet_logout|payment_link|financial_memory|price_quote|pix_onramp|pix_offramp|pix_transfer|pix_payment|pix_send|pix_deposit|pix_withdraw|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
     );
     return match ? this.intentFromLabel(match[1]) : null;
   }
 
-  private async detectIntent(message: string, userId?: string): Promise<IntentType> {
+  private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -3119,17 +3132,18 @@ The intent value must be one of the labels above. Do not explain. Do not use mar
 
 Priority rules:
 1. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
-2. If the user asks to send money, mandar dinheiro, transfer, pay someone, the intent is payment.
-3. If the user asks to bring money, deposit, colocar, trazer, or use PIX to add funds, the intent is pix.
-4. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, or off-ramp, the intent is pix.
-5. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
-6. If the user asks for balance, saldo, or what they have, the intent is balance.
-7. If the user asks for transaction history or receipts, the intent is history.
-8. If the user asks to convert or exchange assets, the intent is conversion.
-9. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
-10. If the user asks for quotes, rates, or estimates, the intent is price_quote.
-11. If the user asks to create a payment link, the intent is payment_link.
-12. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
+2. If the message mentions PIX/pix and any money movement, amount, mandar, enviar, pagar, sacar, retirar, trazer, colocar, receber, depósito, saque, entrada, saída, or chave PIX, the intent is pix. PIX wins over generic payment.
+3. If the user asks to bring money, deposit, colocar, trazer, receber via PIX, or use PIX to add funds, the intent is pix.
+4. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, mandar no PIX, enviar no PIX, or off-ramp, the intent is pix.
+5. If the user asks to send money, mandar dinheiro, transfer, or pay someone without mentioning PIX and with a recipient/person, the intent is payment.
+6. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
+7. If the user asks for balance, saldo, or what they have, the intent is balance.
+8. If the user asks for transaction history or receipts, the intent is history.
+9. If the user asks to convert or exchange assets, the intent is conversion.
+10. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
+11. If the user asks for quotes, rates, or estimates, the intent is price_quote.
+12. If the user asks to create a payment link, the intent is payment_link.
+13. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
 
 Strong contact examples that must be contacts:
 - "quero ver meus contatos" -> contacts
@@ -3147,6 +3161,11 @@ Other examples:
 - "quero mandar 10 reais pra rodrigo" -> payment
 - "enviar 50 dolares para Ana" -> payment
 - "mandar pra fora 100 reais via pix" -> pix
+- "quero mandar 100 reais no pix" -> pix
+- "mandar 100 reais no pix" -> pix
+- "quero mandar 100 reais via pix" -> pix
+- "mandar 100 reais por pix" -> pix
+- "quero mandar dinheiro no pix" -> pix
 - "mandar pra fora" -> pix
 - "sacar 50 reais" -> pix
 - "retirar dinheiro" -> pix
@@ -3179,10 +3198,10 @@ If the message is short and obviously about contacts, choose contacts instead of
 
 IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
 
-      const messages = await this.prependContactsContext([
+      const messages = [
         new SystemMessage({ content: systemPrompt }),
         new HumanMessage({ content: message }),
-      ], userId);
+      ];
 
       const maybeBind = (this.llm as any).bindTools;
       if (typeof maybeBind === 'function') {
