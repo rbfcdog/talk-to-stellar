@@ -2221,13 +2221,18 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
   try {
     const action = normalizeMoneyInterfaceAction(input.action || input.intent || input.mode);
     const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || (action === 'bring' ? 'USDC' : 'BRL'));
-    const frontendUrl = buildMoneyInterfaceUrl({
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const rawUrl = buildMoneyInterfaceUrl({
       action,
       amount: input.amount,
       assetCode,
       destinationPixKey: input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey,
       language,
     });
+    const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
+    const frontendUrl = sessionId
+      ? await new ExternalService(supabase as any).shortenPublicUrl({ url: rawUrl, purpose, sessionId, expiresInHours: 24 }).catch(() => rawUrl)
+      : rawUrl;
     const displayAsset = frontendAssetCode(assetCode);
 	    const actionLabel = language === 'en'
 	      ? action === 'bring'
