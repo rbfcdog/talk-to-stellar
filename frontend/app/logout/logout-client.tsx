@@ -43,6 +43,7 @@ export default function LogoutClient() {
     : provider === "whatsapp" || provider === "phone"
       ? "WhatsApp"
       : provider
+  const isLinkLogout = Boolean(token)
 
   function redirectToUsed(customMessage?: string) {
     const params = new URLSearchParams()
@@ -57,10 +58,7 @@ export default function LogoutClient() {
   }, [sessionIdFromUrl])
 
   useEffect(() => {
-    if (!token) {
-      redirectToUsed("This logout link is invalid or has already been used.")
-      return
-    }
+    if (!isLinkLogout) return
 
     let active = true
     async function validateToken() {
@@ -82,14 +80,21 @@ export default function LogoutClient() {
     return () => {
       active = false
     }
-  }, [token])
+  }, [isLinkLogout, token])
 
   useEffect(() => {
     if (status !== "done" || completionRef.current) return
     completionRef.current = true
-    enqueueWebChatFeedback(`Signed out.\n${message || "Your session has ended."}`)
-    closeIntermediatePage()
-  }, [status, message])
+    if (isLinkLogout) {
+      enqueueWebChatFeedback(`Signed out.\n${message || "Your session has ended."}`)
+      closeIntermediatePage()
+      return
+    }
+    const redirect = window.setTimeout(() => {
+      window.location.replace("/chat")
+    }, 900)
+    return () => window.clearTimeout(redirect)
+  }, [isLinkLogout, status, message])
 
   async function handleConfirmLogout() {
     setStatus("loading")
@@ -117,12 +122,13 @@ export default function LogoutClient() {
         localStorage.removeItem("talk-to-stellar.sessionId")
         localStorage.removeItem("talk-to-stellar.sessionToken")
         localStorage.removeItem("talk-to-stellar.sessionCreatedAt")
+        localStorage.removeItem("talk-to-stellar.sessionLastSeenAt")
         localStorage.setItem("talk-to-stellar.logoutRefreshAt", new Date().toISOString())
         sessionStorage.removeItem("chat-session-agent")
         sessionStorage.setItem("chat-session-agent", generateSessionId())
       }
       setStatus("done")
-      setMessage(providerLabel ? `Signed out. Go back to ${providerLabel} to continue.` : "You signed out successfully.")
+      setMessage(isLinkLogout && providerLabel ? `Signed out. Go back to ${providerLabel} to continue.` : "You signed out successfully.")
     } catch {
       setStatus("error")
       setMessage("Could not complete sign-out now. Try again.")
@@ -135,8 +141,11 @@ export default function LogoutClient() {
         <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-8 shadow-2xl backdrop-blur">
           <h1 className="text-3xl font-semibold text-tts-surface">Sign out</h1>
           <p className="mt-3 text-tts-deep">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
-          {status === "done" && (
+          {status === "done" && isLinkLogout && (
             <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+          )}
+          {status === "done" && !isLinkLogout && (
+            <p className="mt-2 text-xs text-tts-muted">Returning to chat...</p>
           )}
           <div className="mt-6 flex min-w-0 flex-wrap gap-3">
             {status !== "done" && (
