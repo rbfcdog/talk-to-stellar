@@ -2948,6 +2948,16 @@ export class AgentGraph {
    * Detect user intent from message using LLM
    */
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
+    // Pre-process: fix common truncations and typos before classification
+    const cleaned = message
+      .replace(/\bpi[,.\s]*$/i, 'pix')
+      .replace(/\bconta[,.\s]*$/i, 'conta')
+      .replace(/\bcomta[,.\s]*$/i, 'conta')
+      .replace(/\bsaldo[,.\s]*$/i, 'saldo')
+      .replace(/\bhistorico[,.\s]*$/i, 'historico')
+      .replace(/\bmand[,.\s]*$/i, 'mandar')
+      .replace(/\bconve[,.\s]*$/i, 'converter')
+      .replace(/\baplic[,.\s]*$/i, 'aplicar');
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -3011,7 +3021,7 @@ IMPORTANT: Handle typos gracefully. "consguee", "consege", "consigo" all mean "c
 
       const response = await this.llm.invoke(await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
-        new HumanMessage({ content: message }),
+        new HumanMessage({ content: cleaned }),
       ], userId));
 
       const intentText = (response.content as string).trim().toLowerCase();
@@ -4864,7 +4874,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           state.current_input,
           state.messages,
           state.session_data?.user_id,
-          this.getLanguage(state)
+          this.getLanguage(state),
+          state.session_id
         );
         state.success = true;
       }
@@ -4895,7 +4906,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     input: string,
     previousMessages: Array<{ role: "user" | "assistant"; content: string }>,
     userId?: string,
-    language: 'pt-BR' | 'en' = 'pt-BR'
+    language: 'pt-BR' | 'en' = 'pt-BR',
+    fallbackSessionId?: string
   ): Promise<string> {
     try {
       const messages = [
@@ -4926,24 +4938,34 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         if (yieldIntent.asset_code) url.searchParams.set('asset', yieldIntent.asset_code);
         url.searchParams.set('from', 'chat');
         url.searchParams.set('lang', language);
+        let finalUrl = url.toString();
+        if (fallbackSessionId) {
+          try { finalUrl = await this.externalService.shortenPublicUrl({ url: finalUrl, purpose: 'rendimentos', sessionId: fallbackSessionId, expiresInHours: 24 }); }
+          catch { /* use raw URL */ }
+        }
         return this.text(
           language,
-          `Abra rendimentos para aplicar dinheiro ou ver posições:\n${url.toString()}\n\nNada sai sem PIN.`,
-          `Open earnings to apply money or view positions:\n${url.toString()}\n\nNothing moves without PIN.`
+          `Abra rendimentos para aplicar dinheiro ou ver posições:\n${finalUrl}\n\nNada sai sem PIN.`,
+          `Open earnings to apply money or view positions:\n${finalUrl}\n\nNothing moves without PIN.`
         );
       }
       const ni = input.toLowerCase();
       const lastUserMsg = previousMessages.filter(m => m.role === 'user').pop()?.content || '';
       const fullCtx = (lastUserMsg + ' ' + ni).toLowerCase();
+      const shorten = async (rawUrl: string, purpose: string) => {
+        if (!fallbackSessionId) return rawUrl;
+        try { return await this.externalService.shortenPublicUrl({ url: rawUrl, purpose, sessionId: fallbackSessionId, expiresInHours: 24 }); }
+        catch { return rawUrl; }
+      };
       if (fullCtx.includes('pix') || fullCtx.includes('pi,') || fullCtx.includes('pi ')) {
         if (fullCtx.includes('fora') || fullCtx.includes('sacar') || fullCtx.includes('retirar')) {
           const offUrl = new URL('/pix-off', this.getFrontendBaseUrl());
           offUrl.searchParams.set('from', 'chat'); offUrl.searchParams.set('lang', language); offUrl.searchParams.set('autostart', '1');
-          return `Abrir PIX (saída):\n${offUrl.toString()}`;
+          return `Abrir PIX (saída):\n${await shorten(offUrl.toString(), 'pix_offramp')}`;
         }
         const onUrl = new URL('/pix-on', this.getFrontendBaseUrl());
         onUrl.searchParams.set('from', 'chat'); onUrl.searchParams.set('lang', language); onUrl.searchParams.set('autostart', '1');
-        return `Abrir PIX (entrada):\n${onUrl.toString()}`;
+        return `Abrir PIX (entrada):\n${await shorten(onUrl.toString(), 'pix_onramp')}`;
       }
       if (fullCtx.includes('mandar') || fullCtx.includes('enviar') || fullCtx.includes('pagar'))
         return `Para enviar dinheiro, preciso saber: valor, moeda e para quem. Exemplo: mandar 50 dolares para Ana.`;

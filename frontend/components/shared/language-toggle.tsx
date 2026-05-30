@@ -1,8 +1,9 @@
 "use client";
 
-import { Globe2, Moon, Sun } from "lucide-react";
+import { Globe2, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/lib/i18n";
 
@@ -54,6 +55,16 @@ export function LanguageToggle() {
         {isDark ? <Sun className="h-3.5 w-3.5" aria-hidden="true" /> : <Moon className="h-3.5 w-3.5" aria-hidden="true" />}
         <span>{themeLabel}</span>
       </button>
+      <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
+      <Link
+        href="/logout"
+        className="inline-flex h-8 min-w-10 items-center justify-center gap-1.5 rounded-full px-2 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-error/10 hover:text-tts-error focus:outline-none focus:ring-2 focus:ring-tts-gold"
+        aria-label={t("language_switch_to_portuguese") || "Sair"}
+        title={language === "pt-BR" ? "Sair" : "Logout"}
+      >
+        <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="hidden sm:inline">{language === "pt-BR" ? "Sair" : "Logout"}</span>
+      </Link>
     </div>
   );
 }
