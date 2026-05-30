@@ -348,6 +348,25 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('/money-cycle');
   });
 
+  it('routes applications wording and typo variants to application options', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Abrir rendimentos:\nhttps://app.example.com/rendimentos',
+    }));
+
+    const first = await graph.processInput(createState('quero ver minhas aplicação'));
+    const second = await graph.processInput(createState('aplicações'));
+
+    expect(executeToolMock.mock.calls.filter(([name]) => name === 'get_yield_options')).toHaveLength(2);
+    expect(first.success).toBe(true);
+    expect(first.response_message).toContain('/rendimentos');
+    expect(second.success).toBe(true);
+    expect(second.response_message).toContain('/rendimentos');
+  });
+
   it('parses intent classifier output even when the LLM returns JSON or punctuation', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 
@@ -357,6 +376,32 @@ describe('Agent production evals', () => {
     expect(graph.parseIntentFromLlmOutput('The intent is payment_link.')).toBe(IntentType.PAYMENT_LINK);
     expect(graph.parseIntentFromLlmOutput('{"intent":"aplicações","confidence":0.8}')).toBe(IntentType.YIELD);
     expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
+  });
+
+  it('extracts OpenAI function tool calls from additional kwargs', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
+
+    const calls = graph.extractToolCalls({
+      additional_kwargs: {
+        tool_calls: [
+          {
+            id: 'call_1',
+            function: {
+              name: 'classify_talktostellar_intent',
+              arguments: '{"intent":"yield","confidence":0.99}',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(calls).toEqual([
+      {
+        id: 'call_1',
+        name: 'classify_talktostellar_intent',
+        args: { intent: 'yield', confidence: 0.99 },
+      },
+    ]);
   });
 
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
