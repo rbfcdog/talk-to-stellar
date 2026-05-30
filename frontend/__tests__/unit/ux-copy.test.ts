@@ -89,6 +89,16 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Fechar");
   });
 
+  it("closes logout instead of returning to chat", () => {
+    const text = source("app/logout/logout-client.tsx");
+
+    expect(text).toContain("closeIntermediatePage()");
+    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).not.toContain('window.location.replace("/chat")');
+    expect(text).not.toContain("Returning to chat");
+    expect(text).not.toContain("Go back to");
+  });
+
   it("does not bring back the confusing yield wording that was removed", () => {
     const text = source("app/rendimentos/rendimentos-client.tsx");
     const forbidden = [

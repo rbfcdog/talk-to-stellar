@@ -38,11 +38,6 @@ export default function LogoutClient() {
   const provider = String(searchParams.get("provider") || searchParams.get("source") || tokenPayload?.provider || tokenPayload?.source || "").trim().toLowerCase()
   const providerUserId = String(searchParams.get("provider_user_id") || tokenPayload?.provider_user_id || "").trim()
   const sessionIdFromUrl = String(searchParams.get("session_id") || tokenPayload?.session_id || "").trim()
-  const providerLabel = provider === "telegram"
-    ? "Telegram"
-    : provider === "whatsapp" || provider === "phone"
-      ? "WhatsApp"
-      : provider
   const isLinkLogout = Boolean(token)
 
   function redirectToUsed(customMessage?: string) {
@@ -87,13 +82,8 @@ export default function LogoutClient() {
     completionRef.current = true
     if (isLinkLogout) {
       enqueueWebChatFeedback(`Signed out.\n${message || "Your session has ended."}`)
-      closeIntermediatePage()
-      return
     }
-    const redirect = window.setTimeout(() => {
-      window.location.replace("/chat")
-    }, 900)
-    return () => window.clearTimeout(redirect)
+    closeIntermediatePage()
   }, [isLinkLogout, status, message])
 
   async function handleConfirmLogout() {
@@ -128,7 +118,7 @@ export default function LogoutClient() {
         sessionStorage.setItem("chat-session-agent", generateSessionId())
       }
       setStatus("done")
-      setMessage(isLinkLogout && providerLabel ? `Signed out. Go back to ${providerLabel} to continue.` : "You signed out successfully.")
+      setMessage("You signed out successfully.")
     } catch {
       setStatus("error")
       setMessage("Could not complete sign-out now. Try again.")
@@ -141,11 +131,8 @@ export default function LogoutClient() {
         <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-8 shadow-2xl backdrop-blur">
           <h1 className="text-3xl font-semibold text-tts-surface">Sign out</h1>
           <p className="mt-3 text-tts-deep">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
-          {status === "done" && isLinkLogout && (
+          {status === "done" && (
             <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
-          )}
-          {status === "done" && !isLinkLogout && (
-            <p className="mt-2 text-xs text-tts-muted">Returning to chat...</p>
           )}
           <div className="mt-6 flex min-w-0 flex-wrap gap-3">
             {status !== "done" && (
