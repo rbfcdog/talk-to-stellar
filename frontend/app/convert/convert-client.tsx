@@ -194,6 +194,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [embeddedReviewValidation, setEmbeddedReviewValidation] = useState<unknown | null>(null);
   const [returnSource, setReturnSource] = useState("convert");
   const [returnTo, setReturnTo] = useState("");
+  const [amountMode, setAmountMode] = useState<"send" | "receive">("send");
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -284,7 +285,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          source_amount: String(amount || "").trim(),
+          ...(amountMode === "receive"
+            ? { dest_amount: String(amount || "").trim() }
+            : { source_amount: String(amount || "").trim() }),
           source_asset_code: sourceCode,
           dest_asset_code: destCode,
           language,
@@ -395,9 +398,19 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             </div>
 
             <div className="mt-5">
-              <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
-                {L("Valor que sai", "Amount leaving")}
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
+                  {amountMode === "receive" ? L("Valor que chega", "Amount receiving") : L("Valor que sai", "Amount leaving")}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setAmountMode(amountMode === "send" ? "receive" : "send")}
+                  className="inline-flex items-center gap-1.5 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep transition hover:border-tts-border2"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  {amountMode === "send" ? L("Receber", "Receive") : L("Enviar", "Send")}
+                </button>
+              </div>
               <input
                 id="convert-amount"
                 value={amount}
