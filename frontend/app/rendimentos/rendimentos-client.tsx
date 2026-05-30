@@ -335,6 +335,10 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
     return { option: o, code, profile: moneyProfile(code), amount: amt, loading: Boolean(!pos || pos.loading), error: String(pos?.error || ""), rate: optionRatePercent(o) };
   });
   const usdRow = rows.find((r) => r.profile.short === "USD");
+  const cetesRow = rows.find((r) => r.profile.short === "CETES");
+  const xlmRow = rows.find((r) => r.profile.short === "XLM");
+  const ctk = (v: number, rate: number) => v > 0 ? v / rate : 0;
+  const totalUsd = (usdRow?.amount || 0) + ctk(cetesRow?.amount || 0, 5.6) + ctk(xlmRow?.amount || 0, 1 / 0.09);
 
   return (
     <div className="space-y-6">
@@ -348,8 +352,9 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
       ) : (
         <>
           <div className="grid grid-cols-3 gap-4">
-            <StatCard label={L("USD", "USD")} value={usdRow && usdRow.amount > 0 ? `${formatAmount(usdRow.amount, language)} USD` : L("—", "—")} sub={usdRow && usdRow.rate > 0 ? `${usdRow.rate.toFixed(2)}% APY` : ""} />
+            <StatCard label={L("Total", "Total")} value={totalUsd > 0 ? `${formatAmount(totalUsd, language)} USD` : L("—", "—")} sub={L("valor estimado", "estimated value")} />
             <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
+            <StatCard label={L("Ambiente", "Environment")} value={L("Testnet", "Testnet")} sub={L("valores estimados", "estimated values")} />
           </div>
 
           {rows.map((row) => {
