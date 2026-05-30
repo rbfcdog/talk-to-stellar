@@ -245,6 +245,8 @@ export default function CreateAccountClient({
     if (!passkeyQrTargetUrl) return ""
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
   }, [passkeyQrTargetUrl])
+  const tokenProvider = String(tokenPayload?.provider || "").trim().toLowerCase()
+  const isExternalLoginOnlyContext = ["whatsapp", "phone", "telegram"].includes(tokenProvider)
   const loginHref = useMemo(() => {
     const params = new URLSearchParams()
     if (token) {
@@ -257,6 +259,11 @@ export default function CreateAccountClient({
     const query = params.toString()
     return query ? `/login?${query}` : "/login"
   }, [language, rawNextPath, token])
+
+  useEffect(() => {
+    if (!isExternalLoginOnlyContext || !token.trim()) return
+    window.location.replace(loginHref)
+  }, [isExternalLoginOnlyContext, loginHref, token])
 
   useEffect(() => {
     let cancelled = false
@@ -887,6 +894,24 @@ export default function CreateAccountClient({
       setPasskeyStatus('error')
       setPasskeyError(message)
     }
+  }
+
+  if (isExternalLoginOnlyContext && token.trim()) {
+    return (
+      <AuthShell
+        title={L("Entrar na conta", "Sign in")}
+        description={L(
+          "Este canal entra em uma conta existente. Abrindo a tela de PIN.",
+          "This channel signs in to an existing account. Opening the PIN screen.",
+        )}
+        className="max-w-md"
+      >
+        <div className="flex flex-col items-center gap-3 py-4 text-center text-sm text-tts-muted">
+          <Spinner className="h-5 w-5" />
+          <span>{L("Abrindo entrada segura", "Opening secure sign-in")}</span>
+        </div>
+      </AuthShell>
+    )
   }
 
   if (telegramDone) {

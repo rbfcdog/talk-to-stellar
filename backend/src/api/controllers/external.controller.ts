@@ -574,7 +574,14 @@ export class ExternalController {
         });
       }
 
-      const { token, url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, externalData);
+      const shouldUseLoginOnlyLink = !isBrowserExternalProvider(normalizedProvider);
+      const { token, url } = shouldUseLoginOnlyLink
+        ? await externalService.createLoginUrlWithShortLink(normalizedProvider, provider_user_id, {
+            ...externalData,
+            source: normalizedProvider,
+            language: req.body?.language,
+          })
+        : await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, externalData);
 
       return res.status(200).json({
         success: true,
@@ -582,6 +589,7 @@ export class ExternalController {
         onboardingRequired: true,
         reason: 'missing_credentials',
         creationUrl: url,
+        loginOnly: shouldUseLoginOnlyLink,
         token,
       });
     } catch (error: any) {
