@@ -348,6 +348,17 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('/money-cycle');
   });
 
+  it('parses intent classifier output even when the LLM returns JSON or punctuation', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
+
+    expect(graph.parseIntentFromLlmOutput('yield.')).toBe(IntentType.YIELD);
+    expect(graph.parseIntentFromLlmOutput('{"intent":"yield","confidence":0.99}')).toBe(IntentType.YIELD);
+    expect(graph.parseIntentFromLlmOutput('```json\n{"intent":"contacts","confidence":0.98}\n```')).toBe(IntentType.CONTACTS);
+    expect(graph.parseIntentFromLlmOutput('The intent is payment_link.')).toBe(IntentType.PAYMENT_LINK);
+    expect(graph.parseIntentFromLlmOutput('{"intent":"aplicações","confidence":0.8}')).toBe(IntentType.YIELD);
+    expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
+  });
+
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
