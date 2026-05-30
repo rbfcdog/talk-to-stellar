@@ -222,6 +222,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     if (typeof window === "undefined") return "";
 
     clearClientSession();
+    localStorage.removeItem("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
     sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
     setSessionId(newSessionId);
@@ -563,6 +564,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   const resetClientSession = () => {
     if (typeof window === "undefined") return;
     clearClientSession();
+    localStorage.removeItem("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
     sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
     setSessionId(newSessionId);

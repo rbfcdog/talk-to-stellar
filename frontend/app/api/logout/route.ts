@@ -25,6 +25,12 @@ export async function POST(req: Request) {
     const token = String(body?.token || "").trim();
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
+    const isBrowserOnlyLogout = !token && !provider && !providerUserId;
+    if (isBrowserOnlyLogout) {
+      const response = NextResponse.json({ success: true, localOnly: true });
+      clearSessionCookies(response);
+      return response;
+    }
     if (!sessionId && !token) {
       const response = NextResponse.json({ success: true, alreadyLoggedOut: true });
       clearSessionCookies(response);

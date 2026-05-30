@@ -113,6 +113,7 @@ export default function LogoutClient() {
         localStorage.removeItem("talk-to-stellar.sessionToken")
         localStorage.removeItem("talk-to-stellar.sessionCreatedAt")
         localStorage.removeItem("talk-to-stellar.sessionLastSeenAt")
+        localStorage.removeItem("talk-to-stellar.browserId")
         localStorage.setItem("talk-to-stellar.logoutRefreshAt", new Date().toISOString())
         sessionStorage.removeItem("chat-session-agent")
         sessionStorage.setItem("chat-session-agent", generateSessionId())

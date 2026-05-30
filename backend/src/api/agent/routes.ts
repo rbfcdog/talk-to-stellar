@@ -831,7 +831,8 @@ export function createAgentRoutes(
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
       const preferredLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale || (previousState?.action_params as any)?.language);
-      const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out);
+      const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out) &&
+        Object.keys(runtimeExternalContext).length === 0;
 
       // Hydrate missing public_key from wallet record to avoid false "login required" during active sessions.
       if (!sessionData.public_key && !forceLoggedOut) {
@@ -852,7 +853,20 @@ export function createAgentRoutes(
 
       const previousMessages = await repository.getMessages(sessionId, 10);
 
-      const actionParams = { ...(previousState?.action_params || {}) };
+      const actionParams: Record<string, any> = { ...(previousState?.action_params || {}) };
+      if (Object.keys(runtimeExternalContext).length > 0 && actionParams.force_logged_out) {
+        actionParams.force_logged_out = false;
+        await supabase
+          .from('agent_states')
+          .update({
+            action_params: {
+              ...actionParams,
+              ...runtimeExternalContext,
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('session_id', sessionId);
+      }
       if (requestSessionToken) {
         (actionParams as any).session_token = requestSessionToken;
       } else {
