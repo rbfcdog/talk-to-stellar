@@ -371,11 +371,61 @@ describe('Agent production evals', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 
     expect(graph.parseIntentFromLlmOutput('yield.')).toBe(IntentType.YIELD);
+    expect(graph.parseIntentFromLlmOutput('The intent is pix_onramp.')).toBe(IntentType.PIX);
     expect(graph.parseIntentFromLlmOutput('{"intent":"yield","confidence":0.99}')).toBe(IntentType.YIELD);
+    expect(graph.parseIntentFromLlmOutput('{"intent":"pix_transfer","confidence":0.99}')).toBe(IntentType.PIX);
     expect(graph.parseIntentFromLlmOutput('```json\n{"intent":"contacts","confidence":0.98}\n```')).toBe(IntentType.CONTACTS);
     expect(graph.parseIntentFromLlmOutput('The intent is payment_link.')).toBe(IntentType.PAYMENT_LINK);
     expect(graph.parseIntentFromLlmOutput('{"intent":"aplicações","confidence":0.8}')).toBe(IntentType.YIELD);
     expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
+  });
+
+  it('routes PIX send wording through the LLM classifier tool instead of generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    const classifierInvoke = jest.fn().mockResolvedValue({
+      content: '',
+      additional_kwargs: {
+        tool_calls: [
+          {
+            id: 'classify-pix',
+            function: {
+              name: 'classify_talktostellar_intent',
+              arguments: '{"intent":"pix","confidence":0.99}',
+            },
+          },
+        ],
+      },
+    });
+    graph.llm = {
+      bindTools: jest.fn(() => ({ invoke: classifierInvoke })),
+      invoke: jest.fn(),
+    };
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState('quero mandar 100 reais no pix'));
+
+      expect(graph.llm.bindTools).toHaveBeenCalled();
+      expect(classifierInvoke).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('/pix-on?');
+      expect(result.response_message).toContain('amount=100');
+      expect(result.response_message).toContain('currency=BRL');
+      expect(result.response_message).not.toContain('Diga o que quer fazer');
+      expect(result.response_message).not.toContain('Posso ajudar com:');
+      expect(executeToolMock.mock.calls.some(([name]) => name === 'list_contacts')).toBe(false);
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
   });
 
   it('extracts OpenAI function tool calls from additional kwargs', () => {
