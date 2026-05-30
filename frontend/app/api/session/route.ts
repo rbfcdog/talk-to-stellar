@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { clearSessionCookies, readSessionCookies } from "@/lib/server-session";
+import { clearSessionCookies, isExternalPrioritySource, readSessionCookies } from "@/lib/server-session";
 
 export async function GET(req: Request) {
   const session = readSessionCookies(req);
   return NextResponse.json({
     authenticated: Boolean(session.sessionId && session.sessionToken),
     session_id: session.sessionId || "",
+    session_source: session.sessionSource || "",
+    external_priority: isExternalPrioritySource(session.sessionSource),
   }, {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate",

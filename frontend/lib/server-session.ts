@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const SESSION_ID_COOKIE = "tts_session_id";
 export const SESSION_TOKEN_COOKIE = "tts_session_token";
+export const SESSION_SOURCE_COOKIE = "tts_session_source";
 export const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 type SessionPair = {
   sessionId: string;
   sessionToken: string;
+  sessionSource: string;
 };
 
 function cookieOptions() {
@@ -31,21 +33,58 @@ export function readSessionCookies(req: NextRequest | Request): Partial<SessionP
   return {
     sessionId: parsed.get(SESSION_ID_COOKIE) || "",
     sessionToken: parsed.get(SESSION_TOKEN_COOKIE) || "",
+    sessionSource: parsed.get(SESSION_SOURCE_COOKIE) || "",
   };
+}
+
+export function normalizeSessionSource(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "telegram") return "telegram";
+  if (normalized === "whatsapp" || normalized === "phone") return "whatsapp";
+  if (normalized === "web" || normalized === "browser" || normalized === "chat") return "web";
+  return normalized;
+}
+
+export function isExternalPrioritySource(value: unknown): boolean {
+  const source = normalizeSessionSource(value);
+  return source === "telegram" || source === "whatsapp";
+}
+
+function extractSessionSource(payload: any): string {
+  if (!payload || typeof payload !== "object") return "";
+  const direct =
+    payload.sessionSource ||
+    payload.session_source ||
+    payload.external_source ||
+    payload.externalSource ||
+    payload.external_provider ||
+    payload.externalProvider ||
+    payload.provider ||
+    payload.source ||
+    payload.channel ||
+    "";
+  const normalized = normalizeSessionSource(direct);
+  if (normalized) return normalized;
+  return normalizeSessionSource(payload.metadata?.provider || payload.metadata?.source || payload.metadata?.channel || "");
 }
 
 /** Attach session cookies to a NextResponse (skips empty values). */
 export function setSessionCookies(response: NextResponse, session: Partial<SessionPair>) {
   const sessionId = String(session.sessionId || "").trim();
   const sessionToken = String(session.sessionToken || "").trim();
+  const sessionSource = normalizeSessionSource(session.sessionSource);
+  const hasSessionIdentity = Boolean(sessionId || sessionToken);
   if (sessionId) response.cookies.set(SESSION_ID_COOKIE, sessionId, cookieOptions());
   if (sessionToken) response.cookies.set(SESSION_TOKEN_COOKIE, sessionToken, cookieOptions());
+  if (sessionSource && hasSessionIdentity) response.cookies.set(SESSION_SOURCE_COOKIE, sessionSource, cookieOptions());
+  else if (hasSessionIdentity) response.cookies.set(SESSION_SOURCE_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
 }
 
 /** Expire both session cookies on the given NextResponse. */
 export function clearSessionCookies(response: NextResponse) {
   response.cookies.set(SESSION_ID_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
   response.cookies.set(SESSION_TOKEN_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
+  response.cookies.set(SESSION_SOURCE_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
 }
 
 /** Pull sessionId/sessionToken out of an arbitrary JSON body (snake or camel case). */
@@ -54,6 +93,7 @@ export function extractSessionFromPayload(payload: any): Partial<SessionPair> {
   return {
     sessionId: String(payload.sessionId || payload.session_id || "").trim(),
     sessionToken: String(payload.sessionToken || payload.session_token || "").trim(),
+    sessionSource: extractSessionSource(payload),
   };
 }
 

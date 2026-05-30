@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { buildSessionHeaders, readSessionCookies } from "@/lib/server-session";
+import { buildSessionHeaders, isExternalPrioritySource, readSessionCookies, setSessionCookies } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
 const getBackendBaseUrl = () => {
@@ -97,6 +97,19 @@ function generateSessionId(): string {
   });
 }
 
+function requestSourceFromPayload(source: unknown, metadata: any): string {
+  return String(
+    source ||
+      metadata?.source ||
+      metadata?.provider ||
+      metadata?.channel ||
+      metadata?.external_source ||
+      metadata?.externalProvider ||
+      metadata?.external_provider ||
+      "",
+  ).trim();
+}
+
 export async function POST(req: Request) {
   let sessionId: string | null = null;
   let requestLanguage = "pt-BR";
@@ -105,7 +118,7 @@ export async function POST(req: Request) {
     const { messages, session_id, source, metadata, language } = await req.json();
     requestLanguage = language || metadata?.language || "pt-BR";
     const browserSessionExpired = metadata?.browser_session_expired === true || metadata?.force_relogin === true;
-    const session = browserSessionExpired ? { sessionId: "", sessionToken: "" } : readSessionCookies(req);
+    const session = browserSessionExpired ? { sessionId: "", sessionToken: "", sessionSource: "" } : readSessionCookies(req);
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -114,15 +127,28 @@ export async function POST(req: Request) {
 
     const browserId = String(metadata?.browser_id || "").trim();
     const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
+    const requestSource = requestSourceFromPayload(source, metadata);
+    const requestHasExternalPriority = isExternalPrioritySource(requestSource);
+    const cookieHasExternalPriority = isExternalPrioritySource(session.sessionSource);
 
-    // The authenticated cookie session is the credentialed source of truth.
-    // Fall back to browser_id linkage only when no active cookie session exists.
-    sessionId = session.sessionId || linkedSessionId || session_id || generateSessionId();
+    // Browser links opened from WhatsApp/Telegram must take over an older web session.
+    // Otherwise the authenticated cookie session remains the credentialed source of truth.
+    sessionId = requestHasExternalPriority
+      ? (session_id || session.sessionId || linkedSessionId || generateSessionId())
+      : cookieHasExternalPriority
+        ? (session.sessionId || session_id || linkedSessionId || generateSessionId())
+        : (session.sessionId || linkedSessionId || session_id || generateSessionId());
+    const sessionTokenForSelectedSession =
+      session.sessionId && session.sessionId === sessionId ? (session.sessionToken || "") : "";
+    const forwardSessionHeaders =
+      !browserSessionExpired && session.sessionId && session.sessionId === sessionId
+        ? buildSessionHeaders(req)
+        : {};
 
     const dataToSend = {
       query: userMessage.content,
       session_id: sessionId,
-      session_token: session.sessionToken || undefined,
+      session_token: sessionTokenForSelectedSession || undefined,
       source: source || "web",
       language: language || metadata?.language || "pt-BR",
       metadata: {
@@ -142,7 +168,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": idempotencyKey,
-        ...(browserSessionExpired ? {} : buildSessionHeaders(req)),
+        ...forwardSessionHeaders,
       },
       body: JSON.stringify(dataToSend),
       signal: controller.signal,
@@ -172,7 +198,7 @@ export async function POST(req: Request) {
       agentApiData?.result?.message ||
       "No valid response received from the agent API.";
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({
       content: botResponse,
       session_id: agentApiData?.session_id || sessionId,
       action: agentApiData?.action || null,
@@ -182,6 +208,14 @@ export async function POST(req: Request) {
       reason: agentApiData?.reason || null,
       success: typeof agentApiData?.success === "boolean" ? agentApiData.success : true,
     });
+    if (requestHasExternalPriority || cookieHasExternalPriority) {
+      setSessionCookies(response, {
+        sessionId: String(agentApiData?.session_id || sessionId || "").trim(),
+        sessionToken: sessionTokenForSelectedSession,
+        sessionSource: requestSource || session.sessionSource || "",
+      });
+    }
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     const payload = publicErrorPayload(error, { code: "chat_unavailable", language: requestLanguage });
@@ -202,6 +236,12 @@ export async function GET(req: Request) {
     const cookieSession = readSessionCookies(req);
     const sessionToken = cookieSession.sessionToken || "";
     const browserId = url.searchParams.get("browser_id") || "";
+    const requestSource =
+      url.searchParams.get("source") ||
+      url.searchParams.get("provider") ||
+      url.searchParams.get("channel") ||
+      url.searchParams.get("external_source") ||
+      "";
     const limit = url.searchParams.get("limit") || "50";
 
     if (!sessionId) {
@@ -209,7 +249,11 @@ export async function GET(req: Request) {
     }
 
     const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
-    const resolvedSessionId = cookieSession.sessionId || linkedSessionId || sessionId;
+    const resolvedSessionId = (isExternalPrioritySource(requestSource)
+      ? (sessionId || cookieSession.sessionId || linkedSessionId)
+      : isExternalPrioritySource(cookieSession.sessionSource)
+        ? (cookieSession.sessionId || sessionId || linkedSessionId)
+        : (cookieSession.sessionId || linkedSessionId || sessionId)) || sessionId;
 
     const messagesUrl = new URL(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50));
 

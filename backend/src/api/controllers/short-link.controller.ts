@@ -69,6 +69,51 @@ function hasTrustedProxySecret(req: Request): boolean {
   return Boolean(expected && provided && timingSafeEqualString(expected, provided));
 }
 
+function normalizeSessionSource(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'telegram') return 'telegram';
+  if (normalized === 'whatsapp' || normalized === 'phone') return 'whatsapp';
+  if (normalized === 'web' || normalized === 'browser' || normalized === 'chat') return 'web';
+  return normalized;
+}
+
+function sourceFromUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return normalizeSessionSource(
+      url.searchParams.get('provider') ||
+      url.searchParams.get('source') ||
+      url.searchParams.get('external_source') ||
+      url.searchParams.get('channel') ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
+
+async function resolveSessionSource(sessionId: string, rawUrl: string): Promise<string> {
+  const fromUrl = sourceFromUrl(rawUrl);
+  if (fromUrl === 'telegram' || fromUrl === 'whatsapp') return fromUrl;
+  if (!sessionId) return fromUrl;
+
+  try {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('provider')
+      .eq('session_id', sessionId)
+      .in('provider', ['telegram', 'whatsapp', 'phone'])
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (error) return fromUrl;
+    const provider = normalizeSessionSource(Array.isArray(data) ? data[0]?.provider : '');
+    return provider || fromUrl;
+  } catch {
+    return fromUrl;
+  }
+}
+
 function validatePublicShortLinkTarget(req: Request, rawUrl: string, purpose: string): string | null {
   if (!PUBLIC_SHORT_LINK_PURPOSES.has(purpose)) {
     return 'purpose de short link não permitido para criação pública.';
@@ -154,7 +199,12 @@ export class ShortLinkController {
         Boolean(record.session_id);
 
       if (!canAttachSession) {
-        return res.status(200).json({ success: true, url: record.url });
+        return res.status(200).json({
+          success: true,
+          url: record.url,
+          purpose: record.purpose || null,
+          session_source: sourceFromUrl(record.url) || null,
+        });
       }
 
       const { data: session, error } = await supabase
@@ -164,14 +214,23 @@ export class ShortLinkController {
         .maybeSingle();
 
       if (error || !session?.session_token || isSessionExpired(session)) {
-        return res.status(200).json({ success: true, url: record.url });
+        return res.status(200).json({
+          success: true,
+          url: record.url,
+          purpose: record.purpose || null,
+          session_source: await resolveSessionSource(String(record.session_id || ''), record.url) || null,
+        });
       }
+
+      const sessionSource = await resolveSessionSource(String(session.session_id || record.session_id || ''), record.url);
 
       return res.status(200).json({
         success: true,
         url: record.url,
+        purpose: record.purpose || null,
         session_id: String(session.session_id || record.session_id || ''),
         session_token: String(session.session_token || ''),
+        session_source: sessionSource || null,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
