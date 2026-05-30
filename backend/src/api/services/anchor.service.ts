@@ -1258,7 +1258,7 @@ export class AnchorService {
         });
         resolvedWallet = { session_id: sessionId, public_key: publicKey };
       } catch (saveError) {
-        logger.warn('[resolve-session-wallet] failed to auto-create wallet record:', saveError instanceof Error ? saveError.message : String(saveError));
+        logger.warn(`[resolve-session-wallet] failed to auto-create wallet record: ${saveError instanceof Error ? saveError.message : String(saveError)}`);
       }
     }
 
