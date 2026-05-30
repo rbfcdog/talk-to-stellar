@@ -2947,6 +2947,105 @@ export class AgentGraph {
   /**
    * Detect user intent from message using LLM
    */
+  private intentFromLabel(value: unknown): IntentType | null {
+    const normalized = String(value || '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .replace(/[^a-z_]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const intentMap: Record<string, IntentType> = {
+      login: IntentType.LOGIN,
+      onboard: IntentType.ONBOARD,
+      wallet: IntentType.WALLET,
+      wallet_logout: IntentType.WALLET_LOGOUT,
+      contacts: IntentType.CONTACTS,
+      payment: IntentType.PAYMENT,
+      payment_link: IntentType.PAYMENT_LINK,
+      balance: IntentType.BALANCE,
+      history: IntentType.HISTORY,
+      financial_memory: IntentType.FINANCIAL_MEMORY,
+      conversion: IntentType.CONVERSION,
+      price_quote: IntentType.PRICE_QUOTE,
+      pix: IntentType.PIX,
+      yield: IntentType.YIELD,
+      general: IntentType.GENERAL,
+      contact: IntentType.CONTACTS,
+      recipient: IntentType.CONTACTS,
+      recipients: IntentType.CONTACTS,
+      beneficiary: IntentType.CONTACTS,
+      beneficiaries: IntentType.CONTACTS,
+      application: IntentType.YIELD,
+      applications: IntentType.YIELD,
+      aplicacao: IntentType.YIELD,
+      aplicacoes: IntentType.YIELD,
+      investimento: IntentType.YIELD,
+      investimentos: IntentType.YIELD,
+      rendimento: IntentType.YIELD,
+      rendimentos: IntentType.YIELD,
+      earnings: IntentType.YIELD,
+      investment: IntentType.YIELD,
+      investments: IntentType.YIELD,
+      best_route: IntentType.PRICE_QUOTE,
+      route: IntentType.PRICE_QUOTE,
+      quote: IntentType.PRICE_QUOTE,
+      rate: IntentType.PRICE_QUOTE,
+      rates: IntentType.PRICE_QUOTE,
+      convert: IntentType.CONVERSION,
+      exchange: IntentType.CONVERSION,
+      payment_links: IntentType.PAYMENT_LINK,
+      pay_link: IntentType.PAYMENT_LINK,
+      payments: IntentType.PAYMENT,
+    };
+
+    return intentMap[normalized] || null;
+  }
+
+  private parseIntentFromLlmOutput(content: unknown): IntentType | null {
+    const raw = typeof content === 'string' ? content.trim() : JSON.stringify(content || '');
+    if (!raw) return null;
+
+    const withoutFence = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    const parseJsonCandidate = (candidate: string): IntentType | null => {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (typeof parsed === 'string') return this.intentFromLabel(parsed);
+        if (Array.isArray(parsed)) return parsed.length ? this.intentFromLabel(parsed[0]) : null;
+        if (parsed && typeof parsed === 'object') {
+          return this.intentFromLabel(
+            parsed.intent ||
+            parsed.detected_intent ||
+            parsed.label ||
+            parsed.classification ||
+            parsed.route
+          );
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    };
+
+    const jsonIntent = parseJsonCandidate(withoutFence) || parseJsonCandidate(raw);
+    if (jsonIntent) return jsonIntent;
+
+    const directIntent = this.intentFromLabel(withoutFence);
+    if (directIntent) return directIntent;
+
+    const match = withoutFence.toLowerCase().match(
+      /\b(wallet_logout|payment_link|financial_memory|price_quote|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
+    );
+    return match ? this.intentFromLabel(match[1]) : null;
+  }
+
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
@@ -2954,7 +3053,10 @@ export class AgentGraph {
 Classify the user message into ONE and only ONE of these intents:
 login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, general
 
-Return only the intent label. No punctuation. No explanation. No extra words.
+Return compact JSON only, with this exact shape:
+{"intent":"yield","confidence":0.99}
+
+The intent value must be one of the labels above. Do not explain. Do not use markdown.
 
 Priority rules:
 1. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
@@ -2997,6 +3099,15 @@ Other examples:
 - "ver saldo" -> balance
 - "qual meu saldo atual?" -> balance
 - "ver transações" -> history
+- "quero ver aplicações" -> yield
+- "quero ver aplicacoes" -> yield
+- "quero ver aolicacoes" -> yield
+- "aplicacoes" -> yield
+- "aplicações" -> yield
+- "ver minhas aplicações" -> yield
+- "ver rendimentos" -> yield
+- "ver posições" -> yield
+- "meu dinheiro rendendo" -> yield
 - "quero investir" -> yield
 - "quero aplicar dinheiro" -> yield
 - "converter dolares para reais" -> conversion
@@ -3007,35 +3118,15 @@ Other examples:
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.
 
-IMPORTANT: Handle typos gracefully. "consguee", "consege", "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
+IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
 
       const response = await this.llm.invoke(await this.prependContactsContext([
         new SystemMessage({ content: systemPrompt }),
         new HumanMessage({ content: message }),
       ], userId));
 
-      const intentText = (response.content as string).trim().toLowerCase();
-
-      const intentMap: Record<string, IntentType> = {
-        login: IntentType.LOGIN,
-        onboard: IntentType.ONBOARD,
-        wallet: IntentType.WALLET,
-        wallet_logout: IntentType.WALLET_LOGOUT,
-        contacts: IntentType.CONTACTS,
-        payment: IntentType.PAYMENT,
-        payment_link: IntentType.PAYMENT_LINK,
-        balance: IntentType.BALANCE,
-        history: IntentType.HISTORY,
-        financial_memory: IntentType.FINANCIAL_MEMORY,
-        conversion: IntentType.CONVERSION,
-        price_quote: IntentType.PRICE_QUOTE,
-        pix: IntentType.PIX,
-        yield: IntentType.YIELD,
-        general: IntentType.GENERAL,
-      };
-
-      const detectedIntent = intentMap[intentText] || IntentType.GENERAL;
-      logger.debug(`Intent: "${message}" -> ${detectedIntent}`);
+      const detectedIntent = this.parseIntentFromLlmOutput(response.content) || IntentType.GENERAL;
+      logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
     } catch (error) {
