@@ -525,7 +525,7 @@ export function createAgentRoutes(
     res: Response,
     next: NextFunction
   ) => {
-    req.setTimeout(30000, () => {
+    req.setTimeout(55000, () => {
       if (!res.headersSent) {
         res.status(504).json({ success: false, error: 'Agent query timed out. Try again in a few seconds.' });
       }
