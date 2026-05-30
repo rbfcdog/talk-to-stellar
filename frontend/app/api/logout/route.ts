@@ -26,7 +26,9 @@ export async function POST(req: Request) {
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
     if (!sessionId && !token) {
-      return NextResponse.json({ success: false, error: "session_id or token is required" }, { status: 400 });
+      const response = NextResponse.json({ success: true, alreadyLoggedOut: true });
+      clearSessionCookies(response);
+      return response;
     }
 
     const response = await fetch(AGENT_LOGOUT_URL, {
