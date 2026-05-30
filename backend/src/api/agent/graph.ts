@@ -1019,11 +1019,14 @@ export class AgentGraph {
     const mentionsPix = /\bpix\b/.test(normalized);
     const mentionsPixOffRampWording =
       /\b(?:para|pra|pro|a)\s+fora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
-      /\bfora\s+(?:do|de|da)\s+pix\b/.test(normalized);
+      /\bfora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
+      /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/.test(normalized) ||
+      /\b(?:pra|para|pro|a)\s+fora\b.*\bvia\s+pix\b/.test(normalized);
     const extractPixFundedPaymentRecipient = (): string => {
       const isOffRampRecipientNoise = (value: string) =>
         /\bfora\s+(?:do|de|da)\s+pix\b/.test(value) ||
-        /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(value);
+        /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(value) ||
+        /^fora$/i.test(value.trim());
       const stopAtFlowWords = (value: string) => String(value || '')
         .replace(/\s+\b(?:de|do|da)\s+(?:r\$\s*)?\d.*$/i, '')
         .replace(/\s+\b(?:na|no)\s+qual\b.*$/i, '')
@@ -1059,7 +1062,8 @@ export class AgentGraph {
       mentionsPixOffRampWording ||
       /\b(?:pra|para|pro)\s+fora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
       /\b(?:mandar|enviar|tirar|retirar|sacar)\b.*\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
-      /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized);
+      /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
+      /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/.test(normalized);
     const mentionsBankOffRamp =
       /\b(off\s*ramp|offramp)\b/.test(normalized) ||
       /\b(?:banco|bancaria|bancario|bancária|bancário|conta externa|outro banco)\b/.test(normalized) ||
