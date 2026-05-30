@@ -4958,12 +4958,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           `Open earnings to apply money or view positions:\n${url.toString()}\n\nNothing moves without PIN.`
         );
       }
-      const hint = normalizedInput.includes('mandar') || normalizedInput.includes('enviar') || normalizedInput.includes('pagar')
+      const ni = input.toLowerCase();
+      const hint = ni.includes('mandar') || ni.includes('enviar') || ni.includes('pagar')
         ? 'Para enviar dinheiro, preciso saber: valor, moeda e para quem (contato salvo ou chave).'
-        : normalizedInput.includes('saldo') || normalizedInput.includes('quanto')
+        : ni.includes('saldo') || ni.includes('quanto')
           ? 'Veja seu saldo em /rendimentos ou peça no chat.'
-          : normalizedInput.includes('pix')
-            ? 'Para PIX, diga se é para trazer reais ou retirar.'
+          : ni.includes('pix')
+            ? 'Para PIX, diga se e para trazer reais ou retirar.'
             : 'Pode repetir o que deseja fazer? Tente ser mais direto.';
       return `Nao entendi completamente. ${hint}`;
     }
