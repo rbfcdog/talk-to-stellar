@@ -134,6 +134,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   ).trim()
   const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
+  const isExternalLoginOnlyContext = ["whatsapp", "phone", "telegram"].includes(externalProvider)
   const externalProviderLabel = isTelegramContext ? "Telegram" : externalProvider === "whatsapp" || externalProvider === "phone" ? "WhatsApp" : "Account"
   const externalIdentifierLabel = useMemo(
     () => formatExternalIdentifier(externalProvider, externalProviderUserId),
@@ -549,6 +550,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   useEffect(() => {
     if (!PASSKEY_LOGIN_ENABLED) return
+    if (isExternalLoginOnlyContext) return
     if (requestedAuthMethod !== "passkey") return
     if (passkeyAutoTriggerRef.current) return
     if (!email.trim()) {
@@ -559,10 +561,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     if (externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey") return
     passkeyAutoTriggerRef.current = true
     void handlePasskeyLogin()
-  }, [requestedAuthMethod, email, externalLinkUsed, status])
+  }, [requestedAuthMethod, email, externalLinkUsed, status, isExternalLoginOnlyContext])
 
   useEffect(() => {
     if (!GOOGLE_LOGIN_ENABLED) return
+    if (isExternalLoginOnlyContext) return
     if (typeof window === "undefined") return
     if (window.google?.accounts?.id) {
       setGoogleScriptReady(true)
@@ -584,10 +587,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     return () => {
       // Keep the script cached for the next login page visit.
     }
-  }, [language])
+  }, [language, isExternalLoginOnlyContext])
 
   useEffect(() => {
     if (!GOOGLE_LOGIN_ENABLED || !googleScriptReady) return
+    if (isExternalLoginOnlyContext) return
     if (!googleButtonRef.current) return
     if (!window.google?.accounts?.id) return
 
@@ -652,7 +656,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       width: googleButtonRef.current.clientWidth,
       shape: "rectangular",
     })
-  }, [googleScriptReady, language])
+  }, [googleScriptReady, language, isExternalLoginOnlyContext])
 
   if (loginDone) {
     return (
@@ -710,14 +714,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     <AuthShell
       title={t("login_title")}
       description={t("login_subtitle")}
-      footer={
+      footer={!isExternalLoginOnlyContext ? (
         <a
           href="/create-account"
           className="text-[12px] text-tts-muted underline-offset-4 hover:text-tts-deep hover:underline"
         >
           {language === "pt-BR" ? "Criar conta" : "Create account"}
         </a>
-      }
+      ) : undefined}
     >
       {hasExternalContext && (
         <div className="inline-flex items-center gap-2 self-center rounded-full border border-tts-border bg-tts-bg px-3 py-1 text-[11px] font-medium text-tts-deep">
@@ -815,7 +819,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         </Button>
       </form>
 
-      {PASSKEY_LOGIN_ENABLED && (
+      {PASSKEY_LOGIN_ENABLED && !isExternalLoginOnlyContext && (
         <Button
           type="button"
           variant="outline"
@@ -831,7 +835,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         </Button>
       )}
 
-      {GOOGLE_LOGIN_ENABLED && (
+      {GOOGLE_LOGIN_ENABLED && !isExternalLoginOnlyContext && (
         <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
           <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-tts-muted">
             <Chrome className="h-4 w-4" />

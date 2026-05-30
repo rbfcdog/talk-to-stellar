@@ -613,7 +613,8 @@ export function createAgentRoutes(
 
         const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
         if (!existing) {
-          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+          const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+            source: normalizedProvider,
             language: requestLanguage,
             ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
             ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
@@ -628,8 +629,8 @@ export function createAgentRoutes(
             creationUrl: url,
             message: localized(
               requestLanguage,
-              `Sua sessão não está ativa no momento.\n\nAbra este link para entrar na sua conta:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
-              `Your session is not active right now.\n\nOpen this link to sign in to your account:\n${url}\n\nOn the page, use "I already have an account".`
+              `Sua sessão não está ativa no momento.\n\nAbra este link para entrar na sua conta com PIN:\n${url}`,
+              `Your session is not active right now.\n\nOpen this link to sign in to your account with PIN:\n${url}`
             ),
           });
         }

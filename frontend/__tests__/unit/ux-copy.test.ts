@@ -105,6 +105,20 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("Go back to");
   });
 
+  it("keeps WhatsApp and Telegram account links login-only", () => {
+    const loginText = source("app/login/login-client.tsx");
+    const createText = source("app/create-account/create-account-client.tsx");
+    const agentRoutesText = source("../backend/src/api/agent/routes.ts");
+
+    expect(agentRoutesText).toContain("createLoginUrlWithShortLink(normalizedProvider");
+    expect(agentRoutesText).toContain("entrar na sua conta com PIN");
+    expect(createText).toContain('["whatsapp", "phone", "telegram"].includes(tokenProvider)');
+    expect(createText).toContain("window.location.replace(loginHref)");
+    expect(loginText).toContain('["whatsapp", "phone", "telegram"].includes(externalProvider)');
+    expect(loginText).toContain("footer={!isExternalLoginOnlyContext");
+    expect(loginText).toContain("GOOGLE_LOGIN_ENABLED && !isExternalLoginOnlyContext");
+  });
+
   it("does not bring back the confusing yield wording that was removed", () => {
     const text = source("app/rendimentos/rendimentos-client.tsx");
     const forbidden = [
