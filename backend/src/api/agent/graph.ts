@@ -2933,6 +2933,11 @@ export class AgentGraph {
    * Detect user intent from message using LLM
    */
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
+    const normalized = String(message || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    if (/^(quero\s+)?(deslog|sair\s+da\s+conta|desconectar|logoff|logout)/i.test(normalized)) return IntentType.WALLET_LOGOUT;
+    if (/^(quero\s+)?(entrar|login|criar\s+conta)/i.test(normalized) && !/deslog/.test(normalized)) return IntentType.LOGIN;
+
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -2952,6 +2957,7 @@ Priority rules:
 8. If the user asks to create a payment link or shareable payment page, the intent is payment_link.
 9. If the user asks to send money to a specific recipient, the intent is payment.
 10. If the user asks to create, log in to, or connect an account, the intent is wallet or onboard.
+11. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
 
 Strong contact examples that must be contacts:
 - "quero ver meus contatos" -> contacts
