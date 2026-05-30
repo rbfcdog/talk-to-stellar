@@ -2933,11 +2933,6 @@ export class AgentGraph {
    * Detect user intent from message using LLM
    */
   private async detectIntent(message: string, userId?: string): Promise<IntentType> {
-    const normalized = String(message || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-
-    if (/^(quero\s+)?(deslog|sair\s+da\s+conta|desconectar|logoff|logout)/i.test(normalized)) return IntentType.WALLET_LOGOUT;
-    if (/^(quero\s+)?(entrar|login|criar\s+conta)/i.test(normalized) && !/deslog/.test(normalized)) return IntentType.LOGIN;
-
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -2992,11 +2987,20 @@ Other examples:
 - "quero criar um link de transacao de 10 usdc" -> payment_link
 - "gerar link de pagamento de 15 dólares" -> payment_link
 - "quero mandar 10 usdc pra o Rodrigo receber em brl" -> payment
-- "Sair da conta" -> wallet_logout
-- "Desconectar conta" -> wallet_logout
-- "Deslogar" -> wallet_logout
+- "quero sair da conta" -> wallet_logout
+- "deslogar" -> wallet_logout
 - "quero deslogar" -> wallet_logout
-- "deslogar da conta" -> wallet_logout
+- "deslogar dessa conta" -> wallet_logout
+- "deslogar dessa comta" -> wallet_logout
+- "quero deslogar dessa comta" -> wallet_logout
+- "sair da conta" -> wallet_logout
+- "desconectar" -> wallet_logout
+- "encerrar sessao" -> wallet_logout
+- "logoff" -> wallet_logout
+- "logout" -> wallet_logout
+- "sign out" -> wallet_logout
+- "log out" -> wallet_logout
+- IMPORTANTE: "deslogar" (mesmo escrito errado como "deslogar dessa comta") SEMPRE deve ser wallet_logout, nunca general.
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.`;
 
