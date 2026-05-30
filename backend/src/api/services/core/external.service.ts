@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ExternalRepository } from '../../repository/core/external.repository';
+import { ExternalRepository, externalProviderAliases, normalizeExternalProvider, normalizeExternalProviderUserId } from '../../repository/core/external.repository';
 import { ContactRepository } from '../../repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -394,6 +394,105 @@ export class ExternalService {
     return record?.url || null;
   }
 
+  private completedFinalizationLink(row: any): { sessionId: string; userId: string } {
+    const status = String(row?.status || '').trim().toLowerCase();
+    const completed = Boolean(row?.used) || status === 'completed';
+    if (!completed) return { sessionId: '', userId: '' };
+    const result = row?.result && typeof row.result === 'object' ? row.result : {};
+    return {
+      sessionId: String(row?.session_id || result.sessionId || result.session_id || '').trim(),
+      userId: String(row?.user_id || result.userId || result.user_id || result.email || '').trim(),
+    };
+  }
+
+  private async recoverExternalAccountFromFinalization(provider: string, providerUserId: string) {
+    const normalizedProvider = normalizeExternalProvider(provider);
+    const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
+    const providers = externalProviderAliases(normalizedProvider);
+    if (!normalizedProviderUserId || providers.length === 0) return null;
+
+    const { data, error } = await this.supabase
+      .from('onboarding_finalizations')
+      .select('session_id, user_id, used, status, result, updated_at')
+      .in('provider', providers)
+      .eq('provider_user_id', normalizedProviderUserId)
+      .order('updated_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('onboarding_finalizations') || message.includes('schema cache') || message.includes('does not exist')) {
+        return null;
+      }
+      throw error;
+    }
+
+    for (const item of data || []) {
+      let { sessionId, userId } = this.completedFinalizationLink(item);
+      if (!sessionId && !userId) continue;
+
+      if (sessionId) {
+        const { data: session } = await this.supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email')
+          .eq('session_id', sessionId)
+          .maybeSingle();
+        if (session?.session_id) {
+          sessionId = String(session.session_id);
+          userId = userId || String(session.user_id || session.email || '').trim();
+        }
+      }
+
+      if (!sessionId && userId) {
+        let { data: latestSession } = await this.supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!latestSession) {
+          const retry = await this.supabase
+            .from('agent_sessions')
+            .select('session_id, user_id, email')
+            .eq('email', userId)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          latestSession = retry.data;
+        }
+        if (latestSession?.session_id) {
+          sessionId = String(latestSession.session_id);
+          userId = userId || String(latestSession.user_id || latestSession.email || '').trim();
+        }
+      }
+
+      if (!sessionId || !userId) continue;
+
+      const { data: recovered, error: upsertError } = await this.supabase
+        .from('external_accounts')
+        .upsert({
+          provider: normalizedProvider,
+          provider_user_id: normalizedProviderUserId,
+          session_id: sessionId,
+          user_id: userId,
+          data: {
+            recovered_from: 'onboarding_finalizations',
+            recovered_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'provider,provider_user_id' })
+        .select()
+        .single();
+
+      if (upsertError) throw upsertError;
+      logger.info(`[external-account] recovered ${normalizedProvider}/${normalizedProviderUserId.slice(-6)} from onboarding finalization`);
+      return recovered;
+    }
+
+    return null;
+  }
+
   // Check if provider user exists; return account info or null
   async checkExternalAccount(provider: string, providerUserId: string) {
     let row;
@@ -409,13 +508,15 @@ export class ExternalService {
       throw error;
     }
 
-    if (!row) return null;
+    if (!row) return await this.recoverExternalAccountFromFinalization(provider, providerUserId);
 
     // Placeholder rows can exist before onboarding is finalized.
     // Only consider account as existing when it is actually linked.
     const hasLinkedSession = Boolean(row.session_id);
     const hasLinkedUser = Boolean(row.user_id);
-    if (!hasLinkedSession || !hasLinkedUser) return null;
+    if (!hasLinkedSession || !hasLinkedUser) {
+      return await this.recoverExternalAccountFromFinalization(provider, providerUserId);
+    }
 
     return row;
   }

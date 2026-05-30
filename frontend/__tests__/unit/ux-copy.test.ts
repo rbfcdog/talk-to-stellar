@@ -91,9 +91,15 @@ describe("UX copy guardrails", () => {
 
   it("closes logout instead of returning to chat", () => {
     const text = source("app/logout/logout-client.tsx");
+    const apiText = source("app/api/logout/route.ts");
+    const chatText = source("components/chat/chat-window.tsx");
 
     expect(text).toContain("closeIntermediatePage()");
     expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
+    expect(chatText).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
+    expect(apiText).toContain("isBrowserOnlyLogout");
+    expect(apiText).toContain("localOnly: true");
     expect(text).not.toContain('window.location.replace("/chat")');
     expect(text).not.toContain("Returning to chat");
     expect(text).not.toContain("Go back to");
