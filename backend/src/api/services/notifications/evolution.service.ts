@@ -79,6 +79,25 @@ function publicBackendBaseUrl(): string {
   return normalizeBaseUrl(raw);
 }
 
+function publicFrontendBaseUrl(): string {
+  const raw =
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.PAYMENT_CONFIRM_BASE ||
+    process.env.CREATE_ACCOUNT_BASE ||
+    'http://localhost:3000';
+  return normalizeBaseUrl(raw);
+}
+
+function buildFrontendUrl(path: string, params: Record<string, unknown> = {}): string {
+  const url = new URL(path, publicFrontendBaseUrl());
+  for (const [key, value] of Object.entries(params)) {
+    const text = String(value ?? '').trim();
+    if (text) url.searchParams.set(key, text);
+  }
+  return url.toString();
+}
+
 function normalizeBackendBaseUrl(value: unknown): string {
   return normalizeBaseUrl(value)
     .replace(/\/api\/agent\/query\/?$/i, '')
@@ -280,7 +299,12 @@ function buildEvolutionFallbackReply(intent?: string): string {
     return 'Posso criar um link de pagamento para receber ou cobrar. Diga: "criar link de pagamento de 50 dólares".';
   }
   if (normalizedIntent === 'conversion') {
-    return 'Posso converter entre R$, US$ e CETES. Diga: "converter 200 reais para dólar".';
+    const url = buildFrontendUrl('/convert', {
+      from: 'whatsapp',
+      lang: 'pt-BR',
+      picker: '1',
+    });
+    return `Abra a conversão para escolher valor e moedas:\n${url}`;
   }
   if (normalizedIntent === 'yield') {
     return 'Posso abrir a área de aplicações e posições. Diga: "quero investir".';
