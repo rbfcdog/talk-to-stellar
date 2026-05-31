@@ -148,9 +148,8 @@ export class TransferNotificationService {
         `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`
     );
 
-    let shouldDeliverWelcome = true;
     try {
-      shouldDeliverWelcome = await this.agentRepo.saveMessageOnce(
+      await this.agentRepo.saveMessageOnce(
         sessionId,
         'assistant',
         text,
@@ -161,12 +160,14 @@ export class TransferNotificationService {
       logger.warn(`[session-welcome] failed to save chat message: ${message}`);
     }
 
-    if (!shouldDeliverWelcome) return;
-
-    await Promise.all([
+    const [, whatsappReport] = await Promise.all([
       this.sendTelegramToMappings(mappings, text),
       this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
     ]);
+
+    if (whatsappReport.attempted && whatsappReport.delivered === 0) {
+      logger.warn(`[session-welcome] WhatsApp delivery attempted but not delivered: ${JSON.stringify(whatsappReport)}`);
+    }
   }
 
   static async notifyOnboardingConversion(input: OnboardingConversionNotification): Promise<void> {
