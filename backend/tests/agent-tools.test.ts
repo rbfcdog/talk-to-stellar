@@ -453,6 +453,20 @@ describe('Agent tool execution', () => {
     expect(bring.frontend_url).toContain('asset=BRL');
     expect(bring.frontend_url).toContain('currency=BRL');
 
+    const bringUsdOutput = await executeTool('open_asset_interface', {
+      action: 'bring',
+      amount: '100',
+      asset_code: 'USDC',
+      language: 'pt-BR',
+    });
+    const bringUsd = JSON.parse(bringUsdOutput);
+
+    expect(bringUsd.success).toBe(true);
+    expect(bringUsd.frontend_url).toContain('/pix-on?');
+    expect(bringUsd.frontend_url).toContain('asset=BRL');
+    expect(bringUsd.frontend_url).toContain('target_asset=USDC');
+    expect(bringUsd.frontend_url).toContain('currency=BRL');
+
     const keepOutput = await executeTool('open_asset_interface', {
       action: 'keep',
       amount: '50',

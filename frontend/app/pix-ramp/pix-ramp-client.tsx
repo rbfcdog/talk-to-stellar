@@ -194,6 +194,19 @@ function normalizeTargetAsset(value: unknown, fallback: TargetAsset = "BRL"): Ta
   return canonicalAssetCode(value, fallback);
 }
 
+function resolveOnRampTargetAssetFromQuery(input: {
+  amount?: string;
+  asset?: string;
+  currency?: string;
+  requestedTargetAsset?: string;
+}) {
+  const requestedTargetAsset = normalizeTargetAsset(input.requestedTargetAsset || "", "");
+  if (requestedTargetAsset) return requestedTargetAsset;
+  const amountCurrency = normalizeTargetAsset(input.currency || "", "");
+  if (input.amount && amountCurrency === "BRL") return "BRL";
+  return normalizeTargetAsset(input.asset || amountCurrency, "BRL");
+}
+
 function userFacingAssetCode(code: unknown, fallback: TargetAsset = "BRL") {
   return canonicalAssetCode(code, fallback);
 }
@@ -855,6 +868,7 @@ export default function PixRampClient({
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
   const offRampInputPrefix = offRampExactReceiveBrl ? "R$" : friendlyAssetName(offRampInputAsset, language);
   const offRampInputUnit = offRampExactReceiveBrl ? "BRL" : offRampInputAsset;
+  const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset;
   const offRampPixTargetAmount = String(
     temporaryOffRampTestResult?.target_brl ||
     temporaryOffRampTestResult?.destination_amount ||
@@ -1264,7 +1278,14 @@ export default function PixRampClient({
       setOffRampAmountLocked(true);
     }
     if (!(mode === "onramp" && receiveAmount)) {
-      const normalizedAsset = normalizeTargetAsset(asset, "BRL");
+      const normalizedAsset = mode === "onramp"
+        ? resolveOnRampTargetAssetFromQuery({
+            amount,
+            asset,
+            currency,
+            requestedTargetAsset: receiveAsset,
+          })
+        : normalizeTargetAsset(asset, "BRL");
       if (isAdvancedAsset(normalizedAsset)) setAdvancedAssetMode(true);
       setTargetAsset(normalizedAsset);
     }
@@ -2419,7 +2440,7 @@ export default function PixRampClient({
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{L("Moeda", "Currency")}</p>
-                <p className="mt-2 text-sm font-black text-tts-deep">{friendlyAssetName(targetAsset, language)} {targetAsset}</p>
+                <p className="mt-2 text-sm font-black text-tts-deep">{friendlyAssetName(headerCurrencyAsset, language)} {headerCurrencyAsset}</p>
               </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                   <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_destination")}</p>

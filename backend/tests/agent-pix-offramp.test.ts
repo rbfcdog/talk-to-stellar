@@ -246,8 +246,42 @@ describe('Agent PIX off-ramp detection', () => {
       }));
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('currency')).toBe('BRL');
       expect(parsed.searchParams.get('provider')).toBe('telegram');
       expect(parsed.searchParams.get('provider_user_id')).toBe('123456');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
+  it('keeps BRL as the PIX input asset when the top-up amount is in reais', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const url = await (graph as any).buildPixRampUrl({
+        session_id: 'session-1',
+        session_data: { email: 'rodrigo@example.com', user_id: 'user-1' },
+      }, {
+        direction: 'onramp',
+        amount: '100',
+        amount_currency: 'BRL',
+        asset_code: 'USDC',
+      });
+      const parsed = new URL(url);
+
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('currency')).toBe('BRL');
+      expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('target_asset')).toBe('USDC');
+      expect(parsed.searchParams.get('receive_amount')).toBeNull();
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;
