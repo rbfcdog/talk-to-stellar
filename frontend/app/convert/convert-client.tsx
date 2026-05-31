@@ -207,6 +207,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     const queryDest = params.get("dest_asset") || params.get("dest_asset_code") || params.get("to_asset") || "";
     const queryReturnSource = params.get("from") || params.get("origin") || params.get("source") || "";
     const queryReturnTo = params.get("return_to") || params.get("returnTo") || "";
+    const pickerMode = ["1", "true", "yes"].includes(String(params.get("picker") || params.get("choose") || "").trim().toLowerCase());
+    if (pickerMode && !queryAmount) setAmount("");
     if (parseAmount(queryAmount) > 0) setAmount(queryAmount);
     if (querySource) setSourceCode(normalizeAssetCode(querySource));
     if (queryDest) setDestCode(normalizeAssetCode(queryDest));

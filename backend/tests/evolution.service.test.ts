@@ -581,6 +581,61 @@ describe('EvolutionService', () => {
     expect(sentText).toContain('Melhor rota — comparar cotação, taxas e caminho');
   });
 
+  it('opens the conversion picker when the LLM returns a generic conversion reply', async () => {
+    process.env.FRONTEND_URL = 'https://app.example.com';
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          intent: 'conversion',
+          message: 'Posso ajudar com:',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-conversion-picker-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'quero converter dinheiro',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
+
+    await flushBackgroundWork();
+
+    expect(sendTextSpy).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextSpy.mock.calls[0]?.[2] || '');
+    expect(sentText).toContain('Abra a conversão para escolher valor e moedas');
+    expect(sentText).toContain('https://app.example.com/convert?from=whatsapp&lang=pt-BR&picker=1');
+    expect(sentText).not.toContain('Posso converter entre');
+  });
+
   it('deduplicates repeated Evolution delivery for the same text even when message ids differ', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
