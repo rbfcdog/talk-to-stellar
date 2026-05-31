@@ -255,12 +255,17 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
   const destinationCurrency = hasFinalConversionAmount
     ? quoteCurrencyCode(quote.finalCurrency || quote.userFacingToCurrency, "BRL")
     : quoteCurrencyCode(quote.toCurrency, "BRL");
-  const destinationBeforeRaw = hasFinalConversionAmount
-    ? (quote.finalAmountBeforeFee || quote.finalAmountAfterFee || quote.userFacingToAmount || "")
-    : (quote.destinationAmountBeforeFee || quote.destinationAmount || "");
+  const isTesouroOfframp = mode === "offramp" && /TESOURO/i.test(String(quote.fromCurrency || ""));
+  const destinationBeforeRaw = isTesouroOfframp
+    ? (quote.fromAmount || "")
+    : hasFinalConversionAmount
+      ? (quote.finalAmountBeforeFee || quote.finalAmountAfterFee || quote.userFacingToAmount || "")
+      : (quote.destinationAmountBeforeFee || quote.destinationAmount || "");
   const destinationAfterRaw = hasFinalConversionAmount
     ? (quote.finalAmountAfterFee || quote.userFacingToAmount || "")
-    : (quote.destinationAmountAfterFee || quote.toAmount || "");
+    : isTesouroOfframp
+      ? (quote.fromAmount || "") // TESOURO=BRL 1:1, source amount is the destination
+      : (quote.destinationAmountAfterFee || quote.toAmount || "");
   const sourceAmount = parseHumanAmount(quote.fromAmount);
   const destinationBefore = parseHumanAmount(destinationBeforeRaw);
   const destinationAfter = parseHumanAmount(destinationAfterRaw);
