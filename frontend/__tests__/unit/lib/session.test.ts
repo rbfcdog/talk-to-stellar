@@ -11,12 +11,16 @@ describe('getClientSession', () => {
       json: async () => ({
         authenticated: true,
         session_id: 'session-1',
+        session_source: 'whatsapp',
+        external_priority: true,
       }),
     } as Response)
 
     await expect(getClientSession()).resolves.toEqual({
       authenticated: true,
+      externalPriority: true,
       sessionId: 'session-1',
+      sessionSource: 'whatsapp',
     })
 
     expect(fetchMock).toHaveBeenCalledWith('/api/session', expect.objectContaining({

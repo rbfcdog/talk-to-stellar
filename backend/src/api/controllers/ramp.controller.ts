@@ -138,6 +138,15 @@ export class RampController {
     }
   }
 
+  static async verifySessionPin(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.verifySessionPin(requestInput(req));
+      res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
+    }
+  }
+
   static async getEtherfuseKycStatus(req: Request, res: Response) {
     try {
       const result = await AnchorService.getKycStatusForSession(requestInput(req));
