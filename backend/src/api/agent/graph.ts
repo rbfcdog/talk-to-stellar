@@ -90,11 +90,13 @@ export class AgentGraph {
   private repository: AgentRepository;
   private systemPrompt: string;
   private externalService: ExternalService;
+  private openaiApiKey: string;
 
   constructor(repository: AgentRepository, openaiApiKey: string, systemPrompt: string) {
     this.repository = repository;
     this.systemPrompt = systemPrompt;
     this.externalService = new ExternalService(supabase as any);
+    this.openaiApiKey = openaiApiKey;
     this.llm = new ChatOpenAI({
       openAIApiKey: openaiApiKey,
       temperature: parseFloat(process.env.TEMPERATURE || "0.1"),
@@ -117,6 +119,11 @@ export class AgentGraph {
 
   private text(language: 'pt-BR' | 'en', pt: string, en: string): string {
     return language === 'en' ? en : pt;
+  }
+
+  private shouldUseLlmIntentClassifier(): boolean {
+    const key = String(this.openaiApiKey || '').trim().toLowerCase();
+    return Boolean(key && key !== 'test-openai-key' && !key.startsWith('test-'));
   }
 
   private languageInstruction(language: 'pt-BR' | 'en'): string {
@@ -1287,7 +1294,7 @@ export class AgentGraph {
     }
     const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
     const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
-    const onRampTargetAsset = explicitReceiveBrl
+    const onRampTargetAsset = explicitReceiveBrl || (mentionsBrl && !mentionsUsdc)
       ? 'BRL'
       : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? 'USDC' : 'BRL');
     const fundAndPayAsset = mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL';
@@ -2019,8 +2026,8 @@ export class AgentGraph {
       String(parsed?.receive_asset_code || parsed?.asset_code || 'BRL')
     ).toUpperCase().replace(/^USD$/, 'USDC');
     const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
-      ? ['BRL', 'USDC', 'CETES']
-      : ['BRL', 'USDC', 'EUR'];
+      ? ['BRL', 'USDC', 'CETES', 'XLM']
+      : ['BRL', 'USDC', 'EUR', 'XLM'];
     const safeDestAssetCode = allowedRouteAssets.includes(destAssetCode) ? destAssetCode : 'BRL';
     const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
 
@@ -2969,7 +2976,8 @@ export class AgentGraph {
       '- Treat RUNTIME CONTEXT as authoritative for this turn.',
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
-      '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, and logout, prefer tools over free text.',
+      '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, explanations, and logout, prefer tools over free text.',
+      '- If the user asks what the app can do, asks for an explanation, or asks about a feature, asset, balance, XLM, CETES, USDC, BRL, or rendimentos, call get_product_context when the answer needs context beyond a direct action.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
@@ -2988,8 +2996,8 @@ export class AgentGraph {
       '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
-      '- Never mention blockchain internals in user-facing copy. Do not mention XLM, issuer, trustline, ledger, hash, Horizon, public key, path payment, or Stellar network details.',
-      '- If the user asks for XLM or technical balances, show only the app balance in R$, US$, and CETES/Mexico test option in testnet and say TalkToStellar displays the available app balance.',
+      '- Never mention blockchain internals in user-facing copy. Do not mention issuer, trustline, ledger, Horizon, path payment, or Stellar network details unless the user explicitly asks for technical details.',
+      '- XLM is a visible app asset. Balance answers must include XLM together with R$, US$, and CETES/Mexico test option in testnet when available.',
       '- Do not send duplicate welcome/start messages. Mini-menus are for first greeting, ajuda, onboarding/login completion, or when the user is clearly lost.',
       '- For first greetings, use get_intent_help and show the full capability list with one short explanatory line per area. If the user explicitly asks for ajuda, funcionalidades, comandos, or what TalkToStellar can do, use the same fuller capability list.',
       '- Mini-menus must use no technical terms and no second welcome block if the user already received a login/onboarding completion message.',
@@ -3004,6 +3012,7 @@ export class AgentGraph {
       '- For broad multi-asset navigation like "trazer", "manter", "mandar embora", "add money", "apply", or "send to PIX", use open_asset_interface so the user receives a frontend URL.',
       '- Do not discuss returns/rates publicly. Say only that the user reviews value and operation before confirming.',
       '- Route users to /rendimentos for the earnings/application page. Do not route users to legacy localized routes.',
+      '- For generic conversion requests without amount or without both assets, use open_conversion_interface and let the page collect value and currencies. For explicit conversion requests with amount, source asset, and destination asset, prepare the conversion confirmation flow.',
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
@@ -3225,6 +3234,10 @@ export class AgentGraph {
     const normalizedMessage = this.normalizeTextForIntent(message);
     const highConfidenceIntent = this.classifyHighConfidenceProductIntent(message);
 
+    if (!this.shouldUseLlmIntentClassifier()) {
+      return highConfidenceIntent || IntentType.GENERAL;
+    }
+
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -3294,6 +3307,10 @@ Other examples:
 - "meu dinheiro rendendo" -> yield
 - "quero investir" -> yield
 - "quero aplicar dinheiro" -> yield
+- "quero converter dinheiro" -> conversion
+- "quero converter 10 usdc pra brl" -> conversion
+- "converter 10 USDC para BRL" -> conversion
+- "converter xlm pra usdc" -> conversion
 - "converter dolares para reais" -> conversion
 - "quero criar um link de pagamento" -> payment_link
 - "quero sair da conta" -> wallet_logout
@@ -3333,12 +3350,7 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
             classifierCall?.args?.label
           );
           const confidence = Number(classifierCall?.args?.confidence);
-          const hasReliableToolIntent = toolIntent && (
-            toolIntent !== IntentType.GENERAL ||
-            !highConfidenceIntent ||
-            (Number.isFinite(confidence) && confidence >= 0.85)
-          );
-          if (hasReliableToolIntent) {
+          if (toolIntent) {
             logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
             return toolIntent;
           }
@@ -3355,9 +3367,7 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
       const response = await this.llm.invoke(messages);
 
       const parsedIntent = this.parseIntentFromLlmOutput(response.content);
-      const detectedIntent = parsedIntent && (parsedIntent !== IntentType.GENERAL || !highConfidenceIntent)
-        ? parsedIntent
-        : highConfidenceIntent || parsedIntent || IntentType.GENERAL;
+      const detectedIntent = parsedIntent || highConfidenceIntent || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
@@ -4005,7 +4015,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             byAsset.set(asset, { ...balance, asset });
           }
         }
-        const balanceAssets = getStellarNetworkName() === 'TESTNET' ? ['BRL', 'USDC', 'CETES'] : ['BRL', 'USDC', 'EUR'];
+        const balanceAssets = getStellarNetworkName() === 'TESTNET' ? ['BRL', 'USDC', 'CETES', 'XLM'] : ['BRL', 'USDC', 'EUR', 'XLM'];
         const exactBalances = balanceAssets.map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
         const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();
@@ -4402,7 +4412,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       session_id: state.session_id,
       action: intent.action,
       amount: intent.amount,
-      asset_code: intent.asset_code || (intent.action === 'bring' ? 'USDC' : 'BRL'),
+      asset_code: intent.asset_code || 'BRL',
       destination_pix_key: intent.destination_pix_key,
       language,
     });
@@ -4720,10 +4730,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
-      const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
       let finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
-      const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '');
-      const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || inferredAssets.destAssetCode || '');
+      const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || '');
+      const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || '');
       const finalSourceAssetCode = this.toSettlementAssetCode(requestedSourceAssetCode) || requestedSourceAssetCode;
       const finalDestAssetCode = this.toSettlementAssetCode(requestedDestAssetCode) || requestedDestAssetCode;
 
@@ -4979,18 +4988,12 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       );
       const semanticProductIntent = this.classifyHighConfidenceProductIntent(state.current_input);
 
-      const urgentIntents = wantsReceiptImage ? IntentType.HISTORY
-        : wantsTransactionHistory ? IntentType.HISTORY
+      const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id);
+      const safetyOverrideIntent = wantsReceiptImage ? IntentType.HISTORY
         : localContactIntent?.action === 'add' ? IntentType.CONTACTS
-        : this.isContactsRequest(state.current_input) ? IntentType.CONTACTS
-        : deterministicYield.is_yield ? IntentType.YIELD
-        : /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/i.test(state.current_input) ||
-          /\b(?:sacar|retirar|tirar|saque)\b.*\bpix\b/i.test(state.current_input) ||
-          /\bmandar\s+(?:pra|para|pro|a)\s+fora\b/i.test(state.current_input)
-        ? IntentType.PIX
-        : semanticProductIntent;
+        : null;
 
-      state.detected_intent = urgentIntents || await this.detectIntent(state.current_input, state.session_data?.user_id);
+      state.detected_intent = safetyOverrideIntent || llmDetectedIntent || semanticProductIntent || IntentType.GENERAL;
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(

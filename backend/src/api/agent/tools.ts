@@ -14,7 +14,7 @@ import { supabase } from "../../config/supabase";
 import { WalletRepository } from "../repository/core/wallet.repository";
 import VaultService from "../services/core/vault.service";
 import ExternalService from "../services/core/external.service";
-import { assetMatchesConfiguredIssuer, getAssetIssuer, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, getStellarNetworkName, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../services/contact-seed.service";
 import { BalanceAlertService } from "../services/balance-alert.service";
 import { AutoConversionService } from "../services/auto-conversion.service";
@@ -464,7 +464,7 @@ function buildMoneyInterfaceUrl(input: {
   language?: 'pt-BR' | 'en';
 }): string {
   const action = normalizeMoneyInterfaceAction(input.action);
-  const asset = frontendAssetCode(input.assetCode || (action === 'bring' ? 'USDC' : 'BRL'));
+  const asset = frontendAssetCode(input.assetCode || 'BRL');
   const amount = String(input.amount || '').trim();
   const language = input.language || 'pt-BR';
 
@@ -812,6 +812,26 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_product_context",
+    description: "Retorna contexto codado para a LLM explicar funcionalidades, ativos, saldos e rendimentos do TalkToStellar. Use quando o usuário pedir explicação, tiver dúvida sobre o app, perguntar o que é cada ativo, ou pedir detalhes sobre rendimentos/aplicações.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          enum: ["all", "features", "assets", "rendimentos", "fees", "security"],
+          description: "Área que o usuário quer entender. Use all quando não estiver claro.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_brl_usdc_quote",
     description: "Get the current BRL-USDC quote from the configured TESOURO settlement asset. Returns both BRL per 1 USDC and USDC per 1 BRL.",
     parameters: {
@@ -1092,7 +1112,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing balance summary. Returns only R$ and US$ balances. Never expose technical assets or account identifiers in chat.",
+    description: "Get the user-facing balance summary. Returns R$, US$, CETES/EUR when configured, and XLM. Never expose account identifiers in chat.",
     parameters: {
       type: "object",
       properties: {
@@ -1893,6 +1913,8 @@ export async function executeTool(
         return await executeSetLanguage(toolInput);
       case "get_intent_help":
         return executeGetIntentHelp();
+      case "get_product_context":
+        return executeGetProductContext(toolInput);
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
       case "get_yield_options":
@@ -2020,8 +2042,8 @@ function executeGetIntentHelp(): string {
     {
       command: "saldo",
       intent: "balance",
-      description: "Mostra o saldo disponível em R$, US$, CETES e moedas configuradas.",
-      examples: ["ver saldo", "qual meu saldo em cetes?"],
+      description: "Mostra o saldo disponível em R$, US$, CETES, XLM e moedas configuradas.",
+      examples: ["ver saldo", "qual meu saldo em xlm?"],
     },
     {
       command: "enviar",
@@ -2032,8 +2054,8 @@ function executeGetIntentHelp(): string {
     {
       command: "converter",
       intent: "conversion",
-      description: "Abre a conversão entre reais, dólares, CETES e moedas configuradas pela rota mais otimizada.",
-      examples: ["converter 10 us$ para cetes"],
+      description: "Abre a conversão entre reais, dólares, CETES, XLM e moedas configuradas pela rota mais otimizada.",
+      examples: ["converter 10 usdc para brl", "quero converter dinheiro"],
     },
     {
       command: "rota",
@@ -2100,8 +2122,120 @@ function executeGetIntentHelp(): string {
   return JSON.stringify({
     success: true,
     commands,
+    explainable: true,
+    explanation_hint: "Também posso explicar como cada funcionalidade funciona, o que significa cada ativo e como consultar rendimentos/posições.",
     message: buildCapabilityHelpMessage(),
   });
+}
+
+function executeGetProductContext(input: any): string {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  const topic = String(input.topic || 'all').trim().toLowerCase() || 'all';
+  const isPt = language !== 'en';
+  const payload = {
+    success: true,
+    topic,
+    guidance: isPt
+      ? 'Use estas informações como contexto. Responda de forma direta, sem prometer retorno, sem recomendação personalizada e sem termos técnicos desnecessários.'
+      : 'Use this as context. Answer directly without promising returns, personalized advice, or unnecessary technical terms.',
+    features: [
+      {
+        key: 'contacts',
+        name: isPt ? 'Contatos' : 'Contacts',
+        explanation: isPt
+          ? 'Lista, salva e escolhe destinatários para pagamentos. Quando o usuário pede contatos, mostre os contatos salvos em vez de abrir um menu genérico.'
+          : 'Lists, saves, and selects recipients for payments. When the user asks for contacts, show saved contacts instead of a generic menu.',
+      },
+      {
+        key: 'balance',
+        name: isPt ? 'Saldo' : 'Balance',
+        explanation: isPt
+          ? 'Mostra saldos disponíveis em R$, US$, CETES, XLM e moedas configuradas. XLM aparece como saldo da conta quando disponível.'
+          : 'Shows available balances in R$, US$, CETES, XLM, and configured assets. XLM appears as account balance when available.',
+      },
+      {
+        key: 'pix',
+        name: 'PIX',
+        explanation: isPt
+          ? 'Permite trazer dinheiro por PIX, retirar para uma chave PIX digitada na hora ou pagar alguém usando PIX. A tela mostra valores e taxas antes do PIN.'
+          : 'Lets the user add money through PIX, withdraw to a PIX key, or pay someone using PIX. The page shows amounts and fees before PIN.',
+      },
+      {
+        key: 'conversion',
+        name: isPt ? 'Conversão' : 'Conversion',
+        explanation: isPt
+          ? 'Troca entre R$, US$, CETES, XLM e moedas configuradas. Se o usuário não informar valor e moedas, abra a tela de conversão para escolher; se informar tudo, prepare a confirmação.'
+          : 'Converts between R$, US$, CETES, XLM, and configured assets. If the user does not provide amount and assets, open the conversion picker; if they provide all details, prepare confirmation.',
+      },
+      {
+        key: 'payments',
+        name: isPt ? 'Enviar dinheiro' : 'Send money',
+        explanation: isPt
+          ? 'Envia para contato salvo ou carteira externa com revisão antes de confirmar. Não invente destinatários; use contato salvo ou chave informada.'
+          : 'Sends to saved contacts or external wallets with review before confirmation. Do not invent recipients; use saved contacts or provided destination keys.',
+      },
+      {
+        key: 'payment_link',
+        name: isPt ? 'Link de recebimento' : 'Receive link',
+        explanation: isPt
+          ? 'Cria link para alguém pagar ou para o usuário receber sem escolher contato antes.'
+          : 'Creates a link so someone can pay or the user can receive without choosing a contact first.',
+      },
+      {
+        key: 'rendimentos',
+        name: isPt ? 'Rendimentos e posições' : 'Earnings and positions',
+        explanation: isPt
+          ? 'Mostra opções configuradas, posição atual e telas para aplicar ou retirar. Dados de testnet são estimados e servem para acompanhamento técnico; confirmação sempre exige PIN.'
+          : 'Shows configured options, current position, and pages to apply or withdraw. Testnet data is estimated and used for technical tracking; confirmation always requires PIN.',
+      },
+      {
+        key: 'history',
+        name: isPt ? 'Histórico' : 'History',
+        explanation: isPt
+          ? 'Mostra entradas, saídas, conversões, PIX, comprovantes e apelidos de transações.'
+          : 'Shows deposits, withdrawals, conversions, PIX, receipts, and transaction nicknames.',
+      },
+      {
+        key: 'profile',
+        name: isPt ? 'Perfil e acesso' : 'Profile and access',
+        explanation: isPt
+          ? 'Abre o perfil global, links públicos, login, PIN e biometria quando disponível.'
+          : 'Opens the global profile, public links, login, PIN, and biometrics when available.',
+      },
+    ],
+    assets: [
+      {
+        code: 'BRL',
+        label: isPt ? 'Reais' : 'Brazilian reais',
+        explanation: isPt ? 'Saldo em reais usado em PIX e conversões.' : 'Reais balance used in PIX and conversions.',
+      },
+      {
+        code: 'USDC',
+        label: isPt ? 'Dólares' : 'Dollars',
+        explanation: isPt ? 'Saldo em dólares do app, exibido como US$.' : 'App dollar balance, displayed as US$.',
+      },
+      {
+        code: 'CETES',
+        label: isPt ? 'Opção México em teste' : 'Mexico test option',
+        explanation: isPt ? 'Ativo configurado no ambiente de teste para conversão e posições.' : 'Asset configured in the test environment for conversions and positions.',
+      },
+      {
+        code: 'XLM',
+        label: 'XLM',
+        explanation: isPt ? 'Saldo XLM da conta. Pode aparecer no saldo e em conversões quando disponível.' : 'Account XLM balance. It can appear in balances and conversions when available.',
+      },
+    ],
+    rendimentos: {
+      user_copy: isPt
+        ? 'Você pode ver posições atuais, aplicar saldo disponível ou preparar retirada. Nada é confirmado sem PIN.'
+        : 'You can view current positions, apply available balance, or prepare withdrawal. Nothing is confirmed without PIN.',
+      limitations: isPt
+        ? 'Ambiente testnet: valores e taxas exibidos são estimados e podem mudar.'
+        : 'Testnet environment: displayed values and rates are estimated and can change.',
+    },
+  };
+
+  return JSON.stringify(payload);
 }
 
 async function executeGetBrlUsdcQuote(): Promise<string> {
@@ -2222,7 +2356,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
     const action = normalizeMoneyInterfaceAction(input.action || input.intent || input.mode);
-    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || (action === 'bring' ? 'USDC' : 'BRL'));
+    const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'BRL');
     const sessionId = String(input.session_id || '').trim() || undefined;
     const rawUrl = buildMoneyInterfaceUrl({
       action,
@@ -2267,9 +2401,12 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
 async function executeOpenConversionInterface(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   try {
+    const hasSourceAsset = Boolean(String(input.source_asset_code || input.sourceAssetCode || input.from_asset || input.fromAsset || '').trim());
+    const hasDestAsset = Boolean(String(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || '').trim());
     const sourceAsset = normalizeYieldAssetInput(input.source_asset_code || input.sourceAssetCode || input.from_asset || input.fromAsset || 'BRL');
     const destAsset = normalizeYieldAssetInput(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || 'USDC');
     const sourceAmount = String(input.source_amount || input.sourceAmount || input.amount || '').trim();
+    const hasCompletePrefill = Boolean(sourceAmount && hasSourceAsset && hasDestAsset);
     const sessionId = String(input.session_id || '').trim() || undefined;
     const rawUrl = buildConversionFrontendUrl({
       sourceAmount,
@@ -2283,14 +2420,18 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
 
     return JSON.stringify({
       success: true,
-      action: 'conversion_interface',
+      action: hasCompletePrefill ? 'conversion_confirmation_prefill' : 'conversion_picker',
       source_amount: sourceAmount || null,
       source_asset_code: sourceDisplay,
       dest_asset_code: destDisplay,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `Conversion is ready to confirm: ${sourceAmount || 'amount'} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
-        : `Conversão pronta para confirmar: ${sourceAmount || 'valor'} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`,
+        ? hasCompletePrefill
+          ? `Conversion is ready to review: ${sourceAmount} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
+          : `Open the conversion screen to choose amount and assets.\n\nOpen:\n${frontendUrl}`
+        : hasCompletePrefill
+          ? `Conversão pronta para revisar: ${sourceAmount} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`
+          : `Abra a tela de conversão para escolher valor e moedas.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -2820,7 +2961,10 @@ async function executeGetBalance(input: any): Promise<string> {
     }
     let account = accountLookup.account;
 
-    const visibleAssets = getUserFacingAssetCodes()
+    const defaultVisibleAssets = getStellarNetworkName() === 'TESTNET'
+      ? ['BRL', 'USDC', 'CETES', 'XLM']
+      : ['BRL', 'USDC', 'EUR', 'XLM'];
+    const visibleAssets = [...defaultVisibleAssets, ...getUserFacingAssetCodes()]
       .map((asset) => userFacingAssetCode(asset))
       .filter((asset, index, all) => asset && all.indexOf(asset) === index);
     let balances = account.balances.map(normalizeBalanceLine);

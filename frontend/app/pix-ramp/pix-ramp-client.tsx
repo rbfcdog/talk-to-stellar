@@ -1264,7 +1264,7 @@ export default function PixRampClient({
       setOffRampAmountLocked(true);
     }
     if (!(mode === "onramp" && receiveAmount)) {
-      const normalizedAsset = normalizeTargetAsset(asset, mode === "onramp" ? "USDC" : "BRL");
+      const normalizedAsset = normalizeTargetAsset(asset, "BRL");
       if (isAdvancedAsset(normalizedAsset)) setAdvancedAssetMode(true);
       setTargetAsset(normalizedAsset);
     }
