@@ -3350,13 +3350,17 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
             classifierCall?.args?.label
           );
           const confidence = Number(classifierCall?.args?.confidence);
-          if (toolIntent) {
+          if (toolIntent && toolIntent !== IntentType.GENERAL) {
             logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
             return toolIntent;
           }
           if (highConfidenceIntent) {
             logger.debug(`Intent: "${message}" -> ${highConfidenceIntent}; via=semantic_repair_after_classifier intent=${toolIntent || 'none'} confidence=${Number.isFinite(confidence) ? confidence : 'n/a'}`);
             return highConfidenceIntent;
+          }
+          if (toolIntent) {
+            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
+            return toolIntent;
           }
           logger.warn(`[Agent] Intent classifier tool returned no usable call: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
         } catch (toolError) {
@@ -3367,7 +3371,9 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
       const response = await this.llm.invoke(messages);
 
       const parsedIntent = this.parseIntentFromLlmOutput(response.content);
-      const detectedIntent = parsedIntent || highConfidenceIntent || IntentType.GENERAL;
+      const detectedIntent = parsedIntent && parsedIntent !== IntentType.GENERAL
+        ? parsedIntent
+        : highConfidenceIntent || parsedIntent || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
@@ -4730,9 +4736,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
-      let finalSourceAmount = String(llmParsed.sourceAmount || '').trim();
-      const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || '');
-      const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || '');
+      const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
+      let finalSourceAmount = String(llmParsed.sourceAmount || '').trim() || this.extractAmountFollowUpFromText(state.current_input) || '';
+      const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '');
+      const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || inferredAssets.destAssetCode || '');
       const finalSourceAssetCode = this.toSettlementAssetCode(requestedSourceAssetCode) || requestedSourceAssetCode;
       const finalDestAssetCode = this.toSettlementAssetCode(requestedDestAssetCode) || requestedDestAssetCode;
 

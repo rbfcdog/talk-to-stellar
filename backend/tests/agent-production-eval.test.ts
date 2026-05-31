@@ -525,6 +525,70 @@ describe('Agent production evals', () => {
     ]);
   });
 
+  it('routes explicit conversion even when the LLM classifier returns generic', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const classifierInvoke = jest.fn().mockResolvedValue({
+      additional_kwargs: {
+        tool_calls: [
+          {
+            id: 'call_general',
+            function: {
+              name: 'classify_talktostellar_intent',
+              arguments: '{"intent":"general","confidence":0.91}',
+            },
+          },
+        ],
+      },
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      invoke: jest.fn(),
+    };
+    graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({});
+    graph.resolveWalletAssetIssuer = jest
+      .fn()
+      .mockResolvedValueOnce('GUSDC')
+      .mockResolvedValueOnce('GTESOURO');
+
+    executeToolMock
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        quote: {
+          sourceAmount: '10',
+          destinationAmount: '43.8720000',
+          sourceAsset: { code: 'USDC', issuer: 'GUSDC' },
+          destinationAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
+          path: [],
+        },
+        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
+        message: 'Rota mais otimizada agora.',
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        url: 'https://app.example.com/confirm-conversion?token=abc',
+      }));
+
+    const result = await graph.processInput(createState('quero converter 10 usdc pra brl'));
+
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.CONVERSION);
+    expect(result.action_type).toBe(ActionType.CONVERT_ASSETS);
+    expect(executeToolMock).toHaveBeenNthCalledWith(1, 'get_best_route', expect.objectContaining({
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+    }));
+    expect(executeToolMock).toHaveBeenNthCalledWith(2, 'prepare_conversion_confirmation', expect.objectContaining({
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+    }));
+    expect(result.response_message).toContain('/confirm-conversion?');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
+  });
+
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
