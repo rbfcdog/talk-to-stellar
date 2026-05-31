@@ -2,6 +2,7 @@ import { logger } from '../../../utils/logger';
 import { isProductionLikeEnvironment } from '../../../config/runtime';
 import { timingSafeEqualString } from '../../../utils/password';
 import { supabase } from '../../../config/supabase';
+import { buildCapabilityHelpMessage } from '../../agent/capability-help';
 import crypto from 'crypto';
 
 type EvolutionMessage = {
@@ -287,21 +288,7 @@ function buildEvolutionFallbackReply(intent?: string): string {
   if (normalizedIntent === 'wallet' || normalizedIntent === 'onboard' || normalizedIntent === 'login') {
     return 'Posso ajudar com acesso, conta e início de uso. Diga: "entrar na conta" ou "criar conta".';
   }
-  return [
-    'Posso ajudar com:',
-    '1. Contatos',
-    '2. Saldo',
-    '3. PIX',
-    '4. Conversão',
-    '5. Enviar dinheiro',
-    '6. Link de pagamento',
-    '7. Aplicações',
-    '8. Histórico',
-    '9. Perfil',
-    '10. PIN',
-    '',
-    'Diga o que quer fazer em uma frase curta.'
-  ].join('\n');
+  return buildCapabilityHelpMessage();
 }
 
 function buildUsefulEvolutionReply(response: AgentResponse): string {

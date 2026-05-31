@@ -9,6 +9,7 @@ import { StellarService as ApiStellarService } from "../services/stellar.service
 import { UserService } from "../services/user.service";
 import { PinResetService } from "../services/core/pin-reset.service";
 import { logger } from "../../utils/logger";
+import { buildCapabilityHelpMessage } from "./capability-help";
 import { supabase } from "../../config/supabase";
 import { WalletRepository } from "../repository/core/wallet.repository";
 import VaultService from "../services/core/vault.service";
@@ -2099,21 +2100,7 @@ function executeGetIntentHelp(): string {
   return JSON.stringify({
     success: true,
     commands,
-    message: [
-      "Posso ajudar com:",
-      "1. Contatos — listar, adicionar ou buscar.",
-      "2. Enviar dinheiro — para contatos salvos.",
-      "3. PIX — trazer ou retirar reais.",
-      "4. Saldo — moedas e status da conta.",
-      "5. Conversão — entre R$, US$ e moedas disponíveis.",
-      "6. Link de pagamento — cobrar sem contato.",
-      "7. Rendimentos — opções, posição e taxas.",
-      "8. Melhor rota — comparar caminhos e economia.",
-      "9. Histórico — operações e comprovantes.",
-      "10. PIN — acesso, redefinição e biometria.",
-      "",
-      "Fale o que quer em uma frase curta com valor e destinatário se houver.",
-    ].join("\n"),
+    message: buildCapabilityHelpMessage(),
   });
 }
 
