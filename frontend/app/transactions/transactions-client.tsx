@@ -222,6 +222,8 @@ export default function TransactionsClient() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [message, setMessage] = useState("")
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
+  const [page, setPage] = useState(1)
+  const perPage = 15
 
   const pageTitle = useMemo(() => {
     if (period === "all") return "Todo histórico"
@@ -245,6 +247,8 @@ export default function TransactionsClient() {
     if (!sessionId || !authenticated) return
     void loadTransactions(sessionId, period, month, year)
   }, [authenticated, month, period, sessionId, year])
+
+  useEffect(() => { setPage(1) }, [kindFilter, search, period])
 
   async function loadTransactions(currentSessionId = sessionId, currentPeriod = period, currentMonth = month, currentYear = year) {
     if (!currentSessionId) return
@@ -291,6 +295,14 @@ export default function TransactionsClient() {
       return true
     })
   }, [kindFilter, search, transactions])
+
+  const totalPages = Math.max(1, Math.ceil(visibleTransactions.length / perPage))
+  const pagedTransactions = useMemo(() =>
+    visibleTransactions.slice((page - 1) * perPage, page * perPage),
+    [page, visibleTransactions]
+  )
+
+  const setPageSafe = (p: number) => setPage(Math.max(1, Math.min(p, totalPages)))
 
   function exportPdf() {
     window.print()
@@ -451,11 +463,24 @@ export default function TransactionsClient() {
             <StatePanel icon={<FileText className="h-5 w-5" aria-hidden="true" />} title="Nenhuma transação encontrada" detail="Ajuste o filtro ou tente outro período." />
           ) : null}
 
-          {status === "ready" && visibleTransactions.length > 0 ? (
+          {status === "ready" && pagedTransactions.length > 0 ? (
             <div className="divide-y divide-tts-border">
-              {visibleTransactions.map((item, index) => (
+              {pagedTransactions.map((item, index) => (
                 <TransactionRow key={`${String(item.id)}:${index}`} item={item} />
               ))}
+              {totalPages > 1 ? (
+                <div className="flex items-center justify-center gap-2 p-4 no-print">
+                  <button type="button" onClick={() => setPageSafe(page - 1)} disabled={page <= 1}
+                    className="min-h-9 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep disabled:opacity-30 hover:border-tts-border2">
+                    Anterior
+                  </button>
+                  <span className="text-xs font-bold text-tts-muted">{page} / {totalPages}</span>
+                  <button type="button" onClick={() => setPageSafe(page + 1)} disabled={page >= totalPages}
+                    className="min-h-9 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep disabled:opacity-30 hover:border-tts-border2">
+                    Próxima
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>
