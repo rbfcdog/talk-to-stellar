@@ -22,6 +22,33 @@ function createSupabaseMock(existingRows: any[]) {
 }
 
 describe('ExternalRepository', () => {
+  it('prefers a WhatsApp alias with login data over an empty phone alias', async () => {
+    const { supabase } = createSupabaseMock([
+      {
+        provider: 'phone',
+        provider_user_id: '5519997624114',
+        session_id: null,
+        user_id: null,
+        data: { remote_jid: '5519997624114@s.whatsapp.net' },
+      },
+      {
+        provider: 'whatsapp',
+        provider_user_id: '5519997624114',
+        session_id: null,
+        user_id: null,
+        data: { email: 'rodrigo@example.com' },
+      },
+    ]);
+    const repo = new ExternalRepository(supabase as any);
+
+    const row = await repo.findByProviderAndId('phone', '5519997624114@s.whatsapp.net');
+
+    expect(row).toEqual(expect.objectContaining({
+      provider: 'whatsapp',
+      data: expect.objectContaining({ email: 'rodrigo@example.com' }),
+    }));
+  });
+
   it('does not copy identity data from another provider alias into a new alias row', async () => {
     const { supabase, getUpsertPayload } = createSupabaseMock([
       {
