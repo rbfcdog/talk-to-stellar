@@ -9,6 +9,7 @@ import { HumanMessage, AIMessage, ToolMessage, BaseMessage, SystemMessage } from
 import { AgentState, IntentType, ActionType } from "./types";
 import { AgentRepository } from "../repository/core/agent.repository";
 import { ALL_TOOLS, executeTool } from "./tools";
+import { buildCapabilityHelpMessage } from "./capability-help";
 import { logger } from "../../utils/logger";
 import ExternalService from '../services/core/external.service';
 import { supabase } from '../../config/supabase';
@@ -5210,11 +5211,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       logger.error(`[Agent] Error: ${errorMessage}`);
       state.success = false;
       state.error = errorMessage;
-      state.response_message = this.text(
-        this.getLanguage(state),
-        "Posso ajudar com contatos, saldo, PIX, conversão, enviar dinheiro, link de pagamento, aplicações, melhor rota, histórico e PIN. Diga o objetivo em uma frase, por exemplo: ver saldo, trazer 100 reais via PIX, converter 50 reais para dólar, ver aplicações ou abrir perfil.",
-        "I can help with contacts, balance, PIX, conversion, sending money, payment links, applications, best route, history, and PIN. Say the goal in one sentence, for example: show balance, bring 100 reais via PIX, convert 50 reais to dollars, view applications, or open profile."
-      );
+      state.response_message = this.getLanguage(state) === 'en'
+        ? "I can help with contacts, balance, PIX, conversion, sending money, payment links, applications, best route, history, profile, and PIN. Tell me the goal in one sentence, including amount, currency, and destination when relevant."
+        : buildCapabilityHelpMessage();
       return state;
     }
 

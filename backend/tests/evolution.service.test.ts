@@ -162,6 +162,64 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.', { reliable: true });
   });
 
+  it('replaces generic capability replies with the detailed WhatsApp help message', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: [
+            'Posso ajudar com:',
+            '1. Contatos',
+            '2. Saldo',
+            '3. PIX',
+            'Diga o que quer fazer em uma frase curta.',
+          ].join('\n'),
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-detailed-help-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'o que posso fazer por aqui?',
+        },
+      },
+    });
+
+    await flushBackgroundWork();
+
+    expect(sendTextSpy).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      expect.stringContaining('Posso ajudar com sua conta TalkToStellar:'),
+      { reliable: true }
+    );
+    const sentText = String(sendTextSpy.mock.calls[0]?.[2] || '');
+    expect(sentText).toContain('Contatos — listar, adicionar e escolher destinatários salvos');
+    expect(sentText).toContain('PIX — trazer dinheiro, retirar para uma chave PIX ou pagar alguém via PIX');
+    expect(sentText).toContain('Aplicações e posições');
+    expect(sentText).toContain('Pode escrever normal');
+  });
+
   it('keeps Evolution instanceId as diagnostic metadata and uses the configured instance name for delivery', async () => {
     process.env.EVOLUTION_INSTANCE = 'TalkToStellar';
     const fetchMock = jest.fn(async (...args: any[]) => {
@@ -466,7 +524,7 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.', { reliable: true });
   });
 
-  it('sends a short fallback when the agent request fails', async () => {
+  it('sends the detailed capability fallback when the agent request fails', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
       const normalizedUrl = String(url);
@@ -515,9 +573,12 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith(
       'main',
       '5519981808102',
-      'Nao consegui processar sua mensagem agora. Tente novamente em alguns segundos.',
+      expect.stringContaining('Posso ajudar com sua conta TalkToStellar:'),
       { reliable: true }
     );
+    const sentText = String(sendTextSpy.mock.calls[0]?.[2] || '');
+    expect(sentText).toContain('Contatos — listar, adicionar e escolher destinatários salvos');
+    expect(sentText).toContain('Melhor rota — comparar cotação, taxas e caminho');
   });
 
   it('deduplicates repeated Evolution delivery for the same text even when message ids differ', async () => {
