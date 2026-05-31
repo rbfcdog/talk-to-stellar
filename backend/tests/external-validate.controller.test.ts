@@ -102,6 +102,39 @@ describe('ExternalValidateController', () => {
     }));
   });
 
+  it('resolves WhatsApp PIN-only login from legacy mapping data email when session fields are missing', async () => {
+    validateFindByProviderAndIdMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5519997624114',
+      session_id: null,
+      user_id: null,
+      data: {
+        email: 'rodrigo@example.com',
+        remote_jid: '5519997624114@s.whatsapp.net',
+      },
+    });
+
+    const token = signExternalToken({
+      provider: 'whatsapp',
+      provider_user_id: '+55 19 99762-4114',
+    });
+    const req = { query: { token }, body: {} } as any;
+    const res = createResponse();
+
+    const ExternalValidateController = (await import('../src/api/controllers/external-validate.controller')).default;
+    await ExternalValidateController.validate(req, res);
+
+    expect(validateFindByProviderAndIdMock).toHaveBeenCalledWith('whatsapp', '5519997624114');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      valid: true,
+      pinOnly: true,
+      email: 'rodrigo@example.com',
+      resolvedLogin: 'rodrigo@example.com',
+    }));
+  });
+
   it('resolves the linked email from Telegram token session context', async () => {
     validateGetSessionMock.mockResolvedValue({
       session_id: 'session-telegram',

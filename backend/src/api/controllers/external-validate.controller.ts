@@ -93,6 +93,8 @@ async function resolveExternalLinkedLogin(payload: any): Promise<Record<string, 
       const mapping = await externalRepo.findByProviderAndId(provider, providerUserId)
       const mappedSessionId = String(mapping?.session_id || '').trim()
       const mappedUserId = normalizeEmailForCompare(String(mapping?.user_id || ''))
+      const mappedData = mapping?.data && typeof mapping.data === 'object' ? mapping.data as Record<string, unknown> : {}
+      const mappedEmail = normalizeEmailForCompare(String(mappedData.email || mappedData.user_id || mappedData.userId || ''))
       if (mappedSessionId) {
         const mappedSession = await getSessionSafely(mappedSessionId)
         if (mappedSession) {
@@ -104,6 +106,10 @@ async function resolveExternalLinkedLogin(payload: any): Promise<Record<string, 
       if (!canonicalLogin && looksLikeEmail(mappedUserId)) {
         userId = mappedUserId
         canonicalLogin = mappedUserId
+      }
+      if (!canonicalLogin && looksLikeEmail(mappedEmail)) {
+        userId = mappedEmail
+        canonicalLogin = mappedEmail
       }
     } catch {
       // Validation should still succeed if the token is valid but mapping lookup is temporarily unavailable.

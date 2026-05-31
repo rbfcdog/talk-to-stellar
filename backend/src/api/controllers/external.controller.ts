@@ -277,9 +277,11 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
   const mapped = await externalRepo.findByProviderAndId(normalizedProvider, normalizedProviderUserId);
   const mappedSessionId = String(mapped?.session_id || '').trim();
   const mappedUserId = normalizeEmailForCompare(String(mapped?.user_id || ''));
+  const mappedData = mapped?.data && typeof mapped.data === 'object' ? mapped.data as Record<string, unknown> : {};
+  const mappedEmail = normalizeEmailForCompare(String(mappedData.email || mappedData.user_id || mappedData.userId || ''));
 
-  if (mappedSessionId || mappedUserId) {
-    let canonicalLogin = looksLikeEmail(mappedUserId) ? mappedUserId : '';
+  if (mappedSessionId || mappedUserId || mappedEmail) {
+    let canonicalLogin = looksLikeEmail(mappedUserId) ? mappedUserId : looksLikeEmail(mappedEmail) ? mappedEmail : '';
     if (mappedSessionId) {
       const linkedSession = await agentRepo.getSession(mappedSessionId);
       if (linkedSession) {
@@ -288,7 +290,7 @@ async function resolveExternalIdentityLock(provider: string, providerUserId: str
     }
     return {
       sessionId: mappedSessionId || undefined,
-      userId: mappedUserId || undefined,
+      userId: mappedUserId || mappedEmail || undefined,
       canonicalLogin: canonicalLogin || undefined,
     };
   }
@@ -677,6 +679,11 @@ export class ExternalController {
       const existingMapping = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, providerUserId);
       const mappedSessionId = String(existingMapping?.session_id || '').trim();
       const mappedUserId = String(existingMapping?.user_id || '').trim();
+      const mappedData = existingMapping?.data && typeof existingMapping.data === 'object' ? existingMapping.data as Record<string, unknown> : {};
+      const mappedEmail = normalizeEmailForCompare(String(mappedData.email || mappedData.user_id || mappedData.userId || ''));
+      if (!email && mappedEmail) {
+        email = mappedEmail;
+      }
 
       if (mappedSessionId && mappedUserId) {
         const linkedSession = await agentRepo.getSession(mappedSessionId);

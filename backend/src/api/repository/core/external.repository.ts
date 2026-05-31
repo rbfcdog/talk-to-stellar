@@ -35,6 +35,19 @@ export function externalProviderAliases(provider: string): string[] {
   return ['whatsapp', 'phone'];
 }
 
+function rowHasOwner(row: ExternalAccountRow): boolean {
+  return Boolean(String(row.session_id || '').trim() || String(row.user_id || '').trim());
+}
+
+function rowHasLoginHint(row: ExternalAccountRow): boolean {
+  const data = row.data && typeof row.data === 'object' ? row.data : {};
+  return Boolean(
+    rowHasOwner(row) ||
+    String((data as any).email || '').trim() ||
+    String((data as any).user_id || (data as any).userId || '').trim()
+  );
+}
+
 export class ExternalRepository {
   supabase: SupabaseClient;
 
@@ -63,9 +76,14 @@ export class ExternalRepository {
     const rows = (data || []) as ExternalAccountRow[];
     if (rows.length === 0) return null;
 
+    const exactRows = rows.filter((row) => String(row.provider || '').toLowerCase() === normalizedProvider);
+
     return (
-      rows.find((row) => String(row.provider || '').toLowerCase() === normalizedProvider) ||
-      rows.find((row) => Boolean(row.session_id) && Boolean(row.user_id)) ||
+      exactRows.find(rowHasOwner) ||
+      rows.find(rowHasOwner) ||
+      exactRows.find(rowHasLoginHint) ||
+      rows.find(rowHasLoginHint) ||
+      exactRows[0] ||
       rows[0]
     );
   }
