@@ -842,6 +842,25 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_explanations",
+    description: "Returns detailed explanations about TalkToStellar features, assets, earnings, PIX, and how things work. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description: "Specific topic to explain: 'all', 'pix', 'assets', 'earnings', 'account', 'conversion', 'payments', 'security'",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Language for the explanation",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_yield_options",
     description: "List available user-facing application options. Use this for questions about applying money or current supported currencies. Do not present this as guaranteed return, investment advice, fixed income, savings account, or bank deposit.",
     parameters: {
@@ -1918,6 +1937,8 @@ export async function executeTool(
         return executeGetProductContext(toolInput);
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
+      case "get_explanations":
+        return await executeGetExplanations(toolInput);
       case "get_yield_options":
         return await executeGetYieldOptions(toolInput);
       case "open_asset_interface":
@@ -2030,6 +2051,125 @@ export async function executeTool(
       error: errorMessage,
     });
   }
+}
+
+async function executeGetExplanations(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  const topic = String(input.topic || 'all').trim().toLowerCase();
+  const isEn = language === 'en';
+
+  const explanations: Record<string, { pt: string; en: string }> = {
+    pix: {
+      pt: `PIX é a forma mais rápida de movimentar dinheiro na sua conta TalkToStellar. Você pode:
+TRAZER DINHEIRO (entrada): via PIX, o valor cai em reais e é convertido para US$ automaticamente pela melhor rota disponível. Basta abrir o link, escanear o QR e confirmar com PIN.
+RETIRAR DINHEIRO (saída): converte seu saldo em US$ para reais e envia direto para seu PIX. O valor chega em segundos na sua conta bancária.
+PAGAR ALGUÉM: depois de colocar dinheiro via PIX, você pode pagar um contato salvo automaticamente. Tudo com taxa transparente, mostrada antes da confirmação.`,
+      en: `PIX is the fastest way to move money in your TalkToStellar account. You can:
+BRING MONEY IN: via PIX, the amount arrives in reais and is converted to US$ automatically through the best available route. Just open the link, scan the QR code and confirm with PIN.
+WITHDRAW MONEY: converts your US$ balance to reais and sends it directly to your PIX. The amount arrives in seconds to your bank account.
+PAY SOMEONE: after depositing via PIX, you can automatically pay a saved contact. Everything with transparent fees, shown before confirmation.`,
+    },
+    assets: {
+      pt: `Sua conta TalkToStellar trabalha com várias moedas:
+USDC (US$): dólar digital lastreado 1:1. É a moeda principal para guardar e movimentar valores internacionais.
+BRL (R$): reais. Usado para PIX de entrada e saída. Internamente convertido pela melhor rota.
+CETES: ativo de teste em testnet. Representa opções de rendimento alternativas.
+XLM: ativo nativo da rede Stellar. Usado para pagar taxas de rede e manter a conta ativa. Aparece no saldo mas não é usado em operações do dia a dia.
+Todas as conversões entre moedas usam a rota mais otimizada disponível, com taxas mostradas antes da confirmação.`,
+      en: `Your TalkToStellar account works with multiple currencies:
+USDC (US$): digital dollar backed 1:1. The main currency for storing and moving international values.
+BRL (R$): reais. Used for PIX in and out. Internally converted through the best route.
+CETES: test asset on testnet. Represents alternative earnings options.
+XLM: native asset of the Stellar network. Used to pay network fees and keep the account active. Shown in balance but not used in day-to-day operations.
+All conversions between currencies use the most optimized available route, with fees shown before confirmation.`,
+    },
+    earnings: {
+      pt: `Rendimentos são opções para seu dinheiro render enquanto está na conta. Funciona assim:
+1. Você escolhe uma opção disponível (USDC, CETES ou XLM)
+2. Define o valor que quer aplicar
+3. Confirma com seu PIN
+4. Seu saldo fica aplicado e você acompanha a posição e a taxa estimada
+5. Pode retirar quando quiser
+As taxas são estimadas e variam conforme o ambiente. Em testnet, são valores simulados. Nada sai sem PIN.`,
+      en: `Earnings are options for your money to yield while in the account. Here's how it works:
+1. Choose an available option (USDC, CETES or XLM)
+2. Set the amount you want to apply
+3. Confirm with your PIN
+4. Your balance gets applied and you track the position and estimated rate
+5. You can withdraw whenever you want
+Rates are estimated and vary by environment. On testnet, they are simulated values. Nothing moves without PIN.`,
+    },
+    account: {
+      pt: `Sua conta TalkToStellar é uma conta digital que conecta reais (via PIX) com dólar digital (USDC). Você pode:
+- Ver saldo em R$, US$, CETES e XLM
+- Adicionar dinheiro via PIX
+- Converter entre moedas
+- Enviar para contatos salvos
+- Aplicar em rendimentos
+- Retirar para seu PIX
+Tudo com confirmação por PIN e taxas transparentes mostradas antes de cada operação.`,
+      en: `Your TalkToStellar account is a digital account that connects reais (via PIX) with digital dollars (USDC). You can:
+- Check balance in R$, US$, CETES and XLM
+- Add money via PIX
+- Convert between currencies
+- Send to saved contacts
+- Apply to earnings
+- Withdraw to your PIX
+Everything with PIN confirmation and transparent fees shown before each operation.`,
+    },
+    conversion: {
+      pt: `A conversão entre moedas no TalkToStellar usa a rota mais otimizada disponível. Quando você pede uma conversão:
+1. O sistema busca o melhor caminho entre as moedas
+2. Mostra a taxa, o valor de origem e o valor de destino
+3. Você confirma com PIN
+A conversão é instantânea e as taxas são sempre mostradas antes. Você pode converter entre R$, US$, CETES e as moedas disponíveis.`,
+      en: `Currency conversion on TalkToStellar uses the most optimized available route. When you request a conversion:
+1. The system finds the best path between currencies
+2. Shows the rate, source amount and destination amount
+3. You confirm with PIN
+Conversion is instant and fees are always shown before. You can convert between R$, US$, CETES and available currencies.`,
+    },
+    payments: {
+      pt: `Para enviar dinheiro no TalkToStellar:
+1. Escolha um contato salvo (ou adicione um novo)
+2. Informe o valor e a moeda
+3. O sistema mostra a taxa e o valor total
+4. Confirme com PIN
+O destinatário recebe na hora. Você também pode criar links de pagamento para cobrar alguém sem precisar de contato prévio.`,
+      en: `To send money on TalkToStellar:
+1. Choose a saved contact (or add a new one)
+2. Enter the amount and currency
+3. The system shows the fee and total amount
+4. Confirm with PIN
+The recipient receives it instantly. You can also create payment links to charge someone without needing a prior contact.`,
+    },
+    security: {
+      pt: `Sua segurança no TalkToStellar:
+- Toda operação financeira exige PIN de 4 a 8 dígitos
+- O PIN é seu e só você sabe. Ninguém do time tem acesso
+- Você pode redefinir o PIN a qualquer momento
+- A conta pode ser acessada com biometria (Passkey)
+- Todas as transações são registradas e auditáveis`,
+      en: `Your security on TalkToStellar:
+- Every financial operation requires a 4 to 8 digit PIN
+- The PIN is yours and only you know it. No team member has access
+- You can reset your PIN at any time
+- Account can be accessed with biometrics (Passkey)
+- All transactions are recorded and auditable`,
+    },
+  };
+
+  const allTopics = Object.entries(explanations)
+    .map(([key, value]) => `## ${key.toUpperCase()}\n${isEn ? value.en : value.pt}`)
+    .join('\n\n---\n\n');
+
+  const msg = topic === 'all'
+    ? allTopics
+    : explanations[topic]
+      ? (isEn ? explanations[topic].en : explanations[topic].pt)
+      : `Tópico "${topic}" não encontrado. Tópicos disponíveis: ${Object.keys(explanations).join(', ')} ou "all".`;
+
+  return JSON.stringify({ success: true, topic: topic === 'all' ? 'all' : topic, message: msg });
 }
 
 function executeGetIntentHelp(): string {

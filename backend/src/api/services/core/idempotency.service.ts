@@ -222,7 +222,7 @@ export class IdempotencyService {
     }
 
     if (existingRow.request_hash !== requestHash) {
-      return { conflict: 'Idempotency-Key reutilizada com payload diferente.' };
+      return { conflict: 'Este link expirou ou ja foi usado. Gere um novo link para continuar.' };
     }
 
     if (existingRow.status === 'completed') {
