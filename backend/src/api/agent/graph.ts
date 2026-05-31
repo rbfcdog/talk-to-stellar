@@ -4154,7 +4154,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const toolResultRaw = await executeTool('get_transaction_history', {
         public_key: state.session_data.public_key,
         user_id: state.session_data.user_id,
-        limit: 10,
+        limit: 5,
       });
 
       let toolResult: any;
@@ -4168,14 +4168,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.success = false;
         state.response_message = `Não consegui consultar suas transações agora: ${toolResult.error || 'erro desconhecido'}`;
       } else {
-        const transactions = Array.isArray(toolResult.transactions) ? toolResult.transactions : [];
+        const transactions = Array.isArray(toolResult.transactions) ? toolResult.transactions.slice(0, 5) : [];
         const formattedTransactions = transactions.length > 0
           ? transactions.map((transaction: any, index: number) => this.formatTransactionLine(transaction, index)).join('\n\n')
           : 'Nenhuma transação encontrada.';
         const historyUrl = await this.buildTransactionsHistoryUrl(state);
 
         state.success = true;
-        state.response_message = `Últimas transações da sua conta:\n${formattedTransactions}\n\nVer histórico completo:\n${historyUrl}`;
+        state.response_message = `Ver histórico completo:\n${historyUrl}\n\nÚltimas 5 transações da sua conta:\n${formattedTransactions}`;
       }
     }
 
