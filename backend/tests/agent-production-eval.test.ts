@@ -85,6 +85,34 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Não consegui entender');
   });
 
+  it('answers common product questions directly instead of falling back to the menu', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    graph.llm = {
+      bindTools: jest.fn(),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      balances: [
+        { asset: 'BRL', balance: '25.0000000' },
+        { asset: 'USDC', balance: '12.5000000' },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quanto eu tenho na conta?'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
+      session_id: 'eval-session',
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Saldo da sua conta');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
+  });
+
   it('lists saved contacts for direct contacts requests without the generic help fallback', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
@@ -115,6 +143,33 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Seus destinatários');
     expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('histórico: 2 envio(s)');
+  });
+
+  it('lists contacts even when the WhatsApp text has contact typos', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    graph.llm = {
+      bindTools: jest.fn(),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      contacts: [
+        {
+          contact_name: 'Bruna',
+          pix_key: 'bruna@pix',
+        },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meus conattos'));
+
+    expect(executeToolMock.mock.calls.filter(([name]) => name === 'list_contacts')).toHaveLength(1);
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Bruna');
+    expect(result.response_message).not.toContain('Posso ajudar com:');
   });
 
   it('adds a new contact when the user asks to add an email to contacts', async () => {
@@ -323,6 +378,8 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('show yield options', false));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_yield_options', {
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
@@ -341,11 +398,39 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('quero investir'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_yield_options', {
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('/rendimentos');
     expect(result.response_message).not.toContain('/money-cycle');
+  });
+
+  it('routes misspelled applications wording to application options without generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    graph.llm = {
+      bindTools: jest.fn(),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Abrir rendimentos:\nhttps://app.example.com/rendimentos',
+    }));
+
+    const result = await graph.processInput(createState('quero ver aolicacoes'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_yield_options', {
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
+      language: 'pt-BR',
+    });
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('/rendimentos');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
   });
 
   it('routes applications wording and typo variants to application options', async () => {
@@ -380,28 +465,14 @@ describe('Agent production evals', () => {
     expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
   });
 
-  it('routes PIX send wording through the LLM classifier tool instead of generic help', async () => {
+  it('routes PIX send wording through the product intent router instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const classifierInvoke = jest.fn().mockResolvedValue({
-      content: '',
-      additional_kwargs: {
-        tool_calls: [
-          {
-            id: 'classify-pix',
-            function: {
-              name: 'classify_talktostellar_intent',
-              arguments: '{"intent":"pix","confidence":0.99}',
-            },
-          },
-        ],
-      },
-    });
     graph.llm = {
-      bindTools: jest.fn(() => ({ invoke: classifierInvoke })),
+      bindTools: jest.fn(),
       invoke: jest.fn(),
     };
     graph.externalService = {
@@ -411,8 +482,8 @@ describe('Agent production evals', () => {
     try {
       const result = await graph.processInput(createState('quero mandar 100 reais no pix'));
 
-      expect(graph.llm.bindTools).toHaveBeenCalled();
-      expect(classifierInvoke).toHaveBeenCalled();
+      expect(graph.llm.bindTools).not.toHaveBeenCalled();
+      expect(graph.llm.invoke).not.toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.detected_intent).toBe(IntentType.PIX);
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);

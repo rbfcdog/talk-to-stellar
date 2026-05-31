@@ -538,11 +538,98 @@ export class AgentGraph {
     };
   }
 
+  private repairNoisyIntentText(value: string): string {
+    return String(value || '')
+      .replace(/\b(?:conattos|conatatos|contatoss|conatios|contstos)\b/g, 'contatos')
+      .replace(/\b(?:destinatarioss|destinatrios|destinatarioos)\b/g, 'destinatarios')
+      .replace(/\b(?:historicp|historic0|histirico|historioc|historio|historicoo|historic)\b/g, 'historico')
+      .replace(/\b(?:aolicacoes|aolicacao|aplicacoe|aplicaoes|aplicacoeses|aplicacaoes)\b/g, 'aplicacoes')
+      .replace(/\b(?:aolicar|aplicarrr|aplcar)\b/g, 'aplicar')
+      .replace(/\b(?:investimetos|ivestimentos|investimntos|investimentos)\b/g, 'investimentos')
+      .replace(/\b(?:rendimetos|rendimntos|rendimentos)\b/g, 'rendimentos')
+      .replace(/\b(?:posicaoes|posicoees|posicoes)\b/g, 'posicoes')
+      .replace(/\b(?:saldp|saldoo|saldos)\b/g, 'saldo')
+      .replace(/\b(?:perfi|perfill|perfio)\b/g, 'perfil')
+      .replace(/\b(?:rotta|rotaaa|rotas)\b/g, 'rota')
+      .replace(/\b(?:agota|agpra|agoraa)\b/g, 'agora')
+      .replace(/\b(?:consguee|consege|consegui|conseg|consgue|conseguee)\b/g, 'consegue')
+      .replace(/\b(?:possso|possooo|possoo)\b/g, 'posso')
+      .replace(/\b(?:vocee|voceee|vc)\b/g, 'voce')
+      .replace(/\b(?:pixx|piz|pic)\b/g, 'pix')
+      .replace(/\b(?:conversaoo|convercao|converssa?o|convertion)\b/g, 'conversao')
+      .replace(/\b(?:converterr|convereter|converteer)\b/g, 'converter')
+      .replace(/\b(?:mandarr|mandaer|mndar)\b/g, 'mandar')
+      .replace(/\b(?:enviarrr|envair|enviaar)\b/g, 'enviar')
+      .replace(/\b(?:retirarr|sacarr|saqeu|saquei)\b/g, (match) => match.startsWith('sa') ? 'sacar' : 'retirar')
+      .replace(/\b(?:comta|contaa)\b/g, 'conta')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   private normalizeTextForIntent(text: string): string {
-    return String(text || '')
+    const normalized = String(text || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
+    return this.repairNoisyIntentText(normalized);
+  }
+
+  private isBalanceRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+    const asksBalance = /\b(saldo|quanto tenho|quanto eu tenho|dinheiro disponivel|disponivel|balance|balances)\b/.test(normalized);
+    const excludesHistory = /\b(historico|extrato|movimentacoes|transacoes|recibos|comprovantes)\b/.test(normalized);
+    const excludesApplicationPosition = /\b(rendimentos|aplicacoes|investimentos|posicoes|posicao)\b/.test(normalized);
+    return asksBalance && !excludesHistory && !excludesApplicationPosition;
+  }
+
+  private isConversionRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return false;
+    return /\b(converter|conversao|trocar|cambiar|exchange|swap)\b/.test(normalized) ||
+      /\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b.*\b(?:para|pra|por|em)\b.*\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized);
+  }
+
+  private isLikelyPaymentRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return false;
+    if (this.isPaymentLinkRequest(normalized)) return false;
+    const hasPayVerb = /\b(mandar|enviar|pagar|transferir|fazer pagamento|send|pay|transfer)\b/.test(normalized);
+    const hasRecipient = /\b(?:para|pra|pro|a)\s+[a-z0-9._%+-]+/.test(normalized);
+    return hasPayVerb && hasRecipient;
+  }
+
+  private classifyHighConfidenceProductIntent(text: string): IntentType | null {
+    const normalized = this.normalizeTextForIntent(text);
+    if (!normalized) return null;
+
+    if (/\b(logout|deslogar|sair da conta|desconectar|encerrar sessao|sign out|log out)\b/.test(normalized)) {
+      return IntentType.WALLET_LOGOUT;
+    }
+    if (this.isContactsRequest(normalized)) return IntentType.CONTACTS;
+    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return IntentType.PIX;
+    if (this.extractYieldIntentFromText(normalized).is_yield) return IntentType.YIELD;
+    if (this.isRampHistoryRequest(normalized) || this.isTransactionHistoryRequest(normalized)) return IntentType.HISTORY;
+    if (this.isBalanceRequest(normalized)) return IntentType.BALANCE;
+    if (this.isPaymentLinkRequest(normalized) || this.isReceiveLinkRequest(normalized)) return IntentType.PAYMENT_LINK;
+    if (this.isOptimizedRouteRequest(normalized)) return IntentType.PRICE_QUOTE;
+    if (this.isConversionRequest(normalized)) return IntentType.CONVERSION;
+    if (this.isLikelyPaymentRequest(normalized)) return IntentType.PAYMENT;
+    if (/\b(entrar|login|acessar conta|sign in)\b/.test(normalized)) return IntentType.LOGIN;
+    if (/\b(criar conta|nova conta|cadastro|cadastrar|onboard)\b/.test(normalized)) return IntentType.ONBOARD;
+
+    return null;
   }
 
   private normalizeHistoryIntentText(text: string): string {
@@ -665,16 +752,25 @@ export class AgentGraph {
       .trim();
     const fuzzy = normalized
       .replace(/([a-z])\1+/g, '$1$1')
-      .replace(/consguee|consegui|consegu|conseg|consego/gi, 'consegue')
-      .replace(/voce?e?|vc/gi, 'voce')
-      .replace(/faze?|fazer|faco/gi, 'fazer')
+      .replace(/\b(?:consguee|consegui|consegu|conseg|consego|conseguee)\b/gi, 'consegue')
+      .replace(/\b(?:voce|vc)\b/gi, 'voce')
+      .replace(/\b(?:fazer|faze|faco)\b/gi, 'fazer')
       .trim();
+    const asksCapabilities =
+      /\bo\s+que\b.*\b(?:voce\s+)?(?:pode|consegue)\b.*\bfazer\b/.test(fuzzy) ||
+      /\bo\s+que\b.*\b(?:eu\s+)?posso\b.*\bfazer\b/.test(fuzzy) ||
+      /\b(?:quais|que)\b.*\b(?:funcionalidades|comandos|coisas)\b/.test(fuzzy);
     return (
       normalized === 'ajuda' ||
       normalized === 'help' ||
       normalized === 'menu' ||
+      asksCapabilities ||
       fuzzy.includes('o que fazer') ||
+      fuzzy.includes('o que posso fazer') ||
+      fuzzy.includes('o que eu posso fazer') ||
       fuzzy.includes('oq fazer') ||
+      fuzzy.includes('que posso fazer') ||
+      fuzzy.includes('que eu posso fazer') ||
       fuzzy.includes('que pode fazer') ||
       fuzzy.includes('que consegue fazer') ||
       fuzzy.includes('que da para fazer') ||
@@ -2707,6 +2803,12 @@ export class AgentGraph {
       .replace(/\s+/g, ' ')
       .trim();
 
+    const looksLikeApplicationRequest =
+      /\b(rendendo|rendimento|rendimentos|render|investir|investimento|investimentos|aplicar|aplicacao|aplicacoes|posicao|posicoes)\b/.test(normalized);
+    if (looksLikeApplicationRequest) {
+      return null;
+    }
+
     if (!normalized || !this.isContactsRequest(normalized)) {
       const addVerbFallback = /\b(adicion(?:a|ar|e)?|salv(?:a|ar|e)?|inclu(?:i|ir|a)?|cadastr(?:a|ar|e)?|novo contato|criar contato|coloc(?:a|ar|e)?|guardar|registrar)\b/.test(normalized);
       if (!addVerbFallback) {
@@ -3119,6 +3221,9 @@ export class AgentGraph {
   }
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
+    const normalizedMessage = this.normalizeTextForIntent(message);
+    const highConfidenceIntent = this.classifyHighConfidenceProductIntent(message);
+
     try {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
@@ -3200,7 +3305,13 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
 
       const messages = [
         new SystemMessage({ content: systemPrompt }),
-        new HumanMessage({ content: message }),
+        new HumanMessage({
+          content: [
+            `original_message: ${message}`,
+            `normalized_message: ${normalizedMessage}`,
+            'Classify by the normalized semantic meaning, but preserve the original user language for downstream response.',
+          ].join('\n'),
+        }),
       ];
 
       const maybeBind = (this.llm as any).bindTools;
@@ -3220,9 +3331,19 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
             classifierCall?.args?.detected_intent ||
             classifierCall?.args?.label
           );
-          if (toolIntent) {
+          const confidence = Number(classifierCall?.args?.confidence);
+          const hasReliableToolIntent = toolIntent && (
+            toolIntent !== IntentType.GENERAL ||
+            !highConfidenceIntent ||
+            (Number.isFinite(confidence) && confidence >= 0.85)
+          );
+          if (hasReliableToolIntent) {
             logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
             return toolIntent;
+          }
+          if (highConfidenceIntent) {
+            logger.debug(`Intent: "${message}" -> ${highConfidenceIntent}; via=semantic_repair_after_classifier intent=${toolIntent || 'none'} confidence=${Number.isFinite(confidence) ? confidence : 'n/a'}`);
+            return highConfidenceIntent;
           }
           logger.warn(`[Agent] Intent classifier tool returned no usable call: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
         } catch (toolError) {
@@ -3232,14 +3353,17 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
 
       const response = await this.llm.invoke(messages);
 
-      const detectedIntent = this.parseIntentFromLlmOutput(response.content) || IntentType.GENERAL;
+      const parsedIntent = this.parseIntentFromLlmOutput(response.content);
+      const detectedIntent = parsedIntent && (parsedIntent !== IntentType.GENERAL || !highConfidenceIntent)
+        ? parsedIntent
+        : highConfidenceIntent || parsedIntent || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Intent detection failed: ${errorMessage}`);
-      return IntentType.GENERAL;
+      return highConfidenceIntent || IntentType.GENERAL;
     }
   }
 
@@ -4852,6 +4976,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.current_input,
         this.hasPendingNicknamePrompt(state)
       );
+      const semanticProductIntent = this.classifyHighConfidenceProductIntent(state.current_input);
 
       const urgentIntents = wantsReceiptImage ? IntentType.HISTORY
         : wantsTransactionHistory ? IntentType.HISTORY
@@ -4862,7 +4987,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           /\b(?:sacar|retirar|tirar|saque)\b.*\bpix\b/i.test(state.current_input) ||
           /\bmandar\s+(?:pra|para|pro|a)\s+fora\b/i.test(state.current_input)
         ? IntentType.PIX
-        : null;
+        : semanticProductIntent;
 
       state.detected_intent = urgentIntents || await this.detectIntent(state.current_input, state.session_data?.user_id);
       state.action_type = this.mapIntentToAction(state.detected_intent);
@@ -5019,6 +5144,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
+      }
+
+      if (state.action_type === ActionType.GET_BALANCE) {
+        return await this.handleBalanceCheck(state);
       }
 
       if (state.action_type === ActionType.LIST_CONTACTS) {
