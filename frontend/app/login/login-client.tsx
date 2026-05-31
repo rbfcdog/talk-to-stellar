@@ -706,11 +706,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     actionLockRef.current ||
     status === "pin" ||
     status === "passkey" ||
-    !loginEmail ||
+    (!isExternalLoginOnlyContext && !loginEmail) ||
     !pin.trim() ||
     (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
 
-  const useExternalPinOnlyLogin = hasExternalContext && Boolean(externalResolvedLogin)
+  const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext
   const displayedResolvedLogin = externalResolvedLogin ? maskLoginEmail(externalResolvedLogin) : ""
 
   return (
