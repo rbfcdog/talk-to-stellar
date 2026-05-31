@@ -15,6 +15,12 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   },
 }));
 
+jest.mock('../src/api/services/fiat-rate.service', () => ({
+  FiatRateService: {
+    getUsdBrlRate: jest.fn(),
+  },
+}));
+
 describe('AnchorService off-ramp balance validation', () => {
   const originalEnv = { ...process.env };
 
@@ -22,6 +28,7 @@ describe('AnchorService off-ramp balance validation', () => {
     process.env = { ...originalEnv };
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    delete process.env.TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY;
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
       sandbox: true,
       provider: 'etherfuse',
@@ -41,6 +48,12 @@ describe('AnchorService off-ramp balance validation', () => {
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
     (BrlReferenceRateService.quoteUsdcToBrl as jest.Mock).mockResolvedValue({
       destinationAmount: '51300.0000000',
+    });
+    jest.requireMock('../src/api/services/fiat-rate.service').FiatRateService.getUsdBrlRate.mockResolvedValue({
+      brlPerUsd: 5.13,
+      source: 'market:test:USD-BRL',
+      fetchedAt: '2026-05-31T12:00:00.000Z',
+      fallbackApplied: false,
     });
   });
 
@@ -114,6 +127,40 @@ describe('AnchorService off-ramp balance validation', () => {
       destAmount: '100',
     }));
     expect(result.source_amount).toBe('18.5000000');
+    expect(result.target_brl).toBe('100');
+    expect(result.amount_tesouro).toBe('100.0000000');
+  });
+
+  it('falls back to the market USD/BRL reference when USDC testnet liquidity is distorted for PIX target amount', async () => {
+    (StellarService as any).quotePathPayment.mockRejectedValue(
+      new Error('strict-receive path quote: Cotação BRL/USDC da Stellar desvia 80% da referência USD/BRL de mercado')
+    );
+    jest.spyOn(AnchorService as any, 'createCustomerForSession').mockResolvedValue({
+      customer: {
+        id: 'customer-1',
+        kycStatus: 'not_started',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    jest.spyOn(AnchorService as any, 'getQuoteForSession').mockResolvedValue({
+      quote: {
+        id: 'quote-1',
+        fromAmount: '100.0000000',
+        toAmount: '100.0000000',
+      },
+    });
+
+    const result = await AnchorService.previewOffRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      amount: '100',
+      target_brl: '100',
+      source_asset_code: 'USDC',
+      amount_currency: 'USDC',
+    });
+
+    expect(Number(result.source_amount)).toBeCloseTo(19.4931774, 6);
     expect(result.target_brl).toBe('100');
     expect(result.amount_tesouro).toBe('100.0000000');
   });

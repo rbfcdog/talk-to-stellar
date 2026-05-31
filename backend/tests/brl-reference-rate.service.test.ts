@@ -84,7 +84,7 @@ describe('BrlReferenceRateService', () => {
     expect(Number(offChainOut.brlPerUsdc)).toBeCloseTo(Number(insideConversionOut.brlPerUsdc), 8);
   });
 
-  it('allows direct TESOURO testnet liquidity even when it deviates from external market reference', async () => {
+  it('rejects direct TESOURO testnet liquidity when it deviates from the market reference', async () => {
     strictSendPathsMock.mockReturnValue({
       call: jest.fn().mockResolvedValue({
         records: [{ destination_amount: '43.8720000', path: [] }],
@@ -97,11 +97,7 @@ describe('BrlReferenceRateService', () => {
       fallbackApplied: false,
     });
 
-    const quote = await BrlReferenceRateService.quoteUsdcToBrl('10');
-
-    expect(quote.destinationAsset.code).toBe('TESOURO');
-    expect(quote.destinationAmount).toBe('43.8720000');
-    expect(quote.brlPerUsdc).toBe('4.38720000');
+    await expect(BrlReferenceRateService.quoteUsdcToBrl('10')).rejects.toThrow(/desvia/);
   });
 
   it('rejects paths that do not use configured trusted issuers', async () => {
