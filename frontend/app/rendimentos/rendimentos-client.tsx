@@ -22,7 +22,7 @@ import { getClientSession } from "@/lib/session";
 type ApiState = { loading: boolean; message: string; error: string };
 type YieldApiError = Error & { code?: string; requestId?: string; supportCode?: string };
 type YieldStep = "plan" | "review";
-type SessionState = { authenticated: boolean; sessionId?: string; loading?: boolean; checked?: boolean };
+type SessionState = { authenticated: boolean; sessionId?: string; sessionSource?: string; externalPriority?: boolean; loading?: boolean; checked?: boolean };
 type BalanceLine = { asset_code: string; asset_type?: string; asset_issuer?: string; balance: string };
 type YieldOption = {
   asset_code: string; asset_issuer?: string; display_asset_code?: string; vault_address: string;
@@ -140,6 +140,9 @@ export default function RendimentosClient({
     if (tab !== next) setTab(next);
   }, [initialView]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
+  const [returnsPin, setReturnsPin] = useState("");
+  const [returnsPinVerified, setReturnsPinVerified] = useState(false);
+  const [returnsPinState, setReturnsPinState] = useState<ApiState>({ loading: false, message: "", error: "" });
   const [yieldStatus, setYieldStatus] = useState<YieldStatus | null>(null);
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [selectedCode, setSelectedCode] = useState("USDC");
@@ -172,6 +175,8 @@ export default function RendimentosClient({
   const selectedHasYield = Boolean(selectedOption);
   const selectedExecutionBlocked = optionExecutionBlocked(actionableOption);
   const sessionLoading = Boolean(session.loading && !session.checked);
+  const requiresChannelPin = Boolean(session.authenticated && session.externalPriority);
+  const channelPinUnlocked = !requiresChannelPin || returnsPinVerified;
   const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const requestedAmount = normalizeDecimal(amount);
@@ -194,6 +199,11 @@ export default function RendimentosClient({
     return ["10", "50", "100", "250"];
   }, [selectedProfile.short]);
 
+  async function refreshAccountBalances() {
+    const accountPayload = await yieldApi("etherfuse/wallet-balances", undefined, 20000);
+    setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
+  }
+
   useEffect(() => {
     if (loadedDataRef.current) return;
     loadedDataRef.current = true;
@@ -205,13 +215,18 @@ export default function RendimentosClient({
         const sessionPayload = await getClientSession();
         const nextSession = { ...sessionPayload, loading: false, checked: true };
         setSession(nextSession);
-        const accountPromise = nextSession.authenticated ? yieldApi("etherfuse/wallet-balances", undefined, 20000) : Promise.resolve(null);
+        const accountPromise = nextSession.authenticated && !nextSession.externalPriority ? yieldApi("etherfuse/wallet-balances", undefined, 20000) : Promise.resolve(null);
         const statusPayload = await statusPromise;
         setYieldStatus(statusPayload);
         const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
         const bestAvailable = vaults[0] || null;
         if (!requestedAssetRef.current && bestAvailable) setSelectedCode((c) => vaults.some((item: YieldOption) => optionCode(item) === c) ? c : optionCode(bestAvailable));
         if (!nextSession.authenticated) { setBalances([]); setApiState({ loading: false, message: L("Entre para ver seus saldos.", "Sign in to see balances."), error: "" }); return; }
+        if (nextSession.externalPriority) {
+          setBalances([]);
+          setApiState({ loading: false, message: L("Confirme seu PIN para ver seus rendimentos.", "Confirm your PIN to see your returns."), error: "" });
+          return;
+        }
         const accountPayload = await accountPromise;
         setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
         setApiState({ loading: false, message: "", error: "" });
@@ -223,9 +238,15 @@ export default function RendimentosClient({
     })();
   }, []);
 
+  useEffect(() => {
+    setReturnsPin("");
+    setReturnsPinVerified(false);
+    setReturnsPinState({ loading: false, message: "", error: "" });
+  }, [session.sessionId, session.sessionSource]);
+
   useEffect(() => { setYieldResult(null); setPin(""); }, [action, amount, actionableOption?.vault_address, safeSelectedCode]);
   useEffect(() => {
-    if (tab !== "returns" || !session.authenticated || !options.length) return;
+    if (tab !== "returns" || !session.authenticated || !options.length || !channelPinUnlocked) return;
     let cancelled = false;
     const initial = Object.fromEntries(options.map((o) => [optionCode(o), { loading: true, amount: "0", error: "" }]));
     setPositionBalances(initial);
@@ -239,7 +260,27 @@ export default function RendimentosClient({
       }
     })).then((entries) => { if (!cancelled) setPositionBalances(Object.fromEntries(entries)); });
     return () => { cancelled = true; };
-  }, [tab, session.authenticated, options, language]);
+  }, [tab, session.authenticated, options, language, channelPinUnlocked]);
+
+  async function unlockChannelReturns() {
+    const nextPin = returnsPin.replace(/\D/g, "").slice(0, 8);
+    if (nextPin.length < 4) return;
+    setReturnsPinState({ loading: true, message: "", error: "" });
+    try {
+      await yieldApi("session/verify-pin", {
+        method: "POST",
+        body: JSON.stringify({ pin: nextPin, wallet_pin: nextPin }),
+      }, 18000);
+      setReturnsPin("");
+      setApiState({ loading: true, message: "", error: "" });
+      await refreshAccountBalances();
+      setReturnsPinVerified(true);
+      setReturnsPinState({ loading: false, message: "", error: "" });
+      setApiState({ loading: false, message: "", error: "" });
+    } catch (error) {
+      setReturnsPinState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
+    }
+  }
 
   async function prepareYield() {
     if (!actionableOption) return;
@@ -296,35 +337,89 @@ export default function RendimentosClient({
           </div>
         )}
 
-        {tab === "returns" && (
-          <ReturnsTab
-            language={language} session={session} sessionLoading={sessionLoading} options={options}
-            positionBalances={positionBalances} isTestnet={isTestnetYield}
-            onRefresh={() => {}} newApplicationUrl={newApplicationUrl}
+        {requiresChannelPin && !returnsPinVerified ? (
+          <ChannelPinGate
+            language={language}
+            pin={returnsPin}
+            onPinChange={(value) => setReturnsPin(value.replace(/\D/g, "").slice(0, 8))}
+            onSubmit={unlockChannelReturns}
+            state={returnsPinState}
           />
-        )}
+        ) : (
+          <>
+            {tab === "returns" && (
+              <ReturnsTab
+                language={language} session={session} sessionLoading={sessionLoading} options={options}
+                positionBalances={positionBalances} isTestnet={isTestnetYield}
+                onRefresh={() => {}} newApplicationUrl={newApplicationUrl}
+              />
+            )}
 
-        {tab === "apply" && (
-          <ApplyTab
-            language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
-            amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
-            action={action} onActionChange={setAction}
-            selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
-            options={options} onSelectCode={setSelectedCode}
-            selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
-            selectedBalanceInsufficient={selectedBalanceInsufficient}
-            balanceForSelected={balanceForSelected}
-            alternativeConversionCode={alternativeConversionCode}
-            activeStep={activeStep} setActiveStep={setActiveStep}
-            yieldResult={yieldResult} canPrepare={canPrepare}
-            confirmationEnabled={confirmationEnabled} configured={configured}
-            pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
-            onPrepare={prepareYield} onConfirm={confirmYield}
-            convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
-          />
+            {tab === "apply" && (
+              <ApplyTab
+                language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
+                amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
+                action={action} onActionChange={setAction}
+                selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
+                options={options} onSelectCode={setSelectedCode}
+                selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
+                selectedBalanceInsufficient={selectedBalanceInsufficient}
+                balanceForSelected={balanceForSelected}
+                alternativeConversionCode={alternativeConversionCode}
+                activeStep={activeStep} setActiveStep={setActiveStep}
+                yieldResult={yieldResult} canPrepare={canPrepare}
+                confirmationEnabled={confirmationEnabled} configured={configured}
+                pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
+                onPrepare={prepareYield} onConfirm={confirmYield}
+                convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+              />
+            )}
+          </>
         )}
       </div>
     </main>
+  );
+}
+
+function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
+  language: AppLanguage; pin: string; onPinChange: (value: string) => void; onSubmit: () => void; state: ApiState;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const canSubmit = pin.length >= 4 && !state.loading;
+  return (
+    <div className="mx-auto max-w-md border border-tts-border bg-tts-surface p-6">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-tts-confirm/15 text-tts-confirm">
+          <LockKeyhole className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold">{L("Confirme seu PIN", "Confirm your PIN")}</h2>
+          <p className="text-sm text-tts-muted">{L("Acesso aberto pelo WhatsApp pede PIN antes de mostrar rendimentos.", "WhatsApp access requires your PIN before showing returns.")}</p>
+        </div>
+      </div>
+
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-tts-muted">PIN</label>
+      <input
+        value={pin}
+        onChange={(event) => onPinChange(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Enter" && canSubmit) onSubmit(); }}
+        inputMode="numeric"
+        type="password"
+        autoComplete="current-password"
+        className="w-full border border-tts-border bg-tts-bg px-4 py-3 text-base font-bold outline-none focus:border-tts-deep"
+      />
+
+      {state.error && <p className="mt-3 text-sm font-semibold text-tts-error">{state.error}</p>}
+
+      <button
+        onClick={onSubmit}
+        disabled={!canSubmit}
+        className="mt-4 flex w-full items-center justify-center gap-2 bg-tts-deep px-4 py-3 text-sm font-bold text-tts-surface disabled:opacity-40"
+      >
+        {state.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
+        {L("Ver rendimentos", "View returns")}
+      </button>
+    </div>
   );
 }
 

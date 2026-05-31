@@ -5,6 +5,13 @@ const SESSION_ID_KEY = "talk-to-stellar.sessionId";
 const SESSION_TOKEN_KEY = "talk-to-stellar.sessionToken";
 const SESSION_REQUEST_TIMEOUT_MS = 5000;
 
+export type ClientSession = {
+  sessionId: string;
+  authenticated: boolean;
+  sessionSource: string;
+  externalPriority: boolean;
+};
+
 function normalizeTimestamp(raw: string | null): number {
   const parsed = Number(raw || "0");
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
@@ -12,9 +19,16 @@ function normalizeTimestamp(raw: string | null): number {
   return parsed < 1_000_000_000_000 ? parsed * 1000 : parsed;
 }
 
-/** Read the server's view of the current session (sessionId + authenticated flag) via /api/session. */
-export async function getClientSession(): Promise<{ sessionId: string; authenticated: boolean }> {
-  if (typeof window === "undefined") return { sessionId: "", authenticated: false };
+const EMPTY_CLIENT_SESSION: ClientSession = {
+  sessionId: "",
+  authenticated: false,
+  sessionSource: "",
+  externalPriority: false,
+};
+
+/** Read the server's view of the current session via /api/session. */
+export async function getClientSession(): Promise<ClientSession> {
+  if (typeof window === "undefined") return EMPTY_CLIENT_SESSION;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), SESSION_REQUEST_TIMEOUT_MS);
   try {
@@ -27,9 +41,11 @@ export async function getClientSession(): Promise<{ sessionId: string; authentic
     return {
       sessionId: String(payload?.session_id || payload?.sessionId || "").trim(),
       authenticated: Boolean(payload?.authenticated),
+      sessionSource: String(payload?.session_source || payload?.sessionSource || "").trim(),
+      externalPriority: Boolean(payload?.external_priority || payload?.externalPriority),
     };
   } catch {
-    return { sessionId: "", authenticated: false };
+    return EMPTY_CLIENT_SESSION;
   } finally {
     window.clearTimeout(timeout);
   }

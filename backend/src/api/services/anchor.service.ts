@@ -1292,6 +1292,20 @@ export class AnchorService {
     return pin;
   }
 
+  static async verifySessionPin(input: RampSessionInput): Promise<{
+    authenticated: true;
+    session_id: string;
+    user_id: string;
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    this.requireWalletPin(input, context);
+    return {
+      authenticated: true,
+      session_id: context.sessionId,
+      user_id: context.userId,
+    };
+  }
+
   static async getOrCreateExternalBankAccountForSession(input: ExternalBankAccountInput): Promise<{
     external_bank_account: ExternalBankAccount;
   }> {
