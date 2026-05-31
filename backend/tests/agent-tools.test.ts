@@ -160,6 +160,8 @@ describe('Agent tool execution', () => {
       'PIN',
     ]));
     expect(parsed.message).toContain('R$, US$, CETES');
+    expect(parsed.message).toContain('XLM');
+    expect(parsed.message).toContain('Também posso explicar');
     expect(parsed.message).toContain('1. Contatos');
     expect(parsed.message).toContain('Link de pagamento');
     expect(parsed.message).toContain('Aplicações e posições');
@@ -170,6 +172,30 @@ describe('Agent tool execution', () => {
     expect(JSON.stringify(parsed)).not.toMatch(/rendendo|APY/i);
     expect(parsed.message).not.toMatch(/ciclo completo|money cycle|sair para meu PIX/i);
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
+  });
+
+  it('returns coded product context for LLM explanations', async () => {
+    const output = await executeTool('get_product_context', {
+      topic: 'all',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.features.map((item: any) => item.key)).toEqual(expect.arrayContaining([
+      'contacts',
+      'balance',
+      'pix',
+      'conversion',
+      'rendimentos',
+    ]));
+    expect(parsed.assets.map((item: any) => item.code)).toEqual(expect.arrayContaining([
+      'BRL',
+      'USDC',
+      'CETES',
+      'XLM',
+    ]));
+    expect(parsed.rendimentos.user_copy).toContain('Nada é confirmado sem PIN');
   });
 
   it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
@@ -399,10 +425,8 @@ describe('Agent tool execution', () => {
       currency: 'BRL',
       name: 'reais',
     });
-    expect(parsed.frontend_url).toContain('/rendimentos?');
-    expect(parsed.frontend_url).toContain('view=application');
-    expect(parsed.frontend_url).toContain('asset=BRL');
-    expect(parsed.frontend_url).toContain('amount=100');
+    expect(parsed.frontend_url).toContain('/r/');
+    expect(parsed.message).toContain(parsed.frontend_url);
     expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
       session_id: '11111111-1111-4111-8111-111111111111',
       action: 'deposit',
@@ -416,6 +440,19 @@ describe('Agent tool execution', () => {
   });
 
   it('opens frontend interfaces for broad multi-asset money intents', async () => {
+    const bringOutput = await executeTool('open_asset_interface', {
+      action: 'bring',
+      amount: '100',
+      language: 'pt-BR',
+    });
+    const bring = JSON.parse(bringOutput);
+
+    expect(bring.success).toBe(true);
+    expect(bring.asset_code).toBe('BRL');
+    expect(bring.frontend_url).toContain('/pix-on?');
+    expect(bring.frontend_url).toContain('asset=BRL');
+    expect(bring.frontend_url).toContain('currency=BRL');
+
     const keepOutput = await executeTool('open_asset_interface', {
       action: 'keep',
       amount: '50',
@@ -468,15 +505,27 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.action).toBe('conversion_interface');
+    expect(parsed.action).toBe('conversion_confirmation_prefill');
     expect(parsed.source_asset_code).toBe('BRL');
     expect(parsed.dest_asset_code).toBe('CETES');
     expect(parsed.frontend_url).toContain('/convert?');
     expect(parsed.frontend_url).toContain('amount=500');
     expect(parsed.frontend_url).toContain('source_asset=BRL');
     expect(parsed.frontend_url).toContain('dest_asset=CETES');
-    expect(parsed.message).toContain('Conversion is ready to confirm');
+    expect(parsed.message).toContain('Conversion is ready to review');
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|issuer|trustline|XDR/i);
+  });
+
+  it('opens the conversion picker when amount or assets are missing', async () => {
+    const output = await executeTool('open_conversion_interface', {
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.action).toBe('conversion_picker');
+    expect(parsed.frontend_url).toContain('/convert?');
+    expect(parsed.message).toContain('escolher valor e moedas');
   });
 
   it('sanitizes yield confirmation setup errors before returning them to chat', async () => {

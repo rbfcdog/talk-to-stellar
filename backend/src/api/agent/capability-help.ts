@@ -12,6 +12,7 @@ export function buildCapabilityHelpMessage(): string {
     "9. Histórico — ver operações, conversões, PIX, comprovantes e apelidos. Ex.: \"ver histórico\".",
     "10. Perfil, PIN e acesso — abrir perfil, entrar de novo, trocar ou recuperar PIN e usar biometria quando disponível. Ex.: \"ver meu perfil\".",
     "",
+    "Também posso explicar como cada funcionalidade funciona, o que significa cada ativo e como consultar posições/rendimentos.",
     "Pode escrever normal. Quando envolver dinheiro, mande valor, moeda e destino."
   ].join("\n");
 }
