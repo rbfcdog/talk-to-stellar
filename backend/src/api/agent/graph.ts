@@ -2042,6 +2042,107 @@ export class AgentGraph {
     };
   }
 
+  private extractConversionBestRouteEstimateIntent(text: string): {
+    amount: string;
+    destAssetCode: string;
+    sourceAssetCode: string;
+  } | null {
+    const normalized = this.normalizeTextForIntent(text);
+    if (!this.isOptimizedRouteRequest(text)) return null;
+    const isConversionRoute = this.isConversionRequest(normalized) ||
+      /\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b.*\b(?:para|pra|por|em)\b.*\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized);
+    if (!isConversionRoute) return null;
+
+    const amount = this.extractAmountFollowUpFromText(normalized);
+    if (!amount) return null;
+
+    const inferredAssets = this.inferConversionAssetsFromText(normalized);
+    const sourceAssetCode = this.normalizeAgentAssetCode(inferredAssets.sourceAssetCode || '');
+    const destAssetCode = this.normalizeAgentAssetCode(inferredAssets.destAssetCode || '');
+    if (!sourceAssetCode || !destAssetCode || sourceAssetCode === destAssetCode) return null;
+
+    const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
+      ? ['BRL', 'USDC', 'CETES', 'XLM']
+      : ['BRL', 'USDC', 'EUR', 'XLM'];
+    if (!allowedRouteAssets.includes(sourceAssetCode) || !allowedRouteAssets.includes(destAssetCode)) {
+      return null;
+    }
+
+    return {
+      amount,
+      sourceAssetCode,
+      destAssetCode,
+    };
+  }
+
+  private async handleBestRouteConversionEstimate(state: AgentState, estimate: {
+    amount: string;
+    destAssetCode: string;
+    sourceAssetCode: string;
+  }): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const publicKey = String(state.session_data?.public_key || '').trim();
+    if (!publicKey) {
+      state.success = false;
+      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const routeSourceAssetCode = this.toSettlementAssetCode(estimate.sourceAssetCode) || estimate.sourceAssetCode;
+    const routeDestAssetCode = this.toSettlementAssetCode(estimate.destAssetCode) || estimate.destAssetCode;
+    const sourceIssuer = getAssetIssuer(routeSourceAssetCode) ||
+      await this.resolveWalletAssetIssuer(publicKey, routeSourceAssetCode);
+    const destIssuer = getAssetIssuer(routeDestAssetCode) ||
+      await this.resolveWalletAssetIssuer(publicKey, routeDestAssetCode);
+
+    const raw = await executeTool('get_best_route', {
+      source_public_key: publicKey,
+      destination: publicKey,
+      source_amount: estimate.amount,
+      source_asset_code: routeSourceAssetCode,
+      source_asset_issuer: sourceIssuer,
+      dest_asset_code: routeDestAssetCode,
+      dest_asset_issuer: destIssuer,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      result = { success: false, error: 'route_quote_parse_failed' };
+    }
+
+    if (!result?.success) {
+      state.success = false;
+      state.response_message = result?.error || this.conversionUnavailableMessage(language);
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const sourceAmount = String(result.source?.amount || result.quote?.sourceAmount || estimate.amount).trim();
+    const destinationAmount = String(result.destination?.amount || result.quote?.destinationAmount || '').trim();
+    const rate = this.toAmountNumber(result.effective_rate?.destination_per_source);
+    const transparencyLine = this.formatBestRouteTransparency(result);
+    const rateLine = rate > 0
+      ? `Cotação efetiva: 1 ${this.formatUserFacingAssetName(estimate.sourceAssetCode, language)} ≈ ${this.formatMoneyByAsset(String(rate), estimate.destAssetCode)}.`
+      : '';
+
+    state.success = true;
+    state.response_message = [
+      `Melhor rota agora para converter ${this.formatMoneyByAsset(sourceAmount, estimate.sourceAssetCode)} em ${this.formatUserFacingAssetName(estimate.destAssetCode, language)}:`,
+      destinationAmount ? `Recebe aproximadamente ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}.` : '',
+      rateLine,
+      transparencyLine || result.message,
+      'Nada é confirmado sem abrir a tela de confirmação e digitar o PIN.',
+    ].filter(Boolean).join('\n');
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async handleGenericBestRouteEstimate(state: AgentState, estimate: {
     amount: string;
     destAssetCode: string;
@@ -4989,6 +5090,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const extractedPixRamp = this.extractPixRampIntentFromText(state.current_input);
       const deterministicYield = this.extractYieldIntentFromText(state.current_input);
       const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
+      const deterministicConversionBestRouteEstimate = this.extractConversionBestRouteEstimateIntent(state.current_input);
       const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
@@ -5079,6 +5181,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
       if (wantsTransactionHistory) {
         return await this.handleHistoryCheck(state);
+      }
+
+      if (deterministicConversionBestRouteEstimate) {
+        return await this.handleBestRouteConversionEstimate(state, deterministicConversionBestRouteEstimate);
       }
 
       if (deterministicBestRouteEstimate) {

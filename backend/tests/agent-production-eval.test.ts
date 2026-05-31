@@ -285,6 +285,44 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Desculpe');
   });
 
+  it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValueOnce(JSON.stringify({
+      success: true,
+      source: { amount: '100', asset_code: 'USDC' },
+      destination: { amount: '438.7000000', asset_code: 'TESOURO' },
+      route: { chain: 'USDC -> TESOURO', hops_count: 0 },
+      effective_rate: { destination_per_source: '4.38700000' },
+      fee_breakdown: { total_fee_display: 'R$ 0,01' },
+      quote_ttl_seconds: 45,
+      quote: {
+        sourceAmount: '100',
+        destinationAmount: '438.7000000',
+        sourceAsset: { code: 'USDC' },
+        destinationAsset: { code: 'TESOURO' },
+        path: [],
+      },
+      optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
+      message: 'Rota mais otimizada agora.',
+    }));
+
+    const result = await graph.processInput(createState('- melhor rota para converter 100 USDC para BRL'));
+
+    expect(executeToolMock).toHaveBeenCalledTimes(1);
+    expect(executeToolMock).toHaveBeenCalledWith('get_best_route', expect.objectContaining({
+      source_amount: '100',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+    }));
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Melhor rota agora para converter US$ 100.00');
+    expect(result.response_message).toContain('Recebe aproximadamente R$ 438.70');
+    expect(result.response_message).toContain('Rota mais otimizada agora: US$ -> R$');
+    expect(result.response_message).not.toContain('Eu analiso a melhor rota quando você informa');
+  });
+
   it('routes menu item 8 to best-route guidance before savings summaries', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
