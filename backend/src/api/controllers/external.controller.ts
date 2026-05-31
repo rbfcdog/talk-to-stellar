@@ -960,16 +960,18 @@ export class ExternalController {
       });
 
       const displayName = String(targetEmail || targetUserId || providerUserId);
-      void TransferNotificationService.notifySessionWelcome({
-        sessionId: String(matched.session_id),
-        userId: targetUserId,
-        name: displayName,
-        provider,
-        providerUserId,
-        language,
-      }).catch((welcomeError) => {
+      try {
+        await TransferNotificationService.notifySessionWelcome({
+          sessionId: String(matched.session_id),
+          userId: targetUserId,
+          name: displayName,
+          provider,
+          providerUserId,
+          language,
+        });
+      } catch (welcomeError) {
         console.warn('[external-link-existing] welcome notification failed:', welcomeError instanceof Error ? welcomeError.message : String(welcomeError));
-      });
+      }
 
       return res.status(200).json({
         success: true,
@@ -1101,16 +1103,18 @@ export class ExternalController {
         })
         .eq('session_id', sessionId);
 
-      void TransferNotificationService.notifySessionWelcome({
-        sessionId,
-        userId: String(session.user_id),
-        name: String(session.email || session.user_id),
-        provider,
-        providerUserId,
-        language,
-      }).catch((welcomeError) => {
+      try {
+        await TransferNotificationService.notifySessionWelcome({
+          sessionId,
+          userId: String(session.user_id),
+          name: String(session.email || session.user_id),
+          provider,
+          providerUserId,
+          language,
+        });
+      } catch (welcomeError) {
         console.warn('[external-link-session] welcome notification failed:', welcomeError instanceof Error ? welcomeError.message : String(welcomeError));
-      });
+      }
 
       return res.status(200).json({
         success: true,

@@ -351,7 +351,7 @@ describe('TransferNotificationService', () => {
     );
   });
 
-  it('does not send a second welcome when the session intro was already saved', async () => {
+  it('still sends welcome to WhatsApp when the session intro was already saved', async () => {
     (TransferNotificationService as any).agentRepo = {
       getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
       saveMessageOnce: jest.fn(async () => false),
@@ -366,7 +366,13 @@ describe('TransferNotificationService', () => {
       language: 'pt-BR',
     });
 
-    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      expect.stringContaining('Login concluido'),
+      { reliable: true }
+    );
   });
 
   it('sends one welcome when it wins the session intro dedupe key', async () => {
