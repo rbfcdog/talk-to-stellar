@@ -48,6 +48,7 @@ const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: st
   CETES: { namePt: "CETES", nameEn: "CETES", short: "CETES" },
   USD: { namePt: "Dólares", nameEn: "Dollars", short: "USD" },
   XLM: { namePt: "XLM", nameEn: "XLM", short: "XLM" },
+  TESOURO: { namePt: "Reais", nameEn: "Reais", short: "BRL" },
   BRL: { namePt: "Reais", nameEn: "Reais", short: "BRL" },
 };
 
@@ -88,7 +89,7 @@ function normalizeUiAssetCode(value: unknown) {
   if (!code) return "";
   if (["USD", "DOLLAR", "DOLLARS"].includes(code)) return "USDC";
   if (["EUR", "EURC", "EURO", "EUROS"].includes(code)) return "CETES";
-  if (["TESOURO", "REAL", "REAIS", "R$"].includes(code)) return "BRL";
+  if (["TESOURO", "REAL", "REAIS", "R$", "BRL"].includes(code)) return "TESOURO";
   return code;
 }
 function buildMoneyUrl(path: string, params: Record<string, unknown>) {
@@ -186,7 +187,7 @@ export default function RendimentosClient({
     return [...balances].filter((item: BalanceLine) => { const c = normalizeUiAssetCode(item.asset_code); return Boolean(c && c !== safeSelectedCode && normalizeDecimal(item.balance) > 0.0000001); }).sort((a, b) => normalizeDecimal(b.balance) - normalizeDecimal(a.balance))[0] || null;
   }, [balances, safeSelectedCode]);
   const alternativeConversionCode = normalizeUiAssetCode(alternativeConversionBalance?.asset_code);
-  const smartConvertSourceCode = selectedBalanceInsufficient ? alternativeConversionCode || (safeSelectedCode === "BRL" ? "USDC" : "BRL") : safeSelectedCode;
+  const smartConvertSourceCode = selectedBalanceInsufficient ? alternativeConversionCode || (safeSelectedCode === "TESOURO" ? "USDC" : "TESOURO") : safeSelectedCode;
   const smartConvertDestCode = selectedBalanceInsufficient ? actionableOptionCode || safeSelectedCode || bestOptionCode || "USDC" : bestOptionCode || actionableOptionCode || "USDC";
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);

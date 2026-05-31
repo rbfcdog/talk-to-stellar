@@ -54,7 +54,7 @@ export function settlementAssetCode(value: unknown): string {
 
 export function userFacingAssetCode(value: unknown): string {
   const code = normalizeAssetCode(value);
-  if (code === 'TESOURO') return 'BRL';
+  if (code === 'TESOURO') return 'TESOURO';
   if (code === 'EURC') return 'EUR';
   return code;
 }
