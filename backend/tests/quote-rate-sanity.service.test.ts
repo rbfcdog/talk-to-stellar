@@ -80,6 +80,8 @@ describe('quote-rate-sanity.service', () => {
   });
 
   it('rejects BRL/USDC quotes that deviate from the market reference', async () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
+
     await expect(assertSaneBrlUsdcQuote({
       sourceAssetCode: 'USDC',
       destinationAssetCode: 'BRL',

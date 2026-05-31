@@ -1238,6 +1238,13 @@ export class StellarService {
                 destinationAmount: input.destinationAmount,
                 context: 'strict-receive submit',
             });
+            await assertSaneBrlUsdcQuote({
+                sourceAssetCode: assetCode(sourceAssetObj),
+                destinationAssetCode: assetCode(destinationAssetObj),
+                sourceAmount: String(bestPath.source_amount),
+                destinationAmount: input.destinationAmount,
+                context: 'strict-receive submit',
+            });
 
             const pathAssets = (bestPath.path || []).map((pathAsset: any) => {
                 if (pathAsset.asset_type === 'native') return Asset.native();
@@ -1306,6 +1313,13 @@ export class StellarService {
             assertSafeSameSymbolConversion({
                 sourceAsset: sourceAssetObj,
                 destinationAsset: destinationAssetObj,
+                sourceAmount: input.sourceAmount,
+                destinationAmount: String(bestPath.destination_amount),
+                context: 'strict-send submit',
+            });
+            await assertSaneBrlUsdcQuote({
+                sourceAssetCode: assetCode(sourceAssetObj),
+                destinationAssetCode: assetCode(destinationAssetObj),
                 sourceAmount: input.sourceAmount,
                 destinationAmount: String(bestPath.destination_amount),
                 context: 'strict-send submit',
