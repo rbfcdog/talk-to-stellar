@@ -493,7 +493,8 @@ function buildMoneyInterfaceUrl(input: {
     path: '/pix-on',
     params: {
       mode: 'onramp',
-      asset,
+      asset: 'BRL',
+      target_asset: asset !== 'BRL' ? asset : '',
       amount,
       currency: 'BRL',
       from: 'chat',

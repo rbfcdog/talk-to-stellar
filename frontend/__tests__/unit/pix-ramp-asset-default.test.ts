@@ -13,6 +13,9 @@ describe("PIX asset defaults", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 
     expect(text).toContain('normalizeTargetAsset(asset, "BRL")');
+    expect(text).toContain("resolveOnRampTargetAssetFromQuery");
+    expect(text).toContain('amountCurrency === "BRL") return "BRL"');
+    expect(text).toContain('const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset');
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
   });
 });

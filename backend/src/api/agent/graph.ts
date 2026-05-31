@@ -1359,8 +1359,13 @@ export class AgentGraph {
     const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
     const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
+    const amountCurrency = intent.amount_currency || intent.asset_code;
+    const urlAsset = intent.direction === 'onramp' && amountCurrency === 'BRL' ? 'BRL' : intent.asset_code;
     url.searchParams.set('mode', intent.direction);
-    url.searchParams.set('asset', intent.asset_code);
+    url.searchParams.set('asset', urlAsset);
+    if (intent.direction === 'onramp' && intent.asset_code !== urlAsset) {
+      url.searchParams.set('target_asset', intent.asset_code);
+    }
     url.searchParams.set('intent_id', intentId);
     url.searchParams.set('from', 'chat');
     url.searchParams.set('autostart', '1');
@@ -1383,7 +1388,6 @@ export class AgentGraph {
       url.searchParams.set('receive_asset', finalPayAsset);
     }
     if (intent.amount) {
-      const amountCurrency = intent.amount_currency || intent.asset_code;
       if (isPixFundedPayment && finalPayAmount && finalPayAsset) {
         url.searchParams.set('currency', finalPayAsset);
         url.searchParams.set('amount', intent.amount);
