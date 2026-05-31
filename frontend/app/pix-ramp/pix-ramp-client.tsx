@@ -134,6 +134,18 @@ function buildAppPath(path: string, params: Record<string, unknown>) {
   return query ? `${path}?${query}` : path;
 }
 
+function safeInternalReturnPath(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.startsWith("//")) return "";
+  try {
+    const url = new URL(raw, typeof window === "undefined" ? "https://talktostellar.local" : window.location.origin);
+    if (typeof window !== "undefined" && url.origin !== window.location.origin) return "";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return raw.startsWith("/") ? raw : "";
+  }
+}
+
 const CONFIGURED_TARGET_ASSETS = parseConfiguredAssetList(
   process.env.NEXT_PUBLIC_TTS_VISIBLE_ASSET_CODES ||
   process.env.NEXT_PUBLIC_VISIBLE_ASSET_CODES ||
@@ -920,6 +932,17 @@ export default function PixRampClient({
   const waitingForReceiveEstimate = Boolean(receiveEstimateRequired && receiveEstimateLoading);
 
   const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
+  const returnSource = useMemo(() => String(queryParams.get("return_source") || queryParams.get("from") || "").trim().toLowerCase(), [queryParams]);
+  const returnToPath = useMemo(() => safeInternalReturnPath(queryParams.get("return_to") || ""), [queryParams]);
+  const stayOpenAfterSuccess = useMemo(() => queryParams.get("stay_open") === "1" || Boolean(returnToPath), [queryParams, returnToPath]);
+  const returnLabel = useMemo(() => {
+    const explicit = String(queryParams.get("return_label") || "").trim();
+    if (explicit) return explicit;
+    if (returnSource === "rendimentos" || returnSource === "investimentos") {
+      return L("Voltar aos investimentos", "Back to investments");
+    }
+    return L("Continuar", "Continue");
+  }, [L, queryParams, returnSource]);
   const externalProvider = String(queryParams.get("provider") || "").trim().toLowerCase();
   const externalProviderUserId = String(queryParams.get("provider_user_id") || "").trim();
   const externalSource = String(queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
@@ -1316,8 +1339,9 @@ export default function PixRampClient({
 
   useEffect(() => {
     if (step !== "success") return;
+    if (stayOpenAfterSuccess) return;
     closeIntermediatePage();
-  }, [step]);
+  }, [stayOpenAfterSuccess, step]);
 
   useEffect(() => {
     if (!operationStorageKey) return;
@@ -3317,7 +3341,18 @@ export default function PixRampClient({
                 </div>
               )}
 
-              <p className="relative mt-4 text-xs font-semibold text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+              {returnToPath ? (
+                <div className="relative mt-6">
+                  <a
+                    href={returnToPath}
+                    className="inline-flex w-full items-center justify-center rounded-3xl bg-tts-deep px-5 py-4 text-sm font-black text-tts-surface transition hover:bg-tts-deep/90 sm:w-auto"
+                  >
+                    {returnLabel}
+                  </a>
+                </div>
+              ) : stayOpenAfterSuccess ? null : (
+                <p className="relative mt-4 text-xs font-semibold text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+              )}
             </div>
           </section>
         )}

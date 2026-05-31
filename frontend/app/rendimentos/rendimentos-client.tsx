@@ -15,6 +15,7 @@ import {
   Plus,
   WalletCards,
 } from "lucide-react";
+import { AccountStatusCard } from "@/components/shared/account-status";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -192,7 +193,16 @@ export default function RendimentosClient({
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", { amount, source_asset: smartConvertSourceCode, dest_asset: smartConvertDestCode, from: "review", next: "review", lang: language }), [amount, smartConvertDestCode, smartConvertSourceCode, language]);
-  const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", { amount, asset: "BRL", from: "review", lang: language }), [amount, language]);
+  const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", {
+    amount,
+    asset: "BRL",
+    from: "rendimentos",
+    return_source: "rendimentos",
+    return_to: newApplicationUrl,
+    return_label: L("Voltar aos investimentos", "Back to investments"),
+    stay_open: "1",
+    lang: language,
+  }), [amount, language, newApplicationUrl, L]);
   const amountPresets = useMemo(() => {
     const s = selectedProfile.short;
     if (s === "BRL") return ["50", "100", "500", "1000"];
@@ -321,6 +331,13 @@ export default function RendimentosClient({
           <a href="/logout" className="ml-auto px-3 py-3 text-xs font-bold text-tts-muted hover:text-tts-error transition">{L("Sair", "Logout")}</a>
         </div>
 
+        <AccountStatusCard
+          state={sessionLoading ? "loading" : session.authenticated ? "connected" : "signed-out"}
+          ctaHref="/login?next=/rendimentos"
+          compact
+          className="mb-6"
+        />
+
         {apiState.error && (
           <div className="flex items-start gap-3 border border-tts-error bg-tts-error/10 p-4 mb-6 text-sm" role="alert">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-tts-error" />
@@ -349,7 +366,7 @@ export default function RendimentosClient({
         ) : (
           <>
             {tab === "returns" && (
-              <ReturnsTab
+              <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} isTestnet={isTestnetYield}
                 onRefresh={() => {}} newApplicationUrl={newApplicationUrl}
@@ -424,7 +441,7 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function ReturnsTab({ language, session, sessionLoading, options, positionBalances, isTestnet, onRefresh, newApplicationUrl }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, isTestnet, onRefresh, newApplicationUrl }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   isTestnet: boolean; onRefresh: () => void; newApplicationUrl: string;
@@ -434,7 +451,16 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
     const code = optionCode(o);
     const pos = positionBalances[code];
     const amt = normalizeDecimal(pos?.amount || "0");
-    return { option: o, code, profile: moneyProfile(code), amount: amt, loading: Boolean(!pos || pos.loading), error: String(pos?.error || ""), rate: optionRatePercent(o) };
+    return {
+      option: o,
+      code,
+      profile: moneyProfile(code),
+      amount: amt,
+      loading: Boolean(!pos || pos.loading),
+      error: String(pos?.error || ""),
+      source: String(pos?.source || ""),
+      rate: optionRatePercent(o),
+    };
   });
   return (
     <div className="space-y-6">
@@ -447,14 +473,16 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
-            <StatCard label={L("Ambiente", "Environment")} value={L("Testnet", "Testnet")} sub={L("valores estimados", "estimated values")} />
-          </div>
+          <PortfolioOverview language={language} rows={rows} isTestnet={isTestnet} />
 
           {rows.map((row) => {
             const spv = sparklineValues(row.amount, row.rate);
             const maxSpv = Math.max(...spv);
+            const hasAmount = row.amount > 0;
+            const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Consulta indisponível", "Unavailable") : hasAmount ? `${formatAmount(row.amount, language)} ${row.profile.short}` : L("Nada aplicado agora", "Nothing applied now");
+            const sourceText = row.source === "operation_history_fallback"
+              ? L("Atualizado pelo histórico da conta", "Updated from account history")
+              : L("Atualizado da conta.", "Updated from account.");
             return (
               <div key={row.code} className="border border-tts-border bg-tts-surface p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -463,14 +491,19 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
                     <h3 className="text-lg font-bold mt-0.5">{profileName(row.profile, language)}</h3>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold">{row.loading ? L("...", "...") : row.error ? L("—", "—") : `${formatAmount(row.amount, language)} ${row.profile.short}`}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Posição atual", "Current position")}</p>
+                    <p className="text-lg font-bold" role="status">{balanceText}</p>
+                    {!row.loading && !row.error ? <p className="text-xs text-tts-muted">{sourceText}</p> : null}
                   </div>
                 </div>
                 {row.amount > 0 && row.rate > 0 && (
-                  <div className="flex items-end gap-1 h-14 mb-3">
-                    {spv.map((v, i) => (
-                      <div key={i} className="flex-1 rounded-t bg-tts-confirm/70" style={{ height: `${Math.max(8, (v / maxSpv) * 100)}%` }} />
-                    ))}
+                  <div className="mb-3">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Simulação", "Simulation")}</p>
+                    <div className="flex h-14 items-end gap-1">
+                      {spv.map((v, i) => (
+                        <div key={i} className="flex-1 rounded-t bg-tts-confirm/70" style={{ height: `${Math.max(8, (v / maxSpv) * 100)}%` }} />
+                      ))}
+                    </div>
                   </div>
                 )}
                 <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", lang: language })}
@@ -489,6 +522,57 @@ function ReturnsTab({ language, session, sessionLoading, options, positionBalanc
         </>
       )}
     </div>
+  );
+}
+
+function PortfolioOverview({ language, rows, isTestnet }: {
+  language: AppLanguage;
+  rows: Array<{ code: string; profile: { namePt: string; nameEn: string; short: string }; amount: number; rate: number; loading: boolean; error: string; source: string }>;
+  isTestnet: boolean;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const activeRows = rows.filter((row) => row.amount > 0);
+  const maxAmount = Math.max(...rows.map((row) => row.amount), 1);
+  const strongest = [...activeRows].sort((a, b) => b.amount - a.amount)[0];
+  return (
+    <section className="border border-tts-border bg-tts-surface p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Posições", "Positions")}</p>
+          <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Investimentos atuais", "Current investments")}</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:min-w-72">
+          <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
+          <StatCard label={L("Ambiente", "Environment")} value={isTestnet ? L("Testnet", "Testnet") : L("Rede ativa", "Live")} sub={L("valores estimados", "estimated values")} />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-[0.8fr_1.2fr]">
+        <div className="border border-tts-border bg-tts-bg p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Maior posição", "Largest position")}</p>
+          <p className="mt-2 text-xl font-bold text-tts-deep">
+            {strongest ? `${formatAmount(strongest.amount, language)} ${strongest.profile.short}` : L("Nada aplicado agora", "Nothing applied now")}
+          </p>
+        </div>
+
+        <div className="border border-tts-border bg-tts-bg p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Distribuição", "Distribution")}</p>
+          <div className="mt-3 space-y-2">
+            {rows.map((row) => (
+              <div key={row.code}>
+                <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
+                  <span>{row.profile.short}</span>
+                  <span>{row.amount > 0 ? `${formatAmount(row.amount, language)} ${row.profile.short}` : L("Nada aplicado agora", "Nothing applied now")}</span>
+                </div>
+                <div className="h-2 bg-tts-border">
+                  <div className="h-full bg-tts-confirm" style={{ width: `${Math.max(row.amount > 0 ? 8 : 0, (row.amount / maxAmount) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -545,7 +629,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
         <div className="border border-tts-gold bg-tts-gold-bg p-4 text-sm">
           <p className="font-bold text-tts-gold mb-2">{L("Saldo insuficiente", "Insufficient balance")}</p>
           <div className="flex gap-2">
-            <a href={convertAssetsUrl} className="flex items-center gap-1.5 bg-tts-gold text-tts-deep px-3 py-2 text-xs font-bold"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter", "Convert")}</a>
+            <a href={convertAssetsUrl} className="flex items-center gap-1.5 bg-tts-gold text-tts-deep px-3 py-2 text-xs font-bold"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter ativos", "Convert assets")}</a>
             <a href={pixTopUpUrl} className="flex items-center gap-1.5 border border-tts-gold text-tts-gold px-3 py-2 text-xs font-bold"><ArrowDownToLine className="h-3.5 w-3.5" /> PIX</a>
           </div>
         </div>
@@ -616,7 +700,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             {confirmAvailable ? (
               <button onClick={onConfirm} disabled={!canConfirm}
                 className="flex-1 py-3 bg-tts-deep text-tts-surface font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition">
-                <LockKeyhole className="h-4 w-4" /> {L("Confirmar", "Confirm")}
+                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar", "Confirm")}
               </button>
             ) : (
               <div className="flex-1 py-3 border border-tts-gold bg-tts-gold-bg text-tts-gold text-sm font-bold text-center">
