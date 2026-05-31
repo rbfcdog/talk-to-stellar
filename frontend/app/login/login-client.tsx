@@ -190,7 +190,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function getExternalLoginLockKey() {
     if (!hasExternalContext) return ""
-    return `talk-to-stellar.external-login-lock:${externalProvider}:${externalProviderUserId}`
+    const tokenScope = externalToken.trim()
+      ? externalToken.trim().slice(-64)
+      : `${externalProvider}:${externalProviderUserId}`
+    return `talk-to-stellar.external-login-lock:${tokenScope}`
   }
 
   function isExternalLoginAlreadyCompleted() {

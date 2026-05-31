@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeSessionSource, setSessionCookies } from "@/lib/server-session";
+import { clearSessionCookies, isExternalPrioritySource, normalizeSessionSource, setSessionCookies } from "@/lib/server-session";
 
 function getBackendBaseUrl() {
   const raw =
@@ -81,10 +81,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   }
 
   const redirect = NextResponse.redirect(String(payload.url));
+  const sessionSource = sourceFromPayload(payload);
+  if (isExternalPrioritySource(sessionSource)) {
+    clearSessionCookies(redirect);
+  }
   setSessionCookies(redirect, {
     sessionId: String(payload.session_id || payload.sessionId || "").trim(),
     sessionToken: String(payload.session_token || payload.sessionToken || "").trim(),
-    sessionSource: sourceFromPayload(payload),
+    sessionSource,
   });
+  redirect.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
   return redirect;
 }
