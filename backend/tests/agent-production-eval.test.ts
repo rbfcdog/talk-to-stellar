@@ -240,12 +240,13 @@ describe('Agent production evals', () => {
     expect(executeToolMock).toHaveBeenCalledWith('get_transaction_history', {
       public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       user_id: 'eval-user',
-      limit: 10,
+      limit: 5,
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Últimas transações');
-    expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('Ver histórico completo');
+    expect(result.response_message).toContain('Últimas 5 transações');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message.indexOf('Ver histórico completo')).toBeLessThan(result.response_message.indexOf('Últimas 5 transações'));
   });
 
   it('opens the user profile page for direct profile requests', async () => {
