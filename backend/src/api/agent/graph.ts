@@ -26,7 +26,7 @@ const INTENT_CLASSIFIER_TOOLS = [
     type: 'function' as const,
     function: {
       name: INTENT_CLASSIFIER_TOOL_NAME,
-      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Handle user typos semantically, such as sald9/sald0 as balance. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber.',
+      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Handle user typos semantically, such as sald9/sald0 as balance. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber. Use reset_pin when the user asks to mudar, trocar, alterar, redefinir, resetar, recover or forgot PIN.',
       parameters: {
         type: 'object',
         properties: {
@@ -37,6 +37,7 @@ const INTENT_CLASSIFIER_TOOLS = [
               'onboard',
               'wallet',
               'wallet_logout',
+              'reset_pin',
               'contacts',
               'payment',
               'payment_link',
@@ -735,6 +736,39 @@ export class AgentGraph {
           `Here is your profile:\n\n${link}`
         )
       : String(result?.error || this.text(language, 'Não consegui abrir seu perfil agora.', 'I could not open your profile right now.'));
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handlePinResetRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const sessionToken = String(
+      (state.action_params as any)?.session_token ||
+      state.session_data?.session_token ||
+      ''
+    ).trim();
+
+    const resultRaw = await executeTool('reset_pin', {
+      session_id: state.session_id,
+      session_token: sessionToken,
+      user_id: state.session_data?.user_id,
+      language,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: this.text(language, 'Não consegui iniciar a troca de PIN agora.', 'I could not start the PIN change right now.') };
+    }
+
+    state.success = Boolean(result?.success);
+    state.response_message = String(
+      result?.message ||
+      result?.error ||
+      this.text(language, 'Não consegui iniciar a troca de PIN agora.', 'I could not start the PIN change right now.')
+    );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -3193,6 +3227,7 @@ export class AgentGraph {
     userId?: string,
     sessionId?: string,
     language: 'pt-BR' | 'en' = 'pt-BR',
+    sessionToken?: string,
     maxRounds: number = 3
   ): Promise<string> {
     const isUuid = (value: string) =>
@@ -3256,8 +3291,20 @@ export class AgentGraph {
         ) {
           toolArgs.session_id = sessionId;
         }
+
+        if (toolCall.name === 'reset_pin') {
+          if (sessionToken && !String(toolArgs.session_token || toolArgs.sessionToken || '').trim()) {
+            toolArgs.session_token = sessionToken;
+          }
+          if (!String(toolArgs.language || '').trim()) {
+            toolArgs.language = language;
+          }
+        }
         
-        logger.info(`[invokeWithTools] Executing tool: ${toolCall.name} with args: ${JSON.stringify(toolArgs)}`);
+        const logArgs = { ...toolArgs };
+        if (logArgs.session_token) logArgs.session_token = '[redacted]';
+        if (logArgs.sessionToken) logArgs.sessionToken = '[redacted]';
+        logger.info(`[invokeWithTools] Executing tool: ${toolCall.name} with args: ${JSON.stringify(logArgs)}`);
         const toolResult = await executeTool(toolCall.name, toolArgs);
         logger.debug(`[invokeWithTools] Tool result: ${toolResult.substring(0, 200)}`);
         conversation.push(
@@ -3295,6 +3342,17 @@ export class AgentGraph {
       onboard: IntentType.ONBOARD,
       wallet: IntentType.WALLET,
       wallet_logout: IntentType.WALLET_LOGOUT,
+      reset_pin: IntentType.RESET_PIN,
+      pin_reset: IntentType.RESET_PIN,
+      change_pin: IntentType.RESET_PIN,
+      update_pin: IntentType.RESET_PIN,
+      security: IntentType.RESET_PIN,
+      seguranca: IntentType.RESET_PIN,
+      mudar_pin: IntentType.RESET_PIN,
+      alterar_pin: IntentType.RESET_PIN,
+      trocar_pin: IntentType.RESET_PIN,
+      redefinir_pin: IntentType.RESET_PIN,
+      resetar_pin: IntentType.RESET_PIN,
       contacts: IntentType.CONTACTS,
       payment: IntentType.PAYMENT,
       payment_link: IntentType.PAYMENT_LINK,
@@ -3386,7 +3444,7 @@ export class AgentGraph {
     if (directIntent) return directIntent;
 
     const match = withoutFence.toLowerCase().match(
-      /\b(wallet_logout|payment_link|financial_memory|price_quote|pix_onramp|pix_offramp|pix_transfer|pix_payment|pix_send|pix_deposit|pix_withdraw|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
+      /\b(wallet_logout|reset_pin|pin_reset|payment_link|financial_memory|price_quote|pix_onramp|pix_offramp|pix_transfer|pix_payment|pix_send|pix_deposit|pix_withdraw|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
     );
     return match ? this.intentFromLabel(match[1]) : null;
   }
@@ -3403,7 +3461,7 @@ export class AgentGraph {
       const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
 
 Classify the user message into ONE and only ONE of these intents:
-login, onboard, wallet, wallet_logout, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, general
+login, onboard, wallet, wallet_logout, reset_pin, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, general
 
 Return compact JSON only, with this exact shape:
 {"intent":"yield","confidence":0.99}
@@ -3411,20 +3469,21 @@ Return compact JSON only, with this exact shape:
 The intent value must be one of the labels above. Do not explain. Do not use markdown.
 
 Priority rules:
-1. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
-2. If the message mentions PIX/pix and any money movement, amount, mandar, enviar, pagar, sacar, retirar, trazer, colocar, receber, depósito, saque, entrada, saída, or chave PIX, the intent is pix. PIX wins over generic payment.
-3. If the user asks to bring money, deposit, colocar, trazer, receber via PIX, or use PIX to add funds, the intent is pix.
-4. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, mandar no PIX, enviar no PIX, or off-ramp, the intent is pix.
-5. If the user asks to send money, mandar dinheiro, transfer, or pay someone without mentioning PIX and with a recipient/person, the intent is payment.
-6. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
-7. If the user asks for balance, saldo, or what they have, the intent is balance.
-8. If the user asks for transaction history or receipts, the intent is history.
-9. If the user asks to convert or exchange assets, the intent is conversion.
-10. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
-11. If the user asks for quotes, rates, or estimates, the intent is price_quote.
-12. If the user asks to create a payment link, the intent is payment_link.
-13. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
-14. Do not return general for obvious product requests with typos, missing accents, wrong final letters, or numeric substitutions. Classify by meaning.
+1. If the user asks to change, reset, update, recover, redefine, trocar, mudar, alterar, resetar, redefinir, recuperar or forgot/esqueci PIN, the intent is reset_pin.
+2. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
+3. If the message mentions PIX/pix and any money movement, amount, mandar, enviar, pagar, sacar, retirar, trazer, colocar, receber, depósito, saque, entrada, saída, or chave PIX, the intent is pix. PIX wins over generic payment.
+4. If the user asks to bring money, deposit, colocar, trazer, receber via PIX, or use PIX to add funds, the intent is pix.
+5. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, mandar no PIX, enviar no PIX, or off-ramp, the intent is pix.
+6. If the user asks to send money, mandar dinheiro, transfer, or pay someone without mentioning PIX and with a recipient/person, the intent is payment.
+7. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
+8. If the user asks for balance, saldo, or what they have, the intent is balance.
+9. If the user asks for transaction history or receipts, the intent is history.
+10. If the user asks to convert or exchange assets, the intent is conversion.
+11. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
+12. If the user asks for quotes, rates, or estimates, the intent is price_quote.
+13. If the user asks to create a payment link, the intent is payment_link.
+14. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
+15. Do not return general for obvious product requests with typos, missing accents, wrong final letters, or numeric substitutions. Classify by meaning.
 
 Strong contact examples that must be contacts:
 - "quero ver meus contatos" -> contacts
@@ -3481,6 +3540,11 @@ Other examples:
 - "quero sair da conta" -> wallet_logout
 - "deslogar" -> wallet_logout
 - "logout" -> wallet_logout
+- "quero mudar de pin" -> reset_pin
+- "trocar meu PIN" -> reset_pin
+- "alterar pin" -> reset_pin
+- "esqueci meu pin" -> reset_pin
+- "resetar o PIN" -> reset_pin
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.
 
@@ -5326,6 +5390,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return state;
       }
 
+      if (state.action_type === ActionType.RESET_PIN) {
+        return await this.handlePinResetRequest(state);
+      }
+
       if (state.action_type === ActionType.GET_BALANCE) {
         return await this.handleBalanceCheck(state);
       }
@@ -5357,7 +5425,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         ];
 
         // Invoke LLM with system prompt containing guidelines and mandatory contacts context
-        const responseContent = await this.invokeWithTools(preMessages, state.session_data?.user_id, state.session_id, this.getLanguage(state));
+        const responseContent = await this.invokeWithTools(
+          preMessages,
+          state.session_data?.user_id,
+          state.session_id,
+          this.getLanguage(state),
+          state.session_data?.session_token || String((state.action_params as any)?.session_token || '').trim()
+        );
 
         state.response_message = responseContent;
         state.success = true;
@@ -5452,6 +5526,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       [IntentType.ONBOARD]: ActionType.CREATE_ACCOUNT,
       [IntentType.WALLET]: ActionType.CREATE_WALLET,
       [IntentType.WALLET_LOGOUT]: ActionType.LOGOUT_WALLET,
+      [IntentType.RESET_PIN]: ActionType.RESET_PIN,
       [IntentType.CONTACTS]: ActionType.LIST_CONTACTS,
       [IntentType.PAYMENT]: ActionType.BUILD_PAYMENT,
       [IntentType.PAYMENT_LINK]: ActionType.CREATE_PAYMENT_LINK,

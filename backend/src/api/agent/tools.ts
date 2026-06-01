@@ -1919,7 +1919,7 @@ export const toolDefinitions = [
   },
   {
     name: "reset_pin",
-    description: "Request a PIN reset. Generates a temporary link (valid 15 minutes) to change your PIN if you forgot it.",
+    description: "Request a PIN reset. Sends a temporary confirmation link (valid 15 minutes) to the email linked to the current account.",
     parameters: {
       type: "object",
       properties: {
@@ -1927,9 +1927,18 @@ export const toolDefinitions = [
           type: "string",
           description: "Current chat session ID",
         },
+        session_token: {
+          type: "string",
+          description: "Current authenticated session token injected by the backend.",
+        },
         user_id: {
           type: "string",
           description: "Current user ID (optional; will be resolved automatically from session when missing)",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language",
         },
       },
       required: ["session_id"],
@@ -6685,6 +6694,7 @@ async function executeResetPin(input: any): Promise<string> {
     const sessionId = String(input.session_id || '').trim();
     const sessionToken = String(input.session_token || input.sessionToken || '').trim();
     const requestedUserId = String(input.user_id || '').trim();
+    const language = String(input.language || '').trim().toLowerCase().startsWith('en') ? 'en' : 'pt-BR';
 
     if (!sessionId || !sessionToken) {
       return JSON.stringify({
@@ -6763,14 +6773,28 @@ async function executeResetPin(input: any): Promise<string> {
     }
 
     // Generate reset token
-    const resetData = await PinResetService.generateResetToken(resolvedUserId, sessionId);
+    const resetEmail = sessionEmail || Array.from(emailCandidates)[0] || '';
+    const resetData = await PinResetService.generateResetToken(resolvedUserId, sessionId, {
+      email: resetEmail,
+      language,
+    });
+
+    const emailMessage = resetData.email_sent && resetData.masked_email
+      ? (language === 'en'
+          ? `We sent an email to ${resetData.masked_email} with the secure link to change your PIN. It is valid for ${resetData.expires_in_minutes} minutes.`
+          : `Enviei um e-mail para ${resetData.masked_email} com o link seguro para mudar seu PIN. Ele vale por ${resetData.expires_in_minutes} minutos.`)
+      : (language === 'en'
+          ? `I generated a secure PIN change link. It is valid for ${resetData.expires_in_minutes} minutes:\n${resetData.reset_url}`
+          : `Gerei um link seguro para mudar seu PIN. Ele vale por ${resetData.expires_in_minutes} minutos:\n${resetData.reset_url}`);
 
     return JSON.stringify({
       success: true,
       reset_url: resetData.reset_url,
       expires_in_minutes: resetData.expires_in_minutes,
       user_id: resolvedUserId,
-      message: `Link de redefinição de PIN gerado! Válido por ${resetData.expires_in_minutes} minutos.\n\nClique aqui para mudar seu PIN:\n${resetData.reset_url}`,
+      email_sent: Boolean(resetData.email_sent),
+      masked_email: resetData.masked_email,
+      message: emailMessage,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
