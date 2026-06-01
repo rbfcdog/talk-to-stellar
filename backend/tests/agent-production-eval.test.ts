@@ -858,6 +858,25 @@ describe('Agent production evals', () => {
     expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
   });
 
+  it('does not mask missing production router configuration as generic help outside tests', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, '', 'production prompt') as any;
+
+    try {
+      const result = await graph.processInput(createState('quero mandar 10 xlm pra ana silva'));
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('intent_router_unavailable');
+      expect(result.response_message).toContain('instabilidade');
+      expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+      expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
   it('selects the highest-confidence LLM route when the model returns more than one route tool', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
@@ -957,6 +976,58 @@ describe('Agent production evals', () => {
     expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
     expect(result.response_message).toContain('7.00 CETES');
     expect(result.response_message).toContain('Marina Costa');
+    expect(result.response_message).toContain('/confirm-payment?');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('routes the exact WhatsApp XLM-to-contact request to payment instead of the help menu', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const contactPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for this request');
+      }
+
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Ana Silva',
+              stellar_public_key: contactPublicKey,
+              email: 'ana@example.com',
+            },
+          ],
+        });
+      }
+
+      if (name === 'prepare_payment_confirmation') {
+        return JSON.stringify({
+          success: true,
+          url: 'https://app.example.com/confirm-payment?token=ana-xlm',
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('quero mandar 10 xlm pra ana silva'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_payment_confirmation', expect.objectContaining({
+      amount: '10',
+      asset_code: 'XLM',
+      destination: contactPublicKey,
+      destination_name: 'Ana Silva',
+    }));
+    expect(result.response_message).toContain('10 XLM');
+    expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('/confirm-payment?');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });

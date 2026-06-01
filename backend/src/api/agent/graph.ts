@@ -3570,7 +3570,13 @@ When calling the selected route tool:
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
     this.lastIntentRouterFailure = null;
     if (!this.shouldUseLlmIntentRouter()) {
-      logger.debug('[Agent] Intent router skipped because no production OpenAI key is configured');
+      const reason = 'Intent router skipped because no production OpenAI key is configured';
+      if (process.env.NODE_ENV !== 'test') {
+        this.lastIntentRouterFailure = reason;
+        logger.warn(`[Agent] ${reason}`);
+      } else {
+        logger.debug(`[Agent] ${reason}`);
+      }
       return IntentType.GENERAL;
     }
 
