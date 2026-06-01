@@ -74,7 +74,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to mudar/trocar/alterar/redefinir/resetar/recuperar PIN, forgot PIN, change PIN, recover PIN, or update PIN.',
+    description: 'Use when the user asks to mudar/trocar/alterar/modificar/atualizar/redefinir/resetar/recuperar PIN, senha/PIN da conta, forgot PIN, change PIN, recover PIN, update PIN, or says the PIN is wrong/forgotten. PIN change requests are account security actions and must not route to general help.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -3377,7 +3377,8 @@ Routing principles:
 - Do not route PIX saída/off-ramp as route_payment_intent just because the user says "mandar/enviar/pagar". If PIX or own destination is present, route_pix_intent wins.
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
-- "mudar de pin", "trocar PIN", "alterar PIN", "esqueci meu PIN", and "resetar PIN" are reset PIN.
+- PIN/security requests are account actions, never generic help. Strong PIN phrases: "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "redefinir PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN". Route all of them to route_reset_pin_intent.
+- Do not choose route_general_intent for a PIN request even if the wording is short or has no amount. The next action is reset_pin.
 - "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
 - Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
 
@@ -3393,6 +3394,10 @@ Tool selection examples:
 - quero ver meus contatos -> route_contacts_intent
 - quero ver aolicacoes -> route_yield_intent
 - quero mudar de pin -> route_reset_pin_intent
+- quero alterar meu pin -> route_reset_pin_intent
+- trocar meu PIN -> route_reset_pin_intent
+- esqueci meu pin -> route_reset_pin_intent
+- meu pin nao funciona -> route_reset_pin_intent
 - quero criar link de pagamento -> route_payment_link_intent
 - quero mandar 10 xlm para rodrigo@email.com -> route_payment_intent
 - qual a melhor rota de usdc pra brl agora -> route_price_quote_intent

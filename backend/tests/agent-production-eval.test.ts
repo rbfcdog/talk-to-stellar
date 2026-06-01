@@ -588,7 +588,7 @@ describe('Agent production evals', () => {
     expect(second.response_message).toContain('/rendimentos');
   });
 
-  it('routes PIN change requests to the reset_pin tool instead of generic help', async () => {
+  it('routes PIN alteration requests to the reset_pin tool instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const routerInvoke = jest.fn().mockResolvedValue({
@@ -614,7 +614,7 @@ describe('Agent production evals', () => {
       message: 'Enviei um e-mail para r******@gmail.com com o link seguro para mudar seu PIN. Ele vale por 15 minutos.',
     }));
 
-    const result = await graph.processInput(createState('quero mudar de pin'));
+    const result = await graph.processInput(createState('quero alterar meu pin'));
 
     expect(result.success).toBe(true);
     expect(result.detected_intent).toBe(IntentType.RESET_PIN);
