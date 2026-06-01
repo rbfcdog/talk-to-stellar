@@ -3388,21 +3388,17 @@ export class AgentGraph {
     return INTENT_BY_ROUTING_TOOL.get(toolName) || null;
   }
 
-  private buildIntentRouterMessages(message: string, repair = false): BaseMessage[] {
+  private buildIntentRouterMessages(message: string): BaseMessage[] {
     const sanitized = this.sanitizeUserMessage(String(message || '')).trim();
     const userMessage = sanitized.length > INTENT_ROUTER_MAX_MESSAGE_LENGTH
       ? `${sanitized.slice(0, INTENT_ROUTER_MAX_MESSAGE_LENGTH)}\n[message truncated for routing]`
       : sanitized;
 
-    const instruction = repair
-      ? 'Previous routing attempt did not return one usable route tool. Retry and call exactly one route_*_intent tool now.'
-      : 'Route this user message by calling exactly one route tool.';
-
     return [
       new SystemMessage({ content: this.buildIntentRouterPrompt() }),
       new HumanMessage({
         content: [
-          instruction,
+          'Decide whether this message should trigger a TalkToStellar route tool. Call one route tool only when a concrete product route should run.',
           `User message: ${userMessage}`,
         ].join('\n'),
       }),
@@ -3468,17 +3464,14 @@ export class AgentGraph {
     logger.info(`[Agent] LLM intent route ${fields.join(' ')} message=${JSON.stringify(this.sanitizeIntentRouterLogMessage(message))}`);
   }
 
-  private async invokeIntentRouter(messages: BaseMessage[], mode: 'required' | 'auto'): Promise<{ selected: IntentRouteCandidate; candidateCount: number } | null> {
+  private async invokeIntentRouter(messages: BaseMessage[]): Promise<{ selected: IntentRouteCandidate; candidateCount: number } | null> {
     const maybeBind = (this.llm as any).bindTools;
     if (typeof maybeBind !== 'function') {
       logger.warn('[Agent] Intent router unavailable because current LLM client does not expose bindTools');
       return null;
     }
 
-    const bindOptions = mode === 'required' ? { tool_choice: 'required' } : undefined;
-    const toolAwareRouter = bindOptions
-      ? maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any, bindOptions as any)
-      : maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
+    const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
     const toolResponse = await toolAwareRouter.invoke(messages);
     const candidates = this.extractRouteCandidates(toolResponse);
 
@@ -3488,7 +3481,7 @@ export class AgentGraph {
 
     const selected = candidates[0] || null;
     if (!selected) {
-      logger.warn(`[Agent] Intent router returned no usable route tool in ${mode} mode: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
+      logger.info(`[Agent] Intent router selected no route tool; continuing as general. response=${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
       return null;
     }
 
@@ -3498,13 +3491,15 @@ export class AgentGraph {
   private buildIntentRouterPrompt(): string {
     return `You are the routing layer for TalkToStellar.
 
-Your job is not to answer the user. Your only job is to choose exactly one route_*_intent tool.
+Your job is to decide whether the user message should trigger a TalkToStellar route tool.
 
-Hard contract:
-- Call exactly one route_*_intent tool. Do not answer with prose, markdown, JSON text, or explanations.
-- If the message is ambiguous but clearly belongs to a product area, choose that product route and set needs_clarification=true.
+Tool-call contract:
+- You are not obligated to call a tool.
+- Call exactly one route_*_intent tool when the message is an actionable TalkToStellar product request.
+- Do not call a tool for pure small talk, broad explanations, unsupported non-product requests, or cases where no product route should run.
+- If the message is ambiguous but clearly belongs to a product area, call that product route and set needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
-- route_general_intent is only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests.
+- route_general_intent is optional and only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests. It is also acceptable to call no tool for these messages.
 - Preserve the user's language in the language argument. Use pt-BR for Portuguese, including typo-heavy Portuguese.
 - Use risk=high for money movement, PIN/security, login, logout, account access, or anything that can move funds.
 - User typos are expected. Interpret by semantic intent, not exact spelling.
@@ -3560,7 +3555,7 @@ Tool selection examples:
 - quero alterar meu pin -> route_reset_pin_intent
 - quero ver meu perfil -> route_wallet_intent
 
-Call one route tool with confidence, reason, needs_clarification, language, and risk. Do not produce prose.`;
+When you call a route tool, include confidence, reason, needs_clarification, language, and risk.`;
   }
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
@@ -3570,38 +3565,18 @@ Call one route tool with confidence, reason, needs_clarification, language, and 
     }
 
     try {
-      const requiredMessages = this.buildIntentRouterMessages(message);
+      const messages = this.buildIntentRouterMessages(message);
       try {
-        const route = await this.invokeIntentRouter(requiredMessages, 'required');
+        const route = await this.invokeIntentRouter(messages);
         if (route) {
-          this.logIntentRoute(message, route.selected, 'required', route.candidateCount);
+          this.logIntentRoute(message, route.selected, 'auto', route.candidateCount);
           return route.selected.intent;
         }
       } catch (toolError) {
-        logger.warn(`[Agent] Intent router required tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+        logger.warn(`[Agent] Intent router tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
       }
 
-      try {
-        const repairRoute = await this.invokeIntentRouter(this.buildIntentRouterMessages(message, true), 'required');
-        if (repairRoute) {
-          this.logIntentRoute(message, repairRoute.selected, 'repair', repairRoute.candidateCount);
-          return repairRoute.selected.intent;
-        }
-      } catch (repairError) {
-        logger.warn(`[Agent] Intent router repair tool call failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`);
-      }
-
-      try {
-        const autoRoute = await this.invokeIntentRouter(requiredMessages, 'auto');
-        if (autoRoute) {
-          this.logIntentRoute(message, autoRoute.selected, 'auto', autoRoute.candidateCount);
-          return autoRoute.selected.intent;
-        }
-      } catch (autoToolError) {
-        logger.warn(`[Agent] Intent router auto tool call failed: ${autoToolError instanceof Error ? autoToolError.message : String(autoToolError)}`);
-      }
-
-      logger.warn('[Agent] Intent router could not select a route tool');
+      logger.info('[Agent] Intent router did not select a route tool; using general handling');
       return IntentType.GENERAL;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

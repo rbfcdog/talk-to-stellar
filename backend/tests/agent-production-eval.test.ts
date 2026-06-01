@@ -641,46 +641,25 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('redefinir o pin -> route_reset_pin_intent');
     expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
+    expect(prompt).toContain('You are not obligated to call a tool');
     expect(prompt).toContain('Priority order when multiple intents appear');
   });
 
-  it('retries the LLM router when the first response does not call a route tool', async () => {
+  it('does not force or retry a route tool when the LLM router selects no tool', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const routerInvoke = jest.fn()
-      .mockResolvedValueOnce({ content: 'Posso ajudar com saldo, PIX e PIN.' })
-      .mockResolvedValueOnce({
-        tool_calls: [{
-          id: 'call_retry_reset_pin',
-          name: 'route_reset_pin_intent',
-          args: {
-            confidence: 0.97,
-            reason: 'short PIN reset command',
-            needs_clarification: false,
-            language: 'pt-BR',
-            risk: 'high',
-          },
-        }],
-      });
+    const routerInvoke = jest.fn().mockResolvedValue({ content: 'Posso responder sem ferramenta quando não houver rota concreta.' });
     graph.llm = {
       bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
       invoke: jest.fn(),
     };
 
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      message: 'Enviei o link seguro para mudar seu PIN.',
-    }));
+    const intent = await graph.detectIntent('olá, explica o que você faz');
 
-    const result = await graph.processInput(createState('redefinir o pin'));
-
-    expect(routerInvoke).toHaveBeenCalledTimes(2);
-    expect(result.detected_intent).toBe(IntentType.RESET_PIN);
-    expect(executeToolMock).toHaveBeenCalledWith('reset_pin', expect.objectContaining({
-      session_id: 'eval-session',
-      user_id: 'eval-user',
-    }));
-    expect(result.response_message).toContain('PIN');
+    expect(intent).toBe(IntentType.GENERAL);
+    expect(routerInvoke).toHaveBeenCalledTimes(1);
+    expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
+    expect(graph.llm.bindTools.mock.calls[0][1]).toBeUndefined();
   });
 
   it('selects the highest-confidence LLM route when the model returns more than one route tool', async () => {
