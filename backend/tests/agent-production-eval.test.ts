@@ -57,6 +57,42 @@ function mockRouteIntent(graph: any, toolName: string) {
   return routerInvoke;
 }
 
+const routeToolByIntent: Record<IntentType, string> = {
+  [IntentType.LOGIN]: 'route_login_intent',
+  [IntentType.ONBOARD]: 'route_onboard_intent',
+  [IntentType.WALLET]: 'route_wallet_intent',
+  [IntentType.WALLET_LOGOUT]: 'route_wallet_logout_intent',
+  [IntentType.RESET_PIN]: 'route_reset_pin_intent',
+  [IntentType.CONTACTS]: 'route_contacts_intent',
+  [IntentType.PAYMENT]: 'route_payment_intent',
+  [IntentType.PAYMENT_LINK]: 'route_payment_link_intent',
+  [IntentType.BALANCE]: 'route_balance_intent',
+  [IntentType.HISTORY]: 'route_history_intent',
+  [IntentType.FINANCIAL_MEMORY]: 'route_financial_memory_intent',
+  [IntentType.CONVERSION]: 'route_conversion_intent',
+  [IntentType.PRICE_QUOTE]: 'route_price_quote_intent',
+  [IntentType.PIX]: 'route_pix_intent',
+  [IntentType.YIELD]: 'route_yield_intent',
+  [IntentType.GENERAL]: 'route_general_intent',
+};
+
+type RouterEvalCase = {
+  name: string;
+  input: string;
+  expectedIntent: IntentType;
+  risk?: 'low' | 'medium' | 'high';
+  language?: 'pt-BR' | 'en';
+};
+
+function flattenMessageContent(value: any): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => flattenMessageContent(item?.text ?? item?.content ?? item)).join('\n');
+  }
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return String(value || '');
+}
+
 describe('Agent production evals', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -675,6 +711,109 @@ describe('Agent production evals', () => {
     expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
     expect(prompt).not.toContain('quero mandar 10 xlm pra ana silva');
     expect(prompt).not.toContain('uero redefinir o pin ->');
+  });
+
+  describe('LLM intent router contract matrix', () => {
+    const cases: RouterEvalCase[] = [
+      { name: 'balance typo', input: 'quero ver meu sald9', expectedIntent: IntentType.BALANCE, risk: 'low' },
+      { name: 'balance natural', input: 'quanto eu tenho na conta agora?', expectedIntent: IntentType.BALANCE, risk: 'low' },
+      { name: 'balance xlm', input: 'mostra meu saldo em xlm', expectedIntent: IntentType.BALANCE, risk: 'low' },
+      { name: 'contacts list', input: 'quero ver meus contatos', expectedIntent: IntentType.CONTACTS, risk: 'low' },
+      { name: 'contacts typo', input: 'lista meus conattos salvos', expectedIntent: IntentType.CONTACTS, risk: 'low' },
+      { name: 'contacts add', input: 'adicionar rodrigobfcdog@gmail.com nos contatos', expectedIntent: IntentType.CONTACTS, risk: 'medium' },
+      { name: 'payment typo contact', input: 'uero mandar 10 xlm pra ana silva', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment abbreviated contact', input: 'qro enviar 7 cetes para marina costa', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment email recipient', input: 'manda 3 usdc para rodrigo@example.com', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment cpf recipient', input: 'transferir 20 reais para 123.456.789-09', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment external wallet', input: 'enviar 5 xlm para carteira externa GDUMMYPUBLICKEY', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix off ramp own key', input: 'sacar 25 usdc para minha chave pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix on ramp', input: 'colocar 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix funded payment', input: 'pagar Ana via PIX', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix typo off ramp', input: 'uero mandar 100 reais pra fora do pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'conversion explicit', input: 'quero converter 10 usdc pra brl', expectedIntent: IntentType.CONVERSION, risk: 'high' },
+      { name: 'conversion generic', input: 'quero converter dinheiro', expectedIntent: IntentType.CONVERSION, risk: 'medium' },
+      { name: 'conversion swap wording', input: 'trocar 50 reais para dólar', expectedIntent: IntentType.CONVERSION, risk: 'high' },
+      { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'price quote fees', input: 'quanto custa enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'price quote bank comparison', input: 'vale a pena comparado com o banco enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
+      { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
+      { name: 'yield deposit', input: 'guardar 250 reais rendendo', expectedIntent: IntentType.YIELD, risk: 'high' },
+      { name: 'yield position', input: 'quanto tenho rendendo em cetes?', expectedIntent: IntentType.YIELD, risk: 'low' },
+      { name: 'history typo', input: 'quero ver meu historicp', expectedIntent: IntentType.HISTORY, risk: 'low' },
+      { name: 'history receipts', input: 'listar meus comprovantes recentes', expectedIntent: IntentType.HISTORY, risk: 'low' },
+      { name: 'history transactions', input: 'ver minhas movimentações', expectedIntent: IntentType.HISTORY, risk: 'low' },
+      { name: 'financial memory nicknames', input: 'quais apelidos eu salvei para pagamentos?', expectedIntent: IntentType.FINANCIAL_MEMORY, risk: 'low' },
+      { name: 'financial memory savings', input: 'quanto eu economizei esse ano?', expectedIntent: IntentType.FINANCIAL_MEMORY, risk: 'low' },
+      { name: 'reset pin typo', input: 'uero redefinir o pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin change', input: 'quero alterar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin forgot', input: 'esqueci meu PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin invalid', input: 'meu pin nao funciona', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'payment link create', input: 'criar link de pagamento de 50 dólares', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
+      { name: 'payment link receive', input: 'quero meu link para receber dinheiro', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
+      { name: 'profile', input: 'quero ver meu perfil', expectedIntent: IntentType.WALLET, risk: 'low' },
+      { name: 'wallet public info', input: 'qual minha chave de recebimento?', expectedIntent: IntentType.WALLET, risk: 'low' },
+      { name: 'login', input: 'entrar na minha conta', expectedIntent: IntentType.LOGIN, risk: 'high' },
+      { name: 'onboard', input: 'quero criar uma conta nova', expectedIntent: IntentType.ONBOARD, risk: 'medium' },
+      { name: 'logout', input: 'deslogar dessa conta', expectedIntent: IntentType.WALLET_LOGOUT, risk: 'high' },
+      { name: 'general greeting', input: 'olaaa', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'general capabilities', input: 'o que você consegue fazer?', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'general asset explanation', input: 'quais são os assets? explique cada um', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'english balance', input: 'show my balance', expectedIntent: IntentType.BALANCE, risk: 'low', language: 'en' },
+      { name: 'english payment', input: 'send 12 usdc to Ana Silva', expectedIntent: IntentType.PAYMENT, risk: 'high', language: 'en' },
+      { name: 'english pin', input: 'forgot my PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high', language: 'en' },
+      { name: 'english help', input: 'what can you do?', expectedIntent: IntentType.GENERAL, risk: 'low', language: 'en' },
+    ];
+
+    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, risk = 'medium', language = 'pt-BR' }) => {
+      const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
+      const expectedTool = routeToolByIntent[expectedIntent];
+      const routerInvoke = jest.fn(async (messages: any[]) => {
+        const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
+
+        expect(joinedMessages).toContain('You are the routing layer for TalkToStellar');
+        expect(joinedMessages).toContain('This routing step must call exactly one route_*_intent tool for every user message');
+        expect(joinedMessages).toContain(`User message: ${input}`);
+
+        return {
+          tool_calls: [{
+            id: `call_${expectedTool}`,
+            name: expectedTool,
+            args: {
+              confidence: 0.99,
+              reason: `eval expects ${expectedIntent}`,
+              needs_clarification: false,
+              language,
+              risk,
+            },
+          }],
+        };
+      });
+
+      graph.llm = {
+        bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+        invoke: jest.fn(),
+      };
+
+      const detected = await graph.detectIntent(input);
+
+      expect(detected).toBe(expectedIntent);
+      expect(routerInvoke).toHaveBeenCalledTimes(1);
+      expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
+      expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
+
+      const tools = graph.llm.bindTools.mock.calls[0][0];
+      const toolNames = tools.map((tool: any) => tool.function?.name).filter(Boolean);
+      expect(toolNames).toContain(expectedTool);
+      expect(toolNames).toContain('route_general_intent');
+      expect(toolNames).toContain('route_payment_intent');
+      expect(toolNames).toContain('route_pix_intent');
+
+      if (expectedIntent !== IntentType.GENERAL) {
+        expect(expectedTool).not.toBe('route_general_intent');
+      }
+    });
   });
 
   it('binds the LLM route tools with required tool choice and uses general only as an explicit route', async () => {
