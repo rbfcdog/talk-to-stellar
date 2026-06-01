@@ -2205,7 +2205,7 @@ function executeGetIntentHelp(): string {
     {
       command: "rota",
       intent: "price_quote",
-      description: "Mostra a melhor cotação antes de confirmar uma conversão.",
+      description: "Abre ou calcula uma cotação; conversões e envios usam a melhor rota disponível antes do PIN.",
       examples: ["melhor estimativa para converter reais"],
     },
     {
@@ -2217,8 +2217,8 @@ function executeGetIntentHelp(): string {
     {
       command: "melhor rota",
       intent: "best_route",
-      description: "Mostra automaticamente a melhor rota para enviar ou converter com menor custo efetivo.",
-      examples: ["qual a melhor rota pra enviar 300 reais em dólar?"],
+      description: "Toda conversão ou envio usa a melhor rota disponível dentro da transação.",
+      examples: ["converter 300 reais para dólar", "enviar 50 USDC para BRL"],
     },
     {
       command: "PIX",

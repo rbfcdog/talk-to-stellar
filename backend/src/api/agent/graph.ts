@@ -2028,25 +2028,26 @@ export class AgentGraph {
     return this.text(
       language,
       [
-        'Eu analiso a melhor rota quando você informa valor, moeda e destino.',
-        'Para calcular, me diga valor, moeda de origem e moeda de destino.',
+        'Toda conversão ou envio usa a melhor rota disponível dentro da própria transação.',
+        'Para ver valores antes do PIN, inicie uma conversão ou envio com valor, moeda de origem e destino.',
         '',
         'Exemplos:',
-        '- melhor rota para converter 100 USDC para BRL',
-        '- melhor rota para enviar 50 reais para Ana',
+        '- converter 100 USDC para BRL',
+        '- enviar 50 reais para Ana',
         '- cotação de 200 reais para dólares',
         '',
-        'Eu mostro valor final, taxa e caminho antes de qualquer PIN.',
+        'A tela mostra valor final, taxas e a rota escolhida antes de qualquer PIN.',
       ].join('\n'),
       [
-        'To calculate the best route, tell me amount, source currency, and destination currency.',
+        'Every conversion or transfer uses the best available route inside the transaction itself.',
+        'To see values before PIN, start a conversion or transfer with amount, source currency, and destination.',
         '',
         'Examples:',
-        '- best route to convert 100 USDC to BRL',
-        '- best route to send 50 reais to Ana',
+        '- convert 100 USDC to BRL',
+        '- send 50 reais to Ana',
         '- quote 200 reais to dollars',
         '',
-        'I show final amount and fee before any PIN.',
+        'The screen shows final amount, fees, and selected route before any PIN.',
       ].join('\n')
     );
   }
