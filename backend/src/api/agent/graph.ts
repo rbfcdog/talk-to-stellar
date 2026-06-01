@@ -61,7 +61,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PAYMENT,
     toolName: 'route_payment_intent',
-    description: 'Use for sending, paying, or transferring a specific amount/asset to a saved contact, email, phone, CPF, transfer key, or external wallet when PIX is not the requested rail. Treat "uero" as typo for "quero". Exact examples: "uero mandar 10 xlm pra ana silva", "quero mandar 10 xlm pra ana silva", "mandar 5 XLM para public key", "enviar 10 dolares para Ana", "pagar contato salvo". Must not become general help.',
+    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to a recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
   },
   {
     intent: IntentType.PAYMENT_LINK,
@@ -86,7 +86,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to change account PIN/security, even with typos. Exact Portuguese examples: "uero redefinir o pin", "quero redefinir o pin", "redefinir o pin", "alterar meu pin", "mudar meu pin", "trocar o PIN", "resetar pin", "recuperar pin", "esqueci meu pin", "pin nao funciona". English examples: forgot PIN, change PIN, recover PIN, update PIN. PIN change/reset requests must call this tool and must never become general help.',
+    description: 'Use when the user asks to change, reset, recover, update, alter, or troubleshoot account PIN/security, even with typos or very short wording. PIN change/reset/recovery requests must never become general help.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -111,7 +111,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.GENERAL,
     toolName: 'route_general_intent',
-    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, recover, or typo variants like "uero redefinir o pin". Never use for value+asset+recipient send requests like "uero mandar 10 xlm pra ana silva".',
+    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests, PIN/security changes, or money-transfer requests that contain a transfer verb, amount, asset, and recipient.',
   },
 ];
 
@@ -3231,8 +3231,8 @@ export class AgentGraph {
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
       '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, explanations, and logout, prefer tools over free text.',
-      '- Never return the generic capability menu for actionable money movement. If the user says "uero", treat it as "quero".',
-      '- If the message asks to mandar/enviar/pagar/transferir a concrete amount plus asset to a named person/contact/email/key and does not mention PIX, this is a normal payment. Use payment handling/tools, not get_intent_help. Example: "uero mandar 10 xlm pra ana silva" means send 10 XLM to the saved contact Ana Silva.',
+      '- Never return the generic capability menu for actionable money movement. Interpret typo-heavy Portuguese semantically instead of relying on exact spelling.',
+      '- If the message asks to send/pay/transfer a concrete amount plus asset to a named person/contact/email/key and does not mention PIX as the rail, this is a normal payment. Use payment handling/tools, not get_intent_help.',
       '- If the user asks what the app can do, asks for an explanation, or asks about a feature, asset, balance, XLM, CETES, USDC, BRL, or rendimentos, call get_product_context when the answer needs context beyond a direct action.',
       '- If the user asks "quais sao os assets", "explique os ativos/moedas", or asks to explain each currency, use get_explanations with topic="assets" and answer the assets directly. Do not return the generic capability menu.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
@@ -3502,7 +3502,7 @@ Tool-call contract:
 - Use route_general_intent only for pure small talk, broad help/menu/capability questions, broad explanations, unsupported non-product requests, or cases where no product route should run.
 - route_general_intent is not a fallback for failed understanding. If the message is actionable, choose the concrete product route.
 - route_general_intent is not acceptable for PIN/security, balance, PIX, conversion, yield, history, contacts, payments, payment links, login/logout, wallet, or profile requests.
-- route_general_intent is not acceptable for "uero/quero mandar/enviar/pagar/transferir <amount> <asset> pra/para <person>".
+- route_general_intent is not acceptable for money-transfer requests that combine a transfer verb, amount, asset/currency, and recipient, even when the text has typos.
 - If the message is ambiguous but clearly belongs to a product area, call that product route and set needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
 - Preserve the user's language in the language argument. Use pt-BR for Portuguese, including typo-heavy Portuguese.
@@ -3521,51 +3521,34 @@ Priority order when multiple intents appear:
 Routing principles:
 - Choose the concrete product action whenever the message is actionable. Use route_general_intent only for greetings, menu/help requests, small talk, or unsupported requests.
 - Understand Portuguese, English, mixed language, missing accents, slang, and typos by meaning.
-- Treat "uero" as a typo for "quero" across all product requests, not only PIN.
+- Interpret typo-heavy product requests by meaning across all product areas. Do not require exact spelling of common Portuguese intent words.
 - PIX has priority over generic payments whenever PIX is the rail. Use route_pix_intent for both PIX entrada and PIX saída.
 - PIX saída/off-ramp means money leaves the user's TalkToStellar account and arrives in the user's own PIX/BRL destination. Strong saída phrases: "mandar pra fora", "sacar", "retirar", "tirar da conta", "mandar para meu PIX", "enviar para minha chave PIX", "mandar 50 reais em pix", "quero mandar pra fora 50 reais em pix", "quero mandar 100 reais no pix", "mandar pro meu banco", "conta externa", "off-ramp".
 - PIX entrada/on-ramp means the user pays a PIX to add money into the TalkToStellar account. Strong entrada phrases: "colocar dinheiro", "trazer dinheiro", "depositar", "carregar", "adicionar saldo", "receber saldo", "entrar dinheiro via PIX".
 - PIX funded payment means the user pays PIX first and then pays another saved contact. Strong funded-payment phrases: "pagar Ana via PIX", "mandar para Ana pagando com PIX", "fazer uma transferencia para Ana e pagar via PIX". This still routes to route_pix_intent.
 - Do not route PIX saída/off-ramp as route_payment_intent just because the user says "mandar/enviar/pagar". If PIX or own destination is present, route_pix_intent wins.
-- Payment without PIX: if the user says mandar/enviar/pagar/transferir + amount + asset + named recipient, route_payment_intent. Examples: "uero mandar 10 xlm pra ana silva", "quero mandar 10 xlm pra ana silva", "manda 3 usdc para Ana", "transferir 20 cetes para Carlos". Do not route these to general help.
+- Normal payment routing: when the message has a money-transfer verb, a concrete amount, a source asset/currency, and a recipient identifier or person/contact name, route_payment_intent. Do not route these to general help. If PIX is not the rail and the destination is not the user's own PIX/bank exit, it is a normal payment.
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
-- PIN/security requests are account actions, never generic help. If the message contains "pin" plus any reset/change verb, choose route_reset_pin_intent. Strong verbs: redefinir, mudar, alterar, trocar, modificar, atualizar, resetar, recuperar, esqueci, esquecido, forgot, change, update, recover. Strong phrases: "redefinir o pin", "redefinir meu pin", "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN".
-- Treat "uero" as a typo for "quero". "uero redefinir o pin" is an actionable PIN reset request and must call route_reset_pin_intent.
+- PIN/security requests are account actions, never generic help. If the message mentions PIN plus any reset/change/recover/update/troubleshoot meaning, choose route_reset_pin_intent. This includes typo-heavy or short Portuguese and English requests.
 - Do not choose route_general_intent for a PIN reset/change request.
 - Do not choose route_general_intent and do not skip tool-calling for a PIN reset/change request even if the wording is short, has no amount, has leading whitespace, or looks like an incomplete command. The next action is reset_pin.
-- "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
+- Requests to see/list/manage contacts, destinatários, favorites, or beneficiaries are contacts.
 - Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
-- "quero ver meu perfil" is a concrete account/profile request. Do not answer with a menu; route to route_wallet_intent if no more specific profile route exists.
-- "quero alterar meu pin", "redefinir o pin", "trocar PIN" and similar short security commands route to route_reset_pin_intent, never route_general_intent.
+- Own profile/account access requests are concrete account/profile requests. Do not answer with a menu; route to route_wallet_intent if no more specific profile route exists.
+- Short security commands about changing/recovering/resetting/troubleshooting PIN route to route_reset_pin_intent, never route_general_intent.
 
-Tool selection examples:
-- quero ver meu sald9 -> route_balance_intent
-- quero mandar pra fora 50 reais em pix -> route_pix_intent
-- quero mandar 100 reais no pix -> route_pix_intent
-- quero sacar 50 reais para meu pix -> route_pix_intent
-- quero retirar 10 usdc para minha chave pix -> route_pix_intent
-- quero colocar 100 reais via pix -> route_pix_intent
-- quero pagar Ana via pix -> route_pix_intent
-- uero mandar 10 xlm pra ana silva -> route_payment_intent
-- quero mandar 10 xlm pra ana silva -> route_payment_intent
-- quero converter 10 usdc pra brl -> route_conversion_intent
-- quero ver meus contatos -> route_contacts_intent
-- quero ver aolicacoes -> route_yield_intent
-- quero mudar de pin -> route_reset_pin_intent
-- quero alterar meu pin -> route_reset_pin_intent
-- uero redefinir o pin -> route_reset_pin_intent
-- redefinir o pin -> route_reset_pin_intent
-- redefinir meu pin -> route_reset_pin_intent
-- resetar pin -> route_reset_pin_intent
-- trocar meu PIN -> route_reset_pin_intent
-- esqueci meu pin -> route_reset_pin_intent
-- meu pin nao funciona -> route_reset_pin_intent
-- quero criar link de pagamento -> route_payment_link_intent
-- quero mandar 10 xlm para rodrigo@email.com -> route_payment_intent
-- qual a melhor rota de usdc pra brl agora -> route_price_quote_intent
-- quero alterar meu pin -> route_reset_pin_intent
-- quero ver meu perfil -> route_wallet_intent
+Tool selection patterns:
+- balance/saldo/current holdings, including typo-heavy wording -> route_balance_intent
+- PIX in or PIX out, including own PIX/bank exit wording -> route_pix_intent
+- transfer/send/pay amount + asset/currency + recipient without PIX rail -> route_payment_intent
+- convert/swap/exchange source asset into destination asset -> route_conversion_intent
+- contacts/destinatários/favorites/beneficiaries -> route_contacts_intent
+- investments/rendimentos/aplicações/positions -> route_yield_intent
+- PIN/security change, reset, recovery, update, invalid PIN, or forgotten PIN -> route_reset_pin_intent
+- payment/receive/charge link creation or sharing -> route_payment_link_intent
+- best route/quote/rate/fees/cost comparison -> route_price_quote_intent
+- own profile/account identity/wallet management -> route_wallet_intent
 
 When you call a route tool, include confidence, reason, needs_clarification, language, and risk.`;
   }

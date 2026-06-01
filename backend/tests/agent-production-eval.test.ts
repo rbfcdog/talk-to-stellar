@@ -660,20 +660,21 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('keeps exact short PIN reset wording in the intent router prompt', () => {
+  it('documents broad LLM route boundaries without hardcoded payment examples', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
     const prompt = graph.buildIntentRouterPrompt();
 
-    expect(prompt).toContain('redefinir o pin -> route_reset_pin_intent');
-    expect(prompt).toContain('uero redefinir o pin -> route_reset_pin_intent');
-    expect(prompt).toContain('"uero redefinir o pin" is an actionable PIN reset request');
-    expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
+    expect(prompt).toContain('money-transfer requests that combine a transfer verb, amount, asset/currency, and recipient');
+    expect(prompt).toContain('Normal payment routing');
+    expect(prompt).toContain('PIN/security requests are account actions');
+    expect(prompt).toContain('Tool selection patterns');
     expect(prompt).toContain('This routing step must call exactly one route_*_intent tool for every user message');
-    expect(prompt).toContain('uero mandar 10 xlm pra ana silva -> route_payment_intent');
-    expect(prompt).toContain('Payment without PIX');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
     expect(prompt).toContain('route_general_intent is not a fallback for failed understanding');
     expect(prompt).toContain('Priority order when multiple intents appear');
+    expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
+    expect(prompt).not.toContain('quero mandar 10 xlm pra ana silva');
+    expect(prompt).not.toContain('uero redefinir o pin ->');
   });
 
   it('binds the LLM route tools with required tool choice and uses general only as an explicit route', async () => {
@@ -739,10 +740,10 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('does not let the exact typo payment request fall through to the generic menu path', async () => {
+  it('does not let routed money-transfer requests fall through to the generic menu path', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const anaPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const contactPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
     const routerInvoke = jest.fn().mockResolvedValue({
       tool_calls: [{
         id: 'call_payment',
@@ -771,9 +772,9 @@ describe('Agent production evals', () => {
           success: true,
           contacts: [
             {
-              contact_name: 'Ana Silva',
-              stellar_public_key: anaPublicKey,
-              email: 'ana@example.com',
+              contact_name: 'Marina Costa',
+              stellar_public_key: contactPublicKey,
+              email: 'marina@example.com',
             },
           ],
         });
@@ -789,15 +790,15 @@ describe('Agent production evals', () => {
       return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
     });
 
-    const result = await graph.processInput(createState('uero mandar 10 xlm pra ana silva'));
+    const result = await graph.processInput(createState('qro enviar 7 cetes para marina costa'));
 
     expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
     expect(routerInvoke).toHaveBeenCalled();
     expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
     expect(result.detected_intent).toBe(IntentType.PAYMENT);
     expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
-    expect(result.response_message).toContain('10 XLM');
-    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('7.00 CETES');
+    expect(result.response_message).toContain('Marina Costa');
     expect(result.response_message).toContain('/confirm-payment?');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
@@ -815,11 +816,11 @@ describe('Agent production evals', () => {
     expect(sanitized).not.toContain('99999-9999');
   });
 
-  it('routes typo send requests with amount, asset, and saved contact as payments', async () => {
+  it('routes send requests with amount, asset, and saved contact as payments', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
-    const anaPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const contactPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
     executeToolMock.mockImplementation(async (name: string) => {
       if (name === 'list_contacts') {
@@ -827,9 +828,9 @@ describe('Agent production evals', () => {
           success: true,
           contacts: [
             {
-              contact_name: 'Ana Silva',
-              stellar_public_key: anaPublicKey,
-              email: 'ana@example.com',
+              contact_name: 'Marina Costa',
+              stellar_public_key: contactPublicKey,
+              email: 'marina@example.com',
             },
           ],
         });
@@ -845,7 +846,7 @@ describe('Agent production evals', () => {
       return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
     });
 
-    const result = await graph.processInput(createState('uero mandar 10 xlm pra ana silva'));
+    const result = await graph.processInput(createState('qro enviar 7 cetes para marina costa'));
 
     expect(routerInvoke).toHaveBeenCalled();
     expect(result.detected_intent).toBe(IntentType.PAYMENT);
@@ -853,14 +854,14 @@ describe('Agent production evals', () => {
     expect(executeToolMock).toHaveBeenCalledWith('prepare_payment_confirmation', expect.objectContaining({
       session_id: 'eval-session',
       owner_id: 'eval-user',
-      amount: '10',
-      asset_code: 'XLM',
-      destination: anaPublicKey,
-      destination_name: 'Ana Silva',
+      amount: '7',
+      asset_code: 'CETES',
+      destination: contactPublicKey,
+      destination_name: 'Marina Costa',
     }));
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('10 XLM');
-    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('7.00 CETES');
+    expect(result.response_message).toContain('Marina Costa');
     expect(result.response_message).toContain('/confirm-payment?');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });

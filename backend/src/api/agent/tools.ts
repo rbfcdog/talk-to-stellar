@@ -837,7 +837,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_intent_help",
-    description: "Mostra todos os comandos e funcionalidades disponíveis no TalkToStellar com explicações completas em pt-BR. Use SEMPRE esta ferramenta quando o usuário pedir ajuda, lista de comandos, funcionalidades, o que pode fazer, ou equivalente.",
+    description: "Mostra todos os comandos e funcionalidades disponíveis no TalkToStellar com explicações completas em pt-BR. Use somente quando o usuário pedir ajuda, lista de comandos, funcionalidades, o que pode fazer, menu, ou equivalente. Nunca use para pedidos acionáveis como envio/pagamento/transferência com valor e destinatário, PIX, saldo, conversão, PIN, contatos, histórico, perfil ou rendimentos.",
     parameters: {
       type: "object",
       properties: {},
@@ -1424,7 +1424,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_payment_confirmation",
-    description: "Create a one-time frontend payment confirmation link for a confirmed recipient and amount. For cross-asset transfers, amount/asset_code are the destination amount/asset the recipient receives, and source_amount/source_asset_code must identify the origin amount/asset the sender spends. Use this for normal user chat payment requests instead of build_payment.",
+    description: "Create a one-time frontend payment confirmation link for a confirmed recipient and amount. Use for normal user chat requests to send, pay, transfer, or move a concrete amount/asset to a saved contact, person, email, phone, CPF, transfer key, or external wallet after resolving the recipient. For cross-asset transfers, amount/asset_code are the destination amount/asset the recipient receives, and source_amount/source_asset_code must identify the origin amount/asset the sender spends. Use this for normal user chat payment requests instead of build_payment.",
     parameters: {
       type: "object",
       properties: {
