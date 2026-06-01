@@ -312,9 +312,24 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('valor, moeda e destino');
-    expect(result.response_message).toContain('melhor rota para converter 100 USDC para BRL');
+    expect(result.response_message).toContain('Toda conversão ou envio usa a melhor rota disponível');
+    expect(result.response_message).toContain('valor, moeda de origem e destino');
+    expect(result.response_message).toContain('converter 100 USDC para BRL');
     expect(result.response_message).not.toContain('Desculpe');
+    expect(result.response_message).not.toContain('Eu analiso a melhor rota');
+  });
+
+  it('does not claim standalone best-route knowledge when route request has assets but no amount', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    const result = await graph.processInput(createState('qual a melhor rota de usdc pra brl agor?'));
+
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Toda conversão ou envio usa a melhor rota disponível');
+    expect(result.response_message).toContain('antes de qualquer PIN');
+    expect(result.response_message).not.toContain('Eu analiso a melhor rota');
   });
 
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
@@ -363,8 +378,8 @@ describe('Agent production evals', () => {
 
     expect(executeToolMock).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Eu analiso a melhor rota');
-    expect(result.response_message).toContain('valor final, taxa e caminho');
+    expect(result.response_message).toContain('Toda conversão ou envio usa a melhor rota disponível');
+    expect(result.response_message).toContain('valor final, taxas e a rota escolhida');
   });
 
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
