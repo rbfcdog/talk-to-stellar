@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ArrowUpRight, Copy, History, Loader2, UserCircle2 } from "lucide-react"
+import { ArrowUpRight, Copy, History, UserCircle2 } from "lucide-react"
 
 function displayName(profile: any, username: string) {
   return String(profile?.display_name || profile?.username || username || "TalkToStellar").trim()
@@ -141,37 +141,10 @@ export default function PublicProfilePage() {
         </section>
 
         <section className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
-          <div className="mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-tts-muted">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Visão rápida
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Resumo</p>
-              <p className="mt-2 text-sm leading-6 text-tts-deep">
-                Perfil público com atalhos para receber, copiar o link e abrir o histórico sem cair em pagamento.
-              </p>
-            </div>
-            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
-              <p className="mt-2 break-all text-sm font-semibold text-tts-surface">
-                {publicKey || "indisponível"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Ação principal</p>
-              <p className="mt-2 text-sm text-tts-deep">
-                O link acima pode ser compartilhado. Quem abrir entra na conta certa de recebimento.
-              </p>
-            </div>
-            <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Acesso rápido</p>
-              <p className="mt-2 text-sm text-tts-deep">
-                Use o histórico para conferir entradas e o link público para receber sem pedir dados de novo.
-              </p>
-            </div>
-          </div>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
+          <p className="mt-3 break-all font-mono-financial text-sm font-semibold leading-6 text-tts-surface">
+            {publicKey || "indisponível"}
+          </p>
         </section>
       </div>
     </main>
