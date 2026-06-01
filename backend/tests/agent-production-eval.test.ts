@@ -116,18 +116,18 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('uses the LLM intent classifier to route typo balance requests instead of generic help', async () => {
+  it('uses LLM route tools to route typo balance requests instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'real-openai-key', 'production prompt') as any;
-    const classifierInvoke = jest.fn().mockResolvedValue({
+    const routerInvoke = jest.fn().mockResolvedValue({
       tool_calls: [{
         id: 'intent-call-1',
-        name: 'classify_talktostellar_intent',
-        args: { intent: 'balance', confidence: 0.98 },
+        name: 'route_balance_intent',
+        args: { confidence: 0.98, reason: 'saldo typo' },
       }],
     });
     graph.llm = {
-      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
       invoke: jest.fn(),
     };
 
@@ -143,7 +143,10 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('quero ver meu sald9'));
 
     expect(graph.llm.bindTools).toHaveBeenCalled();
-    expect(classifierInvoke).toHaveBeenCalled();
+    expect(routerInvoke).toHaveBeenCalled();
+    const routedTools = graph.llm.bindTools.mock.calls[0][0];
+    expect(routedTools.some((tool: any) => tool.function?.name === 'route_balance_intent')).toBe(true);
+    expect(routedTools.some((tool: any) => tool.function?.name === 'classify_talktostellar_intent')).toBe(false);
     expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
       session_id: 'eval-session',
       public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
@@ -155,7 +158,7 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('routes saldo typo requests to balance even when the LLM classifier is unavailable', async () => {
+  it('routes saldo typo requests to balance even when the LLM router is unavailable', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
     graph.llm = {
@@ -607,7 +610,7 @@ describe('Agent production evals', () => {
     expect(second.response_message).toContain('/rendimentos');
   });
 
-  it('parses intent classifier output even when the LLM returns JSON or punctuation', () => {
+  it('parses fallback intent text even when the LLM returns JSON or punctuation', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 
     expect(graph.parseIntentFromLlmOutput('yield.')).toBe(IntentType.YIELD);
@@ -624,21 +627,21 @@ describe('Agent production evals', () => {
   it('routes PIN change requests to the reset_pin tool instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const classifierInvoke = jest.fn().mockResolvedValue({
+    const routerInvoke = jest.fn().mockResolvedValue({
       additional_kwargs: {
         tool_calls: [
           {
             id: 'call_reset_pin',
             function: {
-              name: 'classify_talktostellar_intent',
-              arguments: '{"intent":"reset_pin","confidence":0.99}',
+              name: 'route_reset_pin_intent',
+              arguments: '{"confidence":0.99,"reason":"change pin"}',
             },
           },
         ],
       },
     });
     graph.llm = {
-      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
       invoke: jest.fn(),
     };
 
@@ -708,8 +711,8 @@ describe('Agent production evals', () => {
           {
             id: 'call_1',
             function: {
-              name: 'classify_talktostellar_intent',
-              arguments: '{"intent":"yield","confidence":0.99}',
+              name: 'route_yield_intent',
+              arguments: '{"confidence":0.99,"reason":"applications"}',
             },
           },
         ],
@@ -719,30 +722,30 @@ describe('Agent production evals', () => {
     expect(calls).toEqual([
       {
         id: 'call_1',
-        name: 'classify_talktostellar_intent',
-        args: { intent: 'yield', confidence: 0.99 },
+        name: 'route_yield_intent',
+        args: { confidence: 0.99, reason: 'applications' },
       },
     ]);
   });
 
-  it('routes explicit conversion when the LLM classifier returns conversion', async () => {
+  it('routes explicit conversion when the LLM route tool returns conversion', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const classifierInvoke = jest.fn().mockResolvedValue({
+    const routerInvoke = jest.fn().mockResolvedValue({
       additional_kwargs: {
         tool_calls: [
           {
             id: 'call_conversion',
             function: {
-              name: 'classify_talktostellar_intent',
-              arguments: '{"intent":"conversion","confidence":0.96}',
+              name: 'route_conversion_intent',
+              arguments: '{"confidence":0.96,"reason":"explicit conversion"}',
             },
           },
         ],
       },
     });
     graph.llm = {
-      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
       invoke: jest.fn(),
     };
     graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({});

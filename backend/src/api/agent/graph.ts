@@ -20,47 +20,114 @@ import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/am
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
-const INTENT_CLASSIFIER_TOOL_NAME = 'classify_talktostellar_intent';
-const INTENT_CLASSIFIER_TOOLS = [
+const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; description: string }> = [
   {
-    type: 'function' as const,
-    function: {
-      name: INTENT_CLASSIFIER_TOOL_NAME,
-      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Handle user typos semantically, such as sald9/sald0 as balance. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber. Use reset_pin when the user asks to mudar, trocar, alterar, redefinir, resetar, recover or forgot PIN.',
-      parameters: {
-        type: 'object',
-        properties: {
-          intent: {
-            type: 'string',
-            enum: [
-              'login',
-              'onboard',
-              'wallet',
-              'wallet_logout',
-              'reset_pin',
-              'contacts',
-              'payment',
-              'payment_link',
-              'balance',
-              'history',
-              'financial_memory',
-              'conversion',
-              'price_quote',
-              'pix',
-              'yield',
-              'general',
-            ],
-          },
-          confidence: {
-            type: 'number',
-            description: 'Classifier confidence from 0 to 1.',
-          },
-        },
-        required: ['intent', 'confidence'],
-      },
-    },
+    intent: IntentType.PIX,
+    toolName: 'route_pix_intent',
+    description: 'Use for any PIX money movement: trazer/colocar/depositar via PIX, sacar/retirar, mandar para meu PIX, mandar pra fora, off-ramp, pagar/enviar via PIX, chave PIX, QR PIX, or any request where PIX is the rail. PIX wins over generic payment when PIX is mentioned.',
+  },
+  {
+    intent: IntentType.BALANCE,
+    toolName: 'route_balance_intent',
+    description: 'Use when the user asks for account balance/saldo, available money, quanto tenho, sald9, sald0, saldp, balances, or current holdings in the wallet.',
+  },
+  {
+    intent: IntentType.CONTACTS,
+    toolName: 'route_contacts_intent',
+    description: 'Use when the user asks to list, see, add, save, edit, or choose contacts/destinatarios/favorites/beneficiaries.',
+  },
+  {
+    intent: IntentType.CONVERSION,
+    toolName: 'route_conversion_intent',
+    description: 'Use when the user wants to convert/trocar/cambiar/swap one asset into another, including BRL, USDC/USD, CETES, XLM, or when they say converter dinheiro without enough details.',
+  },
+  {
+    intent: IntentType.YIELD,
+    toolName: 'route_yield_intent',
+    description: 'Use when the user asks about investments, rendimentos, dinheiro rendendo, aplicacoes/aplicações/aolicacoes, positions/posicoes, aplicar, investir, current investment positions, or adding/removing money from those options.',
+  },
+  {
+    intent: IntentType.PAYMENT,
+    toolName: 'route_payment_intent',
+    description: 'Use for sending or paying a saved contact or external wallet when PIX is not the requested rail. Examples: enviar 10 dolares para Ana, mandar 5 XLM para public key, pagar contato salvo.',
+  },
+  {
+    intent: IntentType.PAYMENT_LINK,
+    toolName: 'route_payment_link_intent',
+    description: 'Use when the user wants to create, open, share, charge/cobrar, or receive with a payment/receive link.',
+  },
+  {
+    intent: IntentType.HISTORY,
+    toolName: 'route_history_intent',
+    description: 'Use when the user asks for history, extrato, transacoes, movimentacoes, receipts/comprovantes/recibos, or recent operations.',
+  },
+  {
+    intent: IntentType.PRICE_QUOTE,
+    toolName: 'route_price_quote_intent',
+    description: 'Use when the user asks for best route/melhor rota, rate/cotacao, estimated fees, comparison, quote, or cost before doing a transaction.',
+  },
+  {
+    intent: IntentType.FINANCIAL_MEMORY,
+    toolName: 'route_financial_memory_intent',
+    description: 'Use when the user asks about saved transaction nicknames, financial memory, remembered labels, spending/savings summaries, or comparing previous activity.',
+  },
+  {
+    intent: IntentType.RESET_PIN,
+    toolName: 'route_reset_pin_intent',
+    description: 'Use when the user asks to mudar/trocar/alterar/redefinir/resetar/recuperar PIN, forgot PIN, change PIN, recover PIN, or update PIN.',
+  },
+  {
+    intent: IntentType.WALLET_LOGOUT,
+    toolName: 'route_wallet_logout_intent',
+    description: 'Use when the user asks to logout, sign out, deslogar, sair da conta, disconnect, close session, or end account session.',
+  },
+  {
+    intent: IntentType.LOGIN,
+    toolName: 'route_login_intent',
+    description: 'Use when the user asks to login, entrar, acessar conta, sign in, reconnect an existing account, or continue an existing account.',
+  },
+  {
+    intent: IntentType.ONBOARD,
+    toolName: 'route_onboard_intent',
+    description: 'Use when the user asks to create/register/cadastrar/open a new account or start onboarding.',
+  },
+  {
+    intent: IntentType.WALLET,
+    toolName: 'route_wallet_intent',
+    description: 'Use for wallet setup, wallet creation, account connection, wallet public key, or general wallet management that is not login/logout.',
+  },
+  {
+    intent: IntentType.GENERAL,
+    toolName: 'route_general_intent',
+    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Do not use this for typoed product requests.',
   },
 ];
+
+const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
+  type: 'function' as const,
+  function: {
+    name: spec.toolName,
+    description: spec.description,
+    parameters: {
+      type: 'object',
+      properties: {
+        confidence: {
+          type: 'number',
+          description: 'Confidence from 0 to 1 that this is the best single route.',
+        },
+        reason: {
+          type: 'string',
+          description: 'Short internal reason for the selected route. This is not shown to the user.',
+        },
+      },
+      required: ['confidence'],
+    },
+  },
+}));
+
+const INTENT_BY_ROUTING_TOOL = new Map(
+  INTENT_ROUTING_SPECS.map((spec) => [spec.toolName, spec.intent] as const),
+);
 
 function ensureHttpProtocol(value: string): string {
   const trimmed = String(value || '').trim();
@@ -122,7 +189,7 @@ export class AgentGraph {
     return language === 'en' ? en : pt;
   }
 
-  private shouldUseLlmIntentClassifier(): boolean {
+  private shouldUseLlmIntentRouter(): boolean {
     const key = String(this.openaiApiKey || '').trim().toLowerCase();
     return Boolean(key && key !== 'test-openai-key' && !key.startsWith('test-'));
   }
@@ -3457,114 +3524,55 @@ export class AgentGraph {
     return match ? this.intentFromLabel(match[1]) : null;
   }
 
-  private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
-    const normalizedMessage = this.normalizeTextForIntent(message);
-    const highConfidenceIntent = this.classifyHighConfidenceProductIntent(message);
+  private intentFromRoutingToolName(value: unknown): IntentType | null {
+    const toolName = String(value || '').trim();
+    return INTENT_BY_ROUTING_TOOL.get(toolName) || null;
+  }
 
-    if (!this.shouldUseLlmIntentClassifier()) {
-      return highConfidenceIntent || IntentType.GENERAL;
+  private buildIntentRouterPrompt(): string {
+    return `You are the routing layer for TalkToStellar.
+
+Your job is not to answer the user. Your only job is to choose exactly one route_*_intent tool.
+
+Routing principles:
+- Choose the concrete product action whenever the message is actionable. Use route_general_intent only for greetings, menu/help requests, small talk, or unsupported requests.
+- Understand Portuguese, English, mixed language, missing accents, slang, and typos by meaning.
+- PIX has priority over generic payments whenever PIX is the rail. "mandar pra fora 50 reais em pix" and "quero mandar 100 reais no pix" are PIX off-ramp requests.
+- Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
+- "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
+- "mudar de pin", "trocar PIN", "alterar PIN", "esqueci meu PIN", and "resetar PIN" are reset PIN.
+- "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
+- Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
+
+Tool selection examples:
+- quero ver meu sald9 -> route_balance_intent
+- quero mandar pra fora 50 reais em pix -> route_pix_intent
+- quero mandar 100 reais no pix -> route_pix_intent
+- quero converter 10 usdc pra brl -> route_conversion_intent
+- quero ver meus contatos -> route_contacts_intent
+- quero ver aolicacoes -> route_yield_intent
+- quero mudar de pin -> route_reset_pin_intent
+- quero criar link de pagamento -> route_payment_link_intent
+- quero mandar 10 xlm para rodrigo@email.com -> route_payment_intent
+- qual a melhor rota de usdc pra brl agora -> route_price_quote_intent
+
+Call one route tool with confidence. Do not produce prose.`;
+  }
+
+  private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
+    const localFallbackIntent = this.classifyHighConfidenceProductIntent(message);
+
+    if (!this.shouldUseLlmIntentRouter()) {
+      return localFallbackIntent || IntentType.GENERAL;
     }
 
     try {
-      const systemPrompt = `You are an intent classifier for a TalkToStellar account assistant.
-
-Classify the user message into ONE and only ONE of these intents:
-login, onboard, wallet, wallet_logout, reset_pin, contacts, payment, payment_link, balance, history, financial_memory, conversion, price_quote, pix, yield, general
-
-Return compact JSON only, with this exact shape:
-{"intent":"yield","confidence":0.99}
-
-The intent value must be one of the labels above. Do not explain. Do not use markdown.
-
-Priority rules:
-1. If the user asks to change, reset, update, recover, redefine, trocar, mudar, alterar, resetar, redefinir, recuperar or forgot/esqueci PIN, the intent is reset_pin.
-2. If the user asks to log out, sign out, disconnect, deslogar, sair da conta, or end session, the intent is wallet_logout.
-3. If the message mentions PIX/pix and any money movement, amount, mandar, enviar, pagar, sacar, retirar, trazer, colocar, receber, depósito, saque, entrada, saída, or chave PIX, the intent is pix. PIX wins over generic payment.
-4. If the user asks to bring money, deposit, colocar, trazer, receber via PIX, or use PIX to add funds, the intent is pix.
-5. If the user asks to withdraw, sacar, retirar, mandar pra fora, send money OUT of account, mandar no PIX, enviar no PIX, or off-ramp, the intent is pix.
-6. If the user asks to send money, mandar dinheiro, transfer, or pay someone without mentioning PIX and with a recipient/person, the intent is payment.
-7. If the user asks for contacts, saved recipients, or favorites, the intent is contacts.
-8. If the user asks for balance, saldo, or what they have, the intent is balance.
-9. If the user asks for transaction history or receipts, the intent is history.
-10. If the user asks to convert or exchange assets, the intent is conversion.
-11. If the user asks to invest, apply, or see yield/earnings, the intent is yield.
-12. If the user asks for quotes, rates, or estimates, the intent is price_quote.
-13. If the user asks to create a payment link, the intent is payment_link.
-14. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
-15. Do not return general for obvious product requests with typos, missing accents, wrong final letters, or numeric substitutions. Classify by meaning.
-
-Strong contact examples that must be contacts:
-- "quero ver meus contatos" -> contacts
-- "ver contatos" -> contacts
-- "listar contatos" -> contacts
-- "mostrar meus destinatários" -> contacts
-- "abrir meus favoritos" -> contacts
-- "quais contatos eu tenho salvo" -> contacts
-- "meus contatos" -> contacts
-- "contatos salvos" -> contacts
-- "destinatários salvos" -> contacts
-
-Other examples:
-- "mandar dinheiro pra alguem" -> payment
-- "quero mandar 10 reais pra rodrigo" -> payment
-- "enviar 50 dolares para Ana" -> payment
-- "mandar pra fora 100 reais via pix" -> pix
-- "quero mandar 100 reais no pix" -> pix
-- "mandar 100 reais no pix" -> pix
-- "quero mandar 100 reais via pix" -> pix
-- "mandar 100 reais por pix" -> pix
-- "quero mandar dinheiro no pix" -> pix
-- "mandar pra fora" -> pix
-- "sacar 50 reais" -> pix
-- "retirar dinheiro" -> pix
-- "colocar dinheiro via pix" -> pix
-- "trazer 100 reais" -> pix
-- "depositar via pix" -> pix
-- "quero mandar 5 brl pra ana por pix" -> pix
-- "Check my balance" -> balance
-- "ver saldo" -> balance
-- "qual meu saldo atual?" -> balance
-- "quero ver meu sald9" -> balance
-- "quero ver meu sald0" -> balance
-- "me mostra o saldp" -> balance
-- "ver transações" -> history
-- "quero ver aplicações" -> yield
-- "quero ver aplicacoes" -> yield
-- "quero ver aolicacoes" -> yield
-- "aplicacoes" -> yield
-- "aplicações" -> yield
-- "ver minhas aplicações" -> yield
-- "ver rendimentos" -> yield
-- "ver posições" -> yield
-- "meu dinheiro rendendo" -> yield
-- "quero investir" -> yield
-- "quero aplicar dinheiro" -> yield
-- "quero converter dinheiro" -> conversion
-- "quero converter 10 usdc pra brl" -> conversion
-- "converter 10 USDC para BRL" -> conversion
-- "converter xlm pra usdc" -> conversion
-- "converter dolares para reais" -> conversion
-- "quero criar um link de pagamento" -> payment_link
-- "quero sair da conta" -> wallet_logout
-- "deslogar" -> wallet_logout
-- "logout" -> wallet_logout
-- "quero mudar de pin" -> reset_pin
-- "trocar meu PIN" -> reset_pin
-- "alterar pin" -> reset_pin
-- "esqueci meu pin" -> reset_pin
-- "resetar o PIN" -> reset_pin
-
-If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.
-
-IMPORTANT: Handle typos gracefully. "sald9" and "sald0" mean "saldo"; "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
-
       const messages = [
-        new SystemMessage({ content: systemPrompt }),
+        new SystemMessage({ content: this.buildIntentRouterPrompt() }),
         new HumanMessage({
           content: [
-            `original_message: ${message}`,
-            `normalized_message: ${normalizedMessage}`,
-            'Classify by the normalized semantic meaning, but preserve the original user language for downstream response.',
+            'Route this user message by calling exactly one route tool.',
+            `User message: ${message}`,
           ].join('\n'),
         }),
       ];
@@ -3572,46 +3580,49 @@ IMPORTANT: Handle typos gracefully. "sald9" and "sald0" mean "saldo"; "aolicacoe
       const maybeBind = (this.llm as any).bindTools;
       if (typeof maybeBind === 'function') {
         try {
-          const toolAwareClassifier = maybeBind.call(this.llm, INTENT_CLASSIFIER_TOOLS as any, {
-            tool_choice: {
-              type: 'function',
-              function: { name: INTENT_CLASSIFIER_TOOL_NAME },
-            },
+          const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any, {
+            tool_choice: 'required',
           } as any);
-          const toolResponse = await toolAwareClassifier.invoke(messages);
-          const classifierCall = this.extractToolCalls(toolResponse)
-            .find((call) => call.name === INTENT_CLASSIFIER_TOOL_NAME);
-          const toolIntent = this.intentFromLabel(
-            classifierCall?.args?.intent ||
-            classifierCall?.args?.detected_intent ||
-            classifierCall?.args?.label
-          );
-          const confidence = Number(classifierCall?.args?.confidence);
-          if (toolIntent && toolIntent !== IntentType.GENERAL) {
-            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
-            return toolIntent;
-          }
+          const toolResponse = await toolAwareRouter.invoke(messages);
+          const routingCall = this.extractToolCalls(toolResponse)
+            .find((call) => this.intentFromRoutingToolName(call.name));
+          const toolIntent = this.intentFromRoutingToolName(routingCall?.name);
+          const confidence = Number(routingCall?.args?.confidence);
           if (toolIntent) {
-            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
+            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${routingCall?.name}; confidence=${Number.isFinite(confidence) ? confidence : 'unknown'}`);
             return toolIntent;
           }
-          logger.warn(`[Agent] Intent classifier tool returned no usable call: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
+          logger.warn(`[Agent] Intent router returned no usable route tool: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
         } catch (toolError) {
-          logger.warn(`[Agent] Intent classifier tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+          logger.warn(`[Agent] Intent router tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+          try {
+            const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
+            const toolResponse = await toolAwareRouter.invoke(messages);
+            const routingCall = this.extractToolCalls(toolResponse)
+              .find((call) => this.intentFromRoutingToolName(call.name));
+            const toolIntent = this.intentFromRoutingToolName(routingCall?.name);
+            const confidence = Number(routingCall?.args?.confidence);
+            if (toolIntent) {
+              logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${routingCall?.name}; confidence=${Number.isFinite(confidence) ? confidence : 'unknown'}; mode=auto`);
+              return toolIntent;
+            }
+          } catch (autoToolError) {
+            logger.warn(`[Agent] Intent router auto tool call failed: ${autoToolError instanceof Error ? autoToolError.message : String(autoToolError)}`);
+          }
         }
       }
 
       const response = await this.llm.invoke(messages);
 
       const parsedIntent = this.parseIntentFromLlmOutput(response.content);
-      const detectedIntent = parsedIntent || highConfidenceIntent || IntentType.GENERAL;
+      const detectedIntent = parsedIntent || localFallbackIntent || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Intent detection failed: ${errorMessage}`);
-      return highConfidenceIntent || IntentType.GENERAL;
+      return localFallbackIntent || IntentType.GENERAL;
     }
   }
 
@@ -5226,14 +5237,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.current_input,
         this.hasPendingNicknamePrompt(state)
       );
-      const semanticProductIntent = this.classifyHighConfidenceProductIntent(state.current_input);
 
       const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id);
       const safetyOverrideIntent = wantsReceiptImage ? IntentType.HISTORY
         : localContactIntent?.action === 'add' ? IntentType.CONTACTS
         : null;
 
-      state.detected_intent = safetyOverrideIntent || llmDetectedIntent || semanticProductIntent || IntentType.GENERAL;
+      state.detected_intent = safetyOverrideIntent || llmDetectedIntent || IntentType.GENERAL;
       state.action_type = this.mapIntentToAction(state.detected_intent);
 
       await this.repository.saveMessage(
