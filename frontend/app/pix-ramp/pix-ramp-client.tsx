@@ -499,6 +499,13 @@ function stableHash(value: string) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+function createLocalIntentNonce() {
+  const randomId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return randomId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
+}
+
 function buildExternalBankAccount(seed: string, email: string): ExternalBankAccount {
   const hash = stableHash(`${seed || "talktostellar"}:${email || "account"}`);
   const digits = String(parseInt(hash.slice(0, 6), 16)).padStart(8, "0");
@@ -794,6 +801,8 @@ export default function PixRampClient({
   const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
   const recipientValidationKeyRef = useRef("");
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
+  const localIntentNonceRef = useRef("");
+  if (!localIntentNonceRef.current) localIntentNonceRef.current = createLocalIntentNonce();
   const [sessionId, setSessionId] = useState("");
   const [rampEmail, setRampEmail] = useState("");
   const [resolvedWallet, setResolvedWallet] = useState<RampResponse | null>(null);
@@ -859,6 +868,7 @@ export default function PixRampClient({
   );
   const externalPixDestination = normalizedOffRampPixKey ? `PIX ${normalizedOffRampPixKey}` : L("PIX de destino", "Destination PIX");
   const atomicIntentKey = intentId || `local-${stableHash([
+    localIntentNonceRef.current,
     queryString,
     sessionId,
     rampMode,
