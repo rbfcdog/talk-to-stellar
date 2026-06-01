@@ -89,7 +89,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     setToken(current)
     if (isClientSessionExpired()) {
       clearClientSession()
-      setLoginNotice("Your session expired. Sign in again to receive this payment.")
+      setLoginNotice(T(language, "Sua sessão expirou. Entre novamente para receber este pagamento.", "Your session expired. Sign in again to receive this payment."))
       setSessionId("")
       setSessionReady("invalid")
     } else {
@@ -102,7 +102,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     if (current) {
       window.history.replaceState(null, "", window.location.pathname)
     }
-  }, [initialToken])
+  }, [initialToken, language])
 
   useEffect(() => {
     async function validate() {
@@ -112,7 +112,11 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
         const payload = await response.json().catch(() => ({}))
         if (!response.ok || !payload?.valid) {
-          setValidation({ valid: false, payload: fallback, message: payload?.message || "Invalid or expired link." })
+          setValidation({
+            valid: false,
+            payload: fallback,
+            message: payload?.message || T(language, "Link inválido ou expirado.", "Invalid or expired link."),
+          })
           return
         }
         setValidation(payload)
@@ -121,7 +125,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       }
     }
     validate()
-  }, [token])
+  }, [token, language])
 
   useEffect(() => {
     if (status !== "done") return
@@ -150,7 +154,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           clearClientSession()
           setSessionId("")
           setSessionReady(response.ok ? "missing_wallet" : "invalid")
-          setLoginNotice("Your current session does not have an active global account. Sign in or create your account to receive this payment.")
+          setLoginNotice(T(language, "Sua sessão atual não tem uma conta global ativa. Entre ou crie sua conta para receber este pagamento.", "Your current session does not have an active global account. Sign in or create your account to receive this payment."))
           return
         }
 
@@ -161,7 +165,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         clearClientSession()
         setSessionId("")
         setSessionReady("invalid")
-        setLoginNotice("Could not validate your current session. Sign in again to receive this payment.")
+        setLoginNotice(T(language, "Não foi possível validar sua sessão atual. Entre novamente para receber este pagamento.", "Could not validate your current session. Sign in again to receive this payment."))
       }
     }
 
@@ -169,7 +173,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     return () => {
       cancelled = true
     }
-  }, [sessionId])
+  }, [sessionId, language])
 
   async function claim() {
     if (!token || validation.valid === false || !sessionId) return
@@ -190,7 +194,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       if (response.status === 401 && payload?.loginRequired) {
         clearClientSession()
         setSessionId("")
-        setLoginNotice(payload?.message || "Sign in again to receive this payment.")
+        setLoginNotice(payload?.message || T(language, "Entre novamente para receber este pagamento.", "Sign in again to receive this payment."))
       }
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
@@ -210,7 +214,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       }
     } catch (error) {
       claimLockRef.current = false
-      setResult({ success: false, message: error instanceof Error ? error.message : "Failed to receive payment." })
+      setResult({
+        success: false,
+        message: error instanceof Error
+          ? error.message
+          : T(language, "Não foi possível receber este pagamento.", "Failed to receive payment."),
+      })
       setStatus("error")
     }
   }
@@ -224,12 +233,13 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const sourceAssetCode = normalizeAssetCode(payload.asset_code || "USDC")
   const isCrossAsset = destinationAssetCode !== sourceAssetCode
   const receiveLabel = isCrossAsset ? destinationAssetCode : sourceAmountLabel
-  const recipientName = String(payload.recipient_name || "you")
-  const senderName = String(payload.sender_name || "Someone")
+  const recipientName = String(payload.recipient_name || T(language, "você", "you"))
+  const senderName = String(payload.sender_name || T(language, "Alguém", "Someone"))
   const hasSessionCredentials = Boolean(sessionId)
   const loggedIn = Boolean(hasSessionCredentials && sessionReady === "ready")
   const nextPath = `/claim-payment?token=${encodeURIComponent(token)}`
-  const createAccountPath = `/create-account?next=${encodeURIComponent(nextPath)}&force_new=1&context=claim-payment`
+  const localizedNextPath = `${nextPath}&lang=${encodeURIComponent(language)}`
+  const createAccountPath = `/create-account?next=${encodeURIComponent(localizedNextPath)}&force_new=1&context=claim-payment&lang=${encodeURIComponent(language)}`
   const senderSessionId = String(payload.session_id || "").trim()
   const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
@@ -260,29 +270,42 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         <section className="min-w-0 w-full overflow-hidden rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
-            Receive Payment
+            {T(language, "Receber pagamento", "Receive Payment")}
           </div>
 
           <h1 className="mt-5 text-3xl font-semibold text-tts-surface md:text-5xl">
-            {senderName} created a {sourceAmountLabel} link for {recipientName}
+            {T(
+              language,
+              `${senderName} criou um link de ${sourceAmountLabel} para ${recipientName}`,
+              `${senderName} created a ${sourceAmountLabel} link for ${recipientName}`
+            )}
           </h1>
           <p className="mt-4 text-sm leading-6 text-tts-deep md:text-base">
-            You will receive {isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} with final credit in ${destinationAssetCode}.` : sourceAmountLabel}. To receive it, sign in or create your global account.
-            This process takes about 2 minutes.
-            {isCrossAsset ? ` You receive in ${destinationAssetCode}.` : " The money is sent to the account authenticated on this page."}
-            {loggedIn && !isSenderSession ? " As soon as the login is valid, the credit will be processed automatically." : ""}
+            {T(
+              language,
+              `Você vai receber ${isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} com crédito final em ${destinationAssetCode}` : sourceAmountLabel}. Para receber, entre ou crie sua conta global. Esse processo leva cerca de 2 minutos.`,
+              `You will receive ${isCrossAsset ? `${formatAmount(payload.amount, payload.asset_code)} with final credit in ${destinationAssetCode}` : sourceAmountLabel}. To receive it, sign in or create your global account. This process takes about 2 minutes.`
+            )}
+            {isCrossAsset
+              ? T(language, ` Você recebe em ${destinationAssetCode}.`, ` You receive in ${destinationAssetCode}.`)
+              : T(language, " O dinheiro vai para a conta autenticada nesta página.", " The money is sent to the account authenticated on this page.")}
+            {loggedIn && !isSenderSession
+              ? T(language, " Assim que o login estiver válido, o crédito será processado automaticamente.", " As soon as the login is valid, the credit will be processed automatically.")
+              : ""}
           </p>
 
           <div className="mt-6 rounded-lg border border-tts-border bg-tts-surface p-4 text-sm">
-            <p className="text-tts-muted">Link status</p>
+            <p className="text-tts-muted">{T(language, "Status do link", "Link status")}</p>
             {validation.valid === false ? (
               <p className="mt-1 text-tts-error">
                 {isExpiredLink
-                  ? `Expired link. ${validation.message || "Request a new link."}`
-                  : (validation.message || "Invalid link.")}
+                  ? `${T(language, "Link expirado.", "Expired link.")} ${validation.message || T(language, "Peça um novo link.", "Request a new link.")}`
+                  : (validation.message || T(language, "Link inválido.", "Invalid link."))}
               </p>
             ) : (
-              <p className="mt-1 text-tts-confirm">Link ready. Next step: sign in or create an account to receive this amount.</p>
+              <p className="mt-1 text-tts-confirm">
+                {T(language, "Link pronto. Próximo passo: entre ou crie uma conta para receber este valor.", "Link ready. Next step: sign in or create an account to receive this amount.")}
+              </p>
             )}
           </div>
 
@@ -290,7 +313,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
               {hasSessionCredentials && sessionReady === "checking" && (
                 <p className="sm:col-span-2 rounded-lg border border-tts-border bg-tts-surface p-3 text-sm text-tts-deep">
-                  Validating your account for receipt...
+                  {T(language, "Validando sua conta para recebimento...", "Validating your account for receipt...")}
                 </p>
               )}
               {loginNotice && (
@@ -300,7 +323,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               )}
               {isSenderSession && (
                 <p className="sm:col-span-2 rounded-lg border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
-                  This browser is signed in to the account that created the link. To receive it, sign in or create the recipient account.
+                  {T(language, "Este navegador está conectado na conta que criou o link. Para receber, entre ou crie a conta de destino.", "This browser is signed in to the account that created the link. To receive it, sign in or create the recipient account.")}
                 </p>
               )}
               {isSenderSession && (
@@ -309,22 +332,22 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   onClick={leaveSenderSession}
                   className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
                 >
-                  Use another account to receive
+                  {T(language, "Usar outra conta para receber", "Use another account to receive")}
                 </button>
               )}
               <Link
-                href={`/login?next=${encodeURIComponent(nextPath)}`}
+                href={`/login?next=${encodeURIComponent(localizedNextPath)}&lang=${encodeURIComponent(language)}`}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold"
               >
                 <LogIn className="h-4 w-4" />
-                1) Sign in to receive
+                {T(language, "1) Entrar para receber", "1) Sign in to receive")}
               </Link>
               <Link
                 href={createAccountPath}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
               >
                 <UserPlus className="h-4 w-4" />
-                2) Create account to receive
+                {T(language, "2) Criar conta para receber", "2) Create account to receive")}
               </Link>
             </div>
           )}
@@ -332,19 +355,24 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           {loggedIn && !isSenderSession && !isExpiredLink && (
             <div className="mt-5 space-y-3">
               <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-3 text-sm text-tts-confirm">
-                Account validated. Processing automatic receipt of {receiveLabel}.
+                {T(language, `Conta validada. Processando recebimento automático de ${receiveLabel}.`, `Account validated. Processing automatic receipt of ${receiveLabel}.`)}
               </div>
               <button
                 type="button"
                 onClick={leaveSenderSession}
                 className="inline-flex w-full items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
               >
-                Use another account to receive
+                {T(language, "Usar outra conta para receber", "Use another account to receive")}
               </button>
             </div>
           )}
 
-          {status === "claiming" && <div className="mt-5 inline-flex items-center gap-2 text-sm text-tts-deep"><TypingDots />Validating and crediting payment...</div>}
+          {status === "claiming" && (
+            <div className="mt-5 inline-flex items-center gap-2 text-sm text-tts-deep">
+              <TypingDots />
+              {T(language, "Validando e creditando pagamento...", "Validating and crediting payment...")}
+            </div>
+          )}
           <AnimatePresence mode="wait">
           {status === "done" && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
@@ -361,7 +389,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   rel="noopener noreferrer"
                   className="inline-flex w-full items-center justify-center rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
                 >
-                  View receipt
+                  {T(language, "Ver comprovante", "View receipt")}
                 </a>
               )}
               {successAutoConversionMessage && (
@@ -372,7 +400,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           )}
           {status === "error" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
-              {result?.error || result?.message || "Could not receive this payment."}
+              {result?.error || result?.message || T(language, "Não foi possível receber este pagamento.", "Could not receive this payment.")}
             </motion.div>
           )}
           </AnimatePresence>
