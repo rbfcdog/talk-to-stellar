@@ -634,12 +634,41 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Diga o que quer fazer');
   });
 
+  it('routes typo PIN reset wording instead of showing the generic menu', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_reset_pin_intent');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Enviei um e-mail para r******@gmail.com com o link seguro para mudar seu PIN. Ele vale por 15 minutos.',
+    }));
+
+    const result = await graph.processInput(createState('uero redefinir o pin'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.RESET_PIN);
+    expect(result.action_type).toBe(ActionType.RESET_PIN);
+    expect(executeToolMock).toHaveBeenCalledWith('reset_pin', {
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
+      user_id: 'eval-user',
+      language: 'pt-BR',
+    });
+    expect(result.response_message).toContain('e-mail');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
   it('keeps exact short PIN reset wording in the intent router prompt', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
     const prompt = graph.buildIntentRouterPrompt();
 
     expect(prompt).toContain('redefinir o pin -> route_reset_pin_intent');
+    expect(prompt).toContain('uero redefinir o pin -> route_reset_pin_intent');
+    expect(prompt).toContain('"uero redefinir o pin" is an actionable PIN reset request');
     expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
+    expect(prompt).toContain('No-tool is not acceptable for PIN/security');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
     expect(prompt).toContain('You are not obligated to call a tool');
     expect(prompt).toContain('Priority order when multiple intents appear');

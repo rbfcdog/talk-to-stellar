@@ -86,7 +86,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to change account PIN/security. Exact Portuguese examples: "redefinir o pin", "alterar meu pin", "mudar meu pin", "trocar o PIN", "resetar pin", "recuperar pin", "esqueci meu pin", "pin nao funciona". English examples: forgot PIN, change PIN, recover PIN, update PIN. PIN change/reset requests must never route to general help.',
+    description: 'Use when the user asks to change account PIN/security, even with typos. Exact Portuguese examples: "uero redefinir o pin", "quero redefinir o pin", "redefinir o pin", "alterar meu pin", "mudar meu pin", "trocar o PIN", "resetar pin", "recuperar pin", "esqueci meu pin", "pin nao funciona". English examples: forgot PIN, change PIN, recover PIN, update PIN. PIN change/reset requests must call this tool and must never become general help.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -111,7 +111,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.GENERAL,
     toolName: 'route_general_intent',
-    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, or recover.',
+    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, recover, or typo variants like "uero redefinir o pin".',
   },
 ];
 
@@ -3497,6 +3497,7 @@ Tool-call contract:
 - You are not obligated to call a tool.
 - Call exactly one route_*_intent tool when the message is an actionable TalkToStellar product request.
 - Do not call a tool for pure small talk, broad explanations, unsupported non-product requests, or cases where no product route should run.
+- No-tool is acceptable only for non-actionable messages. No-tool is not acceptable for PIN/security, balance, PIX, conversion, yield, history, contacts, payments, payment links, login/logout, wallet, or profile requests.
 - If the message is ambiguous but clearly belongs to a product area, call that product route and set needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
 - route_general_intent is optional and only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests. It is also acceptable to call no tool for these messages.
@@ -3524,7 +3525,9 @@ Routing principles:
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
 - PIN/security requests are account actions, never generic help. If the message contains "pin" plus any reset/change verb, choose route_reset_pin_intent. Strong verbs: redefinir, mudar, alterar, trocar, modificar, atualizar, resetar, recuperar, esqueci, esquecido, forgot, change, update, recover. Strong phrases: "redefinir o pin", "redefinir meu pin", "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN".
-- Do not choose route_general_intent for a PIN reset/change request even if the wording is short, has no amount, has leading whitespace, or looks like an incomplete command. The next action is reset_pin.
+- Treat "uero" as a typo for "quero". "uero redefinir o pin" is an actionable PIN reset request and must call route_reset_pin_intent.
+- Do not choose route_general_intent for a PIN reset/change request.
+- Do not choose route_general_intent and do not skip tool-calling for a PIN reset/change request even if the wording is short, has no amount, has leading whitespace, or looks like an incomplete command. The next action is reset_pin.
 - "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
 - Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
 - "quero ver meu perfil" is a concrete account/profile request. Do not answer with a menu; route to route_wallet_intent if no more specific profile route exists.
@@ -3543,6 +3546,7 @@ Tool selection examples:
 - quero ver aolicacoes -> route_yield_intent
 - quero mudar de pin -> route_reset_pin_intent
 - quero alterar meu pin -> route_reset_pin_intent
+- uero redefinir o pin -> route_reset_pin_intent
 - redefinir o pin -> route_reset_pin_intent
 - redefinir meu pin -> route_reset_pin_intent
 - resetar pin -> route_reset_pin_intent
