@@ -505,7 +505,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
                 </div>
                 {row.amount > 0 && row.rate > 0 && (
                   <div className="mb-3">
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Simulação", "Simulation")}</p>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Rentabilidade", "Return")}</p>
                     <div className="flex h-14 items-end gap-1">
                       {spv.map((v, i) => (
                         <div key={i} className="flex-1 rounded-t bg-tts-confirm/70" style={{ height: `${Math.max(8, (v / maxSpv) * 100)}%` }} />
