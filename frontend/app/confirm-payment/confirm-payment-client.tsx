@@ -112,7 +112,7 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   if (code === "BRL") return `R$ ${truncated.toFixed(2)}`
   if (code === "USDC") return `US$ ${truncated.toFixed(2)}`
   if (code === "CETES") return `${truncated.toFixed(2)} CETES`
-  if (code === "XLM") return "saldo da conta TalkToStellar"
+  if (code === "XLM") return `${truncated.toFixed(2)} XLM`
   return `${truncated.toFixed(2)} ${code}`
 }
 
@@ -143,9 +143,11 @@ function formatRecipientLabel(payload: any, language: AppLanguage = "en") {
     ''
   ).trim()
 
-  if (isPublicAccountKey(candidate)) return T(language, 'Destinatário', 'Recipient')
-  if (candidate) return candidate
-  return T(language, 'Destinatário', 'Recipient')
+  const fallback = formatRecipientKey(payload)
+  const weakLabel = /^(o|a|ao|aos|as|para|pra|pro|destinatario|recipient)$/i.test(candidate)
+  if (isPublicAccountKey(candidate)) return fallback || T(language, 'Destinatário', 'Recipient')
+  if (candidate && !weakLabel) return candidate
+  return fallback || T(language, 'Destinatário', 'Recipient')
 }
 
 function formatRecipientKey(payload: any) {
@@ -980,7 +982,7 @@ export default function ConfirmPaymentClient({
                   inputMode="numeric"
                   maxLength={8}
                   placeholder="Enter your PIN"
-                  className="w-full rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-surface outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+                  className="w-full rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 

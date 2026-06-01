@@ -44,7 +44,7 @@ function formatAmount(amount?: string, assetCode?: string) {
   if (code === "USDC") return `US$ ${n.toFixed(2)}`
   if (code === "BRL") return `R$ ${n.toFixed(2)}`
   if (code === "CETES") return `${n.toFixed(2)} CETES`
-  if (code === "XLM") return "saldo da conta TalkToStellar"
+  if (code === "XLM") return `${n.toFixed(2)} XLM`
   return `${n.toFixed(2)} ${code}`
 }
 

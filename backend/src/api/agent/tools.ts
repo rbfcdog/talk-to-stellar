@@ -314,6 +314,38 @@ function normalizeToolLanguage(value: unknown): 'pt-BR' | 'en' {
   return 'pt-BR';
 }
 
+function isWeakPaymentRecipientName(value: unknown): boolean {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  return !normalized || /^(o|a|ao|aos|as|para|pra|pro|destinatario|recipient)$/.test(normalized);
+}
+
+function paymentRecipientFallbackLabel(input: any, destination: string): string {
+  const contact = input?.destination_contact || {};
+  const candidates = [
+    contact.email,
+    contact.pix_key,
+    contact.phone_number,
+    contact.cpf,
+    input?.recipient_key,
+    input?.recipientKey,
+    input?.destination_key,
+    input?.destinationKey,
+    input?.recipient_email,
+    input?.recipientEmail,
+    input?.destination_email,
+    input?.destinationEmail,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value) => !/^G[A-Z2-7]{55}$/i.test(value));
+
+  return candidates[0] || String(destination || '').trim();
+}
+
 async function executeSetLanguage(input: Record<string, any>): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
   return JSON.stringify({
@@ -3769,6 +3801,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       } catch (err) {
         // ignore lookup failures
       }
+    }
+    if (isWeakPaymentRecipientName(destinationName)) {
+      destinationName = paymentRecipientFallbackLabel(input, normalizedDestination) || destinationName;
     }
 
     const assetCode = normalizeAssetCode(
