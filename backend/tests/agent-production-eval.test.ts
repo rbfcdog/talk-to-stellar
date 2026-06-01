@@ -668,18 +668,24 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('uero redefinir o pin -> route_reset_pin_intent');
     expect(prompt).toContain('"uero redefinir o pin" is an actionable PIN reset request');
     expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
-    expect(prompt).toContain('No-tool is not acceptable for PIN/security');
+    expect(prompt).toContain('This routing step must call exactly one route_*_intent tool for every user message');
     expect(prompt).toContain('uero mandar 10 xlm pra ana silva -> route_payment_intent');
     expect(prompt).toContain('Payment without PIX');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
-    expect(prompt).toContain('You are not obligated to call a tool');
+    expect(prompt).toContain('route_general_intent is not a fallback for failed understanding');
     expect(prompt).toContain('Priority order when multiple intents appear');
   });
 
-  it('does not force or retry a route tool when the LLM router selects no tool', async () => {
+  it('binds the LLM route tools with required tool choice and uses general only as an explicit route', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const routerInvoke = jest.fn().mockResolvedValue({ content: 'Posso responder sem ferramenta quando não houver rota concreta.' });
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_general',
+        name: 'route_general_intent',
+        args: { confidence: 0.95, reason: 'broad capability question', language: 'pt-BR', risk: 'low' },
+      }],
+    });
     graph.llm = {
       bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
       invoke: jest.fn(),
@@ -690,7 +696,7 @@ describe('Agent production evals', () => {
     expect(intent).toBe(IntentType.GENERAL);
     expect(routerInvoke).toHaveBeenCalledTimes(1);
     expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
-    expect(graph.llm.bindTools.mock.calls[0][1]).toBeUndefined();
+    expect(graph.llm.bindTools.mock.calls[0][1]).toEqual({ tool_choice: 'required' });
   });
 
   it('selects the highest-confidence LLM route when the model returns more than one route tool', async () => {
@@ -730,6 +736,69 @@ describe('Agent production evals', () => {
       session_id: 'eval-session',
     }));
     expect(result.response_message).toContain('XLM: 2.0000000');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('does not let the exact typo payment request fall through to the generic menu path', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const anaPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_payment',
+        name: 'route_payment_intent',
+        args: {
+          confidence: 0.99,
+          reason: 'specific amount, asset, and saved contact recipient',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'high',
+        },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for this request');
+      }
+
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Ana Silva',
+              stellar_public_key: anaPublicKey,
+              email: 'ana@example.com',
+            },
+          ],
+        });
+      }
+
+      if (name === 'prepare_payment_confirmation') {
+        return JSON.stringify({
+          success: true,
+          url: 'https://app.example.com/confirm-payment?token=abc',
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('uero mandar 10 xlm pra ana silva'));
+
+    expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(result.response_message).toContain('10 XLM');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('/confirm-payment?');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
