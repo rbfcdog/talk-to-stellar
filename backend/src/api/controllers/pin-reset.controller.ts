@@ -39,6 +39,12 @@ function normalizeIdentity(value: unknown): string {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  return 'pt-BR';
+}
+
 async function loadSession(sessionId: string): Promise<any | null> {
   const { data, error } = await supabase
     .from('agent_sessions')
@@ -116,16 +122,24 @@ export class PinResetController {
 
       const resetData = await PinResetService.generateResetToken(
         resolvedUserId,
-        String(session_id)
+        String(session_id),
+        {
+          email: session.email,
+          language: normalizeLanguage(req.body?.language || req.headers['accept-language']),
+        }
       );
 
       logger.info(`PIN reset initiated for session ${session_id}`);
 
       return res.status(200).json({
         success: true,
-        message: `Reset link generated. Valid for ${resetData.expires_in_minutes} minutes.`,
+        message: resetData.email_sent && resetData.masked_email
+          ? `E-mail enviado para ${resetData.masked_email}. O link vale por ${resetData.expires_in_minutes} minutos.`
+          : `Reset link generated. Valid for ${resetData.expires_in_minutes} minutes.`,
         reset_url: resetData.reset_url,
         expires_in_minutes: resetData.expires_in_minutes,
+        email_sent: Boolean(resetData.email_sent),
+        masked_email: resetData.masked_email,
       });
     } catch (error: any) {
       logger.error(`PIN reset initiation error: ${error?.message || String(error)}`);

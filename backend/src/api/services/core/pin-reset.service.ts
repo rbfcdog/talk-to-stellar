@@ -8,6 +8,29 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../../../config/supabase';
 import { logger } from '../../../utils/logger';
 import { getRequiredJwtSecret } from '../../../config/secrets';
+import { EmailConfirmationService } from '../email-confirmation.service';
+
+type PinResetLanguage = 'pt-BR' | 'en';
+
+type GenerateResetTokenOptions = {
+  email?: string | null;
+  language?: PinResetLanguage | string | null;
+};
+
+function normalizeEmail(value?: string | null): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function looksLikeEmail(value?: string | null): boolean {
+  const normalized = normalizeEmail(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function normalizeLanguage(value?: string | null): PinResetLanguage {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  return 'pt-BR';
+}
 
 interface PinResetToken {
   id: string;
@@ -41,12 +64,61 @@ export class PinResetService {
   /**
    * Generate a PIN reset token
    */
-  static async generateResetToken(userId: string, sessionId: string): Promise<{
+  private static async sendResetEmail(input: {
+    email: string;
+    resetUrl: string;
+    expiresInMinutes: number;
+    language: PinResetLanguage;
+  }): Promise<void> {
+    const subject = input.language === 'en'
+      ? 'Confirm your TalkToStellar PIN change'
+      : 'Confirme a troca do seu PIN TalkToStellar';
+    const text = input.language === 'en'
+      ? [
+          'We received a request to change your TalkToStellar PIN.',
+          `Open this link to choose a new PIN: ${input.resetUrl}`,
+          `This link expires in ${input.expiresInMinutes} minutes.`,
+          'If this was not you, ignore this email.',
+        ].join('\n')
+      : [
+          'Recebemos um pedido para mudar seu PIN TalkToStellar.',
+          `Abra este link para escolher um novo PIN: ${input.resetUrl}`,
+          `Este link expira em ${input.expiresInMinutes} minutos.`,
+          'Se não foi você, ignore este e-mail.',
+        ].join('\n');
+    const html = input.language === 'en'
+      ? [
+          '<p>We received a request to change your TalkToStellar PIN.</p>',
+          `<p><a href="${input.resetUrl}">Change my PIN</a></p>`,
+          `<p>This link expires in ${input.expiresInMinutes} minutes.</p>`,
+          '<p>If this was not you, ignore this email.</p>',
+        ].join('')
+      : [
+          '<p>Recebemos um pedido para mudar seu PIN TalkToStellar.</p>',
+          `<p><a href="${input.resetUrl}">Mudar meu PIN</a></p>`,
+          `<p>Este link expira em ${input.expiresInMinutes} minutos.</p>`,
+          '<p>Se não foi você, ignore este e-mail.</p>',
+        ].join('');
+
+    await EmailConfirmationService.sendTransactional({
+      to: input.email,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  static async generateResetToken(userId: string, sessionId: string, options: GenerateResetTokenOptions = {}): Promise<{
     token: string;
     reset_url: string;
     expires_in_minutes: number;
+    email_sent?: boolean;
+    masked_email?: string;
   }> {
     try {
+      const language = normalizeLanguage(options.language);
+      const email = normalizeEmail(options.email);
+      const sendEmail = looksLikeEmail(email);
       // Generate random token
       const resetToken = crypto.randomBytes(this.RESET_TOKEN_LENGTH).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
@@ -80,17 +152,35 @@ export class PinResetService {
         const fallbackToken = this.generatePinChangeJWT(userId, resetToken, sessionId);
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const fallbackResetUrl = `${frontendUrl}/change-pin?token=${encodeURIComponent(fallbackToken)}&user_id=${encodeURIComponent(userId)}`;
+        if (sendEmail) {
+          await this.sendResetEmail({
+            email,
+            resetUrl: fallbackResetUrl,
+            expiresInMinutes: this.TOKEN_EXPIRY_MINUTES,
+            language,
+          });
+        }
 
         return {
           token: fallbackToken,
           reset_url: fallbackResetUrl,
           expires_in_minutes: this.TOKEN_EXPIRY_MINUTES,
+          email_sent: sendEmail,
+          masked_email: sendEmail ? EmailConfirmationService.maskEmail(email) : undefined,
         };
       }
 
       // Generate reset URL
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       const resetUrl = `${frontendUrl}/change-pin?token=${resetToken}&user_id=${userId}`;
+      if (sendEmail) {
+        await this.sendResetEmail({
+          email,
+          resetUrl,
+          expiresInMinutes: this.TOKEN_EXPIRY_MINUTES,
+          language,
+        });
+      }
 
       logger.info(`PIN reset token generated for user ${userId}`);
 
@@ -98,6 +188,8 @@ export class PinResetService {
         token: resetToken,
         reset_url: resetUrl,
         expires_in_minutes: this.TOKEN_EXPIRY_MINUTES,
+        email_sent: sendEmail,
+        masked_email: sendEmail ? EmailConfirmationService.maskEmail(email) : undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

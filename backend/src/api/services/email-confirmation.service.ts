@@ -8,7 +8,7 @@ export type EmailConfirmationPurpose = 'create_account' | 'login';
 
 type Language = 'pt-BR' | 'en';
 
-type EmailMessage = {
+export type EmailMessage = {
   to: string;
   subject: string;
   text: string;
@@ -527,6 +527,10 @@ export class EmailConfirmationService {
 
   static maskEmail(email: string): string {
     return maskEmail(normalizeEmail(email));
+  }
+
+  static async sendTransactional(message: EmailMessage): Promise<void> {
+    await sendEmail(message);
   }
 
   static async requireVerified(input: RequireVerifiedInput): Promise<RequireVerifiedResult> {

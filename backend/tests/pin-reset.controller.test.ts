@@ -28,6 +28,8 @@ describe('PinResetController security', () => {
       token: 'raw-reset-token',
       reset_url: 'http://localhost:3000/change-pin?token=raw-reset-token&user_id=user-1',
       expires_in_minutes: 15,
+      email_sent: true,
+      masked_email: 'u**r@example.com',
     });
   });
 
@@ -84,10 +86,16 @@ describe('PinResetController security', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(PinResetService.generateResetToken).toHaveBeenCalledWith(
       'user-1',
-      '11111111-1111-4111-8111-111111111111'
+      '11111111-1111-4111-8111-111111111111',
+      expect.objectContaining({
+        email: 'user@example.com',
+        language: 'pt-BR',
+      })
     );
     const payload = (res.json as jest.Mock).mock.calls[0][0];
     expect(payload.reset_url).toContain('/change-pin');
+    expect(payload.email_sent).toBe(true);
+    expect(payload.masked_email).toBe('u**r@example.com');
     expect(payload).not.toHaveProperty('token');
   });
 

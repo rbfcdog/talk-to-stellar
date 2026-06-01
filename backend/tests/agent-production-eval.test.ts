@@ -585,8 +585,51 @@ describe('Agent production evals', () => {
     expect(graph.parseIntentFromLlmOutput('{"intent":"pix_transfer","confidence":0.99}')).toBe(IntentType.PIX);
     expect(graph.parseIntentFromLlmOutput('```json\n{"intent":"contacts","confidence":0.98}\n```')).toBe(IntentType.CONTACTS);
     expect(graph.parseIntentFromLlmOutput('The intent is payment_link.')).toBe(IntentType.PAYMENT_LINK);
+    expect(graph.parseIntentFromLlmOutput('{"intent":"reset_pin","confidence":0.99}')).toBe(IntentType.RESET_PIN);
     expect(graph.parseIntentFromLlmOutput('{"intent":"aplicações","confidence":0.8}')).toBe(IntentType.YIELD);
     expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
+  });
+
+  it('routes PIN change requests to the reset_pin tool instead of generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const classifierInvoke = jest.fn().mockResolvedValue({
+      additional_kwargs: {
+        tool_calls: [
+          {
+            id: 'call_reset_pin',
+            function: {
+              name: 'classify_talktostellar_intent',
+              arguments: '{"intent":"reset_pin","confidence":0.99}',
+            },
+          },
+        ],
+      },
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Enviei um e-mail para r******@gmail.com com o link seguro para mudar seu PIN. Ele vale por 15 minutos.',
+    }));
+
+    const result = await graph.processInput(createState('quero mudar de pin'));
+
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.RESET_PIN);
+    expect(result.action_type).toBe(ActionType.RESET_PIN);
+    expect(executeToolMock).toHaveBeenCalledWith('reset_pin', {
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
+      user_id: 'eval-user',
+      language: 'pt-BR',
+    });
+    expect(result.response_message).toContain('e-mail');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
   });
 
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
