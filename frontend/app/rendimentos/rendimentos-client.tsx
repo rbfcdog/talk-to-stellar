@@ -193,16 +193,23 @@ export default function RendimentosClient({
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", { amount, source_asset: smartConvertSourceCode, dest_asset: smartConvertDestCode, from: "review", next: "review", lang: language }), [amount, smartConvertDestCode, smartConvertSourceCode, language]);
+  const pixTopUpTargetAsset = safeSelectedCode === "TESOURO" ? "BRL" : safeSelectedCode || "BRL";
+  const pixTopUpUsesExactReceive = pixTopUpTargetAsset === "BRL" || pixTopUpTargetAsset === "USDC";
   const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", {
-    amount,
+    mode: "onramp",
+    amount: pixTopUpUsesExactReceive ? "" : amount,
+    receive_amount: pixTopUpUsesExactReceive ? amount : "",
+    receive_asset: pixTopUpUsesExactReceive ? pixTopUpTargetAsset : "",
     asset: "BRL",
+    target_asset: pixTopUpTargetAsset === "BRL" ? "" : pixTopUpTargetAsset,
+    currency: "BRL",
     from: "rendimentos",
     return_source: "rendimentos",
     return_to: newApplicationUrl,
     return_label: L("Voltar aos investimentos", "Back to investments"),
     stay_open: "1",
     lang: language,
-  }), [amount, language, newApplicationUrl, L]);
+  }), [amount, language, newApplicationUrl, pixTopUpTargetAsset, pixTopUpUsesExactReceive, L]);
   const amountPresets = useMemo(() => {
     const s = selectedProfile.short;
     if (s === "BRL") return ["50", "100", "500", "1000"];
