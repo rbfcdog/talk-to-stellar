@@ -651,18 +651,6 @@ export class AgentGraph {
     return this.repairNoisyIntentText(normalized);
   }
 
-  private isBalanceRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return false;
-    const asksBalance = /\b(saldo|quanto tenho|quanto eu tenho|dinheiro disponivel|disponivel|balance|balances)\b/.test(normalized);
-    const excludesHistory = /\b(historico|extrato|movimentacoes|transacoes|recibos|comprovantes)\b/.test(normalized);
-    const excludesApplicationPosition = /\b(rendimentos|aplicacoes|investimentos|posicoes|posicao)\b/.test(normalized);
-    return asksBalance && !excludesHistory && !excludesApplicationPosition;
-  }
-
   private isConversionRequest(text: string): boolean {
     const normalized = this.normalizeTextForIntent(text)
       .replace(/[!?.,;:]+/g, ' ')
@@ -672,41 +660,6 @@ export class AgentGraph {
     if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return false;
     return /\b(converter|conversao|trocar|cambiar|exchange|swap)\b/.test(normalized) ||
       /\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b.*\b(?:para|pra|por|em)\b.*\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized);
-  }
-
-  private isLikelyPaymentRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return false;
-    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return false;
-    if (this.isPaymentLinkRequest(normalized)) return false;
-    const hasPayVerb = /\b(mandar|enviar|pagar|transferir|fazer pagamento|send|pay|transfer)\b/.test(normalized);
-    const hasRecipient = /\b(?:para|pra|pro|a)\s+[a-z0-9._%+-]+/.test(normalized);
-    return hasPayVerb && hasRecipient;
-  }
-
-  private classifyHighConfidenceProductIntent(text: string): IntentType | null {
-    const normalized = this.normalizeTextForIntent(text);
-    if (!normalized) return null;
-
-    if (/\b(logout|deslogar|sair da conta|desconectar|encerrar sessao|sign out|log out)\b/.test(normalized)) {
-      return IntentType.WALLET_LOGOUT;
-    }
-    if (this.isContactsRequest(normalized)) return IntentType.CONTACTS;
-    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return IntentType.PIX;
-    if (this.extractYieldIntentFromText(normalized).is_yield) return IntentType.YIELD;
-    if (this.isRampHistoryRequest(normalized) || this.isTransactionHistoryRequest(normalized)) return IntentType.HISTORY;
-    if (this.isBalanceRequest(normalized)) return IntentType.BALANCE;
-    if (this.isPaymentLinkRequest(normalized) || this.isReceiveLinkRequest(normalized)) return IntentType.PAYMENT_LINK;
-    if (this.isOptimizedRouteRequest(normalized)) return IntentType.PRICE_QUOTE;
-    if (this.isConversionRequest(normalized)) return IntentType.CONVERSION;
-    if (this.isLikelyPaymentRequest(normalized)) return IntentType.PAYMENT;
-    if (/\b(entrar|login|acessar conta|sign in)\b/.test(normalized)) return IntentType.LOGIN;
-    if (/\b(criar conta|nova conta|cadastro|cadastrar|onboard)\b/.test(normalized)) return IntentType.ONBOARD;
-
-    return null;
   }
 
   private normalizeHistoryIntentText(text: string): string {
@@ -3254,7 +3207,7 @@ export class AgentGraph {
       '- Strict contact rule: if a payment names a person, use only a real saved contact from RUNTIME CONTEXT/tool results. If not found, ask for an exact saved contact or transfer key/email/CPF/phone; never create a recipient from a typo.',
       '- In payment and conversion tools, source/origin asset is what the sender spends; destination asset is what the recipient receives.',
       '- Example: "transferir 200 BRL para Carlos receber em USDC" means source_amount=200, source_asset_code=BRL, destination/dest asset=USDC. Do not send 200 USDC.',
-      '- Never invent PIX URLs or routes. PIX flows must use the deterministic pix handler, which builds /pix-on or /pix-off from FRONTEND_URL.',
+      '- Never invent PIX URLs or routes. PIX flows must use the PIX route handler, which builds /pix-on or /pix-off from FRONTEND_URL after the LLM has selected the PIX route.',
       '- Never expose TESOURO in normal user copy. In PIX flows it is internal and should be described as reais or R$.',
       '- Do not mention sandbox/testnet/devnet/provider/anchor/Etherfuse/infrastructure in chat. User-facing copy must sound like a banking app.',
       '- Mainnet is an advanced separate mode. Only discuss Stellar Mainnet if the user explicitly says mainnet, pubnet, rede publica, carteira mainnet, or saldo mainnet.',
@@ -3398,132 +3351,6 @@ export class AgentGraph {
       : JSON.stringify(fallback.content);
   }
 
-  /**
-   * Detect user intent from message using LLM
-   */
-  private intentFromLabel(value: unknown): IntentType | null {
-    const normalized = String(value || '')
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/^["'`]+|["'`]+$/g, '')
-      .replace(/[^a-z_]+/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '');
-
-    const intentMap: Record<string, IntentType> = {
-      login: IntentType.LOGIN,
-      onboard: IntentType.ONBOARD,
-      wallet: IntentType.WALLET,
-      wallet_logout: IntentType.WALLET_LOGOUT,
-      reset_pin: IntentType.RESET_PIN,
-      pin_reset: IntentType.RESET_PIN,
-      change_pin: IntentType.RESET_PIN,
-      update_pin: IntentType.RESET_PIN,
-      security: IntentType.RESET_PIN,
-      seguranca: IntentType.RESET_PIN,
-      mudar_pin: IntentType.RESET_PIN,
-      alterar_pin: IntentType.RESET_PIN,
-      trocar_pin: IntentType.RESET_PIN,
-      redefinir_pin: IntentType.RESET_PIN,
-      resetar_pin: IntentType.RESET_PIN,
-      contacts: IntentType.CONTACTS,
-      payment: IntentType.PAYMENT,
-      payment_link: IntentType.PAYMENT_LINK,
-      balance: IntentType.BALANCE,
-      history: IntentType.HISTORY,
-      financial_memory: IntentType.FINANCIAL_MEMORY,
-      conversion: IntentType.CONVERSION,
-      price_quote: IntentType.PRICE_QUOTE,
-      pix: IntentType.PIX,
-      pix_onramp: IntentType.PIX,
-      pix_offramp: IntentType.PIX,
-      pix_transfer: IntentType.PIX,
-      pix_payment: IntentType.PIX,
-      pix_send: IntentType.PIX,
-      pix_deposit: IntentType.PIX,
-      pix_withdraw: IntentType.PIX,
-      onramp: IntentType.PIX,
-      offramp: IntentType.PIX,
-      withdraw: IntentType.PIX,
-      withdrawal: IntentType.PIX,
-      saque: IntentType.PIX,
-      retirada: IntentType.PIX,
-      yield: IntentType.YIELD,
-      general: IntentType.GENERAL,
-      contact: IntentType.CONTACTS,
-      recipient: IntentType.CONTACTS,
-      recipients: IntentType.CONTACTS,
-      beneficiary: IntentType.CONTACTS,
-      beneficiaries: IntentType.CONTACTS,
-      application: IntentType.YIELD,
-      applications: IntentType.YIELD,
-      aplicacao: IntentType.YIELD,
-      aplicacoes: IntentType.YIELD,
-      investimento: IntentType.YIELD,
-      investimentos: IntentType.YIELD,
-      rendimento: IntentType.YIELD,
-      rendimentos: IntentType.YIELD,
-      earnings: IntentType.YIELD,
-      investment: IntentType.YIELD,
-      investments: IntentType.YIELD,
-      best_route: IntentType.PRICE_QUOTE,
-      route: IntentType.PRICE_QUOTE,
-      quote: IntentType.PRICE_QUOTE,
-      rate: IntentType.PRICE_QUOTE,
-      rates: IntentType.PRICE_QUOTE,
-      convert: IntentType.CONVERSION,
-      exchange: IntentType.CONVERSION,
-      payment_links: IntentType.PAYMENT_LINK,
-      pay_link: IntentType.PAYMENT_LINK,
-      payments: IntentType.PAYMENT,
-    };
-
-    return intentMap[normalized] || null;
-  }
-
-  private parseIntentFromLlmOutput(content: unknown): IntentType | null {
-    const raw = typeof content === 'string' ? content.trim() : JSON.stringify(content || '');
-    if (!raw) return null;
-
-    const withoutFence = raw
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
-
-    const parseJsonCandidate = (candidate: string): IntentType | null => {
-      try {
-        const parsed = JSON.parse(candidate);
-        if (typeof parsed === 'string') return this.intentFromLabel(parsed);
-        if (Array.isArray(parsed)) return parsed.length ? this.intentFromLabel(parsed[0]) : null;
-        if (parsed && typeof parsed === 'object') {
-          return this.intentFromLabel(
-            parsed.intent ||
-            parsed.detected_intent ||
-            parsed.label ||
-            parsed.classification ||
-            parsed.route
-          );
-        }
-      } catch {
-        return null;
-      }
-      return null;
-    };
-
-    const jsonIntent = parseJsonCandidate(withoutFence) || parseJsonCandidate(raw);
-    if (jsonIntent) return jsonIntent;
-
-    const directIntent = this.intentFromLabel(withoutFence);
-    if (directIntent) return directIntent;
-
-    const match = withoutFence.toLowerCase().match(
-      /\b(wallet_logout|reset_pin|pin_reset|payment_link|financial_memory|price_quote|pix_onramp|pix_offramp|pix_transfer|pix_payment|pix_send|pix_deposit|pix_withdraw|contacts|conversion|payment|balance|history|yield|wallet|onboard|login|pix|general)\b/
-    );
-    return match ? this.intentFromLabel(match[1]) : null;
-  }
-
   private intentFromRoutingToolName(value: unknown): IntentType | null {
     const toolName = String(value || '').trim();
     return INTENT_BY_ROUTING_TOOL.get(toolName) || null;
@@ -3560,10 +3387,9 @@ Call one route tool with confidence. Do not produce prose.`;
   }
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
-    const localFallbackIntent = this.classifyHighConfidenceProductIntent(message);
-
     if (!this.shouldUseLlmIntentRouter()) {
-      return localFallbackIntent || IntentType.GENERAL;
+      logger.debug('[Agent] Intent router skipped because no production OpenAI key is configured');
+      return IntentType.GENERAL;
     }
 
     try {
@@ -3612,17 +3438,12 @@ Call one route tool with confidence. Do not produce prose.`;
         }
       }
 
-      const response = await this.llm.invoke(messages);
-
-      const parsedIntent = this.parseIntentFromLlmOutput(response.content);
-      const detectedIntent = parsedIntent || localFallbackIntent || IntentType.GENERAL;
-      logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
-
-      return detectedIntent;
+      logger.warn('[Agent] Intent router could not select a route tool');
+      return IntentType.GENERAL;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Intent detection failed: ${errorMessage}`);
-      return localFallbackIntent || IntentType.GENERAL;
+      return IntentType.GENERAL;
     }
   }
 

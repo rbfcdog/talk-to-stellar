@@ -26,6 +26,21 @@ describe('Agent PIX off-ramp detection', () => {
     success: false,
   });
 
+  const mockRouteIntent = (graph: any, toolName: string) => {
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: `call_${toolName}`,
+        name: toolName,
+        args: { confidence: 0.99, reason: 'test route' },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+    return routerInvoke;
+  };
+
   it('treats retirar para outro banco as PIX off-ramp even without saying PIX', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 
@@ -148,7 +163,8 @@ describe('Agent PIX off-ramp detection', () => {
 
   it('processes money-out wording as a PIX off-ramp link instead of asking for payment recipient', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
     (graph as any).externalService = {
@@ -175,7 +191,8 @@ describe('Agent PIX off-ramp detection', () => {
 
   it('answers fora do pix wording with an off-ramp page instead of a missing contact error', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
     (graph as any).externalService = {
@@ -202,7 +219,8 @@ describe('Agent PIX off-ramp detection', () => {
 
   it('answers mandar pra fora reais em pix with an off-ramp page instead of a missing contact error', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
     (graph as any).externalService = {
@@ -402,7 +420,8 @@ describe('Agent PIX off-ramp detection', () => {
 
   it('processes PIX-funded contact transfer as auto-pay link instead of wallet top-up', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent');
     const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
@@ -454,7 +473,8 @@ describe('Agent PIX off-ramp detection', () => {
 
   it('blocks PIX-funded recipient link when the recipient is not a saved real contact', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
     const contactLookup = jest.spyOn(graph as any, 'resolveOwnedPaymentContact').mockResolvedValue({
