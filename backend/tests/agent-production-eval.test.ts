@@ -116,6 +116,45 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
+  it('uses the LLM intent classifier to route typo balance requests instead of generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'real-openai-key', 'production prompt') as any;
+    const classifierInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'intent-call-1',
+        name: 'classify_talktostellar_intent',
+        args: { intent: 'balance', confidence: 0.98 },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: classifierInvoke }),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      balances: [
+        { asset: 'BRL', balance: '12.3400000' },
+        { asset: 'USDC', balance: '8.9000000' },
+        { asset: 'XLM', balance: '3.0000000' },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meu sald9'));
+
+    expect(graph.llm.bindTools).toHaveBeenCalled();
+    expect(classifierInvoke).toHaveBeenCalled();
+    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
+      session_id: 'eval-session',
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar');
+    expect(result.response_message).toContain('R$: 12.3400000');
+    expect(result.response_message).toContain('XLM: 3.0000000');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
   it('answers common product questions directly instead of falling back to the menu', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
@@ -610,17 +649,17 @@ describe('Agent production evals', () => {
     ]);
   });
 
-  it('routes explicit conversion even when the LLM classifier returns generic', async () => {
+  it('routes explicit conversion when the LLM classifier returns conversion', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const classifierInvoke = jest.fn().mockResolvedValue({
       additional_kwargs: {
         tool_calls: [
           {
-            id: 'call_general',
+            id: 'call_conversion',
             function: {
               name: 'classify_talktostellar_intent',
-              arguments: '{"intent":"general","confidence":0.91}',
+              arguments: '{"intent":"conversion","confidence":0.96}',
             },
           },
         ],

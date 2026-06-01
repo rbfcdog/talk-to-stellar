@@ -26,7 +26,7 @@ const INTENT_CLASSIFIER_TOOLS = [
     type: 'function' as const,
     function: {
       name: INTENT_CLASSIFIER_TOOL_NAME,
-      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber.',
+      description: 'Classify the user message into the single TalkToStellar intent that should route the next tool/action. Handle user typos semantically, such as sald9/sald0 as balance. Use pix for any PIX money movement, even when the user says send, pay, mandar, enviar, pagar, sacar, retirar, trazer, colocar, or receber.',
       parameters: {
         type: 'object',
         properties: {
@@ -3424,6 +3424,7 @@ Priority rules:
 11. If the user asks for quotes, rates, or estimates, the intent is price_quote.
 12. If the user asks to create a payment link, the intent is payment_link.
 13. If the user asks to create an account, log in, or connect, the intent is wallet or onboard.
+14. Do not return general for obvious product requests with typos, missing accents, wrong final letters, or numeric substitutions. Classify by meaning.
 
 Strong contact examples that must be contacts:
 - "quero ver meus contatos" -> contacts
@@ -3456,6 +3457,9 @@ Other examples:
 - "Check my balance" -> balance
 - "ver saldo" -> balance
 - "qual meu saldo atual?" -> balance
+- "quero ver meu sald9" -> balance
+- "quero ver meu sald0" -> balance
+- "me mostra o saldp" -> balance
 - "ver transações" -> history
 - "quero ver aplicações" -> yield
 - "quero ver aplicacoes" -> yield
@@ -3480,7 +3484,7 @@ Other examples:
 
 If the message is short and obviously about contacts, choose contacts instead of general. If in doubt between contacts and general, choose contacts.
 
-IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
+IMPORTANT: Handle typos gracefully. "sald9" and "sald0" mean "saldo"; "aolicacoes" means "aplicacoes"; "consguee", "consege", and "consigo" all mean "consegue". Classify by meaning, not exact spelling.`;
 
       const messages = [
         new SystemMessage({ content: systemPrompt }),
@@ -3515,10 +3519,6 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
             logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
             return toolIntent;
           }
-          if (highConfidenceIntent) {
-            logger.debug(`Intent: "${message}" -> ${highConfidenceIntent}; via=semantic_repair_after_classifier intent=${toolIntent || 'none'} confidence=${Number.isFinite(confidence) ? confidence : 'n/a'}`);
-            return highConfidenceIntent;
-          }
           if (toolIntent) {
             logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${INTENT_CLASSIFIER_TOOL_NAME}`);
             return toolIntent;
@@ -3532,9 +3532,7 @@ IMPORTANT: Handle typos gracefully. "aolicacoes" means "aplicacoes"; "consguee",
       const response = await this.llm.invoke(messages);
 
       const parsedIntent = this.parseIntentFromLlmOutput(response.content);
-      const detectedIntent = parsedIntent && parsedIntent !== IntentType.GENERAL
-        ? parsedIntent
-        : highConfidenceIntent || parsedIntent || IntentType.GENERAL;
+      const detectedIntent = parsedIntent || highConfidenceIntent || IntentType.GENERAL;
       logger.debug(`Intent: "${message}" -> ${detectedIntent}; raw=${JSON.stringify(response.content).slice(0, 200)}`);
 
       return detectedIntent;
