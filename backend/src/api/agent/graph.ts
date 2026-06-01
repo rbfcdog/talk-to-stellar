@@ -20,6 +20,18 @@ import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/am
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
+const INTENT_ROUTER_MAX_MESSAGE_LENGTH = 1600;
+
+type IntentRouteCandidate = {
+  intent: IntentType;
+  toolName: string;
+  confidence: number;
+  reason?: string;
+  needsClarification?: boolean;
+  language?: 'pt-BR' | 'en';
+  risk?: 'low' | 'medium' | 'high';
+};
+
 const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; description: string }> = [
   {
     intent: IntentType.PIX,
@@ -118,6 +130,20 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
         reason: {
           type: 'string',
           description: 'Short internal reason for the selected route. This is not shown to the user.',
+        },
+        needs_clarification: {
+          type: 'boolean',
+          description: 'True when the route is clear but the downstream action still needs details such as amount, asset, destination, or PIN.',
+        },
+        language: {
+          type: 'string',
+          enum: ['pt-BR', 'en'],
+          description: 'The language the user is using for this request.',
+        },
+        risk: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'Risk level of the requested action. Use high for money movement, security/PIN, login/logout, or account access.',
         },
       },
       required: ['confidence'],
@@ -3362,10 +3388,135 @@ export class AgentGraph {
     return INTENT_BY_ROUTING_TOOL.get(toolName) || null;
   }
 
+  private buildIntentRouterMessages(message: string, repair = false): BaseMessage[] {
+    const sanitized = this.sanitizeUserMessage(String(message || '')).trim();
+    const userMessage = sanitized.length > INTENT_ROUTER_MAX_MESSAGE_LENGTH
+      ? `${sanitized.slice(0, INTENT_ROUTER_MAX_MESSAGE_LENGTH)}\n[message truncated for routing]`
+      : sanitized;
+
+    const instruction = repair
+      ? 'Previous routing attempt did not return one usable route tool. Retry and call exactly one route_*_intent tool now.'
+      : 'Route this user message by calling exactly one route tool.';
+
+    return [
+      new SystemMessage({ content: this.buildIntentRouterPrompt() }),
+      new HumanMessage({
+        content: [
+          instruction,
+          `User message: ${userMessage}`,
+        ].join('\n'),
+      }),
+    ];
+  }
+
+  private normalizeRouteConfidence(value: unknown): number {
+    const confidence = Number(value);
+    if (!Number.isFinite(confidence)) return 0;
+    return Math.max(0, Math.min(1, confidence));
+  }
+
+  private routeCandidateFromToolCall(call: { name: string; args?: Record<string, any> }): IntentRouteCandidate | null {
+    const intent = this.intentFromRoutingToolName(call.name);
+    if (!intent) return null;
+
+    const rawLanguage = String(call.args?.language || '').trim();
+    const language = rawLanguage === 'en' ? 'en' : rawLanguage === 'pt-BR' ? 'pt-BR' : undefined;
+    const rawRisk = String(call.args?.risk || '').trim();
+    const risk = rawRisk === 'low' || rawRisk === 'medium' || rawRisk === 'high' ? rawRisk : undefined;
+
+    return {
+      intent,
+      toolName: call.name,
+      confidence: this.normalizeRouteConfidence(call.args?.confidence),
+      reason: typeof call.args?.reason === 'string' ? call.args.reason.slice(0, 220) : undefined,
+      needsClarification: typeof call.args?.needs_clarification === 'boolean'
+        ? call.args.needs_clarification
+        : undefined,
+      language,
+      risk,
+    };
+  }
+
+  private extractRouteCandidates(toolResponse: any): IntentRouteCandidate[] {
+    return this.extractToolCalls(toolResponse)
+      .map((call) => this.routeCandidateFromToolCall(call))
+      .filter((candidate): candidate is IntentRouteCandidate => Boolean(candidate))
+      .sort((a, b) => b.confidence - a.confidence);
+  }
+
+  private sanitizeIntentRouterLogMessage(message: string): string {
+    return this.sanitizeUserMessage(String(message || ''))
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted_email]')
+      .replace(/\b(?:pin|senha)\s*[:=-]?\s*\d{3,12}\b/gi, 'PIN [redacted]')
+      .replace(/\+?\d[\d\s().-]{7,}\d/g, '[redacted_number]')
+      .slice(0, 160);
+  }
+
+  private logIntentRoute(message: string, candidate: IntentRouteCandidate, mode: string, candidateCount: number): void {
+    const fields = [
+      `intent=${candidate.intent}`,
+      `via=${candidate.toolName}`,
+      `confidence=${candidate.confidence.toFixed(2)}`,
+      `mode=${mode}`,
+      `candidates=${candidateCount}`,
+    ];
+    if (candidate.needsClarification !== undefined) fields.push(`needsClarification=${candidate.needsClarification}`);
+    if (candidate.risk) fields.push(`risk=${candidate.risk}`);
+    if (candidate.language) fields.push(`language=${candidate.language}`);
+    if (candidate.reason) fields.push(`reason=${JSON.stringify(candidate.reason)}`);
+
+    logger.info(`[Agent] LLM intent route ${fields.join(' ')} message=${JSON.stringify(this.sanitizeIntentRouterLogMessage(message))}`);
+  }
+
+  private async invokeIntentRouter(messages: BaseMessage[], mode: 'required' | 'auto'): Promise<{ selected: IntentRouteCandidate; candidateCount: number } | null> {
+    const maybeBind = (this.llm as any).bindTools;
+    if (typeof maybeBind !== 'function') {
+      logger.warn('[Agent] Intent router unavailable because current LLM client does not expose bindTools');
+      return null;
+    }
+
+    const bindOptions = mode === 'required' ? { tool_choice: 'required' } : undefined;
+    const toolAwareRouter = bindOptions
+      ? maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any, bindOptions as any)
+      : maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
+    const toolResponse = await toolAwareRouter.invoke(messages);
+    const candidates = this.extractRouteCandidates(toolResponse);
+
+    if (candidates.length > 1) {
+      logger.warn(`[Agent] Intent router returned multiple route tools; selecting highest confidence: ${candidates.map((candidate) => `${candidate.toolName}:${candidate.confidence.toFixed(2)}`).join(', ')}`);
+    }
+
+    const selected = candidates[0] || null;
+    if (!selected) {
+      logger.warn(`[Agent] Intent router returned no usable route tool in ${mode} mode: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
+      return null;
+    }
+
+    return { selected, candidateCount: candidates.length };
+  }
+
   private buildIntentRouterPrompt(): string {
     return `You are the routing layer for TalkToStellar.
 
 Your job is not to answer the user. Your only job is to choose exactly one route_*_intent tool.
+
+Hard contract:
+- Call exactly one route_*_intent tool. Do not answer with prose, markdown, JSON text, or explanations.
+- If the message is ambiguous but clearly belongs to a product area, choose that product route and set needs_clarification=true.
+- Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
+- route_general_intent is only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests.
+- Preserve the user's language in the language argument. Use pt-BR for Portuguese, including typo-heavy Portuguese.
+- Use risk=high for money movement, PIN/security, login, logout, account access, or anything that can move funds.
+- User typos are expected. Interpret by semantic intent, not exact spelling.
+
+Priority order when multiple intents appear:
+1. PIN/security/login/logout/account access.
+2. PIX money movement.
+3. Conversion, quote, or best-route request.
+4. Payment link/receive link.
+5. Payment to saved contact or external wallet.
+6. Balance, yield/earnings, history, contacts, wallet management.
+7. General help only when no concrete product action is requested.
 
 Routing principles:
 - Choose the concrete product action whenever the message is actionable. Use route_general_intent only for greetings, menu/help requests, small talk, or unsupported requests.
@@ -3381,6 +3532,8 @@ Routing principles:
 - Do not choose route_general_intent for a PIN reset/change request even if the wording is short, has no amount, has leading whitespace, or looks like an incomplete command. The next action is reset_pin.
 - "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
 - Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
+- "quero ver meu perfil" is a concrete account/profile request. Do not answer with a menu; route to route_wallet_intent if no more specific profile route exists.
+- "quero alterar meu pin", "redefinir o pin", "trocar PIN" and similar short security commands route to route_reset_pin_intent, never route_general_intent.
 
 Tool selection examples:
 - quero ver meu sald9 -> route_balance_intent
@@ -3404,8 +3557,10 @@ Tool selection examples:
 - quero criar link de pagamento -> route_payment_link_intent
 - quero mandar 10 xlm para rodrigo@email.com -> route_payment_intent
 - qual a melhor rota de usdc pra brl agora -> route_price_quote_intent
+- quero alterar meu pin -> route_reset_pin_intent
+- quero ver meu perfil -> route_wallet_intent
 
-Call one route tool with confidence. Do not produce prose.`;
+Call one route tool with confidence, reason, needs_clarification, language, and risk. Do not produce prose.`;
   }
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
@@ -3415,49 +3570,35 @@ Call one route tool with confidence. Do not produce prose.`;
     }
 
     try {
-      const messages = [
-        new SystemMessage({ content: this.buildIntentRouterPrompt() }),
-        new HumanMessage({
-          content: [
-            'Route this user message by calling exactly one route tool.',
-            `User message: ${message}`,
-          ].join('\n'),
-        }),
-      ];
-
-      const maybeBind = (this.llm as any).bindTools;
-      if (typeof maybeBind === 'function') {
-        try {
-          const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any, {
-            tool_choice: 'required',
-          } as any);
-          const toolResponse = await toolAwareRouter.invoke(messages);
-          const routingCall = this.extractToolCalls(toolResponse)
-            .find((call) => this.intentFromRoutingToolName(call.name));
-          const toolIntent = this.intentFromRoutingToolName(routingCall?.name);
-          const confidence = Number(routingCall?.args?.confidence);
-          if (toolIntent) {
-            logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${routingCall?.name}; confidence=${Number.isFinite(confidence) ? confidence : 'unknown'}`);
-            return toolIntent;
-          }
-          logger.warn(`[Agent] Intent router returned no usable route tool: ${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
-        } catch (toolError) {
-          logger.warn(`[Agent] Intent router tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
-          try {
-            const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
-            const toolResponse = await toolAwareRouter.invoke(messages);
-            const routingCall = this.extractToolCalls(toolResponse)
-              .find((call) => this.intentFromRoutingToolName(call.name));
-            const toolIntent = this.intentFromRoutingToolName(routingCall?.name);
-            const confidence = Number(routingCall?.args?.confidence);
-            if (toolIntent) {
-              logger.debug(`Intent: "${message}" -> ${toolIntent}; via=${routingCall?.name}; confidence=${Number.isFinite(confidence) ? confidence : 'unknown'}; mode=auto`);
-              return toolIntent;
-            }
-          } catch (autoToolError) {
-            logger.warn(`[Agent] Intent router auto tool call failed: ${autoToolError instanceof Error ? autoToolError.message : String(autoToolError)}`);
-          }
+      const requiredMessages = this.buildIntentRouterMessages(message);
+      try {
+        const route = await this.invokeIntentRouter(requiredMessages, 'required');
+        if (route) {
+          this.logIntentRoute(message, route.selected, 'required', route.candidateCount);
+          return route.selected.intent;
         }
+      } catch (toolError) {
+        logger.warn(`[Agent] Intent router required tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+      }
+
+      try {
+        const repairRoute = await this.invokeIntentRouter(this.buildIntentRouterMessages(message, true), 'required');
+        if (repairRoute) {
+          this.logIntentRoute(message, repairRoute.selected, 'repair', repairRoute.candidateCount);
+          return repairRoute.selected.intent;
+        }
+      } catch (repairError) {
+        logger.warn(`[Agent] Intent router repair tool call failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`);
+      }
+
+      try {
+        const autoRoute = await this.invokeIntentRouter(requiredMessages, 'auto');
+        if (autoRoute) {
+          this.logIntentRoute(message, autoRoute.selected, 'auto', autoRoute.candidateCount);
+          return autoRoute.selected.intent;
+        }
+      } catch (autoToolError) {
+        logger.warn(`[Agent] Intent router auto tool call failed: ${autoToolError instanceof Error ? autoToolError.message : String(autoToolError)}`);
       }
 
       logger.warn('[Agent] Intent router could not select a route tool');
