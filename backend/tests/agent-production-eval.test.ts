@@ -85,6 +85,37 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Não consegui entender');
   });
 
+  it('answers asset explanation questions with the explanations tool instead of generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      topic: 'assets',
+      message: [
+        'Assets são as moedas que podem aparecer na sua conta TalkToStellar:',
+        '1. R$ / BRL: reais.',
+        '2. USDC / US$: dólar digital.',
+        '3. CETES: opção México em teste.',
+        '4. XLM: saldo técnico visível da conta.',
+      ].join('\n'),
+    }));
+
+    const result = await graph.processInput(createState('uais são os assets explique sobre cada um deles'));
+
+    expect(executeToolMock).toHaveBeenCalledWith('get_explanations', {
+      topic: 'assets',
+      language: 'pt-BR',
+    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Assets são as moedas');
+    expect(result.response_message).toContain('USDC');
+    expect(result.response_message).toContain('CETES');
+    expect(result.response_message).toContain('XLM');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
   it('answers common product questions directly instead of falling back to the menu', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;

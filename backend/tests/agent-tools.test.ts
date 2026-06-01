@@ -198,6 +198,25 @@ describe('Agent tool execution', () => {
     expect(parsed.rendimentos.user_copy).toContain('Nada é confirmado sem PIN');
   });
 
+  it('explains user-facing assets directly without returning the generic help menu', async () => {
+    const output = await executeTool('get_explanations', {
+      topic: 'assets',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.topic).toBe('assets');
+    expect(parsed.message).toContain('Assets são as moedas');
+    expect(parsed.message).toContain('R$ / BRL');
+    expect(parsed.message).toContain('USDC / US$');
+    expect(parsed.message).toContain('CETES');
+    expect(parsed.message).toContain('XLM');
+    expect(parsed.message).toContain('nada é confirmado sem sua autorização');
+    expect(parsed.message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(parsed.message).not.toContain('1. Contatos');
+  });
+
   it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
     const output = await executeTool('get_brl_usdc_quote', {});
     const parsed = JSON.parse(output);

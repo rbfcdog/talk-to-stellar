@@ -814,7 +814,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_product_context",
-    description: "Retorna contexto codado para a LLM explicar funcionalidades, ativos, saldos e rendimentos do TalkToStellar. Use quando o usuário pedir explicação, tiver dúvida sobre o app, perguntar o que é cada ativo, ou pedir detalhes sobre rendimentos/aplicações.",
+    description: "Retorna contexto codado para a LLM explicar funcionalidades, ativos, saldos e rendimentos do TalkToStellar. Use quando o usuário pedir explicação, tiver dúvida sobre o app, perguntar o que é cada ativo, ou pedir detalhes sobre rendimentos/aplicações. Não use get_intent_help para perguntas sobre ativos.",
     parameters: {
       type: "object",
       properties: {
@@ -843,7 +843,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_explanations",
-    description: "Returns detailed explanations about TalkToStellar features, assets, earnings, PIX, and how things work. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept.",
+    description: "Returns detailed explanations about TalkToStellar features, assets, earnings, PIX, and how things work. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept. For 'quais sao os assets', 'explique os ativos/moedas', or asset questions, call this with topic='assets' instead of returning the generic help menu.",
     parameters: {
       type: "object",
       properties: {
@@ -2070,18 +2070,22 @@ WITHDRAW MONEY: converts your US$ balance to reais and sends it directly to your
 PAY SOMEONE: after depositing via PIX, you can automatically pay a saved contact. Everything with transparent fees, shown before confirmation.`,
     },
     assets: {
-      pt: `Sua conta TalkToStellar trabalha com várias moedas:
-USDC (US$): dólar digital lastreado 1:1. É a moeda principal para guardar e movimentar valores internacionais.
-BRL (R$): reais. Usado para PIX de entrada e saída. Internamente convertido pela melhor rota.
-CETES: ativo de teste em testnet. Representa opções de rendimento alternativas.
-XLM: ativo nativo da rede Stellar. Usado para pagar taxas de rede e manter a conta ativa. Aparece no saldo mas não é usado em operações do dia a dia.
-Todas as conversões entre moedas usam a rota mais otimizada disponível, com taxas mostradas antes da confirmação.`,
-      en: `Your TalkToStellar account works with multiple currencies:
-USDC (US$): digital dollar backed 1:1. The main currency for storing and moving international values.
-BRL (R$): reais. Used for PIX in and out. Internally converted through the best route.
-CETES: test asset on testnet. Represents alternative earnings options.
-XLM: native asset of the Stellar network. Used to pay network fees and keep the account active. Shown in balance but not used in day-to-day operations.
-All conversions between currencies use the most optimized available route, with fees shown before confirmation.`,
+      pt: `Assets são as moedas que podem aparecer na sua conta TalkToStellar:
+1. R$ / BRL: reais. É o dinheiro usado para PIX de entrada e saída. Quando você traz ou retira por PIX, a experiência aparece em reais.
+2. USDC / US$: dólar digital. É o saldo em dólares usado para guardar, converter e enviar valores internacionais dentro do app.
+3. CETES: opção México em teste. Neste ambiente, aparece como uma moeda/opção configurada para conversão e posições.
+4. XLM: saldo técnico visível da conta. Ele pode aparecer no saldo e em conversões quando disponível, mas não precisa ser entendido para usar PIX, enviar ou converter.
+
+Na prática: você escolhe a moeda de origem e destino, o app calcula a rota disponível, mostra valor e taxas antes do PIN, e nada é confirmado sem sua autorização.
+Ambiente testnet: valores e rotas podem variar e servem para teste técnico.`,
+      en: `Assets are the currencies that can appear in your TalkToStellar account:
+1. R$ / BRL: Brazilian reais. Used for PIX money in and out. When you add or withdraw through PIX, the experience appears in reais.
+2. USDC / US$: digital dollars. The dollar balance used to hold, convert, and send international value in the app.
+3. CETES: Mexico test option. In this environment, it appears as a configured currency/option for conversions and positions.
+4. XLM: visible technical account balance. It can appear in balances and conversions when available, but you do not need to understand it to use PIX, send, or convert.
+
+In practice: you choose source and destination currency, the app calculates the available route, shows amount and fees before PIN, and nothing is confirmed without your authorization.
+Testnet environment: values and routes can vary and are for technical testing.`,
     },
     earnings: {
       pt: `Rendimentos são opções para seu dinheiro render enquanto está na conta. Funciona assim:
@@ -2348,22 +2352,30 @@ function executeGetProductContext(input: any): string {
       {
         code: 'BRL',
         label: isPt ? 'Reais' : 'Brazilian reais',
-        explanation: isPt ? 'Saldo em reais usado em PIX e conversões.' : 'Reais balance used in PIX and conversions.',
+        explanation: isPt
+          ? 'Reais aparecem como R$ no app. São usados para PIX de entrada e saída, e podem ser convertidos para outras moedas antes da confirmação por PIN.'
+          : 'Reais appear as R$ in the app. They are used for PIX in and out, and can be converted to other currencies before PIN confirmation.',
       },
       {
         code: 'USDC',
         label: isPt ? 'Dólares' : 'Dollars',
-        explanation: isPt ? 'Saldo em dólares do app, exibido como US$.' : 'App dollar balance, displayed as US$.',
+        explanation: isPt
+          ? 'USDC aparece como US$. É o saldo em dólares usado para guardar, converter e enviar valores internacionais dentro da conta.'
+          : 'USDC appears as US$. It is the dollar balance used to hold, convert, and send international value inside the account.',
       },
       {
         code: 'CETES',
         label: isPt ? 'Opção México em teste' : 'Mexico test option',
-        explanation: isPt ? 'Ativo configurado no ambiente de teste para conversão e posições.' : 'Asset configured in the test environment for conversions and positions.',
+        explanation: isPt
+          ? 'CETES é uma opção configurada no ambiente de teste. Pode aparecer em conversões e posições quando estiver disponível para a conta.'
+          : 'CETES is an option configured in the test environment. It can appear in conversions and positions when available for the account.',
       },
       {
         code: 'XLM',
         label: 'XLM',
-        explanation: isPt ? 'Saldo XLM da conta. Pode aparecer no saldo e em conversões quando disponível.' : 'Account XLM balance. It can appear in balances and conversions when available.',
+        explanation: isPt
+          ? 'XLM é um saldo técnico visível da conta. Pode aparecer no saldo e em conversões quando disponível, mas o usuário não precisa lidar com detalhes técnicos para usar o app.'
+          : 'XLM is a visible technical account balance. It can appear in balances and conversions when available, but users do not need technical details to use the app.',
       },
     ],
     rendimentos: {
