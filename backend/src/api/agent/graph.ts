@@ -61,7 +61,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PAYMENT,
     toolName: 'route_payment_intent',
-    description: 'Use for sending or paying a saved contact or external wallet when PIX is not the requested rail. Examples: enviar 10 dolares para Ana, mandar 5 XLM para public key, pagar contato salvo.',
+    description: 'Use for sending, paying, or transferring a specific amount/asset to a saved contact, email, phone, CPF, transfer key, or external wallet when PIX is not the requested rail. Treat "uero" as typo for "quero". Exact examples: "uero mandar 10 xlm pra ana silva", "quero mandar 10 xlm pra ana silva", "mandar 5 XLM para public key", "enviar 10 dolares para Ana", "pagar contato salvo". Must not become general help.',
   },
   {
     intent: IntentType.PAYMENT_LINK,
@@ -111,7 +111,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.GENERAL,
     toolName: 'route_general_intent',
-    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, recover, or typo variants like "uero redefinir o pin".',
+    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, recover, or typo variants like "uero redefinir o pin". Never use for value+asset+recipient send requests like "uero mandar 10 xlm pra ana silva".',
   },
 ];
 
@@ -2020,7 +2020,7 @@ export class AgentGraph {
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
     if (upper === 'EUR') return `€ ${n.toFixed(2)}`;
-    if (upper === 'XLM') return 'saldo da conta TalkToStellar';
+    if (upper === 'XLM') return `${n.toFixed(7).replace(/0+$/, '').replace(/\.$/, '')} XLM`;
     return `${n.toFixed(2)} ${upper || 'saldo'}`;
   }
 
@@ -3231,6 +3231,8 @@ export class AgentGraph {
       '- If session_active=true, never ask for user_id or session_id. Use the provided session_id in tools.',
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
       '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, explanations, and logout, prefer tools over free text.',
+      '- Never return the generic capability menu for actionable money movement. If the user says "uero", treat it as "quero".',
+      '- If the message asks to mandar/enviar/pagar/transferir a concrete amount plus asset to a named person/contact/email/key and does not mention PIX, this is a normal payment. Use payment handling/tools, not get_intent_help. Example: "uero mandar 10 xlm pra ana silva" means send 10 XLM to the saved contact Ana Silva.',
       '- If the user asks what the app can do, asks for an explanation, or asks about a feature, asset, balance, XLM, CETES, USDC, BRL, or rendimentos, call get_product_context when the answer needs context beyond a direct action.',
       '- If the user asks "quais sao os assets", "explique os ativos/moedas", or asks to explain each currency, use get_explanations with topic="assets" and answer the assets directly. Do not return the generic capability menu.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
@@ -3498,6 +3500,7 @@ Tool-call contract:
 - Call exactly one route_*_intent tool when the message is an actionable TalkToStellar product request.
 - Do not call a tool for pure small talk, broad explanations, unsupported non-product requests, or cases where no product route should run.
 - No-tool is acceptable only for non-actionable messages. No-tool is not acceptable for PIN/security, balance, PIX, conversion, yield, history, contacts, payments, payment links, login/logout, wallet, or profile requests.
+- No-tool is not acceptable for "uero/quero mandar/enviar/pagar/transferir <amount> <asset> pra/para <person>".
 - If the message is ambiguous but clearly belongs to a product area, call that product route and set needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
 - route_general_intent is optional and only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests. It is also acceptable to call no tool for these messages.
@@ -3517,11 +3520,13 @@ Priority order when multiple intents appear:
 Routing principles:
 - Choose the concrete product action whenever the message is actionable. Use route_general_intent only for greetings, menu/help requests, small talk, or unsupported requests.
 - Understand Portuguese, English, mixed language, missing accents, slang, and typos by meaning.
+- Treat "uero" as a typo for "quero" across all product requests, not only PIN.
 - PIX has priority over generic payments whenever PIX is the rail. Use route_pix_intent for both PIX entrada and PIX saída.
 - PIX saída/off-ramp means money leaves the user's TalkToStellar account and arrives in the user's own PIX/BRL destination. Strong saída phrases: "mandar pra fora", "sacar", "retirar", "tirar da conta", "mandar para meu PIX", "enviar para minha chave PIX", "mandar 50 reais em pix", "quero mandar pra fora 50 reais em pix", "quero mandar 100 reais no pix", "mandar pro meu banco", "conta externa", "off-ramp".
 - PIX entrada/on-ramp means the user pays a PIX to add money into the TalkToStellar account. Strong entrada phrases: "colocar dinheiro", "trazer dinheiro", "depositar", "carregar", "adicionar saldo", "receber saldo", "entrar dinheiro via PIX".
 - PIX funded payment means the user pays PIX first and then pays another saved contact. Strong funded-payment phrases: "pagar Ana via PIX", "mandar para Ana pagando com PIX", "fazer uma transferencia para Ana e pagar via PIX". This still routes to route_pix_intent.
 - Do not route PIX saída/off-ramp as route_payment_intent just because the user says "mandar/enviar/pagar". If PIX or own destination is present, route_pix_intent wins.
+- Payment without PIX: if the user says mandar/enviar/pagar/transferir + amount + asset + named recipient, route_payment_intent. Examples: "uero mandar 10 xlm pra ana silva", "quero mandar 10 xlm pra ana silva", "manda 3 usdc para Ana", "transferir 20 cetes para Carlos". Do not route these to general help.
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
 - PIN/security requests are account actions, never generic help. If the message contains "pin" plus any reset/change verb, choose route_reset_pin_intent. Strong verbs: redefinir, mudar, alterar, trocar, modificar, atualizar, resetar, recuperar, esqueci, esquecido, forgot, change, update, recover. Strong phrases: "redefinir o pin", "redefinir meu pin", "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN".
@@ -3541,6 +3546,8 @@ Tool selection examples:
 - quero retirar 10 usdc para minha chave pix -> route_pix_intent
 - quero colocar 100 reais via pix -> route_pix_intent
 - quero pagar Ana via pix -> route_pix_intent
+- uero mandar 10 xlm pra ana silva -> route_payment_intent
+- quero mandar 10 xlm pra ana silva -> route_payment_intent
 - quero converter 10 usdc pra brl -> route_conversion_intent
 - quero ver meus contatos -> route_contacts_intent
 - quero ver aolicacoes -> route_yield_intent

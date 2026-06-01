@@ -669,6 +669,8 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('"uero redefinir o pin" is an actionable PIN reset request');
     expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
     expect(prompt).toContain('No-tool is not acceptable for PIN/security');
+    expect(prompt).toContain('uero mandar 10 xlm pra ana silva -> route_payment_intent');
+    expect(prompt).toContain('Payment without PIX');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
     expect(prompt).toContain('You are not obligated to call a tool');
     expect(prompt).toContain('Priority order when multiple intents appear');
@@ -742,6 +744,56 @@ describe('Agent production evals', () => {
     expect(sanitized).not.toContain('1234');
     expect(sanitized).not.toContain('rodrigo@example.com');
     expect(sanitized).not.toContain('99999-9999');
+  });
+
+  it('routes typo send requests with amount, asset, and saved contact as payments', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+    const anaPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Ana Silva',
+              stellar_public_key: anaPublicKey,
+              email: 'ana@example.com',
+            },
+          ],
+        });
+      }
+
+      if (name === 'prepare_payment_confirmation') {
+        return JSON.stringify({
+          success: true,
+          url: 'https://app.example.com/confirm-payment?token=abc',
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('uero mandar 10 xlm pra ana silva'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_payment_confirmation', expect.objectContaining({
+      session_id: 'eval-session',
+      owner_id: 'eval-user',
+      amount: '10',
+      asset_code: 'XLM',
+      destination: anaPublicKey,
+      destination_name: 'Ana Silva',
+    }));
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('10 XLM');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('/confirm-payment?');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
