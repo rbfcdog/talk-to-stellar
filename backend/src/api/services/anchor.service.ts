@@ -331,6 +331,22 @@ function formatDecimalAmount(value: unknown): string {
   return amount.toFixed(7).replace(/\.?0+$/, '');
 }
 
+function formatCentsCeil(value: unknown): string {
+  const amount = parseHumanAmountNumber(value);
+  if (!Number.isFinite(amount) || amount <= 0) return '0';
+  return (Math.ceil((amount - Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+function configuredEtherfuseOnRampFeeBps(): number {
+  const parsed = parseHumanAmountNumber(
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS ||
+    process.env.ETHERFUSE_TESTNET_FEE_BPS ||
+    '20',
+  );
+  if (!Number.isFinite(parsed) || parsed < 0) return 20;
+  return Math.min(parsed, 1000);
+}
+
 function readConfiguredUsdBrlRate(): { brlPerUsd: number; source: string } | null {
   for (const key of ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']) {
     const value = parseHumanAmountNumber(process.env[key]);
@@ -1082,7 +1098,13 @@ export class AnchorService {
     const finalIsAnchor = sameIssuedAsset(finalAsset, anchorAsset);
     const desiredFinalAmount = coalesceString(input.desiredFinalAmount);
     const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || finalAsset.code);
-    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.sourceAmountBrl, quote);
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(
+      input.sourceAmountBrl,
+      quote,
+      finalIsAnchor && desiredFinalAmount && ['BRL', 'TESOURO'].includes(desiredFinalAssetCode)
+        ? desiredFinalAmount
+        : undefined,
+    );
     const anchorAmountBeforeFee = brlFeeBridge.grossAmount;
     const anchorAmountAfterFee = brlFeeBridge.netAmount;
 
@@ -1094,7 +1116,7 @@ export class AnchorService {
       anchorAsset,
       anchorAmountBeforeFee,
       anchorAmountAfterFee,
-      anchorProviderFeeAmount: quote.feeAmount || quote.fee || '0',
+      anchorProviderFeeAmount: brlFeeBridge.providerFeeAmount,
       anchorProviderFeeCurrency: 'BRL',
     };
 
@@ -1144,7 +1166,7 @@ export class AnchorService {
     return decorated;
   }
 
-  private static estimateOnRampBrlFeeBridge(sourceAmountBrl: unknown, quote?: Record<string, unknown> | null): {
+  private static estimateOnRampBrlFeeBridge(sourceAmountBrl: unknown, quote?: Record<string, unknown> | null, desiredNetAmountBrl?: unknown): {
     grossAmount: string;
     netAmount: string;
     providerFeeAmount: string;
@@ -1152,6 +1174,8 @@ export class AnchorService {
     totalFeeAmount: string;
   } {
     const gross = Math.max(0, parseHumanAmountNumber(sourceAmountBrl));
+    const desiredNet = Math.max(0, parseHumanAmountNumber(desiredNetAmountBrl));
+    const feeBase = desiredNet > 0 ? desiredNet : gross;
     const rawProviderFee = Math.max(0, parseHumanAmountNumber(
       coalesceString(
         quote?.feeAmount,
@@ -1159,24 +1183,29 @@ export class AnchorService {
         quote?.anchorProviderFeeAmount,
       ) || '0',
     ));
-    const feeBps = Math.max(0, parseHumanAmountNumber(quote?.feeBps));
-    const providerFee = rawProviderFee > 0
-      ? rawProviderFee
-      : gross > 0 && feeBps > 0
-        ? gross * (feeBps / 10000)
-        : 0;
+    const quoteFeeBps = Math.max(0, parseHumanAmountNumber(quote?.feeBps));
+    const feeBps = quoteFeeBps > 0 ? quoteFeeBps : configuredEtherfuseOnRampFeeBps();
+    const providerFee = desiredNet > 0
+      ? feeBase * (feeBps / 10000)
+      : rawProviderFee > 0
+        ? rawProviderFee
+        : gross > 0 && feeBps > 0
+          ? gross * (feeBps / 10000)
+          : 0;
     const platformFee = PlatformFeeService.calculateSpread({
-      sourceAmount: gross,
+      sourceAmount: feeBase,
       sourceAssetCode: 'BRL',
       destinationAssetCode: 'USDC',
       mode: 'deduct_from_source',
     });
     const talkToStellarFee = Math.max(0, parseHumanAmountNumber(platformFee.feeAmount));
-    const totalFee = Math.min(gross, providerFee + talkToStellarFee);
-    const net = Math.max(0, gross - totalFee);
+    const totalFee = desiredNet > 0
+      ? providerFee + talkToStellarFee
+      : Math.min(gross, providerFee + talkToStellarFee);
+    const net = desiredNet > 0 ? desiredNet : Math.max(0, gross - totalFee);
 
     return {
-      grossAmount: formatDecimalAmount(gross),
+      grossAmount: desiredNet > 0 ? formatCentsCeil(desiredNet + totalFee) : formatDecimalAmount(gross),
       netAmount: formatDecimalAmount(net),
       providerFeeAmount: formatDecimalAmount(providerFee),
       talkToStellarFeeAmount: formatDecimalAmount(talkToStellarFee),
@@ -1756,8 +1785,17 @@ export class AnchorService {
     const orderId = `sandbox-pix-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const finalIsTesouro = sameIssuedAsset(input.finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
-    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(input.amount, input.quote as Record<string, unknown> | undefined);
     const desiredFinalAssetCode = normalizeAssetCode(input.desiredFinalAssetCode || input.finalAsset.code);
+    const shouldReceiveExactBrl = Boolean(
+      finalIsTesouro &&
+      input.desiredFinalAmount &&
+      ['BRL', 'TESOURO'].includes(desiredFinalAssetCode)
+    );
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(
+      input.amount,
+      input.quote as Record<string, unknown> | undefined,
+      shouldReceiveExactBrl ? input.desiredFinalAmount : undefined,
+    );
     const destinationAmount = toStellarAmount(
       finalIsTesouro && input.desiredFinalAmount && ['BRL', 'TESOURO'].includes(desiredFinalAssetCode)
         ? input.desiredFinalAmount
@@ -2806,7 +2844,7 @@ export class AnchorService {
     }
 
     const direction = input.direction === 'offramp' ? 'offramp' : 'onramp';
-    const amount = normalizeAmount(coalesceString(input.amount, input.from_amount));
+    let amount = normalizeAmount(coalesceString(input.amount, input.from_amount));
     const finalAsset = direction === 'onramp'
       ? resolveRampFinalAsset(input.final_asset, input.finalAsset, input.final_asset_code, input.finalAssetCode, input.to_currency, input.toCurrency, 'TESOURO')
       : undefined;
@@ -2816,6 +2854,18 @@ export class AnchorService {
     const desiredFinalAssetCode = desiredFinalAmount
       ? normalizeAssetCode(coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset?.code))
       : '';
+    if (
+      direction === 'onramp' &&
+      finalAsset &&
+      desiredFinalAmount &&
+      ['BRL', 'TESOURO'].includes(desiredFinalAssetCode) &&
+      sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() })
+    ) {
+      const requiredGross = this.estimateOnRampBrlFeeBridge(amount, null, desiredFinalAmount).grossAmount;
+      if (parseHumanAmountNumber(requiredGross) > parseHumanAmountNumber(amount)) {
+        amount = requiredGross;
+      }
+    }
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) ||
       (direction === 'offramp' ? this.getTesouroIdentifier() : 'BRL');
     const toCurrency = coalesceString(input.to_currency, input.toCurrency) ||
@@ -2963,7 +3013,7 @@ export class AnchorService {
     let customerId = coalesceString(input.customer_id, input.customerId);
     let preparedCustomer: Customer | undefined;
     let quoteId = coalesceString(input.quote_id, input.quoteId);
-    const amount = normalizeAmount(input.amount);
+    let amount = normalizeAmount(input.amount);
     const fromCurrency = coalesceString(input.from_currency, input.fromCurrency) || 'BRL';
     const requestedFinalCurrency = coalesceString(
       input.final_asset,
@@ -2986,6 +3036,16 @@ export class AnchorService {
     const desiredFinalAssetCode = desiredFinalAmount
       ? normalizeAssetCode(coalesceString(input.desired_final_asset, input.desiredFinalAsset, finalAsset.code))
       : '';
+    if (
+      desiredFinalAmount &&
+      ['BRL', 'TESOURO'].includes(desiredFinalAssetCode) &&
+      sameIssuedAsset(finalAsset, targetAsset)
+    ) {
+      const requiredGross = this.estimateOnRampBrlFeeBridge(amount, null, desiredFinalAmount).grossAmount;
+      if (parseHumanAmountNumber(requiredGross) > parseHumanAmountNumber(amount)) {
+        amount = requiredGross;
+      }
+    }
     const autoPayAfterRamp = Boolean(input.auto_pay_after_ramp || input.autoPayAfterRamp);
     const autoPayRecipient = coalesceString(input.auto_pay_recipient, input.autoPayRecipient);
     const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
@@ -3276,7 +3336,6 @@ export class AnchorService {
       throw apiError('Não consegui gerar o PIX nesta tentativa. Gere uma nova estimativa e tente novamente.', 409);
     }
 
-    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(amount, orderQuote as Record<string, unknown> | undefined);
     const finalIsTesouro = sameIssuedAsset(finalAsset, targetAsset);
     const desiredMatchesFinalAsset = Boolean(
       desiredFinalAmount &&
@@ -3284,6 +3343,11 @@ export class AnchorService {
         desiredFinalAssetCode === normalizeAssetCode(finalAsset.code) ||
         (finalIsTesouro && desiredFinalAssetCode === 'BRL')
       )
+    );
+    const brlFeeBridge = this.estimateOnRampBrlFeeBridge(
+      amount,
+      orderQuote as Record<string, unknown> | undefined,
+      finalIsTesouro && desiredMatchesFinalAsset ? desiredFinalAmount : undefined,
     );
     const operationFinalAmount = desiredMatchesFinalAsset
       ? desiredFinalAmount

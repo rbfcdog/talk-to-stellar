@@ -167,6 +167,23 @@ function clientTtsTransactionFeeBps() {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : DEFAULT_TTS_TRANSACTION_FEE_BPS;
 }
 
+function clientTtsTransactionMinBrl() {
+  const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_MIN_BRL || process.env.NEXT_PUBLIC_TTS_SPREAD_MIN_BRL || 0.05);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.05;
+}
+
+function clientEtherfuseOnRampFeeBps() {
+  const parsed = Number(process.env.NEXT_PUBLIC_ETHERFUSE_ONRAMP_FEE_BPS || process.env.NEXT_PUBLIC_ETHERFUSE_TESTNET_FEE_BPS || ETHERFUSE_TESTNET_FEE_BPS);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : ETHERFUSE_TESTNET_FEE_BPS;
+}
+
+function estimatePixOnRampGrossForBrlReceive(receiveBrl: number) {
+  if (!Number.isFinite(receiveBrl) || receiveBrl <= 0) return 0;
+  const providerFee = receiveBrl * (clientEtherfuseOnRampFeeBps() / 10000);
+  const ttsFee = Math.max(receiveBrl * (clientTtsTransactionFeeBps() / 10000), clientTtsTransactionMinBrl());
+  return Math.ceil((receiveBrl + providerFee + ttsFee - Number.EPSILON) * 100) / 100;
+}
+
 function getStoredSession() {
   if (typeof window === "undefined") return { sessionId: "" };
   return {
@@ -1407,9 +1424,9 @@ export default function PixRampClient({
       return;
     }
 
-    const totalFeeBps = ETHERFUSE_TESTNET_FEE_BPS + clientTtsTransactionFeeBps();
-    const denominator = Math.max(0.0001, 1 - (totalFeeBps / 10000));
-    const estimatedBrl = receiveBrl / denominator;
+    const providerFeeBps = clientEtherfuseOnRampFeeBps();
+    const ttsFeeBps = clientTtsTransactionFeeBps();
+    const estimatedBrl = estimatePixOnRampGrossForBrlReceive(receiveBrl);
     setAmountBrl(estimatedBrl.toFixed(2));
     setReceiveEstimateReady(true);
     setReceiveEstimateLoading(false);
@@ -1423,7 +1440,7 @@ export default function PixRampClient({
       method: "LOCAL",
       path: "/pix-on",
       request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-      response: { amount_brl: estimatedBrl.toFixed(2), total_fee_bps: totalFeeBps },
+      response: { amount_brl: estimatedBrl.toFixed(2), provider_fee_bps: providerFeeBps, app_fee_bps: ttsFeeBps },
     });
   }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
@@ -3488,10 +3505,10 @@ function RampFeeBridge({
     ? L("Resumo do PIX", "PIX summary")
     : L("Resumo da retirada", "Withdrawal summary");
   const feeCaption = mode === "onramp"
-    ? L("Veja quanto sai no PIX, a taxa do app e quanto será enviado.", "See how much leaves through PIX, the app fee, and how much will be sent.")
+    ? L("Veja quanto paga no PIX, a taxa por fora e quanto entra na conta.", "See how much you pay by PIX, the fee on top, and how much arrives in the account.")
     : L("Veja quanto sai da conta, a taxa do app e quanto chega no PIX.", "See how much leaves the account, the app fee, and how much arrives in PIX.");
   const destinationLabel = mode === "onramp"
-    ? L("Será enviado", "Will be sent")
+    ? L("Entra na conta", "Arrives in account")
     : L("Chega no PIX", "Arrives in PIX");
 
   return (
@@ -3515,7 +3532,9 @@ function RampFeeBridge({
           <p className="max-w-sm text-xs font-bold leading-5 text-tts-confirm">
             {mixedFeeCurrencies && mode === "offramp"
               ? L("A taxa em R$ já está abatida no valor que chega no PIX. Nada é confirmado antes do PIN.", "The BRL fee is already deducted from the PIX payout. Nothing is confirmed before the PIN.")
-              : L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
+              : mode === "onramp"
+                ? L("Esse valor é cobrado por fora para o saldo recebido bater com o valor escolhido. Nada é confirmado antes do PIN.", "This amount is charged on top so the received balance matches the chosen amount. Nothing is confirmed before the PIN.")
+                : L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
           </p>
         </div>
       </div>
@@ -3530,7 +3549,11 @@ function RampFeeBridge({
           <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Taxa", "Fee")}</p>
           <p className="mt-2 text-lg font-black text-tts-deep">{totalFeeDisplay}</p>
           <p className="mt-1 text-xs font-bold text-tts-muted">
-            {mixedFeeCurrencies && mode === "offramp" ? L("taxa do app; PIX já vem líquido", "app fee; PIX already arrives net") : L("descontada nesta operação", "deducted in this operation")}
+            {mixedFeeCurrencies && mode === "offramp"
+              ? L("taxa do app; PIX já vem líquido", "app fee; PIX already arrives net")
+              : mode === "onramp"
+                ? L("cobrada por fora", "charged on top")
+                : L("descontada nesta operação", "deducted in this operation")}
           </p>
         </div>
         <div className="rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3">

@@ -228,6 +228,66 @@ describe('AnchorService PIX organization bank account routing', () => {
     expect((result.quote as any).userFacingToAmount).not.toBe('43.29');
   });
 
+  it('grosses up a PIX BRL quote so the requested amount enters the account exactly', async () => {
+    const anchor = {
+      getQuote: jest.fn().mockResolvedValue({
+        id: 'quote-brl-exact-1',
+        fromCurrency: 'BRL',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        fromAmount: '50.25',
+        toAmount: '43.50',
+        destinationAmountAfterFee: '43.50',
+        exchangeRate: '0.8658',
+        fee: '0.1005',
+        feeAmount: '0.1005',
+        feeBps: '20',
+        provider: 'etherfuse',
+      }),
+    };
+
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+
+    const result = await AnchorService.getQuoteForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      direction: 'onramp',
+      amount: '50',
+      from_currency: 'BRL',
+      to_currency: 'TESOURO',
+      final_asset: 'BRL',
+      desired_final_amount: '50',
+      desired_final_asset: 'BRL',
+    });
+
+    expect(anchor.getQuote).toHaveBeenCalledWith(expect.objectContaining({
+      fromAmount: '50.25',
+      fromCurrency: 'BRL',
+      toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    }));
+    expect(result.quote).toMatchObject({
+      userFacingToCurrency: 'BRL',
+      userFacingToAmount: '50',
+      finalAmountBeforeFee: '50.25',
+      finalAmountAfterFee: '50',
+      requestedFinalAmount: '50',
+      requestedFinalAssetCode: 'BRL',
+      anchorProviderFeeAmount: '0.1',
+      talkToStellarFeeAmount: '0.15',
+      totalFeeAmount: '0.25',
+    });
+  });
+
   it('keeps provider on-ramp orders user-facing at TESOURO equals real instead of raw provider units', async () => {
     mockSandboxRuntime();
 
@@ -368,7 +428,7 @@ describe('AnchorService PIX organization bank account routing', () => {
     expect((result.transaction as any).sandbox_mock).toBe(true);
   });
 
-  it('registers a dynamic PIX destination before creating a sandbox off-ramp', async () => {
+  it('registers a dynamic PIX destination before using the controlled sandbox off-ramp', async () => {
     mockSandboxRuntime();
 
     const anchor = {
@@ -427,13 +487,10 @@ describe('AnchorService PIX organization bank account routing', () => {
         }),
       }),
     );
-    expect(anchor.createOffRamp).toHaveBeenCalledWith(expect.objectContaining({
-      customerId: 'customer-1',
-      quoteId: 'quote-1',
-      fiatAccountId: 'registered-pix-id',
-    }));
+    expect(anchor.createOffRamp).not.toHaveBeenCalled();
     expect(result.operation_id).toBe('op-1');
-    expect(result.transaction.id).toBe('provider-offramp-1');
+    expect(result.transaction.id).toMatch(/^sandbox-offramp-/);
+    expect((result.transaction as any).sandbox_mock).toBe(true);
   });
 
   it('does not open hosted onboarding or create a PIX bank account for regional sandbox customer setup', async () => {

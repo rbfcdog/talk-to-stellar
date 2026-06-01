@@ -31,6 +31,7 @@
     "financial:backfill-global-profiles": "ts-node scripts/backfill-global-profiles.ts",
     "financial:send-daily-summaries-once": "ts-node scripts/send-daily-summaries-once.ts",
     "etherfuse:measure-fees": "ts-node scripts/measure-etherfuse-testnet-fees.ts",
+    "etherfuse:preview-pix-onramp-fees": "ts-node scripts/preview-pix-onramp-fees.ts",
     "defindex:env": "ts-node scripts/setup-defindex-env.ts",
     "passkey:smart-account": "ts-node scripts/setup-passkey-smart-account.ts",
     "evolution:configure-webhook": "ts-node scripts/configure-evolution-webhook.ts",
