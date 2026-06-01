@@ -560,6 +560,7 @@ export class AgentGraph {
       .replace(/\b(?:perfi|perfill|perfio)\b/g, 'perfil')
       .replace(/\b(?:rotta|rotaaa|rotas)\b/g, 'rota')
       .replace(/\b(?:agota|agpra|agoraa)\b/g, 'agora')
+      .replace(/\buais\b/g, 'quais')
       .replace(/\b(?:consguee|consege|consegui|conseg|consgue|conseguee)\b/g, 'consegue')
       .replace(/\b(?:possso|possooo|possoo)\b/g, 'posso')
       .replace(/\b(?:vocee|voceee|vc)\b/g, 'voce')
@@ -873,6 +874,59 @@ export class AgentGraph {
 
     state.success = Boolean(result.success);
     state.response_message = result.message || result.error || 'Não consegui carregar os comandos agora.';
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private explanationTopicFromText(text: string): '' | 'assets' | 'pix' | 'earnings' | 'conversion' | 'payments' | 'security' | 'account' {
+    const normalized = this.normalizeTextForIntent(text)
+      .replace(/[!?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return '';
+
+    const asksExplanation =
+      /\b(explique|explica|explicar|me explica|detalhe|detalhar|o que e|o que sao|quais sao|quais ativos|quais moedas|what is|what are|explain|describe)\b/.test(normalized) ||
+      normalized.includes('sobre cada') ||
+      normalized.includes('cada um deles');
+
+    if (!asksExplanation) return '';
+
+    if (/\b(assets?|ativos?|moedas?|currencies|brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized)) return 'assets';
+    if (/\b(pix|chave pix|qr code|deposito|saque|retirada)\b/.test(normalized)) return 'pix';
+    if (/\b(rendimento|rendimentos|investimento|investir|aplicacao|aplicacoes|posicao|posicoes|dinheiro rendendo)\b/.test(normalized)) return 'earnings';
+    if (/\b(conversao|converter|trocar|cambio|cotacao)\b/.test(normalized)) return 'conversion';
+    if (/\b(pagamento|pagar|enviar|mandar|transferir|link de pagamento|link de recebimento)\b/.test(normalized)) return 'payments';
+    if (/\b(seguranca|pin|biometria|senha|acesso)\b/.test(normalized)) return 'security';
+    if (/\b(conta|perfil|saldo)\b/.test(normalized)) return 'account';
+
+    return '';
+  }
+
+  private async handleExplanationRequest(
+    state: AgentState,
+    topic: ReturnType<AgentGraph['explanationTopicFromText']>
+  ): Promise<AgentState> {
+    const resultRaw = await executeTool('get_explanations', {
+      topic: topic || 'all',
+      language: this.getLanguage(state),
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: 'Falha ao carregar explicação.' };
+    }
+
+    state.success = Boolean(result.success);
+    state.response_message = String(result.message || result.error || '').trim() ||
+      this.text(
+        this.getLanguage(state),
+        'Não consegui carregar essa explicação agora.',
+        'I could not load that explanation right now.'
+      );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -3083,6 +3137,7 @@ export class AgentGraph {
       '- If session_active=false, do not invent account data. Return the login/onboarding link flow.',
       '- For balances, contacts, history, payments, conversions, PIX, earnings, reset PIN, explanations, and logout, prefer tools over free text.',
       '- If the user asks what the app can do, asks for an explanation, or asks about a feature, asset, balance, XLM, CETES, USDC, BRL, or rendimentos, call get_product_context when the answer needs context beyond a direct action.',
+      '- If the user asks "quais sao os assets", "explique os ativos/moedas", or asks to explain each currency, use get_explanations with topic="assets" and answer the assets directly. Do not return the generic capability menu.',
       '- When a tool accepts session_id, pass exactly the session_id from RUNTIME CONTEXT.',
       '- When adding/listing contacts, use session_id and the contact key from the user message.',
       '- Never invent amounts, fees, quotes, hashes, contact names, or success states.',
@@ -5095,6 +5150,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
       const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
       const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
+      const explanationTopic = this.explanationTopicFromText(state.current_input);
       const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
         state.current_input,
         this.hasPendingNicknamePrompt(state)
@@ -5124,6 +5180,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
       if (savingsCalculator) {
         return await this.handleSavingsCalculatorIntent(state, savingsCalculator);
+      }
+
+      if (explanationTopic) {
+        return await this.handleExplanationRequest(state, explanationTopic);
       }
 
       const onboardingIntents = new Set<IntentType>([
