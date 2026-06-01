@@ -657,6 +657,8 @@ describe('Agent production evals', () => {
       expect(result.response_message).toContain('/pix-on?');
       expect(result.response_message).toContain('amount=100');
       expect(result.response_message).toContain('currency=BRL');
+      expect(result.response_message).toContain('receive_amount=100');
+      expect(result.response_message).toContain('receive_asset=BRL');
       expect(result.response_message).not.toContain('Diga o que quer fazer');
       expect(result.response_message).not.toContain('Posso ajudar com:');
       expect(executeToolMock.mock.calls.some(([name]) => name === 'list_contacts')).toBe(false);

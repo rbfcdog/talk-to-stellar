@@ -1483,6 +1483,11 @@ export class AgentGraph {
         url.searchParams.set('receive_amount', intent.amount);
         url.searchParams.set('receive_asset', 'USDC');
         url.searchParams.set('currency', 'USDC');
+      } else if (intent.direction === 'onramp' && amountCurrency === 'BRL' && intent.asset_code === 'BRL') {
+        url.searchParams.set('amount', intent.amount);
+        url.searchParams.set('currency', 'BRL');
+        url.searchParams.set('receive_amount', intent.amount);
+        url.searchParams.set('receive_asset', 'BRL');
       } else {
         url.searchParams.set('amount', intent.amount);
         url.searchParams.set('currency', amountCurrency);
@@ -1580,8 +1585,8 @@ export class AgentGraph {
       const url = await this.buildPixRampUrl(state, pixIntent);
       const pixFeeNote = this.text(
         language,
-        'A página mostra quanto sai no PIX, a taxa do app e quanto será enviado antes do PIN.',
-        'The page shows how much leaves through PIX, the app fee, and how much will be sent before the PIN.'
+        'A página mostra o PIX a pagar, a taxa do app e quanto entra na conta antes do PIN.',
+        'The page shows the PIX amount to pay, the app fee, and how much arrives in the account before the PIN.'
       );
       state.success = true;
       state.pending_pix_ramp = undefined;
@@ -1604,11 +1609,11 @@ export class AgentGraph {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         const actionText = intent.amount_currency === 'USDC'
           ? this.text(language, `receber ${amountText}`, `receive ${amountText}`)
-          : this.text(language, `colocar ${amountText} na sua conta`, `add ${amountText} to your account`);
+          : this.text(language, `receber ${amountText} na sua conta`, `receive ${amountText} in your account`);
         state.response_message = this.text(
           language,
-          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nNa página, use o QR e confirme com PIN para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
-          `To ${actionText} with PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nOn the page, use the QR and confirm with PIN so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
+          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nNa página, o PIX a pagar já inclui a taxa por fora para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
+          `To ${actionText} with PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nOn the page, the PIX amount to pay already includes the fee on top so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
         );
       }
     }
