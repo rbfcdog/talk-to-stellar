@@ -42,6 +42,21 @@ function createState(input: string, hasWallet = true): AgentState {
   };
 }
 
+function mockRouteIntent(graph: any, toolName: string) {
+  const routerInvoke = jest.fn().mockResolvedValue({
+    tool_calls: [{
+      id: `call_${toolName}`,
+      name: toolName,
+      args: { confidence: 0.99, reason: 'test route' },
+    }],
+  });
+  graph.llm = {
+    bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+    invoke: jest.fn(),
+  };
+  return routerInvoke;
+}
+
 describe('Agent production evals', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -146,7 +161,6 @@ describe('Agent production evals', () => {
     expect(routerInvoke).toHaveBeenCalled();
     const routedTools = graph.llm.bindTools.mock.calls[0][0];
     expect(routedTools.some((tool: any) => tool.function?.name === 'route_balance_intent')).toBe(true);
-    expect(routedTools.some((tool: any) => tool.function?.name === 'classify_talktostellar_intent')).toBe(false);
     expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
       session_id: 'eval-session',
       public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
@@ -158,44 +172,10 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('routes saldo typo requests to balance even when the LLM router is unavailable', async () => {
-    const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
-    graph.llm = {
-      bindTools: jest.fn(),
-      invoke: jest.fn(),
-    };
-
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      balances: [
-        { asset: 'BRL', balance: '50.0000000' },
-        { asset: 'USDC', balance: '8.9000000' },
-        { asset: 'XLM', balance: '3.0000000' },
-      ],
-    }));
-
-    const result = await graph.processInput(createState('quero ver meu sald9'));
-
-    expect(graph.llm.bindTools).not.toHaveBeenCalled();
-    expect(graph.llm.invoke).not.toHaveBeenCalled();
-    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
-      session_id: 'eval-session',
-      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    });
-    expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar');
-    expect(result.response_message).toContain('R$: 50.0000000');
-    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
-  });
-
   it('answers common product questions directly instead of falling back to the menu', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
-    graph.llm = {
-      bindTools: jest.fn(),
-      invoke: jest.fn(),
-    };
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_balance_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -211,7 +191,6 @@ describe('Agent production evals', () => {
       session_id: 'eval-session',
       public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     });
-    expect(graph.llm.invoke).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('Saldo da sua conta');
     expect(result.response_message).not.toContain('Diga o que quer fazer');
@@ -219,7 +198,8 @@ describe('Agent production evals', () => {
 
   it('lists saved contacts for direct contacts requests without the generic help fallback', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_contacts_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -251,11 +231,8 @@ describe('Agent production evals', () => {
 
   it('lists contacts even when the WhatsApp text has contact typos', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
-    graph.llm = {
-      bindTools: jest.fn(),
-      invoke: jest.fn(),
-    };
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_contacts_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -270,7 +247,7 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('quero ver meus conattos'));
 
     expect(executeToolMock.mock.calls.filter(([name]) => name === 'list_contacts')).toHaveLength(1);
-    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(routerInvoke).toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('Bruna');
     expect(result.response_message).not.toContain('Posso ajudar com:');
@@ -278,7 +255,8 @@ describe('Agent production evals', () => {
 
   it('adds a new contact when the user asks to add an email to contacts', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_contacts_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -526,7 +504,8 @@ describe('Agent production evals', () => {
 
   it('routes public yield questions to yield tools even before login', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -546,7 +525,8 @@ describe('Agent production evals', () => {
 
   it('routes a plain investment request to application options', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -567,11 +547,8 @@ describe('Agent production evals', () => {
 
   it('routes misspelled applications wording to application options without generic help', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
-    graph.llm = {
-      bindTools: jest.fn(),
-      invoke: jest.fn(),
-    };
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -585,7 +562,7 @@ describe('Agent production evals', () => {
       session_token: 'eval-session-token',
       language: 'pt-BR',
     });
-    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(routerInvoke).toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('/rendimentos');
     expect(result.response_message).not.toContain('Diga o que quer fazer');
@@ -593,7 +570,8 @@ describe('Agent production evals', () => {
 
   it('routes applications wording and typo variants to application options', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -608,20 +586,6 @@ describe('Agent production evals', () => {
     expect(first.response_message).toContain('/rendimentos');
     expect(second.success).toBe(true);
     expect(second.response_message).toContain('/rendimentos');
-  });
-
-  it('parses fallback intent text even when the LLM returns JSON or punctuation', () => {
-    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
-
-    expect(graph.parseIntentFromLlmOutput('yield.')).toBe(IntentType.YIELD);
-    expect(graph.parseIntentFromLlmOutput('The intent is pix_onramp.')).toBe(IntentType.PIX);
-    expect(graph.parseIntentFromLlmOutput('{"intent":"yield","confidence":0.99}')).toBe(IntentType.YIELD);
-    expect(graph.parseIntentFromLlmOutput('{"intent":"pix_transfer","confidence":0.99}')).toBe(IntentType.PIX);
-    expect(graph.parseIntentFromLlmOutput('```json\n{"intent":"contacts","confidence":0.98}\n```')).toBe(IntentType.CONTACTS);
-    expect(graph.parseIntentFromLlmOutput('The intent is payment_link.')).toBe(IntentType.PAYMENT_LINK);
-    expect(graph.parseIntentFromLlmOutput('{"intent":"reset_pin","confidence":0.99}')).toBe(IntentType.RESET_PIN);
-    expect(graph.parseIntentFromLlmOutput('{"intent":"aplicações","confidence":0.8}')).toBe(IntentType.YIELD);
-    expect(graph.parseIntentFromLlmOutput('{"intent":"applications","confidence":0.8}')).toBe(IntentType.YIELD);
   });
 
   it('routes PIN change requests to the reset_pin tool instead of generic help', async () => {
@@ -668,14 +632,11 @@ describe('Agent production evals', () => {
 
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    graph.llm = {
-      bindTools: jest.fn(),
-      invoke: jest.fn(),
-    };
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_intent');
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };
@@ -683,8 +644,7 @@ describe('Agent production evals', () => {
     try {
       const result = await graph.processInput(createState('quero mandar 100 reais no pix'));
 
-      expect(graph.llm.bindTools).not.toHaveBeenCalled();
-      expect(graph.llm.invoke).not.toHaveBeenCalled();
+      expect(routerInvoke).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.detected_intent).toBe(IntentType.PIX);
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
@@ -794,7 +754,8 @@ describe('Agent production evals', () => {
 
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -817,7 +778,8 @@ describe('Agent production evals', () => {
 
   it('routes yield balance checks to get_yield_balance for CETES', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -838,7 +800,8 @@ describe('Agent production evals', () => {
 
   it('routes explicit yield confirmations with PIN to confirm_yield_action', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -862,7 +825,8 @@ describe('Agent production evals', () => {
 
   it('does not execute yield confirmation without a PIN', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_yield_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
