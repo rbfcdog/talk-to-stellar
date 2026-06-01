@@ -74,7 +74,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to mudar/trocar/alterar/modificar/atualizar/redefinir/resetar/recuperar PIN, senha/PIN da conta, forgot PIN, change PIN, recover PIN, update PIN, or says the PIN is wrong/forgotten. PIN change requests are account security actions and must not route to general help.',
+    description: 'Use when the user asks to change account PIN/security. Exact Portuguese examples: "redefinir o pin", "alterar meu pin", "mudar meu pin", "trocar o PIN", "resetar pin", "recuperar pin", "esqueci meu pin", "pin nao funciona". English examples: forgot PIN, change PIN, recover PIN, update PIN. PIN change/reset requests must never route to general help.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -99,7 +99,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.GENERAL,
     toolName: 'route_general_intent',
-    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Do not use this for typoed product requests.',
+    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests. Never use when the message mentions PIN with alterar, mudar, trocar, redefinir, resetar, recuperar, esqueci, forgot, change, update, or recover.',
   },
 ];
 
@@ -3377,8 +3377,8 @@ Routing principles:
 - Do not route PIX saída/off-ramp as route_payment_intent just because the user says "mandar/enviar/pagar". If PIX or own destination is present, route_pix_intent wins.
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
-- PIN/security requests are account actions, never generic help. Strong PIN phrases: "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "redefinir PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN". Route all of them to route_reset_pin_intent.
-- Do not choose route_general_intent for a PIN request even if the wording is short or has no amount. The next action is reset_pin.
+- PIN/security requests are account actions, never generic help. If the message contains "pin" plus any reset/change verb, choose route_reset_pin_intent. Strong verbs: redefinir, mudar, alterar, trocar, modificar, atualizar, resetar, recuperar, esqueci, esquecido, forgot, change, update, recover. Strong phrases: "redefinir o pin", "redefinir meu pin", "mudar meu pin", "alterar meu pin", "trocar meu PIN", "modificar o PIN", "atualizar PIN", "resetar PIN", "recuperar PIN", "esqueci meu PIN", "PIN inválido", "PIN nao funciona", "quero outro PIN".
+- Do not choose route_general_intent for a PIN reset/change request even if the wording is short, has no amount, has leading whitespace, or looks like an incomplete command. The next action is reset_pin.
 - "quero ver meus contatos", "listar contatos", and "destinatarios salvos" are contacts.
 - Asset explanation questions such as "quais sao os assets" should be routed as general only when they are asking for explanation, not as a transaction.
 
@@ -3395,6 +3395,9 @@ Tool selection examples:
 - quero ver aolicacoes -> route_yield_intent
 - quero mudar de pin -> route_reset_pin_intent
 - quero alterar meu pin -> route_reset_pin_intent
+- redefinir o pin -> route_reset_pin_intent
+- redefinir meu pin -> route_reset_pin_intent
+- resetar pin -> route_reset_pin_intent
 - trocar meu PIN -> route_reset_pin_intent
 - esqueci meu pin -> route_reset_pin_intent
 - meu pin nao funciona -> route_reset_pin_intent

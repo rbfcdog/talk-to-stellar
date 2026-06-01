@@ -588,7 +588,7 @@ describe('Agent production evals', () => {
     expect(second.response_message).toContain('/rendimentos');
   });
 
-  it('routes PIN alteration requests to the reset_pin tool instead of generic help', async () => {
+  it('routes PIN reset requests to the reset_pin tool instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const routerInvoke = jest.fn().mockResolvedValue({
@@ -614,7 +614,7 @@ describe('Agent production evals', () => {
       message: 'Enviei um e-mail para r******@gmail.com com o link seguro para mudar seu PIN. Ele vale por 15 minutos.',
     }));
 
-    const result = await graph.processInput(createState('quero alterar meu pin'));
+    const result = await graph.processInput(createState(' redefinir o pin'));
 
     expect(result.success).toBe(true);
     expect(result.detected_intent).toBe(IntentType.RESET_PIN);
@@ -628,6 +628,14 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('e-mail');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
     expect(result.response_message).not.toContain('Diga o que quer fazer');
+  });
+
+  it('keeps exact short PIN reset wording in the intent router prompt', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
+    const prompt = graph.buildIntentRouterPrompt();
+
+    expect(prompt).toContain('redefinir o pin -> route_reset_pin_intent');
+    expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
   });
 
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
