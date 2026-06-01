@@ -161,6 +161,10 @@ describe('Agent production evals', () => {
     expect(routerInvoke).toHaveBeenCalled();
     const routedTools = graph.llm.bindTools.mock.calls[0][0];
     expect(routedTools.some((tool: any) => tool.function?.name === 'route_balance_intent')).toBe(true);
+    const balanceRouteTool = routedTools.find((tool: any) => tool.function?.name === 'route_balance_intent');
+    expect(balanceRouteTool.function.parameters.properties.needs_clarification).toBeDefined();
+    expect(balanceRouteTool.function.parameters.properties.risk.enum).toEqual(['low', 'medium', 'high']);
+    expect(balanceRouteTool.function.parameters.properties.language.enum).toEqual(['pt-BR', 'en']);
     expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
       session_id: 'eval-session',
       public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
@@ -636,6 +640,100 @@ describe('Agent production evals', () => {
 
     expect(prompt).toContain('redefinir o pin -> route_reset_pin_intent');
     expect(prompt).toContain('Do not choose route_general_intent for a PIN reset/change request');
+    expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
+    expect(prompt).toContain('Priority order when multiple intents appear');
+  });
+
+  it('retries the LLM router when the first response does not call a route tool', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn()
+      .mockResolvedValueOnce({ content: 'Posso ajudar com saldo, PIX e PIN.' })
+      .mockResolvedValueOnce({
+        tool_calls: [{
+          id: 'call_retry_reset_pin',
+          name: 'route_reset_pin_intent',
+          args: {
+            confidence: 0.97,
+            reason: 'short PIN reset command',
+            needs_clarification: false,
+            language: 'pt-BR',
+            risk: 'high',
+          },
+        }],
+      });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      message: 'Enviei o link seguro para mudar seu PIN.',
+    }));
+
+    const result = await graph.processInput(createState('redefinir o pin'));
+
+    expect(routerInvoke).toHaveBeenCalledTimes(2);
+    expect(result.detected_intent).toBe(IntentType.RESET_PIN);
+    expect(executeToolMock).toHaveBeenCalledWith('reset_pin', expect.objectContaining({
+      session_id: 'eval-session',
+      user_id: 'eval-user',
+    }));
+    expect(result.response_message).toContain('PIN');
+  });
+
+  it('selects the highest-confidence LLM route when the model returns more than one route tool', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [
+        {
+          id: 'call_general',
+          name: 'route_general_intent',
+          args: { confidence: 0.2, reason: 'too broad', needs_clarification: true },
+        },
+        {
+          id: 'call_balance',
+          name: 'route_balance_intent',
+          args: { confidence: 0.94, reason: 'balance typo', needs_clarification: false, language: 'pt-BR', risk: 'low' },
+        },
+      ],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      balances: [
+        { asset: 'BRL', balance: '50.0000000' },
+        { asset: 'XLM', balance: '2.0000000' },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meu sald9'));
+
+    expect(result.detected_intent).toBe(IntentType.BALANCE);
+    expect(executeToolMock).toHaveBeenCalledWith('get_balance', expect.objectContaining({
+      session_id: 'eval-session',
+    }));
+    expect(result.response_message).toContain('XLM: 2.0000000');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('redacts sensitive values from LLM router logs', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
+
+    const sanitized = graph.sanitizeIntentRouterLogMessage('PIN 1234 para rodrigo@example.com +55 19 99999-9999');
+
+    expect(sanitized).toContain('PIN [redacted]');
+    expect(sanitized).toContain('[redacted_email]');
+    expect(sanitized).toContain('[redacted_number]');
+    expect(sanitized).not.toContain('1234');
+    expect(sanitized).not.toContain('rodrigo@example.com');
+    expect(sanitized).not.toContain('99999-9999');
   });
 
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
