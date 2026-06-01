@@ -215,7 +215,25 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Veja entradas, envios, conversões, PIX e ajustes");
     expect(text).toContain('const [period, setPeriod] = useState<PeriodMode>("all")');
     expect(text).toContain("Buscar por contato, valor, moeda, PIX ou hash");
+    expect(text).toContain("Itens por página");
+    expect(text).toContain("Página {page} de {totalPages}");
+    expect(text).toContain("Mostrando {pageStart}-{pageEnd}");
     expect(text).not.toContain("Transactions for");
     expect(text).not.toContain("Full list with person");
+  });
+
+  it("keeps wallet profile as an account overview with asset distribution", () => {
+    const text = source("app/profile/[publicKey]/wallet-profile-client.tsx");
+
+    expect(text).toContain("Perfil global");
+    expect(text).toContain("Distribuição da carteira");
+    expect(text).toContain("Saldos por asset");
+    expect(text).toContain("Moedas com saldo");
+    expect(text).toContain("Maior saldo");
+    expect(text).toContain("Ações rápidas");
+    expect(text).toContain("Copiar chave");
+    expect(text).toContain("PIN obrigatório");
+    expect(text).not.toContain("Payment link");
+    expect(text).not.toContain("Pay ");
   });
 });
