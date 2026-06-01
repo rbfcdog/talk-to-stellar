@@ -35,7 +35,7 @@ type FinalizeResponse = {
   devCode?: string
 }
 
-const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION !== "false"
 const PASSKEY_ENROLLMENT_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 
 function generateBrowserId(): string {

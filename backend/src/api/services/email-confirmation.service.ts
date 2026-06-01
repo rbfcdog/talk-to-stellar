@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
 import { logger } from '../../utils/logger';
 import { getRequiredJwtSecret } from '../../config/secrets';
-import { isProductionLikeEnvironment } from '../../config/runtime';
+import { isProductionLikeEnvironment, readBooleanEnv } from '../../config/runtime';
 
 export type EmailConfirmationPurpose = 'create_account' | 'login';
 
@@ -14,6 +14,8 @@ type EmailMessage = {
   text: string;
   html: string;
 };
+
+type EmailProvider = 'ses' | 'resend' | 'sendgrid' | 'webhook';
 
 type RequireVerifiedInput = {
   email?: string | null;
@@ -33,10 +35,15 @@ type RequireVerifiedResult = {
 };
 
 function emailConfirmationEnabled(): boolean {
-  // Email confirmation delivery is intentionally disconnected from the app.
-  // Keep the implementation below for future reference, but do not call
-  // provider/storage logic from login or account creation in the current build.
-  return false;
+  const explicit = [
+    process.env.EMAIL_CONFIRMATION_ENABLED,
+    process.env.ENABLE_EMAIL_CONFIRMATION,
+    process.env.REQUIRE_EMAIL_CONFIRMATION,
+  ].find((value) => String(value || '').trim() !== '');
+  if (explicit !== undefined) return readBooleanEnv(explicit);
+
+  if (process.env.NODE_ENV === 'test') return false;
+  return hasConfiguredEmailProvider();
 }
 
 export class EmailConfirmationError extends Error {
@@ -75,6 +82,12 @@ function getTtlSeconds(): number {
 function getMaxAttempts(): number {
   const parsed = Number(String(process.env.EMAIL_CONFIRMATION_MAX_ATTEMPTS || '5').trim());
   if (!Number.isFinite(parsed) || parsed <= 0) return 5;
+  return Math.trunc(parsed);
+}
+
+function getRequestCooldownSeconds(): number {
+  const parsed = Number(String(process.env.EMAIL_CONFIRMATION_COOLDOWN_SECONDS || '45').trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return 45;
   return Math.trunc(parsed);
 }
 
@@ -173,6 +186,8 @@ function genericEmailMessage(code: string, language: Language): string {
       return localizedMessage(language, 'Muitas tentativas. Solicite um novo código.', 'Too many attempts. Request a new code.');
     case 'EMAIL_CODE_EXPIRED':
       return localizedMessage(language, 'Código de confirmação expirado. Solicite um novo código.', 'Confirmation code expired. Request a new code.');
+    case 'EMAIL_CODE_RECENT':
+      return localizedMessage(language, 'Código enviado agora. Aguarde alguns segundos antes de solicitar outro.', 'Code sent recently. Wait a few seconds before requesting another one.');
     default:
       return localizedMessage(language, 'Não foi possível confirmar o e-mail.', 'Could not confirm email.');
   }
@@ -196,6 +211,37 @@ function parseFromAddress(value: string): { email: string; name?: string } {
 
 function allowDevCodeResponse(): boolean {
   return !isProductionLikeEnvironment() || process.env.EMAIL_CONFIRMATION_ALLOW_DEV_CODE === 'true';
+}
+
+function configuredEmailProvider(): EmailProvider | null {
+  const raw = String(process.env.EMAIL_CONFIRMATION_PROVIDER || '').trim().toLowerCase();
+  if (!raw) return null;
+  if (['ses', 'aws-ses', 'aws_ses'].includes(raw)) return 'ses';
+  if (raw === 'resend') return 'resend';
+  if (raw === 'sendgrid') return 'sendgrid';
+  if (raw === 'webhook') return 'webhook';
+  throw new EmailConfirmationError(
+    'EMAIL_PROVIDER_INVALID',
+    `Unsupported EMAIL_CONFIRMATION_PROVIDER "${raw}". Use ses, resend, sendgrid or webhook.`,
+    500
+  );
+}
+
+function hasSesConfig(): boolean {
+  const hasAccessKey = Boolean(String(process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim());
+  const hasSecretKey = Boolean(String(process.env.AWS_SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim());
+  const explicitSes = configuredEmailProvider() === 'ses';
+  const sesRegion = Boolean(String(process.env.AWS_SES_REGION || process.env.SES_REGION || '').trim());
+  return hasAccessKey && hasSecretKey && (explicitSes || sesRegion);
+}
+
+function hasConfiguredEmailProvider(): boolean {
+  return Boolean(
+    String(process.env.RESEND_API_KEY || '').trim() ||
+      String(process.env.SENDGRID_API_KEY || '').trim() ||
+      String(process.env.EMAIL_CONFIRMATION_WEBHOOK_URL || process.env.EMAIL_WEBHOOK_URL || '').trim() ||
+      hasSesConfig()
+  );
 }
 
 function buildMessage(input: {
@@ -262,6 +308,164 @@ async function sendViaSendGrid(message: EmailMessage): Promise<boolean> {
   return true;
 }
 
+async function sendViaResend(message: EmailMessage): Promise<boolean> {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) return false;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromAddress(),
+      to: [message.to],
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Resend email failed: ${response.status} ${body}`);
+  }
+  return true;
+}
+
+function sha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function hmac(key: crypto.BinaryLike, value: string): Buffer {
+  return crypto.createHmac('sha256', key).update(value, 'utf8').digest();
+}
+
+function getSesRegion(): string {
+  return String(
+    process.env.AWS_SES_REGION ||
+      process.env.SES_REGION ||
+      process.env.AWS_REGION ||
+      process.env.AWS_DEFAULT_REGION ||
+      'sa-east-1'
+  ).trim();
+}
+
+function getSesEndpoint(region: string): URL {
+  const configured = String(process.env.AWS_SES_ENDPOINT || '').trim();
+  return new URL(configured || `https://email.${region}.amazonaws.com/v2/email/outbound-emails`);
+}
+
+function signSesRequest(input: {
+  payload: string;
+  region: string;
+  endpoint: URL;
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+  now?: Date;
+}): Record<string, string> {
+  const now = input.now || new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const host = input.endpoint.host;
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    host,
+    'x-amz-date': amzDate,
+  };
+  if (input.sessionToken) headers['x-amz-security-token'] = input.sessionToken;
+
+  const signedHeaders = Object.keys(headers).sort().join(';');
+  const canonicalHeaders = Object.keys(headers)
+    .sort()
+    .map((key) => `${key}:${headers[key]}\n`)
+    .join('');
+  const canonicalRequest = [
+    'POST',
+    input.endpoint.pathname,
+    input.endpoint.searchParams.toString(),
+    canonicalHeaders,
+    signedHeaders,
+    sha256Hex(input.payload),
+  ].join('\n');
+  const credentialScope = `${dateStamp}/${input.region}/ses/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join('\n');
+
+  const signingKey = hmac(
+    hmac(hmac(hmac(Buffer.from(`AWS4${input.secretAccessKey}`, 'utf8'), dateStamp), input.region), 'ses'),
+    'aws4_request'
+  );
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  return {
+    ...headers,
+    authorization: [
+      `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${credentialScope}`,
+      `SignedHeaders=${signedHeaders}`,
+      `Signature=${signature}`,
+    ].join(', '),
+  };
+}
+
+async function sendViaSes(message: EmailMessage): Promise<boolean> {
+  const accessKeyId = String(process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim();
+  const secretAccessKey = String(process.env.AWS_SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  if (!accessKeyId || !secretAccessKey) return false;
+
+  const region = getSesRegion();
+  const endpoint = getSesEndpoint(region);
+  const payload = JSON.stringify({
+    FromEmailAddress: fromAddress(),
+    Destination: {
+      ToAddresses: [message.to],
+    },
+    Content: {
+      Simple: {
+        Subject: {
+          Data: message.subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          Text: {
+            Data: message.text,
+            Charset: 'UTF-8',
+          },
+          Html: {
+            Data: message.html,
+            Charset: 'UTF-8',
+          },
+        },
+      },
+    },
+  });
+  const headers = signSesRequest({
+    payload,
+    region,
+    endpoint,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken: String(process.env.AWS_SES_SESSION_TOKEN || process.env.AWS_SESSION_TOKEN || '').trim() || undefined,
+  });
+
+  const response = await fetch(endpoint.toString(), {
+    method: 'POST',
+    headers,
+    body: payload,
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`AWS SES email failed: ${response.status} ${body}`);
+  }
+  return true;
+}
+
 async function sendViaWebhook(message: EmailMessage): Promise<boolean> {
   const url = String(process.env.EMAIL_CONFIRMATION_WEBHOOK_URL || process.env.EMAIL_WEBHOOK_URL || '').trim();
   if (!url) return false;
@@ -291,8 +495,18 @@ async function sendViaWebhook(message: EmailMessage): Promise<boolean> {
 }
 
 async function sendEmail(message: EmailMessage): Promise<void> {
-  if (await sendViaSendGrid(message)) return;
-  if (await sendViaWebhook(message)) return;
+  const provider = configuredEmailProvider();
+  if (provider === 'ses' && await sendViaSes(message)) return;
+  if (provider === 'resend' && await sendViaResend(message)) return;
+  if (provider === 'sendgrid' && await sendViaSendGrid(message)) return;
+  if (provider === 'webhook' && await sendViaWebhook(message)) return;
+
+  if (!provider) {
+    if (await sendViaResend(message)) return;
+    if (await sendViaSendGrid(message)) return;
+    if (await sendViaWebhook(message)) return;
+    if (await sendViaSes(message)) return;
+  }
 
   if (allowDevCodeResponse()) {
     logger.warn(`[email-confirmation] DEV email fallback for ${message.to}: ${message.text}`);
@@ -301,7 +515,7 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 
   throw new EmailConfirmationError(
     'EMAIL_PROVIDER_MISSING',
-    'Email sending is not configured on the server. Set SENDGRID_API_KEY or EMAIL_CONFIRMATION_WEBHOOK_URL in the backend environment.',
+    'Email sending is not configured on the server. Set EMAIL_CONFIRMATION_PROVIDER=ses with AWS SES credentials, RESEND_API_KEY, SENDGRID_API_KEY or EMAIL_CONFIRMATION_WEBHOOK_URL.',
     500
   );
 }
@@ -336,7 +550,7 @@ export class EmailConfirmationService {
 
     const code = String(input.code || '').replace(/\D+/g, '').trim();
     if (code) {
-      await this.verifyCode({ email, purpose: input.purpose, code });
+      await this.verifyCode({ email, purpose: input.purpose, code, language });
       return {
         verified: true,
         email,
@@ -361,9 +575,29 @@ export class EmailConfirmationService {
   }): Promise<RequireVerifiedResult> {
     const ttlSeconds = getTtlSeconds();
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    const latest = await this.getLatestPending(input.email, input.purpose);
+    const cooldownSeconds = getRequestCooldownSeconds();
+    if (latest?.created_at && cooldownSeconds > 0) {
+      const createdAt = Date.parse(String((latest as any).created_at || ''));
+      if (Number.isFinite(createdAt) && Date.now() - createdAt < cooldownSeconds * 1000) {
+        throw new EmailConfirmationError('EMAIL_CODE_RECENT', genericEmailMessage('EMAIL_CODE_RECENT', input.language), 429);
+      }
+    }
+
     const code = generateCode();
     const codeHash = hashCode(input.email, input.purpose, code);
     const now = new Date().toISOString();
+    const { error: cleanupError } = await supabase
+      .from('email_confirmations')
+      .update({
+        used_at: now,
+        updated_at: now,
+      })
+      .eq('email', input.email)
+      .eq('purpose', input.purpose)
+      .is('used_at', null);
+    if (cleanupError) handleEmailConfirmationStorageError(cleanupError);
+
     const insertPayload = {
       email: input.email,
       purpose: input.purpose,
@@ -405,10 +639,10 @@ export class EmailConfirmationService {
     email: string;
     purpose: EmailConfirmationPurpose;
     code: string;
+    language: Language;
   }): Promise<void> {
-    const language = 'en';
     if (!/^\d{6}$/.test(input.code)) {
-      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID', language), 401);
+      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID', input.language), 401);
     }
 
     const codeHash = hashCode(input.email, input.purpose, input.code);
@@ -429,17 +663,17 @@ export class EmailConfirmationService {
 
     if (!data) {
       await this.incrementLatestAttempt(input.email, input.purpose);
-      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID_OR_EXPIRED', language), 401);
+      throw new EmailConfirmationError('EMAIL_CODE_INVALID', genericEmailMessage('EMAIL_CODE_INVALID_OR_EXPIRED', input.language), 401);
     }
 
     const attempts = Number((data as any)?.attempts || 0);
     if (attempts >= getMaxAttempts()) {
-      throw new EmailConfirmationError('EMAIL_CODE_LOCKED', genericEmailMessage('EMAIL_CODE_LOCKED', language), 429);
+      throw new EmailConfirmationError('EMAIL_CODE_LOCKED', genericEmailMessage('EMAIL_CODE_LOCKED', input.language), 429);
     }
 
     const expiresAt = Date.parse(String((data as any)?.expires_at || ''));
     if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) {
-      throw new EmailConfirmationError('EMAIL_CODE_EXPIRED', genericEmailMessage('EMAIL_CODE_EXPIRED', language), 401);
+      throw new EmailConfirmationError('EMAIL_CODE_EXPIRED', genericEmailMessage('EMAIL_CODE_EXPIRED', input.language), 401);
     }
 
     const { error: updateError } = await supabase
@@ -473,5 +707,22 @@ export class EmailConfirmationService {
         updated_at: new Date().toISOString(),
       })
       .eq('id', String((data as any).id));
+  }
+
+  private static async getLatestPending(email: string, purpose: EmailConfirmationPurpose): Promise<any | null> {
+    const { data, error } = await supabase
+      .from('email_confirmations')
+      .select('id, created_at, expires_at')
+      .eq('email', email)
+      .eq('purpose', purpose)
+      .is('used_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      handleEmailConfirmationStorageError(error);
+    }
+    return data || null;
   }
 }

@@ -111,7 +111,7 @@ function extractResolvedLogin(value: any): string {
   )
 }
 
-const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION === "true"
+const EMAIL_CONFIRMATION_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMAIL_CONFIRMATION !== "false"
 const PASSKEY_LOGIN_ENABLED = process.env.NEXT_PUBLIC_PASSKEY_ENABLED !== "false"
 const GOOGLE_LOGIN_ENABLED = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID)
 
