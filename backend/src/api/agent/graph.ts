@@ -557,7 +557,7 @@ export class AgentGraph {
       .replace(/\b(?:investimetos|ivestimentos|investimntos|investimentos)\b/g, 'investimentos')
       .replace(/\b(?:rendimetos|rendimntos|rendimentos)\b/g, 'rendimentos')
       .replace(/\b(?:posicaoes|posicoees|posicoes)\b/g, 'posicoes')
-      .replace(/\b(?:saldp|saldoo|saldos)\b/g, 'saldo')
+      .replace(/\b(?:sald9|sald0|saldp|saldoo|saldos)\b/g, 'saldo')
       .replace(/\b(?:perfi|perfill|perfio)\b/g, 'perfil')
       .replace(/\b(?:rotta|rotaaa|rotas)\b/g, 'rota')
       .replace(/\b(?:agota|agpra|agoraa)\b/g, 'agora')
@@ -1274,6 +1274,7 @@ export class AgentGraph {
     const mentionsPixOffRampWording =
       /\b(?:para|pra|pro|a)\s+fora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
       /\bfora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
+      /\b(?:mandar|enviar|tirar|retirar|sacar)\s+(?:pra|para|pro|a)\s+fora\b/.test(normalized) ||
       /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/.test(normalized) ||
       /\b(?:pra|para|pro|a)\s+fora\b.*\bvia\s+pix\b/.test(normalized);
     const extractPixFundedPaymentRecipient = (): string => {
@@ -1284,7 +1285,8 @@ export class AgentGraph {
       const stopAtFlowWords = (value: string) => String(value || '')
         .replace(/\s+\b(?:de|do|da)\s+(?:r\$\s*)?\d.*$/i, '')
         .replace(/\s+\b(?:na|no)\s+qual\b.*$/i, '')
-        .replace(/\s+\b(?:via|por|com|usando|pago|paga|pagando)\b.*$/i, '')
+        .replace(/\s+\b(?:via|por|com|em|usando|pago|paga|pagando)\b.*$/i, '')
+        .replace(/\s+(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:[.,]\d{1,8})?\b.*$/i, '')
         .replace(/\s+\b(?:receber|receba|em)\s+(?:brl|real|reais|usd|usdc|dolar|dolares|xlm)\b.*$/i, '')
         .replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
         .replace(/\s+/g, ' ')
@@ -1333,6 +1335,7 @@ export class AgentGraph {
       /\b(mandar|enviar|pagar|transferir|transacao|transação|trasacao|transferencia|transferência|pagamento|fazer uma transacao|fazer uma transação|fazer uma trasacao|fazer transacao|fazer transação|fazer trasacao|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
       Boolean(pixFundedPaymentRecipient) &&
       !mentionsOwnPixDestination &&
+      !mentionsMoneyOutOfOwnAccount &&
       mentionsPix &&
       !/\b(meu banco|conta bancaria|conta bancária|outro banco|conta externa)\b/.test(normalized);
 

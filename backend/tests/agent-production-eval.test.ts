@@ -155,6 +155,37 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
+  it('routes saldo typo requests to balance even when the LLM classifier is unavailable', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    graph.llm = {
+      bindTools: jest.fn(),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      balances: [
+        { asset: 'BRL', balance: '50.0000000' },
+        { asset: 'USDC', balance: '8.9000000' },
+        { asset: 'XLM', balance: '3.0000000' },
+      ],
+    }));
+
+    const result = await graph.processInput(createState('quero ver meu sald9'));
+
+    expect(graph.llm.bindTools).not.toHaveBeenCalled();
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
+      session_id: 'eval-session',
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar');
+    expect(result.response_message).toContain('R$: 50.0000000');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
   it('answers common product questions directly instead of falling back to the menu', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;

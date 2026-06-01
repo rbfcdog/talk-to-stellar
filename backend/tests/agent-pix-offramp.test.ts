@@ -84,6 +84,22 @@ describe('Agent PIX off-ramp detection', () => {
     expect(intent.recipient_query).toBeUndefined();
   });
 
+  it('treats mandar pra fora reais em pix as PIX off-ramp instead of a contact payment', () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+
+    const intent = (graph as any).extractPixRampIntentFromText('quero mandar pra fora 50 reais em pix');
+
+    expect(intent).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'offramp',
+      flow: 'fund_wallet',
+      amount: '50',
+      amount_currency: 'BRL',
+      asset_code: 'BRL',
+    });
+    expect(intent.recipient_query).toBeUndefined();
+  });
+
   it('parses pt-BR thousands in PIX off-ramp amounts', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 
@@ -176,6 +192,33 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.response_message).toContain('source_asset=BRL');
       expect(result.response_message).toContain('source_amount=100');
       expect(result.response_message).toContain('fiat_amount=100');
+      expect(result.response_message).not.toContain('Não encontrei');
+      expect(result.response_message).not.toContain('contatos');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
+  it('answers mandar pra fora reais em pix with an off-ramp page instead of a missing contact error', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState('quero mandar pra fora 50 reais em pix'));
+
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('/pix-off?');
+      expect(result.response_message).toContain('source_asset=BRL');
+      expect(result.response_message).toContain('source_amount=50');
+      expect(result.response_message).toContain('fiat_amount=50');
       expect(result.response_message).not.toContain('Não encontrei');
       expect(result.response_message).not.toContain('contatos');
     } finally {
