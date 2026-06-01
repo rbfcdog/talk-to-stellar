@@ -3473,7 +3473,9 @@ export class AgentGraph {
       return null;
     }
 
-    const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any);
+    const toolAwareRouter = maybeBind.call(this.llm, INTENT_ROUTING_TOOLS as any, {
+      tool_choice: 'required',
+    } as any);
     const toolResponse = await toolAwareRouter.invoke(messages);
     const candidates = this.extractRouteCandidates(toolResponse);
 
@@ -3483,7 +3485,7 @@ export class AgentGraph {
 
     const selected = candidates[0] || null;
     if (!selected) {
-      logger.info(`[Agent] Intent router selected no route tool; continuing as general. response=${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
+      logger.warn(`[Agent] Intent router selected no route tool even with required tool_choice; continuing as general. response=${JSON.stringify(toolResponse?.content || toolResponse).slice(0, 300)}`);
       return null;
     }
 
@@ -3496,14 +3498,13 @@ export class AgentGraph {
 Your job is to decide whether the user message should trigger a TalkToStellar route tool.
 
 Tool-call contract:
-- You are not obligated to call a tool.
-- Call exactly one route_*_intent tool when the message is an actionable TalkToStellar product request.
-- Do not call a tool for pure small talk, broad explanations, unsupported non-product requests, or cases where no product route should run.
-- No-tool is acceptable only for non-actionable messages. No-tool is not acceptable for PIN/security, balance, PIX, conversion, yield, history, contacts, payments, payment links, login/logout, wallet, or profile requests.
-- No-tool is not acceptable for "uero/quero mandar/enviar/pagar/transferir <amount> <asset> pra/para <person>".
+- This routing step must call exactly one route_*_intent tool for every user message.
+- Use route_general_intent only for pure small talk, broad help/menu/capability questions, broad explanations, unsupported non-product requests, or cases where no product route should run.
+- route_general_intent is not a fallback for failed understanding. If the message is actionable, choose the concrete product route.
+- route_general_intent is not acceptable for PIN/security, balance, PIX, conversion, yield, history, contacts, payments, payment links, login/logout, wallet, or profile requests.
+- route_general_intent is not acceptable for "uero/quero mandar/enviar/pagar/transferir <amount> <asset> pra/para <person>".
 - If the message is ambiguous but clearly belongs to a product area, call that product route and set needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
-- route_general_intent is optional and only for true help/menu/capability questions, greetings, small talk, or unsupported non-product requests. It is also acceptable to call no tool for these messages.
 - Preserve the user's language in the language argument. Use pt-BR for Portuguese, including typo-heavy Portuguese.
 - Use risk=high for money movement, PIN/security, login, logout, account access, or anything that can move funds.
 - User typos are expected. Interpret by semantic intent, not exact spelling.
@@ -3580,7 +3581,7 @@ When you call a route tool, include confidence, reason, needs_clarification, lan
       try {
         const route = await this.invokeIntentRouter(messages);
         if (route) {
-          this.logIntentRoute(message, route.selected, 'auto', route.candidateCount);
+          this.logIntentRoute(message, route.selected, 'required', route.candidateCount);
           return route.selected.intent;
         }
       } catch (toolError) {
