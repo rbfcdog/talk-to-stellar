@@ -6,6 +6,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   FileDown,
   FileText,
@@ -223,7 +225,7 @@ export default function TransactionsClient() {
   const [message, setMessage] = useState("")
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
   const [page, setPage] = useState(1)
-  const perPage = 15
+  const [pageSize, setPageSize] = useState(8)
 
   const pageTitle = useMemo(() => {
     if (period === "all") return "Todo histórico"
@@ -248,7 +250,7 @@ export default function TransactionsClient() {
     void loadTransactions(sessionId, period, month, year)
   }, [authenticated, month, period, sessionId, year])
 
-  useEffect(() => { setPage(1) }, [kindFilter, search, period])
+  useEffect(() => { setPage(1) }, [kindFilter, pageSize, search, period])
 
   async function loadTransactions(currentSessionId = sessionId, currentPeriod = period, currentMonth = month, currentYear = year) {
     if (!currentSessionId) return
@@ -296,13 +298,19 @@ export default function TransactionsClient() {
     })
   }, [kindFilter, search, transactions])
 
-  const totalPages = Math.max(1, Math.ceil(visibleTransactions.length / perPage))
+  const totalPages = Math.max(1, Math.ceil(visibleTransactions.length / pageSize))
   const pagedTransactions = useMemo(() =>
-    visibleTransactions.slice((page - 1) * perPage, page * perPage),
-    [page, visibleTransactions]
+    visibleTransactions.slice((page - 1) * pageSize, page * pageSize),
+    [page, pageSize, visibleTransactions]
   )
 
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
   const setPageSafe = (p: number) => setPage(Math.max(1, Math.min(p, totalPages)))
+  const pageStart = visibleTransactions.length === 0 ? 0 : (page - 1) * pageSize + 1
+  const pageEnd = Math.min(page * pageSize, visibleTransactions.length)
 
   function exportPdf() {
     window.print()
@@ -465,22 +473,30 @@ export default function TransactionsClient() {
 
           {status === "ready" && pagedTransactions.length > 0 ? (
             <div className="divide-y divide-tts-border">
+              <PaginationControls
+                page={page}
+                totalPages={totalPages}
+                pageStart={pageStart}
+                pageEnd={pageEnd}
+                totalItems={visibleTransactions.length}
+                pageSize={pageSize}
+                onPageChange={setPageSafe}
+                onPageSizeChange={(value) => setPageSize(value)}
+              />
               {pagedTransactions.map((item, index) => (
                 <TransactionRow key={`${String(item.id)}:${index}`} item={item} />
               ))}
-              {totalPages > 1 ? (
-                <div className="flex items-center justify-center gap-2 p-4 no-print">
-                  <button type="button" onClick={() => setPageSafe(page - 1)} disabled={page <= 1}
-                    className="min-h-9 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep disabled:opacity-30 hover:border-tts-border2">
-                    Anterior
-                  </button>
-                  <span className="text-xs font-bold text-tts-muted">{page} / {totalPages}</span>
-                  <button type="button" onClick={() => setPageSafe(page + 1)} disabled={page >= totalPages}
-                    className="min-h-9 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep disabled:opacity-30 hover:border-tts-border2">
-                    Próxima
-                  </button>
-                </div>
-              ) : null}
+              <PaginationControls
+                page={page}
+                totalPages={totalPages}
+                pageStart={pageStart}
+                pageEnd={pageEnd}
+                totalItems={visibleTransactions.length}
+                pageSize={pageSize}
+                onPageChange={setPageSafe}
+                onPageSizeChange={(value) => setPageSize(value)}
+                compact
+              />
             </div>
           ) : null}
         </section>
@@ -507,6 +523,77 @@ function StatePanel({ icon, title, detail, action }: { icon: ReactNode; title: s
       <p className="mt-3 text-base font-black text-tts-deep">{title}</p>
       <p className="mt-1 max-w-md text-sm leading-6 text-tts-muted">{detail}</p>
       {action}
+    </div>
+  )
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  pageStart,
+  pageEnd,
+  totalItems,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  compact = false,
+}: {
+  page: number
+  totalPages: number
+  pageStart: number
+  pageEnd: number
+  totalItems: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (value: number) => void
+  compact?: boolean
+}) {
+  return (
+    <div className={`no-print flex flex-col gap-3 bg-tts-bg/50 p-4 sm:flex-row sm:items-center sm:justify-between ${compact ? "border-t border-tts-border" : ""}`}>
+      <div>
+        <p className="text-sm font-black text-tts-deep">
+          Página {page} de {totalPages}
+        </p>
+        <p className="mt-1 text-xs text-tts-muted">
+          Mostrando {pageStart}-{pageEnd} de {totalItems} movimentações
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {!compact ? (
+          <label className="flex min-h-10 items-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-muted">
+            Itens por página
+            <select
+              value={pageSize}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              className="min-h-8 border-0 bg-transparent p-0 text-xs font-black text-tts-deep outline-none"
+            >
+              <option value={8}>8</option>
+              <option value={15}>15</option>
+              <option value={30}>30</option>
+            </select>
+          </label>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-xs font-black text-tts-deep transition hover:border-tts-border2 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Anterior
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-2 text-xs font-black text-tts-deep transition hover:border-tts-border2 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          Próxima
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   )
 }
@@ -540,13 +627,8 @@ function TransactionRow({ item }: { item: TransactionItem }) {
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="border border-tts-border bg-tts-bg px-2 py-1 text-xs font-black text-tts-deep">
-            {statusLabel(item.status)}
+            {statusLabel(item.status)}{operationLabel ? ` · ${operationLabel}` : ""}
           </span>
-          {operationLabel ? (
-            <span className="border border-tts-border bg-tts-bg px-2 py-1 text-xs font-bold text-tts-muted">
-              {operationLabel}
-            </span>
-          ) : null}
         </div>
 
         <p className="mt-3 text-sm font-black text-tts-deep">{counterpartyName(item)}</p>
