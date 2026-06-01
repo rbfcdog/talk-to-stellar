@@ -185,6 +185,7 @@ export class AgentGraph {
   private systemPrompt: string;
   private externalService: ExternalService;
   private openaiApiKey: string;
+  private lastIntentRouterFailure: string | null = null;
 
   constructor(repository: AgentRepository, openaiApiKey: string, systemPrompt: string) {
     this.repository = repository;
@@ -218,6 +219,14 @@ export class AgentGraph {
   private shouldUseLlmIntentRouter(): boolean {
     const key = String(this.openaiApiKey || '').trim().toLowerCase();
     return Boolean(key && key !== 'test-openai-key' && !key.startsWith('test-'));
+  }
+
+  private getIntentRouterUnavailableMessage(language: 'pt-BR' | 'en'): string {
+    return this.text(
+      language,
+      'Estou com instabilidade para interpretar sua mensagem agora. Tente novamente em alguns segundos; se continuar, o acesso ao interpretador LLM precisa ser revisado.',
+      'I am having trouble interpreting your message right now. Try again in a few seconds; if it continues, the LLM interpreter access needs to be reviewed.'
+    );
   }
 
   private languageInstruction(language: 'pt-BR' | 'en'): string {
@@ -3559,6 +3568,7 @@ When calling the selected route tool:
   }
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
+    this.lastIntentRouterFailure = null;
     if (!this.shouldUseLlmIntentRouter()) {
       logger.debug('[Agent] Intent router skipped because no production OpenAI key is configured');
       return IntentType.GENERAL;
@@ -3573,13 +3583,16 @@ When calling the selected route tool:
           return route.selected.intent;
         }
       } catch (toolError) {
-        logger.warn(`[Agent] Intent router tool call failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`);
+        const message = toolError instanceof Error ? toolError.message : String(toolError);
+        this.lastIntentRouterFailure = message;
+        logger.warn(`[Agent] Intent router tool call failed: ${message}`);
       }
 
       logger.info('[Agent] Intent router did not select a route tool; using general handling');
       return IntentType.GENERAL;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      this.lastIntentRouterFailure = errorMessage;
       logger.error(`Intent detection failed: ${errorMessage}`);
       return IntentType.GENERAL;
     }
@@ -5198,6 +5211,21 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       );
 
       const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id);
+      if (this.lastIntentRouterFailure) {
+        state.detected_intent = IntentType.GENERAL;
+        state.action_type = ActionType.NONE;
+        state.success = false;
+        state.error = 'intent_router_unavailable';
+        state.response_message = this.getIntentRouterUnavailableMessage(this.getLanguage(state));
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
       const safetyOverrideIntent = wantsReceiptImage ? IntentType.HISTORY
         : localContactIntent?.action === 'add' ? IntentType.CONTACTS
         : null;

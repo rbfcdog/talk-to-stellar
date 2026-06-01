@@ -839,6 +839,25 @@ describe('Agent production evals', () => {
     expect(graph.llm.bindTools.mock.calls[0][1]).toEqual({ tool_choice: 'required' });
   });
 
+  it('does not mask LLM router API failures as generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockRejectedValue(new Error('429 You exceeded your current quota'));
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    const result = await graph.processInput(createState('quero ver meu sald9'));
+
+    expect(routerInvoke).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('intent_router_unavailable');
+    expect(result.response_message).toContain('instabilidade');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+  });
+
   it('selects the highest-confidence LLM route when the model returns more than one route tool', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
