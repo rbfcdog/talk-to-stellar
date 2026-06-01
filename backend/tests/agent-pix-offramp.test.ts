@@ -237,6 +237,10 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.response_message).toContain('source_asset=BRL');
       expect(result.response_message).toContain('source_amount=50');
       expect(result.response_message).toContain('fiat_amount=50');
+      expect(result.response_message).toContain('saldo que sai da conta');
+      expect(result.response_message).toContain('chega no seu PIX');
+      expect(result.response_message).not.toContain('PIX a pagar');
+      expect(result.response_message).not.toContain('entra na conta');
       expect(result.response_message).not.toContain('Não encontrei');
       expect(result.response_message).not.toContain('contatos');
     } finally {

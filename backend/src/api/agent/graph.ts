@@ -24,7 +24,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PIX,
     toolName: 'route_pix_intent',
-    description: 'Use for any PIX money movement: trazer/colocar/depositar via PIX, sacar/retirar, mandar para meu PIX, mandar pra fora, off-ramp, pagar/enviar via PIX, chave PIX, QR PIX, or any request where PIX is the rail. PIX wins over generic payment when PIX is mentioned.',
+    description: 'Use for any PIX money movement. Entrada/on-ramp: trazer, colocar, depositar, carregar, receber saldo via PIX. Saida/off-ramp: sacar, retirar, mandar para meu PIX, mandar pra fora, enviar para minha chave PIX, tirar da conta, off-ramp. PIX wins over generic payment when PIX is mentioned.',
   },
   {
     intent: IntentType.BALANCE,
@@ -1606,11 +1606,17 @@ export class AgentGraph {
         recipient_public_key: resolvedRecipientPublicKey || undefined,
       };
       const url = await this.buildPixRampUrl(state, pixIntent);
-      const pixFeeNote = this.text(
-        language,
-        'A página mostra o PIX a pagar, a taxa do app e quanto entra na conta antes do PIN.',
-        'The page shows the PIX amount to pay, the app fee, and how much arrives in the account before the PIN.'
-      );
+      const pixFeeNote = intent.direction === 'offramp'
+        ? this.text(
+            language,
+            'A página mostra o saldo que sai da conta, a taxa do app e quanto chega no seu PIX antes do PIN.',
+            'The page shows the balance leaving the account, the app fee, and how much arrives in your PIX before the PIN.'
+          )
+        : this.text(
+            language,
+            'A página mostra o PIX a pagar, a taxa do app e quanto entra na conta antes do PIN.',
+            'The page shows the PIX amount to pay, the app fee, and how much arrives in the account before the PIN.'
+          );
       state.success = true;
       state.pending_pix_ramp = undefined;
       state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
@@ -3364,7 +3370,11 @@ Your job is not to answer the user. Your only job is to choose exactly one route
 Routing principles:
 - Choose the concrete product action whenever the message is actionable. Use route_general_intent only for greetings, menu/help requests, small talk, or unsupported requests.
 - Understand Portuguese, English, mixed language, missing accents, slang, and typos by meaning.
-- PIX has priority over generic payments whenever PIX is the rail. "mandar pra fora 50 reais em pix" and "quero mandar 100 reais no pix" are PIX off-ramp requests.
+- PIX has priority over generic payments whenever PIX is the rail. Use route_pix_intent for both PIX entrada and PIX saída.
+- PIX saída/off-ramp means money leaves the user's TalkToStellar account and arrives in the user's own PIX/BRL destination. Strong saída phrases: "mandar pra fora", "sacar", "retirar", "tirar da conta", "mandar para meu PIX", "enviar para minha chave PIX", "mandar 50 reais em pix", "quero mandar pra fora 50 reais em pix", "quero mandar 100 reais no pix", "mandar pro meu banco", "conta externa", "off-ramp".
+- PIX entrada/on-ramp means the user pays a PIX to add money into the TalkToStellar account. Strong entrada phrases: "colocar dinheiro", "trazer dinheiro", "depositar", "carregar", "adicionar saldo", "receber saldo", "entrar dinheiro via PIX".
+- PIX funded payment means the user pays PIX first and then pays another saved contact. Strong funded-payment phrases: "pagar Ana via PIX", "mandar para Ana pagando com PIX", "fazer uma transferencia para Ana e pagar via PIX". This still routes to route_pix_intent.
+- Do not route PIX saída/off-ramp as route_payment_intent just because the user says "mandar/enviar/pagar". If PIX or own destination is present, route_pix_intent wins.
 - Balance typos such as "sald9", "sald0", and "saldp" mean saldo/balance.
 - "aplicacoes", "aplicações", "aolicacoes", "investimentos", "rendimentos", and "quero investir" are earnings/yield.
 - "mudar de pin", "trocar PIN", "alterar PIN", "esqueci meu PIN", and "resetar PIN" are reset PIN.
@@ -3375,6 +3385,10 @@ Tool selection examples:
 - quero ver meu sald9 -> route_balance_intent
 - quero mandar pra fora 50 reais em pix -> route_pix_intent
 - quero mandar 100 reais no pix -> route_pix_intent
+- quero sacar 50 reais para meu pix -> route_pix_intent
+- quero retirar 10 usdc para minha chave pix -> route_pix_intent
+- quero colocar 100 reais via pix -> route_pix_intent
+- quero pagar Ana via pix -> route_pix_intent
 - quero converter 10 usdc pra brl -> route_conversion_intent
 - quero ver meus contatos -> route_contacts_intent
 - quero ver aolicacoes -> route_yield_intent
