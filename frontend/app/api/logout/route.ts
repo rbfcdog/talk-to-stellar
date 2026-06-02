@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { clearSessionCookies, readSessionCookies } from "@/lib/server-session";
+import { clearSessionCookies, readSessionCookies, requestSessionSource } from "@/lib/server-session";
 
 const getAgentLogoutUrl = () => {
   if (process.env.BACKEND_URL) {
@@ -19,21 +19,24 @@ const AGENT_LOGOUT_URL = getAgentLogoutUrl();
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const session = readSessionCookies(req);
+    const requestedSource = requestSessionSource(req, body);
+    const session = readSessionCookies(req, requestedSource);
     const sessionId = String(body?.session_id || session.sessionId || "").trim();
     const sessionToken = String(session.sessionToken || "").trim();
     const token = String(body?.token || "").trim();
     const provider = String(body?.provider || "").trim();
     const providerUserId = String(body?.provider_user_id || "").trim();
-    const isBrowserOnlyLogout = !token && !provider && !providerUserId;
+    const externalProvider = provider.toLowerCase() === "web" ? "" : provider;
+    const externalProviderUserId = externalProvider ? providerUserId : "";
+    const isBrowserOnlyLogout = !externalProvider && !externalProviderUserId;
     if (isBrowserOnlyLogout) {
       const response = NextResponse.json({ success: true, localOnly: true });
-      clearSessionCookies(response);
+      clearSessionCookies(response, requestedSource);
       return response;
     }
     if (!sessionId && !token) {
       const response = NextResponse.json({ success: true, alreadyLoggedOut: true });
-      clearSessionCookies(response);
+      clearSessionCookies(response, requestedSource);
       return response;
     }
 
@@ -48,8 +51,8 @@ export async function POST(req: Request) {
         session_id: sessionId || undefined,
         session_token: sessionToken || undefined,
         token: token || undefined,
-        provider: provider || undefined,
-        provider_user_id: providerUserId || undefined,
+        provider: externalProvider || undefined,
+        provider_user_id: externalProviderUserId || undefined,
       }),
     });
 
@@ -64,12 +67,12 @@ export async function POST(req: Request) {
         },
         { status: response.status }
       );
-      if (response.status === 401 || response.status === 410) clearSessionCookies(errorResponse);
+      if (response.status === 401 || response.status === 410) clearSessionCookies(errorResponse, requestedSource);
       return errorResponse;
     }
 
     const successResponse = NextResponse.json({ success: true });
-    clearSessionCookies(successResponse);
+    clearSessionCookies(successResponse, requestedSource);
     return successResponse;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

@@ -1,5 +1,7 @@
 "use client"
 
+import { currentPageSessionSource, normalizeClientSessionSource } from "@/lib/session"
+
 export type WebChatFeedback = {
   id: string
   content: string
@@ -24,9 +26,16 @@ function sanitizeFeedbackText(content: string) {
     .trim()
 }
 
+function isExternalChannelPage() {
+  if (typeof window === "undefined") return false
+  const source = normalizeClientSessionSource(currentPageSessionSource())
+  return source === "whatsapp" || source === "telegram"
+}
+
 /** Queue a feedback message in localStorage + broadcast it so any open web chat tab picks it up. */
 export function enqueueWebChatFeedback(content: string) {
   if (typeof window === "undefined") return
+  if (isExternalChannelPage()) return
   const text = sanitizeFeedbackText(String(content || ""))
   if (!text) return
 

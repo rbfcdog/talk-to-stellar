@@ -38,6 +38,9 @@ export class AgentRepository {
       pix_key: sessionData.pix_key,
       password_hash: sessionData.password_hash,
       session_password_hash: sessionData.session_password_hash,
+      email_verified: sessionData.email_verified,
+      email_verified_at: sessionData.email_verified_at,
+      email_verification_source: sessionData.email_verification_source,
       created_at: sessionData.created_at,
       last_activity: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -52,6 +55,20 @@ export class AgentRepository {
       const retry = await this.supabase
         .from('agent_sessions')
         .upsert(sessionRecordWithoutPix, { onConflict: 'session_id' });
+      error = retry.error;
+    }
+
+    if (error && this.isMissingColumnError(error, 'email_verified')) {
+      const {
+        pix_key,
+        email_verified,
+        email_verified_at,
+        email_verification_source,
+        ...sessionRecordWithoutEmailVerification
+      } = sessionRecord;
+      const retry = await this.supabase
+        .from('agent_sessions')
+        .upsert(sessionRecordWithoutEmailVerification, { onConflict: 'session_id' });
       error = retry.error;
     }
 
@@ -89,6 +106,7 @@ export class AgentRepository {
       ...currentActionParams,
       pending_payment: state.pending_payment ?? null,
       pending_conversion: state.pending_conversion ?? null,
+      pending_pix_ramp: state.pending_pix_ramp ?? currentActionParams.pending_pix_ramp ?? null,
     };
 
     const { error } = await this.supabase

@@ -395,6 +395,43 @@ function formatDisplayAmount(value: unknown, assetCode: string): string {
   return `${amount} ${code}`;
 }
 
+function receiptBrlFeeFromContext(
+  context: Record<string, unknown> | undefined,
+  sourceAmountBrl?: unknown,
+  destinationAmountBrl?: unknown,
+): { feeDisplay?: string; feeBrl?: string } {
+  const providerFee = parseHumanAmountNumber(coalesceString(
+    context?.provider_onramp_fee_amount,
+    context?.provider_fee_amount,
+    context?.anchor_provider_fee_amount,
+  ));
+  const appFee = parseHumanAmountNumber(coalesceString(
+    context?.talktostellar_transaction_fee_amount,
+    context?.app_fee_amount,
+    context?.platform_fee_amount,
+  ));
+  const totalFromContext = parseHumanAmountNumber(coalesceString(
+    context?.total_fee_amount,
+    context?.total_fee_brl,
+    context?.actual_fee_brl,
+  ));
+  const source = parseHumanAmountNumber(sourceAmountBrl);
+  const destination = parseHumanAmountNumber(destinationAmountBrl);
+  const deltaFee = Number.isFinite(source) && Number.isFinite(destination) && source > destination
+    ? source - destination
+    : 0;
+  const summedFee = (Number.isFinite(providerFee) && providerFee > 0 ? providerFee : 0) +
+    (Number.isFinite(appFee) && appFee > 0 ? appFee : 0);
+  const fee = [totalFromContext, summedFee, deltaFee]
+    .find((value) => Number.isFinite(value) && value > 0) || 0;
+
+  if (!fee) return {};
+  return {
+    feeDisplay: `R$ ${fee.toFixed(2)}`,
+    feeBrl: fee.toFixed(8),
+  };
+}
+
 function truncatePublicKey(value: string): string {
   return value ? `${value.slice(0, 7)}...${value.slice(-7)}` : 'wallet';
 }
@@ -1615,6 +1652,11 @@ export class AnchorService {
       } catch (balanceError) {
         console.warn('[ramp] Could not read updated balance for PIX receipt:', debugErrorMessage(balanceError));
       }
+      const fee = receiptBrlFeeFromContext(
+        record.operationContext,
+        record.sourceAmountBrl,
+        record.finalAmount || record.destinationAmount,
+      );
       return await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: record.sessionId,
@@ -1627,6 +1669,9 @@ export class AnchorService {
         destinationAmount: record.finalAmount || record.destinationAmount,
         destinationAssetCode: userFacingFinalAsset,
         hash: hash || record.deliveryHash || null,
+        feeDisplay: fee.feeDisplay || null,
+        feeBrl: fee.feeBrl || null,
+        quote: record.operationContext || null,
         status: 'completed',
         contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`,
       });
@@ -2061,6 +2106,11 @@ export class AnchorService {
       input.context.destination_amount,
     );
     if (!destinationAmount) return '';
+    const fee = receiptBrlFeeFromContext(
+      input.context,
+      coalesceString(input.context.source_amount_brl, input.transaction.fromAmount, input.operation.amount),
+      destinationAmount,
+    );
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'payment_received',
@@ -2074,6 +2124,9 @@ export class AnchorService {
       destinationAmount,
       destinationAssetCode: userFacingFinalAsset,
       hash: input.hash || coalesceString(input.context.final_conversion_hash, input.transaction.id) || null,
+      feeDisplay: fee.feeDisplay || null,
+      feeBrl: fee.feeBrl || null,
+      quote: input.context || null,
       status: 'completed',
       contextMessage: `PIX confirmado. Entregamos ${userFacingFinalAsset} na sua conta TalkToStellar.`,
     });
@@ -5609,6 +5662,7 @@ export class AnchorService {
   }> {
     const query = coalesceString(recipientQuery);
     if (!query) throw apiError('recipient is required for PIX-funded transfer.', 400);
+    const preferredName = coalesceString(options.preferredName);
     const preferredKey = coalesceString(options.preferredKey);
     const preferredPublicKey = coalesceString(options.preferredPublicKey);
 
@@ -5674,6 +5728,20 @@ export class AnchorService {
       });
     }
 
+    if (!contact && isValidPublicKey(requestedPublicKey)) {
+      const walletRepository = new WalletRepository(supabase);
+      const destinationWallet = await walletRepository.getWalletByPublicKey(requestedPublicKey).catch(() => null);
+      return {
+        publicKey: requestedPublicKey,
+        displayName: preferredName || (/^G[A-Z2-7]{55}$/i.test(query) ? `Contato ${requestedPublicKey.slice(0, 6)}` : query),
+        pixKey: preferredKey || undefined,
+        recipientKey: preferredKey || undefined,
+        sessionId: coalesceString(destinationWallet?.session_id) || undefined,
+        userId: coalesceString((destinationWallet as any)?.user_id) || undefined,
+        vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
+      };
+    }
+
     if (!contact) {
       throw apiError(`Recipient "${query}" was not found in your saved contacts. Open contacts and choose a real recipient before creating a PIX-funded transfer.`, 404);
     }
@@ -5698,6 +5766,69 @@ export class AnchorService {
     }
 
     throw apiError(`Saved contact "${coalesceString(contact?.contact_name) || query}" does not have a Stellar destination yet. Choose another contact.`, 409);
+  }
+
+  private static async upsertRecentContactFromPayment(input: {
+    ownerId: string;
+    sourcePublicKey?: string;
+    destinationPublicKey: string;
+    contactName?: string;
+    transferKey?: string;
+  }): Promise<void> {
+    const ownerId = coalesceString(input.ownerId);
+    const destinationPublicKey = coalesceString(input.destinationPublicKey);
+    const sourcePublicKey = coalesceString(input.sourcePublicKey);
+    if (!ownerId || !/^G[A-Z2-7]{55}$/i.test(destinationPublicKey)) return;
+    if (sourcePublicKey && sourcePublicKey === destinationPublicKey) return;
+
+    const requestedName = coalesceString(input.contactName);
+    const contactName = /^G[A-Z2-7]{55}$/i.test(requestedName)
+      ? `Contato ${destinationPublicKey.slice(0, 6)}`
+      : requestedName || `Contato ${destinationPublicKey.slice(0, 6)}`;
+    const transferKey = coalesceString(input.transferKey).toLowerCase();
+    const pixKey = transferKey && !/^G[A-Z2-7]{55}$/i.test(transferKey) ? transferKey : null;
+
+    const { data: existingContact, error: lookupError } = await supabase
+      .from('contacts')
+      .select('id, contact_name, pix_key')
+      .eq('owner_id', ownerId)
+      .eq('stellar_public_key', destinationPublicKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+
+    if (existingContact?.id) {
+      const nextName = coalesceString(existingContact.contact_name) || contactName;
+      const nextPixKey = coalesceString(existingContact.pix_key) || pixKey;
+      const shouldUpdate =
+        nextName !== coalesceString(existingContact.contact_name) ||
+        coalesceString(nextPixKey) !== coalesceString(existingContact.pix_key);
+      if (!shouldUpdate) return;
+
+      const { error } = await supabase
+        .from('contacts')
+        .update({
+          contact_name: nextName,
+          pix_key: nextPixKey,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingContact.id);
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase
+      .from('contacts')
+      .insert({
+        owner_id: ownerId,
+        contact_name: contactName,
+        stellar_public_key: destinationPublicKey,
+        pix_key: pixKey,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    if (error) throw error;
   }
 
   static async resolvePixFundedTransferRecipientForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
@@ -5855,6 +5986,16 @@ export class AnchorService {
         console.warn('[ramp] Could not send recipient PIX-funded transfer receipt:', debugErrorMessage(error));
       }
     }
+
+    await this.upsertRecentContactFromPayment({
+      ownerId: context.userId,
+      sourcePublicKey: context.publicKey,
+      destinationPublicKey: recipient.publicKey,
+      contactName: recipient.displayName,
+      transferKey: recipient.recipientKey || recipient.pixKey,
+    }).catch((error) => {
+      console.warn('[ramp] Could not auto-save PIX-funded transfer contact:', debugErrorMessage(error));
+    });
 
     return {
       success: true,

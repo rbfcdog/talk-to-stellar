@@ -1761,7 +1761,7 @@ export const toolDefinitions = [
   },
   {
     name: "send_receipt_with_savings",
-    description: "Monta o comprovante conversacional em formato WhatsApp após pagamento ou conversão concluída, destacando economia antes do hash técnico.",
+    description: "Monta o comprovante conversacional com economia somente para operações concluídas com BRL enviado e USD/USDC recebido positivos. Não use para XLM, CETES, pagamentos no mesmo ativo ou operações sem BRL/USD; nesses casos use o comprovante normal.",
     parameters: {
       type: "object",
       properties: {
@@ -1953,6 +1953,14 @@ export const toolDefinitions = [
         session_id: {
           type: "string",
           description: "Current chat session ID",
+        },
+        provider: {
+          type: "string",
+          description: "Optional external channel provider to disconnect, such as whatsapp or telegram.",
+        },
+        provider_user_id: {
+          type: "string",
+          description: "Optional external channel user id to disconnect for the provider.",
         },
       },
       required: ["session_id"],
@@ -3002,6 +3010,8 @@ async function executeCreateUsdBankTransferIntent(input: any): Promise<string> {
 async function executeLogoutSession(input: any): Promise<string> {
   try {
     const sessionId = String(input.session_id || '').trim();
+    const provider = String(input.provider || '').trim().toLowerCase();
+    const providerUserId = String(input.provider_user_id || input.providerUserId || '').trim();
     if (!sessionId) {
       return JSON.stringify({
         success: false,
@@ -3015,27 +3025,16 @@ async function executeLogoutSession(input: any): Promise<string> {
       .eq('session_id', sessionId)
       .maybeSingle();
 
-    // Do not delete agent_sessions row; agent_messages references session_id via FK.
-    // Deleting here causes subsequent message persistence to fail in the same request flow.
-    const { error } = await supabase
-      .from('agent_sessions')
-      .update({
-        public_key: null,
-        session_token: crypto.randomUUID(),
-        last_activity: new Date().toISOString(),
-      })
-      .eq('session_id', sessionId);
-
-    if (error) {
-      throw new Error(error.message || 'Falha ao encerrar sessão');
-    }
-
     void TransferNotificationService.notifySessionLogout({
       sessionId,
       userId: String((sessionBeforeLogout as any)?.user_id || ''),
+      provider: provider || undefined,
+      providerUserId: providerUserId || undefined,
     });
 
-    // Clear runtime state tied to wallet/payment context.
+    // Mark only the current chat context as logged out. Do not clear the shared
+    // agent_sessions wallet fields because WhatsApp, Telegram, and browser tabs
+    // can be linked to the same account session.
     await supabase
       .from('agent_states')
       .update({
@@ -3045,19 +3044,23 @@ async function executeLogoutSession(input: any): Promise<string> {
       })
       .eq('session_id', sessionId);
 
-    const { error: unlinkError } = await supabase
-      .from('external_accounts')
-      .update({
-        session_id: null,
-        user_id: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('session_id', sessionId);
+    if (provider && providerUserId) {
+      const { error: unlinkError } = await supabase
+        .from('external_accounts')
+        .update({
+          session_id: null,
+          user_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('provider', provider)
+        .eq('provider_user_id', providerUserId)
+        .eq('session_id', sessionId);
 
-    if (unlinkError) {
-      const message = String(unlinkError.message || '').toLowerCase();
-      if (!message.includes('external_accounts') && !message.includes('schema cache') && !message.includes('does not exist')) {
-        throw new Error(unlinkError.message || 'Falha ao desvincular sessão externa');
+      if (unlinkError) {
+        const message = String(unlinkError.message || '').toLowerCase();
+        if (!message.includes('external_accounts') && !message.includes('schema cache') && !message.includes('does not exist')) {
+          throw new Error(unlinkError.message || 'Falha ao desvincular sessão externa');
+        }
       }
     }
 
@@ -3849,7 +3852,6 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       sourceAssetCode: sourceAssetCodeForFee,
       destinationAssetCode: destinationAssetCodeForFee,
     });
-    const totalFeeDisplay = unifiedFee.display || 'US$ indisponivel';
     const routeChain = quote
       ? formatRouteChain({
           sourceAssetCode: quote?.sourceAsset?.code || input.source_asset_code || input.sourceAssetCode,
@@ -3866,9 +3868,6 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
           estimatedFeeBrl: unifiedFee.fee_brl || null,
         })
       : null;
-    const quoteValidityLine = quote?.quote_expires_at
-      ? `Estimativa válida por ${quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. `
-      : '';
 
     const { url } = await externalService.createPaymentConfirmUrl({
       amount: normalizedAmount,
@@ -3919,12 +3918,9 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
       message:
-        `Antes de confirmar: estamos preparando da forma mais otimizada, com taxa estimada total ${totalFeeDisplay}. ` +
-        `${savingsEstimate ? `Encontrei uma rota mais barata: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `${crossAsset && routeChain ? `Rota mais otimizada: ${routeChain}. ` : ''}` +
-        quoteValidityLine +
+        `Gerei o link de confirmação da forma mais otimizada para enviar ${normalizedAmount} ${asset.code} para ${destinationName || normalizedDestination}. ` +
         `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
-        `Para confirmar o envio para ${destinationName || normalizedDestination}, abra o link:\n\n${url}`,
+        `Abra para revisar e confirmar com PIN:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -5028,21 +5024,103 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     metadata?.gross_amount_brl,
     paymentLog?.source_asset_code === 'BRL' || paymentLog?.source_asset_code === 'TESOURO' ? paymentLog?.source_amount : '',
   ]);
-  const sourceAsset = String(paymentLog?.source_asset_code || metadata?.source_asset_code || transferDetails?.sourceAssetCode || 'BRL').toUpperCase();
+  const sourceAsset = String(
+    input.source_asset_code ||
+    input.sourceAssetCode ||
+    paymentLog?.source_asset_code ||
+    metadata?.source_asset_code ||
+    transferDetails?.sourceAssetCode ||
+    'BRL'
+  ).toUpperCase().replace(/^USD$/, 'USDC');
+  const sourceIsUsd = sourceAsset === 'USDC';
+  const sourceIsBrl = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
   const brlSent = sourceAmount > 0
-    ? (sourceAsset === 'BRL' || sourceAsset === 'TESOURO' ? sourceAmount : sourceAmount * rate.rate)
+    ? (sourceIsBrl ? sourceAmount : sourceIsUsd ? sourceAmount * rate.rate : 0)
     : firstPositiveNumber([metadata?.savings?.gross_amount_brl, metadata?.gross_amount_brl]);
-  const destinationAsset = String(paymentLog?.destination_asset_code || metadata?.destination_asset_code || transferDetails?.destinationAssetCode || 'USDC').toUpperCase().replace(/^USD$/, 'USDC');
+  const destinationAsset = String(
+    input.destination_asset_code ||
+    input.destinationAssetCode ||
+    paymentLog?.destination_asset_code ||
+    metadata?.destination_asset_code ||
+    transferDetails?.destinationAssetCode ||
+    'USDC'
+  ).toUpperCase().replace(/^USD$/, 'USDC');
+  const destinationIsUsd = destinationAsset === 'USDC';
+  const savingsAssetPair = sourceIsBrl || sourceIsUsd || destinationIsUsd || destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
   const usdReceived = firstPositiveNumber([
     input.usd_received,
     input.usdc_received,
-    input.destination_amount,
+    destinationIsUsd ? input.destination_amount : '',
     destinationAsset === 'USDC' ? paymentLog?.destination_amount : '',
     transferDetails?.destinationAssetCode === 'USDC' ? transferDetails?.destinationAmount : '',
-  ]) || (brlSent > 0 ? brlSent / rate.rate : 0);
+  ]) || (savingsAssetPair && brlSent > 0 ? brlSent / rate.rate : 0);
   const recipientName = extractRealRecipientName(paymentLog, input);
   const feeBreakdown = await buildReceiptFeeBreakdown(paymentLog, input);
   const feeCharged = feeBreakdown.totalFeeBrl;
+  if (brlSent <= 0 || usdReceived <= 0) {
+    const sourceAmount = String(
+      input.source_amount ||
+      transferDetails?.sourceAmount ||
+      paymentLog?.source_amount ||
+      input.amount ||
+      paymentLog?.amount ||
+      ''
+    ).trim();
+    const sourceAssetCode = String(
+      input.source_asset_code ||
+      transferDetails?.sourceAssetCode ||
+      paymentLog?.source_asset_code ||
+      input.asset_code ||
+      paymentLog?.asset_code ||
+      ''
+    ).trim().toUpperCase();
+    const destinationAmount = String(
+      input.destination_amount ||
+      transferDetails?.destinationAmount ||
+      paymentLog?.destination_amount ||
+      sourceAmount
+    ).trim();
+    const destinationAssetCode = String(
+      input.destination_asset_code ||
+      transferDetails?.destinationAssetCode ||
+      paymentLog?.destination_asset_code ||
+      sourceAssetCode
+    ).trim().toUpperCase();
+
+    if (destinationAmount && destinationAssetCode) {
+      const receiptInput: PaymentReceiptInput = {
+        type: 'payment_sent',
+        sessionId,
+        userId,
+        counterpartyLabel: recipientName,
+        sourceAmount: sourceAmount || destinationAmount,
+        sourceAssetCode: sourceAssetCode || destinationAssetCode,
+        destinationAmount,
+        destinationAssetCode,
+        feeDisplay: String(input.fee_display || transferDetails?.feeDisplay || paymentLog?.fee_display || '').trim() || null,
+        feeXlm: String(input.fee_xlm || transferDetails?.feeXlm || paymentLog?.fee_xlm || '').trim() || null,
+        hash: stellarHash || null,
+        completedAt: String(input.completed_at || input.completedAt || paymentLog?.completed_at || paymentLog?.created_at || new Date().toISOString()),
+        status: 'Confirmado',
+      };
+      const receiptUrl = sessionId && userId
+        ? await PaymentReceiptService.createReceiptLink(receiptInput).catch(() => '')
+        : '';
+      const receiptText = await PaymentReceiptService.buildReceiptText(receiptInput);
+      const message = receiptUrl ? `${receiptText}\nComprovante: ${receiptUrl}` : receiptText;
+      return JSON.stringify({
+        success: true,
+        source: paymentLog ? 'payment_logs' : 'tool_input',
+        receipt_url: receiptUrl,
+        message,
+      });
+    }
+
+    return JSON.stringify({
+      success: false,
+      error: 'Este comprovante não tem dados suficientes de BRL e USDC para calcular economia. Use o comprovante normal da operação.',
+    });
+  }
   const bankFee = roundMoney(brlSent * SAVINGS_TRADITIONAL_BANK_FEE_PCT);
   const savings = roundMoney(Math.max(0, bankFee - feeCharged));
   const completedAt = String(input.completed_at || input.completedAt || paymentLog?.completed_at || paymentLog?.created_at || new Date().toISOString());
@@ -6377,7 +6455,8 @@ async function executeAddContact(input: any): Promise<string> {
       throw new Error('Informe uma chave válida (pública, transferência, e-mail ou telefone) já cadastrada.');
     }
 
-    const contactName = String(resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim();
+    const requestedName = String(input.contact_name || input.name || '').trim();
+    const contactName = String(requestedName || resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim();
 
     const { data, error } = await supabase
       .from("contacts")

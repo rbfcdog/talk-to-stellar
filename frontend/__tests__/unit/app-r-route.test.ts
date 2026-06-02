@@ -21,14 +21,14 @@ describe("/r short-link session handoff", () => {
     else process.env.SHORT_LINK_PROXY_SECRET = previousSecret;
   });
 
-  it("lets WhatsApp short links replace an existing browser session", async () => {
+  it("keeps WhatsApp short links in a separate scoped session from the browser session", async () => {
     process.env.BACKEND_URL = "https://backend.test";
     process.env.SHORT_LINK_PROXY_SECRET = "secret";
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
-        url: "https://app.test/rendimentos?source=whatsapp",
+        url: "https://app.test/rendimentos",
         session_id: "whatsapp-session",
         session_token: "whatsapp-token",
         session_source: "whatsapp",
@@ -44,13 +44,15 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "abc" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=whatsapp");
-    expect(cookies).toContain("tts_session_id=whatsapp-session");
-    expect(cookies).toContain("tts_session_token=whatsapp-token");
-    expect(cookies).toContain("tts_session_source=whatsapp");
+    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=whatsapp&session_scope=whatsapp");
+    expect(cookies).toContain("tts_session_id_whatsapp=whatsapp-session");
+    expect(cookies).toContain("tts_session_token_whatsapp=whatsapp-token");
+    expect(cookies).toContain("tts_session_source_whatsapp=whatsapp");
+    expect(cookies).not.toContain("tts_session_id=");
+    expect(cookies).not.toContain("tts_session_token=");
   });
 
-  it("clears the browser session before opening a WhatsApp login link without a session token", async () => {
+  it("clears only the WhatsApp scoped session before opening a WhatsApp login link without a session token", async () => {
     process.env.BACKEND_URL = "https://backend.test";
     process.env.SHORT_LINK_PROXY_SECRET = "secret";
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
@@ -71,10 +73,11 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "login" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/login?provider=whatsapp&source=whatsapp");
-    expect(cookies).toContain("tts_session_id=");
-    expect(cookies).toContain("tts_session_token=");
-    expect(cookies).toContain("tts_session_source=");
+    expect(response.headers.get("location")).toBe("https://app.test/login?provider=whatsapp&source=whatsapp&session_scope=whatsapp");
+    expect(cookies).toContain("tts_session_id_whatsapp=");
+    expect(cookies).toContain("tts_session_token_whatsapp=");
+    expect(cookies).toContain("tts_session_source_whatsapp=");
+    expect(cookies).not.toContain("tts_session_id=;");
     expect(cookies).toContain("Max-Age=0");
   });
 });

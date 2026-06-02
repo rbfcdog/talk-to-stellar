@@ -8,7 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, MoreVertical, Phone, Send, Video, Search, ExternalLink } from "lucide-react";
-import { clearClientSession, getClientSession, isClientSessionExpired, touchClientSessionActivity } from "@/lib/session";
+import {
+  clearClientSession,
+  currentClientSessionScope,
+  getClientSession,
+  isClientSessionExpired,
+  normalizeClientSessionSource,
+  scopedClientStorageKey,
+  touchClientSessionActivity,
+} from "@/lib/session";
 import { idempotentFetch } from "@/lib/idempotency";
 import { publicErrorPayload } from "@/lib/public-errors";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
@@ -84,9 +92,18 @@ function isDuplicateChatMessage(a: Pick<Message, "role" | "content">, b: Pick<Me
   return isLoginStatusDuplicate(a.content, b.content);
 }
 
-function getStoredChatSessionId(chatId: string): string {
+function chatSessionStorageKey(chatId: string, source: string): string {
+  return scopedClientStorageKey(`chat-session-${chatId}`, source || "web");
+}
+
+function getStoredChatSessionId(chatId: string, source: string): string {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(`chat-session-${chatId}`) || "";
+  return sessionStorage.getItem(chatSessionStorageKey(chatId, source)) || "";
+}
+
+function setStoredChatSessionId(chatId: string, source: string, value: string) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(chatSessionStorageKey(chatId, source), value);
 }
 
 function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
@@ -191,6 +208,10 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   const inputRef = useRef<HTMLInputElement>(null);
   const browserSessionExpiredRef = useRef(false);
   const expiredNoticeShownRef = useRef(false);
+  const clientSessionSource = typeof window === "undefined" ? "web" : currentClientSessionScope();
+  const externalSessionSource = normalizeClientSessionSource(clientSessionSource);
+  const externalPriorityChat = externalSessionSource === "whatsapp" || externalSessionSource === "telegram";
+  const logoutRefreshStorageKey = scopedClientStorageKey("talk-to-stellar.logoutRefreshAt", clientSessionSource);
 
   const generateSessionId = (): string => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -222,9 +243,9 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     if (typeof window === "undefined") return "";
 
     clearClientSession();
-    localStorage.removeItem("talk-to-stellar.browserId");
+    if (!externalPriorityChat) localStorage.removeItem("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
-    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
     setSessionId(newSessionId);
     browserSessionExpiredRef.current = true;
     setBrowserSessionExpired(true);
@@ -236,7 +257,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     const { sessionId: cookieSessionId, authenticated } = await getClientSession();
     if (!authenticated || !cookieSessionId || typeof window === "undefined") return "";
 
-    sessionStorage.setItem(`chat-session-${chatId}`, cookieSessionId);
+    setStoredChatSessionId(chatId, clientSessionSource, cookieSessionId);
     setSessionId(cookieSessionId);
     browserSessionExpiredRef.current = false;
     setBrowserSessionExpired(false);
@@ -253,7 +274,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     }
 
     const storedSessionId = typeof window !== 'undefined'
-      ? sessionStorage.getItem(`chat-session-${chatId}`)
+      ? getStoredChatSessionId(chatId, clientSessionSource)
       : null;
     
     const newSessionId = storedSessionId || generateSessionId();
@@ -261,18 +282,18 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
 
     // Store it for subsequent messages
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+      setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
       if (chatId === "agent") {
         touchClientSessionActivity();
         getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
           if (authenticated && cookieSessionId) {
-            sessionStorage.setItem(`chat-session-${chatId}`, cookieSessionId);
+            setStoredChatSessionId(chatId, clientSessionSource, cookieSessionId);
             setSessionId(cookieSessionId);
           }
         });
       }
     }
-  }, [beginExpiredBrowserSession, chatId, t]);
+  }, [beginExpiredBrowserSession, chatId, clientSessionSource, t]);
 
   useEffect(() => {
     const starterIds = new Set(Object.values(chatMeta).flatMap((meta) => meta.starter.map((message) => message.id)));
@@ -325,7 +346,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   };
 
   useEffect(() => {
-    if (chatId !== "agent" || typeof window === "undefined") return;
+    if (chatId !== "agent" || typeof window === "undefined" || externalPriorityChat) return;
     consumeQueuedWebFeedback();
 
     const onFeedback = (event: Event) => {
@@ -361,7 +382,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         channel?.close();
       } catch {}
     };
-  }, [chatId]);
+  }, [chatId, externalPriorityChat]);
   
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const pollInFlightRef = useRef(false);
@@ -431,11 +452,11 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     if (typeof window === "undefined") return;
     clearClientSession();
     const newSessionId = generateSessionId();
-    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
     setSessionId(newSessionId);
     setMessages(selectedMeta.starter.map((message) => ({ ...message, createdAt: new Date() })));
     window.location.reload();
-  }, [chatId, selectedMeta.starter]);
+  }, [chatId, clientSessionSource, selectedMeta.starter]);
 
   const fetchServerMessages = useCallback(async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
@@ -445,13 +466,14 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     }
     if (browserSessionExpiredRef.current) return;
 
-    const resolvedSessionId = getStoredChatSessionId(chatId) || sessionId;
+    const resolvedSessionId = getStoredChatSessionId(chatId, clientSessionSource) || sessionId;
     if (!resolvedSessionId) return;
-    const browserId = getOrCreateBrowserId();
+    const browserId = externalPriorityChat ? "" : getOrCreateBrowserId();
     const params = new URLSearchParams({
       session_id: resolvedSessionId,
       limit: "50",
     });
+    params.set("source", clientSessionSource || "web");
     if (browserId) {
       params.set("browser_id", browserId);
     }
@@ -471,7 +493,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         return;
       }
       if (data.session_id && data.session_id !== resolvedSessionId && typeof window !== "undefined") {
-        sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
+        setStoredChatSessionId(chatId, clientSessionSource, data.session_id);
         setSessionId(data.session_id);
         touchClientSessionActivity();
       }
@@ -481,7 +503,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     } finally {
       pollInFlightRef.current = false;
     }
-  }, [beginExpiredBrowserSession, chatId, mergeServerMessages, sessionId]);
+  }, [beginExpiredBrowserSession, chatId, clientSessionSource, externalPriorityChat, mergeServerMessages, sessionId]);
 
   useEffect(() => {
     if (chatId !== "agent" || !sessionId) return;
@@ -499,7 +521,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       }
     };
     const syncOnSessionChange = (event: StorageEvent) => {
-      if (!event.key || event.key === "talk-to-stellar.logoutRefreshAt") {
+      if (!event.key || event.key === logoutRefreshStorageKey) {
         fetchServerMessages();
       }
     };
@@ -514,10 +536,10 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       window.removeEventListener("visibilitychange", syncWhenVisible);
       window.removeEventListener("storage", syncOnSessionChange);
     };
-  }, [chatId, fetchServerMessages, sessionId]);
+  }, [chatId, fetchServerMessages, logoutRefreshStorageKey, sessionId]);
 
   useEffect(() => {
-    if (chatId !== "agent" || typeof window === "undefined") return;
+    if (chatId !== "agent" || typeof window === "undefined" || externalPriorityChat) return;
 
     const syncSoon = () => {
       window.setTimeout(fetchServerMessages, 250);
@@ -544,13 +566,13 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         channel?.close();
       } catch {}
     };
-  }, [chatId, fetchServerMessages]);
+  }, [chatId, externalPriorityChat, fetchServerMessages]);
 
   useEffect(() => {
     if (chatId !== "agent" || typeof window === "undefined") return;
 
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "talk-to-stellar.logoutRefreshAt" && event.newValue) {
+      if (event.key === logoutRefreshStorageKey && event.newValue) {
         resetChatAfterLogout();
       }
     };
@@ -559,14 +581,14 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     return () => {
       window.removeEventListener("storage", onStorage);
     };
-  }, [chatId, resetChatAfterLogout]);
+  }, [chatId, logoutRefreshStorageKey, resetChatAfterLogout]);
 
   const resetClientSession = () => {
     if (typeof window === "undefined") return;
     clearClientSession();
-    localStorage.removeItem("talk-to-stellar.browserId");
+    if (!externalPriorityChat) localStorage.removeItem("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
-    sessionStorage.setItem(`chat-session-${chatId}`, newSessionId);
+    setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
     setSessionId(newSessionId);
   };
 
@@ -639,9 +661,9 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         return;
       }
 
-      const storedSessionId = getStoredChatSessionId(chatId);
+      const storedSessionId = getStoredChatSessionId(chatId, clientSessionSource);
       const resolvedSessionId = storedSessionId || activeSessionId;
-      const browserId = getOrCreateBrowserId();
+      const browserId = externalPriorityChat ? "" : getOrCreateBrowserId();
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
       const response = await idempotentFetch('/api/chat', {
@@ -650,11 +672,13 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         body: JSON.stringify({
           messages: [...messages, userMessage],
           session_id: resolvedSessionId,
-          source: "web",
+          source: clientSessionSource || "web",
           language,
           metadata: {
-            browser_id: browserId,
+            ...(browserId ? { browser_id: browserId } : {}),
             language,
+            source: clientSessionSource || "web",
+            ...(externalPriorityChat ? { external_source: clientSessionSource, external_provider: clientSessionSource } : {}),
             browser_session_expired: requestBrowserSessionExpired || undefined,
           },
         }),
@@ -668,7 +692,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       const data = await response.json();
       const loginRequired = Boolean(data.onboardingRequired || data.loginRequired || data.creationUrl);
       if (data.session_id && typeof window !== "undefined") {
-        sessionStorage.setItem(`chat-session-${chatId}`, data.session_id);
+        setStoredChatSessionId(chatId, clientSessionSource, data.session_id);
         setSessionId(data.session_id);
         if (!loginRequired) {
           browserSessionExpiredRef.current = false;

@@ -44,6 +44,20 @@ function sourceFromPayload(payload: any): string {
   }
 }
 
+function redirectUrlWithSessionSource(rawUrl: string, source: string): string {
+  const normalizedSource = normalizeSessionSource(source);
+  if (!isExternalPrioritySource(normalizedSource)) return rawUrl;
+
+  try {
+    const url = new URL(rawUrl);
+    if (!url.searchParams.get("source")) url.searchParams.set("source", normalizedSource);
+    if (!url.searchParams.get("session_scope")) url.searchParams.set("session_scope", normalizedSource);
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 async function resolveShortLinkPayload(req: NextRequest, encodedCode: string) {
   const internalSecret = String(process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "").trim();
   const directHeaders: Record<string, string> = {};
@@ -80,14 +94,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
     return NextResponse.redirect(new URL("/chat", req.url));
   }
 
-  const redirect = NextResponse.redirect(String(payload.url));
   const sessionSource = sourceFromPayload(payload);
-  if (isExternalPrioritySource(sessionSource)) {
-    clearSessionCookies(redirect);
+  const redirect = NextResponse.redirect(redirectUrlWithSessionSource(String(payload.url), sessionSource));
+  const sessionId = String(payload.session_id || payload.sessionId || "").trim();
+  const sessionToken = String(payload.session_token || payload.sessionToken || "").trim();
+  if (isExternalPrioritySource(sessionSource) && !sessionId && !sessionToken) {
+    clearSessionCookies(redirect, sessionSource);
   }
   setSessionCookies(redirect, {
-    sessionId: String(payload.session_id || payload.sessionId || "").trim(),
-    sessionToken: String(payload.session_token || payload.sessionToken || "").trim(),
+    sessionId,
+    sessionToken,
     sessionSource,
   });
   redirect.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");

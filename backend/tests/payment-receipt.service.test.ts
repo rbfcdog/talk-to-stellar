@@ -89,6 +89,71 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('4.923897');
   });
 
+  it('shows the real PIX on-ramp fee from gross and net BRL amounts', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_received',
+      sessionId: 'session-pix-fee-delta',
+      userId: 'user-pix-fee-delta',
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '100',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '99.50',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'PIX confirmado. Entregamos BRL na sua conta TalkToStellar.',
+    });
+
+    expect(receipt).toContain('Taxa: R$ 0.50');
+    expect(receipt).not.toContain('Taxa: indisponivel');
+  });
+
+  it('shows the real PIX on-ramp fee from saved operation context', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_received',
+      sessionId: 'session-pix-fee-context',
+      userId: 'user-pix-fee-context',
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '99.50',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '99.50',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'Escolhemos a melhor rota para essa conversão e entregamos BRL na sua conta.',
+      quote: {
+        direction: 'onramp',
+        source_amount_brl: '100',
+        destination_amount_anchor: '99.50',
+        provider_onramp_fee_amount: '0.20',
+        talktostellar_transaction_fee_amount: '0.30',
+        total_fee_amount: '0.50',
+      },
+    });
+
+    expect(receipt).toContain('Taxa: R$ 0.50');
+    expect(receipt).not.toContain('Taxa: indisponivel');
+  });
+
+  it('infers the PIX on-ramp fee from configured bps when only the net BRL amount is present', async () => {
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_received',
+      sessionId: 'session-pix-fee-bps',
+      userId: 'user-pix-fee-bps',
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '99.50',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '99.50',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'PIX confirmado. Entregamos BRL na sua conta TalkToStellar.',
+    });
+
+    expect(receipt).toContain('Taxa: R$ 0.50');
+    expect(receipt).not.toContain('Taxa: indisponivel');
+  });
+
   it('hides quote line when payment uses the same asset', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
@@ -200,6 +265,7 @@ describe('PaymentReceiptService', () => {
   });
 
   it('prefers the savings-first WhatsApp receipt over a generic external callback', async () => {
+    process.env.USD_BRL_FALLBACK_RATE = '5';
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
         attempted: true,
@@ -237,6 +303,43 @@ describe('PaymentReceiptService', () => {
     expect(notifySpy.mock.calls[0][0].text).not.toContain('tx-callback-1');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Pagamento concluido.');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Recibo registrado no seu histórico.');
+
+    notifySpy.mockRestore();
+  });
+
+  it('does not use the savings-first WhatsApp receipt for XLM payments', async () => {
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_sent',
+      sessionId: 'session-xlm',
+      userId: 'user-xlm',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '10',
+      sourceAssetCode: 'XLM',
+      destinationAmount: '10',
+      destinationAssetCode: 'XLM',
+      feeDisplay: '0.00001 XLM',
+      hash: 'tx-xlm-1',
+      externalDeliveryText: 'Pagamento concluido.\nValor: 10 XLM\nDestino: Ana Silva',
+    });
+
+    const text = String(notifySpy.mock.calls[0]?.[0]?.text || '');
+    expect(text).toContain('Pagamento concluido.');
+    expect(text).toContain('Valor: 10 XLM');
+    expect(text).not.toContain('Entregue: *US$ 0,00*');
+    expect(text).not.toContain('Enviado: R$ 0,00');
+    expect(text).not.toContain('Você economizou R$ 0,00');
 
     notifySpy.mockRestore();
   });

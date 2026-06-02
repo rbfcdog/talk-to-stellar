@@ -837,6 +837,7 @@ export default function PixRampClient({
   const [quotePayload, setQuotePayload] = useState<RampResponse | null>(null);
   const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
   const [orderPayload, setOrderPayload] = useState<RampResponse | null>(null);
+  const [generatedOnRampOrderKey, setGeneratedOnRampOrderKey] = useState("");
   const [statusPayload, setStatusPayload] = useState<RampResponse | null>(null);
   const [onRampBalancesBefore, setOnRampBalancesBefore] = useState<BalanceItem[]>([]);
   const [onRampBalancesAfter, setOnRampBalancesAfter] = useState<BalanceItem[]>([]);
@@ -920,10 +921,18 @@ export default function PixRampClient({
     (offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : "")
   );
   const offRampPixTargetDisplay = offRampPixTargetAmount ? formatMoney(offRampPixTargetAmount) : "Calculando BRL";
-  const desiredFinalAmount = rampMode === "onramp" && desiredReceiveAmount && desiredReceiveAsset === targetAsset
-    ? desiredReceiveAmount
+  const desiredFinalAmount = rampMode === "onramp"
+    ? desiredReceiveAmount && desiredReceiveAsset === targetAsset
+      ? desiredReceiveAmount
+      : targetAsset === "BRL"
+        ? normalizeHumanAmount(amountBrl)
+        : ""
     : "";
-  const desiredFinalAsset = desiredFinalAmount ? desiredReceiveAsset : "";
+  const desiredFinalAsset = desiredFinalAmount
+    ? desiredReceiveAmount && desiredReceiveAsset === targetAsset
+      ? desiredReceiveAsset
+      : targetAsset
+    : "";
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
@@ -1011,7 +1020,26 @@ export default function PixRampClient({
   });
   const order = statusPayload?.transaction || orderPayload?.transaction;
   const operationId = String(orderPayload?.operation_id || "");
-  const orderId = String(order?.id || "");
+  const orderId = String(
+    order?.id ||
+    orderPayload?.order_id ||
+    orderPayload?.orderId ||
+    orderPayload?.id ||
+    statusPayload?.order_id ||
+    statusPayload?.orderId ||
+    ""
+  );
+  const onRampOrderInputKey = stableHash(JSON.stringify([
+    "onramp",
+    amountBrl,
+    targetAsset,
+    desiredFinalAmount,
+    desiredFinalAsset,
+    transferFlow ? transferRecipientLabel : "",
+    transferFlow ? transferRecipientDisplayKey : "",
+    transferFlow ? feeAdjustedAutoPayAmount || autoPayAmount : "",
+    transferFlow ? feeAdjustedAutoPayAsset || autoPayAsset : "",
+  ]));
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
@@ -1025,7 +1053,7 @@ export default function PixRampClient({
     order?.finalAmount ||
     order?.auto_conversion?.destination_amount ||
     (desiredFinalAmount && receivedCode === desiredFinalAsset ? desiredFinalAmount : "") ||
-    (receivedCode === "BRL" ? (order?.fromAmount || quote?.fromAmount || amountBrl) : "")
+    (receivedCode === "BRL" ? (order?.toAmount || quote?.userFacingToAmount || quote?.toAmount || desiredFinalAmount || "") : "")
   );
   const quoteCreatedAt = parseRampTimestamp(quote?.createdAt);
   const quoteExpiresAt = parseRampTimestamp(quote?.expiresAt);
@@ -1040,6 +1068,13 @@ export default function PixRampClient({
   const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
   const onRampComplete = Boolean(order && isSuccessStatus(status));
   const orderFailed = Boolean(order && isFailureStatus(status));
+  const onRampPixCheckoutAvailable = Boolean(orderId && (pixCode || pixKey || Object.keys(paymentInstructions).length > 0 || isSandboxMockOrder));
+  const onRampPixAlreadyGenerated = Boolean(
+    rampMode === "onramp" &&
+    onRampPixCheckoutAvailable &&
+    !orderFailed &&
+    generatedOnRampOrderKey === onRampOrderInputKey
+  );
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = feeAdjustedAutoPayAmount
       ? feeAdjustedAutoPayDisplayAmount
@@ -1433,6 +1468,7 @@ export default function PixRampClient({
     setQuotePayload(null);
     setQuoteReceivedAt(0);
     setOrderPayload(null);
+    setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
     addDebugLog({
@@ -1473,6 +1509,7 @@ export default function PixRampClient({
         setQuotePayload(null);
         setQuoteReceivedAt(0);
         setOrderPayload(null);
+        setGeneratedOnRampOrderKey("");
         setStatusPayload(null);
         setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
         addDebugLog({
@@ -1803,7 +1840,7 @@ export default function PixRampClient({
     }).then(setQrDataUrl).catch(() => setQrDataUrl(""));
   }, [payablePixAvailable, pixCode, sandboxQrPayload]);
 
-  const refreshOrder = useCallback(async () => {
+  const refreshOrder = useCallback(async (notifyOnTerminal = true) => {
     if (!orderId) return null;
     const payload = await callRampGet(`/api/ramp/etherfuse/onramp/${encodeURIComponent(orderId)}`, {
       operation_id: operationId,
@@ -1814,7 +1851,7 @@ export default function PixRampClient({
       setPolling(false);
       const after = await fetchBalances();
       setOnRampBalancesAfter(after);
-      if (isSuccessStatus(nextStatus) && !transferFlow) {
+      if (isSuccessStatus(nextStatus) && !transferFlow && notifyOnTerminal) {
         markOperationCompleted();
         notifyChatAfterPixCompletion({ kind: "onramp", completedTransaction: payload?.transaction || null });
         setStep("success");
@@ -1972,6 +2009,7 @@ export default function PixRampClient({
     setQuotePayload(null);
     setQuoteReceivedAt(0);
     setOrderPayload(null);
+    setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setTemporaryTestResult(null);
     setTemporaryOffRampTestResult(null);
@@ -1994,6 +2032,7 @@ export default function PixRampClient({
     setQuotePayload(null);
     setQuoteReceivedAt(0);
     setOrderPayload(null);
+    setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setOffRampPreviewPayload(null);
     setOnRampBalancesBefore([]);
@@ -2008,6 +2047,7 @@ export default function PixRampClient({
   async function requestQuote(): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
     setStep("quote");
     setOrderPayload(null);
+    setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setQuoteReceivedAt(0);
     setOnRampBalancesBefore([]);
@@ -2026,13 +2066,16 @@ export default function PixRampClient({
     setCustomerPayload(customerResult);
     setProgrammaticOnboarding(customerResult?.programmatic_onboarding || null);
 
+    const quoteAmountBrl = targetAsset === "BRL" && requestedFinalAmount
+      ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
+      : amountBrl;
     const payload = await callRamp("/api/ramp/etherfuse/quote", {
       customer_id: quoteCustomerId || undefined,
       direction: "onramp",
       from_currency: "BRL",
       to_currency: "TESOURO",
       final_asset: settlementAssetCode(targetAsset),
-      amount: amountBrl,
+      amount: quoteAmountBrl,
       desired_final_amount: requestedFinalAmount || undefined,
       desired_final_asset: requestedFinalAsset || undefined,
     }, "POST", auth);
@@ -2082,18 +2125,23 @@ export default function PixRampClient({
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
       setOnRampBalancesAfter([]);
+      const requestedFinalAmount = transferFlow ? "" : desiredFinalAmount;
+      const requestedFinalAsset = requestedFinalAmount ? optionalSettlementAssetCode(desiredFinalAsset) : "";
+      const orderAmountBrl = targetAsset === "BRL" && requestedFinalAmount
+        ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
+        : amountBrl;
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
         customer_id: orderCustomerId || undefined,
         bank_account_id: orderBankAccountId || undefined,
         quote_id: quoteForOrder?.id || undefined,
-        amount: amountBrl,
+        amount: orderAmountBrl,
         expected_to_amount: quoteForOrder?.toAmount || undefined,
         from_currency: "BRL",
         to_currency: "TESOURO",
         final_asset: settlementAssetCode(targetAsset),
-        desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
-        desired_final_asset: transferFlow ? undefined : optionalSettlementAssetCode(desiredFinalAsset),
+        desired_final_amount: requestedFinalAmount || undefined,
+        desired_final_asset: requestedFinalAsset || undefined,
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
@@ -2110,12 +2158,20 @@ export default function PixRampClient({
       }
       setOnboardingUrl("");
       setOrderPayload(payload);
+      setGeneratedOnRampOrderKey(onRampOrderInputKey);
       setStatusPayload(null);
       setWalletPin("");
       setStep("checkout");
       setPolling(true);
     });
   }
+
+  useEffect(() => {
+    if (rampMode !== "onramp") return;
+    if (generatedOnRampOrderKey) return;
+    if (!onRampPixCheckoutAvailable || orderFailed) return;
+    setGeneratedOnRampOrderKey(onRampOrderInputKey);
+  }, [generatedOnRampOrderKey, onRampOrderInputKey, onRampPixCheckoutAvailable, orderFailed, rampMode]);
 
   useEffect(() => {
     const params = new URLSearchParams(queryString);
@@ -2187,7 +2243,7 @@ export default function PixRampClient({
       }, "POST", undefined, buildIdempotencyKey("confirm-onramp"));
       if (payload?.transaction) setStatusPayload(payload);
       setPolling(true);
-      const refreshed = await refreshOrder();
+      const refreshed = await refreshOrder(false);
       const completedTransaction = refreshed?.transaction || payload?.transaction;
       let transferPayload: RampResponse | null = null;
       if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
@@ -2197,6 +2253,7 @@ export default function PixRampClient({
         markOperationCompleted();
         notifyChatAfterPixCompletion({
           kind: transferPayload ? "funded-transfer" : "onramp",
+          receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url || refreshed?.transaction?.receipt_url || refreshed?.transaction?.receiptUrl || ""),
           completedTransaction,
           transferPayload,
         });
@@ -3031,9 +3088,11 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-lg shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker)} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-lg shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker) || onRampPixAlreadyGenerated} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
               {operationLocked
                 ? L("PIX concluído", "PIX complete")
+                : onRampPixAlreadyGenerated
+                  ? L("PIX gerado para este valor", "PIX created for this amount")
                 : loading === "Preparing PIX checkout"
                   ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
                   : waitingForReceiveEstimate
@@ -3521,23 +3580,23 @@ function RampFeeBridge({
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">
-              {mixedFeeCurrencies && mode === "offramp" ? L("Taxa da conta", "Account fee") : L("Taxa total", "Total fee")}
-            </p>
-            <p className="mt-1 text-2xl font-black text-tts-confirm">{totalFeeDisplay}</p>
-          </div>
-          <p className="max-w-sm text-xs font-bold leading-5 text-tts-confirm">
-            {mixedFeeCurrencies && mode === "offramp"
-              ? L("A taxa em R$ já está abatida no valor que chega no PIX. Nada é confirmado antes do PIN.", "The BRL fee is already deducted from the PIX payout. Nothing is confirmed before the PIN.")
-              : mode === "onramp"
-                ? L("Esse valor é cobrado por fora para o saldo recebido bater com o valor escolhido. Nada é confirmado antes do PIN.", "This amount is charged on top so the received balance matches the chosen amount. Nothing is confirmed before the PIN.")
+      {mode === "offramp" && (
+        <div className="mt-4 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-confirm">
+                {mixedFeeCurrencies ? L("Taxa da conta", "Account fee") : L("Taxa total", "Total fee")}
+              </p>
+              <p className="mt-1 text-2xl font-black text-tts-confirm">{totalFeeDisplay}</p>
+            </div>
+            <p className="max-w-sm text-xs font-bold leading-5 text-tts-confirm">
+              {mixedFeeCurrencies
+                ? L("A taxa em R$ já está abatida no valor que chega no PIX. Nada é confirmado antes do PIN.", "The BRL fee is already deducted from the PIX payout. Nothing is confirmed before the PIN.")
                 : L("Esse é o valor descontado nesta operação. Nada é confirmado antes do PIN.", "This is the amount deducted in this operation. Nothing is confirmed before the PIN.")}
-          </p>
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <div className="rounded-2xl bg-tts-surface p-3">

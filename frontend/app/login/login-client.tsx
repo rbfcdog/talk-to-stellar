@@ -802,7 +802,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         )}
 
         {error && (
-          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
+          <p
+            className={
+              EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired
+                ? "rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-medium leading-6 text-tts-deep"
+                : "rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error"
+            }
+            role={EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired ? "status" : "alert"}
+          >
             {error}
           </p>
         )}

@@ -82,6 +82,22 @@ describe('AnchorService sandbox PIX confirmation', () => {
     });
   });
 
+  it('grosses up BRL PIX funding when the requested BRL delivery amount is exact', () => {
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
+
+    const feeBridge = (AnchorService as any).estimateOnRampBrlFeeBridge('100', null, '100');
+
+    expect(feeBridge).toEqual({
+      grossAmount: '100.50',
+      netAmount: '100',
+      providerFeeAmount: '0.2',
+      talkToStellarFeeAmount: '0.3',
+      totalFeeAmount: '0.5',
+    });
+  });
+
   it('completes sandbox PIX in ledger mode when TESOURO distributor secret is not configured', async () => {
     mockSandboxRuntime();
     jest.spyOn(AnchorService as any, 'notifySandboxOnRampCompleted').mockResolvedValue('');

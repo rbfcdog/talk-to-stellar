@@ -132,6 +132,14 @@ function isMissingTableError(error: any): boolean {
   );
 }
 
+function isMissingEmailVerificationColumnError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('email_verified') &&
+    (message.includes('schema cache') || message.includes('does not exist') || message.includes('could not find'))
+  );
+}
+
 function isPermissionError(error: any): boolean {
   const message = String(error?.message || '').toLowerCase();
   const code = String(error?.code || '').toUpperCase();
@@ -531,6 +539,143 @@ export class EmailConfirmationService {
 
   static async sendTransactional(message: EmailMessage): Promise<void> {
     await sendEmail(message);
+  }
+
+  static async isAccountEmailVerified(input: {
+    email?: string | null;
+    sessionId?: string | null;
+    userId?: string | null;
+  }): Promise<boolean> {
+    const email = normalizeEmail(input.email);
+    const sessionId = String(input.sessionId || '').trim();
+    const userId = normalizeEmail(input.userId);
+
+    const select = 'session_id, user_id, email, email_verified, email_verified_at, email_verification_source';
+    try {
+      const candidates: any[] = [];
+
+      if (sessionId) {
+        const { data, error } = await supabase
+          .from('agent_sessions')
+          .select(select)
+          .eq('session_id', sessionId)
+          .limit(1);
+        if (error) {
+          if (isMissingEmailVerificationColumnError(error)) return false;
+          throw error;
+        }
+        candidates.push(...(data || []));
+      }
+
+      if (email) {
+        const byEmail = await supabase
+          .from('agent_sessions')
+          .select(select)
+          .eq('email', email)
+          .order('updated_at', { ascending: false })
+          .limit(3);
+        if (byEmail.error) {
+          if (isMissingEmailVerificationColumnError(byEmail.error)) return false;
+          throw byEmail.error;
+        }
+        candidates.push(...(byEmail.data || []));
+
+        const byUserId = await supabase
+          .from('agent_sessions')
+          .select(select)
+          .eq('user_id', email)
+          .order('updated_at', { ascending: false })
+          .limit(3);
+        if (byUserId.error) {
+          if (isMissingEmailVerificationColumnError(byUserId.error)) return false;
+          throw byUserId.error;
+        }
+        candidates.push(...(byUserId.data || []));
+      } else if (userId) {
+        const byUserId = await supabase
+          .from('agent_sessions')
+          .select(select)
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(3);
+        if (byUserId.error) {
+          if (isMissingEmailVerificationColumnError(byUserId.error)) return false;
+          throw byUserId.error;
+        }
+        candidates.push(...(byUserId.data || []));
+      }
+
+      return candidates.some((row) => row?.email_verified === true);
+    } catch (error) {
+      logger.warn(`[email-confirmation] could not read account email verification state: ${String((error as any)?.message || error)}`);
+      return false;
+    }
+  }
+
+  static async markAccountEmailVerified(input: {
+    email?: string | null;
+    sessionId?: string | null;
+    userId?: string | null;
+    source?: string | null;
+  }): Promise<void> {
+    const email = normalizeEmail(input.email);
+    const sessionId = String(input.sessionId || '').trim();
+    const userId = normalizeEmail(input.userId);
+    const now = new Date().toISOString();
+    const patch = {
+      email_verified: true,
+      email_verified_at: now,
+      email_verification_source: String(input.source || 'email_confirmation').trim() || 'email_confirmation',
+      updated_at: now,
+    };
+
+    try {
+      if (sessionId) {
+        const { error } = await supabase
+          .from('agent_sessions')
+          .update(patch)
+          .eq('session_id', sessionId);
+        if (error) {
+          if (isMissingEmailVerificationColumnError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (email) {
+        const byEmail = await supabase
+          .from('agent_sessions')
+          .update(patch)
+          .eq('email', email);
+        if (byEmail.error) {
+          if (isMissingEmailVerificationColumnError(byEmail.error)) return;
+          throw byEmail.error;
+        }
+
+        const byUserId = await supabase
+          .from('agent_sessions')
+          .update(patch)
+          .eq('user_id', email);
+        if (byUserId.error) {
+          if (isMissingEmailVerificationColumnError(byUserId.error)) return;
+          throw byUserId.error;
+        }
+        return;
+      }
+
+      if (userId) {
+        const { error } = await supabase
+          .from('agent_sessions')
+          .update(patch)
+          .eq('user_id', userId);
+        if (error) {
+          if (isMissingEmailVerificationColumnError(error)) return;
+          throw error;
+        }
+      }
+    } catch (error) {
+      logger.warn(`[email-confirmation] could not persist verified email state: ${String((error as any)?.message || error)}`);
+    }
   }
 
   static async requireVerified(input: RequireVerifiedInput): Promise<RequireVerifiedResult> {

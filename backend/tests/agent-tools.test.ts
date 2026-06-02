@@ -162,13 +162,17 @@ describe('Agent tool execution', () => {
     expect(parsed.message).toContain('R$, US$, CETES');
     expect(parsed.message).toContain('XLM');
     expect(parsed.message).toContain('Também posso explicar');
-    expect(parsed.message).toContain('1. Contatos');
+    expect(parsed.message).toContain('Mais usados:');
+    expect(parsed.message).toContain('Organização:');
+    expect(parsed.message).toContain('Mais opções:');
+    expect(parsed.message).toContain('Contatos');
     expect(parsed.message).toContain('Link de pagamento');
     expect(parsed.message).toContain('Aplicações e posições');
     expect(parsed.message).toContain('Histórico');
     expect(parsed.message).toContain('comprovantes e apelidos');
     expect(parsed.message).toContain('Perfil, PIN e acesso');
     expect(parsed.message).toContain('biometria');
+    expect(parsed.message).toContain('inclusive com erros de digitação');
     expect(JSON.stringify(parsed)).not.toMatch(/rendendo|APY/i);
     expect(parsed.message).not.toMatch(/ciclo completo|money cycle|sair para meu PIX/i);
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|XDR|issuer|trustline|Horizon|blockchain|crypto|TESOURO/i);
@@ -214,7 +218,8 @@ describe('Agent tool execution', () => {
     expect(parsed.message).toContain('XLM');
     expect(parsed.message).toContain('nada é confirmado sem sua autorização');
     expect(parsed.message).not.toContain('Posso ajudar com sua conta TalkToStellar');
-    expect(parsed.message).not.toContain('1. Contatos');
+    expect(parsed.message).not.toContain('Mais usados:');
+    expect(parsed.message).not.toContain('Organização:');
   });
 
   it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
@@ -306,6 +311,37 @@ describe('Agent tool execution', () => {
     }
   });
 
+  it('falls back to an asset-aware receipt when savings receipt is called for XLM', async () => {
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
+    const receiptSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://app.example.com/receipt/xlm');
+
+    try {
+      const output = await executeTool('send_receipt_with_savings', {
+        source_amount: '10',
+        source_asset_code: 'XLM',
+        destination_amount: '10',
+        destination_asset_code: 'XLM',
+        fee_display: '0.00001 XLM',
+        stellar_hash: 'xlmhash123',
+        recipient_name: 'Ana Silva',
+        session_id: '11111111-1111-4111-8111-111111111111',
+        user_id: 'user-1',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toContain('Você enviou 10 XLM para Ana Silva.');
+      expect(parsed.message).toContain('Comprovante: https://app.example.com/receipt/xlm');
+      expect(parsed.message).not.toContain('US$ 0,00');
+      expect(parsed.message).not.toContain('R$ 0,00');
+      expect(parsed.message).not.toContain('economizou');
+    } finally {
+      receiptSpy.mockRestore();
+    }
+  });
+
   it('sanitizes conversion route failures before returning them to chat', async () => {
     const quoteSpy = jest
       .spyOn(apiStellarService, 'quoteStrictSendConversion')
@@ -359,6 +395,12 @@ describe('Agent tool execution', () => {
       const parsed = JSON.parse(output);
 
       expect(parsed.success).toBe(true);
+      expect(parsed.message).toContain('Gerei o link de confirmação da forma mais otimizada');
+      expect(parsed.message).toContain('100 USDC');
+      expect(parsed.message).toContain('Ana Silva');
+      expect(parsed.message).toContain('https://app.example.com/r/payment');
+      expect(parsed.message).not.toMatch(/saldo/i);
+      expect(parsed.message).not.toMatch(/taxa estimada|indispon[ií]vel/i);
       expect(createPaymentSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           session_id: '11111111-1111-4111-8111-111111111111',

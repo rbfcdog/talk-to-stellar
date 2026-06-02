@@ -59,6 +59,8 @@ jest.mock('../src/api/services/email-confirmation.service', () => {
         maskedEmail: email || '',
         message: 'verified',
       })),
+      isAccountEmailVerified: jest.fn(async () => false),
+      markAccountEmailVerified: jest.fn(async () => undefined),
       maskEmail: jest.fn((email: string) => email),
     },
   };

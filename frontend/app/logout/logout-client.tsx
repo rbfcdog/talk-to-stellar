@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
+import { normalizeClientSessionSource, scopedClientStorageKey } from "@/lib/session"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -36,6 +37,7 @@ export default function LogoutClient() {
   const token = String(searchParams.get("token") || "").trim()
   const tokenPayload = useMemo(() => decodeJwtPayload(token), [token])
   const provider = String(searchParams.get("provider") || searchParams.get("source") || tokenPayload?.provider || tokenPayload?.source || "").trim().toLowerCase()
+  const logoutScope = normalizeClientSessionSource(provider) || "web"
   const providerUserId = String(searchParams.get("provider_user_id") || tokenPayload?.provider_user_id || "").trim()
   const sessionIdFromUrl = String(searchParams.get("session_id") || tokenPayload?.session_id || "").trim()
   const isLinkLogout = Boolean(token)
@@ -109,14 +111,20 @@ export default function LogoutClient() {
         throw new Error(errorMessage || "Failed to end the session on the server.")
       }
       if (typeof window !== "undefined") {
-        localStorage.removeItem("talk-to-stellar.sessionId")
-        localStorage.removeItem("talk-to-stellar.sessionToken")
-        localStorage.removeItem("talk-to-stellar.sessionCreatedAt")
-        localStorage.removeItem("talk-to-stellar.sessionLastSeenAt")
-        localStorage.removeItem("talk-to-stellar.browserId")
-        localStorage.setItem("talk-to-stellar.logoutRefreshAt", new Date().toISOString())
-        sessionStorage.removeItem("chat-session-agent")
-        sessionStorage.setItem("chat-session-agent", generateSessionId())
+        for (const key of [
+          "talk-to-stellar.sessionId",
+          "talk-to-stellar.sessionToken",
+          "talk-to-stellar.sessionCreatedAt",
+          "talk-to-stellar.sessionLastSeenAt",
+        ]) {
+          localStorage.removeItem(scopedClientStorageKey(key, logoutScope))
+          if (logoutScope === "web") localStorage.removeItem(key)
+        }
+        if (logoutScope === "web") localStorage.removeItem("talk-to-stellar.browserId")
+        localStorage.setItem(scopedClientStorageKey("talk-to-stellar.logoutRefreshAt", logoutScope), new Date().toISOString())
+        const chatSessionKey = scopedClientStorageKey("chat-session-agent", logoutScope)
+        sessionStorage.removeItem(chatSessionKey)
+        sessionStorage.setItem(chatSessionKey, generateSessionId())
       }
       setStatus("done")
       setMessage("You signed out successfully.")
