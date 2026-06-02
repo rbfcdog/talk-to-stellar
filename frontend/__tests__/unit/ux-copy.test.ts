@@ -163,6 +163,24 @@ describe("UX copy guardrails", () => {
     expect(text).not.toMatch(/(^|[^\w])source_asset_code:\s*offRampInputAsset/);
   });
 
+  it("keeps BRL PIX top-up net-first and sends the receipt link back to chat", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+    const webFeedbackText = source("lib/web-feedback.ts");
+    const chatText = source("components/chat/chat-window.tsx");
+
+    expect(text).toContain('const desiredFinalAmount = rampMode === "onramp"');
+    expect(text).toContain('targetAsset === "BRL"');
+    expect(text).toContain("estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)");
+    expect(text).toContain("amount: quoteAmountBrl");
+    expect(text).toContain("amount: orderAmountBrl");
+    expect(text).toContain("refreshOrder(false)");
+    expect(text).toContain("receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url");
+    expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
+    expect(webFeedbackText).toContain("isExternalChannelPage()");
+    expect(webFeedbackText).toContain('source === "whatsapp" || source === "telegram"');
+    expect(chatText).toContain('chatId !== "agent" || typeof window === "undefined" || externalPriorityChat');
+  });
+
   it("keeps application options tied to configured vaults and gives recovery actions for PIX shortage", () => {
     const reviewText = source("app/rendimentos/rendimentos-client.tsx");
     const pixText = source("app/pix-ramp/pix-ramp-client.tsx");
@@ -177,7 +195,8 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("CurrentInvestmentsPage");
     expect(reviewText).toContain("PortfolioOverview");
     expect(reviewText).toContain("Distribuição");
-    expect(reviewText).toContain("Simulação");
+    expect(reviewText).toContain("Rentabilidade");
+    expect(reviewText).not.toContain("Simulação");
     expect(reviewText).toContain("Posições");
     expect(reviewText).toContain("Posição atual");
     expect(reviewText).toContain("Nada aplicado agora");

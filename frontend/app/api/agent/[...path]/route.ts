@@ -4,6 +4,7 @@ import {
   augmentJsonBodyWithSession,
   buildSessionHeaders,
   passthroughResponseWithSession,
+  requestSessionSourceFromBody,
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
@@ -27,6 +28,7 @@ async function proxy(req: NextRequest, path: string[]) {
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/agent/${path.join("/")}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const requestSource = requestSessionSourceFromBody(req, rawBody);
   const body = augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
@@ -37,13 +39,13 @@ async function proxy(req: NextRequest, path: string[]) {
       headers: {
         "content-type": req.headers.get("content-type") || "application/json",
         "Idempotency-Key": idempotencyKey,
-        ...buildSessionHeaders(req),
+        ...buildSessionHeaders(req, requestSource),
       },
       body,
       cache: "no-store",
     });
     const text = await res.text();
-    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
   } catch (error: any) {
     console.error("[agent-proxy] request failed", { target, error: error?.message || error });
     return NextResponse.json(publicErrorPayload(error, { code: "agent_unavailable" }), { status: 502 });

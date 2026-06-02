@@ -387,6 +387,9 @@ export class PaymentReceiptService {
     const fee = await this.resolveFeeBreakdown(input);
     const grossBrl = this.estimateReceiptBrlAmount(input, fee);
     const usdReceived = this.estimateReceiptUsdAmount(input, grossBrl, fee);
+    if (grossBrl <= 0 || usdReceived <= 0) {
+      return '';
+    }
     const actualFeeBrl = Number(fee.actualFeeBrl || 0) > 0
       ? Number(fee.actualFeeBrl)
       : grossBrl * 0.003;
@@ -634,6 +637,92 @@ export class PaymentReceiptService {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
 
+  private static envBps(...keys: string[]): number {
+    for (const key of keys) {
+      const parsed = Number(String(process.env[key] || '').replace(',', '.'));
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
+    return 0;
+  }
+
+  private static isPixOnRampReceipt(input: PaymentReceiptInput): boolean {
+    const text = [
+      input.counterpartyLabel,
+      input.contextMessage,
+      input.quote?.provider,
+      input.quote?.rail,
+      input.quote?.direction,
+    ].map((value) => String(value || '').toLowerCase()).join(' ');
+
+    return input.type === 'payment_received' && (
+      text.includes('pix etherfuse') ||
+      text.includes('etherfuse') ||
+      (text.includes('pix') && text.includes('onramp')) ||
+      (text.includes('pix') && text.includes('confirmado')) ||
+      input.quote?.direction === 'onramp'
+    );
+  }
+
+  private static inferPixOnRampFeeBrl(input: PaymentReceiptInput): number {
+    if (!this.isPixOnRampReceipt(input)) return 0;
+    const quote = input.quote || {};
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode || input.sourceAssetCode);
+
+    const explicitFee = this.toPositiveNumber(
+      quote.total_fee_amount ||
+      quote.totalFeeAmount ||
+      quote.total_fee_brl ||
+      quote.actual_fee_brl ||
+      quote.fee_brl
+    );
+    if (explicitFee > 0) return explicitFee;
+
+    const providerFee = this.toPositiveNumber(
+      quote.provider_onramp_fee_amount ||
+      quote.provider_fee_amount ||
+      quote.anchor_provider_fee_amount ||
+      quote.anchorProviderFeeAmount
+    );
+    const appFee = this.toPositiveNumber(
+      quote.talktostellar_transaction_fee_amount ||
+      quote.talkToStellarFeeAmount ||
+      quote.app_fee_amount ||
+      quote.platform_fee_amount
+    );
+    if (providerFee + appFee > 0) return providerFee + appFee;
+
+    const sourceGross = this.toPositiveNumber(
+      quote.source_amount_brl ||
+      quote.sourceAmountBrl ||
+      quote.sourceAmount ||
+      (sourceAssetCode === 'BRL' ? input.sourceAmount : '')
+    );
+    const destinationNet = this.toPositiveNumber(
+      quote.final_amount ||
+      quote.finalAmountAfterFee ||
+      quote.userFacingToAmount ||
+      quote.destination_amount ||
+      quote.destinationAmount ||
+      input.destinationAmount
+    );
+    if (sourceGross > 0 && destinationNet > 0 && sourceGross > destinationNet) {
+      return sourceGross - destinationNet;
+    }
+
+    const settledNet = this.toPositiveNumber(input.destinationAmount || input.sourceAmount);
+    if (settledNet > 0 && sourceAssetCode === 'BRL' && destinationAssetCode === 'BRL') {
+      const providerBps = this.envBps('ETHERFUSE_ONRAMP_FEE_BPS', 'ETHERFUSE_TESTNET_FEE_BPS') || 20;
+      const appBps = this.envBps('TALKTOSTELLAR_SPREAD_BPS', 'TTS_SPREAD_BPS') || 30;
+      const totalBps = Math.min(1000, Math.max(0, providerBps + appBps));
+      if (totalBps > 0 && totalBps < 10000) {
+        return settledNet * (totalBps / (10000 - totalBps));
+      }
+    }
+
+    return 0;
+  }
+
   private static receiptUsdBrlRate(input: PaymentReceiptInput): number {
     const sourceAmount = this.toPositiveNumber(input.sourceAmount || input.destinationAmount);
     const destinationAmount = this.toPositiveNumber(input.destinationAmount);
@@ -724,7 +813,8 @@ export class PaymentReceiptService {
       destinationAssetCode: destinationAssetCode || null,
     });
 
-    const actualFeeBrlFromPayload = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl);
+    const inferredPixOnRampFeeBrl = this.inferPixOnRampFeeBrl(input);
+    const actualFeeBrlFromPayload = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl || inferredPixOnRampFeeBrl);
     const actualFeeUsdcFromPayload = this.toPositiveNumber(unifiedFee.fee_usdc || input.feeUsdc || parsedDisplay.usdc);
     let actualDisplay = String(unifiedFee.display || display || '').trim();
     const traditionalFeePct = EconomyEngineService.traditionalFeePct();

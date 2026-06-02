@@ -104,15 +104,17 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
 export function formatCustomerAssetAmount(amount?: string, assetCode?: string): string {
   const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   const value = Number(String(amount || '').replace(',', '.'));
+  const formatQuantity = (quantity: number) =>
+    quantity.toFixed(7).replace(/\.?0+$/, '');
 
   if (!Number.isFinite(value)) return 'valor indisponivel';
   const truncated = Math.trunc(value * 100) / 100;
   if (code === 'BRL' || code === 'TESOURO') return `R$ ${truncated.toFixed(2)}`;
   if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;
   if (code === 'EURC' || code === 'EUR') return `€ ${truncated.toFixed(2)}`;
-  if (code === 'XLM') return 'saldo da carteira TalkToStellar';
+  if (code === 'XLM') return `${formatQuantity(value)} XLM`;
 
-  return `${truncated.toFixed(2)} ${code}`;
+  return `${formatQuantity(value)} ${code}`;
 }
 
 export function buildUnifiedFeeDisplay(input: {

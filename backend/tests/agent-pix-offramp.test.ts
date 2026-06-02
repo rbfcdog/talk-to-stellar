@@ -276,6 +276,57 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('continues a pending PIX on-ramp when the user replies with only the amount', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+    const state = createState('100 reais');
+    state.action_params = {
+      pending_pix_ramp: {
+        direction: 'onramp',
+        flow: 'fund_wallet',
+        amount_currency: 'BRL',
+        asset_code: 'BRL',
+        created_at: new Date().toISOString(),
+      },
+    };
+
+    try {
+      const result = await graph.processInput(state);
+      const link = result.response_message.match(/https?:\/\/\S+/)?.[0] || '';
+      const parsed = new URL(link);
+
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.success).toBe(true);
+      expect(result.response_message).toContain('Tudo finalizado. Aqui estão suas informações');
+      expect(result.response_message).toContain('100');
+      expect(result.response_message).not.toContain('Conta conectada');
+      expect(result.response_message).not.toContain('Escolha o que quer fazer agora');
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('receive_amount')).toBe('100');
+      expect(repository.saveMessage).toHaveBeenCalledWith(
+        state.session_id,
+        'user',
+        '100 reais'
+      );
+      expect(repository.saveState).toHaveBeenCalledWith(
+        state.session_id,
+        expect.objectContaining({
+          pending_pix_ramp: undefined,
+        })
+      );
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('opens Telegram PIX links directly once the account session is active', async () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
     const previousFrontendUrl = process.env.FRONTEND_URL;

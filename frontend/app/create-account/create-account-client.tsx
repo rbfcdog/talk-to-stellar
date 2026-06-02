@@ -1080,8 +1080,8 @@ export default function CreateAccountClient({
         )}
 
         {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
-          <label className="flex flex-col gap-1.5 rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2.5">
-            <span className="text-xs font-medium text-tts-deep">
+          <label className="flex flex-col gap-2 rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-4 py-3">
+            <span className="text-sm font-bold text-tts-deep">
               {L("Código enviado por e-mail", "Code sent by email")}
             </span>
             <Input
@@ -1092,7 +1092,7 @@ export default function CreateAccountClient({
               maxLength={6}
               placeholder="000000"
             />
-            <span className="text-[11px] text-tts-muted">
+            <span className="text-sm font-medium leading-6 text-tts-deep">
               {result?.message || L("Confira seu e-mail e informe o código.", "Check your email and enter the code.")}
             </span>
             {result?.devCode && (

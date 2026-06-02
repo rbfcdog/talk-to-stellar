@@ -36,7 +36,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PIX,
     toolName: 'route_pix_intent',
-    description: 'Use for any PIX money movement. Entrada/on-ramp: trazer, colocar, depositar, carregar, receber saldo via PIX. Saida/off-ramp: sacar, retirar, mandar para meu PIX, mandar pra fora, enviar para minha chave PIX, tirar da conta, off-ramp. PIX wins over generic payment when PIX is mentioned.',
+    description: 'Use for any PIX money movement. Entrada/on-ramp: trazer, colocar, depositar, carregar, receber saldo via PIX. Saida/off-ramp: sacar, retirar, mandar para meu PIX, mandar pra fora, enviar para minha chave PIX, tirar da conta, sair para banco, off-ramp. Use PIX for "mandar pra fora 50 reais em pix" and "uero mandar 100 reais pra fora do pix". PIX wins over generic payment when PIX is mentioned or when the destination is the user own PIX/bank exit.',
   },
   {
     intent: IntentType.BALANCE,
@@ -61,12 +61,12 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PAYMENT,
     toolName: 'route_payment_intent',
-    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to a recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
+    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to another recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail and destination is not the user own PIX/bank exit. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
   },
   {
     intent: IntentType.PAYMENT_LINK,
     toolName: 'route_payment_link_intent',
-    description: 'Use when the user wants to create, open, share, charge/cobrar, or receive with a payment/receive link.',
+    description: 'Use when the user wants to create, generate, open, share, charge/cobrar, receive with, or get a payment/receive link. Payment-link creation does not require an existing contact.',
   },
   {
     intent: IntentType.HISTORY,
@@ -76,7 +76,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PRICE_QUOTE,
     toolName: 'route_price_quote_intent',
-    description: 'Use when the user asks for best route/melhor rota, rate/cotacao, estimated fees, comparison, quote, or cost before doing a transaction.',
+    description: 'Use when the user asks for best route/melhor rota, route quality, rate/cotacao, estimated fees, comparison, quote, cost, spread, or whether it is worth doing before starting a transaction. If amount is missing, still route here with needs_clarification=true.',
   },
   {
     intent: IntentType.FINANCIAL_MEMORY,
@@ -86,7 +86,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to change, reset, recover, update, alter, or troubleshoot account PIN/security, even with typos or very short wording. PIN change/reset/recovery requests must never become general help.',
+    description: 'Use when the user asks to change, reset, recover, update, alter, redefine, troubleshoot, or fix account PIN/security, even with typos such as redefimir/redefinir/uero or very short wording. PIN change/reset/recovery requests must never become general help.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -146,7 +146,7 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
           description: 'Risk level of the requested action. Use high for money movement, security/PIN, login/logout, or account access.',
         },
       },
-      required: ['confidence'],
+      required: ['confidence', 'reason', 'needs_clarification', 'language', 'risk'],
     },
   },
 }));
@@ -224,8 +224,8 @@ export class AgentGraph {
   private getIntentRouterUnavailableMessage(language: 'pt-BR' | 'en'): string {
     return this.text(
       language,
-      'Estou com instabilidade para interpretar sua mensagem agora. Tente novamente em alguns segundos; se continuar, o acesso ao interpretador LLM precisa ser revisado.',
-      'I am having trouble interpreting your message right now. Try again in a few seconds; if it continues, the LLM interpreter access needs to be reviewed.'
+      'Estou com instabilidade para entender pedidos agora. Tente novamente em alguns segundos. Para ações com dinheiro, mande uma frase com ação, valor, moeda e destino.',
+      'I am having trouble understanding requests right now. Try again in a few seconds. For money actions, send one sentence with action, amount, currency, and destination.'
     );
   }
 
@@ -1659,8 +1659,8 @@ export class AgentGraph {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
         state.response_message = this.text(
           language,
-          `Para mandar ${amountText} para seu PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nA tela calcula a melhor conversão e confirma o valor chegando em reais no seu PIX.`,
-          `To send ${amountText} to your PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nThe screen calculates the best conversion and confirms the amount arriving in reais in your PIX.`
+          `Para retirar ${amountText} da conta para PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nA tela calcula a melhor conversão e confirma quanto chega em reais no seu PIX.`,
+          `To withdraw ${amountText} from the account to PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nThe screen calculates the best conversion and confirms how much arrives in reais in your PIX.`
         );
       } else if (intent.flow === 'fund_and_pay' && resolvedRecipientLabel) {
         const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || 'BRL');
@@ -1676,8 +1676,8 @@ export class AgentGraph {
           : this.text(language, `receber ${amountText} na sua conta`, `receive ${amountText} in your account`);
         state.response_message = this.text(
           language,
-          `Para ${actionText} via PIX, abra:\n\n${url}\n\n${pixFeeNote}\n\nNa página, o PIX a pagar já inclui a taxa por fora para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
-          `To ${actionText} with PIX, open:\n\n${url}\n\n${pixFeeNote}\n\nOn the page, the PIX amount to pay already includes the fee on top so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
+          `Tudo finalizado. Aqui estão suas informações para ${actionText} via PIX:\n\n${url}\n\n${pixFeeNote}\n\nNa página, o PIX a pagar já inclui a taxa por fora para o saldo entrar como ${this.formatUserFacingAssetName(intent.asset_code, language)}.`,
+          `Done. Here are your details to ${actionText} with PIX:\n\n${url}\n\n${pixFeeNote}\n\nOn the page, the PIX amount to pay already includes the fee on top so the balance arrives as ${this.formatUserFacingAssetName(intent.asset_code, language)}.`
         );
       }
     }
@@ -1821,6 +1821,7 @@ export class AgentGraph {
     if (!destination) {
       return { success: false, error: 'destination_not_found' };
     }
+    await this.maybeSavePaymentRecipientContact(state, recipientQuery, { contact, destination, destinationName });
 
     let quote: any = null;
     let bestRouteResult: any = null;
@@ -1921,7 +1922,7 @@ export class AgentGraph {
 
     return {
       success: true,
-      message: prepare.message || `Para confirmar o envio de ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}, abra o link:\n\n${prepare.url}`,
+      message: prepare.message || `Gerei o link de confirmação da forma mais otimizada para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}.\n\nAbra para revisar e confirmar com PIN:\n\n${prepare.url}`,
     };
   }
 
@@ -2409,6 +2410,51 @@ export class AgentGraph {
     return { contact, destination, destinationName };
   }
 
+  private async maybeSavePaymentRecipientContact(
+    state: AgentState,
+    recipientQuery: string,
+    recipient: { contact?: any; destination?: string; destinationName?: string },
+  ): Promise<void> {
+    const ownerId = String(state.session_data?.user_id || '').trim();
+    const destination = String(recipient.destination || '').trim();
+    if (!ownerId || !destination) return;
+    if (String(state.session_data?.public_key || '').trim() === destination) return;
+    if (String(recipient.contact?.owner_id || '').trim() === ownerId) return;
+
+    try {
+      const contacts = await this.fetchContacts(ownerId);
+      const alreadySaved = contacts.some((contact: any) => {
+        const contactDestination = String(
+          contact?.destination_public_key ||
+          contact?.stellar_public_key ||
+          contact?.public_key ||
+          ''
+        ).trim();
+        return contactDestination === destination;
+      });
+      if (alreadySaved) return;
+
+      const contactName = String(
+        recipient.destinationName ||
+        recipient.contact?.contact_name ||
+        recipient.contact?.name ||
+        recipientQuery ||
+        ''
+      ).trim();
+
+      await executeTool('add_contact', {
+        session_id: state.session_id,
+        user_id: ownerId,
+        contact_name: contactName || undefined,
+        public_key: destination,
+        pix_key: this.getContactDisplayKey(recipient.contact) || undefined,
+        contact_key: destination,
+      });
+    } catch (error) {
+      logger.warn(`[payment-contact-autosave] failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private async resolveOwnedPaymentContact(recipientQuery: string, userId?: string): Promise<{
     contact?: any;
     destination: string;
@@ -2563,6 +2609,8 @@ export class AgentGraph {
   private async buildPixFundedPaymentMessage(state: AgentState, input: {
     recipientQuery: string;
     destinationName: string;
+    recipientPublicKey?: string;
+    recipientKey?: string;
     amount: string;
     assetCode: string;
     currentBalance?: { amount: number; formatted: string } | null;
@@ -2579,6 +2627,8 @@ export class AgentGraph {
       amount_currency: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
       asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
       recipient_query: input.recipientQuery,
+      recipient_public_key: input.recipientPublicKey,
+      recipient_key: input.recipientKey,
       pay_amount: input.amount,
       pay_asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
     });
@@ -2778,8 +2828,22 @@ export class AgentGraph {
     }
 
     if (llmParsed.needs_clarification || !recipientQuery || !amount || !assetCode) {
+      const language = this.getLanguage(state);
+      const missing = [
+        !recipientQuery ? this.text(language, 'destinatário', 'recipient') : '',
+        !amount ? this.text(language, 'valor', 'amount') : '',
+        !assetCode ? this.text(language, 'moeda', 'currency') : '',
+      ].filter(Boolean);
+      const knownRecipient = recipientQuery
+        ? this.text(language, `Destino entendido: ${recipientQuery}. `, `Recipient understood: ${recipientQuery}. `)
+        : '';
+      const fallbackClarification = this.text(
+        language,
+        `${knownRecipient}Falta só completar o envio: me diga ${missing.join(' e ') || 'destinatário, valor e moeda'}. Exemplo: mandar para Ana Silva 3 USDC.`,
+        `${knownRecipient}I only need the missing payment details: tell me ${missing.join(' and ') || 'recipient, amount, and currency'}. Example: send 3 USDC to Ana Silva.`
+      );
       state.success = false;
-      state.response_message = llmParsed.clarification_question || 'Me diga o destinatário, valor e moeda. Exemplo: mandar para Ana Silva 3 USDC.';
+      state.response_message = llmParsed.clarification_question || fallbackClarification;
       await this.saveAssistantResponse(state);
       await this.repository.saveState(state.session_id, state);
       return state;
@@ -2793,6 +2857,7 @@ export class AgentGraph {
       await this.repository.saveState(state.session_id, state);
       return state;
     }
+    await this.maybeSavePaymentRecipientContact(state, recipientQuery, recipient);
 
     const balance = await this.getWalletBalanceForAsset(state, assetCode);
     const requestedAmount = this.toAmountNumber(amount);
@@ -2808,6 +2873,8 @@ export class AgentGraph {
       state.response_message = await this.buildPixFundedPaymentMessage(state, {
         recipientQuery,
         destinationName: recipient.destinationName,
+        recipientPublicKey: recipient.destination,
+        recipientKey: this.getContactDisplayKey(recipient.contact) || undefined,
         amount,
         assetCode,
         currentBalance: balance,
@@ -2836,10 +2903,10 @@ export class AgentGraph {
     } else {
       state.pending_payment = undefined;
       state.success = true;
-      const balanceConfirmation = balance
-        ? `Saldo suficiente confirmado: ${balance.formatted} disponível para enviar ${this.formatMoneyByAsset(amount, assetCode)}.`
-        : 'Não consegui confirmar o saldo antes do link; a tela de confirmação valida novamente antes de enviar.';
-      state.response_message = `${balanceConfirmation}\n\n${String(prepared.message || 'Link de confirmação gerado com sucesso.')}`;
+      state.response_message = String(
+        prepared.message ||
+        `Gerei o link de confirmação da forma mais otimizada para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${recipient.destinationName}.`
+      );
     }
 
     await this.saveAssistantResponse(state);
@@ -3287,7 +3354,7 @@ export class AgentGraph {
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
       '- For BRL -> US$ net value, exchange-rate, fee, or received-amount questions, call get_conversion_preview or a quote tool. Never use a hardcoded exchange rate.',
       '- If the user asks "quanto custa enviar", "quanto vou pagar", "vale a pena", "comparado com o banco", "banco", or "Wise" with a transfer amount, call show_savings_calculator before asking for confirmation. Never answer fee comparison only with free text.',
-      '- After any payment or conversion is completed inside the agent flow, call send_receipt_with_savings instead of only confirming with free text. The receipt must put the user savings before the Stellar evidence/hash.',
+      '- After BRL <-> USDC payments or conversions completed inside the agent flow, call send_receipt_with_savings only when there are positive BRL sent and USDC/USD received amounts. For XLM, CETES, same-asset payments, or missing BRL/USD values, preserve the normal asset-aware receipt and never show zero savings.',
       '- If the user asks "quanto eu economizei", "resumo do ano", or "histórico de economia", call show_annual_savings_summary.',
       '- Approved savings tool messages are WhatsApp-ready. Preserve emojis, *bold*, and _italic_ exactly as returned by show_savings_calculator, send_receipt_with_savings, or show_annual_savings_summary.',
     ].join('\n');
@@ -3550,11 +3617,21 @@ Route selection guide:
 Disambiguation:
 - "mandar/enviar/pagar + PIX" routes to PIX, not payment.
 - "mandar pra fora", "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", or "off-ramp" routes to PIX.
+- "pra fora do pix", "fora em pix", "sair para meu pix", "tirar para pix", and "mandar para meu banco" are off-ramp PIX, even when they contain transfer verbs like mandar/enviar.
+- "mandar 10 xlm/usdc/cetes/reais pra Ana Silva", emails, phone numbers, CPFs, transfer keys, or external wallets are payment, not help, unless PIX is explicitly the rail.
+- "criar/gerar link de pagamento", "link para receber", "cobrar por link", and "meu link de recebimento" are payment_link, not normal payment.
+- "mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN" or "PIN nao funciona" are reset_pin, not wallet, login, or help.
 - "melhor rota", "quanto custa", "taxa", "cotacao", or bank comparison routes to price_quote unless the user is already giving a direct execution command with PIN.
 - Asking "quais sao os assets" or "explique cada ativo" is general because it is an explanation, not a transaction.
 - A typo-heavy command still routes to the intended product action. Do not downgrade it to general.
 - Normal payment routing: when the user wants to send, pay, transfer, or move money to another person, contact, email, CPF, phone, key, or external wallet without PIX as the rail, route_payment_intent.
 - PIN/security requests are account actions, never generic help.
+
+Clarification behavior:
+- If the route is clear but details are missing, call the specific route with needs_clarification=true instead of route_general_intent.
+- Missing amount for best-route, conversion, payment, PIX, or yield does not make the request general.
+- Missing recipient for payment does not make it general; use payment with needs_clarification=true.
+- Missing account context is not a routing decision. Route to the intended product and let the runtime ask for login/onboarding.
 
 Tool selection patterns:
 - supported product request -> the matching product route
@@ -4075,6 +4152,18 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
     const sessionId = String(state?.session_id || '').trim();
+    if (!externalProvider) {
+      const normalizedBase = resolveFrontendBase([
+        process.env.FRONTEND_URL,
+        process.env.PUBLIC_APP_URL,
+        process.env.CREATE_ACCOUNT_BASE,
+        process.env.PAYMENT_CONFIRM_BASE,
+      ]);
+      const logoutUrl = new URL(`${normalizedBase}/logout`);
+      logoutUrl.searchParams.set('source', 'web');
+      return `Para sair só deste navegador, abra esta página e confirme:\n\n${logoutUrl.toString()}\n\nIsso não desconecta WhatsApp ou Telegram vinculados à mesma conta.`;
+    }
+
     let logoutUrl = '';
     try {
       logoutUrl = await this.externalService.createLogoutUrl({
@@ -5197,6 +5286,17 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.action_type = ActionType.CREATE_WALLET;
         state.detected_intent = IntentType.WALLET;
         return await this.handleWalletCreation(state);
+      }
+
+      if (this.resumePendingPixRampIntent(state)) {
+        state.detected_intent = IntentType.PIX;
+        state.action_type = ActionType.INITIATE_PIX;
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
+        return await this.handlePixRampRequest(state);
       }
 
       const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);

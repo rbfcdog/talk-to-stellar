@@ -5,6 +5,7 @@ import {
   buildSessionHeaders,
   passthroughResponseWithSession,
   readSessionCookies,
+  requestSessionSourceFromBody,
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
@@ -45,11 +46,12 @@ async function proxy(req: NextRequest, path: string[]) {
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/ramp/${pathText}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const requestSource = requestSessionSourceFromBody(req, rawBody);
   const body = augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
   const internalSecret = process.env.RAMP_SANDBOX_INTERNAL_SECRET || process.env.INTERNAL_API_SECRET || "";
-  const session = readSessionCookies(req);
+  const session = readSessionCookies(req, requestSource);
 
   const init: RequestInit = {
     method: req.method,
@@ -57,7 +59,7 @@ async function proxy(req: NextRequest, path: string[]) {
       "content-type": req.headers.get("content-type") || "application/json",
       "Idempotency-Key": idempotencyKey,
       "X-Request-Id": requestId,
-      ...buildSessionHeaders(req),
+      ...buildSessionHeaders(req, requestSource),
       ...(internalSecret ? { "X-Internal-Api-Secret": internalSecret } : {}),
       ...(req.headers.get("x-wallet-pin") ? { "X-Wallet-Pin": req.headers.get("x-wallet-pin") || "" } : {}),
       ...(req.headers.get("x-talktostellar-wallet-pin") ? { "X-TalkToStellar-Wallet-Pin": req.headers.get("x-talktostellar-wallet-pin") || "" } : {}),
@@ -95,7 +97,7 @@ async function proxy(req: NextRequest, path: string[]) {
         console.error("[ramp-proxy] defindex_response_failed", fields);
       }
     }
-    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
     response.headers.set("x-request-id", requestId);
     return response;
   } catch (error: any) {

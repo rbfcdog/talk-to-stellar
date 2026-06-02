@@ -385,6 +385,15 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
 }): Promise<boolean> {
   const email = normalizeEmailForCompare(input.email || '');
   if (!email) return true;
+  const sessionId = String(input.metadata?.session_id || '').trim();
+  const userId = normalizeEmailForCompare(String(input.metadata?.user_id || ''));
+
+  const alreadyVerified = await EmailConfirmationService.isAccountEmailVerified({
+    email,
+    sessionId,
+    userId,
+  });
+  if (alreadyVerified) return true;
 
   try {
     const confirmation = await EmailConfirmationService.requireVerified({
@@ -407,6 +416,12 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
       return false;
     }
 
+    await EmailConfirmationService.markAccountEmailVerified({
+      email,
+      sessionId,
+      userId,
+      source: input.purpose === 'login' ? 'email_confirmation_login' : 'email_confirmation_create_account',
+    });
     return true;
   } catch (error: any) {
     if (error instanceof EmailConfirmationError) {
@@ -764,6 +779,7 @@ async function upsertRecentContactFromPayment(input: {
   destinationPublicKey: string;
   destinationName?: string;
   destinationContact?: any;
+  destinationKey?: string | null;
 }) {
   const ownerId = String(input.ownerId || '').trim();
   const destinationPublicKey = String(input.destinationPublicKey || '').trim();
@@ -774,7 +790,8 @@ async function upsertRecentContactFromPayment(input: {
   const explicitNameRaw = String(input.destinationContact?.contact_name || input.destinationName || '').trim();
   const explicitName = isValidStellarPublicKey(explicitNameRaw) ? '' : explicitNameRaw;
   const contactName = explicitName || `Contato ${destinationPublicKey.slice(0, 6)}`;
-  const pixKey = String(input.destinationContact?.pix_key || '').trim().toLowerCase() || null;
+  const explicitKey = String(input.destinationContact?.pix_key || input.destinationKey || '').trim().toLowerCase();
+  const pixKey = explicitKey && !isValidStellarPublicKey(explicitKey) ? explicitKey : null;
 
   const { data: existingContact, error: existingContactError } = await supabase
     .from('contacts')
@@ -2759,6 +2776,7 @@ export default class ExternalFinalizeController {
           destinationPublicKey: resolvedDestination,
           destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name || destination,
           destinationContact: destinationDisplayContact || destination_contact,
+          destinationKey: destinationDisplayKey || null,
         });
 
         if (destinationWallet?.session_id && destinationWallet.session_id !== String(session_id)) {
@@ -3186,6 +3204,9 @@ export default class ExternalFinalizeController {
             ...existingSession,
             email: normalizedEmail || existingSession.email || '',
             phone_number: normalizedPhoneNumber || existingSession.phone_number,
+            email_verified: Boolean(normalizedEmail) || (existingSession as any)?.email_verified,
+            email_verified_at: normalizedEmail ? new Date().toISOString() : (existingSession as any)?.email_verified_at,
+            email_verification_source: normalizedEmail ? 'email_confirmation_create_account' : (existingSession as any)?.email_verification_source,
           } as any);
 
           void configureWalletAssetsAndContacts({
@@ -3255,6 +3276,9 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
         password_hash: pinHash,
         session_password_hash: pinHash,
+        email_verified: Boolean(normalizedEmail),
+        email_verified_at: normalizedEmail ? now : undefined,
+        email_verification_source: normalizedEmail ? 'email_confirmation_create_account' : undefined,
         created_at: now,
         last_activity: now,
       });

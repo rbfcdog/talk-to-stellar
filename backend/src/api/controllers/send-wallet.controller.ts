@@ -68,6 +68,48 @@ function hasTrustline(account: any, assetCode: string, assetIssuer?: string): bo
   );
 }
 
+async function saveExternalWalletAsContact(input: {
+  ownerId: string;
+  sourcePublicKey: string;
+  destinationPublicKey: string;
+  contactName?: string;
+}) {
+  const ownerId = String(input.ownerId || '').trim();
+  const sourcePublicKey = String(input.sourcePublicKey || '').trim();
+  const destinationPublicKey = String(input.destinationPublicKey || '').trim();
+  if (!ownerId || !isValidStellarPublicKey(destinationPublicKey)) return;
+  if (sourcePublicKey && sourcePublicKey === destinationPublicKey) return;
+
+  const { data: existing, error: lookupError } = await supabase
+    .from('contacts')
+    .select('id, contact_name')
+    .eq('owner_id', ownerId)
+    .eq('stellar_public_key', destinationPublicKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (lookupError) throw new Error(lookupError.message);
+  if (existing?.id) return;
+
+  const requestedName = String(input.contactName || '').trim();
+  const contactName = requestedName && !isValidStellarPublicKey(requestedName)
+    ? requestedName
+    : `Carteira ${destinationPublicKey.slice(0, 6)}`;
+
+  const { error } = await supabase
+    .from('contacts')
+    .insert({
+      owner_id: ownerId,
+      contact_name: contactName,
+      stellar_public_key: destinationPublicKey,
+      pix_key: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) throw new Error(error.message);
+}
+
 async function logExternalPayment(input: {
   sessionId: string;
   userId: string;
@@ -302,6 +344,15 @@ export default class SendWalletController {
         hash: submitted.hash,
         status: 'success',
         executionId,
+      });
+
+      await saveExternalWalletAsContact({
+        ownerId: String(session.user_id),
+        sourcePublicKey: wallet.public_key,
+        destinationPublicKey: destination,
+        contactName: String(req.body?.destination_name || req.body?.contact_name || '').trim() || undefined,
+      }).catch((error) => {
+        console.warn(`[send-to-wallet] could not auto-save destination contact: ${error instanceof Error ? error.message : String(error)}`);
       });
 
       const receiptUrl = await PaymentReceiptService.sendReceipt({

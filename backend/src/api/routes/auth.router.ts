@@ -104,6 +104,9 @@ router.post("/google", async (req, res) => {
       pix_key: existing?.pix_key || undefined,
       password_hash: existing?.password_hash || undefined,
       session_password_hash: existing?.session_password_hash || undefined,
+      email_verified: true,
+      email_verified_at: new Date().toISOString(),
+      email_verification_source: "google_oauth",
       created_at: existing?.created_at || new Date().toISOString(),
       last_activity: new Date().toISOString(),
     };

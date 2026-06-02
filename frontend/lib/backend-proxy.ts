@@ -4,6 +4,7 @@ import {
   augmentJsonBodyWithSession,
   buildSessionHeaders,
   passthroughResponseWithSession,
+  requestSessionSourceFromBody,
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
@@ -39,6 +40,7 @@ export async function proxyBackendApi(
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/${basePath.replace(/^\/|\/$/g, "")}/${path.join("/")}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const requestSource = requestSessionSourceFromBody(req, rawBody);
   const body = options.injectSession === false ? rawBody : augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
@@ -49,7 +51,7 @@ export async function proxyBackendApi(
   const headers: Record<string, string> = {
     "content-type": req.headers.get("content-type") || "application/json",
     "Idempotency-Key": idempotencyKey,
-    ...buildSessionHeaders(req),
+    ...buildSessionHeaders(req, requestSource),
   };
 
   if (webhookSecret) headers["X-Etherfuse-Webhook-Secret"] = webhookSecret;
@@ -64,7 +66,7 @@ export async function proxyBackendApi(
   try {
     const res = await fetch(target, init);
     const text = await res.text();
-    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
   } catch (error: any) {
     console.error("[backend-proxy] request failed", { target, error: error?.message || error });
     return NextResponse.json(publicErrorPayload(error, { code: "backend_unavailable" }), { status: 502 });

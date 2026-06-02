@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { buildSessionHeaders, isExternalPrioritySource, readSessionCookies, setSessionCookies } from "@/lib/server-session";
+import { buildSessionHeaders, isExternalPrioritySource, readSessionCookies, requestSessionSource, setSessionCookies } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
 const getBackendBaseUrl = () => {
@@ -97,19 +97,6 @@ function generateSessionId(): string {
   });
 }
 
-function requestSourceFromPayload(source: unknown, metadata: any): string {
-  return String(
-    source ||
-      metadata?.source ||
-      metadata?.provider ||
-      metadata?.channel ||
-      metadata?.external_source ||
-      metadata?.externalProvider ||
-      metadata?.external_provider ||
-      "",
-  ).trim();
-}
-
 export async function POST(req: Request) {
   let sessionId: string | null = null;
   let requestLanguage = "pt-BR";
@@ -118,7 +105,8 @@ export async function POST(req: Request) {
     const { messages, session_id, source, metadata, language } = await req.json();
     requestLanguage = language || metadata?.language || "pt-BR";
     const browserSessionExpired = metadata?.browser_session_expired === true || metadata?.force_relogin === true;
-    const session = browserSessionExpired ? { sessionId: "", sessionToken: "", sessionSource: "" } : readSessionCookies(req);
+    const requestSource = requestSessionSource(req, { source, metadata });
+    const session = browserSessionExpired ? { sessionId: "", sessionToken: "", sessionSource: "" } : readSessionCookies(req, requestSource);
     const userMessage = messages?.[messages.length - 1];
 
     if (!userMessage?.content) {
@@ -126,15 +114,14 @@ export async function POST(req: Request) {
     }
 
     const browserId = String(metadata?.browser_id || "").trim();
-    const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
-    const requestSource = requestSourceFromPayload(source, metadata);
     const requestHasExternalPriority = isExternalPrioritySource(requestSource);
     const cookieHasExternalPriority = isExternalPrioritySource(session.sessionSource);
+    const linkedSessionId = requestHasExternalPriority ? null : await resolveWebSessionId(browserId).catch(() => null);
 
-    // Browser links opened from WhatsApp/Telegram must take over an older web session.
-    // Otherwise the authenticated cookie session remains the credentialed source of truth.
+    // Browser links opened from WhatsApp/Telegram use a channel-scoped session.
+    // A normal browser tab keeps using the web-scoped session.
     sessionId = requestHasExternalPriority
-      ? (session_id || session.sessionId || linkedSessionId || generateSessionId())
+      ? (session.sessionId || session_id || linkedSessionId || generateSessionId())
       : cookieHasExternalPriority
         ? (session.sessionId || session_id || linkedSessionId || generateSessionId())
         : (session.sessionId || linkedSessionId || session_id || generateSessionId());
@@ -142,18 +129,19 @@ export async function POST(req: Request) {
       session.sessionId && session.sessionId === sessionId ? (session.sessionToken || "") : "";
     const forwardSessionHeaders =
       !browserSessionExpired && session.sessionId && session.sessionId === sessionId
-        ? buildSessionHeaders(req)
+        ? buildSessionHeaders(req, requestSource)
         : {};
 
     const dataToSend = {
       query: userMessage.content,
       session_id: sessionId,
       session_token: sessionTokenForSelectedSession || undefined,
-      source: source || "web",
+      source: requestSource || source || "web",
       language: language || metadata?.language || "pt-BR",
       metadata: {
         ...(metadata || {}),
         language: language || metadata?.language || "pt-BR",
+        source: requestSource || source || metadata?.source || "web",
       },
     };
     const idempotencyKey =
@@ -233,8 +221,6 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
-    const cookieSession = readSessionCookies(req);
-    const sessionToken = cookieSession.sessionToken || "";
     const browserId = url.searchParams.get("browser_id") || "";
     const requestSource =
       url.searchParams.get("source") ||
@@ -242,15 +228,18 @@ export async function GET(req: Request) {
       url.searchParams.get("channel") ||
       url.searchParams.get("external_source") ||
       "";
+    const cookieSession = readSessionCookies(req, requestSource);
+    const sessionToken = cookieSession.sessionToken || "";
     const limit = url.searchParams.get("limit") || "50";
 
     if (!sessionId) {
       return NextResponse.json({ error: "session_id is required" }, { status: 400 });
     }
 
-    const linkedSessionId = await resolveWebSessionId(browserId).catch(() => null);
+    const requestHasExternalPriority = isExternalPrioritySource(requestSource);
+    const linkedSessionId = requestHasExternalPriority ? null : await resolveWebSessionId(browserId).catch(() => null);
     const resolvedSessionId = (isExternalPrioritySource(requestSource)
-      ? (sessionId || cookieSession.sessionId || linkedSessionId)
+      ? (cookieSession.sessionId || sessionId || linkedSessionId)
       : isExternalPrioritySource(cookieSession.sessionSource)
         ? (cookieSession.sessionId || sessionId || linkedSessionId)
         : (cookieSession.sessionId || linkedSessionId || sessionId)) || sessionId;

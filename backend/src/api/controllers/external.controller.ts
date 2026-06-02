@@ -164,6 +164,15 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
 }): Promise<boolean> {
   const email = normalizeEmailForCompare(input.email || '');
   if (!email) return true;
+  const sessionId = String(input.metadata?.session_id || '').trim();
+  const userId = normalizeEmailForCompare(String(input.metadata?.user_id || ''));
+
+  const alreadyVerified = await EmailConfirmationService.isAccountEmailVerified({
+    email,
+    sessionId,
+    userId,
+  });
+  if (alreadyVerified) return true;
 
   try {
     const confirmation = await EmailConfirmationService.requireVerified({
@@ -186,6 +195,12 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
       return false;
     }
 
+    await EmailConfirmationService.markAccountEmailVerified({
+      email,
+      sessionId,
+      userId,
+      source: input.purpose === 'login' ? 'email_confirmation_login' : 'email_confirmation_create_account',
+    });
     return true;
   } catch (error: any) {
     if (error instanceof EmailConfirmationError) {
@@ -935,6 +950,9 @@ export class ExternalController {
         user_id: targetUserId,
         email: targetEmail,
         public_key: wallet?.public_key || undefined,
+        email_verified: Boolean(confirmationEmail),
+        email_verified_at: confirmationEmail ? new Date().toISOString() : undefined,
+        email_verification_source: confirmationEmail ? 'email_confirmation_login' : undefined,
       } as any);
 
       await supabase

@@ -47,7 +47,13 @@ function mockRouteIntent(graph: any, toolName: string) {
     tool_calls: [{
       id: `call_${toolName}`,
       name: toolName,
-      args: { confidence: 0.99, reason: 'test route' },
+      args: {
+        confidence: 0.99,
+        reason: 'test route',
+        needs_clarification: false,
+        language: 'pt-BR',
+        risk: toolName === 'route_general_intent' ? 'low' : 'high',
+      },
     }],
   });
   graph.llm = {
@@ -82,6 +88,7 @@ type RouterEvalCase = {
   expectedIntent: IntentType;
   risk?: 'low' | 'medium' | 'high';
   language?: 'pt-BR' | 'en';
+  needsClarification?: boolean;
 };
 
 function flattenMessageContent(value: any): string {
@@ -174,7 +181,13 @@ describe('Agent production evals', () => {
       tool_calls: [{
         id: 'intent-call-1',
         name: 'route_balance_intent',
-        args: { confidence: 0.98, reason: 'saldo typo' },
+        args: {
+          confidence: 0.98,
+          reason: 'saldo typo',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'low',
+        },
       }],
     });
     graph.llm = {
@@ -638,7 +651,7 @@ describe('Agent production evals', () => {
             id: 'call_reset_pin',
             function: {
               name: 'route_reset_pin_intent',
-              arguments: '{"confidence":0.99,"reason":"change pin"}',
+              arguments: '{"confidence":0.99,"reason":"change pin","needs_clarification":false,"language":"pt-BR","risk":"high"}',
             },
           },
         ],
@@ -696,6 +709,31 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
+  it('keeps web chat logout local so it does not disconnect WhatsApp or Telegram', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_wallet_logout_intent');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    try {
+      const result = await graph.processInput(createState('deslogar dessa conta'));
+
+      expect(routerInvoke).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.WALLET_LOGOUT);
+      expect(result.action_type).toBe(ActionType.LOGOUT_WALLET);
+      expect(result.response_message).toContain('só deste navegador');
+      expect(result.response_message).toContain('https://app.example.com/logout?source=web');
+      expect(result.response_message).toContain('não desconecta WhatsApp ou Telegram');
+      expect(result.response_message).not.toContain('token=');
+      expect(executeToolMock).not.toHaveBeenCalledWith('logout_session', expect.anything());
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('documents broad LLM route boundaries without hardcoded payment examples', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
     const prompt = graph.buildIntentRouterPrompt();
@@ -708,9 +746,56 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
     expect(prompt).toContain('route_general_intent is not a fallback for failed understanding');
     expect(prompt).toContain('Priority order when multiple intents appear');
+    expect(prompt).toContain('"pra fora do pix", "fora em pix", "sair para meu pix"');
+    expect(prompt).toContain('"mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN"');
+    expect(prompt).toContain('Missing recipient for payment does not make it general');
     expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
     expect(prompt).not.toContain('quero mandar 10 xlm pra ana silva');
     expect(prompt).not.toContain('uero redefinir o pin ->');
+  });
+
+  it('exposes route tool descriptions with explicit edge-case boundaries', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_general',
+        name: 'route_general_intent',
+        args: {
+          confidence: 0.95,
+          reason: 'schema inspection',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'low',
+        },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    await graph.detectIntent('olá');
+
+    const tools = graph.llm.bindTools.mock.calls[0][0];
+    const descriptionByName = Object.fromEntries(
+      tools.map((tool: any) => [tool.function?.name, tool.function?.description || ''])
+    );
+    const requiredByName = Object.fromEntries(
+      tools.map((tool: any) => [tool.function?.name, tool.function?.parameters?.required || []])
+    );
+
+    expect(Object.keys(descriptionByName)).toHaveLength(new Set(Object.keys(descriptionByName)).size);
+    for (const required of Object.values(requiredByName) as string[][]) {
+      expect(required).toEqual(['confidence', 'reason', 'needs_clarification', 'language', 'risk']);
+    }
+    expect(descriptionByName.route_pix_intent).toContain('mandar pra fora');
+    expect(descriptionByName.route_pix_intent).toContain('destination is the user own PIX/bank exit');
+    expect(descriptionByName.route_payment_intent).toContain('must not become general help');
+    expect(descriptionByName.route_payment_intent).toContain('when PIX is not the requested rail');
+    expect(descriptionByName.route_payment_link_intent).toContain('does not require an existing contact');
+    expect(descriptionByName.route_price_quote_intent).toContain('needs_clarification=true');
+    expect(descriptionByName.route_reset_pin_intent).toContain('redefimir');
+    expect(descriptionByName.route_general_intent).toContain('Never use for actionable product requests');
   });
 
   describe('LLM intent router contract matrix', () => {
@@ -718,57 +803,86 @@ describe('Agent production evals', () => {
       { name: 'balance typo', input: 'quero ver meu sald9', expectedIntent: IntentType.BALANCE, risk: 'low' },
       { name: 'balance natural', input: 'quanto eu tenho na conta agora?', expectedIntent: IntentType.BALANCE, risk: 'low' },
       { name: 'balance xlm', input: 'mostra meu saldo em xlm', expectedIntent: IntentType.BALANCE, risk: 'low' },
+      { name: 'balance typo zero', input: 'mostra meu sald0 total', expectedIntent: IntentType.BALANCE, risk: 'low' },
+      { name: 'balance mixed with available', input: 'quanto tenho disponivel em usdc?', expectedIntent: IntentType.BALANCE, risk: 'low' },
       { name: 'contacts list', input: 'quero ver meus contatos', expectedIntent: IntentType.CONTACTS, risk: 'low' },
       { name: 'contacts typo', input: 'lista meus conattos salvos', expectedIntent: IntentType.CONTACTS, risk: 'low' },
       { name: 'contacts add', input: 'adicionar rodrigobfcdog@gmail.com nos contatos', expectedIntent: IntentType.CONTACTS, risk: 'medium' },
+      { name: 'contacts beneficiaries', input: 'mostrar destinatarios salvos pra pagamento', expectedIntent: IntentType.CONTACTS, risk: 'low' },
       { name: 'payment typo contact', input: 'uero mandar 10 xlm pra ana silva', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment abbreviated contact', input: 'qro enviar 7 cetes para marina costa', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment email recipient', input: 'manda 3 usdc para rodrigo@example.com', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment cpf recipient', input: 'transferir 20 reais para 123.456.789-09', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment external wallet', input: 'enviar 5 xlm para carteira externa GDUMMYPUBLICKEY', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment missing amount still payment', input: 'quero mandar dinheiro para Ana Silva', expectedIntent: IntentType.PAYMENT, risk: 'high', needsClarification: true },
+      { name: 'payment key without pix', input: 'transferir 12 usdc para chave maria@example.com sem pix', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix off ramp bank wording', input: 'tirar 80 usdc pro meu banco', expectedIntent: IntentType.PIX, risk: 'high' },
       { name: 'pix off ramp own key', input: 'sacar 25 usdc para minha chave pix', expectedIntent: IntentType.PIX, risk: 'high' },
       { name: 'pix on ramp', input: 'colocar 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, risk: 'high' },
       { name: 'pix funded payment', input: 'pagar Ana via PIX', expectedIntent: IntentType.PIX, risk: 'high' },
       { name: 'pix typo off ramp', input: 'uero mandar 100 reais pra fora do pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix cost edge is quote', input: 'quanto custa sacar 100 usdc para meu pix?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'conversion explicit', input: 'quero converter 10 usdc pra brl', expectedIntent: IntentType.CONVERSION, risk: 'high' },
       { name: 'conversion generic', input: 'quero converter dinheiro', expectedIntent: IntentType.CONVERSION, risk: 'medium' },
       { name: 'conversion swap wording', input: 'trocar 50 reais para dólar', expectedIntent: IntentType.CONVERSION, risk: 'high' },
+      { name: 'conversion missing amount', input: 'trocar usdc para brl', expectedIntent: IntentType.CONVERSION, risk: 'medium', needsClarification: true },
       { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote fees', input: 'quanto custa enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote bank comparison', input: 'vale a pena comparado com o banco enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', needsClarification: true },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
+      { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield deposit', input: 'guardar 250 reais rendendo', expectedIntent: IntentType.YIELD, risk: 'high' },
       { name: 'yield position', input: 'quanto tenho rendendo em cetes?', expectedIntent: IntentType.YIELD, risk: 'low' },
+      { name: 'yield apply missing amount', input: 'quero investir', expectedIntent: IntentType.YIELD, risk: 'high', needsClarification: true },
       { name: 'history typo', input: 'quero ver meu historicp', expectedIntent: IntentType.HISTORY, risk: 'low' },
       { name: 'history receipts', input: 'listar meus comprovantes recentes', expectedIntent: IntentType.HISTORY, risk: 'low' },
       { name: 'history transactions', input: 'ver minhas movimentações', expectedIntent: IntentType.HISTORY, risk: 'low' },
+      { name: 'history latest five', input: 'mostrar minhas 5 últimas transações', expectedIntent: IntentType.HISTORY, risk: 'low' },
       { name: 'financial memory nicknames', input: 'quais apelidos eu salvei para pagamentos?', expectedIntent: IntentType.FINANCIAL_MEMORY, risk: 'low' },
       { name: 'financial memory savings', input: 'quanto eu economizei esse ano?', expectedIntent: IntentType.FINANCIAL_MEMORY, risk: 'low' },
       { name: 'reset pin typo', input: 'uero redefinir o pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin typo redefimir', input: 'quero redefimir o pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin change', input: 'quero alterar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin forgot', input: 'esqueci meu PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin invalid', input: 'meu pin nao funciona', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'payment link create', input: 'criar link de pagamento de 50 dólares', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link receive', input: 'quero meu link para receber dinheiro', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
+      { name: 'payment link charge customer', input: 'gerar link pra cobrar cliente 15 usdc', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'profile', input: 'quero ver meu perfil', expectedIntent: IntentType.WALLET, risk: 'low' },
       { name: 'wallet public info', input: 'qual minha chave de recebimento?', expectedIntent: IntentType.WALLET, risk: 'low' },
+      { name: 'wallet global profile', input: 'abrir meu perfil global', expectedIntent: IntentType.WALLET, risk: 'low' },
       { name: 'login', input: 'entrar na minha conta', expectedIntent: IntentType.LOGIN, risk: 'high' },
+      { name: 'login google', input: 'entrar com google', expectedIntent: IntentType.LOGIN, risk: 'high' },
       { name: 'onboard', input: 'quero criar uma conta nova', expectedIntent: IntentType.ONBOARD, risk: 'medium' },
+      { name: 'onboard google', input: 'criar conta com google', expectedIntent: IntentType.ONBOARD, risk: 'medium' },
       { name: 'logout', input: 'deslogar dessa conta', expectedIntent: IntentType.WALLET_LOGOUT, risk: 'high' },
+      { name: 'logout whatsapp', input: 'sair da sessao do whatsapp', expectedIntent: IntentType.WALLET_LOGOUT, risk: 'high' },
       { name: 'general greeting', input: 'olaaa', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'general capabilities', input: 'o que você consegue fazer?', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'general asset explanation', input: 'quais são os assets? explique cada um', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'general feature explanation', input: 'me explica como funciona o pix e os rendimentos', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'english balance', input: 'show my balance', expectedIntent: IntentType.BALANCE, risk: 'low', language: 'en' },
       { name: 'english payment', input: 'send 12 usdc to Ana Silva', expectedIntent: IntentType.PAYMENT, risk: 'high', language: 'en' },
+      { name: 'english pix withdraw', input: 'withdraw 20 usdc to my PIX key', expectedIntent: IntentType.PIX, risk: 'high', language: 'en' },
+      { name: 'english payment link', input: 'create a payment link for 20 dollars', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium', language: 'en' },
       { name: 'english pin', input: 'forgot my PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high', language: 'en' },
       { name: 'english help', input: 'what can you do?', expectedIntent: IntentType.GENERAL, risk: 'low', language: 'en' },
     ];
 
-    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, risk = 'medium', language = 'pt-BR' }) => {
+    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, risk = 'medium', language = 'pt-BR', needsClarification = false }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
       const expectedTool = routeToolByIntent[expectedIntent];
+      const routeArgs = {
+        confidence: 0.99,
+        reason: `eval expects ${expectedIntent}`,
+        needs_clarification: needsClarification,
+        language,
+        risk,
+      };
       const routerInvoke = jest.fn(async (messages: any[]) => {
         const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
 
@@ -780,13 +894,7 @@ describe('Agent production evals', () => {
           tool_calls: [{
             id: `call_${expectedTool}`,
             name: expectedTool,
-            args: {
-              confidence: 0.99,
-              reason: `eval expects ${expectedIntent}`,
-              needs_clarification: false,
-              language,
-              risk,
-            },
+            args: routeArgs,
           }],
         };
       });
@@ -799,6 +907,9 @@ describe('Agent production evals', () => {
       const detected = await graph.detectIntent(input);
 
       expect(detected).toBe(expectedIntent);
+      expect(routeArgs.needs_clarification).toBe(needsClarification);
+      expect(routeArgs.language).toBe(language);
+      expect(routeArgs.risk).toBe(risk);
       expect(routerInvoke).toHaveBeenCalledTimes(1);
       expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
       expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
@@ -823,7 +934,13 @@ describe('Agent production evals', () => {
       tool_calls: [{
         id: 'call_general',
         name: 'route_general_intent',
-        args: { confidence: 0.95, reason: 'broad capability question', language: 'pt-BR', risk: 'low' },
+        args: {
+          confidence: 0.95,
+          reason: 'broad capability question',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'low',
+        },
       }],
     });
     graph.llm = {
@@ -854,6 +971,8 @@ describe('Agent production evals', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('intent_router_unavailable');
     expect(result.response_message).toContain('instabilidade');
+    expect(result.response_message).toContain('ação, valor, moeda e destino');
+    expect(result.response_message).not.toMatch(/LLM|interpretador|acesso/i);
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
     expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
   });
@@ -870,6 +989,8 @@ describe('Agent production evals', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('intent_router_unavailable');
       expect(result.response_message).toContain('instabilidade');
+      expect(result.response_message).toContain('ação, valor, moeda e destino');
+      expect(result.response_message).not.toMatch(/LLM|interpretador|acesso/i);
       expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
       expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
     } finally {
@@ -885,7 +1006,13 @@ describe('Agent production evals', () => {
         {
           id: 'call_general',
           name: 'route_general_intent',
-          args: { confidence: 0.2, reason: 'too broad', needs_clarification: true },
+          args: {
+            confidence: 0.2,
+            reason: 'too broad',
+            needs_clarification: true,
+            language: 'pt-BR',
+            risk: 'low',
+          },
         },
         {
           id: 'call_balance',
@@ -1029,6 +1156,82 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('10 XLM');
     expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('/confirm-payment?');
+    expect(result.response_message).toContain('Gerei o link de confirmação da forma mais otimizada');
+    expect(result.response_message).not.toMatch(/confirmar o saldo|saldo suficiente|taxa estimada|indispon[ií]vel/i);
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('asks one specific payment clarification instead of showing the generic menu', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+    graph.llm.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        recipient_query: 'Ana Silva',
+        amount: '',
+        asset_code: '',
+        receive_asset_code: '',
+        category: '',
+        memo: '',
+        is_payment_link: false,
+        needs_clarification: true,
+        clarification_question: '',
+      }),
+    });
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for a clear payment intent');
+      }
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('quero mandar dinheiro para Ana Silva'));
+
+    expect(routerInvoke).toHaveBeenCalledTimes(1);
+    expect(graph.llm.invoke).toHaveBeenCalledTimes(1);
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(result.success).toBe(false);
+    expect(result.response_message).toContain('Destino entendido: Ana Silva');
+    expect(result.response_message).toContain('Falta só completar o envio');
+    expect(result.response_message).toContain('valor e moeda');
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+  });
+
+  it('keeps payment clarification in English when the session language is English', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_payment_intent');
+    graph.llm.invoke.mockResolvedValue({
+      content: JSON.stringify({
+        recipient_query: 'Ana Silva',
+        amount: '',
+        asset_code: '',
+        receive_asset_code: '',
+        is_payment_link: false,
+        needs_clarification: true,
+        clarification_question: '',
+      }),
+    });
+
+    const state = createState('send money to Ana Silva');
+    state.action_params = {
+      ...state.action_params,
+      language: 'en',
+    };
+
+    const result = await graph.processInput(state);
+
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.success).toBe(false);
+    expect(result.response_message).toContain('Recipient understood: Ana Silva');
+    expect(result.response_message).toContain('amount and currency');
+    expect(result.response_message).toContain('send 3 USDC to Ana Silva');
+    expect(result.response_message).not.toContain('Falta só');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
@@ -1127,6 +1330,40 @@ describe('Agent production evals', () => {
     }
   });
 
+  it('routes outside-PIX wording to off-ramp copy and URL instead of on-ramp copy', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_intent');
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState('quero mandar pra fora 50 reais em pix'));
+
+      expect(routerInvoke).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('/pix-off?');
+      expect(result.response_message).toContain('mode=offramp');
+      expect(result.response_message).toContain('fiat_amount=50');
+      expect(result.response_message).toContain('source_amount=50');
+      expect(result.response_message).toContain('Para retirar');
+      expect(result.response_message).toContain('quanto chega em reais no seu PIX');
+      expect(result.response_message).not.toContain('/pix-on?');
+      expect(result.response_message).not.toContain('o PIX a pagar');
+      expect(result.response_message).not.toContain('Posso ajudar com:');
+      expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('extracts OpenAI function tool calls from additional kwargs', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'production prompt') as any;
 
@@ -1163,7 +1400,7 @@ describe('Agent production evals', () => {
             id: 'call_conversion',
             function: {
               name: 'route_conversion_intent',
-              arguments: '{"confidence":0.96,"reason":"explicit conversion"}',
+              arguments: '{"confidence":0.96,"reason":"explicit conversion","needs_clarification":false,"language":"pt-BR","risk":"high"}',
             },
           },
         ],
@@ -1213,6 +1450,49 @@ describe('Agent production evals', () => {
       dest_asset_code: 'TESOURO',
     }));
     expect(result.response_message).toContain('/confirm-conversion?');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+    expect(result.response_message).not.toContain('Diga o que quer fazer');
+  });
+
+  it('opens the conversion selector for generic conversion requests instead of generic help', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_conversion_intent');
+    graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({
+      sourceAmount: '',
+      sourceAssetCode: '',
+      destAssetCode: '',
+      needs_clarification: true,
+      clarification_question: '',
+    });
+
+    executeToolMock.mockImplementation(async (name: string, args: any) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for a clear conversion intent');
+      }
+      if (name === 'open_conversion_interface') {
+        return JSON.stringify({
+          success: true,
+          frontend_url: `https://app.example.com/convert?source=${args.source_asset_code}&dest=${args.dest_asset_code}`,
+        });
+      }
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('quero converter dinheiro'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.CONVERSION);
+    expect(result.action_type).toBe(ActionType.CONVERT_ASSETS);
+    expect(executeToolMock).toHaveBeenCalledWith('open_conversion_interface', expect.objectContaining({
+      source_asset_code: 'BRL',
+      dest_asset_code: 'USDC',
+      language: 'pt-BR',
+    }));
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    expect(result.response_message).toContain('Abra a tela de conversão');
+    expect(result.response_message).toContain('/convert?');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
     expect(result.response_message).not.toContain('Diga o que quer fazer');
   });

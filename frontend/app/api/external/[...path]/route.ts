@@ -5,6 +5,7 @@ import {
   buildSessionHeaders,
   passthroughResponseWithSession,
   readSessionCookies,
+  requestSessionSourceFromBody,
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
@@ -131,10 +132,11 @@ async function proxy(req: NextRequest, path: string[]) {
   const qs = req.nextUrl.searchParams.toString();
   const target = `${backendBase}/api/external/${pathText}${qs ? `?${qs}` : ""}`;
   const rawBody = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
+  const requestSource = requestSessionSourceFromBody(req, rawBody);
   const body = augmentJsonBodyWithSession(rawBody, req);
   const inboundIdempotencyKey = req.headers.get("Idempotency-Key");
   const isShortLinkCreate = req.method === "POST" && pathText === "short-links";
-  const session = readSessionCookies(req);
+  const session = readSessionCookies(req, requestSource);
 
   if (isShortLinkCreate) {
     const validationError = validateShortLinkPayload(body || "", req.nextUrl.origin);
@@ -147,7 +149,7 @@ async function proxy(req: NextRequest, path: string[]) {
     "content-type": req.headers.get("content-type") || "application/json",
     "x-frontend-origin": req.nextUrl.origin,
     "x-request-id": requestId,
-    ...buildSessionHeaders(req),
+    ...buildSessionHeaders(req, requestSource),
   };
   if (inboundIdempotencyKey) {
     headers["Idempotency-Key"] = inboundIdempotencyKey;
@@ -197,7 +199,7 @@ async function proxy(req: NextRequest, path: string[]) {
     }
     const sanitized = sanitizeBackendErrorResponse(text, res.status, contentType, requestId);
     if (sanitized) return sanitized;
-    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json");
+    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
     response.headers.set("x-request-id", requestId);
     return response;
   } catch (error: any) {
