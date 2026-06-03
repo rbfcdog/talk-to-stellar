@@ -1008,6 +1008,21 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_all_pair_quotes",
+    description: "Mostra a matriz completa de cotações atuais pela melhor rota entre todos os ativos configurados do TalkToStellar. Use quando o usuário pedir todas as cotações, todas as taxas, tabela de câmbio, matriz de conversão, preços de todos os ativos, ou algo como 'uero ver todas as cotacoes aqui'. Retorna os 16 pares de BRL, USDC, CETES e XLM. Não executa transação e não pede PIN.",
+    parameters: {
+      type: "object",
+      properties: {
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Idioma da resposta.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_explanations",
     description: "Returns detailed explanations about TalkToStellar features, assets, earnings, PIX, and how things work. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept. For 'quais sao os assets', 'explique os ativos/moedas', or asset questions, call this with topic='assets' instead of returning the generic help menu.",
     parameters: {
@@ -2122,6 +2137,8 @@ export async function executeTool(
         return await executeGetBrlUsdcQuote();
       case "get_pair_quote":
         return await executeGetPairQuote(toolInput);
+      case "get_all_pair_quotes":
+        return await executeGetAllPairQuotes(toolInput);
       case "get_explanations":
         return await executeGetExplanations(toolInput);
       case "get_yield_options":
@@ -2774,6 +2791,81 @@ async function executeGetPairQuote(input: any): Promise<string> {
         language === 'en'
           ? 'I could not load this quote right now. Try again in a few seconds.'
           : 'Não consegui carregar essa cotação agora. Tente novamente em alguns segundos.'
+      ),
+    });
+  }
+}
+
+function allPairQuoteRouteLabel(cell: any, language: 'pt-BR' | 'en'): string {
+  if (cell?.status === 'synthetic' && cell?.bridge_asset_code) {
+    return language === 'en' ? `via ${cell.bridge_asset_code}` : `via ${cell.bridge_asset_code}`;
+  }
+  if (cell?.status === 'fallback') {
+    return language === 'en' ? 'market ref.' : 'ref. mercado';
+  }
+  if (cell?.status === 'same_asset') {
+    return language === 'en' ? 'same asset' : 'mesmo ativo';
+  }
+  if (cell?.status === 'available') {
+    return language === 'en' ? 'best route' : 'melhor rota';
+  }
+  return language === 'en' ? 'unavailable' : 'indisponível';
+}
+
+async function executeGetAllPairQuotes(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  const assets = ['BRL', 'USDC', 'CETES', 'XLM'];
+
+  try {
+    const matrixPayload = await ConversionRateMatrixService.buildMatrix({
+      assets,
+      sampleAmount: '100',
+    });
+
+    const visibleCells = assets.flatMap((sourceAssetCode) => (
+      assets.map((destAssetCode) => matrixPayload.matrix?.[sourceAssetCode]?.[destAssetCode]).filter(Boolean)
+    ));
+    const lines = visibleCells.map((cell: any) => {
+      if (!cell?.rate || cell?.status === 'unavailable') {
+        return `${cell?.source_asset_code || '-'} -> ${cell?.destination_asset_code || '-'}: ${language === 'en' ? 'unavailable' : 'indisponível'}`;
+      }
+
+      const sourceDisplay = displayPairQuoteAmount('1', cell.source_asset_code);
+      const destinationDisplay = displayPairQuoteAmount(cell.rate, cell.destination_asset_code);
+      return `${sourceDisplay} -> ${destinationDisplay} (${allPairQuoteRouteLabel(cell, language)})`;
+    });
+
+    const message = language === 'en'
+      ? [
+          `Current quotes by best route (${matrixPayload.network.toLowerCase()}):`,
+          ...lines,
+          `Generated at: ${matrixPayload.generated_at}.`,
+          'These are dynamic estimates for the configured assets. Nothing is executed without opening confirmation and entering PIN.',
+        ].join('\n')
+      : [
+          `Cotações atuais pela melhor rota (${matrixPayload.network.toLowerCase()}):`,
+          ...lines,
+          `Gerado em: ${matrixPayload.generated_at}.`,
+          'Essas são estimativas dinâmicas para os ativos configurados. Nada é executado sem abrir a confirmação e digitar o PIN.',
+        ].join('\n');
+
+    return JSON.stringify({
+      success: true,
+      network: matrixPayload.network,
+      assets,
+      generated_at: matrixPayload.generated_at,
+      summary: matrixPayload.summary,
+      pairs: visibleCells,
+      message,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: publicErrorMessage(
+        error,
+        language === 'en'
+          ? 'I could not load all quotes right now. Try again in a few seconds.'
+          : 'Não consegui carregar todas as cotações agora. Tente novamente em alguns segundos.'
       ),
     });
   }

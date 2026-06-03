@@ -441,6 +441,53 @@ describe('Agent tool execution', () => {
     }
   });
 
+  it('executes get_all_pair_quotes with the full dynamic matrix', async () => {
+    const quoteSpy = jest
+      .spyOn(apiStellarService, 'quoteStrictSendConversion')
+      .mockImplementation(async ({ sourceAsset, destAsset, sourceAmount }: any) => {
+        const source = String(sourceAsset?.code || '').toUpperCase() === 'TESOURO' ? 'BRL' : String(sourceAsset?.code || '').toUpperCase();
+        const destination = String(destAsset?.code || '').toUpperCase() === 'TESOURO' ? 'BRL' : String(destAsset?.code || '').toUpperCase();
+        const rates: Record<string, number> = {
+          'XLM->USDC': 0.2,
+          'USDC->XLM': 5,
+          'CETES->USDC': 0.1,
+          'USDC->CETES': 10,
+        };
+        const rate = rates[`${source}->${destination}`];
+        if (!rate) throw new Error(`No direct route for ${source}->${destination}`);
+        const amount = Number(String(sourceAmount || '0').replace(',', '.'));
+        return {
+          sourceAmount: amount.toFixed(7),
+          destinationAmount: (amount * rate).toFixed(7),
+          sourceAsset,
+          destinationAsset: destAsset,
+          destinationMin: (amount * rate * 0.99).toFixed(7),
+          path: [],
+          platformFee: { enabled: false, feeAmount: '0', feeAssetCode: source, feeBps: 0 },
+          networkFeeXlm: '0.0000100',
+        };
+      });
+
+    try {
+      const output = await executeTool('get_all_pair_quotes', {
+        language: 'pt-BR',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.assets).toEqual(['BRL', 'USDC', 'CETES', 'XLM']);
+      expect(parsed.summary.total_pairs).toBe(16);
+      expect(parsed.pairs).toHaveLength(16);
+      expect(parsed.message).toContain('Cotações atuais pela melhor rota');
+      expect(parsed.message).toContain('R$ 1.00 -> US$');
+      expect(parsed.message).toContain('1 XLM ->');
+      expect(parsed.message).toContain('1 CETES ->');
+      expect(parsed.message).toContain('Nada é executado sem abrir a confirmação e digitar o PIN');
+    } finally {
+      quoteSpy.mockRestore();
+    }
+  });
+
   it('uses exact-target pricing for market price pair quotes', async () => {
     const quoteSpy = jest
       .spyOn(apiStellarService, 'quotePathPayment')

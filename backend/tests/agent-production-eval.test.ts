@@ -94,6 +94,7 @@ type RouterEvalCase = {
   expectedSourceAssetCode?: string;
   expectedDestAssetCode?: string;
   expectedQuoteMode?: 'market_price' | 'send_exact';
+  expectedAllQuotes?: boolean;
 };
 
 function flattenMessageContent(value: any): string {
@@ -542,6 +543,50 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Fonte: saldo em reais da sua conta');
   });
 
+  it('calls the all-pair quote tool when the LLM route asks for every quote', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_route_price_quote_intent',
+        name: 'route_price_quote_intent',
+        args: {
+          confidence: 0.99,
+          reason: 'all configured quotes',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'medium',
+          all_quotes: true,
+        },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+    executeToolMock.mockResolvedValueOnce(JSON.stringify({
+      success: true,
+      message: [
+        'Cotações atuais pela melhor rota (testnet):',
+        'R$ 1.00 -> US$ 0.19 (melhor rota)',
+        '1 XLM -> R$ 2.87 (melhor rota)',
+        'Nada é executado sem abrir a confirmação e digitar o PIN.',
+      ].join('\n'),
+    }));
+
+    const result = await graph.processInput(createState('uero ver todas as cotacoes aqui'));
+
+    expect(executeToolMock).toHaveBeenCalledTimes(1);
+    expect(executeToolMock).toHaveBeenCalledWith('get_all_pair_quotes', {
+      language: 'pt-BR',
+    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_brl_usdc_quote', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Cotações atuais pela melhor rota');
+    expect(result.response_message).not.toContain('1 US$ = R$');
+    expect(result.response_message).not.toContain('Fonte: saldo em reais da sua conta');
+  });
+
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
@@ -944,6 +989,8 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_price_quote_intent).toContain('BRL para CETES');
     expect(descriptionByName.route_price_quote_intent).toContain('single-asset quote');
     expect(descriptionByName.route_price_quote_intent).toContain('uero ver a cotacao do cetes');
+    expect(descriptionByName.route_price_quote_intent).toContain('all_quotes=true');
+    expect(descriptionByName.route_price_quote_intent).toContain('uero ver todas as cotacoes aqui');
     expect(descriptionByName.route_reset_pin_intent).toContain('redefimir');
     expect(descriptionByName.route_general_intent).toContain('Never use for actionable product requests');
     const priceQuoteProperties = tools.find((tool: any) => tool.function?.name === 'route_price_quote_intent')?.function?.parameters?.properties || {};
@@ -953,6 +1000,8 @@ describe('Agent production evals', () => {
     expect(priceQuoteProperties.dest_asset_code.description).toContain('default to BRL');
     expect(priceQuoteProperties.quote_mode.description).toContain('market_price');
     expect(priceQuoteProperties.quote_mode.description).toContain('send_exact');
+    expect(priceQuoteProperties.all_quotes.description).toContain('all quotes');
+    expect(priceQuoteProperties.all_quotes.description).toContain('uero ver todas as cotacoes aqui');
   });
 
   it('routes multi-turn PIX-funded CETES contact payment using recent conversation context', async () => {
@@ -1068,6 +1117,7 @@ describe('Agent production evals', () => {
       { name: 'price quote xlm cost in brl', input: 'quanto custa 100 XLM em reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
       { name: 'price quote cetes single asset typo', input: 'uero ver a cotacao do cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
       { name: 'price quote cetes single asset natural', input: 'cotação do CETES agora', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
+      { name: 'price quote all pairs typo', input: 'uero ver todas as cotacoes aqui', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAllQuotes: true },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },
@@ -1127,6 +1177,7 @@ describe('Agent production evals', () => {
       expectedSourceAssetCode,
       expectedDestAssetCode,
       expectedQuoteMode,
+      expectedAllQuotes,
     }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
       const expectedTool = caseExpectedTool || routeToolByIntent[expectedIntent];
@@ -1140,6 +1191,7 @@ describe('Agent production evals', () => {
         ...(expectedSourceAssetCode ? { source_asset_code: expectedSourceAssetCode } : {}),
         ...(expectedDestAssetCode ? { dest_asset_code: expectedDestAssetCode } : {}),
         ...(expectedQuoteMode ? { quote_mode: expectedQuoteMode } : {}),
+        ...(expectedAllQuotes ? { all_quotes: true } : {}),
       };
       const routerInvoke = jest.fn(async (messages: any[]) => {
         const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
@@ -1172,6 +1224,7 @@ describe('Agent production evals', () => {
       if (expectedSourceAssetCode) expect(routeArgs.source_asset_code).toBe(expectedSourceAssetCode);
       if (expectedDestAssetCode) expect(routeArgs.dest_asset_code).toBe(expectedDestAssetCode);
       if (expectedQuoteMode) expect(routeArgs.quote_mode).toBe(expectedQuoteMode);
+      if (expectedAllQuotes) expect(routeArgs.all_quotes).toBe(true);
       const expectedRouterCalls = expectedIntent === IntentType.CONTACTS || expectedTool === 'route_pix_onramp_intent' ? 2 : 1;
       expect(routerInvoke).toHaveBeenCalledTimes(expectedRouterCalls);
       expect(graph.llm.bindTools).toHaveBeenCalledTimes(expectedRouterCalls);
