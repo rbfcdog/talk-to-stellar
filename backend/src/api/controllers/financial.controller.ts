@@ -20,120 +20,16 @@ import { BrlReferenceRateService } from '../services/brl-reference-rate.service'
 import { timingSafeEqualString } from '../../utils/password';
 import { publicErrorMessage } from '../../utils/public-error';
 import { mainnetWalletService } from '../services/mainnet-wallet.service';
-import { FiatRateService, FiatUsdBrlQuote } from '../services/fiat-rate.service';
-import {
-  computeUsdBrlMarketDeviationPct,
-  getUsdBrlMaxMarketDeviationPct,
-} from '../services/quote-rate-sanity.service';
 import { attachQuoteExpiry, quoteTtlSeconds } from '../services/quote-expiry.service';
 import { UserResearchEvidenceService } from '../services/user-research-log.service';
 import { ConversionRateMatrixService } from '../services/conversion-rate-matrix.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
-const DEFAULT_USD_BRL_SANITY_MIN = 3;
-const DEFAULT_USD_BRL_SANITY_MAX = 10;
 
 function toPositiveNumber(value: unknown, fallback = 0): number {
   const parsed = Number(String(value ?? '').replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function configuredPositiveNumber(keys: string[], fallback: number): number {
-  for (const key of keys) {
-    const value = toPositiveNumber(process.env[key], 0);
-    if (value > 0) return value;
-  }
-  return fallback;
-}
-
-function configuredUsdBrlFallback(): { value: number; source: string } {
-  if (!/^(1|true|yes)$/i.test(String(process.env.ALLOW_USD_BRL_ENV_FALLBACK || '').trim())) {
-    return { value: 0, source: '' };
-  }
-  for (const key of ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']) {
-    const value = toPositiveNumber(process.env[key], 0);
-    if (value > 0) return { value, source: `env:${key}` };
-  }
-  return { value: 0, source: '' };
-}
-
-function resolveUsdBrlPreviewRate(rawBrlPerUsdc: number, marketQuote?: FiatUsdBrlQuote | null): {
-  brlPerUsdc: number;
-  fallbackApplied: boolean;
-  fallbackReason?: string;
-  source?: string;
-  marketDeviationPct?: number;
-} {
-  const fallbackRate = configuredUsdBrlFallback();
-  const minRate = configuredPositiveNumber(
-    ['USD_BRL_SANITY_MIN', 'DEFAULT_USD_BRL_SANITY_MIN'],
-    DEFAULT_USD_BRL_SANITY_MIN,
-  );
-  const maxRate = configuredPositiveNumber(
-    ['USD_BRL_SANITY_MAX', 'DEFAULT_USD_BRL_SANITY_MAX'],
-    DEFAULT_USD_BRL_SANITY_MAX,
-  );
-
-  if (!Number.isFinite(rawBrlPerUsdc) || rawBrlPerUsdc <= 0) {
-    if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
-      return {
-        brlPerUsdc: marketQuote.brlPerUsd,
-        fallbackApplied: true,
-        fallbackReason: 'missing_or_invalid_brl_usdc_quote_market_reference',
-        source: marketQuote.source,
-      };
-    }
-    if (fallbackRate.value <= 0) {
-      throw new Error('Cotação USD/BRL indisponível no momento.');
-    }
-    return {
-      brlPerUsdc: fallbackRate.value,
-      fallbackApplied: true,
-      fallbackReason: 'missing_or_invalid_brl_usdc_quote',
-      source: fallbackRate.source,
-    };
-  }
-
-  if (rawBrlPerUsdc < minRate || rawBrlPerUsdc > maxRate) {
-    if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
-      return {
-        brlPerUsdc: marketQuote.brlPerUsd,
-        fallbackApplied: true,
-        fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds_market_reference',
-        source: marketQuote.source,
-      };
-    }
-    if (fallbackRate.value <= 0) {
-      throw new Error('Cotação USD/BRL indisponível no momento.');
-    }
-    return {
-      brlPerUsdc: fallbackRate.value,
-      fallbackApplied: true,
-      fallbackReason: 'brl_usdc_quote_outside_fiat_sanity_bounds',
-      source: fallbackRate.source,
-    };
-  }
-
-  if (marketQuote?.brlPerUsd && marketQuote.brlPerUsd >= minRate && marketQuote.brlPerUsd <= maxRate) {
-    const deviationPct = computeUsdBrlMarketDeviationPct(rawBrlPerUsdc, marketQuote.brlPerUsd);
-    const maxDeviationPct = getUsdBrlMaxMarketDeviationPct();
-    if (deviationPct > maxDeviationPct) {
-      return {
-        brlPerUsdc: marketQuote.brlPerUsd,
-        fallbackApplied: true,
-        fallbackReason: 'brl_usdc_quote_deviates_from_usd_brl_market_reference',
-        source: marketQuote.source,
-        marketDeviationPct: deviationPct,
-      };
-    }
-  }
-
-  return {
-    brlPerUsdc: rawBrlPerUsdc,
-    fallbackApplied: false,
-    source: 'configured_tesouro_asset',
-  };
 }
 
 function sessionAndUser(req: Request): { sessionId?: string; userId?: string } {
@@ -206,20 +102,18 @@ export class FinancialController {
       .trim();
     const brlAmount = Math.max(0, toPositiveNumber(rawAmount, 1000));
     let grossQuote: any = null;
-    let quoteFailureReason = '';
     try {
       grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(brlAmount.toFixed(7));
     } catch (error: any) {
-      quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
+      throw new Error(error?.message || String(error || 'BRL/USDC quote unavailable'));
     }
     const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
-    const marketQuote = await FiatRateService.getUsdBrlRate().catch(() => null);
-    const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc, marketQuote);
-    const brlPerUsdc = rate.brlPerUsdc;
+    if (rawBrlPerUsdc <= 0) {
+      throw new Error('Cotação BRL/USDC indisponível no momento.');
+    }
+    const brlPerUsdc = rawBrlPerUsdc;
     const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
-    const grossUsdc = brlPerUsdc > 0
-      ? brlAmount / brlPerUsdc
-      : toPositiveNumber(grossQuote.destinationAmount, 0);
+    const grossUsdc = toPositiveNumber(grossQuote.destinationAmount, 0);
 
     const spread = PlatformFeeService.calculateSpread({
       sourceAmount: brlAmount.toFixed(7),
@@ -235,16 +129,14 @@ export class FinancialController {
     const netBrl = Math.max(0, brlAmount - spreadBrl);
     const spreadUsdc = spreadBrl * usdcPerBrl;
     let receiveQuote: any = null;
-    if (netBrl > 0 && !rate.fallbackApplied) {
+    if (netBrl > 0) {
       try {
         receiveQuote = await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7));
       } catch {
         receiveQuote = null;
       }
     }
-    const receiveUsdc = rate.fallbackApplied
-      ? netBrl * usdcPerBrl
-      : (receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : netBrl * usdcPerBrl);
+    const receiveUsdc = receiveQuote ? toPositiveNumber(receiveQuote.destinationAmount, 0) : netBrl * usdcPerBrl;
 
     const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
     const networkFeeBrl = toPositiveNumber(networkFee.fee_brl, 0);
@@ -266,18 +158,11 @@ export class FinancialController {
       quote: {
         brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
         usdc_per_brl: Number(usdcPerBrl.toFixed(6)),
-        source: rate.fallbackApplied ? (rate.source || 'usd_brl_sanity_fallback') : grossQuote.source,
+        source: grossQuote.source,
         symbol: grossQuote?.symbol || 'USDC/BRL',
         path: grossQuote?.path || [],
         source_asset: grossQuote?.sourceAsset || { code: 'TESOURO', issuer: getAssetIssuer('TESOURO') },
         destination_asset: grossQuote?.destinationAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
-        ...(rate.fallbackApplied ? {
-          fallback_reason: rate.fallbackReason,
-          quote_failure_reason: quoteFailureReason || undefined,
-          raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
-          market_deviation_pct: rate.marketDeviationPct ? Number(rate.marketDeviationPct.toFixed(4)) : undefined,
-          market_fetched_at: marketQuote?.fetchedAt,
-        } : {}),
       },
       output: {
         gross_receive_usdc: Number(grossUsdc.toFixed(4)),
@@ -333,19 +218,17 @@ export class FinancialController {
         .trim();
       const usdcAmount = Math.max(0, toPositiveNumber(rawAmount, 1));
       let grossQuote: any = null;
-      let quoteFailureReason = '';
       try {
         grossQuote = await BrlReferenceRateService.quoteUsdcToBrl(usdcAmount.toFixed(7));
       } catch (error: any) {
-        quoteFailureReason = error?.message || String(error || 'BRL/USDC quote unavailable');
+        throw new Error(error?.message || String(error || 'BRL/USDC quote unavailable'));
       }
       const rawBrlPerUsdc = toPositiveNumber(grossQuote?.brlPerUsdc, 0);
-      const marketQuote = await FiatRateService.getUsdBrlRate().catch(() => null);
-      const rate = resolveUsdBrlPreviewRate(rawBrlPerUsdc, marketQuote);
-      const brlPerUsdc = rate.brlPerUsdc;
-      const estimatedBrl = rate.fallbackApplied
-        ? usdcAmount * brlPerUsdc
-        : toPositiveNumber(grossQuote?.destinationAmount, usdcAmount * brlPerUsdc);
+      if (rawBrlPerUsdc <= 0) {
+        throw new Error('Cotação BRL/USDC indisponível no momento.');
+      }
+      const brlPerUsdc = rawBrlPerUsdc;
+      const estimatedBrl = toPositiveNumber(grossQuote?.destinationAmount, usdcAmount * brlPerUsdc);
 
       const spread = PlatformFeeService.calculateSpread({
         sourceAmount: estimatedBrl.toFixed(7),
@@ -367,18 +250,11 @@ export class FinancialController {
         quote: {
           brl_per_usdc: Number(brlPerUsdc.toFixed(6)),
           usdc_per_brl: Number((brlPerUsdc > 0 ? 1 / brlPerUsdc : 0).toFixed(8)),
-          source: rate.fallbackApplied ? (rate.source || 'usd_brl_sanity_fallback') : grossQuote.source,
+          source: grossQuote.source,
           symbol: grossQuote?.symbol || 'USDC/BRL',
           path: grossQuote?.path || [],
           source_asset: grossQuote?.sourceAsset || { code: 'USDC', issuer: getAssetIssuer('USDC') },
           destination_asset: grossQuote?.destinationAsset || { code: 'TESOURO', issuer: getAssetIssuer('TESOURO') },
-          ...(rate.fallbackApplied ? {
-            fallback_reason: rate.fallbackReason,
-            quote_failure_reason: quoteFailureReason || undefined,
-            raw_brl_per_usdc: Number(rawBrlPerUsdc.toFixed(6)),
-            market_deviation_pct: rate.marketDeviationPct ? Number(rate.marketDeviationPct.toFixed(4)) : undefined,
-            market_fetched_at: marketQuote?.fetchedAt,
-          } : {}),
         },
         output: {
           estimated_brl: Number(estimatedBrl.toFixed(2)),

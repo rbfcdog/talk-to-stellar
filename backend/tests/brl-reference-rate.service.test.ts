@@ -4,19 +4,11 @@ jest.mock('../src/config/stellar', () => ({
   },
 }));
 
-jest.mock('../src/api/services/fiat-rate.service', () => ({
-  FiatRateService: {
-    getUsdBrlRate: jest.fn(),
-  },
-}));
-
 import { Asset } from '@stellar/stellar-sdk';
 import { server } from '../src/config/stellar';
 import { BrlReferenceRateService } from '../src/api/services/brl-reference-rate.service';
-import { FiatRateService } from '../src/api/services/fiat-rate.service';
 
 const strictSendPathsMock = server.strictSendPaths as jest.Mock;
-const getUsdBrlRateMock = FiatRateService.getUsdBrlRate as jest.Mock;
 
 describe('BrlReferenceRateService', () => {
   const originalEnv = { ...process.env };
@@ -30,13 +22,6 @@ describe('BrlReferenceRateService', () => {
     process.env.TESOURO_ISSUER = tesouroIssuer;
     process.env.BRL_USDC_REFERENCE_SAMPLE_USDC = '100';
     strictSendPathsMock.mockReset();
-    getUsdBrlRateMock.mockReset();
-    getUsdBrlRateMock.mockResolvedValue({
-      brlPerUsd: 5.13,
-      source: 'market:test:USD-BRL',
-      fetchedAt: '2026-05-27T12:00:00.000Z',
-      fallbackApplied: false,
-    });
   });
 
   afterAll(() => {
@@ -60,7 +45,7 @@ describe('BrlReferenceRateService', () => {
     expect(destinationAssets[0].getIssuer()).toBe(tesouroIssuer);
     expect(quote.brlPerUsdc).toBe('5.20000000');
     expect(quote.usdcPerBrl).toBe('0.19230769');
-    expect(quote.source).toBe('configured_tesouro_asset');
+    expect(quote.source).toBe('transaction_values');
   });
 
   it('keeps USDC -> BRL and BRL -> USDC conversions aligned to the same on-chain reference', async () => {
@@ -84,20 +69,15 @@ describe('BrlReferenceRateService', () => {
     expect(Number(offChainOut.brlPerUsdc)).toBeCloseTo(Number(insideConversionOut.brlPerUsdc), 8);
   });
 
-  it('rejects direct TESOURO testnet liquidity when it deviates from the market reference', async () => {
+  it('accepts direct TESOURO testnet liquidity inside the configured transaction-value range', async () => {
     strictSendPathsMock.mockReturnValue({
       call: jest.fn().mockResolvedValue({
         records: [{ destination_amount: '43.8720000', path: [] }],
       }),
     });
-    getUsdBrlRateMock.mockResolvedValue({
-      brlPerUsd: 5.35,
-      source: 'market:test:USD-BRL',
-      fetchedAt: '2026-05-27T12:00:00.000Z',
-      fallbackApplied: false,
-    });
 
-    await expect(BrlReferenceRateService.quoteUsdcToBrl('10')).rejects.toThrow(/desvia/);
+    const quote = await BrlReferenceRateService.quoteUsdcToBrl('10');
+    expect(quote.brlPerUsdc).toBe('4.38720000');
   });
 
   it('rejects paths that do not use configured trusted issuers', async () => {

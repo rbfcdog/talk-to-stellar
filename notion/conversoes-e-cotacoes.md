@@ -1,5 +1,26 @@
 # Conversões e cotações
 
+## Fonte unica de verdade
+
+As conversoes nao usam Binance, AwesomeAPI, Coinbase, Frankfurter, env fallback nem qualquer preco externo para decidir cotacao.
+
+A fonte unica e o proprio valor da rota/operacao:
+
+```text
+source_amount -> destination_amount
+```
+
+O cambio exibido e calculado assim:
+
+```text
+rate = destination_amount / source_amount
+inverse_rate = source_amount / destination_amount
+```
+
+Para BRL/USDC, o BRL do produto e o asset `TESOURO` na Stellar. Quando a tela mostra `R$`, o backend esta usando a rota real `TESOURO <-> USDC` e deriva a cotacao dos valores retornados pela transacao.
+
+Se a rota nao existir ou voltar fora da faixa de sanidade configurada, o sistema deve mostrar indisponivel. Ele nao inventa preco.
+
 ## Problema corrigido
 
 O sistema estava mostrando uma cotação de venda como se fosse preço de compra.
@@ -30,8 +51,9 @@ A enviado -> B recebido
 ```
 
 Tecnicamente, a rota vem da matriz dinâmica de conversão usando pathfinding `strictSendPaths` quando o par é on-chain, ou referência BRL/USDC segura quando o par envolve BRL e USDC.
+Essa referência BRL/USDC tambem e uma rota de transacao `TESOURO <-> USDC`, nao uma fonte externa.
 
-### 2. Preço de mercado por alvo exato (`market_price`)
+### 2. Preço por alvo exato (`market_price`)
 
 Responde:
 
@@ -126,6 +148,16 @@ XLM/BRL, XLM/USDC, XLM/CETES, XLM/XLM
 ```
 
 Quando não existe rota direta segura, a matriz tenta rota sintética por moeda ponte configurada, por exemplo via `USDC`.
+Essa rota sintética ainda usa valores de transação: ela multiplica duas pernas que tambem vieram de `source_amount -> destination_amount`.
+
+## Campos importantes
+
+- `source: transaction_values`: cotacao derivada dos valores da propria rota.
+- `method: stellar_strict_send_transaction_quote`: rota BRL/USDC via Stellar/TESOURO.
+- `method: stellar_strict_send_best_destination_amount`: rota on-chain direta por pathfinding.
+- `method: cross_rate_from_two_dynamic_legs`: rota sintetica a partir de duas pernas reais.
+- `source: none`: nao ha rota confiavel; a UI deve mostrar indisponivel.
+- `transaction_network_fee_xlm`: taxa de rede em XLM, sem conversao externa para BRL/USD.
 
 ## Copy correta para o usuário
 

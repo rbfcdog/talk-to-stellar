@@ -46,13 +46,15 @@ TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY=G...
 TALKTOSTELLAR_SPREAD_BPS=30
 ```
 
-Para fallback de conversao quando fonte externa/quote historica faltar:
+Conversao atual:
 
 ```text
-USD_BRL_FALLBACK_RATE=5.13
-BRL_USDC_QUOTE_SYMBOL=USDCBRL
-XLM_USDC_FALLBACK_RATE=0.1
+BRL_USDC_REFERENCE_SAMPLE_USDC=100
+USD_BRL_SANITY_MIN=3
+USD_BRL_SANITY_MAX=10
 ```
+
+As taxas de cambio vêm dos valores da rota/transacao. Se a rota nao existir, a operacao fica indisponivel.
 
 Para alerta proativo de cambio favoravel:
 

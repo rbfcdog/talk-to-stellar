@@ -164,8 +164,8 @@ No produto, BRL e a moeda de entrada e saida via Pix. A blockchain nao precisa f
 ### Backend
 
 - `payment_logs` deve guardar `source_amount`, `source_asset_code`, `fee_brl`, `fee_usdc`, `payment_hash`.
-- `get_conversion_preview` deve usar quote real ou `USD_BRL_FALLBACK_RATE`.
-- se a cotacao falhar e nao houver fallback configurado, a resposta deve falhar sem inventar cambio.
+- `get_conversion_preview` deve usar quote real derivado dos valores da rota/transacao.
+- se a cotacao falhar, a resposta deve falhar sem inventar cambio.
 - recibos devem omitir economia em BRL quando nao houver base real.
 
 ### Frontend

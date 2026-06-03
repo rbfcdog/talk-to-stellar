@@ -30,7 +30,7 @@ import { EconomyEngineService } from "../services/economy-engine.service";
 import { PlatformFeeService } from "../services/platform-fee.service";
 import { InvoiceService } from "../services/invoice.service";
 import { GlobalProfileService } from "../services/global-profile.service";
-import { FiatRateService } from "../services/fiat-rate.service";
+import { BrlReferenceRateService } from "../services/brl-reference-rate.service";
 import { brlUsdQuoteService } from "../services/brl-usd-quote.service";
 import { internationalTransferService } from "../services/international-transfer.service";
 import { mainnetWalletService } from "../services/mainnet-wallet.service";
@@ -743,58 +743,6 @@ function formatSavingsDate(date = new Date()): string {
   return `${dateLabel} · ${timeLabel}`;
 }
 
-function configuredUsdBrlFallbackRate(): number {
-  const parsed = Number(String(
-    process.env.USD_BRL_FALLBACK_RATE ||
-    process.env.DEFAULT_USD_BRL_RATE ||
-    '0'
-  ).replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-
-async function getSavingsUsdBrlRate(): Promise<{ rate: number; source: string; observedAt: string }> {
-  try {
-    const quote = await fetchBrlUsdcQuote();
-    const rate = toNumber(quote.brlPerUsdc);
-    if (rate > 0) {
-      return {
-        rate,
-        source: quote.source || 'configured_tesouro_asset',
-        observedAt: quote.fetchedAt || new Date().toISOString(),
-      };
-    }
-  } catch (error) {
-    logger.warn(`[savings-rate] live quote unavailable: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  try {
-    const { data } = await supabase
-      .from('currency_rate_history')
-      .select('rate, source, observed_at')
-      .eq('base_currency', 'USD')
-      .eq('quote_currency', 'BRL')
-      .order('observed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const rate = toNumber((data as any)?.rate);
-    if (rate > 0) {
-      return {
-        rate,
-        source: String((data as any)?.source || 'currency_rate_history'),
-        observedAt: String((data as any)?.observed_at || new Date().toISOString()),
-      };
-    }
-  } catch (error) {
-    logger.warn(`[savings-rate] currency_rate_history unavailable: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  return {
-    rate: configuredUsdBrlFallbackRate(),
-    source: configuredUsdBrlFallbackRate() > 0 ? 'configured_env_fallback' : 'unavailable',
-    observedAt: new Date().toISOString(),
-  };
-}
-
 type RealConversionPreview = {
   brlAmount: number;
   brlPerUsdc: number;
@@ -822,13 +770,13 @@ async function buildRealConversionPreview(brlAmount: number): Promise<RealConver
   const gross = Math.max(0, Number(brlAmount || 0));
   if (gross <= 0) throw new Error('brl_amount must be positive');
 
-  const grossQuote = await FiatRateService.getUsdBrlRate();
-  const brlPerUsdc = toNumber(grossQuote.brlPerUsd);
+  const grossQuote = await BrlReferenceRateService.quoteBrlToUsdc(gross.toFixed(7));
+  const brlPerUsdc = toNumber(grossQuote.brlPerUsdc);
   if (brlPerUsdc <= 0) {
     throw new Error('Cotação BRL/USDC indisponível agora.');
   }
   const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
-  const grossUsdc = gross * usdcPerBrl;
+  const grossUsdc = toNumber(grossQuote.destinationAmount);
 
   const spread = PlatformFeeService.calculateSpread({
     sourceAmount: gross.toFixed(7),
@@ -839,7 +787,15 @@ async function buildRealConversionPreview(brlAmount: number): Promise<RealConver
   const spreadEstimateBrl = toNumber(spread.feeAmount);
   const talkToStellarFeeBrl = spread.enabled ? spreadEstimateBrl : 0;
   const netBrl = Math.max(0, gross - talkToStellarFeeBrl);
-  const receiveUsdc = Math.max(0, netBrl * usdcPerBrl);
+  let receiveUsdc = Math.max(0, netBrl * usdcPerBrl);
+  if (netBrl > 0) {
+    try {
+      const netQuote = await BrlReferenceRateService.quoteBrlToUsdc(netBrl.toFixed(7));
+      receiveUsdc = toNumber(netQuote.destinationAmount) || receiveUsdc;
+    } catch {
+      // Keep the rate derived from the gross transaction quote.
+    }
+  }
 
   const networkFee = await formatNetworkFeeForCustomer(DEFAULT_NETWORK_FEE_XLM);
   const stellarNetworkFeeBrl = toNumber(networkFee.fee_brl);
@@ -901,12 +857,13 @@ async function fetchBrlUsdcQuote(): Promise<{
   usdcPerBrl: string;
   fetchedAt: string;
 }> {
-  const quote = await FiatRateService.getUsdBrlRate();
-  const usdcPerBrl = quote.brlPerUsd > 0 ? 1 / quote.brlPerUsd : 0;
+  const quote = await BrlReferenceRateService.getReferenceRate();
+  const brlPerUsdc = toNumber(quote.brlPerUsdc);
+  const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
   return {
     source: quote.source,
-    symbol: 'USD/BRL',
-    brlPerUsdc: quote.brlPerUsd.toFixed(8),
+    symbol: quote.symbol,
+    brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: usdcPerBrl.toFixed(8),
     fetchedAt: quote.fetchedAt,
   };
@@ -2746,9 +2703,7 @@ async function executeGetPairQuote(input: any): Promise<string> {
       : '';
     const routeKind = cell.status === 'synthetic' && cell.bridge_asset_code
       ? (language === 'en' ? `best route via ${cell.bridge_asset_code}` : `melhor rota via ${cell.bridge_asset_code}`)
-      : cell.status === 'fallback'
-        ? (language === 'en' ? 'dynamic market fallback route' : 'rota por referência dinâmica de mercado')
-        : cell.status === 'same_asset'
+      : cell.status === 'same_asset'
           ? (language === 'en' ? 'same-currency route' : 'mesma moeda')
           : (language === 'en' ? 'direct best route' : 'melhor rota direta');
     const message = language === 'en'
@@ -2803,9 +2758,6 @@ async function executeGetPairQuote(input: any): Promise<string> {
 function allPairQuoteRouteLabel(cell: any, language: 'pt-BR' | 'en'): string {
   if (cell?.status === 'synthetic' && cell?.bridge_asset_code) {
     return language === 'en' ? `via ${cell.bridge_asset_code}` : `via ${cell.bridge_asset_code}`;
-  }
-  if (cell?.status === 'fallback') {
-    return language === 'en' ? 'market ref.' : 'ref. mercado';
   }
   if (cell?.status === 'same_asset') {
     return language === 'en' ? 'same asset' : 'mesmo ativo';
@@ -3195,9 +3147,8 @@ async function buildMonthlySavingsSummaryForBalance(input: any, ownPublicKey?: s
       return null;
     }
 
-    const rate = await getSavingsUsdBrlRate();
     const rows = (Array.isArray(data) ? data : [])
-      .map((row) => savingsSummaryFromPaymentLog(row, ownPublicKey, rate.rate))
+      .map((row) => savingsSummaryFromPaymentLog(row, ownPublicKey))
       .filter(Boolean)
       .filter((row: any) => row.direction !== 'received') as Array<{
         grossBrl: number;
@@ -5412,7 +5363,6 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     stellarHash = String(paymentLog?.payment_hash || '').trim();
   }
 
-  const rate = await getSavingsUsdBrlRate();
   const sourceAmount = firstPositiveNumber([
     input.brl_sent,
     input.brl_amount,
@@ -5432,7 +5382,11 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
   const sourceIsUsd = sourceAsset === 'USDC';
   const sourceIsBrl = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
   const brlSent = sourceAmount > 0
-    ? (sourceIsBrl ? sourceAmount : sourceIsUsd ? sourceAmount * rate.rate : 0)
+    ? (sourceIsBrl ? sourceAmount : sourceIsUsd ? estimateBrlForSavingsSummary({
+      amount: sourceAmount,
+      assetCode: sourceAsset,
+      quote: metadata?.quote || transferDetails?.quote,
+    }) : 0)
     : firstPositiveNumber([metadata?.savings?.gross_amount_brl, metadata?.gross_amount_brl]);
   const destinationAsset = String(
     input.destination_asset_code ||
@@ -5443,14 +5397,13 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     'USDC'
   ).toUpperCase().replace(/^USD$/, 'USDC');
   const destinationIsUsd = destinationAsset === 'USDC';
-  const savingsAssetPair = sourceIsBrl || sourceIsUsd || destinationIsUsd || destinationAsset === 'BRL' || destinationAsset === 'TESOURO';
   const usdReceived = firstPositiveNumber([
     input.usd_received,
     input.usdc_received,
     destinationIsUsd ? input.destination_amount : '',
     destinationAsset === 'USDC' ? paymentLog?.destination_amount : '',
     transferDetails?.destinationAssetCode === 'USDC' ? transferDetails?.destinationAmount : '',
-  ]) || (savingsAssetPair && brlSent > 0 ? brlSent / rate.rate : 0);
+  ]) || 0;
   const recipientName = extractRealRecipientName(paymentLog, input);
   const feeBreakdown = await buildReceiptFeeBreakdown(paymentLog, input);
   const feeCharged = feeBreakdown.totalFeeBrl;
@@ -5614,7 +5567,6 @@ function estimateBrlForSavingsSummary(input: {
   amount: unknown;
   assetCode: unknown;
   quote?: any;
-  usdBrlRate?: number;
 }): number {
   const amount = toNumber(input.amount);
   if (amount <= 0) return 0;
@@ -5628,28 +5580,24 @@ function estimateBrlForSavingsSummary(input: {
   const destinationAsset = String(quote.destinationAsset?.code || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   if ((sourceAsset === 'BRL' || sourceAsset === 'TESOURO') && destinationAmount > 0 && sourceAmount > 0) return sourceAmount;
   if ((destinationAsset === 'BRL' || destinationAsset === 'TESOURO') && destinationAmount > 0) return destinationAmount;
-  const usdBrlRate = Number(input.usdBrlRate || configuredUsdBrlFallbackRate());
-  if ((assetCode === 'USDC' || assetCode === 'USD') && Number.isFinite(usdBrlRate) && usdBrlRate > 0) {
-    return amount * usdBrlRate;
-  }
   return 0;
 }
 
-function savingsSummaryFromPaymentLog(row: any, ownPublicKey?: string, usdBrlRate?: number) {
+function savingsSummaryFromPaymentLog(row: any, ownPublicKey?: string) {
   const metadata = row?.metadata || {};
   const savedSavings = metadata?.savings || {};
   const quote = metadata?.quote || row?.quote || null;
   const sourceAmount = row?.source_amount || metadata?.source_amount || metadata?.transferDetails?.sourceAmount || row?.destination_amount;
   const sourceAssetCode = row?.source_asset_code || metadata?.source_asset_code || metadata?.transferDetails?.sourceAssetCode || row?.destination_asset_code || 'USDC';
   const grossBrl = toNumber(savedSavings.gross_amount_brl || metadata.gross_amount_brl) ||
-    estimateBrlForSavingsSummary({ amount: sourceAmount, assetCode: sourceAssetCode, quote, usdBrlRate });
+    estimateBrlForSavingsSummary({ amount: sourceAmount, assetCode: sourceAssetCode, quote });
   if (grossBrl <= 0) return null;
 
   const actualFee = toNumber(savedSavings.actual_fee || metadata.actual_fee_brl || metadata.fee_brl || row.actual_fee || row.fee_brl);
   const bankFee = grossBrl * SAVINGS_TRADITIONAL_BANK_FEE_PCT;
   const savings = Math.max(0, bankFee - actualFee);
   const usdReceived = toNumber(row?.destination_amount || metadata?.destination_amount || metadata?.transferDetails?.destinationAmount) ||
-    (usdBrlRate && usdBrlRate > 0 ? grossBrl / usdBrlRate : 0);
+    0;
   const completedAt = String(row?.completed_at || row?.created_at || new Date().toISOString());
   const direction = inferDirection(row, ownPublicKey);
 
@@ -5664,10 +5612,10 @@ function savingsSummaryFromPaymentLog(row: any, ownPublicKey?: string, usdBrlRat
   };
 }
 
-function savingsSummaryFromOperation(op: any, ownPublicKey?: string, usdBrlRate?: number) {
+function savingsSummaryFromOperation(op: any, ownPublicKey?: string) {
   const asset = getAssetCode(op);
   const amount = op.amount || op.starting_balance || op.source_amount || op.amount_in || op.amount_out;
-  const grossBrl = estimateBrlForSavingsSummary({ amount, assetCode: asset, usdBrlRate });
+  const grossBrl = estimateBrlForSavingsSummary({ amount, assetCode: asset });
   if (grossBrl <= 0) return null;
   const from = String(op.from || op.source_account || op.funder || '').trim();
   const to = String(op.to || op.account || op.into || '').trim();
@@ -5681,7 +5629,7 @@ function savingsSummaryFromOperation(op: any, ownPublicKey?: string, usdBrlRate?
     actualFee,
     bankFee,
     savings,
-    usdReceived: asset === 'USDC' || asset === 'USD' ? toNumber(amount) : (usdBrlRate && usdBrlRate > 0 ? grossBrl / usdBrlRate : 0),
+    usdReceived: asset === 'USDC' || asset === 'USD' ? toNumber(amount) : 0,
     completedAt: String(op.created_at || new Date().toISOString()),
     direction,
   };
@@ -5758,10 +5706,9 @@ async function executeShowAnnualSavingsSummary(input: any): Promise<string> {
   }
 
   const logs = await loadSavingsPaymentLogs(input, userId, sessionId);
-  const rate = await getSavingsUsdBrlRate();
   const sourceRows = logs.length
-    ? logs.map((row) => savingsSummaryFromPaymentLog(row, ownPublicKey, rate.rate))
-    : operations.map((op) => savingsSummaryFromOperation(op, ownPublicKey, rate.rate));
+    ? logs.map((row) => savingsSummaryFromPaymentLog(row, ownPublicKey))
+    : operations.map((op) => savingsSummaryFromOperation(op, ownPublicKey));
   const rows = sourceRows
     .filter(Boolean)
     .filter((row: any) => row.direction !== 'received')
@@ -5817,8 +5764,8 @@ async function executeShowAnnualSavingsSummary(input: any): Promise<string> {
     total_savings_brl: totalSavings,
     average_fee_pct: avgFeePct,
     projected_savings_brl: projection,
-    reference_rate_brl_per_usd: rate.rate,
-    reference_rate_source: rate.source,
+    reference_rate_brl_per_usd: null,
+    reference_rate_source: 'transaction_values_only',
     source: logs.length ? 'payment_logs' : 'getOperationHistory',
     message,
   });
@@ -6167,6 +6114,7 @@ async function getUsdBrlMonthlyChange(): Promise<{
     .select('rate, observed_at')
     .eq('base_currency', 'USD')
     .eq('quote_currency', 'BRL')
+    .eq('source', 'transaction_values')
     .order('observed_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -6176,6 +6124,7 @@ async function getUsdBrlMonthlyChange(): Promise<{
     .select('rate, observed_at')
     .eq('base_currency', 'USD')
     .eq('quote_currency', 'BRL')
+    .eq('source', 'transaction_values')
     .gte('observed_at', monthStart.toISOString())
     .order('observed_at', { ascending: true })
     .limit(1)

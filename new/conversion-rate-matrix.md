@@ -35,7 +35,6 @@ Exemplo reduzido de resposta:
   "summary": {
     "total_pairs": 16,
     "available_pairs": 16,
-    "fallback_pairs": 2,
     "synthetic_pairs": 6,
     "unavailable_pairs": 0
   },
@@ -43,8 +42,8 @@ Exemplo reduzido de resposta:
     "BRL": {
       "USDC": {
         "rate": 0.1904761905,
-        "status": "fallback",
-        "source": "market:awesomeapi:USD-BRL"
+        "status": "available",
+        "source": "transaction_values"
       }
     }
   }
@@ -63,18 +62,18 @@ Taxa: `1`.
 
 2. BRL/USDC
 
-Primeiro tenta a rota Stellar configurada:
+Usa a rota Stellar configurada:
 
 - `BRL` vira `TESOURO`
 - usa `BrlReferenceRateService.quoteBrlToUsdc`
 - ou `BrlReferenceRateService.quoteUsdcToBrl`
-- valida sanidade contra USD/BRL de mercado
+- valida apenas a faixa de sanidade configurada sobre o valor retornado pela propria rota
 
-Se a liquidez da testnet estiver distorcida, cai para `FiatRateService.getUsdBrlRate()`.
+Se a liquidez da testnet estiver distorcida ou a rota falhar, o par fica `unavailable`.
 
-Status nesse caso: `fallback`.
+Status: `available` quando ha rota; `unavailable` quando nao ha rota confiavel.
 
-Esse fallback ainda e dinamico, porque vem de provedores de mercado como Binance, AwesomeAPI, open-er-api, exchangerate-api, Coinbase ou Frankfurter, conforme disponibilidade.
+Nao existe fallback externo. O backend nao usa Binance, AwesomeAPI, Coinbase, Frankfurter, env fallback ou outra fonte de mercado para decidir conversao.
 
 3. Outros pares diretos
 
@@ -183,16 +182,17 @@ Referencia dinamica USD/BRL:
 ```env
 USD_BRL_SANITY_MIN=3
 USD_BRL_SANITY_MAX=10
-USD_BRL_MARKET_DEVIATION_MAX_PCT=15
+USD_BRL_SANITY_MIN=3
+USD_BRL_SANITY_MAX=10
 ```
 
 ## Garantias
 
 - A API sempre retorna 16 celulas para os quatro ativos padrao.
 - Cada celula informa a fonte da taxa.
-- A UI mostra se a taxa veio da Stellar, do mercado, de uma ponte sintetica ou se esta indisponivel.
+- A UI mostra se a taxa veio da rota direta, de uma ponte sintetica ou se esta indisponivel.
 - A confirmacao final nao confia cegamente na matriz; ela recalcula a rota antes do PIN.
-- Em testnet, uma cotacao BRL/USDC absurda e rejeitada e substituida por referencia dinamica de mercado.
+- Em testnet, uma cotacao BRL/USDC absurda e rejeitada. O sistema nao substitui por referencia externa.
 
 ## PIX com entrega exata em ativo final
 

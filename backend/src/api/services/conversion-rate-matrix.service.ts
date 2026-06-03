@@ -1,9 +1,9 @@
 import { getStellarNetworkName, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from '../../config/assets';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
-import { FiatRateService } from './fiat-rate.service';
 import { StellarService } from './stellar.service';
+import { TRANSACTION_RATE_SOURCE } from './transaction-rate.service';
 
-export type ConversionRateStatus = 'available' | 'same_asset' | 'fallback' | 'synthetic' | 'unavailable';
+export type ConversionRateStatus = 'available' | 'same_asset' | 'synthetic' | 'unavailable';
 
 export type ConversionRateCell = {
   pair: string;
@@ -42,7 +42,6 @@ export type ConversionRateMatrix = {
   summary: {
     total_pairs: number;
     available_pairs: number;
-    fallback_pairs: number;
     synthetic_pairs: number;
     unavailable_pairs: number;
   };
@@ -161,43 +160,23 @@ async function quoteUsdcBrlPair(input: {
   sampleSourceAmount: string;
   observedAt: string;
 }): Promise<ConversionRateCell> {
-  try {
-    const quote = input.sourceAssetCode === 'BRL'
-      ? await BrlReferenceRateService.quoteBrlToUsdc(input.sampleSourceAmount)
-      : await BrlReferenceRateService.quoteUsdcToBrl(input.sampleSourceAmount);
+  const quote = input.sourceAssetCode === 'BRL'
+    ? await BrlReferenceRateService.quoteBrlToUsdc(input.sampleSourceAmount)
+    : await BrlReferenceRateService.quoteUsdcToBrl(input.sampleSourceAmount);
 
-    return rateCellFromAmounts({
-      sourceAssetCode: input.sourceAssetCode,
-      destinationAssetCode: input.destinationAssetCode,
-      settlementSourceAssetCode: quote.sourceAsset.code,
-      settlementDestinationAssetCode: quote.destinationAsset.code,
-      sampleSourceAmount: quote.sourceAmount,
-      destinationAmount: quote.destinationAmount,
-      status: 'available',
-      source: quote.source,
-      method: 'stellar_strict_send_brl_usdc_reference',
-      observedAt: quote.fetchedAt || input.observedAt,
-      path: quote.path,
-    });
-  } catch (error) {
-    const market = await FiatRateService.getUsdBrlRate();
-    const sourceAmount = toPositiveNumber(input.sampleSourceAmount);
-    const destinationAmount = input.sourceAssetCode === 'BRL'
-      ? sourceAmount / market.brlPerUsd
-      : sourceAmount * market.brlPerUsd;
-    return rateCellFromAmounts({
-      sourceAssetCode: input.sourceAssetCode,
-      destinationAssetCode: input.destinationAssetCode,
-      sampleSourceAmount: input.sampleSourceAmount,
-      destinationAmount: compactAmount(destinationAmount),
-      status: 'fallback',
-      source: market.source,
-      method: 'dynamic_usd_brl_market_reference_after_stellar_quote_rejected',
-      observedAt: market.fetchedAt || input.observedAt,
-      path: [],
-      legs: [`stellar_error:${publicErrorMessage(error)}`],
-    });
-  }
+  return rateCellFromAmounts({
+    sourceAssetCode: input.sourceAssetCode,
+    destinationAssetCode: input.destinationAssetCode,
+    settlementSourceAssetCode: quote.sourceAsset.code,
+    settlementDestinationAssetCode: quote.destinationAsset.code,
+    sampleSourceAmount: quote.sourceAmount,
+    destinationAmount: quote.destinationAmount,
+    status: 'available',
+    source: TRANSACTION_RATE_SOURCE,
+    method: 'stellar_strict_send_transaction_quote',
+    observedAt: quote.fetchedAt || input.observedAt,
+    path: quote.path,
+  });
 }
 
 async function quoteStellarPair(input: {
@@ -224,7 +203,7 @@ async function quoteStellarPair(input: {
     sampleSourceAmount: quote.sourceAmount,
     destinationAmount: quote.destinationAmount,
     status: 'available',
-    source: 'stellar_horizon_strict_send_paths',
+    source: TRANSACTION_RATE_SOURCE,
     method: 'stellar_strict_send_best_destination_amount',
     observedAt: input.observedAt,
     path: quote.path || [],
@@ -251,7 +230,7 @@ function sameAssetCell(input: {
     sampleSourceAmount: input.sampleSourceAmount,
     destinationAmount: input.sampleSourceAmount,
     status: 'same_asset',
-    source: 'identity',
+    source: TRANSACTION_RATE_SOURCE,
     method: 'same_asset_rate',
     observedAt: input.observedAt,
   });
@@ -307,7 +286,7 @@ function synthesizeCell(input: {
     sampleSourceAmount: input.sampleSourceAmount,
     destinationAmount: compactAmount(destinationAmount),
     status: 'synthetic',
-    source: `synthetic:via_${input.bridgeAssetCode}`,
+    source: TRANSACTION_RATE_SOURCE,
     method: 'cross_rate_from_two_dynamic_legs',
     observedAt: input.observedAt,
     bridgeAssetCode: input.bridgeAssetCode,
@@ -387,8 +366,7 @@ export class ConversionRateMatrixService {
       matrix,
       summary: {
         total_pairs: finalCells.length,
-        available_pairs: finalCells.filter((cell) => ['available', 'same_asset', 'fallback', 'synthetic'].includes(cell.status)).length,
-        fallback_pairs: finalCells.filter((cell) => cell.status === 'fallback').length,
+        available_pairs: finalCells.filter((cell) => ['available', 'same_asset', 'synthetic'].includes(cell.status)).length,
         synthetic_pairs: finalCells.filter((cell) => cell.status === 'synthetic').length,
         unavailable_pairs: finalCells.filter((cell) => cell.status === 'unavailable').length,
       },

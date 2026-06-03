@@ -19,11 +19,6 @@ function quoteTtlSeconds(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 3600) : 300;
 }
 
-function fallbackBrlPerUsd(): number {
-  const parsed = Number(process.env.DEFAULT_USD_BRL_RATE || process.env.BRL_USD_FALLBACK_RATE || 5.6);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5.6;
-}
-
 type QuoteDeps = {
   repository?: InternationalTransferRepository;
   quoteBrlToUsdc?: (amountBrl: string) => Promise<BrlReferenceQuote>;
@@ -51,22 +46,15 @@ export class BrlUsdQuoteService {
       throw new Error('brl_amount must be a positive number.');
     }
 
-    let quoteSource: InternationalTransferQuote['quote_source'] = 'stellar_pathfinding';
+    const quoteSource: InternationalTransferQuote['quote_source'] = 'stellar_pathfinding';
     let estimatedUsdcGross = 0;
     let brlPerUsd = 0;
     let referenceQuote: BrlReferenceQuote | null = null;
 
-    try {
-      referenceQuote = await this.quoteBrlToUsdc(amount(brlAmount));
-      estimatedUsdcGross = toPositiveNumber(referenceQuote.destinationAmount);
-      brlPerUsd = estimatedUsdcGross > 0 ? brlAmount / estimatedUsdcGross : 0;
-      if (!estimatedUsdcGross || !brlPerUsd) throw new Error('Invalid path quote amount.');
-    } catch (error) {
-      quoteSource = 'configured_fallback_rate';
-      brlPerUsd = fallbackBrlPerUsd();
-      estimatedUsdcGross = brlAmount / brlPerUsd;
-      referenceQuote = null;
-    }
+    referenceQuote = await this.quoteBrlToUsdc(amount(brlAmount));
+    estimatedUsdcGross = toPositiveNumber(referenceQuote.destinationAmount);
+    brlPerUsd = estimatedUsdcGross > 0 ? brlAmount / estimatedUsdcGross : 0;
+    if (!estimatedUsdcGross || !brlPerUsd) throw new Error('Invalid path quote amount.');
 
     const platformFee = PlatformFeeService.calculateSpread({
       sourceAmount: brlAmount,

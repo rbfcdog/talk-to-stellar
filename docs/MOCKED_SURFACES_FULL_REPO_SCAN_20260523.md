@@ -458,8 +458,8 @@ Arquivo:
 O que e fallback:
 
 - Primeiro tenta `BrlReferenceRateService.quoteBrlToUsdc()`.
-- Se falhar, usa `quote_source: configured_fallback_rate`.
-- Fallback rate vem de `DEFAULT_USD_BRL_RATE`, `BRL_USD_FALLBACK_RATE` ou default `5.6`.
+- Se falhar, a quote fica indisponivel.
+- Nao usa default/env fallback para inventar cambio.
 - Provider fee ainda aparece como `pending_provider_quote`.
 - Tax/IOF aparece como `not_configured_for_sandbox_quote`.
 
@@ -498,7 +498,6 @@ Env relevante:
 ```text
 USD_BRL_SANITY_MIN=3
 USD_BRL_SANITY_MAX=10
-DEFAULT_USD_BRL_RATE=5.60
 ```
 
 ### 15. Economy engine e comparativo tradicional
@@ -511,7 +510,7 @@ O que e estimado:
 
 - `TRADITIONAL_FEE_PCT` default para benchmark.
 - Metodo `traditional_providers_average_3_5pct`.
-- `estimateAmountInBrl()` pode usar `DEFAULT_USD_BRL_RATE` quando nao ha quote.
+- `estimateAmountInBrl()` usa somente BRL/TESOURO direto ou valores de quote/transacao.
 
 Impacto:
 
@@ -581,7 +580,7 @@ O que e fallback:
 
 - Se o recibo persistido nao existe, gera `paymentDataFromHash(txHash)`.
 - Gera imagem base64 e persiste a partir do hash.
-- `USD_BRL_FALLBACK_RATE` pode ser usado para conversao.
+- Conversao em recibo usa valores da propria transacao/quote; sem fallback externo.
 - `PaymentReceiptService` tambem remove termos como testnet/sandbox/devnet do contexto user-facing.
 
 Impacto:
@@ -802,9 +801,7 @@ Recomendacao:
 | `ENABLE_REAL_PAYOUT_EXECUTION` | Necessario para adapters de payout executarem real. |
 | `ENABLE_MAINNET_SETTLEMENT_VALIDATION` | Permite validacao mainnet de pequeno valor. |
 | `MAX_MAINNET_VALIDATION_AMOUNT_USD` | Limite de valor para mainnet validation. |
-| `DEFAULT_USD_BRL_RATE` | Fallback de referencia USD/BRL. |
-| `BRL_USD_FALLBACK_RATE` | Fallback especifico de quote BRL/USD. |
-| `USD_BRL_FALLBACK_RATE` | Fallback de receipt/conversao. |
+| `BRL_USDC_REFERENCE_SAMPLE_USDC` | Amostra para derivar referencia TESOURO/USDC pela rota. |
 | `USD_BRL_SANITY_MIN` / `USD_BRL_SANITY_MAX` | Faixa segura para rejeitar liquidez testnet absurda. |
 | `TRADITIONAL_FEE_PCT` | Benchmark de taxa tradicional, nao taxa cobrada real. |
 | `TALKTOSTELLAR_SPREAD_BPS` | Spread configurado da TalkToStellar. |
@@ -822,7 +819,7 @@ Recomendacao:
 | `POST /api/ramp/etherfuse/sandbox/pix-funded-transfer` | Automacao sandbox PIX -> transferencia. |
 | `POST /api/ramp/etherfuse/sandbox/test-onramp` | Helper temporario de on-ramp sandbox. |
 | `POST /api/ramp/etherfuse/sandbox/test-offramp` | Helper temporario de off-ramp sandbox. |
-| `POST /api/quotes/brl-usd` | Pode cair em `configured_fallback_rate`. |
+| `POST /api/quotes/brl-usd` | Usa rota TESOURO/USDC; sem fallback externo. |
 | `POST /api/transfers/:id/pix-intent` | Pode criar `mock_pix_intent`. |
 | `POST /api/transfers/:id/funding-confirmation` | Confirma funding sandbox. |
 | `POST /api/transfers/:id/settle-stellar` | Pode anexar `mock-stellar-*`. |
@@ -954,7 +951,7 @@ Mitigacao:
 
 Estado atual:
 
-- Se pathfinding falhar, BRL/USD quote pode cair em `configured_fallback_rate`.
+- Se pathfinding falhar, BRL/USD quote fica indisponivel.
 
 Mitigacao:
 

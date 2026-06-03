@@ -48,7 +48,7 @@ type ConversionRateCell = {
   sample_source_amount: string;
   destination_amount: string | null;
   rate: number | null;
-  status: "available" | "same_asset" | "fallback" | "synthetic" | "unavailable";
+  status: "available" | "same_asset" | "synthetic" | "unavailable";
   source: string;
   method: string;
   bridge_asset_code?: string;
@@ -63,7 +63,6 @@ type ConversionRateMatrix = {
   summary: {
     total_pairs: number;
     available_pairs: number;
-    fallback_pairs: number;
     synthetic_pairs: number;
     unavailable_pairs: number;
   };
@@ -210,7 +209,6 @@ function formatRateValue(cell: ConversionRateCell | undefined, language: AppLang
 function rateStatusLabel(cell: ConversionRateCell | undefined, language: AppLanguage) {
   if (!cell) return language === "pt-BR" ? "carregando" : "loading";
   if (cell.status === "same_asset") return language === "pt-BR" ? "mesmo ativo" : "same asset";
-  if (cell.status === "fallback") return language === "pt-BR" ? "mercado" : "market";
   if (cell.status === "synthetic") return language === "pt-BR" ? `via ${cell.bridge_asset_code}` : `via ${cell.bridge_asset_code}`;
   if (cell.status === "available") return "Stellar";
   return language === "pt-BR" ? "sem rota" : "no route";

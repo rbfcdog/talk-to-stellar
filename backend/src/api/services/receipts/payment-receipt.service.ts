@@ -802,8 +802,7 @@ export class PaymentReceiptService {
       return destinationAmount / sourceAmount;
     }
 
-    const fallback = Number(String(process.env.USD_BRL_FALLBACK_RATE || process.env.DEFAULT_USD_BRL_RATE || '').replace(',', '.'));
-    return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+    return 0;
   }
 
   private static async resolveFeeBreakdown(input: PaymentReceiptInput): Promise<FeeBreakdown> {
@@ -857,9 +856,19 @@ export class PaymentReceiptService {
     const actualFeeBrl = actualFeeBrlFromPayload || (actualFeeUsdcFromPayload > 0 && usdBrl > 0
       ? actualFeeUsdcFromPayload * usdBrl
       : 0);
-    const actualFeeUsdc = actualFeeUsdcFromPayload || (actualFeeBrl > 0 && usdBrl > 0
+    const shouldDeriveUsdcFromTransactionFee =
+      Boolean(unifiedFee.platform_applied) &&
+      actualFeeBrl > 0 &&
+      usdBrl > 0 &&
+      (
+        (sourceAssetCode === 'BRL' && destinationAssetCode === 'USDC') ||
+        (sourceAssetCode === 'USDC' && destinationAssetCode === 'BRL')
+      );
+    const actualFeeUsdc = shouldDeriveUsdcFromTransactionFee
       ? actualFeeBrl / usdBrl
-      : 0);
+      : (actualFeeUsdcFromPayload || (actualFeeBrl > 0 && usdBrl > 0
+        ? actualFeeBrl / usdBrl
+        : 0));
     if (actualFeeUsdc > 0 && actualFeeBrl > 0) {
       actualDisplay = `${this.formatSmallFiat(actualFeeBrl, 'BRL')} / ${this.formatSmallFiat(actualFeeUsdc, 'USDC')}`;
     } else if (actualFeeUsdc > 0 && actualFeeBrl <= 0) {
