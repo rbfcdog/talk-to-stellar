@@ -35,6 +35,7 @@ type IntentRouteCandidate = {
   sourceAssetCode?: string;
   destAssetCode?: string;
   quoteMode?: 'market_price' | 'send_exact';
+  allQuotes?: boolean;
   recipientQuery?: string;
 };
 
@@ -92,7 +93,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PRICE_QUOTE,
     toolName: 'route_price_quote_intent',
-    description: 'Use when the user asks for best route/melhor rota, route quality, rate/cotacao, estimated fees, comparison, quote, cost, spread, or whether it is worth doing before starting a transaction. For generic fee/cost questions without enough pair details, route here with needs_clarification=true. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For a single-asset quote in Portuguese/Brazil context such as "cotação do CETES", "preço do XLM", "uero ver a cotacao do cetes", set source_asset_code to that asset, dest_asset_code=BRL, and quote_mode=market_price. Use quote_mode=market_price for price/cotacao/preco/custo of an asset in another asset, and quote_mode=send_exact for "de A para B", conversion, sell, or route direction questions.',
+    description: 'Use when the user asks for best route/melhor rota, route quality, rate/cotacao, estimated fees, comparison, quote, cost, spread, or whether it is worth doing before starting a transaction. For generic fee/cost questions without enough pair details, route here with needs_clarification=true. For "todas as cotações", "todas as cotacoes", "todas as taxas", "tabela de câmbio", "matriz de conversão", or "uero ver todas as cotacoes aqui", set all_quotes=true and do not fill a single pair. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For a single-asset quote in Portuguese/Brazil context such as "cotação do CETES", "preço do XLM", "uero ver a cotacao do cetes", set source_asset_code to that asset, dest_asset_code=BRL, and quote_mode=market_price. Use quote_mode=market_price for price/cotacao/preco/custo of an asset in another asset, and quote_mode=send_exact for "de A para B", conversion, sell, or route direction questions.',
   },
   {
     intent: IntentType.FINANCIAL_MEMORY,
@@ -184,6 +185,10 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
           type: 'string',
           enum: ['market_price', 'send_exact', ''],
           description: 'For quote/rate requests only. Use market_price for price/cotacao/custo questions like "cotacao XLM/BRL", "preco de XLM em reais", or "quanto custa 100 XLM". Use send_exact for sell/convert/send simulation like "converter 100 XLM para BRL" or "quanto recebo se mandar 100 XLM para BRL".',
+        },
+        all_quotes: {
+          type: 'boolean',
+          description: 'True only when the user asks for all quotes/rates, all pairs, a quote table, or the full conversion matrix. Example: "uero ver todas as cotacoes aqui".',
         },
         recipient_query: {
           type: 'string',
@@ -2549,6 +2554,28 @@ export class AgentGraph {
     return state;
   }
 
+  private async handleAllPairQuotesRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const raw = await executeTool('get_all_pair_quotes', { language });
+
+    let result: any;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      result = { success: false, error: 'all_pair_quotes_parse_failed' };
+    }
+
+    state.success = Boolean(result?.success);
+    state.response_message = String(result?.message || result?.error || this.text(
+      language,
+      'Não consegui carregar todas as cotações agora. Tente novamente em alguns segundos.',
+      'I could not load all quotes right now. Try again in a few seconds.'
+    ));
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
   private async handleBestRouteGuidanceRequest(state: AgentState): Promise<AgentState> {
     const language = this.getLanguage(state);
     state.success = true;
@@ -3774,6 +3801,7 @@ export class AgentGraph {
       sourceAssetCode: sourceAssetCode || undefined,
       destAssetCode: destAssetCode || undefined,
       quoteMode,
+      allQuotes: call.args?.all_quotes === true || String(call.args?.all_quotes || '').trim().toLowerCase() === 'true',
       recipientQuery: recipientQuery || undefined,
     };
   }
@@ -3792,6 +3820,7 @@ export class AgentGraph {
       source_asset_code: candidate.sourceAssetCode,
       dest_asset_code: candidate.destAssetCode,
       quote_mode: candidate.quoteMode,
+      all_quotes: candidate.allQuotes,
       recipient_query: candidate.recipientQuery,
     };
   }
@@ -3905,7 +3934,7 @@ Route selection guide:
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
-- route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For single-asset quotes such as "cotação do CETES", infer CETES/BRL. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
+- route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For "todas as cotações", "todas as cotacoes", "todas as taxas", "tabela de câmbio", or "matriz de conversão", set all_quotes=true and do not fill source_asset_code/dest_asset_code unless the user also asks for a specific pair. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For single-asset quotes such as "cotação do CETES", infer CETES/BRL. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
 - route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options.
 - route_history_intent: user asks for history, extrato, transactions, transações, movimentações, receipts, comprovantes, recibos, recent activity, or full history.
 - route_financial_memory_intent: user asks what nicknames/labels/preferences were saved, what the system remembers financially, savings/economy summaries, or learned payment memory.
@@ -3934,6 +3963,7 @@ Disambiguation:
 - "criar/gerar link de pagamento", "link para receber", "cobrar por link", and "meu link de recebimento" are payment_link, not normal payment.
 - "mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN" or "PIN nao funciona" are reset_pin, not wallet, login, or help.
 - "melhor rota", "quanto custa", "preco", "taxa", "cotacao", "cotação XLM para USDC", "quanto está USDC/BRL", or bank comparison routes to price_quote unless the user is already giving a direct execution command with PIN.
+- "uero ver todas as cotacoes aqui", "quero ver todas as cotações", "mostrar tabela de câmbio", and "matriz de conversão" must use route_price_quote_intent with all_quotes=true. Do not answer with only BRL/USDC and do not use get_brl_usdc_quote for this.
 - "cotação XLM/BRL", "preço de XLM em reais", and "quanto custa 100 XLM em BRL" must use quote_mode=market_price because the user wants the BRL price to receive/buy XLM. Do not answer with the sell quote XLM -> BRL unless the user says converter/vender/mandar XLM para BRL.
 - "cotação do CETES", "uero ver a cotacao do cetes", and "preço do CETES" must use route_price_quote_intent with source_asset_code=CETES, dest_asset_code=BRL, quote_mode=market_price. Do not use the generic USDC/BRL quote for these.
 - "converter 100 XLM para BRL", "vender 100 XLM por reais", and "quanto recebo se mandar 100 XLM para BRL" must use quote_mode=send_exact because the user is asking the sell/conversion direction.
@@ -5559,6 +5589,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
   private async handlePriceQuoteRequest(state: AgentState): Promise<AgentState> {
     const language = this.getLanguage(state);
+    if ((state.action_params as any)?.llm_route?.all_quotes === true) {
+      return await this.handleAllPairQuotesRequest(state);
+    }
+
     const pairQuoteRequest = this.pairQuoteRequestFromLlmRoute(state);
     if (pairQuoteRequest) {
       return await this.handleCurrentPairQuoteRequest(state, pairQuoteRequest);
