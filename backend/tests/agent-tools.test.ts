@@ -544,7 +544,7 @@ describe('Agent tool execution', () => {
       const parsed = JSON.parse(output);
 
       expect(parsed.success).toBe(true);
-      expect(parsed.message).toContain('Gerei o link de confirmação da forma mais otimizada');
+      expect(parsed.message).toContain('Gerei o link de confirmação com a cotação atual');
       expect(parsed.message).toContain('100 USDC');
       expect(parsed.message).toContain('Ana Silva');
       expect(parsed.message).toContain('https://app.example.com/r/payment');

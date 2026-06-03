@@ -2285,12 +2285,12 @@ Tudo com confirmação por PIN e taxas transparentes mostradas antes de cada ope
 Everything with PIN confirmation and transparent fees shown before each operation.`,
     },
     conversion: {
-      pt: `A conversão entre moedas no TalkToStellar usa a rota mais otimizada disponível. Quando você pede uma conversão:
+      pt: `A conversão entre moedas no TalkToStellar usa a melhor cotação disponível no momento. Quando você pede uma conversão:
 1. O sistema busca o melhor caminho entre as moedas
 2. Mostra a taxa, o valor de origem e o valor de destino
 3. Você confirma com PIN
 A conversão é instantânea e as taxas são sempre mostradas antes. Você pode converter entre R$, US$, CETES e as moedas disponíveis.`,
-      en: `Currency conversion on TalkToStellar uses the most optimized available route. When you request a conversion:
+      en: `Currency conversion on TalkToStellar uses the best available quote at that moment. When you request a conversion:
 1. The system finds the best path between currencies
 2. Shows the rate, source amount and destination amount
 3. You confirm with PIN
@@ -2356,13 +2356,13 @@ function executeGetIntentHelp(): string {
     {
       command: "enviar",
       intent: "payment",
-      description: "Cria um link seguro para enviar dinheiro a um contato da forma mais otimizada.",
-      examples: ["mandar 50 dólares para Juliana Lima da forma mais otimizada"],
+      description: "Cria um link seguro para enviar dinheiro a um contato, sempre com revisão antes do PIN.",
+      examples: ["mandar 50 dólares para Juliana Lima"],
     },
     {
       command: "converter",
       intent: "conversion",
-      description: "Abre a conversão entre reais, dólares, CETES, XLM e moedas configuradas pela rota mais otimizada.",
+      description: "Abre a conversão entre reais, dólares, CETES, XLM e moedas configuradas com cotação antes do PIN.",
       examples: ["converter 10 usdc para brl", "quero converter dinheiro"],
     },
     {
@@ -3300,7 +3300,7 @@ async function executeCreateBrlUsdQuote(input: any): Promise<string> {
       message:
         `Cotação criada para entrega internacional em conta USD: ` +
         `R$ ${quote.brl_amount} estimados para US$ ${quote.estimated_usd_amount}. ` +
-        `Taxa total estimada: R$ ${quote.total_fee.amount_brl_equivalent}. ` +
+        `Taxa estimada: R$ ${quote.total_fee.amount_brl_equivalent}. ` +
         `A cotação vence em ${quote.expires_at}.`,
     });
   } catch (error) {
@@ -3734,8 +3734,8 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
       success: true,
       quote: expiringQuote,
       optimization_criteria: sourceAmount
-        ? 'maximizar recebimento no destino para o valor de envio informado'
-        : 'minimizar gasto na origem para o valor de recebimento informado',
+        ? 'melhor cotação disponível para o valor de envio informado'
+        : 'melhor cotação disponível para o valor de recebimento informado',
       route: {
         chain: formatRouteChain({
           sourceAssetCode: quote.sourceAsset?.code,
@@ -3758,10 +3758,9 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
         (sourceAmount
           ? `Estimativa antes de confirmar: ${sourceLabel} deve entregar aproximadamente ${destinationLabel}. `
           : `Estimativa antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
-        `Rota mais otimizada: ${formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
-        `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Estimativa válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Taxa estimada: ${feeBreakdown.total_fee_display}. ` +
+        `${savingsEstimate ? `Economia estimada: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
+        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3830,8 +3829,10 @@ async function executeGetBestRoute(input: any): Promise<string> {
       path: quote.path,
     });
     const criteria = usesStrictSend
-      ? "maximizar recebimento no destino para o valor de envio informado"
-      : "minimizar gasto na origem para o valor de recebimento informado";
+      ? "melhor cotação disponível para o valor de envio informado"
+      : "melhor cotação disponível para o valor de recebimento informado";
+    const sourceLabel = formatCustomerAssetAmount(expiringQuote.sourceAmount, expiringQuote.sourceAsset.code);
+    const destinationLabel = formatCustomerAssetAmount(expiringQuote.destinationAmount, expiringQuote.destinationAsset.code);
     const sourceNumeric = toAmountNumber(quote.sourceAmount);
     const destinationNumeric = toAmountNumber(quote.destinationAmount);
     const destinationPerSource = sourceNumeric > 0 && destinationNumeric > 0 ? destinationNumeric / sourceNumeric : 0;
@@ -3888,11 +3889,10 @@ async function executeGetBestRoute(input: any): Promise<string> {
       quote_expires_at: expiringQuote.quote_expires_at,
       quote_ttl_seconds: expiringQuote.quote_ttl_seconds,
       message:
-        `Rota mais otimizada agora: ${routeChain || formatQuotePath(quote.path, quote.sourceAsset?.code, quote.destinationAsset?.code)}. ` +
-        `Critério: ${criteria}. ` +
-        `Taxa total estimada: ${feeBreakdown.total_fee_display}. ` +
-        `${savingsEstimate ? `Rota mais barata encontrada: economia estimada de ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Estimativa válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Cotação atual: ${sourceLabel} vira aproximadamente ${destinationLabel}. ` +
+        `Taxa estimada: ${feeBreakdown.total_fee_display}. ` +
+        `${savingsEstimate ? `Economia estimada: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
+        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4271,7 +4271,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
       message:
-        `Gerei o link de confirmação da forma mais otimizada para enviar ${normalizedAmount} ${asset.code} para ${destinationName || normalizedDestination}. ` +
+        `Gerei o link de confirmação com a cotação atual para enviar ${normalizedAmount} ${asset.code} para ${destinationName || normalizedDestination}. ` +
         `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
         `Abra para revisar e confirmar com PIN:\n\n${url}`,
     });
@@ -4363,10 +4363,10 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
       quote_expires_at: input.quote?.quote_expires_at || null,
       quote_ttl_seconds: input.quote?.quote_ttl_seconds || quoteTtlSeconds(),
       message:
-        `Antes de confirmar: conversão preparada da forma mais otimizada, com taxa estimada total ${unifiedFee.display || 'indisponível'}. ` +
+        `Antes de confirmar: conversão preparada com a cotação atual e taxa estimada ${unifiedFee.display || 'indisponível'}. ` +
         `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
-        `${crossAsset && routeChain ? `Rota mais otimizada: ${routeChain}. ` : ''}` +
-        `Estimativa válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
+        `${crossAsset && routeChain ? `Cotação entre moedas: ${routeChain}. ` : ''}` +
+        `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
         `Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {

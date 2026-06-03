@@ -3205,7 +3205,7 @@ export default function PixRampClient({
               <div className="mt-5 rounded-3xl border border-tts-gold bg-tts-gold-bg p-4">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-gold">{L("Confirmação final", "Final confirmation")}</p>
                 <p className="mt-2 text-sm font-bold leading-6 text-tts-gold">
-                  {L("Este botão confirma a retirada pela rota mais otimizada e envia o valor para sua chave PIX.", "This button confirms the withdrawal through the most optimized route and sends the amount to your PIX key.")}
+                  {L("Este botão confirma a retirada e envia o valor para sua chave PIX.", "This button confirms the withdrawal and sends the amount to your PIX key.")}
                 </p>
               </div>
 
@@ -3412,7 +3412,7 @@ export default function PixRampClient({
                     ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
                     : receiveEstimateMissing
                       ? L("Aguardando cotação atual", "Waiting for current quote")
-                      : L("Gerar PIX pela rota mais otimizada", "Generate PIX with the most optimized route")}
+                      : L("Gerar PIX", "Generate PIX")}
             </button>
             {transferRecipientBlocker && (
               <p className="mt-3 text-sm font-bold text-tts-error">{transferRecipientBlocker}</p>

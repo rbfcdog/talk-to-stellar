@@ -112,8 +112,8 @@ describe('Agent conversion UX', () => {
           destinationAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
           path: [],
         },
-        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
-        message: 'Rota mais otimizada agora.',
+        optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
+        message: 'Cotação atual.',
       }))
       .mockResolvedValueOnce(JSON.stringify({
         success: true,

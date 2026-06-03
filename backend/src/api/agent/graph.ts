@@ -2146,7 +2146,7 @@ export class AgentGraph {
     if (settlementReceiveAssetCode !== settlementAssetCode) {
       const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
       const message = [
-        `Estimativa antes de confirmar pela rota mais otimizada: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+        `Estimativa antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
         transparencyLine,
         `Para confirmar, abra o link:\n\n${prepare.url}`,
       ].filter(Boolean).join('\n');
@@ -2155,7 +2155,7 @@ export class AgentGraph {
 
     return {
       success: true,
-      message: prepare.message || `Gerei o link de confirmação da forma mais otimizada para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}.\n\nAbra para revisar e confirmar com PIN:\n\n${prepare.url}`,
+      message: prepare.message || `Gerei o link de confirmação com a cotação atual para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}.\n\nAbra para revisar e confirmar com PIN:\n\n${prepare.url}`,
     };
   }
 
@@ -2329,25 +2329,21 @@ export class AgentGraph {
   private formatBestRouteTransparency(quoteResult: any): string {
     if (!quoteResult || typeof quoteResult !== 'object') return '';
 
-    const routeChain = this.maskInternalAssetNames(quoteResult?.route?.chain).trim();
-    const criteria = String(quoteResult?.optimization_criteria || '').trim();
     const totalFeeDisplay = String(quoteResult?.fee_breakdown?.total_fee_display || quoteResult?.quote?.fee_display || '').trim();
     const savingsBrl = this.toAmountNumber(quoteResult?.savings_estimate?.estimated_savings_brl);
     const savingsPct = this.toAmountNumber(quoteResult?.savings_estimate?.savings_percentage_over_traditional_fee);
     const ttlSeconds = this.toAmountNumber(quoteResult?.quote_ttl_seconds);
 
     const lines: string[] = [];
-    if (routeChain) lines.push(`Rota mais otimizada agora: ${routeChain}.`);
-    if (criteria) lines.push(`Critério: ${criteria}.`);
-    if (totalFeeDisplay) lines.push(`Taxa total estimada: ${totalFeeDisplay}.`);
+    if (totalFeeDisplay) lines.push(`Taxa estimada: ${totalFeeDisplay}.`);
     if (savingsBrl > 0) {
       const pctLabel = savingsPct > 0 ? `${savingsPct.toFixed(1).replace('.', ',')}%` : '';
-      lines.push(`Encontrei uma rota mais barata e você economiza aproximadamente R$ ${savingsBrl.toFixed(2).replace('.', ',')} em taxas.`);
+      lines.push(`Economia estimada: aproximadamente R$ ${savingsBrl.toFixed(2).replace('.', ',')} em taxas.`);
       if (pctLabel) {
         lines.push(`Comparativo: cerca de ${pctLabel} mais barato que métodos tradicionais.`);
       }
     }
-    if (ttlSeconds > 0) lines.push(`Estimativa válida por ${Math.trunc(ttlSeconds)} segundos.`);
+    if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
 
     return lines.join(' ');
   }
@@ -2568,7 +2564,7 @@ export class AgentGraph {
       feeDisplay = String(result.fee_breakdown?.total_fee_display || result.quote?.fee_display || feeDisplay).trim() || feeDisplay;
       const ttlSeconds = this.toAmountNumber(result.quote_ttl_seconds);
       if (ttlSeconds > 0) {
-        validityLine = `Estimativa válida por ${Math.trunc(ttlSeconds)} segundos.`;
+        validityLine = `Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`;
       }
     } catch (error) {
       logger.warn(`[generic-route-estimate] route quote failed, using product fallback: ${error instanceof Error ? error.message : String(error)}`);
@@ -2594,10 +2590,10 @@ export class AgentGraph {
 
     state.success = true;
     state.response_message = [
-      `Estimativa da rota mais otimizada para alguém receber ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}:`,
+      `Estimativa para alguém receber ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}:`,
       sourceLine,
       `Recebimento: ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}.`,
-      `Taxa total estimada: ${feeDisplay}.`,
+      `Taxa estimada: ${feeDisplay}.`,
       validityLine,
       'Para finalizar, me envie o nome salvo, e-mail, CPF, telefone ou chave PIX do destinatário.',
     ].join('\n');
@@ -2978,8 +2974,8 @@ export class AgentGraph {
       fundingEstimate,
       this.text(
         language,
-        `Escolhemos a rota mais otimizada disponível: o PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
-        `We chose the most optimized available route: PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after your confirmation, the payment is sent automatically to ${input.destinationName}.`
+        `O PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da sua confirmação, o pagamento sai automaticamente para ${input.destinationName}.`,
+        `PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after your confirmation, the payment is sent automatically to ${input.destinationName}.`
       ),
       this.text(language, `Abra o link:\n\n${url}`, `Open the link:\n\n${url}`),
     ].join('\n\n');
@@ -3247,7 +3243,7 @@ export class AgentGraph {
       state.success = true;
       state.response_message = String(
         prepared.message ||
-        `Gerei o link de confirmação da forma mais otimizada para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${recipient.destinationName}.`
+        `Gerei o link de confirmação com a cotação atual para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${recipient.destinationName}.`
       );
     }
 

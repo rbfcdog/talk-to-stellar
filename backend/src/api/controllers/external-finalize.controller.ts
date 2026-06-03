@@ -2667,8 +2667,8 @@ export default class ExternalFinalizeController {
               destinationAssetCode: destinationAssetForNotice,
               message:
                 sourceAssetForNotice === 'XLM' || destinationAssetForNotice === 'XLM'
-                  ? 'Conversão automática concluída pela forma mais otimizada antes do envio.'
-                  : `Conversão automática concluída pela forma mais otimizada: ${formatCustomerAssetAmount(String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''), sourceAssetForNotice)} ` +
+                  ? 'Conversão automática concluída com a cotação atual antes do envio.'
+                  : `Conversão automática concluída com a cotação atual: ${formatCustomerAssetAmount(String(publicTransferDetails.sourceAmount || quote?.sourceAmount || ''), sourceAssetForNotice)} ` +
                     `viraram ${formatCustomerAssetAmount(String(publicTransferDetails.destinationAmount || quote?.destinationAmount || amount), destinationAssetForNotice)} antes do envio.`,
             }
           : null;
