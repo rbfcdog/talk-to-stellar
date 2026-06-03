@@ -1084,8 +1084,8 @@ export default function CreateAccountClient({
             />
             <span>
               {L(
-                "Opcional: ativar passkey agora. Para demo, você pode usar apenas PIN e ativar biometria depois.",
-                "Optional: enable passkey now. For demos, you can use PIN only and enable biometrics later.",
+                "Opcional: ativar passkey agora. Você pode usar apenas PIN e ativar biometria depois.",
+                "Optional: enable passkey now. You can use PIN only and enable biometrics later.",
               )}
             </span>
           </label>
