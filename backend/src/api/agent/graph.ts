@@ -48,7 +48,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PIX,
     toolName: 'route_pix_offramp_intent',
-    description: 'Use for PIX saída/off-ramp only: the user wants money to leave their TalkToStellar account to their PIX/bank/key. Portuguese examples: "sacar 50 reais para meu PIX", "retirar 20 USDC para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix", "tirar da conta para o banco". This route wins over normal payment when the destination is the user own PIX, own bank exit, or "pra fora" through PIX.',
+    description: 'Use for PIX saída/off-ramp only: the user wants money to leave their TalkToStellar account to their own PIX/bank/key. Portuguese examples: "sacar 50 reais para meu PIX", "retirar 20 USDC para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix", "tirar da conta para o banco". This route wins over normal payment only when the destination is the user own PIX, own bank exit, or explicitly "pra fora" through PIX. Do not use this for plain external-transfer wording with a conversion layer like "uero mandar 10 usdc em xlm pra fora"; that is route_payment_intent with source_asset_code=USDC, dest_asset_code=XLM, amount=10, and needs_clarification=true if the external destination/key is missing.',
   },
   {
     intent: IntentType.PIX,
@@ -78,7 +78,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PAYMENT,
     toolName: 'route_payment_intent',
-    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to another recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail and destination is not the user own PIX/bank exit. Do not use for PIX top-up/deposit/add-balance requests like colocar/adicionar/depositar 100 reais via PIX; those are route_pix_onramp_intent and must not ask for a contact key. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
+    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to another recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail and destination is not the user own PIX/bank exit. Do not use for PIX top-up/deposit/add-balance requests like colocar/adicionar/depositar 100 reais via PIX; those are route_pix_onramp_intent and must not ask for a contact key. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help. For layered external transfers like "uero mandar 10 usdc em xlm pra fora", route here: amount=10, source_asset_code=USDC, asset_code=USDC, dest_asset_code=XLM, needs_clarification=true if no actual contact/email/phone/public key is provided. This means convert USDC to XLM first, then transfer XLM.',
   },
   {
     intent: IntentType.PAYMENT_LINK,
@@ -164,22 +164,22 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
         },
         amount: {
           type: 'string',
-          description: 'Optional normalized decimal amount from the user message. For PIX-funded contact payment, this is the final amount the recipient should receive.',
+          description: 'Optional normalized decimal amount from the user message. For PIX-funded contact payment, this is the final amount the recipient should receive. For layered external transfers such as "10 USDC em XLM pra fora", this is the source amount being spent.',
         },
         asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For single-asset quote requests, also fill source_asset_code/dest_asset_code instead of relying only on this field. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM.',
+          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For single-asset quote requests, also fill source_asset_code/dest_asset_code instead of relying only on this field. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM. For layered external transfers, use the source asset here and also fill source_asset_code/dest_asset_code.',
         },
         source_asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional source/origin asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means source_asset_code XLM. For "cotação do CETES" or "preço do XLM", use CETES/XLM as source_asset_code.',
+          description: 'Optional source/origin asset for quote, conversion, route, fee, cost, or layered transfer requests. Example: "cotacao XLM para USDC" means source_asset_code XLM. For "cotação do CETES" or "preço do XLM", use CETES/XLM as source_asset_code. "mandar 10 USDC em XLM pra fora" means source_asset_code USDC.',
         },
         dest_asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional destination/target asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means dest_asset_code USDC. For single-asset quotes in Portuguese/Brazil context, default to BRL.',
+          description: 'Optional destination/target asset for quote, conversion, route, fee, cost, or layered transfer requests. Example: "cotacao XLM para USDC" means dest_asset_code USDC. "mandar 10 USDC em XLM pra fora" means dest_asset_code XLM. For single-asset quotes in Portuguese/Brazil context, default to BRL.',
         },
         quote_mode: {
           type: 'string',
@@ -1585,6 +1585,55 @@ export class AgentGraph {
     };
   }
 
+  private paymentIntentFromLlmRoute(state: AgentState): {
+    recipient_query?: string;
+    amount?: string;
+    asset_code?: string;
+    receive_asset_code?: string;
+    is_payment_link?: boolean;
+    needs_clarification?: boolean;
+    clarification_question?: string;
+    memo?: string;
+    category?: string;
+  } {
+    const route = (state.action_params as any)?.llm_route || {};
+    if (String(route.tool_name || '').trim() !== 'route_payment_intent') {
+      return {};
+    }
+
+    const sourceAssetCode = this.normalizeAgentAssetCode(route.source_asset_code || route.asset_code || '');
+    const destAssetCode = this.normalizeAgentAssetCode(route.dest_asset_code || '');
+    const amount = String(route.amount || '').trim();
+    const recipientQuery = String(route.recipient_query || '').trim();
+    const hasStructuredFields = Boolean(amount || sourceAssetCode || destAssetCode || recipientQuery);
+    if (!hasStructuredFields) {
+      return {};
+    }
+
+    const isLayeredExternalTransfer = Boolean(
+      amount &&
+      sourceAssetCode &&
+      destAssetCode &&
+      sourceAssetCode !== destAssetCode
+    );
+
+    return {
+      recipient_query: recipientQuery || undefined,
+      amount: amount || undefined,
+      asset_code: sourceAssetCode || this.normalizeAgentAssetCode(route.asset_code || '') || undefined,
+      receive_asset_code: destAssetCode && destAssetCode !== sourceAssetCode ? destAssetCode : undefined,
+      is_payment_link: false,
+      needs_clarification: Boolean(route.needs_clarification || !recipientQuery),
+      clarification_question: isLayeredExternalTransfer && !recipientQuery
+        ? this.text(
+            this.getLanguage(state),
+            `Entendi a operação em duas camadas: converter ${this.formatMoneyByAsset(amount, sourceAssetCode)} para ${destAssetCode} e depois transferir em ${destAssetCode}. Falta só o destino externo: envie o contato, e-mail, telefone, CPF ou public key.`,
+            `I understood the two-layer operation: convert ${this.formatMoneyByAsset(amount, sourceAssetCode)} to ${destAssetCode}, then transfer in ${destAssetCode}. I only need the external destination: send the contact, email, phone, tax ID, or public key.`
+          )
+        : undefined,
+    };
+  }
+
   private async buildPixRampUrl(state: AgentState, intent: {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
@@ -2952,6 +3001,7 @@ export class AgentGraph {
         '- amount deve conter apenas o valor numérico, sem moeda.',
         '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou CETES em testnet; EUR só em public/mainnet) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser euro/EUR/EURC em testnet, normalize para CETES.',
         '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/CETES". Isso também vale para links de pagamento.',
+        '- Quando a mensagem disser "X em Y pra fora" sem PIX/banco próprio, trate como transferência externa em duas camadas: asset_code é X (origem/gasto) e receive_asset_code é Y (ativo final transferido). "pra fora" sozinho não é destinatário; se não houver contato, e-mail, telefone, CPF, public key ou chave, deixe recipient_query vazio e needs_clarification=true.',
         '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
         '- category deve ser um rótulo curto do motivo do pagamento quando o usuário mencionar um propósito (ex.: aluguel, mercado, família, trabalho, viagem).',
         '- memo deve ser um resumo curto e natural do pagamento quando houver contexto útil.',
@@ -2963,6 +3013,7 @@ export class AgentGraph {
         '- "quero mandar pra ana silva 3 usdc" => {"recipient_query":"Ana Silva","amount":"3","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero mandar 10 usdc pra o Rodrigo receber em brl" => {"recipient_query":"Rodrigo","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero transferir 200 brl pra Carlos Souza pra ele receber em usdc" => {"recipient_query":"Carlos Souza","amount":"200","asset_code":"BRL","receive_asset_code":"USDC","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
+        '- "uero mandar 10 usdc em xlm pra fora" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"XLM","category":"","memo":"","is_payment_link":false,"needs_clarification":true,"clarification_question":"Entendi a conversão de 10 USDC para XLM. Para qual contato, e-mail, telefone, CPF ou public key devo transferir?"}',
         '- "quero mandar 20 cetes pra Ana" => {"recipient_query":"Ana","amount":"20","asset_code":"CETES","receive_asset_code":"","category":"","memo":"","is_payment_link":false,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
         '- "quero criar um link de transação de 10 usdc pra pessoa receber em brl" => {"recipient_query":"","amount":"10","asset_code":"USDC","receive_asset_code":"BRL","category":"","memo":"","is_payment_link":true,"needs_clarification":false,"clarification_question":""}',
@@ -3005,10 +3056,20 @@ export class AgentGraph {
       return state;
     }
 
-    const deterministicParsed = this.extractDirectPaymentIntentFromText(state.current_input);
-    const llmParsed = deterministicParsed.amount && deterministicParsed.recipient_query
-      ? deterministicParsed
-      : await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+    const routeParsed = this.paymentIntentFromLlmRoute(state);
+    const routeHasStructuredPayment = Boolean(
+      routeParsed.amount ||
+      routeParsed.asset_code ||
+      routeParsed.receive_asset_code ||
+      routeParsed.recipient_query ||
+      routeParsed.needs_clarification
+    );
+    const deterministicParsed = routeHasStructuredPayment ? {} : this.extractDirectPaymentIntentFromText(state.current_input);
+    const llmParsed = routeHasStructuredPayment
+      ? routeParsed
+      : deterministicParsed.amount && deterministicParsed.recipient_query
+        ? deterministicParsed
+        : await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
     const recipientQuery = String(llmParsed.recipient_query || '').trim();
     const amountInfo = this.normalizePaymentAmountAndAsset(
       String(llmParsed.amount || ''),
@@ -3915,6 +3976,7 @@ Structured extraction fields:
 - For route_pix_intent, amount and asset_code are the final amount and asset the recipient should receive. Example: "quero fazer pix pra Ana Silva de 100 XLM" -> route_pix_intent with amount="100", asset_code="XLM", recipient_query="Ana Silva".
 - For multi-turn route_pix_intent, combine context. Example: previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix" -> route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva". Do not route to route_pix_onramp_intent or generic PIX page.
 - For own-account route_pix_onramp_intent and route_pix_offramp_intent, leave recipient_query empty unless the user explicitly provided their own PIX key as data, not as a contact.
+- For layered external transfers, preserve the two layers. Example: "uero mandar 10 usdc em xlm pra fora" -> route_payment_intent, amount="10", source_asset_code="USDC", asset_code="USDC", dest_asset_code="XLM", needs_clarification=true if no actual destination/contact/public key is provided. This means first convert USDC to XLM, then transfer XLM outward. Do not open generic PIX entrada/saída.
 
 Priority order when multiple intents appear:
 1. Login, logout, PIN/security, and account access routes.
@@ -3930,7 +3992,7 @@ Route selection guide:
 - route_balance_intent: user asks to see balance, saldo, holdings, available money, quanto tenho, current wallet amount, or any asset balance such as XLM/USDC/CETES/BRL.
 - route_contacts_intent: user explicitly asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts. Contact routing requires explicit contact-management meaning; adding money/saldo is not contact management.
 - route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta". It never needs a contact. It is invalid if a separate person/contact is named as the recipient.
-- route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix".
+- route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix". It does not cover cross-asset external-transfer wording like "10 USDC em XLM pra fora" unless the user explicitly says own PIX/bank.
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
@@ -3940,7 +4002,7 @@ Route selection guide:
 - route_financial_memory_intent: user asks what nicknames/labels/preferences were saved, what the system remembers financially, savings/economy summaries, or learned payment memory.
 - route_reset_pin_intent: user asks to change, alter, reset, recover, redefine, update, fix, troubleshoot, or handle a forgotten/invalid PIN. Any PIN problem/change request routes here.
 - route_payment_link_intent: user asks to create, generate, open, share, charge/cobrar, receive with, or get a payment/receive link.
-- route_payment_intent: user wants to send, transfer, pay, or move money to a recipient who is not explicitly the user's own PIX/bank exit. Recipients can be person names, saved contacts, emails, phones, CPFs, keys, or external wallets. Use this even with typos when amount/asset/recipient are present or implied.
+- route_payment_intent: user wants to send, transfer, pay, or move money to a recipient who is not explicitly the user's own PIX/bank exit. Recipients can be person names, saved contacts, emails, phones, CPFs, keys, or external wallets. Use this even with typos when amount/asset/recipient are present or implied. Use this for "10 USDC em XLM pra fora": source is USDC, destination asset is XLM, recipient/destination is still missing.
 - route_wallet_intent: user asks for own profile, public receiving key, wallet public key, account identity, wallet setup, or wallet management that is not login/logout/PIN.
 - route_login_intent: user wants to enter, sign in, access, reconnect, or continue an existing account.
 - route_onboard_intent: user wants to create, open, register, cadastrar, or start a new account.
@@ -3957,7 +4019,8 @@ Disambiguation:
 - Multi-turn: "quero mandar 100 cetes d" followed by "pra ana silva via pix" is route_pix_intent, amount=100, asset_code=CETES, recipient_query=Ana Silva. The latest message is not a generic PIX chooser because recent context has the amount and asset.
 - A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid unless the phrase says "pra minha conta", "para minha conta", "na minha conta", or equivalent own-account language.
 - For "uero fazer pix pra ana silva de 100 xlm": route_pix_intent with high confidence. Do not choose route_pix_onramp_intent. Do not reinterpret "100 xlm" as "R$100". Do not say the user is receiving money in their own account.
-- "mandar pra fora", "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", or "off-ramp" routes to route_pix_offramp_intent.
+- "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", "fora do pix", or explicit "em pix" routes to route_pix_offramp_intent.
+- Plain "pra fora" with a conversion layer such as "10 USDC em XLM pra fora" or "mandar 20 BRL em USDC pra fora" is not a generic PIX chooser. Route as route_payment_intent with source_asset_code as the asset spent and dest_asset_code as the asset transferred outward. If the destination/contact/key is missing, set needs_clarification=true.
 - "pra fora do pix", "fora em pix", "sair para meu pix", "tirar para pix", and "mandar para meu banco" are off-ramp PIX, even when they contain transfer verbs like mandar/enviar.
 - "mandar 10 xlm/usdc/cetes/reais pra Ana Silva", emails, phone numbers, CPFs, transfer keys, or external wallets are payment, not help, unless PIX is explicitly the rail.
 - "criar/gerar link de pagamento", "link para receber", "cobrar por link", and "meu link de recebimento" are payment_link, not normal payment.
