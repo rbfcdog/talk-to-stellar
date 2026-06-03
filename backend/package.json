@@ -36,6 +36,7 @@
     "research:export-user-log": "ts-node scripts/export-mainnet-user-research-log.ts",
     "research:export-testnet": "ts-node scripts/export-mainnet-user-research-log.ts --network=testnet",
     "research:export-mainnet": "ts-node scripts/export-mainnet-user-research-log.ts --network=mainnet",
+    "research:build-15-user-log": "ts-node scripts/build-15-user-research-log.ts",
     "research:sync-notion": "ts-node scripts/export-mainnet-user-research-log.ts --sync-notion",
     "defindex:env": "ts-node scripts/setup-defindex-env.ts",
     "passkey:smart-account": "ts-node scripts/setup-passkey-smart-account.ts",
