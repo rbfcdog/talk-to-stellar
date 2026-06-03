@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Coins,
   FileCheck2,
+  HelpCircle,
   Loader2,
   LockKeyhole,
   Plus,
@@ -654,6 +655,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   convertAssetsUrl: string; pixTopUpUrl: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const [investmentHelpOpen, setInvestmentHelpOpen] = useState(false);
   const hasPrepared = Boolean(yieldResult);
   const submitted = Boolean(yieldResult?.submitted || yieldResult?.hash);
   const preparedBlocked = Boolean(hasPrepared && yieldResult?.execution_ready === false);
@@ -740,9 +742,45 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
       {activeStep === "review" && (
         <div className="border border-tts-border bg-tts-surface p-5 space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">{L("Confirmação", "Confirmation")}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold">{L("Confirmação", "Confirmation")}</h3>
+              <button
+                type="button"
+                onClick={() => setInvestmentHelpOpen((open) => !open)}
+                aria-expanded={investmentHelpOpen}
+                aria-label={L("Explicar investimento", "Explain investment")}
+                title={L("Explicar investimento", "Explain investment")}
+                className="grid h-8 w-8 place-items-center rounded-full border border-tts-border bg-tts-bg text-tts-muted transition hover:border-tts-deep hover:text-tts-deep"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+            </div>
             <BadgeCheck className="h-5 w-5 text-tts-confirm" />
           </div>
+
+          {investmentHelpOpen && (
+            <div className="border border-tts-border bg-tts-bg p-4 text-sm leading-6 text-tts-deep">
+              <p className="font-bold">{L("Como funciona este investimento?", "How does this investment work?")}</p>
+              <p className="mt-2 text-tts-muted">
+                {L(
+                  `Você escolhe um valor em ${profileShort}. Depois do PIN, esse valor sai do saldo disponível e entra na sua posição de rendimentos dessa moeda.`,
+                  `You choose an amount in ${profileShort}. After the PIN, that amount leaves your available balance and enters your earnings position for this currency.`,
+                )}
+              </p>
+              <p className="mt-2 text-tts-muted">
+                {L(
+                  "A tela sempre mostra operação e valor antes do PIN. Se algo estiver diferente do esperado, volte sem confirmar.",
+                  "The screen always shows operation and amount before the PIN. If anything looks different, go back without confirming.",
+                )}
+              </p>
+              <p className="mt-2 text-tts-muted">
+                {L(
+                  "Como este ambiente é testnet, os valores são para testar o fluxo e não representam dinheiro real, depósito bancário ou garantia.",
+                  "Because this is testnet, values are for testing the flow and do not represent real money, a bank deposit, or a guarantee.",
+                )}
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <StatCard label={L("Operação", "Operation")} value={action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")} />

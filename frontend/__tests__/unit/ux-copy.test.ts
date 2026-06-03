@@ -251,6 +251,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).not.toContain("Somente consulta");
     expect(reviewText).toContain("Confirmar investimento");
     expect(reviewText).toContain("Confirmação de investimento indisponível agora");
+    expect(reviewText).toContain("Explicar investimento");
+    expect(reviewText).toContain("Como funciona este investimento?");
+    expect(reviewText).toContain("não representam dinheiro real");
     expect(reviewText).not.toContain("Confirmar na DeFindex");
     expect(reviewText).not.toContain("Confirmação DeFindex indisponível agora");
     expect(reviewText).toContain("const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;");
