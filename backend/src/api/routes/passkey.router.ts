@@ -7,6 +7,8 @@ router.post('/register-init', PasskeyController.registerInit);
 router.post('/register-complete', PasskeyController.registerComplete);
 router.post('/auth-init', PasskeyController.authInit);
 router.post('/auth-complete', PasskeyController.authComplete);
+router.post('/login-code/create', PasskeyController.loginCodeCreate);
+router.post('/login-code/redeem', PasskeyController.loginCodeRedeem);
 router.post('/smart-account-status', PasskeyController.smartAccountStatus);
 
 export default router;

@@ -222,6 +222,14 @@ type ExternalLinkContext = {
   source?: string;
 };
 
+function normalizeExternalSessionScope(value: unknown): 'whatsapp' | 'telegram' | '' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized.includes('telegram')) return 'telegram';
+  if (normalized.includes('whatsapp') || normalized.includes('evolution') || normalized === 'phone') return 'whatsapp';
+  return '';
+}
+
 export class ExternalService {
   repo: ExternalRepository;
   supabase: SupabaseClient;
@@ -540,6 +548,8 @@ export class ExternalService {
     urlObj.searchParams.set('provider', provider);
     urlObj.searchParams.set('provider_user_id', providerUserId);
     urlObj.searchParams.set('source', provider);
+    const sessionScope = normalizeExternalSessionScope(provider);
+    if (sessionScope) urlObj.searchParams.set('session_scope', sessionScope);
     const language = normalizeLanguage((extra as any)?.language || (extra as any)?.lang || (extra as any)?.locale);
     if (language) urlObj.searchParams.set('lang', language);
     const telegramChatId = String((extra as any)?.telegram_chat_id || (extra as any)?.chat_id || '').trim();
@@ -576,7 +586,10 @@ export class ExternalService {
     urlObj.searchParams.set('token', token);
     urlObj.searchParams.set('provider', provider);
     urlObj.searchParams.set('provider_user_id', providerUserId);
-    urlObj.searchParams.set('source', String(extra.source || provider).trim().toLowerCase());
+    const source = String(extra.source || provider).trim().toLowerCase();
+    urlObj.searchParams.set('source', source);
+    const sessionScope = normalizeExternalSessionScope(source || provider);
+    if (sessionScope) urlObj.searchParams.set('session_scope', sessionScope);
     const language = normalizeLanguage(extra.language || extra.lang || extra.locale);
     if (language) urlObj.searchParams.set('lang', language);
 
@@ -1098,6 +1111,8 @@ export class ExternalService {
     if (context.provider) url.searchParams.set('provider', context.provider);
     if (context.provider_user_id) url.searchParams.set('provider_user_id', context.provider_user_id);
     if (context.source) url.searchParams.set('source', context.source);
+    const sessionScope = normalizeExternalSessionScope(context.source || context.provider);
+    if (sessionScope) url.searchParams.set('session_scope', sessionScope);
     return url.toString();
   }
 

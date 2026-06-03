@@ -26,6 +26,8 @@ import {
   getUsdBrlMaxMarketDeviationPct,
 } from '../services/quote-rate-sanity.service';
 import { attachQuoteExpiry, quoteTtlSeconds } from '../services/quote-expiry.service';
+import { UserResearchEvidenceService } from '../services/user-research-log.service';
+import { ConversionRateMatrixService } from '../services/conversion-rate-matrix.service';
 
 const agentRepo = new AgentRepository(supabase);
 const externalService = new ExternalService(supabase as any);
@@ -394,6 +396,26 @@ export class FinancialController {
     }
   }
 
+  static async getConversionRateMatrix(req: Request, res: Response) {
+    try {
+      const assets = String(req.query?.assets || req.body?.assets || '')
+        .split(/[,\s]+/g)
+        .map((asset) => asset.trim())
+        .filter(Boolean);
+      const sampleAmount = req.query?.sample_amount || req.query?.sampleAmount || req.body?.sample_amount || req.body?.sampleAmount;
+      const payload = await ConversionRateMatrixService.buildMatrix({
+        assets: assets.length ? assets : undefined,
+        sampleAmount: sampleAmount as any,
+      });
+      return res.status(200).json(payload);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, 'Nao consegui carregar as taxas de conversao agora. Tente novamente em alguns segundos.'),
+      });
+    }
+  }
+
   static async getActivityFeed(req: Request, res: Response) {
     try {
       const auth = await requireSessionAuth(req, res);
@@ -462,6 +484,47 @@ export class FinancialController {
       return res.status(200).json({ success: true, ...savings });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: publicErrorMessage(error, "Nao consegui carregar essa informacao agora. Tente novamente em alguns segundos.") });
+    }
+  }
+
+  static async trackUserResearchEvent(req: Request, res: Response) {
+    try {
+      const auth = await requireSessionAuth(req, res);
+      if (!auth) return;
+
+      const session = auth.session || {};
+      const result = await UserResearchEvidenceService.track({
+        sessionId: auth.sessionId,
+        userId: auth.userId,
+        email: String((session as any)?.email || req.body?.email || '').trim(),
+        channel: req.body?.channel || req.body?.source || req.body?.from || req.body?.origin || (session as any)?.session_source,
+        eventName: String(req.body?.event_name || req.body?.eventName || '').trim(),
+        eventGroup: String(req.body?.event_group || req.body?.eventGroup || '').trim(),
+        taskLabel: String(req.body?.task_label || req.body?.taskLabel || '').trim(),
+        status: String(req.body?.status || 'observed').trim(),
+        feedbackText: String(req.body?.feedback_text || req.body?.feedbackText || '').trim(),
+        evidenceUrl: String(req.body?.evidence_url || req.body?.evidenceUrl || '').trim(),
+        evidenceType: String(req.body?.evidence_type || req.body?.evidenceType || '').trim(),
+        pageUrl: String(req.body?.page_url || req.body?.pageUrl || '').trim(),
+        route: String(req.body?.route || '').trim(),
+        operationId: String(req.body?.operation_id || req.body?.operationId || '').trim(),
+        transactionHash: String(req.body?.transaction_hash || req.body?.transactionHash || '').trim(),
+        stellarNetwork: String(
+          req.body?.stellar_network ||
+            req.body?.stellarNetwork ||
+            (session as any)?.stellar_network ||
+            process.env.STELLAR_NETWORK ||
+            ''
+        ).trim(),
+        metadata: req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {},
+        dedupeKey: String(req.body?.dedupe_key || req.body?.dedupeKey || '').trim(),
+      });
+      return res.status(201).json(result);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: publicErrorMessage(error, 'Nao consegui registrar essa evidencia agora.'),
+      });
     }
   }
 

@@ -86,6 +86,7 @@ type RouterEvalCase = {
   name: string;
   input: string;
   expectedIntent: IntentType;
+  expectedTool?: string;
   risk?: 'low' | 'medium' | 'high';
   language?: 'pt-BR' | 'en';
   needsClarification?: boolean;
@@ -353,9 +354,10 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Histórico');
   });
 
-  it('routes typo transaction history requests without falling back to the LLM', async () => {
+  it('routes typo transaction history requests through the LLM route contract', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_history_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -386,7 +388,8 @@ describe('Agent production evals', () => {
 
   it('opens the user profile page for direct profile requests', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_wallet_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -410,7 +413,8 @@ describe('Agent production evals', () => {
 
   it('answers ambiguous best-route requests with guidance instead of generic fallback', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
 
     const result = await graph.processInput(createState('qual a melhor rota agota?'));
 
@@ -425,7 +429,8 @@ describe('Agent production evals', () => {
 
   it('does not claim standalone best-route knowledge when route request has assets but no amount', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
 
     const result = await graph.processInput(createState('qual a melhor rota de usdc pra brl agor?'));
 
@@ -438,7 +443,8 @@ describe('Agent production evals', () => {
 
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
 
     executeToolMock.mockResolvedValueOnce(JSON.stringify({
       success: true,
@@ -476,7 +482,8 @@ describe('Agent production evals', () => {
 
   it('routes menu item 8 to best-route guidance before savings summaries', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
 
     const result = await graph.processInput(createState('8. Melhor rota, cotação, taxas e economia'));
 
@@ -488,7 +495,8 @@ describe('Agent production evals', () => {
 
   it('routes cost comparison to show_savings_calculator and preserves WhatsApp rich formatting', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
     const whatsappReadyMessage = [
       '💸 *Simulação de envio: R$ 5.000*',
       '',
@@ -519,7 +527,8 @@ describe('Agent production evals', () => {
 
   it('does not answer fee comparison through generic financial memory tools', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_price_quote_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -537,7 +546,8 @@ describe('Agent production evals', () => {
 
   it('routes annual savings summary to show_annual_savings_summary', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_financial_memory_intent');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -747,6 +757,14 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('route_general_intent is not a fallback for failed understanding');
     expect(prompt).toContain('Priority order when multiple intents appear');
     expect(prompt).toContain('"pra fora do pix", "fora em pix", "sair para meu pix"');
+    expect(prompt).toContain('colocar/adicionar/depositar/carregar/recarregar/trazer 100 reais via/no/por PIX');
+    expect(prompt).toContain('Do not route it as payment and do not ask for contact key');
+    expect(prompt).toContain('"me ajude com o colocar 100 reais via pix"');
+    expect(prompt).toContain('Never choose route_contacts_intent for that shape');
+    expect(prompt).toContain('If PIX pays another person/contact, preserve the requested final asset');
+    expect(prompt).toContain('uero fazer pix pra ana silva de 100 xlm');
+    expect(prompt).toContain('Do not reinterpret "100 xlm" as "R$100"');
+    expect(prompt).toContain('A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid');
     expect(prompt).toContain('"mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN"');
     expect(prompt).toContain('Missing recipient for payment does not make it general');
     expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
@@ -788,10 +806,26 @@ describe('Agent production evals', () => {
     for (const required of Object.values(requiredByName) as string[][]) {
       expect(required).toEqual(['confidence', 'reason', 'needs_clarification', 'language', 'risk']);
     }
-    expect(descriptionByName.route_pix_intent).toContain('mandar pra fora');
-    expect(descriptionByName.route_pix_intent).toContain('destination is the user own PIX/bank exit');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('own-account PIX entrada/on-ramp only');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('me ajude com o colocar 100 reais via pix');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('never requires a contact');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('Never use this if the message has PIX plus a named recipient/person');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('uero fazer pix pra ana silva de 100 xlm');
+    expect(descriptionByName.route_pix_onramp_intent).toContain('fazer PIX pra Ana Silva de 100 XLM');
+    expect(descriptionByName.route_pix_offramp_intent).toContain('PIX saída/off-ramp only');
+    expect(descriptionByName.route_pix_offramp_intent).toContain('mandar pra fora 50 reais em pix');
+    expect(descriptionByName.route_pix_intent).toContain('prefer route_pix_onramp_intent');
+    expect(descriptionByName.route_pix_intent).toContain('prefer route_pix_offramp_intent');
+    expect(descriptionByName.route_pix_intent).toContain('PIX wins over contacts');
+    expect(descriptionByName.route_pix_intent).toContain('amount/asset is the final amount the recipient should receive');
+    expect(descriptionByName.route_pix_intent).toContain('The phrase "de 100 XLM" means 100 XLM to Ana');
+    expect(descriptionByName.route_contacts_intent).toContain('Contact routing requires explicit contact-management meaning');
+    expect(descriptionByName.route_contacts_intent).toContain('Do not use for PIX top-up/on-ramp');
+    expect(descriptionByName.route_contacts_intent).toContain('me ajude com o colocar 100 reais via pix');
+    expect(descriptionByName.route_contacts_intent).toContain('contacts tool is invalid');
     expect(descriptionByName.route_payment_intent).toContain('must not become general help');
     expect(descriptionByName.route_payment_intent).toContain('when PIX is not the requested rail');
+    expect(descriptionByName.route_payment_intent).toContain('Do not use for PIX top-up');
     expect(descriptionByName.route_payment_link_intent).toContain('does not require an existing contact');
     expect(descriptionByName.route_price_quote_intent).toContain('needs_clarification=true');
     expect(descriptionByName.route_reset_pin_intent).toContain('redefimir');
@@ -816,13 +850,31 @@ describe('Agent production evals', () => {
       { name: 'payment external wallet', input: 'enviar 5 xlm para carteira externa GDUMMYPUBLICKEY', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment missing amount still payment', input: 'quero mandar dinheiro para Ana Silva', expectedIntent: IntentType.PAYMENT, risk: 'high', needsClarification: true },
       { name: 'payment key without pix', input: 'transferir 12 usdc para chave maria@example.com sem pix', expectedIntent: IntentType.PAYMENT, risk: 'high' },
-      { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, risk: 'high' },
-      { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, risk: 'high' },
-      { name: 'pix off ramp bank wording', input: 'tirar 80 usdc pro meu banco', expectedIntent: IntentType.PIX, risk: 'high' },
-      { name: 'pix off ramp own key', input: 'sacar 25 usdc para minha chave pix', expectedIntent: IntentType.PIX, risk: 'high' },
-      { name: 'pix on ramp', input: 'colocar 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'payment stellar rail explicit', input: 'mandar 10 xlm pra Ana Silva pela Stellar', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment not pix explicit typo', input: 'uero mandar 10 xlm pra ana sem pix', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment phone recipient no pix', input: 'transferir 8 cetes para +55 11 99999-0000', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp bank wording', input: 'tirar 80 usdc pro meu banco', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp own key', input: 'sacar 25 usdc para minha chave pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp account exit wording', input: 'quero tirar dinheiro da conta e mandar pro meu pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high', needsClarification: true },
+      { name: 'pix off ramp bank no pix word', input: 'retirar 100 reais para o meu banco', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp typo withdraw', input: 'sacarr 30 usdc pro pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix on ramp', input: 'colocar 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp help wording', input: 'me ajude com o colocar 100 reais via pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp help add wording', input: 'me ajuda a adicionar 100 reais por pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp balance wording', input: 'adicionar saldo com pix de 100 reais', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp own account receive', input: 'quero receber 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp load wording', input: 'carregar minha conta com 100 reais no pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp typo own account', input: 'qro botar cem reais por pix na conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
+      { name: 'pix on ramp missing amount', input: 'quero colocar dinheiro via pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', needsClarification: true },
       { name: 'pix funded payment', input: 'pagar Ana via PIX', expectedIntent: IntentType.PIX, risk: 'high' },
-      { name: 'pix typo off ramp', input: 'uero mandar 100 reais pra fora do pix', expectedIntent: IntentType.PIX, risk: 'high' },
+      { name: 'pix funded payment exact xlm typo', input: 'uero fazer pix pra ana silva de 100 xlm', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high' },
+      { name: 'pix funded payment exact xlm natural', input: 'quero fazer pix pra Ana Silva de 100 XLM', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high' },
+      { name: 'pix funded payment exact usdc', input: 'pagar ana silva via pix com 50 usdc', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high' },
+      { name: 'pix funded payment exact cetes', input: 'pix pra Marina de 75 cetes', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high' },
+      { name: 'pix funded payment missing asset', input: 'fazer pix de 100 para Ana Silva', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high' },
+      { name: 'pix typo off ramp', input: 'uero mandar 100 reais pra fora do pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix cost edge is quote', input: 'quanto custa sacar 100 usdc para meu pix?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'conversion explicit', input: 'quero converter 10 usdc pra brl', expectedIntent: IntentType.CONVERSION, risk: 'high' },
       { name: 'conversion generic', input: 'quero converter dinheiro', expectedIntent: IntentType.CONVERSION, risk: 'medium' },
@@ -832,6 +884,8 @@ describe('Agent production evals', () => {
       { name: 'price quote fees', input: 'quanto custa enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote bank comparison', input: 'vale a pena comparado com o banco enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', needsClarification: true },
+      { name: 'price quote xlm to usdc', input: 'quanto dá 100 xlm em usdc?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'price quote route without amount', input: 'melhor rota de brl para xlm', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', needsClarification: true },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },
@@ -849,6 +903,8 @@ describe('Agent production evals', () => {
       { name: 'reset pin change', input: 'quero alterar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin forgot', input: 'esqueci meu PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin invalid', input: 'meu pin nao funciona', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin security wording', input: 'preciso trocar a senha pin da conta', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'reset pin typo missing first letter', input: 'ero mudar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'payment link create', input: 'criar link de pagamento de 50 dólares', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link receive', input: 'quero meu link para receber dinheiro', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link charge customer', input: 'gerar link pra cobrar cliente 15 usdc', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
@@ -865,17 +921,22 @@ describe('Agent production evals', () => {
       { name: 'general capabilities', input: 'o que você consegue fazer?', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'general asset explanation', input: 'quais são os assets? explique cada um', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'general feature explanation', input: 'me explica como funciona o pix e os rendimentos', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'general asset pair explanation', input: 'explique CETES, XLM e USDC', expectedIntent: IntentType.GENERAL, risk: 'low' },
+      { name: 'general route explanation', input: 'como voces escolhem a melhor rota?', expectedIntent: IntentType.GENERAL, risk: 'low' },
       { name: 'english balance', input: 'show my balance', expectedIntent: IntentType.BALANCE, risk: 'low', language: 'en' },
       { name: 'english payment', input: 'send 12 usdc to Ana Silva', expectedIntent: IntentType.PAYMENT, risk: 'high', language: 'en' },
-      { name: 'english pix withdraw', input: 'withdraw 20 usdc to my PIX key', expectedIntent: IntentType.PIX, risk: 'high', language: 'en' },
+      { name: 'english payment not pix', input: 'send 10 xlm to Ana without PIX', expectedIntent: IntentType.PAYMENT, risk: 'high', language: 'en' },
+      { name: 'english pix withdraw', input: 'withdraw 20 usdc to my PIX key', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high', language: 'en' },
+      { name: 'english pix top up', input: 'add 100 reais by PIX to my account', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', language: 'en' },
+      { name: 'english pix contact final asset', input: 'make a PIX to Ana Silva for 100 XLM', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_intent', risk: 'high', language: 'en' },
       { name: 'english payment link', input: 'create a payment link for 20 dollars', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium', language: 'en' },
       { name: 'english pin', input: 'forgot my PIN', expectedIntent: IntentType.RESET_PIN, risk: 'high', language: 'en' },
       { name: 'english help', input: 'what can you do?', expectedIntent: IntentType.GENERAL, risk: 'low', language: 'en' },
     ];
 
-    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, risk = 'medium', language = 'pt-BR', needsClarification = false }) => {
+    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, expectedTool: caseExpectedTool, risk = 'medium', language = 'pt-BR', needsClarification = false }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
-      const expectedTool = routeToolByIntent[expectedIntent];
+      const expectedTool = caseExpectedTool || routeToolByIntent[expectedIntent];
       const routeArgs = {
         confidence: 0.99,
         reason: `eval expects ${expectedIntent}`,
@@ -910,9 +971,18 @@ describe('Agent production evals', () => {
       expect(routeArgs.needs_clarification).toBe(needsClarification);
       expect(routeArgs.language).toBe(language);
       expect(routeArgs.risk).toBe(risk);
-      expect(routerInvoke).toHaveBeenCalledTimes(1);
-      expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
+      const expectedRouterCalls = expectedIntent === IntentType.CONTACTS || expectedTool === 'route_pix_onramp_intent' ? 2 : 1;
+      expect(routerInvoke).toHaveBeenCalledTimes(expectedRouterCalls);
+      expect(graph.llm.bindTools).toHaveBeenCalledTimes(expectedRouterCalls);
       expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
+
+      if (expectedIntent === IntentType.CONTACTS || expectedTool === 'route_pix_onramp_intent') {
+        const auditMessages = routerInvoke.mock.calls[1][0]
+          .map((message: any) => flattenMessageContent(message.content))
+          .join('\n');
+        expect(auditMessages).toContain('ROUTE AUDIT');
+        expect(auditMessages).toContain(`Previous route tool selected: ${expectedTool}`);
+      }
 
       const tools = graph.llm.bindTools.mock.calls[0][0];
       const toolNames = tools.map((tool: any) => tool.function?.name).filter(Boolean);
@@ -920,6 +990,8 @@ describe('Agent production evals', () => {
       expect(toolNames).toContain('route_general_intent');
       expect(toolNames).toContain('route_payment_intent');
       expect(toolNames).toContain('route_pix_intent');
+      expect(toolNames).toContain('route_pix_onramp_intent');
+      expect(toolNames).toContain('route_pix_offramp_intent');
 
       if (expectedIntent !== IntentType.GENERAL) {
         expect(expectedTool).not.toBe('route_general_intent');
@@ -954,6 +1026,98 @@ describe('Agent production evals', () => {
     expect(routerInvoke).toHaveBeenCalledTimes(1);
     expect(graph.llm.bindTools).toHaveBeenCalledTimes(1);
     expect(graph.llm.bindTools.mock.calls[0][1]).toEqual({ tool_choice: 'required' });
+  });
+
+  it('audits a suspicious contacts route through a second LLM route call instead of using a parser', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest
+      .fn()
+      .mockResolvedValueOnce({
+        tool_calls: [{
+          id: 'call_contacts',
+          name: 'route_contacts_intent',
+          args: {
+            confidence: 0.91,
+            reason: 'incorrectly thought adicionar means contacts',
+            needs_clarification: true,
+            language: 'pt-BR',
+            risk: 'high',
+          },
+        }],
+      })
+      .mockResolvedValueOnce({
+        tool_calls: [{
+          id: 'call_pix',
+          name: 'route_pix_onramp_intent',
+          args: {
+            confidence: 0.99,
+            reason: 'own-account PIX top-up',
+            needs_clarification: false,
+            language: 'pt-BR',
+            risk: 'high',
+          },
+        }],
+      });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    const intent = await graph.detectIntent('me ajude com o colocar 100 reais via pix');
+
+    expect(intent).toBe(IntentType.PIX);
+    expect(routerInvoke).toHaveBeenCalledTimes(2);
+    const auditMessages = routerInvoke.mock.calls[1][0].map((message: any) => flattenMessageContent(message.content)).join('\n');
+    expect(auditMessages).toContain('ROUTE AUDIT');
+    expect(auditMessages).toContain('Previous route tool selected: route_contacts_intent');
+    expect(auditMessages).toContain('call route_pix_onramp_intent');
+  });
+
+  it('audits a suspicious PIX on-ramp route into PIX-funded contact payment without using a parser', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest
+      .fn()
+      .mockResolvedValueOnce({
+        tool_calls: [{
+          id: 'call_wrong_onramp',
+          name: 'route_pix_onramp_intent',
+          args: {
+            confidence: 0.92,
+            reason: 'incorrectly treated PIX as own-account top-up',
+            needs_clarification: false,
+            language: 'pt-BR',
+            risk: 'high',
+          },
+        }],
+      })
+      .mockResolvedValueOnce({
+        tool_calls: [{
+          id: 'call_pix_contact',
+          name: 'route_pix_intent',
+          args: {
+            confidence: 0.99,
+            reason: 'PIX funds payment to Ana Silva for final 100 XLM',
+            needs_clarification: false,
+            language: 'pt-BR',
+            risk: 'high',
+          },
+        }],
+      });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+
+    const intent = await graph.detectIntent('uero fazer pix pra ana silva de 100 xlm');
+
+    expect(intent).toBe(IntentType.PIX);
+    expect(routerInvoke).toHaveBeenCalledTimes(2);
+    const auditMessages = routerInvoke.mock.calls[1][0].map((message: any) => flattenMessageContent(message.content)).join('\n');
+    expect(auditMessages).toContain('ROUTE AUDIT');
+    expect(auditMessages).toContain('Previous route tool selected: route_pix_onramp_intent');
+    expect(auditMessages).toContain('uero fazer pix pra ana silva de 100 xlm');
+    expect(auditMessages).toContain('must be route_pix_intent, not route_pix_onramp_intent');
+    expect(auditMessages).toContain('pay Ana Silva 100 XLM using PIX funding');
   });
 
   it('does not mask LLM router API failures as generic help', async () => {
@@ -1304,7 +1468,7 @@ describe('Agent production evals', () => {
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const routerInvoke = mockRouteIntent(graph, 'route_pix_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent');
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };
@@ -1330,13 +1494,47 @@ describe('Agent production evals', () => {
     }
   });
 
+  it('routes own-account PIX top-up help wording to on-ramp instead of asking for a contact', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent');
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState('me ajude com o colocar 100 reais via pix'));
+
+      expect(routerInvoke).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('/pix-on?');
+      expect(result.response_message).toContain('amount=100');
+      expect(result.response_message).toContain('currency=BRL');
+      expect(result.response_message).toContain('receive_amount=100');
+      expect(result.response_message).toContain('receive_asset=BRL');
+      expect(result.response_message).not.toContain('Me diga a chave');
+      expect(result.response_message).not.toContain('email, telefone ou public key');
+      expect(result.response_message).not.toContain('Posso ajudar com:');
+      expect(executeToolMock.mock.calls.some(([name]) => name === 'list_contacts')).toBe(false);
+      expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('routes outside-PIX wording to off-ramp copy and URL instead of on-ramp copy', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const routerInvoke = mockRouteIntent(graph, 'route_pix_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_offramp_intent');
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };

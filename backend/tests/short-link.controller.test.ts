@@ -1,16 +1,21 @@
 const mockShortenPublicUrl = jest.fn();
 const mockResolveShortLink = jest.fn();
+const mockResolveShortLinkRecord = jest.fn();
+const mockSupabase = {
+  from: jest.fn(),
+};
 
 jest.mock('../src/api/services/core/external.service', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
     shortenPublicUrl: mockShortenPublicUrl,
     resolveShortLink: mockResolveShortLink,
+    resolveShortLinkRecord: mockResolveShortLinkRecord,
   })),
 }));
 
 jest.mock('../src/config/supabase', () => ({
-  supabase: {},
+  supabase: mockSupabase,
 }));
 
 import { ShortLinkController } from '../src/api/controllers/short-link.controller';
@@ -22,9 +27,11 @@ function createResponse() {
   return res;
 }
 
-function createRequest(body: Record<string, any>, headers: Record<string, string> = {}) {
+function createRequest(body: Record<string, any>, headers: Record<string, string> = {}, params: Record<string, string> = {}, query: Record<string, string> = {}) {
   return {
     body,
+    params,
+    query,
     get(name: string) {
       return headers[name.toLowerCase()] || headers[name] || '';
     },
@@ -37,6 +44,8 @@ describe('ShortLinkController security validation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockShortenPublicUrl.mockResolvedValue('https://app.example.com/r/abc123');
+    mockResolveShortLinkRecord.mockReset();
+    mockSupabase.from.mockReset();
     process.env = {
       ...originalEnv,
       NODE_ENV: 'production',
@@ -100,5 +109,75 @@ describe('ShortLinkController security validation', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(mockShortenPublicUrl).not.toHaveBeenCalled();
+  });
+
+  it('reattaches and refreshes expired WhatsApp sessions for trusted short-link handoff', async () => {
+    process.env.INTERNAL_API_SECRET = 'internal-secret-value';
+    mockResolveShortLinkRecord.mockResolvedValue({
+      url: 'https://app.example.com/rendimentos?source=chat&session_scope=whatsapp',
+      purpose: 'rendimentos',
+      session_id: 'session-1',
+      user_id: 'user-1',
+    });
+
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: {
+        session_id: 'session-1',
+        session_token: 'token-1',
+        user_id: 'user-1',
+        last_activity: '2020-01-01T00:00:00.000Z',
+        updated_at: '2020-01-01T00:00:00.000Z',
+        created_at: '2020-01-01T00:00:00.000Z',
+      },
+      error: null,
+    });
+    const sessionEq = jest.fn(() => ({ maybeSingle }));
+    const select = jest.fn(() => ({ eq: sessionEq }));
+    const updateEq = jest.fn().mockResolvedValue({ error: null });
+    const update = jest.fn(() => ({ eq: updateEq }));
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'agent_sessions') return { select, update };
+      if (table === 'external_accounts') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              in: jest.fn(() => ({
+                order: jest.fn(() => ({
+                  limit: jest.fn().mockResolvedValue({
+                    data: [{ provider: 'whatsapp' }],
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          })),
+        };
+      }
+      return { select: jest.fn(), update: jest.fn() };
+    });
+
+    const req = createRequest(
+      {},
+      { 'x-internal-api-secret': 'internal-secret-value' },
+      { code: 'abc123' },
+      { include_session: '1' }
+    );
+    const res = createResponse();
+
+    await ShortLinkController.resolve(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      url: 'https://app.example.com/rendimentos?source=chat&session_scope=whatsapp',
+      session_id: 'session-1',
+      session_token: 'token-1',
+      session_source: 'whatsapp',
+    }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      last_activity: expect.any(String),
+      updated_at: expect.any(String),
+    }));
+    expect(updateEq).toHaveBeenCalledWith('session_id', 'session-1');
   });
 });

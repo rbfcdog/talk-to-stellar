@@ -18,4 +18,29 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset');
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
   });
+
+  it("does not copy exact XLM/CETES receive targets into the BRL PIX amount field", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain("hasExactOnRampReceiveTarget");
+    expect(text).toContain("amountParamIsPixBrl");
+    expect(text).toContain("setAmountBrl(\"\")");
+    expect(text).toContain("requestedOnRampTargetDisplay");
+    expect(text).toContain('desiredReceiveAsset === "BRL" || desiredReceiveAsset === "USDC"');
+    expect(text).toContain("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM");
+    expect(text).toContain("PIX amount estimated from conversion matrix");
+    expect(text).toContain("const requiredNetBrl = receiveTarget / rate");
+    expect(text).toContain("O PIX será calculado pela cotação dinâmica antes de gerar o QR.");
+    expect(text).not.toContain('receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL")');
+    expect(text).not.toContain("Alvo: mandar ${formatMoney(amountBrl)}");
+  });
+
+  it("keeps WhatsApp/Telegram session scope on PIX GET and POST ramp calls", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain("scopedExternalSource ? { session_scope: scopedExternalSource }");
+    expect(text).toContain("const externalContext: Record<string, string>");
+    expect(text).toContain("const search = new URLSearchParams({ ...auth, language, ...externalContext, ...(params || {}) });");
+    expect(text).toContain("body: JSON.stringify({ ...auth, language, ...externalContext })");
+  });
 });

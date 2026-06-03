@@ -60,6 +60,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("ConfirmConversionClient");
     expect(text).toContain("Nada passa pelo chat");
     expect(text).toContain("payload?.token");
+    expect(text).toContain("currentPageSessionSource");
+    expect(text).toContain("scopedRampApiPath");
+    expect(text).toContain('params.set("session_scope", source)');
+    expect(text).toContain("fetch(`/api/ramp/${scopedRampApiPath(path)}`");
     expect(text).not.toContain("ReturnToChat");
     expect(text).not.toContain('buildUrl("/chat"');
     expect(financialRouter).toContain("conversion-confirmation");
@@ -97,6 +101,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("closeIntermediatePage()");
     expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
     expect(text).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
+    expect(chatText).toContain("const restoredSessionId = await restoreAuthenticatedBrowserSession();");
+    expect(chatText).toContain("if (!cancelled && !restoredSessionId) beginExpiredBrowserSession(true);");
     expect(chatText).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
     expect(apiText).toContain("isBrowserOnlyLogout");
     expect(apiText).toContain("localOnly: true");
@@ -142,12 +148,45 @@ describe("UX copy guardrails", () => {
     }
   });
 
+  it("keeps logout out of the rendimentos tab bar", () => {
+    const text = source("app/rendimentos/rendimentos-client.tsx");
+    const languageToggleText = source("components/shared/language-toggle.tsx");
+
+    expect(text).not.toContain('href="/logout"');
+    expect(text).not.toContain('>{L("Sair", "Logout")}</a>');
+    expect(languageToggleText).toContain('href="/logout"');
+    expect(languageToggleText).toContain("const logoutTitle");
+    expect(languageToggleText).not.toContain(">{logoutTitle}</span>");
+  });
+
   it("keeps the passkey page framed around biometrics for users", () => {
     const text = source("app/passkey-test/passkey-test-client.tsx");
 
     expect(text).toContain("Entrar com biometria");
     expect(text).toContain("Segurança avançada");
     expect(text).not.toContain("Testar passkey e OpenZeppelin");
+  });
+
+  it("keeps login QR as a phone-generated code flow for desktop sign-in", () => {
+    const loginText = source("app/login/login-client.tsx");
+    const passkeyProxyText = source("app/api/passkeys/[...path]/route.ts");
+    const backendRouterText = source("../backend/src/api/routes/passkey.router.ts");
+    const backendServiceText = source("../backend/src/api/services/core/passkey.service.ts");
+
+    expect(loginText).toContain('url.searchParams.set("auth", "passkey-code")');
+    expect(loginText).toContain('url.searchParams.set("phone_code", "1")');
+    expect(loginText).toContain('url.searchParams.set("pair", passkeyPairId)');
+    expect(loginText).toContain("handlePhonePasskeyCode");
+    expect(loginText).toContain("handleRedeemPhonePasskeyCode");
+    expect(loginText).toContain("Código do celular");
+    expect(loginText).toContain("Generate code for computer");
+    expect(loginText).toContain("/api/passkeys/login-code/create");
+    expect(loginText).toContain("/api/passkeys/login-code/redeem");
+    expect(passkeyProxyText).toContain("passthroughResponseWithSession");
+    expect(backendRouterText).toContain("login-code/create");
+    expect(backendRouterText).toContain("login-code/redeem");
+    expect(backendServiceText).toContain("passkey_login_pairing_codes");
+    expect(backendServiceText).toContain("hashLoginPairingCode");
   });
 
   it("keeps BRL visible while sending TESOURO as the backend settlement asset", () => {
@@ -176,6 +215,15 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("refreshOrder(false)");
     expect(text).toContain("receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url");
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
+    expect(text).toContain("Taxa de conversão estimada");
+    expect(text).toContain("formatFeeParts");
+    expect(text).toContain("Base para conversão");
+    expect(text).toContain("finalConversionPending");
+    expect(text).toContain("onRampFinalAssetDelta");
+    expect(text).toContain('finalAsset === "BRL"');
+    expect(text).toContain("Conversão para");
+    expect(text).toContain("!returnToPath && !stayOpenAfterSuccess");
+    expect(text).toContain("receipt-top-return-cta");
     expect(webFeedbackText).toContain("isExternalChannelPage()");
     expect(webFeedbackText).toContain('source === "whatsapp" || source === "telegram"');
     expect(chatText).toContain('chatId !== "agent" || typeof window === "undefined" || externalPriorityChat');
@@ -197,9 +245,15 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Distribuição");
     expect(reviewText).toContain("Rentabilidade");
     expect(reviewText).not.toContain("Simulação");
+    expect(reviewText).not.toContain("Somente consulta");
+    expect(reviewText).toContain("Confirmar na DeFindex");
+    expect(reviewText).toContain("Confirmação DeFindex indisponível agora");
+    expect(reviewText).toContain("const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;");
+    expect(reviewText).not.toContain("const canConfirm = canPrepare && confirmAvailable");
     expect(reviewText).toContain("Posições");
     expect(reviewText).toContain("Posição atual");
-    expect(reviewText).toContain("Nada aplicado agora");
+    expect(reviewText).toContain("formatPositionAmount");
+    expect(reviewText).not.toContain("Nada aplicado agora");
     expect(reviewText).toContain("Testnet · valores estimados");
     expect(reviewText).toContain("extractDefindexPositionAmount(payload?.position || payload?.balance)");
     expect(reviewText).toContain("operation_history_fallback");

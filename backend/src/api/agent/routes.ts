@@ -301,6 +301,7 @@ Few-shot examples — respostas corretas baseadas em histórico:
 - Use 'get_yield_options', 'get_yield_balance', 'prepare_yield_action', and 'confirm_yield_action' for any application request. Never mention Defindex, vault, contract, XDR, issuer, trustline, blockchain details, "yield", or public return-rate wording in user-facing copy.
 - Use 'create_brl_usd_quote' when the user asks about sending BRL to an international USD bank account. If the user has destination USD account details, follow with 'create_usd_bank_transfer_intent'. Do not describe this as competing with Wise; describe it as delivery to an international USD account.
 - When the user asks to pay/deposit/add/bring balance with PIX, including "trazer 100 BRL pra minha conta via PIX", send them to the PIX ramp page. Do not answer with their PIX receiving key for those messages. Do not mention internal environments in chat; the QR page owns the bank-integration disclaimer.
+- When the user says "colocar", "adicionar", "depositar", "carregar", "recarregar", "trazer", or "receber saldo" with a reais/BRL amount and PIX, treat it as PIX on-ramp into the user's own TalkToStellar account, even if they phrase it as "me ajude com ...". Do not ask for a contact, chave, email, phone, public key, or recipient for this own-account top-up flow.
 - When the user asks to sacar/retirar/tirar dinheiro via PIX, including "sacar 100 reais para meu PIX", send them to the PIX off-ramp page so balance leaves the account and BRL is shown arriving in their PIX.
 - PIX off-ramp destination is always BRL in the user's PIX. If the source balance is USDC, the withdrawal screen converts at exit; do not present USDC as arriving in PIX.
 - When the user says "mandar para meu PIX", "meu banco", "outro banco", "minha conta bancária", "pra fora da minha conta", "para fora da minha conta", "pra fora do PIX", or "retirar", treat it as PIX off-ramp even if the word "mandar" appears and even if "PIX" is omitted.
@@ -314,6 +315,7 @@ Few-shot examples — respostas corretas baseadas em histórico:
 
 ## CONTACT RULES
 - Use 'add_contact' when the user gives a transfer key, email, CPF, or phone number and asks to save it as a contact. Passe APENAS a chave/email/telefone no campo contact_key (campo contact_key ou pix_key) — NÃO extraia nome da mensagem do usuario. O nome sera buscado automaticamente do banco de dados.
+- Contact tools are only for explicit contact management. "Colocar/adicionar/depositar 100 reais via PIX", "me ajude com o colocar 100 reais via pix", and similar balance top-up messages are PIX on-ramp into the user's own account, not contact management, and must never ask for contact key/email/phone/public key.
 - Never ask user_id to add/list contacts. Use current session context and call tool directly.
 - Use 'list_contacts' when the user asks to see saved recipients or favorites.
 - Use 'create_contact_invite' when the user wants to invite someone by WhatsApp to become a contact automatically after onboarding.
@@ -789,36 +791,32 @@ export function createAgentRoutes(
 
       let sessionData = await repository.getSession(sessionId);
       if (sessionData && isSessionExpired(sessionData)) {
-        await repository.clearSession(sessionId);
         const provider = String(runtimeExternalContext.external_provider || '').trim();
         const providerUserId = String(runtimeExternalContext.external_provider_user_id || '').trim();
-        const fallbackProviderUserId = String(metadata?.browser_id || metadata?.provider_user_id || sessionId).trim();
-        const { url } = provider && providerUserId
-          ? await externalService.createLoginUrlWithShortLink(provider, providerUserId, {
-              sessionId,
-              userId: String(sessionData.user_id || sessionData.email || '').trim() || undefined,
-              source: provider,
-              language: requestLanguage,
-              ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
-              ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
-              ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
-              ...(metadata?.phone_number ? { phone_number: String(metadata.phone_number) } : {}),
-              ...(metadata?.whatsapp_number ? { whatsapp_number: String(metadata.whatsapp_number) } : {}),
-            })
-          : await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId, { language: requestLanguage });
+        if (provider && providerUserId) {
+          await repository.saveSession(sessionId, sessionData);
+          sessionData = await repository.getSession(sessionId) || {
+            ...sessionData,
+            last_activity: new Date().toISOString(),
+          };
+        } else {
+          await repository.clearSession(sessionId);
+          const fallbackProviderUserId = String(metadata?.browser_id || metadata?.provider_user_id || sessionId).trim();
+          const { url } = await externalService.createOnboardUrlWithShortLink("web", fallbackProviderUserId, { language: requestLanguage });
 
-        return res.status(200).json({
-          session_id: sessionId,
-          success: true,
-          onboardingRequired: true,
-          reason: "session_expired",
-          creationUrl: url,
-          message: localized(
-            requestLanguage,
-            `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
-            `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
-          ),
-        });
+          return res.status(200).json({
+            session_id: sessionId,
+            success: true,
+            onboardingRequired: true,
+            reason: "session_expired",
+            creationUrl: url,
+            message: localized(
+              requestLanguage,
+              `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`,
+              `Your session expired.\n\nOpen this link to sign in again:\n${url}\n\nOn the page, use "I already have an account".`
+            ),
+          });
+        }
       }
 
       // Initialize session if not exists
@@ -908,6 +906,8 @@ export function createAgentRoutes(
       const resultState = await agentGraph.processInput(state);
 
       logger.info(`Query processed for session: ${sessionId}`);
+
+      await repository.saveSession(sessionId, sessionData);
 
       return res.status(200).json({
         session_id: sessionId,

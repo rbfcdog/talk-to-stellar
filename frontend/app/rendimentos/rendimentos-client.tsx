@@ -18,7 +18,7 @@ import {
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
-import { getClientSession } from "@/lib/session";
+import { currentPageSessionSource, getClientSession } from "@/lib/session";
 
 type ApiState = { loading: boolean; message: string; error: string };
 type YieldApiError = Error & { code?: string; requestId?: string; supportCode?: string };
@@ -66,6 +66,11 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   if (!Number.isFinite(p)) return String(value || "0");
   return new Intl.NumberFormat(isPortuguese(language) ? "pt-BR" : "en-US", { minimumFractionDigits: p > 0 && p < 1 ? 4 : 2, maximumFractionDigits: 7 }).format(p);
 }
+function formatPositionAmount(value: unknown, profile: { short: string }, language: AppLanguage = "pt-BR") {
+  const amount = normalizeDecimal(value);
+  if (amount <= 0) return `0 ${profile.short}`;
+  return `${formatAmount(amount, language)} ${profile.short}`;
+}
 function optionExecutionBlocked(option: YieldOption | null | undefined) { return Boolean(option && (option.execution_available === false || option.execution_blocked_code)); }
 function normalizeDecimal(value: unknown) {
   const raw = String(value || "0").trim();
@@ -108,13 +113,55 @@ function isSessionUiError(error: unknown) {
   return /session|login|unauthor|auth|token|jwt/i.test(raw);
 }
 
-async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000) {
+function externalSessionSource(value: unknown) {
+  const source = String(value || "").trim().toLowerCase();
+  return source === "whatsapp" || source === "telegram" ? source : "";
+}
+
+function scopedRampSource(preferredSource?: unknown) {
+  return externalSessionSource(preferredSource) || (typeof window === "undefined" ? "" : externalSessionSource(currentPageSessionSource()));
+}
+
+function scopedRampPath(path: string, preferredSource?: unknown) {
+  const source = scopedRampSource(preferredSource);
+  if (!source) return path;
+
+  const [pathname, query = ""] = String(path || "").split("?");
+  const params = new URLSearchParams(query);
+  if (!params.get("source")) params.set("source", source);
+  if (!params.get("session_scope")) params.set("session_scope", source);
+  const nextQuery = params.toString();
+  return nextQuery ? `${pathname}?${nextQuery}` : pathname;
+}
+
+function scopedRampInit(init?: RequestInit, preferredSource?: unknown): RequestInit | undefined {
+  const source = scopedRampSource(preferredSource);
+  if (!source || !init?.body || typeof init.body !== "string") return init;
+
+  try {
+    const payload = JSON.parse(init.body || "{}");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return init;
+    return {
+      ...init,
+      body: JSON.stringify({
+        ...payload,
+        source: payload.source || source,
+        session_scope: payload.session_scope || source,
+      }),
+    };
+  } catch {
+    return init;
+  }
+}
+
+async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000, preferredSource?: unknown) {
   const controller = new AbortController();
   const id = window.setTimeout(() => controller.abort(), timeoutMs);
-  const response = await fetch(`/api/ramp/${path}`, {
-    cache: "no-store", credentials: "same-origin", ...init,
+  const scopedInit = scopedRampInit(init, preferredSource);
+  const response = await fetch(`/api/ramp/${scopedRampPath(path, preferredSource)}`, {
+    cache: "no-store", credentials: "same-origin", ...scopedInit,
     signal: controller.signal,
-    headers: { "content-type": "application/json", ...(init?.headers || {}) },
+    headers: { "content-type": "application/json", ...(scopedInit?.headers || {}) },
   }).finally(() => window.clearTimeout(id));
   const payload = await response.json().catch(() => ({}));
   const rid = response.headers.get("x-request-id") || String(payload?.request_id || payload?.requestId || "").trim();
@@ -218,7 +265,7 @@ export default function RendimentosClient({
   }, [selectedProfile.short]);
 
   async function refreshAccountBalances() {
-    const accountPayload = await yieldApi("etherfuse/wallet-balances", undefined, 20000);
+    const accountPayload = await yieldApi("etherfuse/wallet-balances", undefined, 20000, session.sessionSource);
     setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
   }
 
@@ -233,7 +280,7 @@ export default function RendimentosClient({
         const sessionPayload = await getClientSession();
         const nextSession = { ...sessionPayload, loading: false, checked: true };
         setSession(nextSession);
-        const accountPromise = nextSession.authenticated && !nextSession.externalPriority ? yieldApi("etherfuse/wallet-balances", undefined, 20000) : Promise.resolve(null);
+        const accountPromise = nextSession.authenticated && !nextSession.externalPriority ? yieldApi("etherfuse/wallet-balances", undefined, 20000, nextSession.sessionSource) : Promise.resolve(null);
         const statusPayload = await statusPromise;
         setYieldStatus(statusPayload);
         const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
@@ -271,14 +318,14 @@ export default function RendimentosClient({
     Promise.all(options.map(async (o) => {
       const code = optionCode(o);
       try {
-        const payload = await yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}`, undefined, 22000);
+        const payload = await yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}`, undefined, 22000, session.sessionSource);
         return [code, { loading: false, amount: extractDefindexPositionAmount(payload?.position || payload?.balance), error: "", raw: payload?.balance, source: String(payload?.balance_source || payload?.balance?.source || "") }] as const;
       } catch (error) {
         return [code, { loading: false, amount: "0", error: String(error instanceof Error ? error.message : error) }] as const;
       }
     })).then((entries) => { if (!cancelled) setPositionBalances(Object.fromEntries(entries)); });
     return () => { cancelled = true; };
-  }, [tab, session.authenticated, options, language, channelPinUnlocked]);
+  }, [tab, session.authenticated, session.sessionSource, options, language, channelPinUnlocked]);
 
   async function unlockChannelReturns() {
     const nextPin = returnsPin.replace(/\D/g, "").slice(0, 8);
@@ -288,13 +335,21 @@ export default function RendimentosClient({
       await yieldApi("session/verify-pin", {
         method: "POST",
         body: JSON.stringify({ pin: nextPin, wallet_pin: nextPin }),
-      }, 18000);
+      }, 18000, session.sessionSource);
       setReturnsPin("");
-      setApiState({ loading: true, message: "", error: "" });
-      await refreshAccountBalances();
       setReturnsPinVerified(true);
       setReturnsPinState({ loading: false, message: "", error: "" });
-      setApiState({ loading: false, message: "", error: "" });
+      setApiState({ loading: true, message: "", error: "" });
+      try {
+        await refreshAccountBalances();
+        setApiState({ loading: false, message: "", error: "" });
+      } catch {
+        setApiState({
+          loading: false,
+          message: "",
+          error: L("PIN validado. Não consegui atualizar os saldos agora; tente atualizar em alguns segundos.", "PIN validated. I could not refresh balances right now; try again in a few seconds."),
+        });
+      }
     } catch (error) {
       setReturnsPinState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
     }
@@ -305,7 +360,7 @@ export default function RendimentosClient({
     setApiState({ loading: true, message: "", error: "" });
     setYieldResult(null);
     try {
-      const payload = await yieldApi("defindex/yield/prepare", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps }) });
+      const payload = await yieldApi("defindex/yield/prepare", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps }) }, 18000, session.sessionSource);
       setYieldResult(payload);
       setActiveStep("review");
       setApiState({ loading: false, message: payload?.execution_ready === false ? (String(payload?.execution_blocked_code || "") ? String(payload?.execution_blocked_reason || "") : "") : "", error: "" });
@@ -316,7 +371,7 @@ export default function RendimentosClient({
     if (!actionableOption || !yieldResult) return;
     setApiState({ loading: true, message: "", error: "" });
     try {
-      const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin }) }, 60000);
+      const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin }) }, 60000, session.sessionSource);
       setYieldResult(payload);
       setPin("");
       setSuccessNotice({ action, reviewedAmount: amount, reviewedAsset: selectedProfile.short, vaultAmount: String(payload?.amount || "").trim(), vaultAsset: String(payload?.vault?.display_asset_code || payload?.vault?.asset_code || "").trim(), hash: String(payload?.hash || "").trim() });
@@ -335,7 +390,6 @@ export default function RendimentosClient({
         <div className="flex border-b border-tts-border mb-6">
           <div className={tabClass("returns")} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</div>
           <div className={tabClass("apply")} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</div>
-          <a href="/logout" className="ml-auto px-3 py-3 text-xs font-bold text-tts-muted hover:text-tts-error transition">{L("Sair", "Logout")}</a>
         </div>
 
         <AccountStatusCard
@@ -485,8 +539,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
           {rows.map((row) => {
             const spv = sparklineValues(row.amount, row.rate);
             const maxSpv = Math.max(...spv);
-            const hasAmount = row.amount > 0;
-            const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Consulta indisponível", "Unavailable") : hasAmount ? `${formatAmount(row.amount, language)} ${row.profile.short}` : L("Nada aplicado agora", "Nothing applied now");
+            const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Consulta indisponível", "Unavailable") : formatPositionAmount(row.amount, row.profile, language);
             const sourceText = row.source === "operation_history_fallback"
               ? L("Atualizado pelo histórico da conta", "Updated from account history")
               : L("Atualizado da conta.", "Updated from account.");
@@ -541,6 +594,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
   const activeRows = rows.filter((row) => row.amount > 0);
   const maxAmount = Math.max(...rows.map((row) => row.amount), 1);
   const strongest = [...activeRows].sort((a, b) => b.amount - a.amount)[0];
+  const fallbackPosition = rows[0];
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -558,7 +612,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
         <div className="border border-tts-border bg-tts-bg p-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Maior posição", "Largest position")}</p>
           <p className="mt-2 text-xl font-bold text-tts-deep">
-            {strongest ? `${formatAmount(strongest.amount, language)} ${strongest.profile.short}` : L("Nada aplicado agora", "Nothing applied now")}
+            {strongest ? formatPositionAmount(strongest.amount, strongest.profile, language) : fallbackPosition ? formatPositionAmount(0, fallbackPosition.profile, language) : "0"}
           </p>
         </div>
 
@@ -569,7 +623,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
               <div key={row.code}>
                 <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
                   <span>{row.profile.short}</span>
-                  <span>{row.amount > 0 ? `${formatAmount(row.amount, language)} ${row.profile.short}` : L("Nada aplicado agora", "Nothing applied now")}</span>
+                  <span>{formatPositionAmount(row.amount, row.profile, language)}</span>
                 </div>
                 <div className="h-2 bg-tts-border">
                   <div className="h-full bg-tts-confirm" style={{ width: `${Math.max(row.amount > 0 ? 8 : 0, (row.amount / maxAmount) * 100)}%` }} />
@@ -603,9 +657,14 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   const hasPrepared = Boolean(yieldResult);
   const submitted = Boolean(yieldResult?.submitted || yieldResult?.hash);
   const preparedBlocked = Boolean(hasPrepared && yieldResult?.execution_ready === false);
-  const confirmAvailable = confirmationEnabled && !preparedBlocked && !selectedExecutionBlocked;
-  const canConfirm = canPrepare && confirmAvailable && hasPrepared && !submitted && pin.length >= 4;
+  const confirmAvailable = hasPrepared && !preparedBlocked && !selectedExecutionBlocked;
+  const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;
   const blockedCode = String(yieldResult?.execution_blocked_code || "").trim();
+  const blockedReason = String(
+    yieldResult?.execution_blocked_reason ||
+    apiState.message ||
+    ""
+  ).trim();
   const profileShort = selectedProfile.short;
 
   if (!session.authenticated && !sessionLoading) return (
@@ -707,11 +766,12 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             {confirmAvailable ? (
               <button onClick={onConfirm} disabled={!canConfirm}
                 className="flex-1 py-3 bg-tts-deep text-tts-surface font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition">
-                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar", "Confirm")}
+                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar na DeFindex", "Confirm in DeFindex")}
               </button>
             ) : (
-              <div className="flex-1 py-3 border border-tts-gold bg-tts-gold-bg text-tts-gold text-sm font-bold text-center">
-                {preparedBlocked ? (blockedCode === "yield_account_setup_required" ? L("Ativar moeda", "Activate currency") : L("Somente consulta", "View only")) : L("Somente consulta", "View only")}
+              <div className="flex-1 border border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-bold text-tts-gold">
+                <p>{blockedCode === "yield_account_setup_required" ? L("Ative a moeda antes de confirmar.", "Activate the currency before confirming.") : L("Confirmação DeFindex indisponível agora.", "DeFindex confirmation is unavailable right now.")}</p>
+                {blockedReason && <p className="mt-1 text-xs leading-5 text-tts-gold">{blockedReason}</p>}
               </div>
             )}
           </div>

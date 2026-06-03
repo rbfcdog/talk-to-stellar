@@ -34,6 +34,10 @@ function sourceFromPayload(payload: any): string {
     const target = new URL(String(payload?.url || ""));
     return normalizeSessionSource(
       target.searchParams.get("provider") ||
+        target.searchParams.get("session_scope") ||
+        target.searchParams.get("sessionScope") ||
+        target.searchParams.get("session_source") ||
+        target.searchParams.get("sessionSource") ||
         target.searchParams.get("source") ||
         target.searchParams.get("external_source") ||
         target.searchParams.get("channel") ||
@@ -55,6 +59,15 @@ function redirectUrlWithSessionSource(rawUrl: string, source: string): string {
     return url.toString();
   } catch {
     return rawUrl;
+  }
+}
+
+function isAccountAccessUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return url.pathname === "/login" || url.pathname === "/onboard" || url.pathname.startsWith("/login/");
+  } catch {
+    return /^\/?(login|onboard)(\/|\?|#|$)/i.test(String(rawUrl || "").trim());
   }
 }
 
@@ -98,14 +111,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   const redirect = NextResponse.redirect(redirectUrlWithSessionSource(String(payload.url), sessionSource));
   const sessionId = String(payload.session_id || payload.sessionId || "").trim();
   const sessionToken = String(payload.session_token || payload.sessionToken || "").trim();
-  if (isExternalPrioritySource(sessionSource) && !sessionId && !sessionToken) {
+  if (sessionId || sessionToken) {
+    setSessionCookies(redirect, {
+      sessionId,
+      sessionToken,
+      sessionSource,
+    });
+  } else if (isExternalPrioritySource(sessionSource) && isAccountAccessUrl(String(payload.url || ""))) {
     clearSessionCookies(redirect, sessionSource);
   }
-  setSessionCookies(redirect, {
-    sessionId,
-    sessionToken,
-    sessionSource,
-  });
   redirect.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
   return redirect;
 }

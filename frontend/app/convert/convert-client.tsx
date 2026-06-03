@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
-import { getClientSession } from "@/lib/session";
+import { currentPageSessionSource, getClientSession } from "@/lib/session";
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target";
 import ConfirmConversionClient from "../confirm-conversion/confirm-conversion-client";
 
@@ -39,6 +39,34 @@ type BalanceLine = {
   asset_type?: string;
   asset_issuer?: string;
   balance: string;
+};
+
+type ConversionRateCell = {
+  pair: string;
+  source_asset_code: string;
+  destination_asset_code: string;
+  sample_source_amount: string;
+  destination_amount: string | null;
+  rate: number | null;
+  status: "available" | "same_asset" | "fallback" | "synthetic" | "unavailable";
+  source: string;
+  method: string;
+  bridge_asset_code?: string;
+  error?: string;
+};
+
+type ConversionRateMatrix = {
+  assets: string[];
+  generated_at: string;
+  cells: ConversionRateCell[];
+  matrix: Record<string, Record<string, ConversionRateCell>>;
+  summary: {
+    total_pairs: number;
+    available_pairs: number;
+    fallback_pairs: number;
+    synthetic_pairs: number;
+    unavailable_pairs: number;
+  };
 };
 
 const ASSETS: AssetOption[] = [
@@ -169,8 +197,38 @@ function formatAssetAmount(amount: number, asset: AssetOption, language: AppLang
   return `${formatDecimal(amount, language, 7)} ${asset.short}`;
 }
 
+function formatRateValue(cell: ConversionRateCell | undefined, language: AppLanguage) {
+  if (!cell || !cell.rate || cell.status === "unavailable") return language === "pt-BR" ? "Indisponível" : "Unavailable";
+  const rate = Number(cell.rate);
+  const fractionDigits = rate > 100 ? 2 : rate >= 1 ? 4 : 8;
+  return new Intl.NumberFormat(language === "pt-BR" ? "pt-BR" : "en-US", {
+    minimumFractionDigits: rate < 1 ? Math.min(4, fractionDigits) : 2,
+    maximumFractionDigits: fractionDigits,
+  }).format(rate);
+}
+
+function rateStatusLabel(cell: ConversionRateCell | undefined, language: AppLanguage) {
+  if (!cell) return language === "pt-BR" ? "carregando" : "loading";
+  if (cell.status === "same_asset") return language === "pt-BR" ? "mesmo ativo" : "same asset";
+  if (cell.status === "fallback") return language === "pt-BR" ? "mercado" : "market";
+  if (cell.status === "synthetic") return language === "pt-BR" ? `via ${cell.bridge_asset_code}` : `via ${cell.bridge_asset_code}`;
+  if (cell.status === "available") return "Stellar";
+  return language === "pt-BR" ? "sem rota" : "no route";
+}
+
+function scopedRampApiPath(path: string) {
+  const source = typeof window === "undefined" ? "" : currentPageSessionSource();
+  if (source !== "whatsapp" && source !== "telegram") return path;
+  const [pathname, rawQuery = ""] = path.split("?");
+  const params = new URLSearchParams(rawQuery);
+  if (!params.get("source")) params.set("source", source);
+  if (!params.get("session_scope")) params.set("session_scope", source);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 async function accountApi(path: string) {
-  const response = await fetch(`/api/ramp/${path}`, { cache: "no-store" });
+  const response = await fetch(`/api/ramp/${scopedRampApiPath(path)}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
     throw new Error(payload?.message || "Não foi possível carregar os dados da conta.");
@@ -195,6 +253,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [returnSource, setReturnSource] = useState("convert");
   const [returnTo, setReturnTo] = useState("");
   const [amountMode, setAmountMode] = useState<"send" | "receive">("send");
+  const [rateMatrix, setRateMatrix] = useState<ConversionRateMatrix | null>(null);
+  const [rateMatrixStatus, setRateMatrixStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [rateMatrixError, setRateMatrixError] = useState("");
 
   useEffect(() => {
     if (appliedInitialQueryRef.current) return;
@@ -241,6 +302,49 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     };
   }, []);
 
+  async function loadRateMatrix() {
+    setRateMatrixStatus("loading");
+    setRateMatrixError("");
+    try {
+      const response = await fetch("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.success === false || !Array.isArray(payload?.cells)) {
+        throw new Error(payload?.message || L("Não foi possível carregar as taxas agora.", "Could not load rates right now."));
+      }
+      setRateMatrix(payload);
+      setRateMatrixStatus("idle");
+    } catch (error) {
+      setRateMatrixStatus("error");
+      setRateMatrixError(error instanceof Error ? error.message : L("Não foi possível carregar as taxas agora.", "Could not load rates right now."));
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    setRateMatrixStatus("loading");
+    fetch("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false || !Array.isArray(payload?.cells)) {
+          throw new Error(payload?.message || "conversion matrix unavailable");
+        }
+        return payload as ConversionRateMatrix;
+      })
+      .then((payload) => {
+        if (!active) return;
+        setRateMatrix(payload);
+        setRateMatrixStatus("idle");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setRateMatrixStatus("error");
+        setRateMatrixError(error instanceof Error ? error.message : L("Não foi possível carregar as taxas agora.", "Could not load rates right now."));
+      });
+    return () => {
+      active = false;
+    };
+  }, [language]);
+
   const sourceAsset = getAsset(sourceCode);
   const destAsset = getAsset(destCode);
   const numericAmount = parseAmount(amount);
@@ -258,6 +362,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const routeTitle = L("Confirmar conversão", "Confirm conversion");
   const routeDescription = L("Cotação, taxas e PIN aparecem aqui.", "Quote, fees, and PIN appear here.");
   const destinationValue = L("Calculado na confirmação", "Calculated on confirmation");
+  const selectedRateCell = rateMatrix?.matrix?.[sourceCode]?.[destCode];
   const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
   const securityValue = sameAsset
@@ -349,12 +454,90 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
 
         <section className="grid gap-3 lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
           <Metric label={L("Sai da conta", "Leaves account")} value={formatAssetAmount(numericAmount, sourceAsset, language)} detail={sourceBalanceDisplay} />
-          <Metric label={L("Destino", "Destination")} value={destinationValue} detail={`${destAsset.short} · ${assetName(destAsset, language)}`} />
+          <Metric
+            label={L("Destino", "Destination")}
+            value={selectedRateCell?.rate && numericAmount > 0 ? formatAssetAmount(numericAmount * selectedRateCell.rate, destAsset, language) : destinationValue}
+            detail={`${destAsset.short} · ${assetName(destAsset, language)}`}
+          />
           <Metric
             label={L("Segurança", "Security")}
             value={securityValue}
             detail={L("Nada muda antes do PIN.", "Nothing changes before PIN.")}
           />
+        </section>
+
+        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Taxas dinâmicas", "Dynamic rates")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
+                <ArrowRightLeft className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
+                {L("Taxas dinâmicas", "Dynamic rates")}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">
+                {L(
+                  "Matriz 4x4 carregada da rota Stellar, referência BRL/USDC e mercado quando a liquidez de teste está fora da faixa segura.",
+                  "4x4 matrix loaded from Stellar routes, BRL/USDC reference, and market data when test liquidity is outside the safe range."
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadRateMatrix}
+              disabled={rateMatrixStatus === "loading"}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {rateMatrixStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+              {L("Atualizar", "Refresh")}
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <MiniStat
+              label={L("Par selecionado", "Selected pair")}
+              value={`${sourceCode} -> ${destCode}`}
+            />
+            <MiniStat
+              label={L("Taxa", "Rate")}
+              value={selectedRateCell?.rate ? `1 ${sourceCode} = ${formatRateValue(selectedRateCell, language)} ${destCode}` : L("Carregando", "Loading")}
+            />
+            <MiniStat
+              label={L("Origem", "Source")}
+              value={rateStatusLabel(selectedRateCell, language)}
+            />
+          </div>
+
+          {rateMatrixStatus === "error" ? (
+            <div className="mt-4 flex gap-2 border border-tts-error bg-tts-error/10 p-3 text-sm leading-6 text-tts-error">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{rateMatrixError}</span>
+            </div>
+          ) : null}
+
+          <div className="mt-4 overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-5 border-b border-tts-border text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">
+                <div className="p-2">{L("De / Para", "From / To")}</div>
+                {ASSETS.map((asset) => (
+                  <div key={`head-${asset.code}`} className="p-2 text-right">{asset.code}</div>
+                ))}
+              </div>
+              {ASSETS.map((source) => (
+                <div key={`row-${source.code}`} className="grid grid-cols-5 border-b border-tts-border/70 text-sm">
+                  <div className="p-2 font-black text-tts-deep">{source.code}</div>
+                  {ASSETS.map((destination) => {
+                    const cell = rateMatrix?.matrix?.[source.code]?.[destination.code];
+                    const selected = source.code === sourceCode && destination.code === destCode;
+                    return (
+                      <div key={`${source.code}-${destination.code}`} className={`p-2 text-right ${selected ? "bg-tts-confirm/10 font-black text-tts-deep" : "text-tts-muted"}`}>
+                        <span className="block">{formatRateValue(cell, language)}</span>
+                        <span className="block text-[10px] uppercase tracking-[0.1em]">{rateStatusLabel(cell, language)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

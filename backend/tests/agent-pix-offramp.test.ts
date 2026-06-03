@@ -26,12 +26,19 @@ describe('Agent PIX off-ramp detection', () => {
     success: false,
   });
 
-  const mockRouteIntent = (graph: any, toolName: string) => {
+  const mockRouteIntent = (graph: any, toolName: string, args: Record<string, any> = {}) => {
     const routerInvoke = jest.fn().mockResolvedValue({
       tool_calls: [{
         id: `call_${toolName}`,
         name: toolName,
-        args: { confidence: 0.99, reason: 'test route' },
+        args: {
+          confidence: 0.99,
+          reason: 'test route',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'high',
+          ...args,
+        },
       }],
     });
     graph.llm = {
@@ -471,12 +478,44 @@ describe('Agent PIX off-ramp detection', () => {
       asset_code: 'BRL',
       recipient_query: 'ana silva',
     });
+
+    const exactXlmByPix = (graph as any).extractPixRampIntentFromText(
+      'uero fazer pix pra ana silva de 100 xlm'
+    );
+
+    expect(exactXlmByPix).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount: '100',
+      amount_currency: 'XLM',
+      asset_code: 'XLM',
+      recipient_query: 'ana silva',
+    });
+
+    const exactNaturalXlmByPix = (graph as any).extractPixRampIntentFromText(
+      'quero fazer pix pra ana silva de 100 xlm'
+    );
+
+    expect(exactNaturalXlmByPix).toMatchObject({
+      is_pix_ramp: true,
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount: '100',
+      amount_currency: 'XLM',
+      asset_code: 'XLM',
+      recipient_query: 'ana silva',
+    });
   });
 
   it('processes PIX-funded contact transfer as auto-pay link instead of wallet top-up', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
-    mockRouteIntent(graph, 'route_pix_intent');
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+      recipient_query: 'Ana Silva',
+    });
     const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
@@ -520,6 +559,77 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
       expect(parsed.searchParams.get('recipient_key')).toBe('ana.silva@example.com');
       expect(parsed.searchParams.get('recipient_public_key')).toBe(anaPublicKey);
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
+  it('preserves exact XLM target for PIX-funded contact transfer links', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'XLM',
+      recipient_query: 'Ana Silva',
+    });
+    const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    jest.spyOn(graph as any, 'resolveOwnedPaymentContact').mockResolvedValue({
+      contact: {
+        contact_name: 'Ana Silva',
+        email: 'ana.silva@example.com',
+        stellar_public_key: anaPublicKey,
+      },
+      destination: anaPublicKey,
+      destinationName: 'Ana Silva',
+    });
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const state = createState('quero fazer pix pra ana silva de 100 xlm');
+      state.action_params = {
+        external_provider: 'whatsapp',
+        external_provider_user_id: '+5511999999999',
+      };
+      const result = await graph.processInput(state);
+      const url = String(result.response_message.match(/https?:\/\/\S+/)?.[0] || '');
+      const parsed = new URL(url);
+
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.action_params.llm_route).toMatchObject({
+        tool_name: 'route_pix_intent',
+        amount: '100',
+        asset_code: 'XLM',
+        recipient_query: 'Ana Silva',
+      });
+      expect(result.response_message).toContain('100 XLM');
+      expect(result.response_message).toContain('Ana Silva');
+      expect(result.response_message).toContain('Para mandar 100 XLM para Ana Silva via PIX');
+      expect(result.response_message).toContain('envia para Ana Silva');
+      expect(result.response_message).not.toContain('receber R$ 100.00 na sua conta');
+      expect(result.response_message).not.toContain('saldo entrar como US$');
+      expect(result.response_message).not.toContain('saldo entrar como dólar');
+      expect(result.response_message).not.toContain('sua conta via PIX');
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('asset')).toBe('XLM');
+      expect(parsed.searchParams.get('currency')).toBe('XLM');
+      expect(parsed.searchParams.get('receive_amount')).toBe('100');
+      expect(parsed.searchParams.get('receive_asset')).toBe('XLM');
+      expect(parsed.searchParams.get('pay_amount')).toBe('100');
+      expect(parsed.searchParams.get('pay_asset')).toBe('XLM');
+      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+      expect(parsed.searchParams.get('auto_pay_after_ramp')).toBe('1');
+      expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
+      expect(parsed.searchParams.get('recipient_key')).toBe('ana.silva@example.com');
+      expect(parsed.searchParams.get('recipient_public_key')).toBe(anaPublicKey);
+      expect(parsed.searchParams.get('provider')).toBe('whatsapp');
+      expect(parsed.searchParams.get('session_scope')).toBe('whatsapp');
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;

@@ -26,6 +26,7 @@ export function LanguageToggle() {
     language === "en" ? t("language_switch_to_portuguese") : t("language_switch_to_english");
   const themeTitle = isDark ? t("theme_switch_to_light") : t("theme_switch_to_dark");
   const themeLabel = isDark ? t("theme_light_short") : t("theme_dark_short");
+  const logoutTitle = language === "pt-BR" ? "Sair" : "Logout";
 
   return (
     <div
@@ -58,12 +59,11 @@ export function LanguageToggle() {
       <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
       <Link
         href="/logout"
-        className="inline-flex h-8 min-w-10 items-center justify-center gap-1.5 rounded-full px-2 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-error/10 hover:text-tts-error focus:outline-none focus:ring-2 focus:ring-tts-gold"
-        aria-label={t("language_switch_to_portuguese") || "Sair"}
-        title={language === "pt-BR" ? "Sair" : "Logout"}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-tts-deep transition hover:bg-tts-error/10 hover:text-tts-error focus:outline-none focus:ring-2 focus:ring-tts-gold"
+        aria-label={logoutTitle}
+        title={logoutTitle}
       >
         <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="hidden sm:inline">{language === "pt-BR" ? "Sair" : "Logout"}</span>
       </Link>
     </div>
   );

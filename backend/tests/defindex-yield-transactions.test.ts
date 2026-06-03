@@ -210,10 +210,13 @@ describe('Defindex yield transaction flows', () => {
     });
   });
 
-  it('prepares review data without building XDR when execution is not compliance-approved', async () => {
+  it('prepares executable testnet XDR without separate compliance approval', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     delete process.env.DEFINDEX_COMPLIANCE_APPROVED;
-    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
+      xdr: 'deposit-defindex-usdc-xdr',
+      raw: { action: 'deposit', assetCode: 'USDC' },
+    });
 
     const result = await AnchorService.prepareDefindexYieldForSession({
       session_id: 'session-1',
@@ -227,15 +230,20 @@ describe('Defindex yield transaction flows', () => {
     expect(result).toMatchObject({
       success: true,
       prepared: true,
-      review_only: true,
-      execution_ready: false,
+      review_only: false,
+      execution_ready: true,
       action: 'deposit',
       amount: '12.3456789',
       amount_units: 123456789,
       vault: expect.objectContaining({ asset_code: 'USDC', vault_address: YIELD_VAULTS.USDC }),
+      xdr: 'deposit-defindex-usdc-xdr',
     });
-    expect(result).not.toHaveProperty('xdr');
-    expect(buildSpy).not.toHaveBeenCalled();
+    expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'deposit',
+      amountUnits: 123456789,
+      invest: true,
+      caller: SESSION_CONTEXT.publicKey,
+    }));
   });
 
   it.each([

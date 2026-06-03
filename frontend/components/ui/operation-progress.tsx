@@ -1,7 +1,5 @@
 "use client"
 
-import { TypingDots } from "@/components/shared/feedback"
-
 export type OperationProgressStatus = "ready" | "submitting" | "done" | "error"
 
 export type OperationProgressStep = {
@@ -65,18 +63,15 @@ export function OperationProgressPanel({
         ? "border-tts-error bg-tts-error/10 text-tts-error"
         : status === "done"
           ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
-          : "border-tts-gold bg-tts-gold-bg text-tts-gold"
+          : status === "submitting"
+            ? "border-tts-confirm bg-tts-confirm/10 text-tts-deep"
+            : "border-tts-border bg-tts-surface text-tts-muted"
     }`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{title}</p>
           <p className="mt-1 font-semibold">{message}</p>
         </div>
-        {status === "submitting" && (
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black">
-            <TypingDots /> {safeElapsed}s
-          </span>
-        )}
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -89,7 +84,7 @@ export function OperationProgressPanel({
                 stepState === "done"
                   ? "border-tts-confirm bg-tts-confirm/10"
                   : stepState === "active"
-                    ? "border-tts-gold bg-tts-gold-bg"
+                    ? "border-tts-confirm bg-tts-confirm/10"
                     : stepState === "error"
                       ? "border-tts-error bg-tts-error/10"
                       : "border-tts-border bg-tts-deep/20 opacity-70"
@@ -100,7 +95,7 @@ export function OperationProgressPanel({
                   stepState === "done"
                     ? "bg-tts-confirm text-tts-deep"
                     : stepState === "active"
-                      ? "bg-tts-gold text-tts-deep"
+                      ? "bg-tts-confirm text-tts-deep"
                       : stepState === "error"
                         ? "bg-tts-error text-tts-error"
                         : "bg-tts-surface text-tts-surface/60"
@@ -119,4 +114,3 @@ export function OperationProgressPanel({
     </div>
   )
 }
-

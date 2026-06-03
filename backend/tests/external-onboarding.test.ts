@@ -17,6 +17,7 @@ describe('External onboarding service', () => {
     expect(parsedUrl.searchParams.get('provider')).toBe('telegram');
     expect(parsedUrl.searchParams.get('provider_user_id')).toBe('123456');
     expect(parsedUrl.searchParams.get('source')).toBe('telegram');
+    expect(parsedUrl.searchParams.get('session_scope')).toBe('telegram');
 
     const decoded = jwt.decode(token) as jwt.JwtPayload | null;
     expect(decoded).toBeTruthy();
@@ -58,6 +59,7 @@ describe('External onboarding service', () => {
     expect(parsedUrl.searchParams.get('token')).toBe(token);
     expect(parsedUrl.searchParams.get('provider')).toBe('telegram');
     expect(parsedUrl.searchParams.get('provider_user_id')).toBe('6405034913');
+    expect(parsedUrl.searchParams.get('session_scope')).toBe('telegram');
     expect(parsedUrl.searchParams.get('next')).toBe('/pix-on?amount=100&asset=BRL');
     expect(decoded?.session_id).toBe('session-123');
     expect(decoded?.sessionId).toBe('session-123');

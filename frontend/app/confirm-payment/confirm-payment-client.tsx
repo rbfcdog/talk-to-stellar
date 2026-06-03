@@ -831,35 +831,8 @@ export default function ConfirmPaymentClient({
   const sourceAmount = String(payload.source_amount || payload.quote?.sourceAmount || "")
   const sourceAmountLabel = sourceAmount && sourceAssetCode ? formatPaymentAmount(sourceAmount, sourceAssetCode) : ""
   const isCrossCurrency = Boolean(sourceAmountLabel && sourceAssetCode && sourceAssetCode !== assetCode)
-  const shouldShowCrossAssetInsights = isCrossCurrency
   const destinationLabel = formatRecipientLabel(payload, feedbackLanguage)
   const destinationKeyLabel = formatRecipientKey(payload)
-  const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
-  const estimatedSavingsBrl = String(payload?.savings_estimate?.estimated_savings_brl || "")
-  const estimatedSavingsPct = Number(String(payload?.savings_estimate?.savings_percentage_over_traditional_fee || "").replace(",", "."))
-  const routeChain = formatRouteChainFromPayload(payload)
-  const estimatedFeeSummary = buildFeeSummary({
-    feeDisplay: estimatedFeeDisplay,
-    platformFeeDisplay: String(payload.estimated_platform_fee || payload.estimated_spread_fee || ""),
-    feeUsdc: String(payload.estimated_fee_usdc || payload.quote?.fee_usdc || ""),
-    feeBrl: String(payload.estimated_fee_brl || payload.quote?.fee_brl || ""),
-    feeXlm: String(payload.quote?.networkFeeXlm || ""),
-    sourceAmount: sourceAmount || String(payload.amount || ""),
-    sourceAssetCode: sourceAssetCode || assetCode,
-  })
-  const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeSummary)
-  const resultFeeDisplay = result?.transferDetails?.feeDisplay || ""
-  const resultFeeSummary = buildFeeSummary({
-    feeDisplay: resultFeeDisplay,
-    platformFeeDisplay: result?.transferDetails?.platformFeeDisplay,
-    totalFeeDisplay: result?.transferDetails?.totalFeeDisplay,
-    feeUsdc: result?.transferDetails?.feeUsdc,
-    feeBrl: result?.transferDetails?.feeBrl,
-    feeXlm: result?.transferDetails?.feeXlm,
-    sourceAmount: result?.transferDetails?.sourceAmount,
-    sourceAssetCode: result?.transferDetails?.sourceAssetCode,
-  })
-  const showResultFee = hasUsableFeeDisplay(resultFeeSummary) || Boolean(result?.transferDetails)
   const currentStep = status === "submitting" ? 2 : status === "done" ? 3 : 1
   const progressStatus = (status === "submitting" || status === "done" || status === "error" ? status : "ready") as OperationProgressStatus
   const progressElapsedSeconds = progressStartedAt ? Math.max(0, Math.floor((progressNow - progressStartedAt) / 1000)) : 0
@@ -884,8 +857,6 @@ export default function ConfirmPaymentClient({
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
   const successReceiptUrl = String(result?.receipt_url || "")
-  const successAutoConversionMessage = getAutoConversionMessage(result, feedbackLanguage)
-  const successMonthlySavings = formatBrl(String(result?.monthly_savings?.estimated_savings_brl || ""), feedbackLanguage)
   const successDestinationKey = formatRecipientKey(result) || destinationKeyLabel
   const visibleError = result?.error || result?.message
     ? publicPaymentErrorMessage(result?.error || result?.message, feedbackLanguage)
@@ -958,19 +929,6 @@ export default function ConfirmPaymentClient({
                 )}
                 <p className="text-tts-deep">{T(feedbackLanguage, "Destino", "Destination")}: {destinationLabel}</p>
                 {destinationKeyLabel && <p className="text-tts-deep">{T(feedbackLanguage, "Chave", "Key")}: {destinationKeyLabel}</p>}
-                {showEstimatedFee && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeSummary}</p>
-                )}
-                {shouldShowCrossAssetInsights && routeChain && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
-                )}
-                {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
-                  <p className="text-tts-confirm font-medium">
-                    {T(feedbackLanguage, "Rota mais otimizada encontrada: economia de", "Most optimized route found: you save")} {formatBrl(estimatedSavingsBrl, feedbackLanguage)}
-                    {Number.isFinite(estimatedSavingsPct) && estimatedSavingsPct > 0 ? ` (${estimatedSavingsPct.toFixed(1)}%)` : ""}
-                    {" "}{T(feedbackLanguage, "vs métodos tradicionais.", "vs traditional methods.")}
-                  </p>
-                )}
                 {assetCode !== "XLM" && !isCrossCurrency && (
                   <p className="text-tts-confirm">{T(feedbackLanguage, "Valor garantido no destino", "Guaranteed amount at destination")}: {amountLabel}</p>
                 )}
@@ -1079,18 +1037,6 @@ export default function ConfirmPaymentClient({
                     {successDestinationKey && <p><span className="text-tts-deep">{T(feedbackLanguage, "Chave", "Key")}: </span>{successDestinationKey}</p>}
                     <p><span className="text-tts-deep">{T(feedbackLanguage, "Horário", "Time")}: </span>{formatTimestamp(result.completed_at, feedbackLanguage)}</p>
                   </div>
-                  {showResultFee && (
-                    <p>{T(feedbackLanguage, "Taxa aplicada", "Applied fee")}: {resultFeeSummary || T(feedbackLanguage, "taxa aplicada indisponível", "applied fee unavailable")}</p>
-                  )}
-                  {shouldShowCrossAssetInsights && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
-                    <p>{T(feedbackLanguage, "Economia estimada nesta operação com a rota mais otimizada", "Estimated savings on this operation with the most optimized route")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
-                  )}
-                  {successAutoConversionMessage && (
-                    <p>{successAutoConversionMessage}</p>
-                  )}
-                  {successMonthlySavings && (
-                    <p>{T(feedbackLanguage, `Você já economizou ${successMonthlySavings} este mês usando TalkToStellar.`, `You have already saved ${successMonthlySavings} this month using TalkToStellar.`)}</p>
-                  )}
                   {successReceiptUrl && (
                     <a
                       href={successReceiptUrl}
