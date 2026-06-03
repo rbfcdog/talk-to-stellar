@@ -464,7 +464,7 @@ describe('Agent tool execution', () => {
       expect(parsed.message).toContain('BRL/USDC: R$ 1.00 -> US$');
       expect(parsed.message).toContain('USDC/XLM: US$ 1.00 ->');
       expect(parsed.message).toContain('CETES/XLM: 1 CETES ->');
-      expect(parsed.message).toContain('Conferi arbitragem direta de ida e volta');
+      expect(parsed.message).toContain('Conferi arbitragem direta e multi-hop');
       expect(parsed.message).not.toContain('mesmo ativo');
       expect(parsed.message).not.toContain('US$ 1.00 -> US$ 1.00');
       expect(parsed.message).toContain('Nada é executado sem abrir a confirmação e digitar o PIN');

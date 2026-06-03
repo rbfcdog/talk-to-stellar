@@ -151,6 +151,55 @@ describe('ConversionRateMatrixService', () => {
     expect(roundTrip).toBeLessThanOrEqual(matrix.summary.max_round_trip_product + 1e-8);
   });
 
+  it('clips triangular routes that would allow multi-hop arbitrage', async () => {
+    quoteStrictSendConversionMock.mockImplementation(({ sourceAsset, destAsset, sourceAmount }) => {
+      const source = displayCode(sourceAsset.code);
+      const destination = displayCode(destAsset.code);
+      const rates: Record<string, number> = {
+        'USDC->CETES': 15,
+        'CETES->USDC': 0.065,
+        'CETES->XLM': 0.33,
+        'XLM->CETES': 1.7,
+        'XLM->USDC': 0.66,
+        'USDC->XLM': 1.5,
+      };
+      const rate = rates[`${source}->${destination}`];
+      if (!rate) {
+        throw new Error(`No direct route for ${source}->${destination}`);
+      }
+      const amount = Number(sourceAmount);
+      return Promise.resolve({
+        sourceAsset,
+        destinationAsset: destAsset,
+        sourceAmount: amount.toFixed(7),
+        effectiveSourceAmount: amount.toFixed(7),
+        destinationAmount: (amount * rate).toFixed(7),
+        destinationMin: (amount * rate * 0.98).toFixed(7),
+        platformFee: { enabled: false, feeAmount: '0', feeAssetCode: source, feeBps: 30 },
+        networkFeeXlm: '0.0000100',
+        path: [],
+      });
+    });
+
+    const matrix = await ConversionRateMatrixService.buildMatrix({ assets: ['USDC', 'CETES', 'XLM'] });
+    const usdcToCetes = matrix.matrix.USDC.CETES;
+    const cetesToXlm = matrix.matrix.CETES.XLM;
+    const xlmToUsdc = matrix.matrix.XLM.USDC;
+    const triangleProduct =
+      Number(usdcToCetes.rate || 0) *
+      Number(cetesToXlm.rate || 0) *
+      Number(xlmToUsdc.rate || 0);
+
+    expect(matrix.summary.arbitrage_guarded_pairs).toBeGreaterThanOrEqual(1);
+    expect(matrix.summary.arbitrage_warnings.join('\n')).toContain('USDC -> CETES -> XLM -> USDC');
+    expect([
+      usdcToCetes.arbitrage_guard?.method,
+      cetesToXlm.arbitrage_guard?.method,
+      xlmToUsdc.arbitrage_guard?.method,
+    ]).toContain('multi_hop_cycle_clip');
+    expect(triangleProduct).toBeLessThanOrEqual(matrix.summary.max_round_trip_product + 1e-8);
+  });
+
   it('marks the pair unavailable when the transaction route quote is rejected', async () => {
     quoteBrlToUsdcMock.mockRejectedValueOnce(new Error('distorted testnet quote'));
 

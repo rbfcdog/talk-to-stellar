@@ -2796,11 +2796,11 @@ async function executeGetAllPairQuotes(input: any): Promise<string> {
     const guardCount = Number(matrixPayload.summary?.arbitrage_guarded_pairs || 0);
     const guardMessage = guardCount > 0
       ? (language === 'en'
-          ? `Checked for direct round-trip arbitrage; ${guardCount} pair(s) were adjusted to a fair reciprocal quote.`
-          : `Conferi arbitragem direta de ida e volta; ${guardCount} par(es) foram ajustados para uma cotação recíproca justa.`)
+          ? `Checked round-trip and multi-hop arbitrage; ${guardCount} route(s) were adjusted to a fair quote.`
+          : `Conferi arbitragem direta e multi-hop; ${guardCount} rota(s) foram ajustadas para uma cotação justa.`)
       : (language === 'en'
-          ? 'Checked for direct round-trip arbitrage; no adjustment was needed.'
-          : 'Conferi arbitragem direta de ida e volta; nenhum ajuste foi necessário.');
+          ? 'Checked round-trip and multi-hop arbitrage; no adjustment was needed.'
+          : 'Conferi arbitragem direta e multi-hop; nenhum ajuste foi necessário.');
 
     const message = language === 'en'
       ? [
