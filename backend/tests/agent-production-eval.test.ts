@@ -93,6 +93,7 @@ type RouterEvalCase = {
   expectedAmount?: string;
   expectedSourceAssetCode?: string;
   expectedDestAssetCode?: string;
+  expectedQuoteMode?: 'market_price' | 'send_exact';
 };
 
 function flattenMessageContent(value: any): string {
@@ -459,6 +460,7 @@ describe('Agent production evals', () => {
           risk: 'medium',
           source_asset_code: 'USDC',
           dest_asset_code: 'BRL',
+          quote_mode: 'send_exact',
         },
       }],
     });
@@ -469,8 +471,8 @@ describe('Agent production evals', () => {
     executeToolMock.mockResolvedValueOnce(JSON.stringify({
       success: true,
       message: [
-        'Cotação atual pela melhor rota: US$ 1.00 -> aproximadamente R$ 5.13.',
-        'Taxa: 1 USDC ≈ R$ 5.13.',
+        'Cotação de envio pela melhor rota: US$ 1.00 -> aproximadamente R$ 5.13.',
+        'Câmbio: 1 USDC ≈ R$ 5.13.',
         'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
       ].join('\n'),
     }));
@@ -482,10 +484,12 @@ describe('Agent production evals', () => {
       source_asset_code: 'USDC',
       dest_asset_code: 'BRL',
       source_amount: '1',
+      amount_was_provided: false,
+      quote_mode: 'send_exact',
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Cotação atual pela melhor rota');
+    expect(result.response_message).toContain('Cotação de envio pela melhor rota');
     expect(result.response_message).not.toContain('Toda conversão ou envio usa a melhor rota disponível');
   });
 
@@ -883,6 +887,8 @@ describe('Agent production evals', () => {
     const priceQuoteProperties = tools.find((tool: any) => tool.function?.name === 'route_price_quote_intent')?.function?.parameters?.properties || {};
     expect(priceQuoteProperties.source_asset_code.description).toContain('source/origin asset');
     expect(priceQuoteProperties.dest_asset_code.description).toContain('destination/target asset');
+    expect(priceQuoteProperties.quote_mode.description).toContain('market_price');
+    expect(priceQuoteProperties.quote_mode.description).toContain('send_exact');
   });
 
   describe('LLM intent router contract matrix', () => {
@@ -933,14 +939,16 @@ describe('Agent production evals', () => {
       { name: 'conversion generic', input: 'quero converter dinheiro', expectedIntent: IntentType.CONVERSION, risk: 'medium' },
       { name: 'conversion swap wording', input: 'trocar 50 reais para dólar', expectedIntent: IntentType.CONVERSION, risk: 'high' },
       { name: 'conversion missing amount', input: 'trocar usdc para brl', expectedIntent: IntentType.CONVERSION, risk: 'medium', needsClarification: true },
-      { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL' },
+      { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'send_exact' },
       { name: 'price quote fees', input: 'quanto custa enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote bank comparison', input: 'vale a pena comparado com o banco enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
-      { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL' },
-      { name: 'price quote xlm to usdc', input: 'quanto dá 100 xlm em usdc?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'USDC' },
-      { name: 'price quote route without amount', input: 'melhor rota de brl para xlm', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'XLM' },
-      { name: 'price quote cetes slash xlm', input: 'quanto está CETES/XLM agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'XLM' },
-      { name: 'price quote brl to cetes', input: 'cotação atual de 250 reais para cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '250', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'CETES' },
+      { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'send_exact' },
+      { name: 'price quote xlm to usdc', input: 'quanto dá 100 xlm em usdc?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'USDC', expectedQuoteMode: 'send_exact' },
+      { name: 'price quote route without amount', input: 'melhor rota de brl para xlm', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'XLM', expectedQuoteMode: 'send_exact' },
+      { name: 'price quote cetes slash xlm', input: 'quanto está CETES/XLM agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'XLM', expectedQuoteMode: 'market_price' },
+      { name: 'price quote brl to cetes', input: 'cotação atual de 250 reais para cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '250', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'CETES', expectedQuoteMode: 'send_exact' },
+      { name: 'price quote xlm brl market price', input: 'cotação XLM/BRL agora', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
+      { name: 'price quote xlm cost in brl', input: 'quanto custa 100 XLM em reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },
@@ -999,6 +1007,7 @@ describe('Agent production evals', () => {
       expectedAmount,
       expectedSourceAssetCode,
       expectedDestAssetCode,
+      expectedQuoteMode,
     }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
       const expectedTool = caseExpectedTool || routeToolByIntent[expectedIntent];
@@ -1011,6 +1020,7 @@ describe('Agent production evals', () => {
         ...(expectedAmount ? { amount: expectedAmount } : {}),
         ...(expectedSourceAssetCode ? { source_asset_code: expectedSourceAssetCode } : {}),
         ...(expectedDestAssetCode ? { dest_asset_code: expectedDestAssetCode } : {}),
+        ...(expectedQuoteMode ? { quote_mode: expectedQuoteMode } : {}),
       };
       const routerInvoke = jest.fn(async (messages: any[]) => {
         const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
@@ -1042,6 +1052,7 @@ describe('Agent production evals', () => {
       if (expectedAmount) expect(routeArgs.amount).toBe(expectedAmount);
       if (expectedSourceAssetCode) expect(routeArgs.source_asset_code).toBe(expectedSourceAssetCode);
       if (expectedDestAssetCode) expect(routeArgs.dest_asset_code).toBe(expectedDestAssetCode);
+      if (expectedQuoteMode) expect(routeArgs.quote_mode).toBe(expectedQuoteMode);
       const expectedRouterCalls = expectedIntent === IntentType.CONTACTS || expectedTool === 'route_pix_onramp_intent' ? 2 : 1;
       expect(routerInvoke).toHaveBeenCalledTimes(expectedRouterCalls);
       expect(graph.llm.bindTools).toHaveBeenCalledTimes(expectedRouterCalls);
