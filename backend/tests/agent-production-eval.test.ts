@@ -493,6 +493,55 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Toda conversão ou envio usa a melhor rota disponível');
   });
 
+  it('quotes single-asset CETES against BRL instead of falling back to USDC/BRL', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_route_price_quote_intent',
+        name: 'route_price_quote_intent',
+        args: {
+          confidence: 0.99,
+          reason: 'single asset quote for CETES',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'medium',
+          asset_code: 'CETES',
+        },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+    executeToolMock.mockResolvedValueOnce(JSON.stringify({
+      success: true,
+      message: [
+        'Preço atual pela melhor rota: para receber 1.0000000 CETES, precisa de aproximadamente R$ 5.01.',
+        'Câmbio: 1 CETES custa cerca de R$ 5.01.',
+        'Modo: cotação por alvo exato. É o mesmo sentido usado quando o PIX precisa entregar um valor final em outro ativo.',
+      ].join('\n'),
+    }));
+
+    const result = await graph.processInput(createState('uero ver a cotacao do cetes'));
+
+    expect(executeToolMock).toHaveBeenCalledTimes(1);
+    expect(executeToolMock).toHaveBeenCalledWith('get_pair_quote', {
+      source_asset_code: 'CETES',
+      dest_asset_code: 'BRL',
+      source_amount: '1',
+      amount_was_provided: false,
+      quote_mode: 'market_price',
+      language: 'pt-BR',
+    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_brl_usdc_quote', {});
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Preço atual pela melhor rota');
+    expect(result.response_message).toContain('1 CETES');
+    expect(result.response_message).not.toContain('1 US$ = R$');
+    expect(result.response_message).not.toContain('Fonte: saldo em reais da sua conta');
+  });
+
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
@@ -818,6 +867,10 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('If PIX pays another person/contact, preserve the requested final asset');
     expect(prompt).toContain('previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix"');
     expect(prompt).toContain('route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva"');
+    expect(prompt).toContain('For single-asset quote requests in Portuguese/Brazil context, default the quote against BRL');
+    expect(prompt).toContain('"uero ver a cotacao do cetes"');
+    expect(prompt).toContain('source_asset_code=CETES, dest_asset_code=BRL, quote_mode=market_price');
+    expect(prompt).toContain('Do not answer with USDC/BRL unless the user asks for dólar/USDC');
     expect(prompt).toContain('uero fazer pix pra ana silva de 100 xlm');
     expect(prompt).toContain('Do not reinterpret "100 xlm" as "R$100"');
     expect(prompt).toContain('A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid');
@@ -889,11 +942,15 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_price_quote_intent).toContain('needs_clarification=true');
     expect(descriptionByName.route_price_quote_intent).toContain('XLM/USDC');
     expect(descriptionByName.route_price_quote_intent).toContain('BRL para CETES');
+    expect(descriptionByName.route_price_quote_intent).toContain('single-asset quote');
+    expect(descriptionByName.route_price_quote_intent).toContain('uero ver a cotacao do cetes');
     expect(descriptionByName.route_reset_pin_intent).toContain('redefimir');
     expect(descriptionByName.route_general_intent).toContain('Never use for actionable product requests');
     const priceQuoteProperties = tools.find((tool: any) => tool.function?.name === 'route_price_quote_intent')?.function?.parameters?.properties || {};
     expect(priceQuoteProperties.source_asset_code.description).toContain('source/origin asset');
+    expect(priceQuoteProperties.source_asset_code.description).toContain('cotação do CETES');
     expect(priceQuoteProperties.dest_asset_code.description).toContain('destination/target asset');
+    expect(priceQuoteProperties.dest_asset_code.description).toContain('default to BRL');
     expect(priceQuoteProperties.quote_mode.description).toContain('market_price');
     expect(priceQuoteProperties.quote_mode.description).toContain('send_exact');
   });
@@ -1009,6 +1066,8 @@ describe('Agent production evals', () => {
       { name: 'price quote brl to cetes', input: 'cotação atual de 250 reais para cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '250', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'CETES', expectedQuoteMode: 'send_exact' },
       { name: 'price quote xlm brl market price', input: 'cotação XLM/BRL agora', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
       { name: 'price quote xlm cost in brl', input: 'quanto custa 100 XLM em reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
+      { name: 'price quote cetes single asset typo', input: 'uero ver a cotacao do cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
+      { name: 'price quote cetes single asset natural', input: 'cotação do CETES agora', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'BRL', expectedQuoteMode: 'market_price' },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },

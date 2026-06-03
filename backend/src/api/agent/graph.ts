@@ -92,7 +92,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PRICE_QUOTE,
     toolName: 'route_price_quote_intent',
-    description: 'Use when the user asks for best route/melhor rota, route quality, rate/cotacao, estimated fees, comparison, quote, cost, spread, or whether it is worth doing before starting a transaction. For generic fee/cost questions without enough pair details, route here with needs_clarification=true. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. Use quote_mode=market_price for price/cotacao/preco/custo of an asset in another asset, and quote_mode=send_exact for "de A para B", conversion, sell, or route direction questions.',
+    description: 'Use when the user asks for best route/melhor rota, route quality, rate/cotacao, estimated fees, comparison, quote, cost, spread, or whether it is worth doing before starting a transaction. For generic fee/cost questions without enough pair details, route here with needs_clarification=true. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For a single-asset quote in Portuguese/Brazil context such as "cotação do CETES", "preço do XLM", "uero ver a cotacao do cetes", set source_asset_code to that asset, dest_asset_code=BRL, and quote_mode=market_price. Use quote_mode=market_price for price/cotacao/preco/custo of an asset in another asset, and quote_mode=send_exact for "de A para B", conversion, sell, or route direction questions.',
   },
   {
     intent: IntentType.FINANCIAL_MEMORY,
@@ -168,17 +168,17 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
         asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM.',
+          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For single-asset quote requests, also fill source_asset_code/dest_asset_code instead of relying only on this field. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM.',
         },
         source_asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional source/origin asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means source_asset_code XLM.',
+          description: 'Optional source/origin asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means source_asset_code XLM. For "cotação do CETES" or "preço do XLM", use CETES/XLM as source_asset_code.',
         },
         dest_asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional destination/target asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means dest_asset_code USDC.',
+          description: 'Optional destination/target asset for quote, conversion, route, fee, or cost requests. Example: "cotacao XLM para USDC" means dest_asset_code USDC. For single-asset quotes in Portuguese/Brazil context, default to BRL.',
         },
         quote_mode: {
           type: 'string',
@@ -2483,14 +2483,27 @@ export class AgentGraph {
     quoteMode?: 'market_price' | 'send_exact';
   } | null {
     const route = (state.action_params as any)?.llm_route || {};
-    const sourceAssetCode = this.normalizeAgentAssetCode(route.source_asset_code || '');
-    const destAssetCode = this.normalizeAgentAssetCode(route.dest_asset_code || '');
+    let sourceAssetCode = this.normalizeAgentAssetCode(route.source_asset_code || '');
+    let destAssetCode = this.normalizeAgentAssetCode(route.dest_asset_code || '');
+    const routeToolName = String(route.tool_name || '').trim();
+    const routeAssetCode = this.normalizeAgentAssetCode(route.asset_code || '');
+    const quoteModeFromRoute = String(route.quote_mode || '').trim();
+    if (
+      routeToolName === 'route_price_quote_intent' &&
+      !sourceAssetCode &&
+      !destAssetCode &&
+      routeAssetCode &&
+      routeAssetCode !== 'BRL'
+    ) {
+      sourceAssetCode = routeAssetCode;
+      destAssetCode = 'BRL';
+    }
     if (!sourceAssetCode || !destAssetCode || sourceAssetCode === destAssetCode) return null;
-    const quoteMode = String(route.quote_mode || '').trim() === 'market_price'
+    const quoteMode = quoteModeFromRoute === 'market_price'
       ? 'market_price'
-      : String(route.quote_mode || '').trim() === 'send_exact'
+      : quoteModeFromRoute === 'send_exact'
         ? 'send_exact'
-        : undefined;
+        : (routeToolName === 'route_price_quote_intent' && routeAssetCode === sourceAssetCode ? 'market_price' : undefined);
 
     return {
       amount: normalizeHumanAmountText(route.amount || '') || '1',
@@ -3865,6 +3878,7 @@ Structured extraction fields:
 - When the user provides an asset/currency, fill asset_code as BRL, USDC, CETES, or XLM. Use USDC for USD/dollars.
 - When amount or asset is missing from the latest message but is clearly present in recent conversation context for the same unfinished request, fill it from that context.
 - For quote/best-route/rate/cost requests between two assets, fill source_asset_code and dest_asset_code. Example: "cotacao XLM para USDC" -> source_asset_code=XLM, dest_asset_code=USDC. "melhor rota de USDC pra BRL" -> source_asset_code=USDC, dest_asset_code=BRL. "quanto está CETES/XLM" -> source_asset_code=CETES, dest_asset_code=XLM.
+- For single-asset quote requests in Portuguese/Brazil context, default the quote against BRL. Examples: "cotação do CETES", "uero ver a cotacao do cetes", "preço do XLM", "quanto custa CETES" -> source_asset_code=CETES or XLM, dest_asset_code=BRL, quote_mode=market_price. Do not answer with USDC/BRL unless the user asks for dólar/USDC or gives no asset at all.
 - In quote/rate requests, amount is optional. If the user does not provide an amount, leave amount empty.
 - For price/cotacao/preco/custo questions about a pair, set quote_mode=market_price. This means "how much of dest_asset is needed to receive/buy source_asset"; for example "cotacao XLM/BRL", "preco de XLM em reais", and "quanto custa 100 XLM em BRL" use market_price.
 - For sell/send/convert/route-direction simulations, set quote_mode=send_exact. This means "if I send source_asset, how much dest_asset do I receive"; for example "melhor rota de USDC pra BRL", "converter 100 XLM para BRL", "vender 100 XLM por reais", and "quanto recebo mandando 100 XLM para BRL" use send_exact.
@@ -3891,7 +3905,7 @@ Route selection guide:
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
-- route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
+- route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For single-asset quotes such as "cotação do CETES", infer CETES/BRL. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
 - route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options.
 - route_history_intent: user asks for history, extrato, transactions, transações, movimentações, receipts, comprovantes, recibos, recent activity, or full history.
 - route_financial_memory_intent: user asks what nicknames/labels/preferences were saved, what the system remembers financially, savings/economy summaries, or learned payment memory.
@@ -3921,6 +3935,7 @@ Disambiguation:
 - "mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN" or "PIN nao funciona" are reset_pin, not wallet, login, or help.
 - "melhor rota", "quanto custa", "preco", "taxa", "cotacao", "cotação XLM para USDC", "quanto está USDC/BRL", or bank comparison routes to price_quote unless the user is already giving a direct execution command with PIN.
 - "cotação XLM/BRL", "preço de XLM em reais", and "quanto custa 100 XLM em BRL" must use quote_mode=market_price because the user wants the BRL price to receive/buy XLM. Do not answer with the sell quote XLM -> BRL unless the user says converter/vender/mandar XLM para BRL.
+- "cotação do CETES", "uero ver a cotacao do cetes", and "preço do CETES" must use route_price_quote_intent with source_asset_code=CETES, dest_asset_code=BRL, quote_mode=market_price. Do not use the generic USDC/BRL quote for these.
 - "converter 100 XLM para BRL", "vender 100 XLM por reais", and "quanto recebo se mandar 100 XLM para BRL" must use quote_mode=send_exact because the user is asking the sell/conversion direction.
 - Asking "quais sao os assets" or "explique cada ativo" is general because it is an explanation, not a transaction.
 - A typo-heavy command still routes to the intended product action. Do not downgrade it to general.
