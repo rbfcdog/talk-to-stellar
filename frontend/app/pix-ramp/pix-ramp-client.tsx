@@ -921,7 +921,6 @@ export default function PixRampClient({
   const [verifiedTransferRecipient, setVerifiedTransferRecipient] = useState<RampResponse | null>(null);
   const [recipientVerificationLoading, setRecipientVerificationLoading] = useState(false);
   const [recipientVerificationError, setRecipientVerificationError] = useState("");
-  const [recipientDetailsOpen, setRecipientDetailsOpen] = useState(false);
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
@@ -2874,95 +2873,31 @@ export default function PixRampClient({
                   {transferFlow && transferRecipientDisplayKey && (
                     <p className="mt-1 break-all text-xs text-tts-muted">{transferRecipientDisplayKey}</p>
                   )}
-	                  {transferFlow && (
-	                    <div className="mt-3">
-	                      <button
-	                        type="button"
-	                        className="rounded-full border border-tts-confirm px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-tts-confirm transition hover:bg-tts-confirm/10"
-	                        onClick={() => setRecipientDetailsOpen((current) => !current)}
-	                      >
-		                        {recipientDetailsOpen ? L("Ocultar contato", "Hide contact") : L("Ver contato", "See contact")}
-	                      </button>
-	                      <div className="mt-2 min-h-5 text-xs font-bold">
-	                        {!sessionReady ? (
-	                          <p className="inline-flex items-center gap-2 text-tts-deep"><InlineSpinner />{L("Verificando sessão deste navegador...", "Checking this browser session...")}</p>
-	                        ) : needsBrowserLoginForPix ? (
-	                          <p className="text-tts-gold">{pixLoginRequiredMessage}</p>
-	                        ) : recipientVerificationLoading ? (
-	                          <p className="inline-flex items-center gap-2 text-tts-confirm"><InlineSpinner />{L("Validando contato salvo...", "Validating saved contact...")}</p>
-	                        ) : recipientVerificationError ? (
-	                          <p className="text-tts-error">{recipientVerificationError}</p>
-	                        ) : transferRecipientVerified ? (
-	                          <p className="text-tts-confirm">{L("Contato validado", "Contact verified")}</p>
-	                        ) : (
-	                          <p className="text-tts-deep">{L("Aguardando validação do contato.", "Waiting for contact validation.")}</p>
-	                        )}
-	                      </div>
-	                      {recipientDetailsOpen && (
-	                        <div className={`mt-3 rounded-2xl border p-3 text-xs ${
-	                          recipientVerificationError
-	                            ? "border-tts-error bg-tts-error/10 text-tts-error"
-	                            : "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
-	                        }`}>
-	                          {!sessionReady ? (
-	                            <div className="flex items-start gap-3">
-	                              <InlineSpinner />
-	                              <div>
-	                                <p className="font-black uppercase tracking-[0.14em] text-tts-deep">{L("Verificando sessão", "Checking session")}</p>
-		                                <p className="mt-2 text-tts-deep/80">{L("Antes de mostrar o contato, preciso confirmar se este navegador está conectado à sua conta.", "Before showing the contact, I need to confirm this browser is connected to your account.")}</p>
-	                              </div>
-	                            </div>
-	                          ) : needsBrowserLoginForPix ? (
-	                            <div>
-	                              <p className="font-black uppercase tracking-[0.14em] text-tts-gold">
-	                                {needsBrowserLoginForChatLink ? L("Sessão do chat não carregada", "Chat session not loaded") : L("Login necessário", "Sign-in required")}
-	                              </p>
-	                              <p className="mt-2 text-tts-gold">{pixLoginRequiredMessage}</p>
-	                              {loginHref && (
-	                                <a
-	                                  href={loginHref}
-	                                  className="mt-3 inline-flex rounded-full border border-tts-gold px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-tts-gold transition hover:bg-tts-gold-bg"
-	                                >
-	                                  {L("Entrar com PIN", "Sign in with PIN")}
-	                                </a>
-	                              )}
-	                            </div>
-	                          ) : recipientVerificationLoading ? (
-	                            <div className="flex items-start gap-3">
-	                              <InlineSpinner />
-	                              <div>
-	                                <p className="font-black uppercase tracking-[0.14em] text-tts-confirm">{L("Validando destinatário", "Validating recipient")}</p>
-		                                <p className="mt-2 text-tts-confirm">{L("Estou conferindo se esse nome está salvo na sua conta.", "Checking whether this name is saved in your account.")}</p>
-	                              </div>
-	                            </div>
-	                          ) : recipientVerificationError ? (
-	                            <div>
-	                              <p className="font-black uppercase tracking-[0.14em] text-tts-error">{L("Contato não validado", "Contact not verified")}</p>
-	                              <p className="mt-2 text-tts-error">{recipientVerificationError}</p>
-	                              <button
-	                                type="button"
-	                                className="mt-3 rounded-full border border-tts-error px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-tts-error transition hover:bg-tts-error/10"
-	                                onClick={() => {
-	                                  recipientValidationKeyRef.current = "";
-	                                  setRecipientVerificationError("");
-	                                  setVerifiedTransferRecipient(null);
-	                                }}
-	                              >
-	                                {L("Validar novamente", "Validate again")}
-	                              </button>
-	                            </div>
-	                          ) : transferRecipientVerified ? (
-	                            <div>
-	                              <p><span className="text-tts-confirm">{L("Nome", "Name")}:</span> {transferRecipientLabel}</p>
-	                              {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-tts-confirm">{L("Chave PIX", "PIX key")}:</span> {transferRecipientDisplayKey}</p>}
-	                            </div>
-	                          ) : (
-	                            <p className="text-tts-deep">{L("Ainda não há contato para mostrar. Volte ao chat e digite \"contatos\" para escolher um destinatário salvo.", "No contact is available yet. Return to chat and type \"contacts\" to choose a saved recipient.")}</p>
-	                          )}
-	                        </div>
-	                      )}
-	                    </div>
-	                  )}
+                  {transferFlow && !transferRecipientVerified && (
+                    <div className="mt-3 min-h-5 text-xs font-bold">
+                      {!sessionReady ? (
+                        <p className="inline-flex items-center gap-2 text-tts-deep"><InlineSpinner />{L("Verificando sessão deste navegador...", "Checking this browser session...")}</p>
+                      ) : needsBrowserLoginForPix ? (
+                        <p className="text-tts-gold">{pixLoginRequiredMessage}</p>
+                      ) : recipientVerificationLoading ? (
+                        <p className="inline-flex items-center gap-2 text-tts-confirm"><InlineSpinner />{L("Validando contato salvo...", "Validating saved contact...")}</p>
+                      ) : recipientVerificationError ? (
+                        <button
+                          type="button"
+                          className="text-left text-tts-error underline decoration-tts-error/40 underline-offset-4"
+                          onClick={() => {
+                            recipientValidationKeyRef.current = "";
+                            setRecipientVerificationError("");
+                            setVerifiedTransferRecipient(null);
+                          }}
+                        >
+                          {recipientVerificationError} {L("Validar novamente", "Validate again")}
+                        </button>
+                      ) : (
+                        <p className="text-tts-deep">{L("Aguardando validação do contato.", "Waiting for contact validation.")}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
             </div>
             <AccountStatusCard
@@ -3392,14 +3327,12 @@ export default function PixRampClient({
             )}
             {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm font-bold text-tts-confirm">
-                <p>{L("Nome", "Name")}: {transferRecipientLabel}</p>
-                {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-tts-confirm">{L("Chave PIX", "PIX key")}: {transferRecipientDisplayKey}</p>}
                 {transferRecipientVerified ? (
-                  <p className="mt-2 text-xs text-tts-confirm">
+                  <p className="text-xs text-tts-confirm">
                     {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount}.`)}
                   </p>
                 ) : (
-                  <p className="mt-2 text-xs text-tts-error">
+                  <p className="text-xs text-tts-error">
                     {transferRecipientBlocker}
                   </p>
                 )}
