@@ -1,5 +1,6 @@
 import { supabase } from '../src/config/supabase';
 import { AnchorService } from '../src/api/services/anchor.service';
+import { PaymentReceiptService } from '../src/api/services/receipts/payment-receipt.service';
 
 function createContactsBuilder(contactRows: any[]) {
   return {
@@ -30,6 +31,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       STELLAR_NETWORK: 'TESTNET',
       ETHERFUSE_SANDBOX_PIX_FALLBACK: 'true',
       USDC_ISSUER: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      CETES_ISSUER_TESTNET: 'GCRYUGD5HYEZB7KUW2JK3AGC6W2GZLHB7NJZQDA2WPKNCLUPQ3WQ4QG7',
     };
     delete process.env.TESOURO_DISTRIBUTOR_SECRET;
   });
@@ -151,6 +153,64 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       recipientKey: '5595280606751',
       sessionId: 'recipient-session',
     });
+  });
+
+  it('completes CETES PIX-funded transfer and sends a concise WhatsApp callback receipt', async () => {
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/cetes-pix');
+    jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({ sandbox: true });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'sender-session',
+      userId: 'sender-user',
+      publicKey: 'GB7L4QQQAMRJQI7GGRH2Y6TSDD2JTFNGEHPKLB3XU43YSOE6GJLMFZWT',
+      vaultSecretId: '',
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
+    jest.spyOn(AnchorService as any, 'sandboxLedgerSettlementEnabled').mockReturnValue(true);
+    jest.spyOn(AnchorService as any, 'resolveTransferRecipient').mockResolvedValue({
+      publicKey: anaPublicKey,
+      displayName: 'Ana Silva',
+      pixKey: '5595280606751',
+      recipientKey: '5595280606751',
+      sessionId: 'recipient-session',
+      userId: 'ana-user',
+      vaultSecretId: '',
+    });
+    jest.spyOn(AnchorService as any, 'upsertRecentContactFromPayment').mockResolvedValue(undefined);
+
+    const result = await AnchorService.submitPixFundedTransferForSession({
+      session_id: 'sender-session',
+      pin: '1234',
+      amount: '100',
+      asset_code: 'CETES',
+      recipient: 'Ana Silva',
+      recipient_key: '5595280606751',
+      provider: 'whatsapp',
+      provider_user_id: '+5519997624114',
+      order_id: 'sandbox-pix-order',
+    } as any);
+
+    expect(result).toMatchObject({
+      success: true,
+      recipient_name: 'Ana Silva',
+      amount: '100',
+      asset_code: 'CETES',
+      receipt_url: 'https://talktostellar.com/receipt/cetes-pix',
+    });
+    expect(String(result.message)).toContain('100 CETES');
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'payment_sent',
+      provider: 'whatsapp',
+      providerUserId: '+5519997624114',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'CETES',
+      destinationAmount: '100',
+      destinationAssetCode: 'CETES',
+      externalDeliveryText: expect.stringContaining('PIX confirmado e transferencia enviada.'),
+    }));
+    const receiptInput = receiptSpy.mock.calls[0][0] as any;
+    expect(receiptInput.externalDeliveryText).toContain('Valor: 100 CETES');
+    expect(receiptInput.externalDeliveryText).toContain('Destino: Ana Silva');
   });
 
   it('simulates the post-PIX transfer in sandbox ledger mode when no on-chain funding secret is available', async () => {
