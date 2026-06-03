@@ -93,6 +93,7 @@ type RouterEvalCase = {
   needsClarification?: boolean;
   expectedAmount?: string;
   expectedAssetCode?: string;
+  expectedQuoteAssetCode?: string;
   expectedSourceAssetCode?: string;
   expectedDestAssetCode?: string;
   expectedQuoteMode?: 'market_price' | 'send_exact';
@@ -1094,7 +1095,7 @@ describe('Agent production evals', () => {
       { name: 'pix on ramp balance wording', input: 'adicionar saldo com pix de 100 reais', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
       { name: 'pix on ramp own account receive', input: 'quero receber 100 reais via pix na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
       { name: 'pix on ramp load wording', input: 'carregar minha conta com 100 reais no pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
-      { name: 'pix on ramp exact usdc receive in own account', input: 'uero mandar um pix pra chegar 100 usdc na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'USDC' },
+      { name: 'pix on ramp usdc quote reference settles as tesouro', input: 'uero mandar um pix pra chegar 100 usdc na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'BRL', expectedQuoteAssetCode: 'USDC' },
       { name: 'pix on ramp typo own account', input: 'qro botar cem reais por pix na conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
       { name: 'pix on ramp missing amount', input: 'quero colocar dinheiro via pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', needsClarification: true },
       { name: 'pix funded payment', input: 'pagar Ana via PIX', expectedIntent: IntentType.PIX, risk: 'high' },
@@ -1179,6 +1180,7 @@ describe('Agent production evals', () => {
       needsClarification = false,
       expectedAmount,
       expectedAssetCode,
+      expectedQuoteAssetCode,
       expectedSourceAssetCode,
       expectedDestAssetCode,
       expectedQuoteMode,
@@ -1194,6 +1196,7 @@ describe('Agent production evals', () => {
         risk,
         ...(expectedAmount ? { amount: expectedAmount } : {}),
         ...(expectedAssetCode ? { asset_code: expectedAssetCode } : {}),
+        ...(expectedQuoteAssetCode ? { quote_asset_code: expectedQuoteAssetCode } : {}),
         ...(expectedSourceAssetCode ? { source_asset_code: expectedSourceAssetCode } : {}),
         ...(expectedDestAssetCode ? { dest_asset_code: expectedDestAssetCode } : {}),
         ...(expectedQuoteMode ? { quote_mode: expectedQuoteMode } : {}),
@@ -1228,6 +1231,7 @@ describe('Agent production evals', () => {
       expect(routeArgs.risk).toBe(risk);
       if (expectedAmount) expect(routeArgs.amount).toBe(expectedAmount);
       if (expectedAssetCode) expect(routeArgs.asset_code).toBe(expectedAssetCode);
+      if (expectedQuoteAssetCode) expect(routeArgs.quote_asset_code).toBe(expectedQuoteAssetCode);
       if (expectedSourceAssetCode) expect(routeArgs.source_asset_code).toBe(expectedSourceAssetCode);
       if (expectedDestAssetCode) expect(routeArgs.dest_asset_code).toBe(expectedDestAssetCode);
       if (expectedQuoteMode) expect(routeArgs.quote_mode).toBe(expectedQuoteMode);
@@ -1825,7 +1829,7 @@ describe('Agent production evals', () => {
     }
   });
 
-  it('routes own-account PIX exact USDC arrival wording to on-ramp instead of contact payment', async () => {
+  it('routes own-account PIX USDC wording to Tesouro on-ramp quote reference instead of contact payment', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const previousFrontendUrl = process.env.FRONTEND_URL;
@@ -1833,7 +1837,8 @@ describe('Agent production evals', () => {
 
     const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent', {
       amount: '100',
-      asset_code: 'USDC',
+      asset_code: 'BRL',
+      quote_asset_code: 'USDC',
     });
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
@@ -1847,10 +1852,14 @@ describe('Agent production evals', () => {
       expect(result.detected_intent).toBe(IntentType.PIX);
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
       expect(result.response_message).toContain('/pix-on?');
-      expect(result.response_message).toContain('receive_amount=100');
-      expect(result.response_message).toContain('receive_asset=USDC');
-      expect(result.response_message).toContain('currency=USDC');
+      expect(result.response_message).toContain('asset=BRL');
+      expect(result.response_message).toContain('quote_amount=100');
+      expect(result.response_message).toContain('quote_asset=USDC');
+      expect(result.response_message).not.toContain('receive_asset=USDC');
+      expect(result.response_message).not.toContain('target_asset=USDC');
+      expect(result.response_message).not.toContain('currency=USDC');
       expect(result.response_message).toContain('US$ 100.00');
+      expect(result.response_message).toContain('reais/TESOURO');
       expect(result.response_message).not.toContain('Não encontrei "chegar"');
       expect(result.response_message).not.toContain('contatos salvos');
       expect(result.response_message).not.toContain('Me diga a chave');

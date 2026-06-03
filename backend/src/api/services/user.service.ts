@@ -7,7 +7,7 @@ import VaultService from './core/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
 import { ContactSeedService } from './contact-seed.service';
-import { getStellarNetworkName } from '../../config/assets';
+import { getStellarNetworkName, isInitialUsdcConversionEnabled } from '../../config/assets';
 
 function normalizeEmail(value?: string): string {
   return String(value || '').trim().toLowerCase();
@@ -280,7 +280,7 @@ export class UserService {
 
       if (secretKey) {
         const initialAssetSetup = await ContactSeedService.createDefaultTrustlines(publicKey, secretKey, userId, sessionId);
-        if (getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
+        if (isInitialUsdcConversionEnabled() && getStellarNetworkName() === 'TESTNET' && !initialAssetSetup.conversion?.completed) {
           console.warn(`[onboarding-usdc] initial funding conversion incomplete for ${publicKey}: ${initialAssetSetup.conversion?.error || 'sem detalhe retornado'}`);
           throw new Error('O saldo inicial em US$ ainda não ficou pronto. Tente novamente em alguns segundos.');
         }

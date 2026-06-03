@@ -35,6 +35,14 @@ export function getStellarNetworkName(): 'PUBLIC' | 'TESTNET' {
     : 'TESTNET';
 }
 
+export function isInitialUsdcConversionEnabled(): boolean {
+  return envFlag('ONBOARDING_AUTO_CONVERT_TO_USDC', false);
+}
+
+export function isUsdcDefaultTrustlineEnabled(): boolean {
+  return envFlag('ENABLE_USDC_DEFAULT_TRUSTLINE', false);
+}
+
 export function normalizeAssetCode(value: unknown): string {
   const code = String(value || 'XLM').trim().toUpperCase();
   if (!code || code === 'NATIVE') return 'XLM';
@@ -163,6 +171,7 @@ export function requireAssetIssuer(assetCode: unknown, providedIssuer?: unknown)
 export function getDefaultTrustedAssets(): Array<{ code: string; issuer: string }> {
   const assetCodes = getUserFacingAssetCodes();
   return assetCodes
+    .filter((code) => code !== 'USDC' || isUsdcDefaultTrustlineEnabled())
     .map((code) => ({ code, issuer: getAssetIssuer(code) || '' }))
     .filter((asset) => Boolean(asset.issuer));
 }

@@ -165,7 +165,8 @@ USDC_ISSUER=
 USDC_ASSET_CODE=USDC
 USDC_ASSET_ISSUER=
 STELLAR_ENFORCE_TRUSTED_PATH_ASSETS=false
-ONBOARDING_AUTO_CONVERT_TO_USDC=true
+ONBOARDING_AUTO_CONVERT_TO_USDC=false
+ENABLE_USDC_DEFAULT_TRUSTLINE=false
 QUOTE_TTL_SECONDS=30
 TALKTOSTELLAR_SPREAD_BPS=30
 TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY=
@@ -347,7 +348,8 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `USDC_ASSET_CODE` | Backend | Código do asset USDC, normalmente `USDC`. |
 | `USDC_ASSET_ISSUER` | Backend | Issuer explícito de USDC para trustlines/path payments. |
 | `STELLAR_ENFORCE_TRUSTED_PATH_ASSETS` | Backend | Quando `true`, restringe path assets a issuers confiáveis configurados. |
-| `ONBOARDING_AUTO_CONVERT_TO_USDC` | Backend | Converte automaticamente saldo inicial/onboarding para USDC quando aplicável. |
+| `ONBOARDING_AUTO_CONVERT_TO_USDC` | Backend | Opt-in para converter automaticamente saldo inicial/onboarding para USDC. Deixe `false` quando PIX deve entrar como TESOURO/BRL. |
+| `ENABLE_USDC_DEFAULT_TRUSTLINE` | Backend | Opt-in para criar trustline USDC por padrão. Deixe `false` para não recriar issuer USDC antigo/deprecated automaticamente. |
 | `QUOTE_TTL_SECONDS` | Backend | Tempo de validade de cotações antes de exigir nova cotação. |
 | `TALKTOSTELLAR_SPREAD_BPS` | Backend | Spread da plataforma em basis points. `30` = 0,30%. |
 | `TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY` | Backend | Conta treasury que recebe fee/spread quando configurada. |

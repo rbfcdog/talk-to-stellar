@@ -14,6 +14,8 @@ describe("PIX asset defaults", () => {
 
     expect(text).toContain('normalizeTargetAsset(asset, "BRL")');
     expect(text).toContain("resolveOnRampTargetAssetFromQuery");
+    expect(text).toContain('const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL"]');
+    expect(text).toContain('const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
     expect(text).toContain('amountCurrency === "BRL") return "BRL"');
     expect(text).toContain('const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset');
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
@@ -23,6 +25,10 @@ describe("PIX asset defaults", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 
     expect(text).toContain("hasExactOnRampReceiveTarget");
+    expect(text).toContain('params.get("quote_amount")');
+    expect(text).toContain('params.get("quote_asset")');
+    expect(text).toContain('const quoteOnlyUsdcOnRamp = Boolean(mode === "onramp" && normalizedReceiveAsset === "USDC" && !nextTransferFlow)');
+    expect(text).toContain('const settlementReceiveAsset = quoteOnlyUsdcOnRamp ? "BRL" : normalizedReceiveAsset');
     expect(text).toContain("amountParamIsPixBrl");
     expect(text).toContain("setAmountBrl(\"\")");
     expect(text).toContain("requestedOnRampTargetDisplay");

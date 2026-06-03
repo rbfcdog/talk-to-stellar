@@ -1,7 +1,7 @@
 import { StellarService } from './stellar.service';
 import { DefindexYieldService } from './defindex-yield.service';
 import { logger } from '../../utils/logger';
-import { getDefaultTrustedAssets, getStellarNetworkName } from '../../config/assets';
+import { getDefaultTrustedAssets, getStellarNetworkName, isUsdcDefaultTrustlineEnabled } from '../../config/assets';
 
 type TrustlineAsset = { code: string; issuer: string };
 type ExistingTrustlineSnapshot = { account: any; trustlines: Set<string> };
@@ -24,7 +24,7 @@ export class TrustlineService {
     }
     return Array.from(
       new Map([...configured, ...vaultAssets].map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
-    );
+    ).filter((asset) => asset.code !== 'USDC' || isUsdcDefaultTrustlineEnabled());
   }
 
   private static sleep(ms: number): Promise<void> {

@@ -256,7 +256,7 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
-  it('builds PIX on-ramp URL with receive_amount when user asks to receive dollars', async () => {
+  it('builds PIX on-ramp URL with USDC as quote reference when user asks to receive dollars', async () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.talktostellar.test';
@@ -274,9 +274,12 @@ describe('Agent PIX off-ramp detection', () => {
 
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('amount')).toBeNull();
-      expect(parsed.searchParams.get('receive_amount')).toBe('10');
-      expect(parsed.searchParams.get('receive_asset')).toBe('USDC');
-      expect(parsed.searchParams.get('currency')).toBe('USDC');
+      expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('quote_amount')).toBe('10');
+      expect(parsed.searchParams.get('quote_asset')).toBe('USDC');
+      expect(parsed.searchParams.get('currency')).toBe('BRL');
+      expect(parsed.searchParams.get('receive_amount')).toBeNull();
+      expect(parsed.searchParams.get('receive_asset')).toBeNull();
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;

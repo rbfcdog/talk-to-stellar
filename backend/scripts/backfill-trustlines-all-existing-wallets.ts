@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { supabase } from '../src/config/supabase';
-import { getDefaultTrustedAssets } from '../src/config/assets';
+import { getDefaultTrustedAssets, isUsdcDefaultTrustlineEnabled } from '../src/config/assets';
 import { TrustlineService } from '../src/api/services/trustline.service';
 import { DefindexYieldService } from '../src/api/services/defindex-yield.service';
 import VaultService from '../src/api/services/core/vault.service';
@@ -81,7 +81,7 @@ async function loadTrustlineAssets(): Promise<Array<{ code: string; issuer: stri
   }
   return Array.from(
     new Map([...getDefaultTrustedAssets(), ...vaultAssets].map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
-  );
+  ).filter((asset) => asset.code !== 'USDC' || isUsdcDefaultTrustlineEnabled());
 }
 
 async function main(): Promise<void> {
