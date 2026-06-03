@@ -83,7 +83,7 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const TRADITIONAL_METHOD_FEE_PCT = 0.035;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
-const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC"];
+const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL"];
 const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
 const FIAT_FORMAT_ASSETS = new Set(["BRL", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
@@ -1445,12 +1445,15 @@ export default function PixRampClient({
     const mode = lockedMode || (params.get("mode") === "offramp" ? "offramp" : "onramp");
     const amount = normalizeHumanAmount(params.get("source_amount") || params.get("amount") || "");
     const fiatAmount = normalizeHumanAmount(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "");
-    const receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || "");
-    const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || "").trim().toUpperCase();
+    const quoteAmount = normalizeHumanAmount(params.get("quote_amount") || "");
+    const quoteAsset = String(params.get("quote_asset") || "").trim().toUpperCase();
+    const receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || quoteAmount || "");
+    const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || quoteAsset || "").trim().toUpperCase();
     const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
     const flow = String(params.get("flow") || "").trim().toLowerCase();
+    const nextTransferFlow = flow === "fund_and_pay" || params.get("auto_pay_after_ramp") === "1";
     const recipient = String(params.get("recipient") || "").trim();
     const recipientKey = String(params.get("recipient_key") || params.get("recipient_email") || "").trim();
     const recipientPublicKey = String(params.get("recipient_public_key") || "").trim();
@@ -1475,13 +1478,15 @@ export default function PixRampClient({
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
     const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
-    if (isAdvancedAsset(normalizedReceiveAsset)) setAdvancedAssetMode(true);
+    const quoteOnlyUsdcOnRamp = Boolean(mode === "onramp" && normalizedReceiveAsset === "USDC" && !nextTransferFlow);
+    const settlementReceiveAsset = quoteOnlyUsdcOnRamp ? "BRL" : normalizedReceiveAsset;
+    if (isAdvancedAsset(settlementReceiveAsset)) setAdvancedAssetMode(true);
     const hasExactOnRampReceiveTarget = Boolean(mode === "onramp" && receiveAmount && normalizedReceiveAsset);
     const amountParamIsPixBrl = currency === "BRL" || asset === "BRL" || asset === "TESOURO";
     if (mode === "onramp" && receiveAmount) {
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
-      setTargetAsset(normalizedReceiveAsset);
+      setTargetAsset(settlementReceiveAsset);
       if (!amountParamIsPixBrl) {
         setAmountBrl("");
       }
@@ -1521,7 +1526,7 @@ export default function PixRampClient({
       setTargetAsset(normalizedAsset);
     }
     if (email.includes("@")) setRampEmail(email);
-    if (flow === "fund_and_pay" || params.get("auto_pay_after_ramp") === "1") setTransferFlow(true);
+    if (nextTransferFlow) setTransferFlow(true);
     if (recipient) setTransferRecipient(recipient);
     if (recipientKey) setTransferRecipientKey(recipientKey);
     if (recipientPublicKey) setTransferRecipientPublicKey(recipientPublicKey);

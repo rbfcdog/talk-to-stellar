@@ -14,7 +14,7 @@ import { supabase } from "../../config/supabase";
 import { WalletRepository } from "../repository/core/wallet.repository";
 import VaultService from "../services/core/vault.service";
 import ExternalService from "../services/core/external.service";
-import { assetMatchesConfiguredIssuer, getAssetIssuer, getStellarNetworkName, getUserFacingAssetCodes, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
+import { assetMatchesConfiguredIssuer, getAssetIssuer, getStellarNetworkName, getUserFacingAssetCodes, isInitialUsdcConversionEnabled, normalizeAssetCode, resolveConfiguredAsset, userFacingAssetCode } from "../../config/assets";
 import { ContactSeedService, repairLegacyStarterContactKey } from "../services/contact-seed.service";
 import { BalanceAlertService } from "../services/balance-alert.service";
 import { AutoConversionService } from "../services/auto-conversion.service";
@@ -89,6 +89,10 @@ async function maybeRepairInitialFundingSweep(input: any, publicKey: string, bal
   completed: boolean;
   error?: string;
 }> {
+  if (!isInitialUsdcConversionEnabled()) {
+    return { attempted: false, completed: false };
+  }
+
   const usdcBalance = balances.find((item: any) => balanceMatchesConfiguredAsset(item, 'USDC'));
   if (numericBalance(usdcBalance?.balance) > 0.0000001) {
     return { attempted: false, completed: false };

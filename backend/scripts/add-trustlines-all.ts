@@ -7,7 +7,7 @@ async function addTrustlinesToAllAccounts() {
   assertMainnetBulkMutationAllowed('add-trustlines-all');
 
   console.log('\n' + '='.repeat(80));
-  console.log('Adding USDC and BRL Trustlines to All Existing Accounts');
+  console.log('Adding configured default trustlines to all existing accounts');
   console.log('='.repeat(80));
 
   try {

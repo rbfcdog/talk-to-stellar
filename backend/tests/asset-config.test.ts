@@ -4,6 +4,8 @@ import {
   getAssetIssuer,
   getTrustedPathAssetCodes,
   getUserFacingAssetCodes,
+  isInitialUsdcConversionEnabled,
+  isUsdcDefaultTrustlineEnabled,
   resolveConfiguredAsset,
   normalizeAssetCode,
   settlementAssetCode,
@@ -76,14 +78,37 @@ describe('asset config', () => {
     process.env.TESOURO_ISSUER = ETHERFUSE_TESOURO_ISSUER;
     process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
     process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,CETES,XLM';
+    delete process.env.ENABLE_USDC_DEFAULT_TRUSTLINE;
 
     expect(getUserFacingAssetCodes()).toEqual(['TESOURO', 'USDC', 'CETES', 'XLM']);
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('BRL');
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('XLM');
-    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'USDC', 'CETES']));
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('USDC');
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toEqual(expect.arrayContaining(['TESOURO', 'CETES']));
     expect(getTrustedPathAssetCodes()).toEqual(['TESOURO', 'USDC', 'CETES', 'XLM']);
     expect(getTrustedPathAssetCodes()).not.toContain('BRL');
     expect(userFacingAssetCode('EURC')).toBe('CETES');
+  });
+
+  it('requires explicit opt-in for automatic USDC default trustlines and initial conversion', () => {
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.TTS_VISIBLE_ASSET_CODES = 'TESOURO,USDC,CETES,XLM';
+    process.env.USDC_ISSUER = TESTNET_USDC_ISSUER;
+    process.env.TESOURO_ISSUER = ETHERFUSE_TESOURO_ISSUER;
+    process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    delete process.env.ENABLE_USDC_DEFAULT_TRUSTLINE;
+    delete process.env.ONBOARDING_AUTO_CONVERT_TO_USDC;
+
+    expect(isUsdcDefaultTrustlineEnabled()).toBe(false);
+    expect(isInitialUsdcConversionEnabled()).toBe(false);
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).not.toContain('USDC');
+
+    process.env.ENABLE_USDC_DEFAULT_TRUSTLINE = 'true';
+    process.env.ONBOARDING_AUTO_CONVERT_TO_USDC = 'true';
+
+    expect(isUsdcDefaultTrustlineEnabled()).toBe(true);
+    expect(isInitialUsdcConversionEnabled()).toBe(true);
+    expect(getDefaultTrustedAssets().map((asset) => asset.code)).toContain('USDC');
   });
 
   it('resolves user-facing EUR to Circle EURC issuer on public network', () => {

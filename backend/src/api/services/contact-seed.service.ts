@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { supabase } from '../../config/supabase';
-import { getAssetIssuer, getDefaultTrustedAssets, getStellarNetworkName, TESTNET_USDC_ISSUER } from '../../config/assets';
+import { getAssetIssuer, getDefaultTrustedAssets, getStellarNetworkName, isInitialUsdcConversionEnabled, TESTNET_USDC_ISSUER } from '../../config/assets';
 import { AgentRepository } from '../repository/core/agent.repository';
 import { WalletRepository } from '../repository/core/wallet.repository';
 import { ExternalRepository } from '../repository/core/external.repository';
@@ -122,6 +122,7 @@ export class ContactSeedService {
   }
 
   private static getHardcodedUsdcIssuer(): string {
+    if (!isInitialUsdcConversionEnabled()) return '';
     return getStellarNetworkName() === 'TESTNET'
       ? TESTNET_USDC_ISSUER
       : (getAssetIssuer('USDC') || '');
@@ -188,7 +189,7 @@ export class ContactSeedService {
     const assets: string[] = [];
     const errors: string[] = [];
 
-    if (!options.skipInitialUsdcConversion && getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
+    if (isInitialUsdcConversionEnabled() && !options.skipInitialUsdcConversion && getStellarNetworkName() === 'TESTNET' && usdcIssuer) {
       const usdcTrustline = await StellarService.ensureTrustlineFromSecret({
         sourceSecret: secretKey,
         assetCode: 'USDC',
