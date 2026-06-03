@@ -805,6 +805,8 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('PIN/security requests are account actions');
     expect(prompt).toContain('Tool selection patterns');
     expect(prompt).toContain('This routing step must call exactly one route_*_intent tool for every user message');
+    expect(prompt).toContain('Always interpret the latest user message together with recent conversation context');
+    expect(prompt).toContain('If the previous context contains a send/pay/transfer request with amount and asset');
     expect(prompt).toContain('Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing');
     expect(prompt).toContain('route_general_intent is not a fallback for failed understanding');
     expect(prompt).toContain('Priority order when multiple intents appear');
@@ -814,9 +816,12 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('"me ajude com o colocar 100 reais via pix"');
     expect(prompt).toContain('Never choose route_contacts_intent for that shape');
     expect(prompt).toContain('If PIX pays another person/contact, preserve the requested final asset');
+    expect(prompt).toContain('previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix"');
+    expect(prompt).toContain('route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva"');
     expect(prompt).toContain('uero fazer pix pra ana silva de 100 xlm');
     expect(prompt).toContain('Do not reinterpret "100 xlm" as "R$100"');
     expect(prompt).toContain('A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid');
+    expect(prompt).toContain('"quero mandar 100 cetes d" followed by "pra ana silva via pix" is route_pix_intent');
     expect(prompt).toContain('"mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN"');
     expect(prompt).toContain('Missing recipient for payment does not make it general');
     expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
@@ -871,6 +876,8 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_pix_intent).toContain('PIX wins over contacts');
     expect(descriptionByName.route_pix_intent).toContain('amount/asset is the final amount the recipient should receive');
     expect(descriptionByName.route_pix_intent).toContain('The phrase "de 100 XLM" means 100 XLM to Ana');
+    expect(descriptionByName.route_pix_intent).toContain('follow-up messages that complete a previous send/payment request');
+    expect(descriptionByName.route_pix_intent).toContain('previous context has amount/asset such as "quero mandar 100 CETES"');
     expect(descriptionByName.route_contacts_intent).toContain('Contact routing requires explicit contact-management meaning');
     expect(descriptionByName.route_contacts_intent).toContain('Do not use for PIX top-up/on-ramp');
     expect(descriptionByName.route_contacts_intent).toContain('me ajude com o colocar 100 reais via pix');
@@ -889,6 +896,59 @@ describe('Agent production evals', () => {
     expect(priceQuoteProperties.dest_asset_code.description).toContain('destination/target asset');
     expect(priceQuoteProperties.quote_mode.description).toContain('market_price');
     expect(priceQuoteProperties.quote_mode.description).toContain('send_exact');
+  });
+
+  it('routes multi-turn PIX-funded CETES contact payment using recent conversation context', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn(async (messages: any[]) => {
+      const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
+
+      expect(joinedMessages).toContain('Recent conversation context:');
+      expect(joinedMessages).toContain('User: quero mandar 100 cetes d');
+      expect(joinedMessages).toContain('Assistant: Para quem você quer mandar 100 CETES?');
+      expect(joinedMessages).toContain('Latest user message: pra Ana Silva via pix');
+      expect(joinedMessages).toContain('previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix"');
+
+      return {
+        tool_calls: [{
+          id: 'call_pix_context',
+          name: 'route_pix_intent',
+          args: {
+            confidence: 0.99,
+            reason: 'latest message completes previous CETES send with PIX rail',
+            needs_clarification: false,
+            language: 'pt-BR',
+            risk: 'high',
+            amount: '100',
+            asset_code: 'CETES',
+            recipient_query: 'Ana Silva',
+          },
+        }],
+      };
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+    const state = createState('pra Ana Silva via pix');
+    state.messages = [
+      { role: 'user', content: 'quero mandar 100 cetes d', created_at: new Date().toISOString() } as any,
+      { role: 'assistant', content: 'Para quem você quer mandar 100 CETES?', created_at: new Date().toISOString() } as any,
+    ];
+
+    const detected = await graph.detectIntent(state.current_input, state.session_data?.user_id, state.messages);
+
+    expect(detected).toBe(IntentType.PIX);
+    expect(routerInvoke).toHaveBeenCalledTimes(1);
+    expect((graph as any).lastIntentRouteCandidate).toMatchObject({
+      intent: IntentType.PIX,
+      toolName: 'route_pix_intent',
+      amount: '100',
+      assetCode: 'CETES',
+      recipientQuery: 'Ana Silva',
+    });
+    expect(graph.llm.bindTools).toHaveBeenCalledWith(expect.any(Array), { tool_choice: 'required' });
   });
 
   describe('LLM intent router contract matrix', () => {
