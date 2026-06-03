@@ -422,7 +422,7 @@ describe('Agent tool execution', () => {
     }
   });
 
-  it('executes get_all_pair_quotes with the full dynamic matrix', async () => {
+  it('executes get_all_pair_quotes with a compact dynamic pair summary', async () => {
     const quoteSpy = jest
       .spyOn(apiStellarService, 'quoteStrictSendConversion')
       .mockImplementation(async ({ sourceAsset, destAsset, sourceAmount }: any) => {
@@ -458,11 +458,14 @@ describe('Agent tool execution', () => {
       expect(parsed.success).toBe(true);
       expect(parsed.assets).toEqual(['BRL', 'USDC', 'CETES', 'XLM']);
       expect(parsed.summary.total_pairs).toBe(16);
-      expect(parsed.pairs).toHaveLength(16);
+      expect(parsed.displayed_pairs).toBe(6);
+      expect(parsed.pairs).toHaveLength(6);
       expect(parsed.message).toContain('Cotações atuais pela melhor rota');
-      expect(parsed.message).toContain('R$ 1.00 -> US$');
-      expect(parsed.message).toContain('1 XLM ->');
-      expect(parsed.message).toContain('1 CETES ->');
+      expect(parsed.message).toContain('BRL/USDC: R$ 1.00 -> US$');
+      expect(parsed.message).toContain('USDC/XLM: US$ 1.00 ->');
+      expect(parsed.message).toContain('CETES/XLM: 1 CETES ->');
+      expect(parsed.message).not.toContain('mesmo ativo');
+      expect(parsed.message).not.toContain('US$ 1.00 -> US$ 1.00');
       expect(parsed.message).toContain('Nada é executado sem abrir a confirmação e digitar o PIN');
     } finally {
       quoteSpy.mockRestore();

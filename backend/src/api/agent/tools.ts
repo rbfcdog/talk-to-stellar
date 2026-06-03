@@ -970,7 +970,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_all_pair_quotes",
-    description: "Mostra a matriz completa de cotações atuais pela melhor rota entre todos os ativos configurados do TalkToStellar. Use quando o usuário pedir todas as cotações, todas as taxas, tabela de câmbio, matriz de conversão, preços de todos os ativos, ou algo como 'uero ver todas as cotacoes aqui'. Retorna os 16 pares de BRL, USDC, CETES e XLM. Não executa transação e não pede PIN.",
+    description: "Mostra um resumo compacto das cotações atuais pela melhor rota entre todos os ativos configurados do TalkToStellar. Use quando o usuário pedir todas as cotações, todas as taxas, tabela de câmbio, matriz de conversão, preços de todos os ativos, ou algo como 'uero ver todas as cotacoes aqui'. Retorna 6 pares únicos entre BRL, USDC, CETES e XLM, com ida e volta na mesma linha. Não executa transação e não pede PIN.",
     parameters: {
       type: "object",
       properties: {
@@ -2755,17 +2755,14 @@ async function executeGetPairQuote(input: any): Promise<string> {
   }
 }
 
-function allPairQuoteRouteLabel(cell: any, language: 'pt-BR' | 'en'): string {
-  if (cell?.status === 'synthetic' && cell?.bridge_asset_code) {
-    return language === 'en' ? `via ${cell.bridge_asset_code}` : `via ${cell.bridge_asset_code}`;
+function compactPairQuoteLeg(cell: any, language: 'pt-BR' | 'en'): string {
+  if (!cell?.rate || cell?.status === 'unavailable') {
+    return language === 'en' ? 'unavailable' : 'indisponível';
   }
-  if (cell?.status === 'same_asset') {
-    return language === 'en' ? 'same asset' : 'mesmo ativo';
-  }
-  if (cell?.status === 'available') {
-    return language === 'en' ? 'best route' : 'melhor rota';
-  }
-  return language === 'en' ? 'unavailable' : 'indisponível';
+
+  const sourceDisplay = displayPairQuoteAmount('1', cell.source_asset_code);
+  const destinationDisplay = displayPairQuoteAmount(cell.rate, cell.destination_asset_code);
+  return `${sourceDisplay} -> ${destinationDisplay}`;
 }
 
 async function executeGetAllPairQuotes(input: any): Promise<string> {
@@ -2778,17 +2775,24 @@ async function executeGetAllPairQuotes(input: any): Promise<string> {
       sampleAmount: '100',
     });
 
-    const visibleCells = assets.flatMap((sourceAssetCode) => (
-      assets.map((destAssetCode) => matrixPayload.matrix?.[sourceAssetCode]?.[destAssetCode]).filter(Boolean)
+    const visiblePairs = assets.flatMap((sourceAssetCode, sourceIndex) => (
+      assets.slice(sourceIndex + 1).map((destAssetCode) => {
+        const forward = matrixPayload.matrix?.[sourceAssetCode]?.[destAssetCode] || null;
+        const reverse = matrixPayload.matrix?.[destAssetCode]?.[sourceAssetCode] || null;
+        return {
+          pair: `${sourceAssetCode}/${destAssetCode}`,
+          source_asset_code: sourceAssetCode,
+          destination_asset_code: destAssetCode,
+          forward,
+          reverse,
+        };
+      })
     ));
-    const lines = visibleCells.map((cell: any) => {
-      if (!cell?.rate || cell?.status === 'unavailable') {
-        return `${cell?.source_asset_code || '-'} -> ${cell?.destination_asset_code || '-'}: ${language === 'en' ? 'unavailable' : 'indisponível'}`;
-      }
-
-      const sourceDisplay = displayPairQuoteAmount('1', cell.source_asset_code);
-      const destinationDisplay = displayPairQuoteAmount(cell.rate, cell.destination_asset_code);
-      return `${sourceDisplay} -> ${destinationDisplay} (${allPairQuoteRouteLabel(cell, language)})`;
+    const routeHint = language === 'en' ? 'best route' : 'melhor rota';
+    const lines = visiblePairs.map((pair) => {
+      const forwardText = compactPairQuoteLeg(pair.forward, language);
+      const reverseText = compactPairQuoteLeg(pair.reverse, language);
+      return `${pair.pair}: ${forwardText} | ${reverseText} (${routeHint})`;
     });
 
     const message = language === 'en'
@@ -2796,13 +2800,13 @@ async function executeGetAllPairQuotes(input: any): Promise<string> {
           `Current quotes by best route (${matrixPayload.network.toLowerCase()}):`,
           ...lines,
           `Generated at: ${matrixPayload.generated_at}.`,
-          'These are dynamic estimates for the configured assets. Nothing is executed without opening confirmation and entering PIN.',
+          'These are compact dynamic estimates for unique asset pairs. Nothing is executed without opening confirmation and entering PIN.',
         ].join('\n')
       : [
           `Cotações atuais pela melhor rota (${matrixPayload.network.toLowerCase()}):`,
           ...lines,
           `Gerado em: ${matrixPayload.generated_at}.`,
-          'Essas são estimativas dinâmicas para os ativos configurados. Nada é executado sem abrir a confirmação e digitar o PIN.',
+          'Essas são estimativas dinâmicas compactas para pares únicos de ativos. Nada é executado sem abrir a confirmação e digitar o PIN.',
         ].join('\n');
 
     return JSON.stringify({
@@ -2811,7 +2815,8 @@ async function executeGetAllPairQuotes(input: any): Promise<string> {
       assets,
       generated_at: matrixPayload.generated_at,
       summary: matrixPayload.summary,
-      pairs: visibleCells,
+      displayed_pairs: visiblePairs.length,
+      pairs: visiblePairs,
       message,
     });
   } catch (error) {
