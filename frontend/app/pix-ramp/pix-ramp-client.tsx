@@ -969,6 +969,7 @@ export default function PixRampClient({
     (offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : "")
   );
   const offRampPixTargetDisplay = offRampPixTargetAmount ? formatMoney(offRampPixTargetAmount) : "Calculando BRL";
+  const exactOnRampReceiveTarget = Boolean(rampMode === "onramp" && desiredReceiveAsset && desiredReceiveAsset === targetAsset);
   const desiredFinalAmount = rampMode === "onramp"
     ? desiredReceiveAmount && desiredReceiveAsset === targetAsset
       ? desiredReceiveAmount
@@ -981,6 +982,9 @@ export default function PixRampClient({
       ? desiredReceiveAsset
       : targetAsset
     : "";
+  const showOnRampReceiveTargetInput = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget || desiredFinalAmount));
+  const targetReceiveInputAmount = exactOnRampReceiveTarget ? desiredReceiveAmount : (targetAsset === "BRL" ? amountBrl : desiredFinalAmount);
+  const targetReceiveInputAsset = exactOnRampReceiveTarget ? desiredReceiveAsset : (desiredFinalAsset || targetAsset);
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
@@ -2312,8 +2316,29 @@ export default function PixRampClient({
     setQrDataUrl("");
     setCopied(false);
     setWalletPin("");
+    setTemporaryTestResult(null);
+    setPixFundedTransferResult(null);
+    setPixFundedTransferError("");
+    setOperationLocked(false);
     setPolling(false);
     setStep("quote");
+  }
+
+  function updateOnRampReceiveTargetAmount(nextAmount: string) {
+    if (exactOnRampReceiveTarget) {
+      const hasAmount = toPositiveNumber(nextAmount, 0) > 0;
+      setDesiredReceiveAmount(nextAmount);
+      setReceiveEstimateReady(false);
+      setReceiveEstimateLoading(hasAmount);
+      if (transferFlow) {
+        setAutoPayAmount(nextAmount);
+        if (!autoPayAsset && targetReceiveInputAsset) setAutoPayAsset(targetReceiveInputAsset);
+      }
+    } else {
+      setAmountBrl(nextAmount);
+    }
+    setError("");
+    clearQuoteState();
   }
 
   async function requestQuote(): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
@@ -3280,14 +3305,23 @@ export default function PixRampClient({
             </div>
             )}
 
-            {desiredFinalAmount ? (
+            {showOnRampReceiveTargetInput ? (
               <>
                 <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Você quer receber", "You want to receive")}</label>
-                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg">
-                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{friendlyAssetName(desiredFinalAsset, language)}</span>
-                  <div className="min-w-0 w-full px-4 py-4 text-3xl font-black text-tts-deep">{desiredFinalAmount}</div>
-                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{desiredFinalAsset}</span>
+                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-confirm">
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{friendlyAssetName(targetReceiveInputAsset, language)}</span>
+                  <input
+                    aria-label={L("Valor que você quer receber", "Amount you want to receive")}
+                    className="min-w-0 w-full bg-transparent px-4 py-4 text-3xl font-black text-tts-deep outline-none"
+                    value={targetReceiveInputAmount}
+                    inputMode="decimal"
+                    onChange={(event) => updateOnRampReceiveTargetAmount(event.target.value)}
+                  />
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{targetReceiveInputAsset}</span>
                 </div>
+                <p className="mt-2 text-xs font-semibold text-tts-muted">
+                  {L("Altere o valor para recalcular o PIX antes de gerar o QR.", "Change the amount to recalculate PIX before creating the QR.")}
+                </p>
                 <div className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
                   {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : amountBrl ? L(`PIX pela rota da sua conta: ${effectiveOnRampPixPayDisplay}`, `PIX from your account route: ${effectiveOnRampPixPayDisplay}`) : L("O PIX será calculado pela cotação dinâmica antes de gerar o QR.", "PIX will be calculated by the dynamic quote before creating the QR.")}
                 </div>

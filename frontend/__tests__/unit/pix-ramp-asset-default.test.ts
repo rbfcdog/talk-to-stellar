@@ -34,6 +34,11 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("quote ? effectiveOnRampPixPayDisplay : formatMoney(amountBrl)");
     expect(text).toContain("const quotedOrderAmountBrl = normalizeHumanAmount(quoteForOrder?.fromAmount || \"\")");
     expect(text).toContain("PIX pela rota da sua conta");
+    expect(text).toContain("function updateOnRampReceiveTargetAmount(nextAmount: string)");
+    expect(text).toContain("value={targetReceiveInputAmount}");
+    expect(text).toContain('aria-label={L("Valor que você quer receber", "Amount you want to receive")}');
+    expect(text).toContain("setAutoPayAmount(nextAmount)");
+    expect(text).toContain("setPixFundedTransferResult(null)");
     expect(text).toContain("pixFundedTransferError");
     expect(text).toContain("PIX confirmado. Não consegui concluir o envio automático agora");
     expect(text).toContain("if (!transferFlow || transferPayload) markOperationCompleted();");
