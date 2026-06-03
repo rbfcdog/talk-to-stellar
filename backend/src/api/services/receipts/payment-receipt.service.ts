@@ -214,12 +214,13 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to create receipt link: ${message}`);
     }
 
-    const textWithLink = viewerUrl ? `${text}\nComprovante: ${viewerUrl}` : text;
-    const savingsFirstDeliveryText = await this.buildSavingsFirstWhatsappReceipt(input, viewerUrl);
+    const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
+    const textWithLink = receiptUrl ? `${text}\nComprovante: ${receiptUrl}` : text;
+    const savingsFirstDeliveryText = await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl);
     const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
     const externalDeliveryText = savingsFirstDeliveryText || (externalDeliveryBase
-      ? viewerUrl
-        ? `${externalDeliveryBase}\nComprovante: ${viewerUrl}`
+      ? receiptUrl
+        ? `${externalDeliveryBase}\nComprovante: ${receiptUrl}`
         : externalDeliveryBase
       : textWithLink);
 
@@ -257,8 +258,8 @@ export class PaymentReceiptService {
         provider: input.provider,
         providerUserId: input.providerUserId,
         text: externalDeliveryText,
-        buttonText: viewerUrl ? 'Abrir comprovante' : null,
-        buttonUrl: viewerUrl || null,
+        buttonText: receiptUrl ? 'Abrir comprovante' : null,
+        buttonUrl: receiptUrl || null,
       });
       this.logExternalDelivery('receipt', delivery);
     } catch (error) {
@@ -266,7 +267,7 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
     }
 
-    return viewerUrl || '';
+    return receiptUrl || '';
   }
 
   private static logExternalDelivery(context: string, delivery: Awaited<ReturnType<typeof TransferNotificationService.notifyExternalChannelMessage>>): void {

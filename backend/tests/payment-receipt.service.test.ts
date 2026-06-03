@@ -306,6 +306,45 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
+  it('falls back to hosted receipt URL when the receipt viewer cannot be created', async () => {
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockRejectedValue(new Error('receipt_images unavailable'));
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    const result = await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-pix-fallback',
+      userId: 'user-pix-fallback',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '100.50',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '100',
+      destinationAssetCode: 'BRL',
+      hash: 'sandbox-pix-fallback-1',
+      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$100.00',
+    });
+
+    const fallbackUrl = 'https://talk-to-stellar-owxg.vercel.app/api/external/receipts/sandbox-pix-fallback-1';
+    expect(result).toBe(fallbackUrl);
+    expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
+      buttonText: 'Abrir comprovante',
+      buttonUrl: fallbackUrl,
+      text: expect.stringContaining(`Comprovante: ${fallbackUrl}`),
+    }));
+
+    createSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
   it('does not use the savings-first WhatsApp receipt for XLM payments', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {

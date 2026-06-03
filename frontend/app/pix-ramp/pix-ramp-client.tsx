@@ -136,6 +136,55 @@ function buildAppPath(path: string, params: Record<string, unknown>) {
   return query ? `${path}?${query}` : path;
 }
 
+function extractRampReceiptUrl(...sources: unknown[]): string {
+  const visited = new Set<unknown>();
+  const keys = [
+    "receipt_url",
+    "receiptUrl",
+    "receipt",
+    "receipt_link",
+    "receiptLink",
+    "comprovante_url",
+    "comprovanteUrl",
+  ];
+  const nestedKeys = ["transaction", "completedTransaction", "result", "order", "payload", "context", "metadata", "quote"];
+
+  const visit = (value: unknown, depth = 0): string => {
+    if (!value || depth > 3) return "";
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return /^https?:\/\/\S+$/i.test(trimmed) ? trimmed : "";
+    }
+    if (typeof value !== "object" || visited.has(value)) return "";
+    visited.add(value);
+    const record = value as Record<string, unknown>;
+
+    for (const key of keys) {
+      const found = visit(record[key], depth + 1);
+      if (found) return found;
+    }
+
+    for (const key of nestedKeys) {
+      const found = visit(record[key], depth + 1);
+      if (found) return found;
+    }
+
+    return "";
+  };
+
+  for (const source of sources) {
+    const found = visit(source);
+    if (found) return found;
+  }
+  return "";
+}
+
+function buildRampReceiptFallbackUrl(reference: unknown): string {
+  const raw = String(reference || "").trim();
+  if (!raw || typeof window === "undefined") return "";
+  return `${window.location.origin}/api/external/receipts/${encodeURIComponent(raw)}`;
+}
+
 function safeInternalReturnPath(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw || raw.startsWith("//")) return "";
@@ -2148,30 +2197,37 @@ export default function PixRampClient({
     completedTransaction?: RampResponse | null;
     offRampPayload?: RampResponse | null;
   }) {
-    const receiptUrl = String(
-      input.receiptUrl ||
-      input.transferPayload?.receipt_url ||
-      input.offRampPayload?.receipt_url ||
-      input.completedTransaction?.receipt_url ||
-      input.completedTransaction?.receiptUrl ||
-      onRampReceiptUrl ||
-      ""
-    ).trim();
-    const feedbackKey = `${input.kind}:${operationId || orderId || atomicIntentKey}:${receiptUrl}`;
-    if (pixFeedbackKeysRef.current.has(feedbackKey)) return;
-    pixFeedbackKeysRef.current.add(feedbackKey);
     const completedAny = (input.completedTransaction || {}) as any;
     const transferAny = (input.transferPayload || {}) as any;
     const offRampAny = (input.offRampPayload || {}) as any;
     const transactionHash = String(
       completedAny.payment_hash ||
         completedAny.paymentHash ||
+        completedAny.stellarTxHash ||
+        completedAny.hash ||
+        completedAny.id ||
         transferAny.payment_hash ||
         transferAny.paymentHash ||
+        transferAny.hash ||
+        transferAny.order_id ||
         offRampAny.payment_hash ||
         offRampAny.paymentHash ||
+        offRampAny.hash ||
+        offRampAny.order_id ||
         ""
     ).trim();
+    const receiptUrl = extractRampReceiptUrl(
+      input.receiptUrl,
+      input.transferPayload,
+      input.offRampPayload,
+      input.completedTransaction,
+      statusPayload,
+      orderPayload,
+      onRampReceiptUrl
+    ) || buildRampReceiptFallbackUrl(transactionHash || operationId || orderId);
+    const feedbackKey = `${input.kind}:${operationId || orderId || atomicIntentKey}:${receiptUrl}`;
+    if (pixFeedbackKeysRef.current.has(feedbackKey)) return;
+    pixFeedbackKeysRef.current.add(feedbackKey);
     const researchBase = {
       eventGroup: "PIX",
       status: "success" as const,
@@ -2573,7 +2629,7 @@ export default function PixRampClient({
         if (!transferFlow || transferPayload) {
           notifyChatAfterPixCompletion({
             kind: transferPayload ? "funded-transfer" : "onramp",
-            receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url || refreshed?.transaction?.receipt_url || refreshed?.transaction?.receiptUrl || ""),
+            receiptUrl: extractRampReceiptUrl(payload, refreshed),
             completedTransaction,
             transferPayload,
           });
@@ -2824,15 +2880,7 @@ export default function PixRampClient({
   const successTransaction = rampMode === "offramp"
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
     : order;
-  const onRampReceiptUrl = String(
-    statusPayload?.receipt_url ||
-    statusPayload?.transaction?.receipt_url ||
-    statusPayload?.transaction?.receiptUrl ||
-    orderPayload?.receipt_url ||
-    orderPayload?.transaction?.receipt_url ||
-    orderPayload?.transaction?.receiptUrl ||
-    ""
-  );
+  const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload);
 
   return (
     <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:px-6 lg:px-8">
