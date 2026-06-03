@@ -48,6 +48,10 @@ describe("PIX asset defaults", () => {
     expect(text).not.toContain("PIX estimado pela rota da sua conta");
     expect(text).not.toContain("Chave PIX/e-mail");
     expect(text).not.toContain("Contato salvo validado");
+    expect(text).not.toContain("Contato validado");
+    expect(text).not.toContain("Contact verified");
+    expect(text).not.toContain("Ver contato");
+    expect(text).not.toContain("See contact");
     expect(text).not.toContain("formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)");
     expect(text).not.toContain('receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL")');
     expect(text).not.toContain("Alvo: mandar ${formatMoney(amountBrl)}");
