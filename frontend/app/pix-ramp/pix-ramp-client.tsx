@@ -3957,15 +3957,15 @@ function RampFeeBridge({
       </div>
 
       {showSavingsCard && (
-        <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep">
+        <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep sm:p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-gold">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-tts-gold sm:text-xs sm:tracking-[0.14em]">
                 {savingsTitle}
               </p>
-              <p className="mt-1 text-2xl font-black">{formatMoney(estimatedSavingsBrl)}</p>
+              <p className="mt-1 text-xl font-black sm:text-2xl">{formatMoney(estimatedSavingsBrl)}</p>
             </div>
-            <p className="max-w-sm text-xs font-bold leading-5 text-tts-muted">
+            <p className="max-w-sm text-[11px] font-bold leading-4 text-tts-muted sm:text-xs sm:leading-5">
               {savingsDescription}
             </p>
           </div>
