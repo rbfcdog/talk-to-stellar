@@ -216,7 +216,11 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("amount: quoteAmountBrl");
     expect(text).toContain("amount: orderAmountBrl");
     expect(text).toContain("refreshOrder(false)");
-    expect(text).toContain("receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url");
+    expect(text).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
+    expect(text).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
+    expect(text).toContain("receiptUrl: extractRampReceiptUrl(payload, refreshed)");
+    expect(text).toContain("buildRampReceiptFallbackUrl(transactionHash || operationId || orderId)");
+    expect(text).toContain("const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload)");
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
     expect(text).toContain("Taxa de conversão estimada");
     expect(text).toContain("formatFeeParts");
