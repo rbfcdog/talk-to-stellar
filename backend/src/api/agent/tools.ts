@@ -566,18 +566,76 @@ function normalizePairQuoteAsset(value: unknown): string {
   return userFacingAssetCode(normalizeAssetCode(raw));
 }
 
-function pairQuoteAmount(value: unknown): string {
+function pairQuoteAmountInfo(value: unknown): { amount: string; provided: boolean } {
   const amount = parseHumanAmountNumber(value);
-  if (Number.isFinite(amount) && amount > 0) return amount.toFixed(7).replace(/\.?0+$/, '');
-  return '1';
+  if (Number.isFinite(amount) && amount > 0) {
+    return { amount: amount.toFixed(7).replace(/\.?0+$/, ''), provided: true };
+  }
+  return { amount: '1', provided: false };
+}
+
+type PairQuoteMode = 'market_price' | 'send_exact';
+
+function normalizePairQuoteMode(value: unknown, amountWasProvided: boolean): PairQuoteMode {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'market_price' || normalized === 'price' || normalized === 'buy' || normalized === 'receive_exact') {
+    return 'market_price';
+  }
+  if (normalized === 'send_exact' || normalized === 'sell' || normalized === 'convert') {
+    return 'send_exact';
+  }
+  return amountWasProvided ? 'send_exact' : 'market_price';
+}
+
+function pairQuoteBoolean(value: unknown): boolean {
+  return value === true || String(value || '').trim().toLowerCase() === 'true';
 }
 
 function displayPairQuoteAmount(value: unknown, assetCode: unknown): string {
   const amount = parseHumanAmountNumber(value);
+  const code = normalizePairQuoteAsset(assetCode);
+  if (!Number.isFinite(amount)) return formatCustomerAssetAmount(String(value || '0'), code);
+  if (code === 'BRL') return `R$ ${amount.toFixed(2)}`;
+  if (code === 'USDC') return `US$ ${amount.toFixed(2)}`;
   return formatCustomerAssetAmount(
-    Number.isFinite(amount) && amount > 0 ? amount.toFixed(7).replace(/\.?0+$/, '') : String(value || '0'),
-    normalizePairQuoteAsset(assetCode)
+    amount > 0 ? amount.toFixed(7).replace(/\.?0+$/, '') : String(value || '0'),
+    code
   );
+}
+
+async function quoteRequiredSourceForTarget(input: {
+  sourceAssetCode: string;
+  destAssetCode: string;
+  destAmount: string;
+}): Promise<{
+  source_amount: string;
+  destination_amount: string;
+  source_asset_code: string;
+  destination_asset_code: string;
+  path: Array<{ code: string; issuer?: string; type?: string }>;
+  method: string;
+  network_fee_xlm?: string;
+  platform_fee?: any;
+}> {
+  const sourceAsset = resolveConfiguredAsset(input.sourceAssetCode);
+  const destAsset = resolveConfiguredAsset(input.destAssetCode);
+  const quote = await ApiStellarService.quotePathPayment({
+    sourcePublicKey: '',
+    destination: '',
+    sourceAsset,
+    destAsset,
+    destAmount: input.destAmount,
+  });
+  return {
+    source_amount: String(quote.sourceAmount),
+    destination_amount: String(quote.destinationAmount),
+    source_asset_code: normalizePairQuoteAsset(quote.sourceAsset?.code || input.sourceAssetCode),
+    destination_asset_code: normalizePairQuoteAsset(quote.destinationAsset?.code || input.destAssetCode),
+    path: quote.path || [],
+    method: 'stellar_strict_receive_best_source_amount',
+    network_fee_xlm: quote.networkFeeXlm,
+    platform_fee: quote.platformFee || null,
+  };
 }
 
 function formatNoPathFallbackMessage(errorMessage: string): string {
@@ -913,7 +971,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_pair_quote",
-    description: "Consulta a cotação atual pela melhor rota entre quaisquer dois ativos configurados do TalkToStellar. Use para perguntas como 'cotação XLM para USDC', 'melhor rota de BRL pra CETES', 'quanto está USDC/XLM agora' ou 'converter 100 XLM para BRL sem executar'. Retorna taxa efetiva, valor estimado de destino, status da rota e se a rota foi direta, fallback ou sintética via moeda ponte. Não executa transação e não pede PIN.",
+    description: "Consulta a cotação atual pela melhor rota entre quaisquer dois ativos configurados do TalkToStellar. Use market_price para preço/cotação/custo de um ativo em outro, como 'cotação XLM/BRL' ou 'quanto custa 100 XLM em reais': calcula quanto do ativo de preço é necessário para receber o ativo cotado. Use send_exact para simular venda/conversão, como 'converter 100 XLM para BRL': calcula quanto destino chega ao enviar origem. Retorna câmbio efetivo, valor estimado, status e rota. Não executa transação e não pede PIN.",
     parameters: {
       type: "object",
       properties: {
@@ -929,7 +987,16 @@ export const toolDefinitions = [
         },
         source_amount: {
           type: "string",
-          description: "Valor de origem para simular. Se o usuário só pedir a taxa/cotação, use 1.",
+          description: "Valor informado pelo usuário. Em send_exact, é o valor de origem enviado. Em market_price, é o valor do ativo cotado que o usuário quer receber/comprar. Se o usuário só pedir a cotação, use 1.",
+        },
+        amount_was_provided: {
+          type: "boolean",
+          description: "True quando o usuário informou explicitamente um valor. False quando source_amount foi preenchido como 1 apenas para cotação unitária.",
+        },
+        quote_mode: {
+          type: "string",
+          enum: ["market_price", "send_exact", ""],
+          description: "market_price para preço/cotação/custo de receber/comprar source_asset_code em dest_asset_code; send_exact para converter/vender/enviar source_asset_code e receber dest_asset_code.",
         },
         language: {
           type: "string",
@@ -2557,7 +2624,10 @@ async function executeGetPairQuote(input: any): Promise<string> {
   try {
     const sourceAssetCode = normalizePairQuoteAsset(input.source_asset_code || input.sourceAssetCode || input.from_asset_code || input.fromAssetCode);
     const destAssetCode = normalizePairQuoteAsset(input.dest_asset_code || input.destAssetCode || input.destination_asset_code || input.destinationAssetCode || input.to_asset_code || input.toAssetCode);
-    const sourceAmount = pairQuoteAmount(input.source_amount || input.sourceAmount || input.amount);
+    const amountInfo = pairQuoteAmountInfo(input.source_amount || input.sourceAmount || input.amount);
+    const sourceAmount = amountInfo.amount;
+    const amountWasProvided = pairQuoteBoolean(input.amount_was_provided || input.amountWasProvided) || amountInfo.provided;
+    const quoteMode = normalizePairQuoteMode(input.quote_mode || input.quoteMode || input.mode, amountWasProvided);
     const language = normalizeToolLanguage(input.language || input.lang || input.locale);
 
     if (!sourceAssetCode || !destAssetCode) {
@@ -2567,6 +2637,61 @@ async function executeGetPairQuote(input: any): Promise<string> {
           ? 'Tell me the source and destination currencies, for example: quote XLM to USDC.'
           : 'Me diga a moeda de origem e destino, por exemplo: cotação XLM para USDC.',
       });
+    }
+
+    if (quoteMode === 'market_price') {
+      try {
+        const targetQuote = await quoteRequiredSourceForTarget({
+          sourceAssetCode: destAssetCode,
+          destAssetCode: sourceAssetCode,
+          destAmount: sourceAmount,
+        });
+        const requiredAmount = parseHumanAmountNumber(targetQuote.source_amount);
+        const targetAmount = parseHumanAmountNumber(targetQuote.destination_amount || sourceAmount);
+        const pricePerUnit = targetAmount > 0 ? requiredAmount / targetAmount : 0;
+        const inverse = requiredAmount > 0 ? targetAmount / requiredAmount : 0;
+        const targetDisplay = displayPairQuoteAmount(targetQuote.destination_amount || sourceAmount, sourceAssetCode);
+        const requiredDisplay = displayPairQuoteAmount(targetQuote.source_amount, destAssetCode);
+        const priceDisplay = pricePerUnit > 0 ? displayPairQuoteAmount(pricePerUnit.toFixed(10), destAssetCode) : '';
+        const inverseDisplay = inverse > 0 ? displayPairQuoteAmount(inverse.toFixed(10), sourceAssetCode) : '';
+        const message = language === 'en'
+          ? [
+              `Current price by best route: to receive ${targetDisplay}, you need approximately ${requiredDisplay}.`,
+              priceDisplay ? `Exchange: 1 ${sourceAssetCode} costs about ${priceDisplay}.` : '',
+              inverseDisplay ? `Inverse: 1 ${destAssetCode} buys about ${inverseDisplay}.` : '',
+              'Mode: exact target quote. This is the same direction used when PIX must deliver a final asset amount.',
+              'This is only a quote. Nothing is executed without opening confirmation and entering PIN.',
+            ].filter(Boolean).join('\n')
+          : [
+              `Preço atual pela melhor rota: para receber ${targetDisplay}, precisa de aproximadamente ${requiredDisplay}.`,
+              priceDisplay ? `Câmbio: 1 ${sourceAssetCode} custa cerca de ${priceDisplay}.` : '',
+              inverseDisplay ? `Inverso: 1 ${destAssetCode} compra cerca de ${inverseDisplay}.` : '',
+              'Modo: cotação por alvo exato. É o mesmo sentido usado quando o PIX precisa entregar um valor final em outro ativo.',
+              'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
+            ].filter(Boolean).join('\n');
+
+        return JSON.stringify({
+          success: true,
+          quote_mode: 'market_price',
+          network: getStellarNetworkName(),
+          source_asset_code: sourceAssetCode,
+          dest_asset_code: destAssetCode,
+          target_asset_code: sourceAssetCode,
+          price_asset_code: destAssetCode,
+          target_amount: targetQuote.destination_amount || sourceAmount,
+          required_amount: targetQuote.source_amount,
+          rate: pricePerUnit,
+          inverse_rate: inverse,
+          route_status: 'available',
+          route_source: 'stellar_horizon_strict_receive_paths',
+          route_method: targetQuote.method,
+          route_path: targetQuote.path,
+          observed_at: new Date().toISOString(),
+          message,
+        });
+      } catch (marketError) {
+        logger.warn(`[pair-quote] exact-target quote failed; falling back to send quote: ${marketError instanceof Error ? marketError.message : String(marketError)}`);
+      }
     }
 
     const matrixPayload = await ConversionRateMatrixService.buildMatrix({
@@ -2607,15 +2732,15 @@ async function executeGetPairQuote(input: any): Promise<string> {
           : (language === 'en' ? 'direct best route' : 'melhor rota direta');
     const message = language === 'en'
       ? [
-          `Current quote by best route: ${sourceDisplay} -> approximately ${destinationDisplay}.`,
-          rateDisplay ? `Rate: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
+          `Current send quote by best route: ${sourceDisplay} -> approximately ${destinationDisplay}.`,
+          rateDisplay ? `Exchange: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
           inverseDisplay ? `Inverse: 1 ${destAssetCode} ≈ ${inverseDisplay}.` : '',
           `Route: ${routeKind}.`,
           'This is only a quote. Nothing is executed without opening confirmation and entering PIN.',
         ].filter(Boolean).join('\n')
       : [
-          `Cotação atual pela melhor rota: ${sourceDisplay} -> aproximadamente ${destinationDisplay}.`,
-          rateDisplay ? `Taxa: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
+          `Cotação de envio pela melhor rota: ${sourceDisplay} -> aproximadamente ${destinationDisplay}.`,
+          rateDisplay ? `Câmbio: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
           inverseDisplay ? `Inverso: 1 ${destAssetCode} ≈ ${inverseDisplay}.` : '',
           `Rota: ${routeKind}.`,
           'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
@@ -2623,6 +2748,7 @@ async function executeGetPairQuote(input: any): Promise<string> {
 
     return JSON.stringify({
       success: true,
+      quote_mode: 'send_exact',
       network: matrixPayload.network,
       source_asset_code: sourceAssetCode,
       dest_asset_code: destAssetCode,

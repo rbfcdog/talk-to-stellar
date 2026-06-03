@@ -433,9 +433,57 @@ describe('Agent tool execution', () => {
       expect(parsed.route_status).toBe('synthetic');
       expect(parsed.bridge_asset_code).toBe('USDC');
       expect(parsed.all_pairs_summary.total_pairs).toBe(16);
-      expect(parsed.message).toContain('Cotação atual pela melhor rota');
+      expect(parsed.message).toContain('Cotação de envio pela melhor rota');
       expect(parsed.message).toContain('100 XLM');
       expect(parsed.message).toContain('200 CETES');
+    } finally {
+      quoteSpy.mockRestore();
+    }
+  });
+
+  it('uses exact-target pricing for market price pair quotes', async () => {
+    const quoteSpy = jest
+      .spyOn(apiStellarService, 'quotePathPayment')
+      .mockResolvedValueOnce({
+        sourceAmount: '69.82',
+        destinationAmount: '100',
+        sourceAsset: { code: 'TESOURO' },
+        destinationAsset: { code: 'XLM' },
+        sourceMax: '71.2164',
+        pathSourceAmount: '69.82',
+        pathSourceMax: '71.2164',
+        path: [],
+        platformFee: { enabled: false, feeAmount: '0', feeAssetCode: 'TESOURO', feeBps: 0 },
+        networkFeeXlm: '0.0000100',
+      });
+
+    try {
+      const output = await executeTool('get_pair_quote', {
+        source_asset_code: 'XLM',
+        dest_asset_code: 'BRL',
+        source_amount: '100',
+        amount_was_provided: true,
+        quote_mode: 'market_price',
+        language: 'pt-BR',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(quoteSpy).toHaveBeenCalledWith(expect.objectContaining({
+        destAmount: '100',
+        sourceAsset: expect.objectContaining({ code: 'TESOURO' }),
+        destAsset: expect.objectContaining({ code: 'XLM' }),
+      }));
+      expect(parsed.success).toBe(true);
+      expect(parsed.quote_mode).toBe('market_price');
+      expect(parsed.target_asset_code).toBe('XLM');
+      expect(parsed.price_asset_code).toBe('BRL');
+      expect(parsed.target_amount).toBe('100');
+      expect(parsed.required_amount).toBe('69.82');
+      expect(parsed.rate).toBeCloseTo(0.6982, 10);
+      expect(parsed.message).toContain('para receber 100 XLM');
+      expect(parsed.message).toContain('R$ 69.82');
+      expect(parsed.message).toContain('alvo exato');
+      expect(parsed.message).not.toContain('R$ 287');
     } finally {
       quoteSpy.mockRestore();
     }
