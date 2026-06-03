@@ -3922,7 +3922,7 @@ function RampFeeBridge({
               </p>
               <p className="mt-1 text-xl font-black sm:text-2xl">{formatMoney(estimatedSavingsBrl)}</p>
             </div>
-            <p className="max-w-sm text-[11px] font-bold leading-4 text-tts-muted sm:text-xs sm:leading-5">
+            <p className="max-w-sm text-[10px] font-semibold leading-4 text-tts-muted sm:text-[11px]">
               {savingsDescription}
             </p>
           </div>
