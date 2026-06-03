@@ -43,7 +43,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PIX,
     toolName: 'route_pix_onramp_intent',
-    description: 'Use for own-account PIX entrada/on-ramp only: the user wants to put/add/load/deposit/bring/receive money into their own TalkToStellar account via PIX. Portuguese examples: "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix de 100 reais", "depositar via PIX", "trazer 50 reais via PIX", "receber um PIX na minha conta". This route never requires a contact, email, phone, recipient, destination public key, saved contact, or human recipient. Never use this if the message has PIX plus a named recipient/person after pra/para/pro/a, such as "fazer PIX pra Ana Silva de 100 XLM" or typo "uero fazer pix pra ana silva de 100 xlm". Those are route_pix_intent because PIX funds a payment to that contact. In those cases the amount/asset is the final recipient target, not BRL for the sender own account.',
+    description: 'Use for own-account PIX entrada/on-ramp only: the user wants to put/add/load/deposit/bring/receive money into their own TalkToStellar account via PIX. Portuguese examples: "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix de 100 reais", "depositar via PIX", "trazer 50 reais via PIX", "receber um PIX na minha conta", "uero mandar um pix pra chegar 100 usdc na minha conta". This route never requires a contact, email, phone, recipient, destination public key, saved contact, or human recipient. Words like chegar, entrar, cair, receber plus "na minha conta" describe the target balance in the user own account, not a contact. For "chegar 100 USDC na minha conta", set amount=100 and asset_code=USDC. Never use this if the message has PIX plus a named recipient/person after pra/para/pro/a, such as "fazer PIX pra Ana Silva de 100 XLM" or typo "uero fazer pix pra ana silva de 100 xlm". Those are route_pix_intent because PIX funds a payment to that contact. In those cases the amount/asset is the final recipient target, not BRL for the sender own account.',
   },
   {
     intent: IntentType.PIX,
@@ -164,12 +164,12 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
         },
         amount: {
           type: 'string',
-          description: 'Optional normalized decimal amount from the user message. For PIX-funded contact payment, this is the final amount the recipient should receive. For layered external transfers such as "10 USDC em XLM pra fora", this is the source amount being spent.',
+          description: 'Optional normalized decimal amount from the user message. For PIX-funded contact payment, this is the final amount the recipient should receive. For own-account PIX on-ramp such as "chegar 100 USDC na minha conta", this is the target amount to arrive in the user account. For layered external transfers such as "10 USDC em XLM pra fora", this is the source amount being spent.',
         },
         asset_code: {
           type: 'string',
           enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
-          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For single-asset quote requests, also fill source_asset_code/dest_asset_code instead of relying only on this field. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM. For layered external transfers, use the source asset here and also fill source_asset_code/dest_asset_code.',
+          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For single-asset quote requests, also fill source_asset_code/dest_asset_code instead of relying only on this field. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM. For own-account PIX on-ramp, this is the asset that should arrive in the user account, e.g. "chegar 100 USDC na minha conta" means asset_code USDC. For layered external transfers, use the source asset here and also fill source_asset_code/dest_asset_code.',
         },
         source_asset_code: {
           type: 'string',
@@ -1585,6 +1585,43 @@ export class AgentGraph {
     };
   }
 
+  private pixOwnAccountIntentFromLlmRoute(state: AgentState): {
+    is_pix_ramp: boolean;
+    direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
+    amount?: string;
+    amount_currency?: string;
+    asset_code: string;
+    recipient_query?: string;
+  } | null {
+    const route = (state.action_params as any)?.llm_route || {};
+    const toolName = String(route.tool_name || '').trim();
+    if (toolName !== 'route_pix_onramp_intent' && toolName !== 'route_pix_offramp_intent') {
+      return null;
+    }
+
+    const amount = String(route.amount || '').trim();
+    const assetCode = this.normalizeAgentAssetCode(route.asset_code || route.dest_asset_code || route.source_asset_code || '');
+    const sourceAssetCode = this.normalizeAgentAssetCode(route.source_asset_code || route.asset_code || '');
+    if (!amount && !assetCode && !sourceAssetCode) {
+      return null;
+    }
+
+    const direction = toolName === 'route_pix_offramp_intent' ? 'offramp' : 'onramp';
+    const normalizedAsset = direction === 'offramp'
+      ? (sourceAssetCode || assetCode || 'BRL')
+      : (assetCode || 'BRL');
+
+    return {
+      is_pix_ramp: true,
+      direction,
+      flow: 'fund_wallet',
+      amount: amount || undefined,
+      amount_currency: normalizedAsset,
+      asset_code: normalizedAsset,
+    };
+  }
+
   private paymentIntentFromLlmRoute(state: AgentState): {
     recipient_query?: string;
     amount?: string;
@@ -1726,9 +1763,10 @@ export class AgentGraph {
   }
 
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
+    const llmOwnAccountPixIntent = this.pixOwnAccountIntentFromLlmRoute(state);
     const llmPixFundedPaymentIntent = this.pixFundedPaymentIntentFromLlmRoute(state);
     const extractedIntent = this.extractPixRampIntentFromText(state.current_input);
-    const intent = llmPixFundedPaymentIntent || (extractedIntent.is_pix_ramp
+    const intent = llmOwnAccountPixIntent || llmPixFundedPaymentIntent || (extractedIntent.is_pix_ramp
       ? extractedIntent
       : (this.resumePendingPixRampIntent(state) || extractedIntent));
     const language = this.getLanguage(state);
@@ -3797,6 +3835,7 @@ export class AgentGraph {
           'If the user is adding, placing, depositing, loading, bringing, or receiving money/saldo via PIX into their own account, call route_pix_onramp_intent.',
           'If the user is withdrawing, sending out, sacar, retirar, or moving money to their own PIX/bank exit, call route_pix_offramp_intent.',
           'If the user names another person/contact/recipient for a PIX payment, call route_pix_intent and preserve the final amount/asset for that recipient.',
+          'Exact audit example: "uero mandar um pix pra chegar 100 usdc na minha conta" must be route_pix_onramp_intent with amount=100 and asset_code=USDC. "chegar" is not a recipient; "na minha conta" means own-account on-ramp.',
           'Exact audit example: "uero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
           'Exact audit example: "quero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
           'Multi-turn audit example: previous user "quero mandar 100 cetes d" followed by latest user "pra ana silva via pix" must be route_pix_intent with amount=100, asset_code=CETES, recipient_query=Ana Silva.',
@@ -3975,6 +4014,7 @@ Structured extraction fields:
 - When the user names a payment recipient/contact, fill recipient_query with the recipient name/key from the message.
 - For route_pix_intent, amount and asset_code are the final amount and asset the recipient should receive. Example: "quero fazer pix pra Ana Silva de 100 XLM" -> route_pix_intent with amount="100", asset_code="XLM", recipient_query="Ana Silva".
 - For multi-turn route_pix_intent, combine context. Example: previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix" -> route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva". Do not route to route_pix_onramp_intent or generic PIX page.
+- For route_pix_onramp_intent, amount and asset_code are the exact target amount/asset that should arrive in the user's own account when the user says "chegar/entrar/cair/receber ... na minha conta". Example: "uero mandar um pix pra chegar 100 usdc na minha conta" -> route_pix_onramp_intent, amount="100", asset_code="USDC", recipient_query empty.
 - For own-account route_pix_onramp_intent and route_pix_offramp_intent, leave recipient_query empty unless the user explicitly provided their own PIX key as data, not as a contact.
 - For layered external transfers, preserve the two layers. Example: "uero mandar 10 usdc em xlm pra fora" -> route_payment_intent, amount="10", source_asset_code="USDC", asset_code="USDC", dest_asset_code="XLM", needs_clarification=true if no actual destination/contact/public key is provided. This means first convert USDC to XLM, then transfer XLM outward. Do not open generic PIX entrada/saída.
 
@@ -3991,7 +4031,7 @@ Priority order when multiple intents appear:
 Route selection guide:
 - route_balance_intent: user asks to see balance, saldo, holdings, available money, quanto tenho, current wallet amount, or any asset balance such as XLM/USDC/CETES/BRL.
 - route_contacts_intent: user explicitly asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts. Contact routing requires explicit contact-management meaning; adding money/saldo is not contact management.
-- route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta". It never needs a contact. It is invalid if a separate person/contact is named as the recipient.
+- route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta", "uero mandar um pix pra chegar 100 usdc na minha conta". It never needs a contact. It is invalid if a separate person/contact is named as the recipient. Words like "chegar", "entrar", "cair" before an amount plus "na minha conta" describe the target balance, not a recipient.
 - route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix". It does not cover cross-asset external-transfer wording like "10 USDC em XLM pra fora" unless the user explicitly says own PIX/bank.
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
@@ -4012,6 +4052,7 @@ Route selection guide:
 Disambiguation:
 - "mandar/enviar/pagar + PIX" routes to a PIX tool, not payment.
 - "colocar/adicionar/depositar/carregar/recarregar/trazer 100 reais via/no/por PIX" is PIX on-ramp into the user's own TalkToStellar account and must call route_pix_onramp_intent, even if the user says "me ajude com". Do not route it as payment and do not ask for contact key, email, phone, public key, or recipient.
+- "mandar um PIX pra chegar 100 USDC na minha conta", "fazer PIX para cair 100 dólares na minha conta", and "PIX para entrar 50 XLM na minha conta" are own-account on-ramp. Call route_pix_onramp_intent with amount and asset_code from the value after chegar/cair/entrar. Do not treat "chegar" as recipient_query.
 - "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por pix", "quero colocar 100 reais no pix", and "adicionar saldo com pix" must call route_pix_onramp_intent. They are not contacts, even though the verbs colocar/adicionar can also be used for saving contacts in other contexts.
 - A message with PIX + amount/currency + add/top-up/deposit wording does not need any recipient. Never choose route_contacts_intent for that shape. The correct tool is route_pix_onramp_intent.
 - Choosing route_contacts_intent for PIX top-up/on-ramp is a routing contract failure. The contacts route must only be used when the user explicitly asks to manage saved people/recipients.
