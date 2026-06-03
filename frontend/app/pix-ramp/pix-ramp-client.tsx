@@ -924,6 +924,7 @@ export default function PixRampClient({
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
+  const [pixFundedTransferError, setPixFundedTransferError] = useState("");
   const normalizedOffRampPixKey = normalizePixKeyInput(offRampPixKey);
   const offRampDestinationBankAccount = useMemo(
     () => normalizedOffRampPixKey
@@ -1349,9 +1350,13 @@ export default function PixRampClient({
         detail: onRampComplete
           ? pixFundedTransferResult?.transaction_hash
             ? L(`${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} enviado para ${transferRecipientLabel}.`, `${formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} sent to ${transferRecipientLabel}.`)
-            : L(`${onRampReceivedDisplay} entregue na conta.`, `${onRampReceivedDisplay} delivered to the account.`)
+            : transferFlow && pixFundedTransferError
+              ? L(`PIX confirmado. Envio automático pendente: ${pixFundedTransferError}`, `PIX confirmed. Automatic transfer pending: ${pixFundedTransferError}`)
+              : transferFlow
+                ? L(`PIX confirmado. Enviando ${autoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}.`, `PIX confirmed. Sending ${autoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}.`)
+                : L(`${onRampReceivedDisplay} entregue na conta.`, `${onRampReceivedDisplay} delivered to the account.`)
           : polling ? L("Atualizando status automaticamente.", "Updating status automatically.") : L(`Aguardando confirmação para entregar ${friendlyAssetName(targetAsset, language)}.`, `Waiting for confirmation to deliver ${friendlyAssetName(targetAsset, language)}.`),
-        state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
+        state: transferFlow ? pixFundedTransferResult?.transaction_hash ? "done" : pixFundedTransferError ? "warning" : onRampComplete ? "active" : polling ? "active" : "pending" : onRampComplete ? "done" : polling ? "active" : "pending",
       },
     ];
   }, [
@@ -1383,9 +1388,11 @@ export default function PixRampClient({
     transferFlow,
     transferRecipient,
     transferRecipientLabel,
+    autoPayDisplayAmount,
     autoPayAmount,
     autoPayAsset,
     pixFundedTransferResult,
+    pixFundedTransferError,
     receiveEstimateLoading,
     receiveEstimateReady,
     receiveEstimateRequired,
@@ -2517,16 +2524,23 @@ export default function PixRampClient({
       const completedTransaction = refreshed?.transaction || payload?.transaction;
       let transferPayload: RampResponse | null = null;
       if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
-        transferPayload = await submitPixFundedTransfer(completedTransaction);
+        setPixFundedTransferError("");
+        try {
+          transferPayload = await submitPixFundedTransfer(completedTransaction);
+        } catch (error) {
+          setPixFundedTransferError(publicRampErrorMessage(error, language));
+        }
       }
       if (isSuccessStatus(completedTransaction?.status)) {
-        markOperationCompleted();
-        notifyChatAfterPixCompletion({
-          kind: transferPayload ? "funded-transfer" : "onramp",
-          receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url || refreshed?.transaction?.receipt_url || refreshed?.transaction?.receiptUrl || ""),
-          completedTransaction,
-          transferPayload,
-        });
+        if (!transferFlow || transferPayload) markOperationCompleted();
+        if (!transferFlow || transferPayload) {
+          notifyChatAfterPixCompletion({
+            kind: transferPayload ? "funded-transfer" : "onramp",
+            receiptUrl: String(payload?.receipt_url || refreshed?.receipt_url || refreshed?.transaction?.receipt_url || refreshed?.transaction?.receiptUrl || ""),
+            completedTransaction,
+            transferPayload,
+          });
+        }
         setStep("success");
       }
     });
@@ -3520,7 +3534,7 @@ export default function PixRampClient({
                     <div className="mt-5 rounded-3xl border-2 border-tts-gold bg-tts-gold-bg p-4 text-tts-gold shadow-lg shadow-amber-950/20">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
-                            {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? L("A transferência foi enviada.", "The transfer was sent.") : L(`${onRampReceivedDisplay} entrou na conta.`, `${onRampReceivedDisplay} arrived in the account.`)}
+                            {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? pixFundedTransferResult?.transaction_hash ? L("A transferência foi enviada.", "The transfer was sent.") : L("A transferência automática ainda está finalizando.", "The automatic transfer is still finishing.") : L(`${onRampReceivedDisplay} entrou na conta.`, `${onRampReceivedDisplay} arrived in the account.`)}
                           </p>
                         ) : (
                           <>
@@ -3707,9 +3721,18 @@ export default function PixRampClient({
                       </div>
                     </>
                   ) : (
-                    <p className="mt-3 text-sm font-bold text-tts-gold">
-                      {L(`PIX confirmado. Enviando automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}...`, `PIX confirmed. Automatically sending ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}...`)}
-                    </p>
+                    <>
+                      <p className={`mt-3 text-sm font-bold ${pixFundedTransferError ? "text-tts-error" : "text-tts-gold"}`}>
+                        {pixFundedTransferError
+                          ? L(`PIX confirmado. Não consegui concluir o envio automático agora: ${pixFundedTransferError}`, `PIX confirmed. I could not finish the automatic transfer now: ${pixFundedTransferError}`)
+                          : L(`PIX confirmado. Enviando automaticamente ${autoPayDisplayAmount} para ${transferRecipientLabel || "destinatário"}...`, `PIX confirmed. Automatically sending ${autoPayDisplayAmount} to ${transferRecipientLabel || "recipient"}...`)}
+                      </p>
+                      {pixFundedTransferError && (
+                        <p className="mt-2 text-xs font-semibold text-tts-muted">
+                          {L("O PIX não precisa ser pago de novo. Aguarde alguns segundos e tente atualizar a operação.", "You do not need to pay PIX again. Wait a few seconds and try refreshing the operation.")}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}

@@ -6015,12 +6015,12 @@ export class AnchorService {
 
     const amount = normalizeAmount(input.amount, 'amount');
     const assetCode = normalizeAssetCode(coalesceString(input.asset_code, input.assetCode) || 'BRL');
-    if (!['BRL', 'USDC'].includes(assetCode)) {
-      throw apiError('PIX-funded transfer can only expose BRL or USDC to the user.', 400);
+    if (!['BRL', 'USDC', 'XLM'].includes(assetCode)) {
+      throw apiError('PIX-funded transfer can only expose BRL, USDC or XLM to the user.', 400);
     }
 
     const asset = resolveConfiguredAsset(assetCode);
-    if (asset.code === 'XLM' || !asset.issuer) {
+    if (asset.code !== 'XLM' && !asset.issuer) {
       throw apiError(`${assetCode} is not configured for PIX-funded transfer.`, 400);
     }
 
@@ -6033,7 +6033,7 @@ export class AnchorService {
         preferredPublicKey: coalesceString(input.recipient_public_key, input.recipientPublicKey),
       }
     );
-    if (recipient.vaultSecretId) {
+    if (asset.code !== 'XLM' && asset.issuer && recipient.vaultSecretId) {
       try {
         const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
         const trustline = await StellarService.ensureTrustlineFromSecret({
