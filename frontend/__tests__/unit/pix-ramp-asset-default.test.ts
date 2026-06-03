@@ -38,8 +38,11 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("PIX confirmado. Não consegui concluir o envio automático agora");
     expect(text).toContain("if (!transferFlow || transferPayload) markOperationCompleted();");
     expect(text).toContain("if (!transferFlow || transferPayload) {");
+    expect(text).toContain("Chave PIX");
     expect(text).toContain("O PIX será calculado pela cotação dinâmica antes de gerar o QR.");
     expect(text).not.toContain("PIX estimado pela rota da sua conta");
+    expect(text).not.toContain("Chave PIX/e-mail");
+    expect(text).not.toContain("Contato salvo validado");
     expect(text).not.toContain("formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)");
     expect(text).not.toContain('receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL")');
     expect(text).not.toContain("Alvo: mandar ${formatMoney(amountBrl)}");

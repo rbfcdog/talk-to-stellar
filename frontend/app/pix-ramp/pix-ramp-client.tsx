@@ -2867,7 +2867,7 @@ export default function PixRampClient({
 	                        ) : recipientVerificationError ? (
 	                          <p className="text-tts-error">{recipientVerificationError}</p>
 	                        ) : transferRecipientVerified ? (
-	                          <p className="text-tts-confirm">{L("Contato salvo validado.", "Saved contact verified.")}</p>
+	                          <p className="text-tts-confirm">{L("Contato validado", "Contact verified")}</p>
 	                        ) : (
 	                          <p className="text-tts-deep">{L("Aguardando validação do contato.", "Waiting for contact validation.")}</p>
 	                        )}
@@ -2927,9 +2927,8 @@ export default function PixRampClient({
 	                            </div>
 	                          ) : transferRecipientVerified ? (
 	                            <div>
-	                              <p className="font-black uppercase tracking-[0.14em] text-tts-confirm">{L("Contato salvo validado", "Saved contact verified")}</p>
-	                              <p className="mt-2"><span className="text-tts-confirm">{L("Nome", "Name")}:</span> {transferRecipientLabel}</p>
-	                              {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-tts-confirm">{L("Chave PIX/e-mail", "PIX/email key")}:</span> {transferRecipientDisplayKey}</p>}
+	                              <p><span className="text-tts-confirm">{L("Nome", "Name")}:</span> {transferRecipientLabel}</p>
+	                              {transferRecipientDisplayKey && <p className="mt-1 break-all"><span className="text-tts-confirm">{L("Chave PIX", "PIX key")}:</span> {transferRecipientDisplayKey}</p>}
 	                            </div>
 	                          ) : (
 	                            <p className="text-tts-deep">{L("Ainda não há contato para mostrar. Volte ao chat e digite \"contatos\" para escolher um destinatário salvo.", "No contact is available yet. Return to chat and type \"contacts\" to choose a saved recipient.")}</p>
@@ -3358,15 +3357,11 @@ export default function PixRampClient({
             )}
             {transferFlow && transferRecipientLabel && (
               <div className="mt-4 rounded-3xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm font-bold text-tts-confirm">
-                <p>
-                  {transferRecipientVerified
-                    ? L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount} para ${transferRecipientLabel}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount} to ${transferRecipientLabel}.`)
-                    : L(`Antes de gerar o PIX, vamos validar se "${transferRecipient}" existe nos seus contatos salvos.`, `Before creating PIX, we will verify that "${transferRecipient}" exists in your saved contacts.`)}
-                </p>
-                {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-tts-confirm">{transferRecipientDisplayKey}</p>}
+                <p>{L("Nome", "Name")}: {transferRecipientLabel}</p>
+                {transferRecipientDisplayKey && <p className="mt-1 break-all text-xs text-tts-confirm">{L("Chave PIX", "PIX key")}: {transferRecipientDisplayKey}</p>}
                 {transferRecipientVerified ? (
                   <p className="mt-2 text-xs text-tts-confirm">
-                    {L("Destinatário confirmado nos seus contatos. Use o botão no topo para conferir.", "Recipient confirmed in your contacts. Use the top button to inspect.")}
+                    {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount}.`)}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-tts-error">
