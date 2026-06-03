@@ -120,6 +120,9 @@ describe("UX copy guardrails", () => {
     expect(agentRoutesText).toContain("entrar na sua conta com PIN");
     expect(createText).toContain('["whatsapp", "phone", "telegram"].includes(tokenProvider)');
     expect(createText).toContain("window.location.replace(loginHref)");
+    expect(createText).toContain("Ambiente de teste");
+    expect(createText).toContain("saldo sem valor real");
+    expect(createText).toContain("Nenhum valor aqui representa dinheiro de verdade");
     expect(loginText).toContain('["whatsapp", "phone", "telegram"].includes(externalProvider)');
     expect(loginText).toContain("footer={!isExternalLoginOnlyContext");
     expect(loginText).toContain("GOOGLE_LOGIN_ENABLED && !isExternalLoginOnlyContext");
@@ -246,8 +249,10 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Rentabilidade");
     expect(reviewText).not.toContain("Simulação");
     expect(reviewText).not.toContain("Somente consulta");
-    expect(reviewText).toContain("Confirmar na DeFindex");
-    expect(reviewText).toContain("Confirmação DeFindex indisponível agora");
+    expect(reviewText).toContain("Confirmar investimento");
+    expect(reviewText).toContain("Confirmação de investimento indisponível agora");
+    expect(reviewText).not.toContain("Confirmar na DeFindex");
+    expect(reviewText).not.toContain("Confirmação DeFindex indisponível agora");
     expect(reviewText).toContain("const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;");
     expect(reviewText).not.toContain("const canConfirm = canPrepare && confirmAvailable");
     expect(reviewText).toContain("Posições");
