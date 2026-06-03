@@ -225,7 +225,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("estimated_traditional_fee_brl");
     expect(text).toContain("estimated_savings_brl");
     expect(text).toContain("actualOffRampFeeBrl");
+    expect(text).toContain("actualOnRampFeeBrl");
+    expect(text).toContain("showSavingsCard");
     expect(text).toContain("estimatedSavingsBrl");
+    expect(text).toContain('L("Economia nesta rota", "Savings on this route")');
     expect(text).toContain('L("Economia estimada", "Estimated savings")');
     expect(text).toContain("Comparado a métodos tradicionais estimados");
     expect(text).toContain("border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep");

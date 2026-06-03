@@ -3894,8 +3894,14 @@ function RampFeeBridge({
   const actualOffRampFeeBrl = mode === "offramp"
     ? (feeCurrency === "BRL" ? feeAmount : 0) + (ttsTransactionFeeCurrency === "BRL" ? ttsTransactionFeeAmount : 0)
     : 0;
+  const actualOnRampFeeBrl = mode === "onramp"
+    ? (feeCurrency === "BRL" ? feeAmount : 0) + (ttsTransactionFeeCurrency === "BRL" ? ttsTransactionFeeAmount : 0)
+    : 0;
   const offRampReceivedBrl = mode === "offramp" && destinationCurrency === "BRL"
     ? toPositiveNumber(destinationAfterRaw || quote.toAmount || quote.destinationAmountAfterFee || quote.destination_amount, 0)
+    : 0;
+  const onRampPaidBrl = mode === "onramp" && sourceCurrency === "BRL"
+    ? toPositiveNumber(quote.fromAmount || quote.sourceAmount || quote.amount, 0)
     : 0;
   const traditionalFeeBrlFromQuote = toPositiveNumber(
     quote?.savings_estimate?.estimated_traditional_fee_brl ||
@@ -3904,18 +3910,26 @@ function RampFeeBridge({
     quote?.traditional_fee_brl,
     0,
   );
-  const traditionalFeeBrl = mode === "offramp"
-    ? traditionalFeeBrlFromQuote || (offRampReceivedBrl > 0 ? offRampReceivedBrl * TRADITIONAL_METHOD_FEE_PCT : 0)
-    : 0;
+  const comparableAmountBrl = mode === "offramp" ? offRampReceivedBrl : onRampPaidBrl;
+  const traditionalFeeBrl = traditionalFeeBrlFromQuote || (comparableAmountBrl > 0 ? comparableAmountBrl * TRADITIONAL_METHOD_FEE_PCT : 0);
   const savingsBrlFromQuote = toPositiveNumber(
     quote?.savings_estimate?.estimated_savings_brl ||
     quote?.savings?.estimated_savings ||
     quote?.estimated_savings_brl,
     0,
   );
-  const estimatedSavingsBrl = mode === "offramp"
-    ? savingsBrlFromQuote || Math.max(0, traditionalFeeBrl - actualOffRampFeeBrl)
-    : 0;
+  const actualFeeBrl = mode === "offramp" ? actualOffRampFeeBrl : actualOnRampFeeBrl;
+  const estimatedSavingsBrl = savingsBrlFromQuote || Math.max(0, traditionalFeeBrl - actualFeeBrl);
+  const showSavingsCard = mode === "onramp" || mode === "offramp"
+    ? traditionalFeeBrl > 0 || actualFeeBrl > 0 || estimatedSavingsBrl > 0
+    : false;
+  const savingsTitle = mode === "onramp"
+    ? L("Economia nesta rota", "Savings on this route")
+    : L("Economia estimada", "Estimated savings");
+  const savingsDescription = L(
+    `Comparado a métodos tradicionais estimados em ${formatMoney(traditionalFeeBrl)}. Aqui a taxa estimada é ${formatMoney(actualFeeBrl)} antes do PIN.`,
+    `Compared with traditional methods estimated at ${formatMoney(traditionalFeeBrl)}. Here the estimated fee is ${formatMoney(actualFeeBrl)} before PIN.`,
+  );
   const feeTitle = mode === "onramp"
     ? L("Resumo do PIX", "PIX summary")
     : L("Resumo da retirada", "Withdrawal summary");
@@ -3942,20 +3956,17 @@ function RampFeeBridge({
         </div>
       </div>
 
-      {mode === "offramp" && (
+      {showSavingsCard && (
         <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-gold">
-                {L("Economia estimada", "Estimated savings")}
+                {savingsTitle}
               </p>
               <p className="mt-1 text-2xl font-black">{formatMoney(estimatedSavingsBrl)}</p>
             </div>
             <p className="max-w-sm text-xs font-bold leading-5 text-tts-muted">
-              {L(
-                `Comparado a métodos tradicionais estimados em ${formatMoney(traditionalFeeBrl)}. Aqui a taxa estimada é ${formatMoney(actualOffRampFeeBrl)} antes do PIN.`,
-                `Compared with traditional methods estimated at ${formatMoney(traditionalFeeBrl)}. Here the estimated fee is ${formatMoney(actualOffRampFeeBrl)} before PIN.`,
-              )}
+              {savingsDescription}
             </p>
           </div>
         </div>
