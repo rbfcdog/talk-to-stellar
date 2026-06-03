@@ -52,7 +52,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PIX,
     toolName: 'route_pix_intent',
-    description: 'Use for PIX money movement when PIX is paying or funding a payment to another person/contact/recipient, including saved contacts. PIX wins over contacts and generic payment when PIX is mentioned with money movement. If the user says "fazer PIX pra Ana Silva de 100 XLM", "uero fazer pix pra ana silva de 100 xlm", "pagar Ana via PIX", or "mandar PIX para Carlos de 20 USDC", route here: the PIX funds a contact payment and the amount/asset is the final amount the recipient should receive. The phrase "de 100 XLM" means 100 XLM to Ana, not R$100 into the sender own account. If the user is adding/depositing/loading/placing money into their own account via PIX and no separate recipient is named, prefer route_pix_onramp_intent. If the user is withdrawing/sending out to their own PIX/bank, prefer route_pix_offramp_intent.',
+    description: 'Use for PIX money movement when PIX is paying or funding a payment to another person/contact/recipient, including saved contacts. PIX wins over contacts and generic payment when PIX is mentioned with money movement. If the user says "fazer PIX pra Ana Silva de 100 XLM", "uero fazer pix pra ana silva de 100 xlm", "pagar Ana via PIX", or "mandar PIX para Carlos de 20 USDC", route here: the PIX funds a contact payment and the amount/asset is the final amount the recipient should receive. The phrase "de 100 XLM" means 100 XLM to Ana, not R$100 into the sender own account. Also use this for follow-up messages that complete a previous send/payment request: if the previous context has amount/asset such as "quero mandar 100 CETES" and the latest message says "pra Ana Silva via PIX", route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva". If the user is adding/depositing/loading/placing money into their own account via PIX and no separate recipient is named, prefer route_pix_onramp_intent. If the user is withdrawing/sending out to their own PIX/bank, prefer route_pix_offramp_intent.',
   },
   {
     intent: IntentType.BALANCE,
@@ -3635,28 +3635,55 @@ export class AgentGraph {
     return INTENT_BY_ROUTING_TOOL.get(toolName) || null;
   }
 
-  private buildIntentRouterMessages(message: string): BaseMessage[] {
+  private buildIntentRouterContext(messages?: Array<{ role?: string; content?: string }>): string {
+    const recent = (Array.isArray(messages) ? messages : [])
+      .slice(-6)
+      .map((message) => {
+        const role = String(message?.role || '').toLowerCase() === 'assistant' ? 'Assistant' : 'User';
+        const content = this.sanitizeUserMessage(String(message?.content || '')).trim();
+        if (!content) return '';
+        return `${role}: ${content.slice(0, 500)}`;
+      })
+      .filter(Boolean);
+
+    return recent.length ? recent.join('\n') : 'No previous conversation context.';
+  }
+
+  private buildIntentRouterMessages(message: string, history?: Array<{ role?: string; content?: string }>): BaseMessage[] {
     const sanitized = this.sanitizeUserMessage(String(message || '')).trim();
     const userMessage = sanitized.length > INTENT_ROUTER_MAX_MESSAGE_LENGTH
       ? `${sanitized.slice(0, INTENT_ROUTER_MAX_MESSAGE_LENGTH)}\n[message truncated for routing]`
       : sanitized;
+    const context = this.buildIntentRouterContext(history);
 
     return [
       new SystemMessage({ content: this.buildIntentRouterPrompt() }),
       new HumanMessage({
         content: [
-          'Decide whether this message should trigger a TalkToStellar route tool. Call one route tool only when a concrete product route should run.',
+          'Decide whether the latest message should trigger a TalkToStellar route tool.',
+          'Use the recent conversation context to complete truncated or follow-up requests.',
+          'Call one route tool only when a concrete product route should run.',
+          '',
+          'Recent conversation context:',
+          context,
+          '',
+          `Latest user message: ${userMessage}`,
           `User message: ${userMessage}`,
         ].join('\n'),
       }),
     ];
   }
 
-  private buildIntentRouteAuditMessages(message: string, selected: IntentRouteCandidate): BaseMessage[] {
+  private buildIntentRouteAuditMessages(
+    message: string,
+    selected: IntentRouteCandidate,
+    history?: Array<{ role?: string; content?: string }>
+  ): BaseMessage[] {
     const sanitized = this.sanitizeUserMessage(String(message || '')).trim();
     const userMessage = sanitized.length > INTENT_ROUTER_MAX_MESSAGE_LENGTH
       ? `${sanitized.slice(0, INTENT_ROUTER_MAX_MESSAGE_LENGTH)}\n[message truncated for routing]`
       : sanitized;
+    const context = this.buildIntentRouterContext(history);
 
     return [
       new SystemMessage({
@@ -3671,6 +3698,7 @@ export class AgentGraph {
           'If the user names another person/contact/recipient for a PIX payment, call route_pix_intent and preserve the final amount/asset for that recipient.',
           'Exact audit example: "uero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
           'Exact audit example: "quero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
+          'Multi-turn audit example: previous user "quero mandar 100 cetes d" followed by latest user "pra ana silva via pix" must be route_pix_intent with amount=100, asset_code=CETES, recipient_query=Ana Silva.',
           'A named recipient after pra/para/pro/a makes own-account on-ramp invalid unless the phrase is explicitly "pra minha conta".',
           'If the user is asking to manage saved contacts/recipients, call route_contacts_intent.',
           'Call exactly one route tool.',
@@ -3679,6 +3707,10 @@ export class AgentGraph {
       new HumanMessage({
         content: [
           'Audit the selected TalkToStellar route for this message.',
+          'Recent conversation context:',
+          context,
+          '',
+          `Latest user message: ${userMessage}`,
           `User message: ${userMessage}`,
         ].join('\n'),
       }),
@@ -3818,6 +3850,8 @@ Do not answer the user. Do not refuse. Do not explain. Select the best route too
 
 Core rule:
 - If the message asks for any supported TalkToStellar product action, call that product route.
+- Always interpret the latest user message together with recent conversation context. Follow-up messages can complete an action started earlier.
+- If the previous context contains a send/pay/transfer request with amount and asset, and the latest message supplies the recipient or payment rail, combine them into one routed action.
 - Missing details are not a reason to use route_general_intent. Use needs_clarification=true.
 - Do not choose route_general_intent just because amount, asset, destination, contact, public key, or PIN is missing.
 - route_general_intent is not a fallback for failed understanding. If the message is actionable, choose the concrete product route.
@@ -3829,12 +3863,14 @@ Core rule:
 Structured extraction fields:
 - When the user provides a numeric amount, fill amount as a normalized decimal string.
 - When the user provides an asset/currency, fill asset_code as BRL, USDC, CETES, or XLM. Use USDC for USD/dollars.
+- When amount or asset is missing from the latest message but is clearly present in recent conversation context for the same unfinished request, fill it from that context.
 - For quote/best-route/rate/cost requests between two assets, fill source_asset_code and dest_asset_code. Example: "cotacao XLM para USDC" -> source_asset_code=XLM, dest_asset_code=USDC. "melhor rota de USDC pra BRL" -> source_asset_code=USDC, dest_asset_code=BRL. "quanto está CETES/XLM" -> source_asset_code=CETES, dest_asset_code=XLM.
 - In quote/rate requests, amount is optional. If the user does not provide an amount, leave amount empty.
 - For price/cotacao/preco/custo questions about a pair, set quote_mode=market_price. This means "how much of dest_asset is needed to receive/buy source_asset"; for example "cotacao XLM/BRL", "preco de XLM em reais", and "quanto custa 100 XLM em BRL" use market_price.
 - For sell/send/convert/route-direction simulations, set quote_mode=send_exact. This means "if I send source_asset, how much dest_asset do I receive"; for example "melhor rota de USDC pra BRL", "converter 100 XLM para BRL", "vender 100 XLM por reais", and "quanto recebo mandando 100 XLM para BRL" use send_exact.
 - When the user names a payment recipient/contact, fill recipient_query with the recipient name/key from the message.
 - For route_pix_intent, amount and asset_code are the final amount and asset the recipient should receive. Example: "quero fazer pix pra Ana Silva de 100 XLM" -> route_pix_intent with amount="100", asset_code="XLM", recipient_query="Ana Silva".
+- For multi-turn route_pix_intent, combine context. Example: previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix" -> route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva". Do not route to route_pix_onramp_intent or generic PIX page.
 - For own-account route_pix_onramp_intent and route_pix_offramp_intent, leave recipient_query empty unless the user explicitly provided their own PIX key as data, not as a contact.
 
 Priority order when multiple intents appear:
@@ -3853,6 +3889,7 @@ Route selection guide:
 - route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta". It never needs a contact. It is invalid if a separate person/contact is named as the recipient.
 - route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix".
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
+- route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
 - route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
 - route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options.
@@ -3874,6 +3911,7 @@ Disambiguation:
 - A message with PIX + amount/currency + add/top-up/deposit wording does not need any recipient. Never choose route_contacts_intent for that shape. The correct tool is route_pix_onramp_intent.
 - Choosing route_contacts_intent for PIX top-up/on-ramp is a routing contract failure. The contacts route must only be used when the user explicitly asks to manage saved people/recipients.
 - "fazer PIX pra Ana Silva de 100 XLM", "uero fazer pix pra ana silva de 100 xlm", "mandar PIX para Carlos de 20 USDC", and "pagar Ana via PIX" are route_pix_intent because PIX is funding a payment to a contact. They are not own-account on-ramp. The asset after the amount is the final asset for the recipient.
+- Multi-turn: "quero mandar 100 cetes d" followed by "pra ana silva via pix" is route_pix_intent, amount=100, asset_code=CETES, recipient_query=Ana Silva. The latest message is not a generic PIX chooser because recent context has the amount and asset.
 - A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid unless the phrase says "pra minha conta", "para minha conta", "na minha conta", or equivalent own-account language.
 - For "uero fazer pix pra ana silva de 100 xlm": route_pix_intent with high confidence. Do not choose route_pix_onramp_intent. Do not reinterpret "100 xlm" as "R$100". Do not say the user is receiving money in their own account.
 - "mandar pra fora", "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", or "off-ramp" routes to route_pix_offramp_intent.
@@ -3906,7 +3944,11 @@ When calling the selected route tool:
 - risk=high for money movement, PIN/security, login/logout, account access, profile/wallet access, or any action affecting funds.`;
   }
 
-  private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
+  private async detectIntent(
+    message: string,
+    _userId?: string,
+    history?: Array<{ role?: string; content?: string }>
+  ): Promise<IntentType> {
     this.lastIntentRouterFailure = null;
     this.lastIntentRouteCandidate = null;
     if (!this.shouldUseLlmIntentRouter()) {
@@ -3921,7 +3963,7 @@ When calling the selected route tool:
     }
 
     try {
-      const messages = this.buildIntentRouterMessages(message);
+      const messages = this.buildIntentRouterMessages(message, history);
       try {
         const route = await this.invokeIntentRouter(messages);
         if (route) {
@@ -3930,7 +3972,7 @@ When calling the selected route tool:
           let mode = 'required';
 
           if (this.shouldAuditSelectedIntentRoute(selected)) {
-            const auditRoute = await this.invokeIntentRouter(this.buildIntentRouteAuditMessages(message, selected));
+            const auditRoute = await this.invokeIntentRouter(this.buildIntentRouteAuditMessages(message, selected, history));
             if (auditRoute?.selected) {
               selected = auditRoute.selected;
               candidateCount = auditRoute.candidateCount;
@@ -5593,7 +5635,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handlePixRampRequest(state);
       }
 
-      const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id);
+      const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id, state.messages);
       if (this.lastIntentRouterFailure) {
         state.detected_intent = IntentType.GENERAL;
         state.action_type = ActionType.NONE;
