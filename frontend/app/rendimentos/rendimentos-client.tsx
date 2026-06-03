@@ -763,20 +763,20 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
               <p className="font-bold">{L("Como funciona este investimento?", "How does this investment work?")}</p>
               <p className="mt-2 text-tts-muted">
                 {L(
-                  `Você escolhe um valor em ${profileShort}. Depois do PIN, esse valor sai do saldo disponível e entra na sua posição de rendimentos dessa moeda.`,
-                  `You choose an amount in ${profileShort}. After the PIN, that amount leaves your available balance and enters your earnings position for this currency.`,
+                  "Uma vault funciona como um cofre de rendimento: ela recebe depósitos, registra sua participação e acompanha quanto da posição pertence a você.",
+                  "A vault works like an earnings vault: it receives deposits, records your share, and tracks how much of the position belongs to you.",
                 )}
               </p>
               <p className="mt-2 text-tts-muted">
                 {L(
-                  "A tela sempre mostra operação e valor antes do PIN. Se algo estiver diferente do esperado, volte sem confirmar.",
-                  "The screen always shows operation and amount before the PIN. If anything looks different, go back without confirming.",
+                  "Depois do PIN, o valor sai do saldo disponível e entra nessa vault. A retirada faz o caminho inverso: reduz sua participação e devolve o saldo disponível quando a operação termina.",
+                  "After the PIN, the amount leaves your available balance and enters that vault. A withdrawal does the reverse: it reduces your share and returns the available balance when the operation finishes.",
                 )}
               </p>
               <p className="mt-2 text-tts-muted">
                 {L(
-                  "Como este ambiente é testnet, os valores são para testar o fluxo e não representam dinheiro real, depósito bancário ou garantia.",
-                  "Because this is testnet, values are for testing the flow and do not represent real money, a bank deposit, or a guarantee.",
+                  "Antes de confirmar, a tela mostra operação, valor e PIN. Em testnet, isso serve para testar o fluxo e não representa dinheiro real.",
+                  "Before confirming, the screen shows operation, amount, and PIN. On testnet, this is for testing the flow and does not represent real money.",
                 )}
               </p>
             </div>
