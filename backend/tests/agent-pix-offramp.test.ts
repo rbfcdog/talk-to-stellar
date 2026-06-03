@@ -629,6 +629,7 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.searchParams.get('recipient_key')).toBe('ana.silva@example.com');
       expect(parsed.searchParams.get('recipient_public_key')).toBe(anaPublicKey);
       expect(parsed.searchParams.get('provider')).toBe('whatsapp');
+      expect(parsed.searchParams.get('provider_user_id')).toBe('+5511999999999');
       expect(parsed.searchParams.get('session_scope')).toBe('whatsapp');
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;

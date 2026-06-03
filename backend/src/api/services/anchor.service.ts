@@ -6014,14 +6014,9 @@ export class AnchorService {
     }
 
     const amount = normalizeAmount(input.amount, 'amount');
-    const assetCode = normalizeAssetCode(coalesceString(input.asset_code, input.assetCode) || 'BRL');
-    if (!['BRL', 'USDC', 'XLM'].includes(assetCode)) {
-      throw apiError('PIX-funded transfer can only expose BRL, USDC or XLM to the user.', 400);
-    }
-
-    const asset = resolveConfiguredAsset(assetCode);
+    const asset = normalizeRampUserAsset(input.asset_code, input.assetCode, 'BRL');
     if (asset.code !== 'XLM' && !asset.issuer) {
-      throw apiError(`${assetCode} is not configured for PIX-funded transfer.`, 400);
+      throw apiError(`${asset.code} is not configured for PIX-funded transfer.`, 400);
     }
 
     const recipient = await this.resolveTransferRecipient(
@@ -6090,6 +6085,13 @@ export class AnchorService {
       reason: `O saldo final já estava em ${asset.code}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
     };
     const routeContext = `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`;
+    const displayAmount = formatDisplayAmount(amount, asset.code);
+    const externalDeliveryText = [
+      'PIX confirmado e transferencia enviada.',
+      `Valor: ${displayAmount}`,
+      `Destino: ${recipient.displayName}`,
+      'Status: concluido',
+    ].join('\n');
     let receiptUrl = '';
     try {
       receiptUrl = await PaymentReceiptService.sendReceipt({
@@ -6106,6 +6108,7 @@ export class AnchorService {
         hash: result.hash || null,
         status: 'completed',
         contextMessage: routeContext,
+        externalDeliveryText,
       });
     } catch (error) {
       console.warn('[ramp] Could not send PIX-funded transfer receipt:', debugErrorMessage(error));
@@ -6160,7 +6163,7 @@ export class AnchorService {
       receipt_url: receiptUrl,
       route_summary: routeContext,
       route,
-      message: `PIX confirmado e transferencia de ${formatDisplayAmount(amount, asset.code)} enviada para ${recipient.displayName}.`,
+      message: `PIX confirmado e transferencia de ${displayAmount} enviada para ${recipient.displayName}.`,
     };
   }
 
