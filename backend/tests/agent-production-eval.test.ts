@@ -42,7 +42,7 @@ function createState(input: string, hasWallet = true): AgentState {
   };
 }
 
-function mockRouteIntent(graph: any, toolName: string) {
+function mockRouteIntent(graph: any, toolName: string, args: Record<string, any> = {}) {
   const routerInvoke = jest.fn().mockResolvedValue({
     tool_calls: [{
       id: `call_${toolName}`,
@@ -53,6 +53,7 @@ function mockRouteIntent(graph: any, toolName: string) {
         needs_clarification: false,
         language: 'pt-BR',
         risk: toolName === 'route_general_intent' ? 'low' : 'high',
+        ...args,
       },
     }],
   });
@@ -1078,6 +1079,7 @@ describe('Agent production evals', () => {
       { name: 'payment stellar rail explicit', input: 'mandar 10 xlm pra Ana Silva pela Stellar', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment not pix explicit typo', input: 'uero mandar 10 xlm pra ana sem pix', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment phone recipient no pix', input: 'transferir 8 cetes para +55 11 99999-0000', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment layered external conversion missing destination', input: 'uero mandar 10 usdc em xlm pra fora', expectedIntent: IntentType.PAYMENT, expectedTool: 'route_payment_intent', risk: 'high', needsClarification: true, expectedAmount: '10', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'XLM' },
       { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp bank wording', input: 'tirar 80 usdc pro meu banco', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
@@ -1577,6 +1579,42 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Gerei o link de confirmação da forma mais otimizada');
     expect(result.response_message).not.toMatch(/confirmar o saldo|saldo suficiente|taxa estimada|indispon[ií]vel/i);
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('keeps layered external conversion as payment clarification instead of opening generic PIX', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent', {
+      needs_clarification: true,
+      amount: '10',
+      asset_code: 'USDC',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'XLM',
+    });
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for layered transfer');
+      }
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('uero mandar 10 usdc em xlm pra fora'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(result.success).toBe(false);
+    expect(result.response_message).toContain('duas camadas');
+    expect(result.response_message).toContain('US$ 10.00');
+    expect(result.response_message).toContain('XLM');
+    expect(result.response_message).toContain('destino externo');
+    expect(result.response_message).not.toContain('Abra para PIX');
+    expect(result.response_message).not.toContain('/pix-on');
+    expect(result.response_message).not.toContain('/pix-off');
+    expect(result.response_message).not.toContain('Me diga a chave, email, telefone ou public key do contato');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
   });
 
   it('asks one specific payment clarification instead of showing the generic menu', async () => {
