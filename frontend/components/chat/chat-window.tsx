@@ -268,32 +268,43 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   
   // --- Initialize session ID on mount ---
   useEffect(() => {
-    if (chatId === "agent" && isClientSessionExpired()) {
-      beginExpiredBrowserSession(true);
-      return;
-    }
+    let cancelled = false;
 
-    const storedSessionId = typeof window !== 'undefined'
-      ? getStoredChatSessionId(chatId, clientSessionSource)
-      : null;
-    
-    const newSessionId = storedSessionId || generateSessionId();
-    setSessionId(newSessionId);
-
-    // Store it for subsequent messages
-    if (typeof window !== 'undefined') {
-      setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
-      if (chatId === "agent") {
-        touchClientSessionActivity();
-        getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
-          if (authenticated && cookieSessionId) {
-            setStoredChatSessionId(chatId, clientSessionSource, cookieSessionId);
-            setSessionId(cookieSessionId);
-          }
-        });
+    const initialize = async () => {
+      if (chatId === "agent" && isClientSessionExpired()) {
+        const restoredSessionId = await restoreAuthenticatedBrowserSession();
+        if (!cancelled && !restoredSessionId) beginExpiredBrowserSession(true);
+        return;
       }
-    }
-  }, [beginExpiredBrowserSession, chatId, clientSessionSource, t]);
+
+      const storedSessionId = typeof window !== 'undefined'
+        ? getStoredChatSessionId(chatId, clientSessionSource)
+        : null;
+
+      const newSessionId = storedSessionId || generateSessionId();
+      if (cancelled) return;
+      setSessionId(newSessionId);
+
+      // Store it for subsequent messages
+      if (typeof window !== 'undefined') {
+        setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
+        if (chatId === "agent") {
+          touchClientSessionActivity();
+          getClientSession().then(({ sessionId: cookieSessionId, authenticated }) => {
+            if (!cancelled && authenticated && cookieSessionId) {
+              setStoredChatSessionId(chatId, clientSessionSource, cookieSessionId);
+              setSessionId(cookieSessionId);
+            }
+          });
+        }
+      }
+    };
+
+    initialize();
+    return () => {
+      cancelled = true;
+    };
+  }, [beginExpiredBrowserSession, chatId, clientSessionSource, restoreAuthenticatedBrowserSession, t]);
 
   useEffect(() => {
     const starterIds = new Set(Object.values(chatMeta).flatMap((meta) => meta.starter.map((message) => message.id)));
@@ -460,13 +471,18 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
 
   const fetchServerMessages = useCallback(async () => {
     if (chatId !== "agent" || !sessionId || pollInFlightRef.current) return;
+    let activeSessionId = sessionId;
     if (isClientSessionExpired()) {
-      beginExpiredBrowserSession(true);
-      return;
+      const restoredSessionId = await restoreAuthenticatedBrowserSession();
+      if (!restoredSessionId) {
+        beginExpiredBrowserSession(true);
+        return;
+      }
+      activeSessionId = restoredSessionId;
     }
     if (browserSessionExpiredRef.current) return;
 
-    const resolvedSessionId = getStoredChatSessionId(chatId, clientSessionSource) || sessionId;
+    const resolvedSessionId = getStoredChatSessionId(chatId, clientSessionSource) || activeSessionId;
     if (!resolvedSessionId) return;
     const browserId = externalPriorityChat ? "" : getOrCreateBrowserId();
     const params = new URLSearchParams({
@@ -503,7 +519,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     } finally {
       pollInFlightRef.current = false;
     }
-  }, [beginExpiredBrowserSession, chatId, clientSessionSource, externalPriorityChat, mergeServerMessages, sessionId]);
+  }, [beginExpiredBrowserSession, chatId, clientSessionSource, externalPriorityChat, mergeServerMessages, restoreAuthenticatedBrowserSession, sessionId]);
 
   useEffect(() => {
     if (chatId !== "agent" || !sessionId) return;
@@ -622,8 +638,14 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       }
 
       if (isClientSessionExpired()) {
-        activeSessionId = beginExpiredBrowserSession(false) || activeSessionId;
-        requestBrowserSessionExpired = true;
+        const restoredSessionId = await restoreAuthenticatedBrowserSession();
+        if (restoredSessionId) {
+          activeSessionId = restoredSessionId;
+          requestBrowserSessionExpired = false;
+        } else {
+          activeSessionId = beginExpiredBrowserSession(false) || activeSessionId;
+          requestBrowserSessionExpired = true;
+        }
       }
     }
     
@@ -736,6 +758,8 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               session_id: resolvedSessionId,
+              source: clientSessionSource || "web",
+              provider: externalPriorityChat ? clientSessionSource : "web",
             }),
           });
         } catch {

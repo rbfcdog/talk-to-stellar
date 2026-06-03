@@ -81,17 +81,23 @@ export function readSessionCookies(req: NextRequest | Request, preferredSource?:
   }
 
   const commonSource = normalizeSessionSource(parsed.get(SESSION_SOURCE_COOKIE) || "");
+  const commonSessionId = parsed.get(SESSION_ID_COOKIE) || "";
+  const commonSessionToken = parsed.get(SESSION_TOKEN_COOKIE) || "";
   if (EXTERNAL_SESSION_SOURCES.has(commonSource)) {
+    // Legacy browser state could have tts_session_source=whatsapp/telegram in
+    // the common cookie namespace. A normal web request must not be logged out
+    // or rerouted because of that stale marker. External requests only read the
+    // channel-scoped cookie names above.
     return {
-      sessionId: "",
-      sessionToken: "",
-      sessionSource: "",
+      sessionId: commonSessionId,
+      sessionToken: commonSessionToken,
+      sessionSource: commonSessionId || commonSessionToken ? "web" : "",
     };
   }
 
   return {
-    sessionId: parsed.get(SESSION_ID_COOKIE) || "",
-    sessionToken: parsed.get(SESSION_TOKEN_COOKIE) || "",
+    sessionId: commonSessionId,
+    sessionToken: commonSessionToken,
     sessionSource: commonSource,
   };
 }
@@ -125,6 +131,8 @@ function extractSessionSource(payload: any): string {
     payload.channel,
     payload.sessionSource,
     payload.session_source,
+    payload.sessionScope,
+    payload.session_scope,
     payload.external_source,
     payload.externalSource,
     payload.source,
@@ -134,6 +142,8 @@ function extractSessionSource(payload: any): string {
     payload.metadata?.externalProvider,
     payload.metadata?.provider,
     payload.metadata?.channel,
+    payload.metadata?.sessionScope,
+    payload.metadata?.session_scope,
     payload.metadata?.external_source,
     payload.metadata?.externalSource,
     payload.metadata?.source,
@@ -154,6 +164,8 @@ export function requestSessionSource(req: NextRequest | Request, payload?: any):
     params.get("externalProvider"),
     params.get("provider"),
     params.get("channel"),
+    params.get("session_scope"),
+    params.get("sessionScope"),
     params.get("session_source"),
     params.get("sessionSource"),
     params.get("external_source"),

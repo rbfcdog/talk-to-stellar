@@ -112,6 +112,13 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
+  if (/recipient_asset_not_ready|ainda nao pode receber|ativar esse ativo|ativar recebimento|op_no_trust|no_trust|trustline.*destinatario|destinatario.*trustline|recipient.*cannot receive|recipient.*asset/.test(normalized)) {
+    return {
+      code: "recipient_asset_not_ready",
+      message: copy(language, "O destinatário ainda não está pronto para receber esse ativo. Peça para a pessoa entrar na conta TalkToStellar e ativar o ativo; depois gere um novo link.", "The recipient is not ready to receive this asset yet. Ask them to sign in and activate the asset, then create a new link."),
+    };
+  }
+
   if (/customer[_\s-]?id.*required|customer.*required|missing customer|cliente.*pix|conta pix|cadastro pix|kyc|programmatic onboarding|onboarding/.test(normalized)) {
     return {
       code: "pix_account_not_ready",
@@ -130,6 +137,13 @@ export function mapPublicError(error: unknown, language?: string) {
     return {
       code: "service_timeout",
       message: copy(language, "A operação demorou demais. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.", "The operation took too long. Try again in a few seconds; if PIX was already paid, check the status before creating another one."),
+    };
+  }
+
+  if (/stellar_payment_submit_failed|falha ao enviar.*transacao stellar|failed to submit|submit.*transaction|transaction failed|tx_failed|payment failed/.test(normalized)) {
+    return {
+      code: "execution_unavailable",
+      message: copy(language, "Não consegui enviar essa transação agora. Nenhum valor saiu da conta. Gere uma nova confirmação e tente novamente.", "I could not submit this transaction right now. No funds left the account. Create a new confirmation and try again."),
     };
   }
 

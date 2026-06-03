@@ -6,6 +6,7 @@ const router = Router();
 router.get('/conversion-preview', FinancialController.getConversionPreview);
 router.get('/conversion-fees-preview', FinancialController.getConversionFeesPreview);
 router.get('/usdc-to-brl-preview', FinancialController.getUsdcToBrlPreview);
+router.get('/conversion-matrix', FinancialController.getConversionRateMatrix);
 router.post('/conversion-confirmation', FinancialController.createConversionConfirmation);
 
 router.get('/activity-feed/:session_id', FinancialController.getActivityFeed);
@@ -13,6 +14,7 @@ router.get('/insights/:session_id', FinancialController.getInsights);
 router.get('/smart-contacts/:session_id', FinancialController.getSmartContacts);
 router.get('/replay/:session_id', FinancialController.getReplayCandidate);
 router.get('/savings/:session_id', FinancialController.getSavings);
+router.post('/user-research-events', FinancialController.trackUserResearchEvent);
 
 router.post('/invoices', FinancialController.createInvoice);
 router.get('/invoices/:session_id', FinancialController.listInvoices);

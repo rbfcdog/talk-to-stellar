@@ -3,6 +3,8 @@ const { Keypair } = require('@stellar/stellar-sdk');
 const testKeypair = Keypair.random();
 const testPublicKey = testKeypair.publicKey();
 const testSecretKey = testKeypair.secret();
+const destinationKeypair = Keypair.random();
+const destinationPublicKey = destinationKeypair.publicKey();
 
 const finalizeSaveSessionMock = jest.fn();
 const finalizeSaveMessageMock = jest.fn();
@@ -584,6 +586,255 @@ describe('ExternalFinalizeController', () => {
       })
     );
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('confirms direct CETES payment to a TalkToStellar contact after recipient trustline setup', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.CETES_ISSUER = testPublicKey;
+    process.env.CETES_ISSUER_TESTNET = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'CETES',
+      destination: destinationPublicKey,
+      destination_name: 'Ana Silva',
+      destination_contact: {
+        contact_name: 'Ana Silva',
+        phone_number: '5575496918127',
+        stellar_public_key: destinationPublicKey,
+      },
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetWalletByPublicKeyMock.mockResolvedValue({
+      session_id: 'ana-session',
+      public_key: destinationPublicKey,
+      vault_secret_id: 'ana-secret-id',
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([]);
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum12', asset_code: 'CETES', asset_issuer: testPublicKey, balance: '50.0000000' },
+      ],
+    });
+    finalizeGetSubmittedPaymentDetailsMock.mockResolvedValue({
+      sourceAmount: '10.0000000',
+      sourceAssetCode: 'CETES',
+      sourceAssetIssuer: testPublicKey,
+      destinationAmount: '10.0000000',
+      destinationAssetCode: 'CETES',
+      destinationAssetIssuer: testPublicKey,
+      feeXlm: '0.0000100',
+    });
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeBuildTrustlineXdrMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePublicKey: destinationPublicKey,
+        assetCode: 'CETES',
+        assetIssuer: testPublicKey,
+      })
+    );
+    expect(finalizeBuildPaymentXdrMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePublicKey: testPublicKey,
+        destination: destinationPublicKey,
+        amount: '10',
+        assetCode: 'CETES',
+        assetIssuer: testPublicKey,
+      })
+    );
+    expect(finalizeBuildPathPaymentXdrMock).not.toHaveBeenCalled();
+    expect(finalizeSignAndSubmitXdrMock).toHaveBeenNthCalledWith(
+      1,
+      'user@example.com',
+      testSecretKey,
+      'trustline-xdr',
+      expect.objectContaining({
+        type: 'TRUSTLINE',
+        asset_code: 'CETES',
+        source_public_key: destinationPublicKey,
+      })
+    );
+    expect(finalizeSignAndSubmitXdrMock).toHaveBeenNthCalledWith(
+      2,
+      'user@example.com',
+      testSecretKey,
+      'unsigned-xdr',
+      expect.objectContaining({
+        type: 'PAYMENT',
+        asset_code: 'CETES',
+        amount: 10,
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: '10.0000000',
+        asset: 'CETES',
+        destination: destinationPublicKey,
+        destinationName: 'Ana Silva',
+        destinationKey: '5575496918127',
+      })
+    );
+  });
+
+  it('returns a user-safe recipient asset message when external recipient cannot receive CETES', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.CETES_ISSUER = testPublicKey;
+    process.env.CETES_ISSUER_TESTNET = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'CETES',
+      destination: destinationPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetWalletByPublicKeyMock.mockResolvedValue(null);
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([]);
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'recipient_asset_not_ready',
+        message: expect.stringContaining('Ana Silva ainda não pode receber CETES'),
+      })
+    );
+  });
+
+  it('does not collapse empty Stellar submission failures into a generic temporary message', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.CETES_ISSUER = testPublicKey;
+    process.env.CETES_ISSUER_TESTNET = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'CETES',
+      destination: destinationPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+    });
+
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeGetWalletByPublicKeyMock.mockResolvedValue({
+      session_id: 'ana-session',
+      public_key: destinationPublicKey,
+      vault_secret_id: 'ana-secret-id',
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([
+      { asset_code: 'CETES', asset_issuer: testPublicKey, balance: '0.0000000' },
+    ]);
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum12', asset_code: 'CETES', asset_issuer: testPublicKey, balance: '50.0000000' },
+      ],
+    });
+    finalizeSignAndSubmitXdrMock.mockResolvedValueOnce({ success: false });
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'stellar_payment_submit_failed',
+        message: expect.stringContaining('Falha ao enviar a transação Stellar para Ana Silva'),
+      })
+    );
   });
 
 });

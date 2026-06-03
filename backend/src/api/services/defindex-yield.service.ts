@@ -277,8 +277,8 @@ export class DefindexYieldService {
     const network = defaultNetwork();
     const stellarNetwork = stellarRuntimeNetwork();
     const networkMismatch = network !== stellarNetwork;
-    const executionRequested = envFlag('DEFINDEX_ENABLE_EXECUTION', false);
-    const complianceApproved = envFlag('DEFINDEX_COMPLIANCE_APPROVED', false);
+    const executionRequested = envFlag('DEFINDEX_ENABLE_EXECUTION', network === 'testnet');
+    const complianceApproved = network === 'testnet' || envFlag('DEFINDEX_COMPLIANCE_APPROVED', false);
     const mainnetExecutionAllowed = envFlag('DEFINDEX_ALLOW_MAINNET_EXECUTION', false);
     const apiKey = coalesceString(process.env.DEFINDEX_API_KEY);
     const vaults = [

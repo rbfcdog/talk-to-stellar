@@ -107,6 +107,36 @@ function verifyPinAgainstSession(pin: string, session: any) {
   ]);
 }
 
+const LOGIN_SESSION_SELECT = [
+  'session_id',
+  'user_id',
+  'email',
+  'session_token',
+  'password_hash',
+  'session_password_hash',
+  'email_verified',
+  'email_verified_at',
+  'email_verification_source',
+  'updated_at',
+  'created_at',
+].join(', ');
+
+function loginSessionSnapshot(session: any, fallback: Record<string, unknown> = {}) {
+  return {
+    session_id: String(session?.session_id || fallback.session_id || ''),
+    user_id: String(session?.user_id || fallback.user_id || ''),
+    email: String(session?.email || fallback.email || ''),
+    session_token: String(session?.session_token || fallback.session_token || ''),
+    password_hash: String(session?.password_hash || fallback.password_hash || ''),
+    session_password_hash: String(session?.session_password_hash || fallback.session_password_hash || ''),
+    email_verified: Boolean(session?.email_verified ?? fallback.email_verified ?? false),
+    email_verified_at: String(session?.email_verified_at || fallback.email_verified_at || ''),
+    email_verification_source: String(session?.email_verification_source || fallback.email_verification_source || ''),
+    updated_at: String(session?.updated_at || fallback.updated_at || ''),
+    created_at: String(session?.created_at || fallback.created_at || ''),
+  };
+}
+
 async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session: any): Promise<void> {
   const verification = verifyPinAgainstSession(pin, session);
   if (!verification.valid || !verification.needsRehash) return;
@@ -727,16 +757,10 @@ export class ExternalController {
             });
           }
 
-          matched = {
+          matched = loginSessionSnapshot(linkedSession, {
             session_id: mappedSessionId,
-            user_id: String((linkedSession as any)?.user_id || mappedUserId),
-            email: String((linkedSession as any)?.email || ''),
-            session_token: String((linkedSession as any)?.session_token || ''),
-            password_hash: String((linkedSession as any)?.password_hash || ''),
-            session_password_hash: String((linkedSession as any)?.session_password_hash || ''),
-            updated_at: String((linkedSession as any)?.updated_at || ''),
-            created_at: String((linkedSession as any)?.created_at || ''),
-          };
+            user_id: mappedUserId,
+          });
         }
       }
 
@@ -758,16 +782,10 @@ export class ExternalController {
               message: 'PIN inválido para a conta já vinculada a este canal.',
             });
           }
-          matched = {
-            session_id: String((lockedSession as any)?.session_id || identityLock.sessionId),
-            user_id: String((lockedSession as any)?.user_id || identityLock.userId || ''),
-            email: String((lockedSession as any)?.email || ''),
-            session_token: String((lockedSession as any)?.session_token || ''),
-            password_hash: String((lockedSession as any)?.password_hash || ''),
-            session_password_hash: String((lockedSession as any)?.session_password_hash || ''),
-            updated_at: String((lockedSession as any)?.updated_at || ''),
-            created_at: String((lockedSession as any)?.created_at || ''),
-          };
+          matched = loginSessionSnapshot(lockedSession, {
+            session_id: identityLock.sessionId,
+            user_id: identityLock.userId || '',
+          });
         }
       }
 
@@ -797,16 +815,10 @@ export class ExternalController {
             }
 
             email = resolveCanonicalSessionLogin(tokenSession) || email;
-            matched = {
-              session_id: String((tokenSession as any)?.session_id || tokenSessionId),
-              user_id: String((tokenSession as any)?.user_id || tokenUserId || ''),
-              email: String((tokenSession as any)?.email || ''),
-              session_token: String((tokenSession as any)?.session_token || ''),
-              password_hash: String((tokenSession as any)?.password_hash || ''),
-              session_password_hash: String((tokenSession as any)?.session_password_hash || ''),
-              updated_at: String((tokenSession as any)?.updated_at || ''),
-              created_at: String((tokenSession as any)?.created_at || ''),
-            };
+            matched = loginSessionSnapshot(tokenSession, {
+              session_id: tokenSessionId,
+              user_id: tokenUserId || '',
+            });
           }
         }
       }
@@ -824,13 +836,13 @@ export class ExternalController {
         const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
           supabase
             .from('agent_sessions')
-            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .select(LOGIN_SESSION_SELECT)
             .eq('email', email)
             .order('updated_at', { ascending: false })
             .limit(20),
           supabase
             .from('agent_sessions')
-            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .select(LOGIN_SESSION_SELECT)
             .eq('user_id', email)
             .order('updated_at', { ascending: false })
             .limit(20),
@@ -846,7 +858,7 @@ export class ExternalController {
         }
 
         const dedupeBySessionId = new Map<string, any>();
-        for (const row of [...(sessionsByEmailResp.data || []), ...(sessionsByUserIdResp.data || [])]) {
+        for (const row of ([...(sessionsByEmailResp.data || []), ...(sessionsByUserIdResp.data || [])] as any[])) {
           if (row?.session_id) {
             dedupeBySessionId.set(String(row.session_id), row);
           }
@@ -866,12 +878,12 @@ export class ExternalController {
         if (mappedSessionIds.length > 0) {
           const { data: mappedSessions } = await supabase
             .from('agent_sessions')
-            .select('session_id, user_id, email, session_token, password_hash, session_password_hash, updated_at, created_at')
+            .select(LOGIN_SESSION_SELECT)
             .in('session_id', mappedSessionIds)
             .order('updated_at', { ascending: false })
             .limit(20);
 
-          for (const row of mappedSessions || []) {
+          for (const row of ((mappedSessions || []) as any[])) {
             if (row?.session_id) {
               dedupeBySessionId.set(String(row.session_id), row);
             }
@@ -950,9 +962,11 @@ export class ExternalController {
         user_id: targetUserId,
         email: targetEmail,
         public_key: wallet?.public_key || undefined,
-        email_verified: Boolean(confirmationEmail),
-        email_verified_at: confirmationEmail ? new Date().toISOString() : undefined,
-        email_verification_source: confirmationEmail ? 'email_confirmation_login' : undefined,
+        ...(confirmationEmail ? {
+          email_verified: true,
+          email_verified_at: matched.email_verified_at || new Date().toISOString(),
+          email_verification_source: matched.email_verification_source || 'email_confirmation_login',
+        } : {}),
       } as any);
 
       await supabase

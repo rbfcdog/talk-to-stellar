@@ -30,13 +30,26 @@ type IntentRouteCandidate = {
   needsClarification?: boolean;
   language?: 'pt-BR' | 'en';
   risk?: 'low' | 'medium' | 'high';
+  amount?: string;
+  assetCode?: string;
+  recipientQuery?: string;
 };
 
 const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; description: string }> = [
   {
     intent: IntentType.PIX,
+    toolName: 'route_pix_onramp_intent',
+    description: 'Use for own-account PIX entrada/on-ramp only: the user wants to put/add/load/deposit/bring/receive money into their own TalkToStellar account via PIX. Portuguese examples: "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix de 100 reais", "depositar via PIX", "trazer 50 reais via PIX", "receber um PIX na minha conta". This route never requires a contact, email, phone, recipient, destination public key, saved contact, or human recipient. Never use this if the message has PIX plus a named recipient/person after pra/para/pro/a, such as "fazer PIX pra Ana Silva de 100 XLM" or typo "uero fazer pix pra ana silva de 100 xlm". Those are route_pix_intent because PIX funds a payment to that contact. In those cases the amount/asset is the final recipient target, not BRL for the sender own account.',
+  },
+  {
+    intent: IntentType.PIX,
+    toolName: 'route_pix_offramp_intent',
+    description: 'Use for PIX saída/off-ramp only: the user wants money to leave their TalkToStellar account to their PIX/bank/key. Portuguese examples: "sacar 50 reais para meu PIX", "retirar 20 USDC para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix", "tirar da conta para o banco". This route wins over normal payment when the destination is the user own PIX, own bank exit, or "pra fora" through PIX.',
+  },
+  {
+    intent: IntentType.PIX,
     toolName: 'route_pix_intent',
-    description: 'Use for any PIX money movement. Entrada/on-ramp: trazer, colocar, depositar, carregar, receber saldo via PIX. Saida/off-ramp: sacar, retirar, mandar para meu PIX, mandar pra fora, enviar para minha chave PIX, tirar da conta, sair para banco, off-ramp. Use PIX for "mandar pra fora 50 reais em pix" and "uero mandar 100 reais pra fora do pix". PIX wins over generic payment when PIX is mentioned or when the destination is the user own PIX/bank exit.',
+    description: 'Use for PIX money movement when PIX is paying or funding a payment to another person/contact/recipient, including saved contacts. PIX wins over contacts and generic payment when PIX is mentioned with money movement. If the user says "fazer PIX pra Ana Silva de 100 XLM", "uero fazer pix pra ana silva de 100 xlm", "pagar Ana via PIX", or "mandar PIX para Carlos de 20 USDC", route here: the PIX funds a contact payment and the amount/asset is the final amount the recipient should receive. The phrase "de 100 XLM" means 100 XLM to Ana, not R$100 into the sender own account. If the user is adding/depositing/loading/placing money into their own account via PIX and no separate recipient is named, prefer route_pix_onramp_intent. If the user is withdrawing/sending out to their own PIX/bank, prefer route_pix_offramp_intent.',
   },
   {
     intent: IntentType.BALANCE,
@@ -46,7 +59,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.CONTACTS,
     toolName: 'route_contacts_intent',
-    description: 'Use when the user asks to list, see, add, save, edit, or choose contacts/destinatarios/favorites/beneficiaries.',
+    description: 'Use only when the user is explicitly managing saved contacts/destinatarios/favorites/beneficiaries: list, see, add, save, edit, or choose a contact. Contact routing requires explicit contact-management meaning. Do not use for adding/colocar/depositing money or balance. Do not use for PIX top-up/on-ramp phrases such as "colocar 100 reais via pix" or "me ajude com o colocar 100 reais via pix"; those are route_pix_onramp_intent and must not ask for contact key/email/phone/public key. If the message contains PIX money movement or own-account top-up, this contacts tool is invalid even if the verb is adicionar/colocar.',
   },
   {
     intent: IntentType.CONVERSION,
@@ -61,7 +74,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.PAYMENT,
     toolName: 'route_payment_intent',
-    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to another recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail and destination is not the user own PIX/bank exit. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
+    description: 'Use for any request to send, pay, transfer, or move a concrete amount in a concrete asset to another recipient such as a saved contact, person name, email, phone, CPF, transfer key, or external wallet, when PIX is not the requested rail and destination is not the user own PIX/bank exit. Do not use for PIX top-up/deposit/add-balance requests like colocar/adicionar/depositar 100 reais via PIX; those are route_pix_onramp_intent and must not ask for a contact key. Interpret typo-heavy Portuguese semantically. A money-transfer request with amount, asset, and recipient must not become general help.',
   },
   {
     intent: IntentType.PAYMENT_LINK,
@@ -145,6 +158,19 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
           enum: ['low', 'medium', 'high'],
           description: 'Risk level of the requested action. Use high for money movement, security/PIN, login/logout, or account access.',
         },
+        amount: {
+          type: 'string',
+          description: 'Optional normalized decimal amount from the user message. For PIX-funded contact payment, this is the final amount the recipient should receive.',
+        },
+        asset_code: {
+          type: 'string',
+          enum: ['BRL', 'USDC', 'CETES', 'XLM', ''],
+          description: 'Optional normalized asset/currency from the user message. Use USDC for dollars/USD. For PIX-funded contact payment, this is the final recipient asset, e.g. 100 XLM means asset_code XLM.',
+        },
+        recipient_query: {
+          type: 'string',
+          description: 'Optional recipient/contact exactly as understood from the user message. Use for payment and PIX-funded contact payments. Leave empty for own-account PIX on-ramp/off-ramp.',
+        },
       },
       required: ['confidence', 'reason', 'needs_clarification', 'language', 'risk'],
     },
@@ -179,6 +205,18 @@ function resolveFrontendBase(candidates: Array<string | undefined>, fallback = '
   return hosted || normalized[0] || fallback;
 }
 
+function normalizeExternalSessionScope(value: unknown): 'whatsapp' | 'telegram' | '' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized.includes('telegram')) return 'telegram';
+  if (
+    normalized.includes('whatsapp') ||
+    normalized.includes('evolution') ||
+    normalized === 'phone'
+  ) return 'whatsapp';
+  return '';
+}
+
 export class AgentGraph {
   private llm: ChatOpenAI;
   private repository: AgentRepository;
@@ -186,6 +224,7 @@ export class AgentGraph {
   private externalService: ExternalService;
   private openaiApiKey: string;
   private lastIntentRouterFailure: string | null = null;
+  private lastIntentRouteCandidate: IntentRouteCandidate | null = null;
 
   constructor(repository: AgentRepository, openaiApiKey: string, systemPrompt: string) {
     this.repository = repository;
@@ -1320,8 +1359,8 @@ export class AgentGraph {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'USDC';
-    asset_code: 'BRL' | 'USDC';
+    amount_currency?: string;
+    asset_code: string;
     recipient_query?: string;
   } {
     const normalized = this.normalizeTextForIntent(text);
@@ -1387,7 +1426,7 @@ export class AgentGraph {
       /\b(?:para|pra|pro|a)\s+a\s+minha\s+chave\s+pix\b/.test(normalized);
 
     const wantsPixFundedPayment =
-      /\b(mandar|enviar|pagar|transferir|transacao|transação|trasacao|transferencia|transferência|pagamento|fazer uma transacao|fazer uma transação|fazer uma trasacao|fazer transacao|fazer transação|fazer trasacao|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
+      /\b(mandar|enviar|pagar|transferir|transacao|transação|trasacao|transferencia|transferência|pagamento|fazer\s+(?:um\s+|uma\s+)?pix|fazer uma transacao|fazer uma transação|fazer uma trasacao|fazer transacao|fazer transação|fazer trasacao|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
       Boolean(pixFundedPaymentRecipient) &&
       !mentionsOwnPixDestination &&
       !mentionsMoneyOutOfOwnAccount &&
@@ -1431,6 +1470,8 @@ export class AgentGraph {
     }
 
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const explicitlyMentionsAsset = /\b(brl|real|reais|r\$|usd|usdc|dolar|dolares|dólar|dólares|dollar|dollars|cetes|xlm|lumen|lumens|tesouro|tesouros)\b/.test(normalized);
+    const inferredAssetCode = explicitlyMentionsAsset ? this.inferPaymentAssetFromText(normalized, amountMatch) : '';
     const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
     const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
     const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
@@ -1442,16 +1483,18 @@ export class AgentGraph {
     const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
     const onRampTargetAsset = explicitReceiveBrl || (mentionsBrl && !mentionsUsdc)
       ? 'BRL'
-      : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? 'USDC' : 'BRL');
-    const fundAndPayAsset = mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL';
+      : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? inferredAssetCode || 'USDC' : 'BRL');
+    const fundAndPayAsset = inferredAssetCode || (mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL');
     return {
       is_pix_ramp: true,
       direction: wantsOffRamp ? 'offramp' : 'onramp',
       flow: wantsPixFundedPayment && !wantsOffRamp ? 'fund_and_pay' : 'fund_wallet',
       amount: amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined,
-      amount_currency: mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : 'BRL',
+      amount_currency: wantsPixFundedPayment
+        ? fundAndPayAsset
+        : (mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : inferredAssetCode || 'BRL'),
       asset_code: wantsOffRamp && !wantsOnRamp
-        ? (mentionsUsdc ? 'USDC' : 'BRL')
+        ? (mentionsUsdc ? 'USDC' : inferredAssetCode || 'BRL')
         : (wantsPixFundedPayment ? fundAndPayAsset : onRampTargetAsset),
       recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? pixFundedPaymentRecipient : undefined,
     };
@@ -1468,8 +1511,8 @@ export class AgentGraph {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'USDC';
-    asset_code: 'BRL' | 'USDC';
+    amount_currency?: string;
+    asset_code: string;
     recipient_query?: string;
   } | null {
     const pending = state.pending_pix_ramp || (state.action_params as any)?.pending_pix_ramp;
@@ -1481,9 +1524,41 @@ export class AgentGraph {
       direction: pending.direction === 'offramp' ? 'offramp' : 'onramp',
       flow: pending.flow === 'fund_and_pay' ? 'fund_and_pay' : 'fund_wallet',
       amount,
-      amount_currency: pending.amount_currency === 'USDC' ? 'USDC' : 'BRL',
-      asset_code: pending.asset_code === 'USDC' ? 'USDC' : 'BRL',
+      amount_currency: String(pending.amount_currency || pending.asset_code || 'BRL').trim().toUpperCase(),
+      asset_code: String(pending.asset_code || 'BRL').trim().toUpperCase(),
       recipient_query: String(pending.recipient_query || '').trim() || undefined,
+    };
+  }
+
+  private pixFundedPaymentIntentFromLlmRoute(state: AgentState): {
+    is_pix_ramp: boolean;
+    direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
+    amount?: string;
+    amount_currency?: string;
+    asset_code: string;
+    recipient_query?: string;
+  } | null {
+    const route = (state.action_params as any)?.llm_route || {};
+    if (String(route.tool_name || '').trim() !== 'route_pix_intent') {
+      return null;
+    }
+
+    const amount = String(route.amount || '').trim();
+    const assetCode = this.normalizeAgentAssetCode(route.asset_code || '');
+    const recipientQuery = String(route.recipient_query || '').trim();
+    if (!amount || !assetCode || !recipientQuery) {
+      return null;
+    }
+
+    return {
+      is_pix_ramp: true,
+      direction: 'onramp',
+      flow: 'fund_and_pay',
+      amount,
+      amount_currency: assetCode,
+      asset_code: assetCode,
+      recipient_query: recipientQuery,
     };
   }
 
@@ -1491,13 +1566,13 @@ export class AgentGraph {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
     amount?: string;
-    amount_currency?: 'BRL' | 'USDC';
-    asset_code: 'BRL' | 'USDC';
+    amount_currency?: string;
+    asset_code: string;
     recipient_query?: string;
     recipient_key?: string;
     recipient_public_key?: string;
     pay_amount?: string;
-    pay_asset_code?: 'BRL' | 'USDC';
+    pay_asset_code?: string;
   }): Promise<string> {
     const page = intent.direction === 'offramp' ? '/pix-off' : '/pix-on';
     const url = new URL(`${this.getFrontendBaseUrl()}${page}`);
@@ -1505,6 +1580,7 @@ export class AgentGraph {
     const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
     const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
+    const externalSessionScope = normalizeExternalSessionScope(externalProvider || externalSource);
     const amountCurrency = intent.amount_currency || intent.asset_code;
     const urlAsset = intent.direction === 'onramp' && amountCurrency === 'BRL' ? 'BRL' : intent.asset_code;
     url.searchParams.set('mode', intent.direction);
@@ -1519,6 +1595,7 @@ export class AgentGraph {
     if (externalProvider) url.searchParams.set('provider', externalProvider);
     if (externalProviderUserId) url.searchParams.set('provider_user_id', externalProviderUserId);
     if (externalSource) url.searchParams.set('source', externalSource);
+    if (externalSessionScope) url.searchParams.set('session_scope', externalSessionScope);
     if (intent.flow === 'fund_and_pay') url.searchParams.set('flow', 'fund_and_pay');
     if (intent.flow === 'fund_and_pay') url.searchParams.set('auto_pay_after_ramp', '1');
     if (intent.recipient_query) url.searchParams.set('recipient', intent.recipient_query);
@@ -1577,10 +1654,11 @@ export class AgentGraph {
   }
 
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
+    const llmPixFundedPaymentIntent = this.pixFundedPaymentIntentFromLlmRoute(state);
     const extractedIntent = this.extractPixRampIntentFromText(state.current_input);
-    const intent = extractedIntent.is_pix_ramp
+    const intent = llmPixFundedPaymentIntent || (extractedIntent.is_pix_ramp
       ? extractedIntent
-      : (this.resumePendingPixRampIntent(state) || extractedIntent);
+      : (this.resumePendingPixRampIntent(state) || extractedIntent));
     const language = this.getLanguage(state);
     if (!intent.is_pix_ramp) {
       const onRampUrl = new URL(`/pix-on`, this.getFrontendBaseUrl());
@@ -1647,11 +1725,17 @@ export class AgentGraph {
             'A página mostra o saldo que sai da conta, a taxa do app e quanto chega no seu PIX antes do PIN.',
             'The page shows the balance leaving the account, the app fee, and how much arrives in your PIX before the PIN.'
           )
-        : this.text(
-            language,
-            'A página mostra o PIX a pagar, a taxa do app e quanto entra na conta antes do PIN.',
-            'The page shows the PIX amount to pay, the app fee, and how much arrives in the account before the PIN.'
-          );
+        : intent.flow === 'fund_and_pay' && resolvedRecipientLabel
+          ? this.text(
+              language,
+              `A página mostra o PIX a pagar, a taxa do app e a conversão necessária para entregar o valor final a ${resolvedRecipientLabel} antes do PIN.`,
+              `The page shows the PIX amount to pay, the app fee, and the conversion needed to deliver the final amount to ${resolvedRecipientLabel} before the PIN.`
+            )
+          : this.text(
+              language,
+              'A página mostra o PIX a pagar, a taxa do app e quanto entra na conta antes do PIN.',
+              'The page shows the PIX amount to pay, the app fee, and how much arrives in the account before the PIN.'
+            );
       state.success = true;
       state.pending_pix_ramp = undefined;
       state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
@@ -2620,17 +2704,18 @@ export class AgentGraph {
     const available = Math.max(0, input.currentBalance?.amount || 0);
     const needsTopUp = input.currentBalance ? Math.max(0, requestedAmount - available) : requestedAmount;
     const fundingAmount = needsTopUp > 0 ? needsTopUp.toFixed(input.assetCode === 'BRL' ? 2 : 7).replace(/0+$/, '').replace(/\.$/, '') : input.amount;
+    const paymentAssetCode = this.toUserFacingAssetCode(input.assetCode).replace(/^USD$/, 'USDC');
     const url = await this.buildPixRampUrl(state, {
       direction: 'onramp',
       flow: 'fund_and_pay',
       amount: fundingAmount,
-      amount_currency: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
-      asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
+      amount_currency: paymentAssetCode,
+      asset_code: paymentAssetCode,
       recipient_query: input.recipientQuery,
       recipient_public_key: input.recipientPublicKey,
       recipient_key: input.recipientKey,
       pay_amount: input.amount,
-      pay_asset_code: input.assetCode === 'BRL' ? 'BRL' : 'USDC',
+      pay_asset_code: paymentAssetCode,
     });
     const language = this.getLanguage(state);
     const fundingEstimate = await this.formatPixFundingEstimate(fundingAmount, input.assetCode, language);
@@ -3141,6 +3226,11 @@ export class AgentGraph {
       .replace(/\s+/g, ' ')
       .trim();
 
+    const mentionsPix = /\bpix\b/.test(normalized);
+    if (mentionsPix) {
+      return null;
+    }
+
     const looksLikeApplicationRequest =
       /\b(rendendo|rendimento|rendimentos|render|investir|investimento|investimentos|aplicar|aplicacao|aplicacoes|posicao|posicoes)\b/.test(normalized);
     if (looksLikeApplicationRequest) {
@@ -3483,6 +3573,43 @@ export class AgentGraph {
     ];
   }
 
+  private buildIntentRouteAuditMessages(message: string, selected: IntentRouteCandidate): BaseMessage[] {
+    const sanitized = this.sanitizeUserMessage(String(message || '')).trim();
+    const userMessage = sanitized.length > INTENT_ROUTER_MAX_MESSAGE_LENGTH
+      ? `${sanitized.slice(0, INTENT_ROUTER_MAX_MESSAGE_LENGTH)}\n[message truncated for routing]`
+      : sanitized;
+
+    return [
+      new SystemMessage({
+        content: [
+          this.buildIntentRouterPrompt(),
+          '',
+          '## ROUTE AUDIT',
+          `Previous route tool selected: ${selected.toolName}.`,
+          'Re-evaluate from first principles. Do not preserve the previous route unless it truly matches the route contract.',
+          'If the user is adding, placing, depositing, loading, bringing, or receiving money/saldo via PIX into their own account, call route_pix_onramp_intent.',
+          'If the user is withdrawing, sending out, sacar, retirar, or moving money to their own PIX/bank exit, call route_pix_offramp_intent.',
+          'If the user names another person/contact/recipient for a PIX payment, call route_pix_intent and preserve the final amount/asset for that recipient.',
+          'Exact audit example: "uero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
+          'Exact audit example: "quero fazer pix pra ana silva de 100 xlm" must be route_pix_intent, not route_pix_onramp_intent. It means pay Ana Silva 100 XLM using PIX funding.',
+          'A named recipient after pra/para/pro/a makes own-account on-ramp invalid unless the phrase is explicitly "pra minha conta".',
+          'If the user is asking to manage saved contacts/recipients, call route_contacts_intent.',
+          'Call exactly one route tool.',
+        ].join('\n'),
+      }),
+      new HumanMessage({
+        content: [
+          'Audit the selected TalkToStellar route for this message.',
+          `User message: ${userMessage}`,
+        ].join('\n'),
+      }),
+    ];
+  }
+
+  private shouldAuditSelectedIntentRoute(candidate: IntentRouteCandidate): boolean {
+    return candidate.intent === IntentType.CONTACTS || candidate.toolName === 'route_pix_onramp_intent';
+  }
+
   private normalizeRouteConfidence(value: unknown): number {
     const confidence = Number(value);
     if (!Number.isFinite(confidence)) return 0;
@@ -3497,6 +3624,10 @@ export class AgentGraph {
     const language = rawLanguage === 'en' ? 'en' : rawLanguage === 'pt-BR' ? 'pt-BR' : undefined;
     const rawRisk = String(call.args?.risk || '').trim();
     const risk = rawRisk === 'low' || rawRisk === 'medium' || rawRisk === 'high' ? rawRisk : undefined;
+    const rawAmount = String(call.args?.amount || '').trim();
+    const amount = rawAmount ? normalizeHumanAmountText(rawAmount) : undefined;
+    const assetCode = this.normalizeAgentAssetCode(call.args?.asset_code || '');
+    const recipientQuery = String(call.args?.recipient_query || '').trim();
 
     return {
       intent,
@@ -3508,6 +3639,24 @@ export class AgentGraph {
         : undefined,
       language,
       risk,
+      amount: amount || undefined,
+      assetCode: assetCode || undefined,
+      recipientQuery: recipientQuery || undefined,
+    };
+  }
+
+  private serializeIntentRouteCandidate(candidate: IntentRouteCandidate | null): Record<string, any> | undefined {
+    if (!candidate) return undefined;
+    return {
+      intent: candidate.intent,
+      tool_name: candidate.toolName,
+      confidence: candidate.confidence,
+      needs_clarification: candidate.needsClarification,
+      language: candidate.language,
+      risk: candidate.risk,
+      amount: candidate.amount,
+      asset_code: candidate.assetCode,
+      recipient_query: candidate.recipientQuery,
     };
   }
 
@@ -3586,6 +3735,13 @@ Core rule:
 - Never use route_general_intent for balance, contacts, PIX, conversion, quote, yield/earnings, history, financial memory, PIN/security, payment, payment link, login, logout, wallet, profile, public key, or account access.
 - route_general_intent is not acceptable for money-transfer requests that combine a transfer verb, amount, asset/currency, and recipient, even when the text has typos.
 
+Structured extraction fields:
+- When the user provides a numeric amount, fill amount as a normalized decimal string.
+- When the user provides an asset/currency, fill asset_code as BRL, USDC, CETES, or XLM. Use USDC for USD/dollars.
+- When the user names a payment recipient/contact, fill recipient_query with the recipient name/key from the message.
+- For route_pix_intent, amount and asset_code are the final amount and asset the recipient should receive. Example: "quero fazer pix pra Ana Silva de 100 XLM" -> route_pix_intent with amount="100", asset_code="XLM", recipient_query="Ana Silva".
+- For own-account route_pix_onramp_intent and route_pix_offramp_intent, leave recipient_query empty unless the user explicitly provided their own PIX key as data, not as a contact.
+
 Priority order when multiple intents appear:
 1. Login, logout, PIN/security, and account access routes.
 2. PIX movement if PIX is the rail or the user is entering/exiting money through PIX.
@@ -3598,8 +3754,10 @@ Priority order when multiple intents appear:
 
 Route selection guide:
 - route_balance_intent: user asks to see balance, saldo, holdings, available money, quanto tenho, current wallet amount, or any asset balance such as XLM/USDC/CETES/BRL.
-- route_contacts_intent: user asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts.
-- route_pix_intent: any PIX money movement. This includes adding money with PIX, receiving through PIX, paying PIX to load the account, withdrawing/sending/sacar/retirar to user's PIX, sending money "pra fora" through PIX, bank exit, off-ramp, or paying a contact via PIX. PIX wins over generic payment.
+- route_contacts_intent: user explicitly asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts. Contact routing requires explicit contact-management meaning; adding money/saldo is not contact management.
+- route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta". It never needs a contact. It is invalid if a separate person/contact is named as the recipient.
+- route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix".
+- route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
 - route_price_quote_intent: user asks about best route, cotacao, quote, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it.
 - route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options.
@@ -3615,8 +3773,15 @@ Route selection guide:
 - route_general_intent: greetings, "what can you do?", menu/help, broad explanations such as explaining assets/features, or unsupported conversation not asking to run a product action.
 
 Disambiguation:
-- "mandar/enviar/pagar + PIX" routes to PIX, not payment.
-- "mandar pra fora", "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", or "off-ramp" routes to PIX.
+- "mandar/enviar/pagar + PIX" routes to a PIX tool, not payment.
+- "colocar/adicionar/depositar/carregar/recarregar/trazer 100 reais via/no/por PIX" is PIX on-ramp into the user's own TalkToStellar account and must call route_pix_onramp_intent, even if the user says "me ajude com". Do not route it as payment and do not ask for contact key, email, phone, public key, or recipient.
+- "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por pix", "quero colocar 100 reais no pix", and "adicionar saldo com pix" must call route_pix_onramp_intent. They are not contacts, even though the verbs colocar/adicionar can also be used for saving contacts in other contexts.
+- A message with PIX + amount/currency + add/top-up/deposit wording does not need any recipient. Never choose route_contacts_intent for that shape. The correct tool is route_pix_onramp_intent.
+- Choosing route_contacts_intent for PIX top-up/on-ramp is a routing contract failure. The contacts route must only be used when the user explicitly asks to manage saved people/recipients.
+- "fazer PIX pra Ana Silva de 100 XLM", "uero fazer pix pra ana silva de 100 xlm", "mandar PIX para Carlos de 20 USDC", and "pagar Ana via PIX" are route_pix_intent because PIX is funding a payment to a contact. They are not own-account on-ramp. The asset after the amount is the final asset for the recipient.
+- A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid unless the phrase says "pra minha conta", "para minha conta", "na minha conta", or equivalent own-account language.
+- For "uero fazer pix pra ana silva de 100 xlm": route_pix_intent with high confidence. Do not choose route_pix_onramp_intent. Do not reinterpret "100 xlm" as "R$100". Do not say the user is receiving money in their own account.
+- "mandar pra fora", "sacar", "retirar", "meu PIX", "minha chave PIX", "pro meu banco", or "off-ramp" routes to route_pix_offramp_intent.
 - "pra fora do pix", "fora em pix", "sair para meu pix", "tirar para pix", and "mandar para meu banco" are off-ramp PIX, even when they contain transfer verbs like mandar/enviar.
 - "mandar 10 xlm/usdc/cetes/reais pra Ana Silva", emails, phone numbers, CPFs, transfer keys, or external wallets are payment, not help, unless PIX is explicitly the rail.
 - "criar/gerar link de pagamento", "link para receber", "cobrar por link", and "meu link de recebimento" are payment_link, not normal payment.
@@ -3646,6 +3811,7 @@ When calling the selected route tool:
 
   private async detectIntent(message: string, _userId?: string): Promise<IntentType> {
     this.lastIntentRouterFailure = null;
+    this.lastIntentRouteCandidate = null;
     if (!this.shouldUseLlmIntentRouter()) {
       const reason = 'Intent router skipped because no production OpenAI key is configured';
       if (process.env.NODE_ENV !== 'test') {
@@ -3662,8 +3828,22 @@ When calling the selected route tool:
       try {
         const route = await this.invokeIntentRouter(messages);
         if (route) {
-          this.logIntentRoute(message, route.selected, 'required', route.candidateCount);
-          return route.selected.intent;
+          let selected = route.selected;
+          let candidateCount = route.candidateCount;
+          let mode = 'required';
+
+          if (this.shouldAuditSelectedIntentRoute(selected)) {
+            const auditRoute = await this.invokeIntentRouter(this.buildIntentRouteAuditMessages(message, selected));
+            if (auditRoute?.selected) {
+              selected = auditRoute.selected;
+              candidateCount = auditRoute.candidateCount;
+              mode = 'audit';
+            }
+          }
+
+          this.logIntentRoute(message, selected, mode, candidateCount);
+          this.lastIntentRouteCandidate = selected;
+          return selected.intent;
         }
       } catch (toolError) {
         const message = toolError instanceof Error ? toolError.message : String(toolError);
@@ -3672,11 +3852,13 @@ When calling the selected route tool:
       }
 
       logger.info('[Agent] Intent router did not select a route tool; using general handling');
+      this.lastIntentRouteCandidate = null;
       return IntentType.GENERAL;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.lastIntentRouterFailure = errorMessage;
       logger.error(`Intent detection failed: ${errorMessage}`);
+      this.lastIntentRouteCandidate = null;
       return IntentType.GENERAL;
     }
   }
@@ -4615,6 +4797,14 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const assetCode = intent.asset_code || 'USDC';
     const sessionToken = String((state.action_params as any)?.session_token || '').trim();
     const sessionAuth = sessionToken ? { session_token: sessionToken } : {};
+    const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
+    const externalSessionScope = normalizeExternalSessionScope(externalProvider || externalSource);
+    const channelContext = {
+      ...(externalProvider ? { provider: externalProvider, external_provider: externalProvider } : {}),
+      ...(externalSource ? { source: externalSource, external_source: externalSource } : {}),
+      ...(externalSessionScope ? { session_scope: externalSessionScope } : {}),
+    };
 
     if (!hasActiveWallet && intent.mode !== 'options') {
       state.success = false;
@@ -4629,12 +4819,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     if (intent.mode === 'balance') {
       toolName = 'get_yield_balance';
-      toolInput = { session_id: state.session_id, ...sessionAuth, asset_code: assetCode, language };
+      toolInput = { session_id: state.session_id, ...sessionAuth, ...channelContext, asset_code: assetCode, language };
     } else if (intent.mode === 'prepare') {
       toolName = 'prepare_yield_action';
       toolInput = {
         session_id: state.session_id,
         ...sessionAuth,
+        ...channelContext,
         action: intent.action,
         amount: intent.amount,
         asset_code: assetCode,
@@ -4645,6 +4836,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       toolInput = {
         session_id: state.session_id,
         ...sessionAuth,
+        ...channelContext,
         action: intent.action,
         amount: intent.amount,
         asset_code: assetCode,
@@ -4653,7 +4845,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       };
     } else {
       toolName = 'get_yield_options';
-      toolInput = { session_id: state.session_id, ...sessionAuth, language };
+      toolInput = { session_id: state.session_id, ...sessionAuth, ...channelContext, language };
     }
 
     const resultRaw = await executeTool(toolName, toolInput);
@@ -5299,23 +5491,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handlePixRampRequest(state);
       }
 
-      const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
-      const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
-      const localContactIntent = this.extractContactIntentFromText(state.current_input);
-      const extractedPixRamp = this.extractPixRampIntentFromText(state.current_input);
-      const deterministicYield = this.extractYieldIntentFromText(state.current_input);
-      const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
-      const deterministicConversionBestRouteEstimate = this.extractConversionBestRouteEstimateIntent(state.current_input);
-      const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
-      const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
-      const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
-      const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
-      const explanationTopic = this.explanationTopicFromText(state.current_input);
-      const deterministicFinancialMemory = this.hasDeterministicFinancialMemoryIntent(
-        state.current_input,
-        this.hasPendingNicknamePrompt(state)
-      );
-
       const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id);
       if (this.lastIntentRouterFailure) {
         state.detected_intent = IntentType.GENERAL;
@@ -5332,12 +5507,15 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         await this.repository.saveState(state.session_id, state);
         return state;
       }
-      const safetyOverrideIntent = wantsReceiptImage ? IntentType.HISTORY
-        : localContactIntent?.action === 'add' ? IntentType.CONTACTS
-        : null;
-
-      state.detected_intent = safetyOverrideIntent || llmDetectedIntent || IntentType.GENERAL;
+      state.detected_intent = llmDetectedIntent || IntentType.GENERAL;
       state.action_type = this.mapIntentToAction(state.detected_intent);
+      const selectedRoute = this.serializeIntentRouteCandidate(this.lastIntentRouteCandidate);
+      if (selectedRoute) {
+        state.action_params = {
+          ...(state.action_params || {}),
+          llm_route: selectedRoute,
+        };
+      }
 
       await this.repository.saveMessage(
         state.session_id,
@@ -5345,19 +5523,28 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         this.sanitizeUserMessage(state.current_input)
       );
 
-      if (localContactIntent?.action === 'add') {
-        state.detected_intent = IntentType.CONTACTS;
-        state.action_type = ActionType.LIST_CONTACTS;
-        return await this.handleContactsRequest(state);
+      if (state.detected_intent === IntentType.CONTACTS) {
+        const localContactIntent = this.extractContactIntentFromText(state.current_input);
+        if (localContactIntent?.action === 'add') {
+          state.detected_intent = IntentType.CONTACTS;
+          state.action_type = ActionType.LIST_CONTACTS;
+          return await this.handleContactsRequest(state);
+        }
       }
 
       const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
-      if (savingsCalculator) {
-        return await this.handleSavingsCalculatorIntent(state, savingsCalculator);
+      if (state.detected_intent === IntentType.PRICE_QUOTE || state.detected_intent === IntentType.FINANCIAL_MEMORY) {
+        const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
+        if (savingsCalculator) {
+          return await this.handleSavingsCalculatorIntent(state, savingsCalculator);
+        }
       }
 
-      if (explanationTopic) {
-        return await this.handleExplanationRequest(state, explanationTopic);
+      if (state.detected_intent === IntentType.GENERAL) {
+        const explanationTopic = this.explanationTopicFromText(state.current_input);
+        if (explanationTopic) {
+          return await this.handleExplanationRequest(state, explanationTopic);
+        }
       }
 
       const onboardingIntents = new Set<IntentType>([
@@ -5397,70 +5584,92 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleWalletCreation(state);
       }
 
-      if (wantsReceiptImage) {
-        return await this.handleReceiptImageRequest(state);
+      if (state.detected_intent === IntentType.HISTORY) {
+        const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
+        if (wantsReceiptImage) {
+          return await this.handleReceiptImageRequest(state);
+        }
       }
 
-      if (hasActiveWallet && this.isOwnProfileRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.WALLET && hasActiveWallet && this.isOwnProfileRequest(state.current_input)) {
         return await this.handleOwnProfileRequest(state);
       }
 
-      if (this.isIntentHelpRequest(state.current_input) || this.isSimpleGreetingRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.GENERAL && (this.isIntentHelpRequest(state.current_input) || this.isSimpleGreetingRequest(state.current_input))) {
         return await this.handleIntentHelpRequest(state);
       }
 
-      if (this.isRampHistoryRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.HISTORY && this.isRampHistoryRequest(state.current_input)) {
         return await this.handleRampHistoryRequest(state);
       }
 
-      if (wantsTransactionHistory) {
-        return await this.handleHistoryCheck(state);
+      if (state.detected_intent === IntentType.HISTORY) {
+        const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
+        if (wantsTransactionHistory) {
+          return await this.handleHistoryCheck(state);
+        }
       }
 
-      if (deterministicConversionBestRouteEstimate) {
-        return await this.handleBestRouteConversionEstimate(state, deterministicConversionBestRouteEstimate);
-      }
+      if (state.detected_intent === IntentType.PRICE_QUOTE) {
+        const deterministicConversionBestRouteEstimate = this.extractConversionBestRouteEstimateIntent(state.current_input);
+        if (deterministicConversionBestRouteEstimate) {
+          return await this.handleBestRouteConversionEstimate(state, deterministicConversionBestRouteEstimate);
+        }
 
-      if (deterministicBestRouteEstimate) {
-        return await this.handleGenericBestRouteEstimate(state, deterministicBestRouteEstimate);
-      }
+        const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
+        if (deterministicBestRouteEstimate) {
+          return await this.handleGenericBestRouteEstimate(state, deterministicBestRouteEstimate);
+        }
 
-      if (this.isBestRouteGuidanceRequest(state.current_input)) {
-        return await this.handleBestRouteGuidanceRequest(state);
+        if (this.isBestRouteGuidanceRequest(state.current_input)) {
+          return await this.handleBestRouteGuidanceRequest(state);
+        }
       }
 
       if (state.action_type === ActionType.INITIATE_PIX) {
         return await this.handlePixRampRequest(state);
       }
 
-      if (state.action_type === ActionType.MANAGE_YIELD && deterministicYield.is_yield) {
-        return await this.handleYieldRequest(state, deterministicYield.is_yield
-          ? deterministicYield
-          : { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
+      if (state.action_type === ActionType.MANAGE_YIELD) {
+        const deterministicYield = this.extractYieldIntentFromText(state.current_input);
+        if (deterministicYield.is_yield) {
+          return await this.handleYieldRequest(state, deterministicYield.is_yield
+            ? deterministicYield
+            : { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
+        }
       }
 
-      if (deterministicAssetInterface.is_asset_interface) {
-        return await this.handleAssetInterfaceRequest(state, deterministicAssetInterface);
+      if (state.detected_intent === IntentType.GENERAL) {
+        const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
+        if (deterministicAssetInterface.is_asset_interface) {
+          return await this.handleAssetInterfaceRequest(state, deterministicAssetInterface);
+        }
       }
 
       if (state.action_type === ActionType.MANAGE_YIELD) {
         return await this.handleYieldRequest(state, { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
       }
 
-      if (deterministicExternalWallet.is_external_wallet) {
-        return await this.handleExternalWalletRequest(state);
+      if (state.detected_intent === IntentType.PAYMENT) {
+        const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
+        if (deterministicExternalWallet.is_external_wallet) {
+          return await this.handleExternalWalletRequest(state);
+        }
       }
 
-      if (wantsAnnualSavingsSummary) {
-        return await this.handleAnnualSavingsSummaryIntent(state);
+      if (state.detected_intent === IntentType.FINANCIAL_MEMORY) {
+        const wantsAnnualSavingsSummary = this.wantsAnnualSavingsSummary(state.current_input);
+        if (wantsAnnualSavingsSummary) {
+          return await this.handleAnnualSavingsSummaryIntent(state);
+        }
+
+        const fixedSavings = this.fixedSavingsIntent(state.current_input);
+        if (fixedSavings) {
+          return await this.handleFixedSavingsIntent(state, fixedSavings);
+        }
       }
 
-      const fixedSavings = this.fixedSavingsIntent(state.current_input);
-      if (fixedSavings) {
-        return await this.handleFixedSavingsIntent(state, fixedSavings);
-      }
-
-      if (hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.WALLET && hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
         const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
         state.response_message = this.formatOwnReceivingKeysForLanguage(this.getLanguage(state), publicKey, pixKey);
         state.success = true;
@@ -5469,7 +5678,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return state;
       }
 
-      if (hasActiveWallet && this.isReceiveLinkRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.PAYMENT_LINK && hasActiveWallet && this.isReceiveLinkRequest(state.current_input)) {
         return await this.handleReceiveLinkRequest(state);
       }
 

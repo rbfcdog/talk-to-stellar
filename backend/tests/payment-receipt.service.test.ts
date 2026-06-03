@@ -25,7 +25,7 @@ describe('PaymentReceiptService', () => {
     expect(url).not.toContain('localhost:8080');
   });
 
-  it('builds a premium receipt with quote, fee and public operation id', async () => {
+  it('builds a concise normal transfer receipt without fee, savings or settlement copy', async () => {
     const operationId = PaymentReceiptService.toPublicOperationId('abc123');
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
@@ -56,10 +56,10 @@ describe('PaymentReceiptService', () => {
     expect(receipt).toContain('Você converteu R$ 500.00 para US$ 89.12 e enviou para João.');
     expect(receipt).toContain('Status: concluído');
     expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.610412');
-    expect(receipt).toContain('Taxa: R$ 0.08 / US$ 0.01');
-    expect(receipt).toContain('Taxa estimada em métodos tradicionais:');
-    expect(receipt).toContain('Economia estimada: R$ 18.80 em relação a métodos tradicionais.');
-    expect(receipt).toContain('Liquidação: 3.2s');
+    expect(receipt).not.toContain('Taxa:');
+    expect(receipt).not.toContain('Taxa estimada em métodos tradicionais:');
+    expect(receipt).not.toContain('Economia estimada:');
+    expect(receipt).not.toContain('Liquidação:');
     expect(receipt).toContain(`ID da operação: ${operationId}`);
     expect(receipt).not.toContain('Stellar hash');
     expect(receipt).not.toContain('blockchain');
@@ -189,7 +189,7 @@ describe('PaymentReceiptService', () => {
       feeDisplay: 'US$ 0.01',
     });
 
-    expect(receipt).toContain('Taxa: US$ 0.01');
+    expect(receipt).not.toContain('Taxa:');
     expect(receipt).not.toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).not.toContain('Economia estimada:');
     expect(receipt).not.toContain('5.15');
@@ -210,15 +210,15 @@ describe('PaymentReceiptService', () => {
       feeDisplay: 'US$ 0.01',
     });
 
-    expect(receipt).toContain('Taxa: R$ 0.06 / US$ 0.01');
-    expect(receipt).toContain('Taxa estimada em métodos tradicionais: R$ 28.13 / US$ 4.50');
-    expect(receipt).toContain('Economia estimada: R$ 28.06 em relação a métodos tradicionais.');
+    expect(receipt).not.toContain('Taxa:');
+    expect(receipt).not.toContain('Taxa estimada em métodos tradicionais:');
+    expect(receipt).not.toContain('Economia estimada:');
     expect(receipt).not.toContain('5.15');
   });
 
   it('adds spread to exact fee when quote carries platform fee and shows traditional comparison', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
-      type: 'payment_sent',
+      type: 'conversion',
       sessionId: 'session-3',
       userId: 'user-3',
       counterpartyLabel: 'Pedro',
@@ -264,7 +264,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Retirada via PIX concluída');
   });
 
-  it('prefers the savings-first WhatsApp receipt over a generic external callback', async () => {
+  it('uses the concise external callback for normal contact transfers', async () => {
     process.env.USD_BRL_FALLBACK_RATE = '5';
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
@@ -295,13 +295,18 @@ describe('PaymentReceiptService', () => {
     expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'whatsapp',
       providerUserId: '5519997624114',
-      text: expect.stringContaining('✅ *Transferência concluída*'),
+      text: expect.stringContaining('Pagamento concluido.'),
       buttonText: 'Abrir comprovante',
     }));
-    expect(notifySpy.mock.calls[0][0].text).toContain('💰 *Você economizou');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Valor: US$ 100.00');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Destino: Ana Silva');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('💰 *Você economizou');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Liquidação');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Liquidacao');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('🔗 Evidência Stellar:');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('tx-callback-1');
-    expect(notifySpy.mock.calls[0][0].text).not.toContain('Pagamento concluido.');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Recibo registrado no seu histórico.');
 
     notifySpy.mockRestore();

@@ -95,6 +95,10 @@ function hashSecret(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+function hashLoginPairingCode(pairId: string, code: string) {
+  return hashSecret(`${String(pairId || '').trim()}:${String(code || '').trim()}`);
+}
+
 function timingSafeEqualString(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(String(left || ''));
   const rightBuffer = Buffer.from(String(right || ''));
@@ -112,9 +116,35 @@ function passkeyAuthorizationError(message: string, statusCode = 401): Error {
   return error;
 }
 
+function normalizePairId(value: unknown): string {
+  const normalized = String(value || '').trim();
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(normalized)) {
+    throw new Error('Valid pair_id is required');
+  }
+  return normalized;
+}
+
+function normalizeLoginPairingCode(value: unknown): string {
+  const normalized = String(value || '').replace(/\D+/g, '').slice(0, 6);
+  if (!/^\d{6}$/.test(normalized)) {
+    throw new Error('Valid 6-digit code is required');
+  }
+  return normalized;
+}
+
+function generateLoginPairingCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
 function getPasskeyChallengeTtlMs() {
   const parsedSeconds = Number(String(process.env.PASSKEY_CHALLENGE_TTL_SECONDS || '900').trim());
   if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) return 15 * 60_000;
+  return Math.trunc(parsedSeconds * 1000);
+}
+
+function getPasskeyLoginCodeTtlMs() {
+  const parsedSeconds = Number(String(process.env.PASSKEY_LOGIN_CODE_TTL_SECONDS || '300').trim());
+  if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) return 5 * 60_000;
   return Math.trunc(parsedSeconds * 1000);
 }
 
@@ -387,6 +417,20 @@ type ChallengeRow = {
   payload: any;
   expires_at: string;
   used_at?: string | null;
+};
+
+type LoginPairingCodeRow = {
+  id: string;
+  pair_id: string;
+  code_hash: string;
+  user_id: string;
+  email?: string | null;
+  session_id: string;
+  session_token_hash: string;
+  expires_at: string;
+  used_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type PasskeyRegistrationAuthorization = {
@@ -837,6 +881,137 @@ export class PasskeyService {
       verified: true,
       sessionToken: AuthService.generateTokenForUser(userId),
       ...latestSession,
+    };
+  }
+
+  static async createLoginPairingCode(input: {
+    pairId: string;
+    sessionId?: string;
+    sessionToken?: string;
+    userId?: string;
+    email?: string;
+  }) {
+    const pairId = normalizePairId(input.pairId);
+    const sessionId = String(input.sessionId || '').trim();
+    const sessionToken = String(input.sessionToken || '').trim();
+    if (!sessionId || !sessionToken) {
+      throw passkeyAuthorizationError('A valid passkey session is required before generating a login code.');
+    }
+
+    const session = await agentRepo.getSession(sessionId);
+    if (!session || isSessionExpired(session)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in with Passkey again.');
+    }
+
+    const storedSessionToken = String((session as any).session_token || '').trim();
+    if (!storedSessionToken || !timingSafeEqualString(storedSessionToken, sessionToken)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in with Passkey again.');
+    }
+
+    const sessionUserId = normalizeIdentity((session as any).user_id);
+    const sessionEmail = normalizeIdentity((session as any).email);
+    const requestedUserId = normalizeIdentity(input.userId);
+    const requestedEmail = normalizeIdentity(input.email);
+    const requestedIdentity = requestedUserId || requestedEmail;
+    if (requestedIdentity && requestedIdentity !== sessionUserId && requestedIdentity !== sessionEmail) {
+      throw passkeyAuthorizationError('This Passkey session cannot generate a login code for a different account.', 403);
+    }
+
+    const userId = String((session as any).user_id || input.userId || '').trim();
+    if (!userId) {
+      throw passkeyAuthorizationError('Session does not have a user identity for login pairing.', 409);
+    }
+
+    const code = generateLoginPairingCode();
+    const expiresAt = new Date(Date.now() + getPasskeyLoginCodeTtlMs()).toISOString();
+    const email = String((session as any).email || input.email || '').trim() || null;
+
+    const { error } = await supabase
+      .from('passkey_login_pairing_codes')
+      .upsert({
+        pair_id: pairId,
+        code_hash: hashLoginPairingCode(pairId, code),
+        user_id: userId,
+        email,
+        session_id: sessionId,
+        session_token_hash: hashSecret(storedSessionToken),
+        expires_at: expiresAt,
+        used_at: null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'pair_id' });
+
+    if (error) {
+      throw new Error(`Failed to create passkey login code: ${error.message}`);
+    }
+
+    return {
+      code,
+      expiresAt,
+      expiresInSeconds: Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)),
+      pairId,
+      userId,
+      email,
+    };
+  }
+
+  static async redeemLoginPairingCode(input: { pairId: string; code: string }) {
+    const pairId = normalizePairId(input.pairId);
+    const code = normalizeLoginPairingCode(input.code);
+    const codeHash = hashLoginPairingCode(pairId, code);
+
+    const { data, error } = await supabase
+      .from('passkey_login_pairing_codes')
+      .select('*')
+      .eq('pair_id', pairId)
+      .eq('code_hash', codeHash)
+      .maybeSingle();
+
+    if (error || !data) {
+      throw passkeyAuthorizationError('Login code not found. Generate a new code on your phone.', 404);
+    }
+
+    const row = data as LoginPairingCodeRow;
+    if (row.used_at) {
+      throw passkeyAuthorizationError('Login code already used. Generate a new code on your phone.', 409);
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      throw passkeyAuthorizationError('Login code expired. Generate a new code on your phone.', 410);
+    }
+
+    const session = await agentRepo.getSession(row.session_id);
+    if (!session || isSessionExpired(session)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in with Passkey again on your phone.', 401);
+    }
+
+    const storedSessionToken = String((session as any).session_token || '').trim();
+    if (!storedSessionToken || !timingSafeEqualString(hashSecret(storedSessionToken), row.session_token_hash)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in with Passkey again on your phone.', 401);
+    }
+
+    const markUsed = await supabase
+      .from('passkey_login_pairing_codes')
+      .update({ used_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .is('used_at', null)
+      .select('id')
+      .maybeSingle();
+
+    if (markUsed.error) {
+      throw new Error(`Failed to consume passkey login code: ${markUsed.error.message}`);
+    }
+    if (!markUsed.data) {
+      throw passkeyAuthorizationError('Login code already used. Generate a new code on your phone.', 409);
+    }
+
+    await agentRepo.saveSession(row.session_id, session as any);
+
+    return {
+      verified: true,
+      userId: String((session as any).user_id || row.user_id || '').trim(),
+      email: String((session as any).email || row.email || '').trim(),
+      sessionId: row.session_id,
+      sessionToken: storedSessionToken,
+      session_source: 'web',
     };
   }
 

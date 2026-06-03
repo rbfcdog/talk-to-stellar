@@ -70,6 +70,23 @@ describe('public-error utility', () => {
   it('maps confirmation PIN and state failures to actionable messages', () => {
     expect(publicErrorMessage('PIN da conta e obrigatorio para confirmar esta operacao.')).toContain('PIN');
     expect(publicErrorMessage('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.')).toContain('Prepare a confirmacao');
-    expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('concluir a confirmacao');
+    expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('Nenhum valor saiu');
+  });
+
+  it('maps recipient asset readiness failures without hiding the required action', () => {
+    const message = publicErrorMessage('Ana Silva ainda nao pode receber CETES. Peca para ativar recebimento.');
+
+    expect(message).toContain('destinatario');
+    expect(message).toContain('receber esse ativo');
+    expect(message).toContain('ativar o ativo');
+    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
+  });
+
+  it('maps Stellar submission failures to a non-generic no-funds-left message', () => {
+    const message = publicErrorMessage('Falha ao enviar a transacao Stellar para Ana Silva. Nenhum valor saiu da conta.');
+
+    expect(message).toContain('Nao consegui enviar');
+    expect(message).toContain('Nenhum valor saiu');
+    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
   });
 });

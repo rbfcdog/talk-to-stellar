@@ -1,0 +1,144 @@
+jest.mock('../src/api/services/brl-reference-rate.service', () => ({
+  BrlReferenceRateService: {
+    quoteBrlToUsdc: jest.fn(),
+    quoteUsdcToBrl: jest.fn(),
+  },
+}));
+
+jest.mock('../src/api/services/fiat-rate.service', () => ({
+  FiatRateService: {
+    getUsdBrlRate: jest.fn(),
+  },
+}));
+
+jest.mock('../src/api/services/stellar.service', () => ({
+  StellarService: {
+    quoteStrictSendConversion: jest.fn(),
+  },
+}));
+
+import { ConversionRateMatrixService } from '../src/api/services/conversion-rate-matrix.service';
+import { BrlReferenceRateService } from '../src/api/services/brl-reference-rate.service';
+import { FiatRateService } from '../src/api/services/fiat-rate.service';
+import { StellarService } from '../src/api/services/stellar.service';
+
+const quoteBrlToUsdcMock = BrlReferenceRateService.quoteBrlToUsdc as jest.Mock;
+const quoteUsdcToBrlMock = BrlReferenceRateService.quoteUsdcToBrl as jest.Mock;
+const getUsdBrlRateMock = FiatRateService.getUsdBrlRate as jest.Mock;
+const quoteStrictSendConversionMock = StellarService.quoteStrictSendConversion as jest.Mock;
+
+function brlQuote(sourceAmount: string | number, direction: 'BRL_USDC' | 'USDC_BRL', brlPerUsdc = 5) {
+  const amount = Number(sourceAmount);
+  return {
+    source: 'configured_tesouro_asset',
+    symbol: 'USDC/BRL',
+    brlPerUsdc: brlPerUsdc.toFixed(8),
+    usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
+    fetchedAt: '2026-06-02T12:00:00.000Z',
+    sourceAsset: direction === 'BRL_USDC'
+      ? { code: 'TESOURO', issuer: 'GTESOURO' }
+      : { code: 'USDC', issuer: 'GUSDC' },
+    destinationAsset: direction === 'BRL_USDC'
+      ? { code: 'USDC', issuer: 'GUSDC' }
+      : { code: 'TESOURO', issuer: 'GTESOURO' },
+    sourceAmount: amount.toFixed(7),
+    destinationAmount: direction === 'BRL_USDC'
+      ? (amount / brlPerUsdc).toFixed(7)
+      : (amount * brlPerUsdc).toFixed(7),
+    path: [],
+  };
+}
+
+function displayCode(code: string) {
+  return code === 'TESOURO' ? 'BRL' : code;
+}
+
+describe('ConversionRateMatrixService', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    process.env.STELLAR_NETWORK = 'TESTNET';
+    process.env.USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    process.env.TESOURO_ISSUER = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    process.env.CETES_ISSUER_TESTNET = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    process.env.CONVERSION_MATRIX_ASSETS = 'BRL,USDC,CETES,XLM';
+    quoteBrlToUsdcMock.mockReset();
+    quoteUsdcToBrlMock.mockReset();
+    getUsdBrlRateMock.mockReset();
+    quoteStrictSendConversionMock.mockReset();
+
+    quoteBrlToUsdcMock.mockImplementation((amount) => Promise.resolve(brlQuote(amount, 'BRL_USDC', 5)));
+    quoteUsdcToBrlMock.mockImplementation((amount) => Promise.resolve(brlQuote(amount, 'USDC_BRL', 5)));
+    getUsdBrlRateMock.mockResolvedValue({
+      brlPerUsd: 5,
+      source: 'market:test:USD-BRL',
+      fetchedAt: '2026-06-02T12:00:00.000Z',
+      fallbackApplied: false,
+    });
+
+    quoteStrictSendConversionMock.mockImplementation(({ sourceAsset, destAsset, sourceAmount }) => {
+      const source = displayCode(sourceAsset.code);
+      const destination = displayCode(destAsset.code);
+      const rates: Record<string, number> = {
+        'XLM->USDC': 0.2,
+        'USDC->XLM': 5,
+        'CETES->USDC': 0.1,
+        'USDC->CETES': 10,
+      };
+      const rate = rates[`${source}->${destination}`];
+      if (!rate) {
+        throw new Error(`No direct route for ${source}->${destination}`);
+      }
+      const amount = Number(sourceAmount);
+      return Promise.resolve({
+        sourceAsset,
+        destinationAsset: destAsset,
+        sourceAmount: amount.toFixed(7),
+        effectiveSourceAmount: amount.toFixed(7),
+        destinationAmount: (amount * rate).toFixed(7),
+        destinationMin: (amount * rate * 0.98).toFixed(7),
+        platformFee: { enabled: false, feeAmount: '0', feeAssetCode: source, feeBps: 30 },
+        networkFeeXlm: '0.0000100',
+        path: [],
+      });
+    });
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns the full 4x4 matrix with 16 dynamically resolved cells', async () => {
+    const matrix = await ConversionRateMatrixService.buildMatrix();
+
+    expect(matrix.assets).toEqual(['BRL', 'USDC', 'CETES', 'XLM']);
+    expect(matrix.cells).toHaveLength(16);
+    expect(matrix.summary.total_pairs).toBe(16);
+    expect(matrix.summary.unavailable_pairs).toBe(0);
+    expect(matrix.matrix.BRL.USDC.rate).toBeCloseTo(0.2, 10);
+    expect(matrix.matrix.USDC.BRL.rate).toBeCloseTo(5, 10);
+    expect(matrix.matrix.XLM.CETES.status).toBe('synthetic');
+    expect(matrix.matrix.XLM.CETES.bridge_asset_code).toBe('USDC');
+    expect(matrix.matrix.XLM.CETES.rate).toBeCloseTo(2, 10);
+    expect(matrix.matrix.BRL.BRL.status).toBe('same_asset');
+  });
+
+  it('uses a dynamic market fallback when the configured BRL/USDC path is rejected', async () => {
+    quoteBrlToUsdcMock.mockRejectedValueOnce(new Error('distorted testnet quote'));
+    getUsdBrlRateMock.mockResolvedValueOnce({
+      brlPerUsd: 5.25,
+      source: 'market:awesomeapi:USD-BRL',
+      fetchedAt: '2026-06-02T13:00:00.000Z',
+      fallbackApplied: false,
+    });
+
+    const matrix = await ConversionRateMatrixService.buildMatrix({ assets: ['BRL', 'USDC'], sampleAmount: 100 });
+
+    expect(matrix.cells).toHaveLength(4);
+    expect(matrix.matrix.BRL.USDC.status).toBe('fallback');
+    expect(matrix.matrix.BRL.USDC.source).toBe('market:awesomeapi:USD-BRL');
+    expect(matrix.matrix.BRL.USDC.rate).toBeCloseTo(1 / 5.25, 8);
+    expect(matrix.matrix.BRL.USDC.legs?.[0]).toContain('stellar_error:distorted testnet quote');
+  });
+});

@@ -106,7 +106,7 @@ describe('DefindexYieldService', () => {
     expect(runtime.execution_blocked_reason).toBeUndefined();
   });
 
-  it('keeps execution disabled until compliance approval is explicit', () => {
+  it('enables testnet execution without separate compliance approval when explicitly requested', () => {
     clearDefindexVaultEnv();
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.DEFINDEX_API_KEY = 'sk_test';
@@ -121,11 +121,11 @@ describe('DefindexYieldService', () => {
       network: 'testnet',
       stellar_network: 'testnet',
       execution_requested: true,
-      execution_enabled: false,
-      compliance_approved: false,
-      compliance_mode: 'review_only',
+      execution_enabled: true,
+      compliance_approved: true,
+      compliance_mode: 'approved_execution',
     });
-    expect(runtime.execution_blocked_reason).toContain('DEFINDEX_COMPLIANCE_APPROVED=true');
+    expect(runtime.execution_blocked_reason).toBeUndefined();
   });
 
   it('does not enable mainnet execution from the general execution flag alone', () => {

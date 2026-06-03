@@ -71,10 +71,22 @@ function hasTrustedProxySecret(req: Request): boolean {
 
 function normalizeSessionSource(value: unknown): string {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'telegram') return 'telegram';
-  if (normalized === 'whatsapp' || normalized === 'phone') return 'whatsapp';
-  if (normalized === 'web' || normalized === 'browser' || normalized === 'chat') return 'web';
+  if (normalized === 'telegram' || normalized.includes('telegram')) return 'telegram';
+  if (
+    normalized === 'whatsapp' ||
+    normalized === 'phone' ||
+    normalized === 'evolution' ||
+    normalized === 'whatsapp_evolution' ||
+    normalized === 'whatsapp-evolution' ||
+    normalized.includes('whatsapp')
+  ) return 'whatsapp';
+  if (normalized === 'web' || normalized === 'browser' || normalized === 'chat' || normalized === 'chat_link') return 'web';
   return normalized;
+}
+
+function isExternalSessionSource(value: unknown): boolean {
+  const source = normalizeSessionSource(value);
+  return source === 'whatsapp' || source === 'telegram';
 }
 
 function sourceFromUrl(rawUrl: string): string {
@@ -82,9 +94,14 @@ function sourceFromUrl(rawUrl: string): string {
     const url = new URL(rawUrl);
     return normalizeSessionSource(
       url.searchParams.get('provider') ||
-      url.searchParams.get('source') ||
+      url.searchParams.get('session_scope') ||
+      url.searchParams.get('sessionScope') ||
+      url.searchParams.get('session_source') ||
+      url.searchParams.get('sessionSource') ||
       url.searchParams.get('external_source') ||
       url.searchParams.get('channel') ||
+      url.searchParams.get('source') ||
+      url.searchParams.get('from') ||
       ''
     );
   } catch {
@@ -213,16 +230,34 @@ export class ShortLinkController {
         .eq('session_id', record.session_id)
         .maybeSingle();
 
-      if (error || !session?.session_token || isSessionExpired(session)) {
+      const sessionSource = await resolveSessionSource(String(session?.session_id || record.session_id || ''), record.url);
+
+      if (error || !session?.session_token) {
         return res.status(200).json({
           success: true,
           url: record.url,
           purpose: record.purpose || null,
-          session_source: await resolveSessionSource(String(record.session_id || ''), record.url) || null,
+          session_source: sessionSource || null,
         });
       }
 
-      const sessionSource = await resolveSessionSource(String(session.session_id || record.session_id || ''), record.url);
+      const expiredSession = isSessionExpired(session);
+      if (expiredSession && !isExternalSessionSource(sessionSource)) {
+        return res.status(200).json({
+          success: true,
+          url: record.url,
+          purpose: record.purpose || null,
+          session_source: sessionSource || null,
+        });
+      }
+
+      if (expiredSession && isExternalSessionSource(sessionSource)) {
+        const now = new Date().toISOString();
+        await supabase
+          .from('agent_sessions')
+          .update({ last_activity: now, updated_at: now })
+          .eq('session_id', String(session.session_id || record.session_id || ''));
+      }
 
       return res.status(200).json({
         success: true,

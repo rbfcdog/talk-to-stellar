@@ -79,4 +79,127 @@ describe("/api/chat channel-scoped sessions", () => {
     expect(cookies).toContain("tts_session_token_whatsapp=whatsapp-token");
     expect(cookies).not.toContain("tts_session_id=whatsapp-session");
   });
+
+  it("keeps the web chat on the web cookie even when WhatsApp cookies also exist", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        session_id: "web-session",
+        message: "web ok",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any,
+    );
+
+    const request = new Request("https://app.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: [
+          "tts_session_id=web-session",
+          "tts_session_token=web-token",
+          "tts_session_source=web",
+          "tts_session_id_whatsapp=whatsapp-session",
+          "tts_session_token_whatsapp=whatsapp-token",
+          "tts_session_source_whatsapp=whatsapp",
+        ].join("; "),
+      },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "olaa" }],
+        session_id: "stored-web-session",
+        source: "web",
+        language: "pt-BR",
+        metadata: {
+          browser_id: "web-browser-id",
+          source: "web",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+    const cookies = setCookieHeaders(response).join("\n");
+
+    expect(payload).toMatchObject({
+      content: "web ok",
+      session_id: "web-session",
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/agent/query");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toMatchObject({
+      "X-Session-Id": "web-session",
+      "X-Session-Token": "web-token",
+    });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      query: "olaa",
+      session_id: "web-session",
+      session_token: "web-token",
+      source: "web",
+      metadata: {
+        source: "web",
+      },
+    });
+    expect(cookies).not.toContain("tts_session_id_whatsapp=");
+    expect(cookies).not.toContain("tts_session_id=whatsapp-session");
+  });
+
+  it("does not log out web chat when a legacy common source cookie says WhatsApp", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        session_id: "web-session",
+        message: "web still ok",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any,
+    );
+
+    const request = new Request("https://app.test/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: [
+          "tts_session_id=web-session",
+          "tts_session_token=web-token",
+          "tts_session_source=whatsapp",
+          "tts_session_id_whatsapp=whatsapp-session",
+          "tts_session_token_whatsapp=whatsapp-token",
+          "tts_session_source_whatsapp=whatsapp",
+        ].join("; "),
+      },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "saldo" }],
+        session_id: "stored-web-session",
+        source: "web",
+        language: "pt-BR",
+        metadata: {
+          browser_id: "web-browser-id",
+          source: "web",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(payload).toMatchObject({
+      content: "web still ok",
+      session_id: "web-session",
+      success: true,
+    });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toMatchObject({
+      "X-Session-Id": "web-session",
+      "X-Session-Token": "web-token",
+    });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      session_id: "web-session",
+      session_token: "web-token",
+      source: "web",
+    });
+  });
 });

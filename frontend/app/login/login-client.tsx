@@ -11,6 +11,7 @@ import { useLanguage } from "@/lib/i18n"
 import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { trackUserResearchEvent } from "@/lib/user-research"
 
 declare global {
   interface Window {
@@ -119,6 +120,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const { language, t } = useLanguage()
   const searchParams = useSearchParams()
   const requestedAuthMethod = PASSKEY_LOGIN_ENABLED ? String(searchParams.get("auth") || "").trim().toLowerCase() : ""
+  const passkeyPairIdFromQuery = String(searchParams.get("pair") || "").trim()
+  const isPasskeyPhoneCodeMode = PASSKEY_LOGIN_ENABLED && Boolean(passkeyPairIdFromQuery) && (
+    requestedAuthMethod === "passkey-code" ||
+    searchParams.get("phone_code") === "1"
+  )
   const emailFromQuery = String(searchParams.get("email") || "").trim()
   const rawNextPath = String(searchParams.get("next") || "").trim()
   const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
@@ -152,6 +158,12 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
   const [googleLoginError, setGoogleLoginError] = useState("")
   const [googleScriptReady, setGoogleScriptReady] = useState(false)
+  const [passkeyPairId, setPasskeyPairId] = useState("")
+  const [passkeyPairCode, setPasskeyPairCode] = useState("")
+  const [passkeyPairCodeInput, setPasskeyPairCodeInput] = useState("")
+  const [passkeyPairCodeExpiresAt, setPasskeyPairCodeExpiresAt] = useState("")
+  const [passkeyPairStatus, setPasskeyPairStatus] = useState<"idle" | "authenticating" | "ready" | "redeeming" | "error">("idle")
+  const [passkeyPairError, setPasskeyPairError] = useState("")
   const actionLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
@@ -174,6 +186,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   function finishLogin(accountLabel?: string) {
     const label = String(accountLabel || externalResolvedLogin || email.trim() || "user").trim()
+    trackUserResearchEvent({
+      eventName: "login_completed",
+      eventGroup: "Acesso",
+      taskLabel: "Entrou na conta",
+      status: "success",
+      metadata: {
+        login_source: loginSource || "web",
+        external_provider: externalProvider || null,
+        account_label_masked: maskLoginEmail(label),
+        passkey_code_flow: Boolean(isPasskeyPhoneCodeMode || passkeyPairCodeInput),
+      },
+      dedupeKey: `login_completed:${loginSource || externalProvider || "web"}:${Date.now()}`,
+    })
     enqueueWebChatFeedback(language === "pt-BR"
       ? `Login concluído.\nConta conectada: ${label}`
       : `Sign-in completed.\nConnected account: ${label}`)
@@ -219,6 +244,11 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }, [emailFromQuery])
 
   useEffect(() => {
+    if (isPasskeyPhoneCodeMode) return
+    setPasskeyPairId(generateBrowserId().replace(/-/g, ""))
+  }, [isPasskeyPhoneCodeMode])
+
+  useEffect(() => {
     const resolvedLogin = extractResolvedLogin(externalPayload)
     if (!resolvedLogin) return
     setExternalResolvedLogin(resolvedLogin)
@@ -243,15 +273,19 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const mobileRedirectUrl = useMemo(() => {
     if (!PASSKEY_LOGIN_ENABLED) return ""
     if (typeof window === "undefined") return ""
+    if (isPasskeyPhoneCodeMode) return ""
     const normalizedEmail = email.trim()
     if (!normalizedEmail) return ""
+    if (!passkeyPairId) return ""
     const url = new URL(`${window.location.origin}/login`)
-    url.searchParams.set("auth", "passkey")
+    url.searchParams.set("auth", "passkey-code")
+    url.searchParams.set("phone_code", "1")
+    url.searchParams.set("pair", passkeyPairId)
     url.searchParams.set("email", normalizedEmail)
     if (nextPath) url.searchParams.set("next", nextPath)
-    if (externalToken) url.searchParams.set("token", externalToken)
+    if (language) url.searchParams.set("lang", language)
     return url.toString()
-  }, [email, nextPath, externalToken])
+  }, [email, nextPath, passkeyPairId, isPasskeyPhoneCodeMode, language])
 
   const qrImageUrl = useMemo(() => {
     if (!qrTargetUrl) return ""
@@ -551,8 +585,146 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     }
   }
 
+  async function handlePhonePasskeyCode(attempt = 0) {
+    if (actionLockRef.current) return
+    if (!passkeyPairIdFromQuery) {
+      setPasskeyPairStatus("error")
+      setPasskeyPairError(language === "pt-BR" ? "QR inválido. Gere um novo QR no computador." : "Invalid QR. Generate a new QR on the computer.")
+      return
+    }
+    if (!email.trim()) {
+      setPasskeyPairStatus("error")
+      setPasskeyPairError(language === "pt-BR" ? "Informe seu e-mail para validar a passkey." : "Enter your email to validate the passkey.")
+      return
+    }
+    if (!window.PublicKeyCredential) {
+      setPasskeyPairStatus("error")
+      setPasskeyPairError(language === "pt-BR" ? "Este navegador não suporta Passkey/WebAuthn." : "This browser does not support Passkey/WebAuthn.")
+      return
+    }
+
+    actionLockRef.current = true
+    setPasskeyPairStatus("authenticating")
+    setPasskeyPairError("")
+    setPasskeyPairCode("")
+
+    try {
+      const initRes = await fetch(`/api/passkeys/auth-init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      const initPayload = await initRes.json().catch(() => ({}))
+      if (!initRes.ok || !initPayload.success) {
+        throw new Error(initPayload.message || "Failed to start Passkey.")
+      }
+      if (initPayload.registrationRequired) {
+        throw new Error("registrationRequired")
+      }
+
+      const credential = await startAuthentication({ optionsJSON: initPayload.options })
+      const completeRes = await fetch(`/api/passkeys/auth-complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: initPayload.userId,
+          challenge_id: initPayload.challengeId,
+          credential,
+        }),
+      })
+      const completePayload = await completeRes.json().catch(() => ({}))
+      if (!completeRes.ok || !completePayload.success) {
+        const serverMessage = String(completePayload?.message || "")
+        if (attempt < 1 && isPasskeyChallengeExpiredMessage(serverMessage)) {
+          actionLockRef.current = false
+          await handlePhonePasskeyCode(attempt + 1)
+          return
+        }
+        throw new Error(completePayload.message || "Failed to complete Passkey.")
+      }
+
+      saveClientSession()
+      localStorage.setItem("talk-to-stellar.userName", email.trim())
+
+      const codeRes = await fetch("/api/passkeys/login-code/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pair_id: passkeyPairIdFromQuery,
+          user_id: initPayload.userId,
+          email,
+        }),
+      })
+      const codePayload = await codeRes.json().catch(() => ({}))
+      if (!codeRes.ok || !codePayload.success || !codePayload.code) {
+        throw new Error(codePayload.message || "Could not generate the computer login code.")
+      }
+
+      setPasskeyPairCode(String(codePayload.code))
+      setPasskeyPairCodeExpiresAt(String(codePayload.expiresAt || ""))
+      setPasskeyPairStatus("ready")
+    } catch (err: any) {
+      const message = getPasskeyErrorMessage(err)
+      if (attempt < 1 && isPasskeyChallengeExpiredMessage(message)) {
+        actionLockRef.current = false
+        await handlePhonePasskeyCode(attempt + 1)
+        return
+      }
+      setPasskeyPairStatus("error")
+      setPasskeyPairError(message)
+    } finally {
+      actionLockRef.current = false
+    }
+  }
+
+  async function handleRedeemPhonePasskeyCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (actionLockRef.current) return
+    if (!passkeyPairId) {
+      setPasskeyPairError(language === "pt-BR" ? "Gere um novo QR de login." : "Generate a new login QR.")
+      return
+    }
+    const code = passkeyPairCodeInput.replace(/\D+/g, "").slice(0, 6)
+    if (code.length !== 6) {
+      setPasskeyPairError(language === "pt-BR" ? "Digite o código de 6 dígitos gerado no celular." : "Enter the 6-digit code generated on your phone.")
+      return
+    }
+
+    actionLockRef.current = true
+    setPasskeyPairStatus("redeeming")
+    setPasskeyPairError("")
+
+    try {
+      const response = await fetch("/api/passkeys/login-code/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pair_id: passkeyPairId,
+          code,
+          session_source: "web",
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || "Could not sign in with the phone code.")
+      }
+
+      saveClientSession()
+      const resolvedLogin = String(payload?.email || payload?.userId || email.trim() || "user").trim()
+      if (resolvedLogin) {
+        localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+      }
+      finishLogin(resolvedLogin)
+    } catch (err) {
+      actionLockRef.current = false
+      setPasskeyPairStatus("error")
+      setPasskeyPairError(err instanceof Error ? err.message : "Could not sign in with the phone code.")
+    }
+  }
+
   useEffect(() => {
     if (!PASSKEY_LOGIN_ENABLED) return
+    if (isPasskeyPhoneCodeMode) return
     if (isExternalLoginOnlyContext) return
     if (requestedAuthMethod !== "passkey") return
     if (passkeyAutoTriggerRef.current) return
@@ -564,7 +736,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     if (externalLinkUsed || actionLockRef.current || status === "pin" || status === "passkey") return
     passkeyAutoTriggerRef.current = true
     void handlePasskeyLogin()
-  }, [requestedAuthMethod, email, externalLinkUsed, status, isExternalLoginOnlyContext])
+  }, [requestedAuthMethod, email, externalLinkUsed, status, isExternalLoginOnlyContext, isPasskeyPhoneCodeMode])
 
   useEffect(() => {
     if (!GOOGLE_LOGIN_ENABLED) return
@@ -696,6 +868,80 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         }
       >
         <div />
+      </AuthShell>
+    )
+  }
+
+  if (isPasskeyPhoneCodeMode) {
+    const expiresLabel = passkeyPairCodeExpiresAt
+      ? new Date(passkeyPairCodeExpiresAt).toLocaleTimeString(language === "pt-BR" ? "pt-BR" : "en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : ""
+
+    return (
+      <AuthShell
+        title={language === "pt-BR" ? "Gerar código para o computador" : "Generate code for computer"}
+        description={
+          language === "pt-BR"
+            ? "Confirme sua passkey neste celular. Depois digite o código no computador para concluir o login."
+            : "Confirm your Passkey on this phone. Then enter the code on your computer to finish sign-in."
+        }
+      >
+        <div className="rounded-xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
+          <p className="font-bold">{language === "pt-BR" ? "Conta" : "Account"}</p>
+          {email.trim() ? (
+            <p className="mt-1 font-mono-financial text-tts-muted">{email.trim()}</p>
+          ) : (
+            <label className="mt-3 flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-tts-deep">{t("login_email")}</span>
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                placeholder="you@example.com"
+              />
+            </label>
+          )}
+        </div>
+
+        {passkeyPairCode ? (
+          <div className="rounded-2xl border border-tts-border bg-tts-surface p-5 text-center shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-tts-muted">
+              {language === "pt-BR" ? "Código para o computador" : "Computer code"}
+            </p>
+            <p className="mt-3 font-mono-financial text-5xl font-black tracking-[0.2em] text-tts-deep">
+              {passkeyPairCode}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-tts-muted">
+              {language === "pt-BR"
+                ? `Digite este código na tela de login do computador${expiresLabel ? ` até ${expiresLabel}` : ""}.`
+                : `Enter this code on the computer login screen${expiresLabel ? ` by ${expiresLabel}` : ""}.`}
+            </p>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              void handlePhonePasskeyCode()
+            }}
+            disabled={actionLockRef.current || passkeyPairStatus === "authenticating" || !email.trim()}
+            className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+          >
+            <Fingerprint className="mr-2 h-4 w-4" />
+            {passkeyPairStatus === "authenticating"
+              ? language === "pt-BR" ? "Confirmando passkey..." : "Confirming Passkey..."
+              : language === "pt-BR" ? "Usar passkey neste celular" : "Use Passkey on this phone"}
+          </Button>
+        )}
+
+        {passkeyPairError && (
+          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error" role="alert">
+            {passkeyPairError}
+          </p>
+        )}
       </AuthShell>
     )
   }
@@ -858,10 +1104,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         </div>
       )}
 
-      {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && (
+      {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && !isExternalLoginOnlyContext && (
         <div className="rounded-xl border border-tts-border bg-tts-bg p-4 text-xs text-tts-deep">
           <p className="font-bold">{t("login_passkey_qr_title")}</p>
-          <p className="mt-1 text-tts-muted">{t("login_passkey_qr_body")}</p>
+          <p className="mt-1 text-tts-muted">
+            {language === "pt-BR"
+              ? "Escaneie, use a passkey no celular e digite aqui o código gerado."
+              : "Scan it, use Passkey on your phone, and enter the generated code here."}
+          </p>
           <div className="mt-3 flex justify-center">
             <img
               src={qrImageUrl}
@@ -872,6 +1122,37 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           {qrTargetUrl && (
             <p className="mt-3 break-all font-mono-financial text-[10px] text-tts-muted">
               {qrTargetUrl}
+            </p>
+          )}
+          <form className="mt-4 grid gap-2" onSubmit={handleRedeemPhonePasskeyCode}>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-bold text-tts-deep">
+                {language === "pt-BR" ? "Código do celular" : "Phone code"}
+              </span>
+              <Input
+                value={passkeyPairCodeInput}
+                onChange={(event) => setPasskeyPairCodeInput(event.target.value.replace(/\D+/g, "").slice(0, 6))}
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                className="text-center font-mono-financial text-lg tracking-[0.18em]"
+                disabled={actionLockRef.current || passkeyPairStatus === "redeeming"}
+              />
+            </label>
+            <Button
+              type="submit"
+              disabled={actionLockRef.current || passkeyPairStatus === "redeeming" || passkeyPairCodeInput.length !== 6}
+              className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
+            >
+              <LogIn className="mr-2 h-4 w-4" />
+              {passkeyPairStatus === "redeeming"
+                ? language === "pt-BR" ? "Entrando..." : "Signing in..."
+                : language === "pt-BR" ? "Entrar com código do celular" : "Sign in with phone code"}
+            </Button>
+          </form>
+          {passkeyPairError && (
+            <p className="mt-3 rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error" role="alert">
+              {passkeyPairError}
             </p>
           )}
         </div>

@@ -13,9 +13,21 @@ describe("rendimentos channel PIN gate", () => {
     const routeText = source("../backend/src/api/routes/ramp.router.ts");
 
     expect(sessionText).toContain("externalPriority");
+    expect(text).toContain("currentPageSessionSource");
+    expect(text).toContain("externalSessionSource");
+    expect(text).toContain("scopedRampSource(preferredSource)");
+    expect(text).toContain("scopedRampPath");
+    expect(text).toContain("scopedRampInit");
+    expect(text).toContain('params.set("session_scope", source)');
+    expect(text).toContain("session_scope: payload.session_scope || source");
+    expect(text).toContain("fetch(`/api/ramp/${scopedRampPath(path, preferredSource)}`");
+    expect(text).toContain('yieldApi("session/verify-pin"');
+    expect(text).toContain("session.sessionSource");
+    expect(text).toContain('yieldApi("etherfuse/wallet-balances", undefined, 20000, session.sessionSource)');
+    expect(text).toContain("setReturnsPinVerified(true)");
+    expect(text).toContain("PIN validado. Não consegui atualizar os saldos agora");
     expect(text).toContain("requiresChannelPin");
     expect(text).toContain("!channelPinUnlocked");
-    expect(text).toContain('yieldApi("session/verify-pin"');
     expect(text).toContain("ChannelPinGate");
     expect(text).toContain("Acesso aberto pelo WhatsApp pede PIN antes de mostrar rendimentos.");
     expect(routeText).toContain("router.post('/session/verify-pin'");

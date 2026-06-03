@@ -68,6 +68,9 @@ const orderedMigrations = [
   '20260514_01_external_bank_accounts.sql',
   '20260515_00_email_confirmations.sql',
   '20260602_00_legacy_email_verification_backfill.sql',
+  '20260602_01_legacy_email_verification_null_created_backfill.sql',
+  '20260602_02_passkey_login_pairing_codes.sql',
+  '20260602_03_user_research_evidence.sql',
 ];
 
 function resolveExecutionList(): string[] {

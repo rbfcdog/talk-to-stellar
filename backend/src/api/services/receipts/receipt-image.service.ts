@@ -278,11 +278,7 @@ export class ReceiptImageService {
     const rawDescription = String(input.description || 'Transferência internacional');
     const description = compactReceiptMessage(rawDescription);
     const converted = fitText(`${input.convertedCurrency || 'R$'}${input.convertedAmount || '-'}`, 24);
-    const fee = fitText(String(input.feeLabel || '-'), 30);
     const quote = fitText(String(input.quoteLabel || '-'), 34);
-    const settlement = Number.isFinite(Number(input.settlementSeconds || 0))
-      ? `${Number(input.settlementSeconds || 0).toFixed(1)} segundos`
-      : 'confirmada';
     const dateLabel = fitText(formatDatePtBr(input.completedAt), 28);
     const savingsLabel = fitText(String(input.savingsLabel || 'R$ 0,00'), 18);
     const savingsPercentLabel = fitText(String(input.savingsPercentLabel || 'menor que métodos tradicionais'), 28);
@@ -319,9 +315,7 @@ export class ReceiptImageService {
     const lines = [
       ['Destinatário', recipient],
       ['Valor convertido', converted],
-      ['Taxa', fee],
       ['Cotação', quote],
-      ['Liquidação', settlement],
       ['Data', dateLabel],
       ['ID', opId],
     ];

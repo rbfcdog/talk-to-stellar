@@ -382,7 +382,7 @@ export class PaymentReceiptService {
 
   private static async buildSavingsFirstWhatsappReceipt(input: PaymentReceiptInput, viewerUrl?: string): Promise<string> {
     const type = String(input.type || '').trim();
-    if (type !== 'payment_sent' && type !== 'conversion' && type !== 'claim_redeemed') return '';
+    if (!this.shouldUseSavingsFirstExternalReceipt(input)) return '';
 
     const fee = await this.resolveFeeBreakdown(input);
     const grossBrl = this.estimateReceiptBrlAmount(input, fee);
@@ -462,6 +462,7 @@ export class PaymentReceiptService {
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
     const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
+    const showEconomics = this.shouldShowReceiptEconomics(input);
     const quoteLine = hasConversion
       ? buildUsedQuoteLabel({
           sourceAmount,
@@ -471,10 +472,10 @@ export class PaymentReceiptService {
         })
       : '';
     const fee = await this.resolveFeeBreakdown(input);
-    const feeLine = this.feeLine(fee);
-    const traditionalFeeLine = this.traditionalFeeLine(fee);
-    const settlementLine = this.settlementLine(input.settlementMs);
-    const savingsLine = this.savingsLine(input.savings, fee);
+    const feeLine = showEconomics ? this.feeLine(fee) : '';
+    const traditionalFeeLine = showEconomics ? this.traditionalFeeLine(fee) : '';
+    const settlementLine = showEconomics ? this.settlementLine(input.settlementMs) : '';
+    const savingsLine = showEconomics ? this.savingsLine(input.savings, fee) : '';
     const timeLine = this.timeLine(input.completedAt);
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = this.statusLabel(input.status);
@@ -548,9 +549,11 @@ export class PaymentReceiptService {
   private static async cumulativeSavingsLine(input: PaymentReceiptInput): Promise<string> {
     const type = String(input.type || '').trim();
     const shouldShow =
+      this.shouldShowReceiptEconomics(input) && (
       type === 'payment_sent' ||
       type === 'claim_redeemed' ||
-      type === 'conversion';
+      type === 'conversion'
+      );
     if (!shouldShow) return '';
 
     try {
@@ -661,6 +664,38 @@ export class PaymentReceiptService {
       (text.includes('pix') && text.includes('confirmado')) ||
       input.quote?.direction === 'onramp'
     );
+  }
+
+  private static isPixLikeReceipt(input: PaymentReceiptInput): boolean {
+    const text = [
+      input.counterpartyLabel,
+      input.contextMessage,
+      input.quote?.provider,
+      input.quote?.rail,
+      input.quote?.direction,
+    ].map((value) => String(value || '').toLowerCase()).join(' ');
+
+    return (
+      text.includes('pix') ||
+      text.includes('banco') ||
+      text.includes('offramp') ||
+      text.includes('onramp') ||
+      input.quote?.direction === 'offramp' ||
+      input.quote?.direction === 'onramp'
+    );
+  }
+
+  private static shouldShowReceiptEconomics(input: PaymentReceiptInput): boolean {
+    const type = String(input.type || '').trim();
+    if (type === 'payment_sent') return this.isPixLikeReceipt(input);
+    if (type === 'payment_received') return this.isPixOnRampReceipt(input);
+    return type === 'conversion' || type === 'claim_redeemed';
+  }
+
+  private static shouldUseSavingsFirstExternalReceipt(input: PaymentReceiptInput): boolean {
+    const type = String(input.type || '').trim();
+    if (this.isPixOnRampReceipt(input)) return true;
+    return type === 'conversion' || type === 'claim_redeemed';
   }
 
   private static inferPixOnRampFeeBrl(input: PaymentReceiptInput): number {
@@ -859,10 +894,8 @@ export class PaymentReceiptService {
     };
   }
 
-  private static settlementLine(settlementMs?: number | null): string {
-    const ms = Number(settlementMs || 0);
-    if (!Number.isFinite(ms) || ms <= 0) return 'Liquidação: confirmada';
-    return `Liquidação: ${(ms / 1000).toFixed(1)}s`;
+  private static settlementLine(_settlementMs?: number | null): string {
+    return 'Liquidação: confirmada';
   }
 
   private static timeLine(completedAt?: string | null): string {

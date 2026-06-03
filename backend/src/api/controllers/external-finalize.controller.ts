@@ -876,17 +876,11 @@ async function sendTelegramPaymentNotification(input: {
     const sourceLabel = input.sourceAmount && input.sourceAssetCode && input.sourceAssetCode !== input.assetCode
       ? formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)
       : '';
-    const feeLabel = String(feeDisplay?.display || '').trim();
-    const settlementLabel = Number.isFinite(Number(input.settlementMs || 0)) && Number(input.settlementMs || 0) > 0
-      ? `${(Number(input.settlementMs) / 1000).toFixed(1)}s`
-      : '';
     const externalDeliveryText = [
       'Pagamento concluido.',
       sourceLabel ? `Origem: ${sourceLabel}` : '',
       `Valor: ${amountLabel}`,
       `Destino: ${readableDestination || 'destinatario'}`,
-      feeLabel ? `Taxa: ${feeLabel}` : '',
-      settlementLabel ? `Liquidacao: ${settlementLabel}` : '',
     ].filter(Boolean).join('\n');
 
     return await PaymentReceiptService.sendReceipt({
@@ -936,16 +930,10 @@ async function sendTelegramConversionNotification(input: {
 }): Promise<string> {
   try {
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
-    const feeLabel = String(feeDisplay?.display || '').trim();
-    const settlementLabel = Number.isFinite(Number(input.settlementMs || 0)) && Number(input.settlementMs || 0) > 0
-      ? `${(Number(input.settlementMs) / 1000).toFixed(1)}s`
-      : '';
     const externalDeliveryText = [
       'Conversao concluida.',
       `De: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}`,
       `Para: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}`,
-      feeLabel ? `Taxa: ${feeLabel}` : '',
-      settlementLabel ? `Liquidacao: ${settlementLabel}` : '',
     ].filter(Boolean).join('\n');
 
     return await PaymentReceiptService.sendReceipt({
@@ -1021,6 +1009,36 @@ async function ensureDestinationCanReceiveAsset(input: {
   if (!trustlineResult.success) {
     throw new Error(`Não consegui ativar recebimento em ${input.assetCode} para o destinatário: ${trustlineResult.error || 'erro desconhecido'}`);
   }
+}
+
+function recipientAssetNotReadyMessage(input: {
+  rawError?: unknown;
+  assetCode: string;
+  destinationName?: string;
+}) {
+  const assetCode = String(input.assetCode || 'ativo').trim().toUpperCase();
+  const destinationName = String(input.destinationName || '').trim();
+  const recipient = destinationName && !isValidStellarPublicKey(destinationName)
+    ? destinationName
+    : 'O destinatário';
+  return `${recipient} ainda não pode receber ${assetCode}. Peça para a pessoa entrar na conta TalkToStellar e ativar esse ativo; depois gere um novo link de pagamento.`;
+}
+
+function paymentSubmissionFailedMessage(input: {
+  rawError?: unknown;
+  assetCode: string;
+  amount: string;
+  destinationName?: string;
+}) {
+  const raw = input.rawError instanceof Error
+    ? input.rawError.message
+    : String(input.rawError || '').trim();
+  if (raw) return raw;
+  const destinationName = String(input.destinationName || '').trim();
+  const destination = destinationName && !isValidStellarPublicKey(destinationName)
+    ? ` para ${destinationName}`
+    : '';
+  return `Falha ao enviar a transação Stellar${destination}. Nenhum valor saiu da conta. Gere uma nova confirmação e tente novamente.`;
 }
 
 async function hashPaymentToken(token: string): Promise<string> {
@@ -2226,13 +2244,28 @@ export default class ExternalFinalizeController {
           // ignore lookup errors; destination may be external
         }
 
-        await ensureDestinationCanReceiveAsset({
-          destination: resolvedDestination,
-          destinationWallet,
-          assetCode,
-          assetIssuer,
-          userId: String(session.user_id),
-        });
+        try {
+          await ensureDestinationCanReceiveAsset({
+            destination: resolvedDestination,
+            destinationWallet,
+            assetCode,
+            assetIssuer,
+            userId: String(session.user_id),
+          });
+        } catch (assetReadinessError) {
+          const message = recipientAssetNotReadyMessage({
+            rawError: assetReadinessError,
+            assetCode,
+            destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name,
+          });
+          logger.warn(`[external-finalize] destination asset readiness failed: sessionId=${session_id}, dest=${resolvedDestination}, asset=${assetCode}, error=${assetReadinessError instanceof Error ? assetReadinessError.message : String(assetReadinessError)}`);
+          return res.status(409).json({
+            success: false,
+            code: 'recipient_asset_not_ready',
+            error: message,
+            message,
+          });
+        }
 
         const destinationAsset = { code: assetCode, issuer: assetIssuer };
         const minimumReserve = 1.5;
@@ -2573,12 +2606,20 @@ export default class ExternalFinalizeController {
             }
           );
 
-          logger.error(`[external-finalize] Payment failed: sessionId=${session_id}, error=${result.error}, dest=${resolvedDestination}`);
+          const message = paymentSubmissionFailedMessage({
+            rawError: result.error,
+            assetCode,
+            amount: String(amount),
+            destinationName: destinationDisplayName || destination_contact?.contact_name || destination_name,
+          });
+
+          logger.error(`[external-finalize] Payment failed: sessionId=${session_id}, error=${message}, dest=${resolvedDestination}`);
 
           return res.status(400).json({
             success: false,
-            error: result.error || 'Não foi possível enviar o pagamento.',
-            message: result.error || 'Não foi possível enviar o pagamento.',
+            code: 'stellar_payment_submit_failed',
+            error: message,
+            message,
           });
         }
 

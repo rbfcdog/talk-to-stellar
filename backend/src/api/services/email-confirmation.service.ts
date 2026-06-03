@@ -17,6 +17,8 @@ export type EmailMessage = {
 
 type EmailProvider = 'ses' | 'resend' | 'sendgrid' | 'webhook';
 
+const LEGACY_EMAIL_VERIFICATION_CUTOFF_MS = Date.parse('2026-06-02T16:40:00Z');
+
 type RequireVerifiedInput = {
   email?: string | null;
   purpose: EmailConfirmationPurpose;
@@ -116,6 +118,21 @@ function maskEmail(email: string): string {
   const first = local.slice(0, 1);
   const last = local.length > 2 ? local.slice(-1) : '';
   return `${first}${'*'.repeat(Math.max(2, local.length - 2))}${last}@${domain}`;
+}
+
+function isLegacyEmailVerifiedRow(row: any): boolean {
+  if (row?.email_verified === true) return true;
+
+  const source = String(row?.email_verification_source || '').trim().toLowerCase();
+  if (source.startsWith('legacy_backfill_20260602')) return true;
+
+  const createdAt = Date.parse(String(row?.created_at || ''));
+  if (Number.isFinite(createdAt) && createdAt > 0 && createdAt < LEGACY_EMAIL_VERIFICATION_CUTOFF_MS) {
+    return true;
+  }
+
+  const updatedAt = Date.parse(String(row?.updated_at || ''));
+  return Number.isFinite(updatedAt) && updatedAt > 0 && updatedAt < LEGACY_EMAIL_VERIFICATION_CUTOFF_MS;
 }
 
 function isMissingTableError(error: any): boolean {
@@ -550,7 +567,7 @@ export class EmailConfirmationService {
     const sessionId = String(input.sessionId || '').trim();
     const userId = normalizeEmail(input.userId);
 
-    const select = 'session_id, user_id, email, email_verified, email_verified_at, email_verification_source';
+    const select = 'session_id, user_id, email, email_verified, email_verified_at, email_verification_source, created_at, updated_at';
     try {
       const candidates: any[] = [];
 
@@ -605,7 +622,7 @@ export class EmailConfirmationService {
         candidates.push(...(byUserId.data || []));
       }
 
-      return candidates.some((row) => row?.email_verified === true);
+      return candidates.some((row) => isLegacyEmailVerifiedRow(row));
     } catch (error) {
       logger.warn(`[email-confirmation] could not read account email verification state: ${String((error as any)?.message || error)}`);
       return false;

@@ -1,8 +1,10 @@
 import { EmailConfirmationService } from '../src/api/services/email-confirmation.service';
+import { supabase } from '../src/config/supabase';
 
 describe('EmailConfirmationService', () => {
   const originalEnv = { ...process.env };
   const fetchMock = jest.fn();
+  const defaultSupabaseFrom = (supabase.from as jest.Mock).getMockImplementation();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,6 +33,7 @@ describe('EmailConfirmationService', () => {
     process.env.EMAIL_CONFIRMATION_ALLOW_DEV_CODE = 'false';
     process.env.EMAIL_CONFIRMATION_COOLDOWN_SECONDS = '0';
     process.env.EMAIL_FROM = 'TalkToStellar <no-reply@talktostellar.com>';
+    (supabase.from as jest.Mock).mockImplementation(defaultSupabaseFrom as any);
   });
 
   afterAll(() => {
@@ -110,6 +113,52 @@ describe('EmailConfirmationService', () => {
     expect(body.Content.Simple.Body.Text.Data).toContain(result.devCode);
   });
 
+  it('treats pre-cutoff sessions as already verified legacy accounts', async () => {
+    (supabase.from as jest.Mock).mockImplementation((table: string) => {
+      expect(table).toBe('agent_sessions');
+      return createSupabaseSelectChain([
+        {
+          session_id: 'legacy-session',
+          user_id: 'legacy@example.com',
+          email: 'legacy@example.com',
+          email_verified: false,
+          email_verification_source: null,
+          created_at: '2026-06-01T12:00:00Z',
+          updated_at: '2026-06-01T12:00:00Z',
+        },
+      ]);
+    });
+
+    await expect(EmailConfirmationService.isAccountEmailVerified({
+      email: 'legacy@example.com',
+      sessionId: 'legacy-session',
+      userId: 'legacy@example.com',
+    })).resolves.toBe(true);
+  });
+
+  it('treats legacy backfill source as verified even when the row was updated later', async () => {
+    (supabase.from as jest.Mock).mockImplementation((table: string) => {
+      expect(table).toBe('agent_sessions');
+      return createSupabaseSelectChain([
+        {
+          session_id: 'legacy-session',
+          user_id: 'legacy@example.com',
+          email: 'legacy@example.com',
+          email_verified: false,
+          email_verification_source: 'legacy_backfill_20260602_external_channel',
+          created_at: '2026-06-02T16:50:00Z',
+          updated_at: '2026-06-02T16:50:00Z',
+        },
+      ]);
+    });
+
+    await expect(EmailConfirmationService.isAccountEmailVerified({
+      email: 'legacy@example.com',
+      sessionId: 'legacy-session',
+      userId: 'legacy@example.com',
+    })).resolves.toBe(true);
+  });
+
   it('fails closed in production-like environments when no provider is configured', async () => {
     process.env.NODE_ENV = 'production';
     process.env.EMAIL_CONFIRMATION_ENABLED = 'true';
@@ -125,3 +174,15 @@ describe('EmailConfirmationService', () => {
     });
   });
 });
+
+function createSupabaseSelectChain(rows: any[]) {
+  const builder: any = {};
+  const chain = () => builder;
+  ['select', 'eq', 'order', 'limit'].forEach((method) => {
+    builder[method] = jest.fn(chain);
+  });
+  builder.then = (onFulfilled: any, onRejected: any) => (
+    Promise.resolve({ data: rows, error: null }).then(onFulfilled, onRejected)
+  );
+  return builder;
+}

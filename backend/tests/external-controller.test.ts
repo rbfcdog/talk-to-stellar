@@ -15,6 +15,7 @@ jest.mock('../src/api/services/core/external.service', () => ({
 	    checkExternalAccount: checkExternalAccountMock,
 	    createOnboardUrl: createOnboardUrlMock,
 	    createOnboardUrlWithShortLink: createOnboardUrlMock,
+	    createLoginUrlWithShortLink: createOnboardUrlMock,
 	  })),
 	}));
 
@@ -91,7 +92,9 @@ describe('ExternalController', () => {
 
     expect(checkExternalAccountMock).toHaveBeenCalledWith('telegram', '555');
     expect(getWalletBySessionMock).toHaveBeenCalledWith('session-123');
-	    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555', {});
+	    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555', expect.objectContaining({
+      source: 'telegram',
+    }));
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({

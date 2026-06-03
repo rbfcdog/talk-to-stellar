@@ -121,6 +121,35 @@ export default class PasskeyController {
     }
   }
 
+  static async loginCodeCreate(req: Request, res: Response) {
+    try {
+      const result = await PasskeyService.createLoginPairingCode({
+        pairId: String(req.body?.pair_id || req.body?.pairId || ''),
+        sessionId: readSessionId(req),
+        sessionToken: readSessionToken(req),
+        userId: req.body?.user_id ? String(req.body.user_id) : undefined,
+        email: req.body?.email ? String(req.body.email) : undefined,
+      });
+
+      return res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      return res.status(passkeyErrorStatus(error)).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
+  static async loginCodeRedeem(req: Request, res: Response) {
+    try {
+      const result = await PasskeyService.redeemLoginPairingCode({
+        pairId: String(req.body?.pair_id || req.body?.pairId || ''),
+        code: String(req.body?.code || ''),
+      });
+
+      return res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      return res.status(passkeyErrorStatus(error)).json({ success: false, message: error?.message || String(error) });
+    }
+  }
+
   static async smartAccountStatus(req: Request, res: Response) {
     try {
       const authorization = await PasskeyService.authorizeRegistration({

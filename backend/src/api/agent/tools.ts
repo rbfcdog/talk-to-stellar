@@ -430,6 +430,14 @@ function buildFrontendInterfaceUrl(input: {
   return url.toString();
 }
 
+function normalizeToolSessionScope(value: unknown): 'whatsapp' | 'telegram' | '' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized.includes('telegram')) return 'telegram';
+  if (normalized.includes('whatsapp') || normalized.includes('evolution') || normalized === 'phone') return 'whatsapp';
+  return '';
+}
+
 async function shortenYieldUrl(rawUrl: string, purpose: string, sessionId?: string): Promise<string> {
   if (!sessionId) return rawUrl;
   try {
@@ -448,7 +456,9 @@ function buildYieldFrontendUrl(input: {
   amount?: unknown;
   assetCode?: unknown;
   language?: 'pt-BR' | 'en';
+  sessionScope?: unknown;
 }): string {
+  const sessionScope = normalizeToolSessionScope(input.sessionScope);
   return buildFrontendInterfaceUrl({
     path: '/rendimentos',
     params: {
@@ -458,6 +468,7 @@ function buildYieldFrontendUrl(input: {
       asset: frontendAssetCode(input.assetCode || 'USDC'),
       advanced: '1',
       from: 'chat',
+      session_scope: sessionScope,
       lang: input.language || 'pt-BR',
     },
   });
@@ -494,14 +505,16 @@ function buildMoneyInterfaceUrl(input: {
   assetCode?: unknown;
   destinationPixKey?: unknown;
   language?: 'pt-BR' | 'en';
+  sessionScope?: unknown;
 }): string {
   const action = normalizeMoneyInterfaceAction(input.action);
   const asset = frontendAssetCode(input.assetCode || 'BRL');
   const amount = String(input.amount || '').trim();
   const language = input.language || 'pt-BR';
+  const sessionScope = normalizeToolSessionScope(input.sessionScope);
 
   if (action === 'keep') {
-    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language });
+    return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language, sessionScope });
   }
 
   if (action === 'send_out') {
@@ -515,6 +528,7 @@ function buildMoneyInterfaceUrl(input: {
         source_amount: amount,
         destination_pix_key: input.destinationPixKey,
         from: 'chat',
+        session_scope: sessionScope,
         autostart: amount ? '1' : '',
         lang: language,
       },
@@ -530,6 +544,7 @@ function buildMoneyInterfaceUrl(input: {
       amount,
       currency: 'BRL',
       from: 'chat',
+      session_scope: sessionScope,
       autostart: amount ? '1' : '',
       lang: language,
     },
@@ -2510,7 +2525,8 @@ async function executeGetYieldOptions(input: any): Promise<string> {
   try {
     const status = await AnchorService.getDefindexYieldStatus();
     const sessionId = String(input.session_id || '').trim() || undefined;
-    const rawUrl = buildYieldFrontendUrl({ language });
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
+    const rawUrl = buildYieldFrontendUrl({ language, sessionScope });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
     const options = (Array.isArray(status.vaults) ? status.vaults : []).map((option: any) => {
       const internalAssetCode = normalizeYieldAssetInput(option.asset_code || option.display_asset_code);
@@ -2560,12 +2576,14 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
     const action = normalizeMoneyInterfaceAction(input.action || input.intent || input.mode);
     const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'BRL');
     const sessionId = String(input.session_id || '').trim() || undefined;
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
     const rawUrl = buildMoneyInterfaceUrl({
       action,
       amount: input.amount,
       assetCode,
       destinationPixKey: input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey,
       language,
+      sessionScope,
     });
     const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
     const frontendUrl = await shortenYieldUrl(rawUrl, purpose, sessionId);
@@ -2648,7 +2666,8 @@ async function executeGetYieldBalance(input: any): Promise<string> {
   try {
     const assetCode = normalizeYieldAssetInput(input.asset_code || input.assetCode || input.currency || 'USDC');
     const sessionId = String(input.session_id || '').trim() || undefined;
-    const rawUrl = buildYieldFrontendUrl({ assetCode, language });
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
+    const rawUrl = buildYieldFrontendUrl({ assetCode, language, sessionScope });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
     const result: any = await AnchorService.getDefindexYieldBalanceForSession({
       ...input,
@@ -2691,7 +2710,8 @@ async function executePrepareYieldAction(input: any): Promise<string> {
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
     const actionText = yieldActionLabel(action, language);
     const sessionId = String(input.session_id || '').trim() || undefined;
-    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
+    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language, sessionScope });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
 
     return JSON.stringify({
@@ -2739,7 +2759,8 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
     const amount = String(result?.amount || input.amount || '').trim();
     const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
     const sessionId = String(input.session_id || '').trim() || undefined;
-    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language });
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
+    const rawUrl = buildYieldFrontendUrl({ action, amount, assetCode: result?.vault?.asset_code || assetCode, language, sessionScope });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
 
     return JSON.stringify({

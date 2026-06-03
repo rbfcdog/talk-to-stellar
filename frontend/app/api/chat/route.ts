@@ -33,10 +33,6 @@ const getAgentMessagesUrl = (sessionId: string, limit = 50) => {
   return queryUrl.toString();
 };
 
-const getExternalCheckAccountUrl = () => {
-  return `${getBackendBaseUrl()}/api/external/check-account`;
-};
-
 function isExpectedSessionAuthFailure(status: number, body: string): boolean {
   if (status === 401 || status === 403 || status === 410) return true;
   const normalized = String(body || "").toLowerCase();
@@ -46,38 +42,6 @@ function isExpectedSessionAuthFailure(status: number, body: string): boolean {
     normalized.includes("sessão expirou") ||
     normalized.includes("invalid or expired session")
   );
-}
-
-const WEB_SESSION_LOOKUP_TTL_MS = 5000;
-const webSessionLookupCache = new Map<string, { sessionId: string | null; expiresAt: number }>();
-
-async function resolveWebSessionId(browserId: string): Promise<string | null> {
-  if (!browserId) return null;
-
-  const cached = webSessionLookupCache.get(browserId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.sessionId;
-  }
-
-  const response = await fetch(getExternalCheckAccountUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider: "web",
-      provider_user_id: browserId,
-      lookup_only: true,
-    }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) return null;
-  const payload = await response.json().catch(() => ({}));
-  const sessionId = payload?.exists && payload?.sessionId ? String(payload.sessionId) : null;
-  webSessionLookupCache.set(browserId, {
-    sessionId,
-    expiresAt: Date.now() + WEB_SESSION_LOOKUP_TTL_MS,
-  });
-  return sessionId;
 }
 
 /**
@@ -113,18 +77,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const browserId = String(metadata?.browser_id || "").trim();
     const requestHasExternalPriority = isExternalPrioritySource(requestSource);
     const cookieHasExternalPriority = isExternalPrioritySource(session.sessionSource);
-    const linkedSessionId = requestHasExternalPriority ? null : await resolveWebSessionId(browserId).catch(() => null);
 
     // Browser links opened from WhatsApp/Telegram use a channel-scoped session.
     // A normal browser tab keeps using the web-scoped session.
     sessionId = requestHasExternalPriority
-      ? (session.sessionId || session_id || linkedSessionId || generateSessionId())
+      ? (session.sessionId || session_id || generateSessionId())
       : cookieHasExternalPriority
-        ? (session.sessionId || session_id || linkedSessionId || generateSessionId())
-        : (session.sessionId || linkedSessionId || session_id || generateSessionId());
+        ? (session.sessionId || session_id || generateSessionId())
+        : (session.sessionId || session_id || generateSessionId());
     const sessionTokenForSelectedSession =
       session.sessionId && session.sessionId === sessionId ? (session.sessionToken || "") : "";
     const forwardSessionHeaders =
@@ -221,7 +183,6 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("session_id");
-    const browserId = url.searchParams.get("browser_id") || "";
     const requestSource =
       url.searchParams.get("source") ||
       url.searchParams.get("provider") ||
@@ -236,13 +197,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "session_id is required" }, { status: 400 });
     }
 
-    const requestHasExternalPriority = isExternalPrioritySource(requestSource);
-    const linkedSessionId = requestHasExternalPriority ? null : await resolveWebSessionId(browserId).catch(() => null);
     const resolvedSessionId = (isExternalPrioritySource(requestSource)
-      ? (cookieSession.sessionId || sessionId || linkedSessionId)
+      ? (cookieSession.sessionId || sessionId)
       : isExternalPrioritySource(cookieSession.sessionSource)
-        ? (cookieSession.sessionId || sessionId || linkedSessionId)
-        : (cookieSession.sessionId || linkedSessionId || sessionId)) || sessionId;
+        ? (cookieSession.sessionId || sessionId)
+        : (cookieSession.sessionId || sessionId)) || sessionId;
 
     const messagesUrl = new URL(getAgentMessagesUrl(resolvedSessionId, Number(limit) || 50));
 

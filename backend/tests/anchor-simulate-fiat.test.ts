@@ -1,4 +1,7 @@
 import { AnchorService } from '../src/api/services/anchor.service';
+import { StellarService } from '../src/api/services/stellar.service';
+import { AgentRepository } from '../src/api/repository/core/agent.repository';
+import { WalletRepository } from '../src/api/repository/core/wallet.repository';
 
 describe('AnchorService sandbox PIX confirmation', () => {
   const originalEnv = { ...process.env };
@@ -98,7 +101,114 @@ describe('AnchorService sandbox PIX confirmation', () => {
     });
   });
 
-  it('completes sandbox PIX in ledger mode when TESOURO distributor secret is not configured', async () => {
+  it('keeps total BRL on-ramp fees on quotes that convert into non-BRL assets', () => {
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
+
+    const decorated = (AnchorService as any).decorateOnRampQuoteForFinalAsset({
+      quote: {
+        id: 'quote-xlm',
+        fromAmount: '100',
+        fromCurrency: 'BRL',
+        toAmount: '99.5',
+        toCurrency: 'TESOURO',
+        feeBps: '20',
+      },
+      sourceAmountBrl: '100',
+      finalAsset: { code: 'XLM' },
+    });
+
+    expect(decorated).toMatchObject({
+      finalConversionRequired: true,
+      finalConversionSourceAmount: '99.5',
+      userFacingToCurrency: 'XLM',
+      anchorProviderFeeAmount: '0.2',
+      talkToStellarFeeAmount: '0.3',
+      totalFeeAmount: '0.5',
+      totalFeeCurrency: 'BRL',
+    });
+  });
+
+  it('calculates the BRL PIX gross amount required for an exact non-BRL final asset', async () => {
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
+
+    jest.spyOn(StellarService, 'quotePathPayment').mockResolvedValue({
+      sourceAsset: { code: 'TESOURO', issuer: 'issuer-tesouro' },
+      destinationAsset: { code: 'XLM' },
+      destinationAmount: '100',
+      sourceAmount: '250',
+      sourceMax: '255',
+      pathSourceAmount: '250',
+      pathSourceMax: '255',
+      path: [],
+      networkFeeXlm: '0.00001',
+      platformFee: { enabled: false, feeAmount: '0', feeAssetCode: 'TESOURO', feeBps: 0 },
+    } as any);
+
+    const plan = await (AnchorService as any).resolveOnRampSourceAmountForExactFinalAsset({
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      finalAsset: { code: 'XLM' },
+      desiredFinalAmount: '100',
+      desiredFinalAssetCode: 'XLM',
+      sourceAmountBrl: '100',
+    });
+
+    expect(plan).toMatchObject({
+      sourceAmountBrl: '251.25',
+      finalConversionSourceAmount: '250',
+    });
+    expect(StellarService.quotePathPayment).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAsset: expect.objectContaining({ code: 'TESOURO' }),
+      destAsset: { code: 'XLM' },
+      destAmount: '100',
+    }));
+  });
+
+  it('refreshes an expired WhatsApp-scoped ramp session when the token is valid', async () => {
+    const expiredSession = {
+      session_id: 'session-1',
+      session_token: 'token-1',
+      user_id: 'user-1',
+      email: 'user@example.com',
+      public_key: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      last_activity: '2020-01-01T00:00:00.000Z',
+    };
+    const refreshedSession = {
+      ...expiredSession,
+      last_activity: new Date().toISOString(),
+    };
+    const getSessionSpy = jest.spyOn(AgentRepository.prototype, 'getSession')
+      .mockResolvedValueOnce(expiredSession as any)
+      .mockResolvedValueOnce(refreshedSession as any);
+    const saveSessionSpy = jest.spyOn(AgentRepository.prototype, 'saveSession').mockResolvedValue(undefined);
+    jest.spyOn(WalletRepository.prototype, 'getWalletBySession').mockResolvedValue({
+      session_id: 'session-1',
+      public_key: expiredSession.public_key,
+      vault_secret_id: 'vault-1',
+    } as any);
+
+    const context = await (AnchorService as any).resolveSessionWallet({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      session_scope: 'whatsapp',
+    });
+
+    expect(context).toMatchObject({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      publicKey: expiredSession.public_key,
+    });
+    expect(saveSessionSpy).toHaveBeenCalledWith('session-1', expect.objectContaining({
+      session_token: 'token-1',
+    }));
+    expect(getSessionSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not fake non-BRL final asset amounts in sandbox ledger mode', async () => {
     mockSandboxRuntime();
     jest.spyOn(AnchorService as any, 'notifySandboxOnRampCompleted').mockResolvedValue('');
     const orderId = 'sandbox-pix-ledger-test';
@@ -131,14 +241,15 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(record.transaction.status).toBe('completed');
     expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
     expect(record.transaction).toMatchObject({
-      toAmount: '43.2900000',
-      finalAmount: '43.2900000',
       sandbox_ledger_settlement: true,
       auto_conversion: {
-        status: 'completed',
-        mode: 'sandbox_ledger_no_distributor',
+        status: 'pending',
+        mode: 'sandbox_anchor_only',
         destination_asset_code: 'USDC',
       },
     });
+    expect((record.transaction as any).toAmount).toBe('');
+    expect((record.transaction as any).finalAmount).toBeUndefined();
+    expect((record.transaction as any).auto_conversion.destination_amount).toBeUndefined();
   });
 });

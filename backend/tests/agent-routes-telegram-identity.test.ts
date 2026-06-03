@@ -56,7 +56,12 @@ function createRepository(sessions: Record<string, any>) {
   return {
     getSession: jest.fn(async (sessionId: string) => sessions[sessionId] || null),
     saveSession: jest.fn(async (sessionId: string, data: any) => {
-      sessions[sessionId] = { ...(sessions[sessionId] || {}), ...data };
+      sessions[sessionId] = {
+        ...(sessions[sessionId] || {}),
+        ...data,
+        last_activity: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
     }),
     clearSession: jest.fn(async (sessionId: string) => {
       delete sessions[sessionId];
@@ -211,6 +216,65 @@ describe('agent Telegram identity binding', () => {
           action_params: expect.objectContaining({
             external_provider: 'telegram',
             external_provider_user_id: '777',
+            session_token: 'linked-token',
+          }),
+        })
+      );
+    });
+  });
+
+  it('refreshes an expired WhatsApp mapped session instead of clearing it', async () => {
+    const linkedSessionId = '33333333-3333-4333-8333-333333333333';
+    const repository = createRepository({
+      [linkedSessionId]: {
+        user_id: 'whatsapp@example.com',
+        email: 'whatsapp@example.com',
+        session_token: 'linked-token',
+        public_key: 'G'.padEnd(56, 'C'),
+        last_activity: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'whatsapp@example.com',
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'quero ver rendimentos',
+          session_id: linkedSessionId,
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.session_id).toBe(linkedSessionId);
+      expect(payload.message).toBe(`processed:${linkedSessionId}`);
+      expect(repository.clearSession).not.toHaveBeenCalled();
+      expect(repository.saveSession).toHaveBeenCalledWith(
+        linkedSessionId,
+        expect.objectContaining({
+          user_id: 'whatsapp@example.com',
+          session_token: 'linked-token',
+        })
+      );
+      expect(processInputMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: linkedSessionId,
+          session_data: expect.objectContaining({ user_id: 'whatsapp@example.com' }),
+          action_params: expect.objectContaining({
+            external_provider: 'whatsapp',
+            external_provider_user_id: '5511999999999',
             session_token: 'linked-token',
           }),
         })

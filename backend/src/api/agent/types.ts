@@ -74,8 +74,8 @@ export interface AgentState {
   pending_pix_ramp?: {
     direction: 'onramp' | 'offramp';
     flow?: 'fund_wallet' | 'fund_and_pay';
-    amount_currency?: 'BRL' | 'USDC';
-    asset_code: 'BRL' | 'USDC';
+    amount_currency?: string;
+    asset_code: string;
     recipient_query?: string;
     created_at?: string;
   };
