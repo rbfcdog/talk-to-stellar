@@ -253,7 +253,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Confirmação de investimento indisponível agora");
     expect(reviewText).toContain("Explicar investimento");
     expect(reviewText).toContain("Como funciona este investimento?");
-    expect(reviewText).toContain("não representam dinheiro real");
+    expect(reviewText).toContain("Uma vault funciona como um cofre de rendimento");
+    expect(reviewText).toContain("registra sua participação");
+    expect(reviewText).toContain("não representa dinheiro real");
     expect(reviewText).not.toContain("Confirmar na DeFindex");
     expect(reviewText).not.toContain("Confirmação DeFindex indisponível agora");
     expect(reviewText).toContain("const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;");
