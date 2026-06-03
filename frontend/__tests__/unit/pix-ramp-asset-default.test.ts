@@ -27,8 +27,8 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("hasExactOnRampReceiveTarget");
     expect(text).toContain('params.get("quote_amount")');
     expect(text).toContain('params.get("quote_asset")');
-    expect(text).toContain('const quoteOnlyUsdcOnRamp = Boolean(mode === "onramp" && normalizedReceiveAsset === "USDC" && !nextTransferFlow)');
-    expect(text).toContain('const settlementReceiveAsset = quoteOnlyUsdcOnRamp ? "BRL" : normalizedReceiveAsset');
+    expect(text).not.toContain("quoteOnlyUsdcOnRamp");
+    expect(text).not.toContain("settlementReceiveAsset");
     expect(text).toContain("amountParamIsPixBrl");
     expect(text).toContain("setAmountBrl(\"\")");
     expect(text).toContain("requestedOnRampTargetDisplay");
