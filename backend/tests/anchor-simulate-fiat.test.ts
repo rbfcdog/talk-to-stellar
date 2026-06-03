@@ -2,6 +2,7 @@ import { AnchorService } from '../src/api/services/anchor.service';
 import { StellarService } from '../src/api/services/stellar.service';
 import { AgentRepository } from '../src/api/repository/core/agent.repository';
 import { WalletRepository } from '../src/api/repository/core/wallet.repository';
+import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 
 describe('AnchorService sandbox PIX confirmation', () => {
   const originalEnv = { ...process.env };
@@ -251,5 +252,56 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect((record.transaction as any).toAmount).toBe('');
     expect((record.transaction as any).finalAmount).toBeUndefined();
     expect((record.transaction as any).auto_conversion.destination_amount).toBeUndefined();
+  });
+
+  it('sends a WhatsApp callback receipt when non-BRL on-ramp settlement is still processing', async () => {
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/xlm-pix');
+    const result = await (AnchorService as any).notifySandboxOnRampCompleted({
+      transaction: {
+        id: 'sandbox-pix-xlm-processing',
+        status: 'completed',
+        fromAmount: '7.32',
+        fromCurrency: 'BRL',
+        toAmount: '',
+        toCurrency: 'XLM',
+        updatedAt: new Date().toISOString(),
+        auto_conversion: {
+          required: true,
+          status: 'pending',
+          destination_asset_code: 'XLM',
+        },
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '7.32',
+      destinationAmount: '7.28',
+      finalAssetCode: 'XLM',
+      desiredFinalAmount: '10',
+      desiredFinalAssetCode: 'XLM',
+      operationContext: {
+        external_provider: 'whatsapp',
+        external_provider_user_id: '+5519997624114',
+        provider_onramp_fee_amount: '0.02',
+        talktostellar_transaction_fee_amount: '0.03',
+        total_fee_amount: '0.05',
+      },
+    }, 'sandbox-ledger-xlm-processing');
+
+    expect(result).toBe('https://talktostellar.com/receipt/xlm-pix');
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'payment_received',
+      provider: 'whatsapp',
+      providerUserId: '+5519997624114',
+      sourceAmount: '7.32',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '10',
+      destinationAssetCode: 'XLM',
+      status: 'processing',
+      externalDeliveryText: expect.stringContaining('PIX confirmado com sucesso.'),
+    }));
+    const receiptInput = receiptSpy.mock.calls[0][0] as any;
+    expect(receiptInput.externalDeliveryText).toContain('Conversão para XLM em processamento');
+    expect(receiptInput.externalDeliveryText).toContain('Valor alvo: 10 XLM');
   });
 });
