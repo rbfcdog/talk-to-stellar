@@ -584,9 +584,10 @@ describe('Agent production evals', () => {
     executeToolMock.mockResolvedValueOnce(JSON.stringify({
       success: true,
       message: [
-        'Cotações atuais pela melhor rota (testnet):',
-        'R$ 1.00 -> US$ 0.19 (melhor rota)',
-        '1 XLM -> R$ 2.87 (melhor rota)',
+        'Cotações atuais (testnet):',
+        'BRL/USDC: R$ 1.00 -> US$ 0.19 | US$ 1.00 -> R$ 5.13',
+        'BRL/XLM: R$ 1.00 -> 0.34 XLM | 1 XLM -> R$ 2.87',
+        'Conferi arbitragem direta de ida e volta; nenhum ajuste foi necessário.',
         'Nada é executado sem abrir a confirmação e digitar o PIN.',
       ].join('\n'),
     }));
@@ -599,7 +600,8 @@ describe('Agent production evals', () => {
     });
     expect(executeToolMock).not.toHaveBeenCalledWith('get_brl_usdc_quote', {});
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Cotações atuais pela melhor rota');
+    expect(result.response_message).toContain('Cotações atuais');
+    expect(result.response_message).toContain('Conferi arbitragem direta de ida e volta');
     expect(result.response_message).not.toContain('1 US$ = R$');
     expect(result.response_message).not.toContain('Fonte: saldo em reais da sua conta');
   });
