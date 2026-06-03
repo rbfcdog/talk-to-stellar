@@ -221,6 +221,17 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Taxa de conversão estimada");
     expect(text).toContain("formatFeeParts");
     expect(text).toContain("Base para conversão");
+    expect(text).toContain("TRADITIONAL_METHOD_FEE_PCT");
+    expect(text).toContain("estimated_traditional_fee_brl");
+    expect(text).toContain("estimated_savings_brl");
+    expect(text).toContain("actualOffRampFeeBrl");
+    expect(text).toContain("estimatedSavingsBrl");
+    expect(text).toContain('L("Economia estimada", "Estimated savings")');
+    expect(text).toContain("Comparado a métodos tradicionais estimados");
+    expect(text).toContain("border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep");
+    expect(text).not.toContain('L("Taxa da conta", "Account fee")');
+    expect(text).not.toContain('L("Taxa total", "Total fee")');
+    expect(text).not.toContain("Esse é o valor descontado nesta operação");
     expect(text).toContain("finalConversionPending");
     expect(text).toContain("onRampFinalAssetDelta");
     expect(text).toContain('finalAsset === "BRL"');
