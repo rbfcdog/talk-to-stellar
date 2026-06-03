@@ -134,7 +134,192 @@ type CounterpartyProfile = {
   short_profile_url: string;
 };
 
+type HistoryScope = {
+  sessionIds: string[];
+  userIds: string[];
+  publicKeys: string[];
+};
+
+type HistoryFilter = {
+  column: string;
+  values: string[];
+};
+
 export class TransactionHistoryService {
+  private static uniqueValues(values: unknown[]): string[] {
+    return Array.from(
+      new Set(values.map((value) => normalizeKey(value as string)).filter(Boolean))
+    );
+  }
+
+  private static dateRange(month: number, year: number): { start: string; end: string } | null {
+    if (!Number.isFinite(month) || !Number.isFinite(year) || month < 1 || month > 12 || year < 2000) {
+      return null;
+    }
+
+    return {
+      start: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0)).toISOString(),
+      end: new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)).toISOString(),
+    };
+  }
+
+  private static missingOptionalColumn(error: unknown, column: string): boolean {
+    const message = String((error as any)?.message || error || '').toLowerCase();
+    return message.includes(column.toLowerCase()) ||
+      message.includes(`'${column.toLowerCase()}' column`) ||
+      message.includes(`column ${column.toLowerCase()}`) ||
+      message.includes('schema cache') ||
+      message.includes('does not exist') ||
+      message.includes('not found');
+  }
+
+  private static async runFilteredHistoryQuery(input: {
+    table: string;
+    select: string;
+    filter: HistoryFilter;
+    month: number;
+    year: number;
+    limit: number;
+    orderColumn?: string;
+  }): Promise<any[]> {
+    const values = this.uniqueValues(input.filter.values);
+    if (!values.length) return [];
+
+    let query = supabase
+      .from(input.table)
+      .select(input.select);
+
+    query = values.length === 1
+      ? query.eq(input.filter.column, values[0])
+      : query.in(input.filter.column, values);
+
+    query = query
+      .order(input.orderColumn || 'created_at', { ascending: false })
+      .limit(input.limit);
+
+    const range = this.dateRange(input.month, input.year);
+    if (range) {
+      query = query.gte(input.orderColumn || 'created_at', range.start).lt(input.orderColumn || 'created_at', range.end);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (
+        missingOptionalTable(error, input.table) ||
+        this.missingOptionalColumn(error, input.filter.column)
+      ) {
+        return [];
+      }
+      throw new Error(`Falha ao carregar ${input.table}: ${error.message}`);
+    }
+
+    return Array.isArray(data) ? data : data ? [data] : [];
+  }
+
+  private static async resolveAccountScope(ctx: { sessionId: string; userId: string; walletPublicKey?: string }): Promise<HistoryScope> {
+    const sessionIds = new Set<string>(this.uniqueValues([ctx.sessionId]));
+    const userIds = new Set<string>(this.uniqueValues([ctx.userId]));
+    const publicKeys = new Set<string>(this.uniqueValues([ctx.walletPublicKey]).filter((value) => hasPublicKey(value)));
+    const emails = new Set<string>();
+
+    const addSessionRows = (rows: any[]) => {
+      for (const row of rows || []) {
+        const sessionId = normalizeKey(row?.session_id);
+        const userId = normalizeKey(row?.user_id);
+        const publicKey = normalizeKey(row?.public_key);
+        const email = normalizeKey(row?.email).toLowerCase();
+        if (sessionId) sessionIds.add(sessionId);
+        if (userId) userIds.add(userId);
+        if (hasPublicKey(publicKey)) publicKeys.add(publicKey);
+        if (email) emails.add(email);
+      }
+    };
+
+    const addWalletRows = (rows: any[]) => {
+      for (const row of rows || []) {
+        const sessionId = normalizeKey(row?.session_id);
+        const publicKey = normalizeKey(row?.public_key);
+        if (sessionId) sessionIds.add(sessionId);
+        if (hasPublicKey(publicKey)) publicKeys.add(publicKey);
+      }
+    };
+
+    const safeRows = async (build: () => any, label: string): Promise<any[]> => {
+      try {
+        const { data, error } = await build();
+        if (error) {
+          if (missingOptionalTable(error, label)) return [];
+          return [];
+        }
+        return Array.isArray(data) ? data : data ? [data] : [];
+      } catch {
+        return [];
+      }
+    };
+
+    if (ctx.userId) {
+      addSessionRows(await safeRows(
+        () => supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, public_key, email')
+          .eq('user_id', ctx.userId)
+          .order('updated_at', { ascending: false })
+          .limit(100),
+        'agent_sessions'
+      ));
+    }
+
+    if (sessionIds.size) {
+      addWalletRows(await safeRows(
+        () => supabase
+          .from('wallets')
+          .select('public_key, session_id')
+          .in('session_id', Array.from(sessionIds))
+          .limit(100),
+        'wallets'
+      ));
+    }
+
+    if (publicKeys.size) {
+      addSessionRows(await safeRows(
+        () => supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, public_key, email')
+          .in('public_key', Array.from(publicKeys))
+          .order('updated_at', { ascending: false })
+          .limit(100),
+        'agent_sessions'
+      ));
+
+      addWalletRows(await safeRows(
+        () => supabase
+          .from('wallets')
+          .select('public_key, session_id')
+          .in('public_key', Array.from(publicKeys))
+          .limit(100),
+        'wallets'
+      ));
+    }
+
+    if (emails.size) {
+      addSessionRows(await safeRows(
+        () => supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, public_key, email')
+          .in('email', Array.from(emails))
+          .order('updated_at', { ascending: false })
+          .limit(100),
+        'agent_sessions'
+      ));
+    }
+
+    return {
+      sessionIds: this.uniqueValues(Array.from(sessionIds)),
+      userIds: this.uniqueValues(Array.from(userIds)),
+      publicKeys: this.uniqueValues(Array.from(publicKeys)).filter((value) => hasPublicKey(value)),
+    };
+  }
+
   private static async listNetworkOperationRows(input: {
     publicKey?: string;
     month: number;
@@ -162,38 +347,87 @@ export class TransactionHistoryService {
     }
   }
 
-  private static async listReceiptRows(input: {
-    sessionId: string;
-    userId: string;
+  private static async listNetworkOperationRowsForScope(input: {
+    publicKeys: string[];
     month: number;
     year: number;
     limit: number;
   }): Promise<any[]> {
-    const filters = [
-      { column: 'session_id', value: input.sessionId },
-      { column: 'user_id', value: input.userId },
-    ].filter((item) => item.value);
+    const byId = new Map<string, any>();
+    for (const publicKey of this.uniqueValues(input.publicKeys).filter((value) => hasPublicKey(value))) {
+      const rows = await this.listNetworkOperationRows({
+        publicKey,
+        month: input.month,
+        year: input.year,
+        limit: input.limit,
+      });
+      for (const row of rows || []) {
+        const key = normalizeKey(row?.transaction_hash || row?.id || row?.paging_token || row?.created_at);
+        if (!key || byId.has(key)) continue;
+        byId.set(key, row);
+      }
+    }
+    return Array.from(byId.values());
+  }
+
+  private static async listPaymentRows(input: {
+    scope: HistoryScope;
+    month: number;
+    year: number;
+    limit: number;
+  }): Promise<any[]> {
+    const filters: HistoryFilter[] = [
+      { column: 'user_id', values: input.scope.userIds },
+      { column: 'session_id', values: input.scope.sessionIds },
+      { column: 'source_public_key', values: input.scope.publicKeys },
+      { column: 'destination_public_key', values: input.scope.publicKeys },
+    ].filter((item) => item.values.length);
+    const byId = new Map<string, any>();
+
+    for (const filter of filters) {
+      const rows = await this.runFilteredHistoryQuery({
+        table: 'payment_logs',
+        select: 'id, payment_hash, status, operation_type, source_amount, source_asset_code, destination_amount, destination_asset_code, destination_public_key, error_message, memo, metadata, created_at, completed_at',
+        filter,
+        month: input.month,
+        year: input.year,
+        limit: input.limit,
+      });
+
+      for (const row of rows || []) {
+        const id =
+          normalizeKey(row?.payment_hash) ||
+          normalizeKey(row?.id) ||
+          `${filter.column}:${normalizeKey(row?.created_at)}:${normalizeKey(row?.source_amount)}:${normalizeKey(row?.destination_amount)}`;
+        if (!id || byId.has(id)) continue;
+        byId.set(id, row);
+      }
+    }
+
+    return Array.from(byId.values());
+  }
+
+  private static async listReceiptRows(input: {
+    scope: HistoryScope;
+    month: number;
+    year: number;
+    limit: number;
+  }): Promise<any[]> {
+    const filters: HistoryFilter[] = [
+      { column: 'session_id', values: input.scope.sessionIds },
+      { column: 'user_id', values: input.scope.userIds },
+    ].filter((item) => item.values.length);
     const byCode = new Map<string, any>();
 
     for (const filter of filters) {
-      let query = supabase
-        .from('receipt_images')
-        .select('code, operation_id, tx_hash, session_id, user_id, receipt_type, metadata, created_at')
-        .eq(filter.column, filter.value)
-        .order('created_at', { ascending: false })
-        .limit(input.limit);
-
-      if (Number.isFinite(input.month) && Number.isFinite(input.year) && input.month >= 1 && input.month <= 12 && input.year >= 2000) {
-        const start = new Date(Date.UTC(input.year, input.month - 1, 1, 0, 0, 0, 0)).toISOString();
-        const end = new Date(Date.UTC(input.year, input.month, 1, 0, 0, 0, 0)).toISOString();
-        query = query.gte('created_at', start).lt('created_at', end);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        if (missingOptionalTable(error, 'receipt_images')) continue;
-        throw new Error(`Falha ao carregar recibos: ${error.message}`);
-      }
+      const data = await this.runFilteredHistoryQuery({
+        table: 'receipt_images',
+        select: 'code, operation_id, tx_hash, session_id, user_id, receipt_type, metadata, created_at',
+        filter,
+        month: input.month,
+        year: input.year,
+        limit: input.limit,
+      });
 
       for (const row of data || []) {
         const code = normalizeKey((row as any)?.code);
@@ -206,41 +440,29 @@ export class TransactionHistoryService {
   }
 
   private static async listOperationRows(input: {
-    sessionId: string;
-    userId: string;
+    scope: HistoryScope;
     month: number;
     year: number;
     limit: number;
   }): Promise<any[]> {
-    const filters = [
-      { column: 'user_id', value: input.userId },
-      { column: 'source_session_id', value: input.sessionId },
-      { column: 'destination_session_id', value: input.sessionId },
-    ].filter((item) => item.value);
+    const filters: HistoryFilter[] = [
+      { column: 'user_id', values: input.scope.userIds },
+      { column: 'source_session_id', values: input.scope.sessionIds },
+      { column: 'destination_session_id', values: input.scope.sessionIds },
+      { column: 'source_public_key', values: input.scope.publicKeys },
+      { column: 'destination_key', values: input.scope.publicKeys },
+    ].filter((item) => item.values.length);
     const byId = new Map<string, any>();
 
     for (const filter of filters) {
-      let query = supabase
-        .from('operations')
-        .select('*')
-        .eq(filter.column, filter.value)
-        .order('created_at', { ascending: false })
-        .limit(input.limit);
-
-      if (Number.isFinite(input.month) && Number.isFinite(input.year) && input.month >= 1 && input.month <= 12 && input.year >= 2000) {
-        const start = new Date(Date.UTC(input.year, input.month - 1, 1, 0, 0, 0, 0)).toISOString();
-        const end = new Date(Date.UTC(input.year, input.month, 1, 0, 0, 0, 0)).toISOString();
-        query = query.gte('created_at', start).lt('created_at', end);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        const message = String(error.message || '').toLowerCase();
-        if (message.includes('operations') || message.includes('schema cache') || message.includes('does not exist') || message.includes(filter.column.toLowerCase())) {
-          continue;
-        }
-        throw new Error(`Falha ao carregar operações: ${error.message}`);
-      }
+      const data = await this.runFilteredHistoryQuery({
+        table: 'operations',
+        select: '*',
+        filter,
+        month: input.month,
+        year: input.year,
+        limit: input.limit,
+      });
 
       for (const row of data || []) {
         const id = normalizeKey((row as any)?.id) || `${filter.column}:${normalizeKey((row as any)?.created_at)}`;
@@ -250,6 +472,17 @@ export class TransactionHistoryService {
     }
 
     return Array.from(byId.values());
+  }
+
+  private static ownPublicKeyForOperation(operation: any, publicKeys: string[]): string {
+    const ownKeys = this.uniqueValues(publicKeys).filter((value) => hasPublicKey(value));
+    if (!ownKeys.length) return '';
+    const candidates = [
+      normalizeKey(operation?.to || operation?.account || operation?.into || operation?.trustor),
+      normalizeKey(operation?.from || operation?.source_account || operation?.funder || operation?.source),
+      normalizeKey(operation?.source_account),
+    ];
+    return ownKeys.find((key) => candidates.includes(key)) || ownKeys[0];
   }
 
   private static async resolveCounterpartyProfiles(publicKeys: string[], sessionId: string, userId: string): Promise<Map<string, CounterpartyProfile>> {
@@ -410,41 +643,28 @@ export class TransactionHistoryService {
     const limit = Math.min(Math.max(Number(input.limit || 60), 1), 500);
     const month = Number(input.month || 0);
     const year = Number(input.year || 0);
+    const scope = await this.resolveAccountScope(ctx);
 
-    let query = supabase
-      .from('payment_logs')
-      .select('id, payment_hash, status, operation_type, source_amount, source_asset_code, destination_amount, destination_asset_code, destination_public_key, error_message, memo, metadata, created_at, completed_at')
-      .eq('user_id', ctx.userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (Number.isFinite(month) && Number.isFinite(year) && month >= 1 && month <= 12 && year >= 2000) {
-      const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0)).toISOString();
-      const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)).toISOString();
-      query = query.gte('created_at', start).lt('created_at', end);
-    }
-
-    const { data: rows, error } = await query;
-    if (error) {
-      throw new Error(`Falha ao carregar histórico de pagamentos: ${error.message}`);
-    }
-
+    const rows = await this.listPaymentRows({
+      scope,
+      month,
+      year,
+      limit,
+    });
     const receiptRows = await this.listReceiptRows({
-      sessionId: ctx.sessionId,
-      userId: ctx.userId,
+      scope,
       month,
       year,
       limit,
     });
     const operationRows = await this.listOperationRows({
-      sessionId: ctx.sessionId,
-      userId: ctx.userId,
+      scope,
       month,
       year,
       limit,
     });
-    const networkRows = await this.listNetworkOperationRows({
-      publicKey: ctx.walletPublicKey,
+    const networkRows = await this.listNetworkOperationRowsForScope({
+      publicKeys: scope.publicKeys,
       month,
       year,
       limit,
@@ -457,7 +677,7 @@ export class TransactionHistoryService {
         return normalizeKey(metadata.destinationPublicKey || metadata.destination_public_key || metadata.counterpartyPublicKey || metadata.counterparty_public_key || metadata.counterpartyKey);
       }),
       ...operationRows.map((row: any) => normalizeKey(row?.destination_key || row?.destination_public_key || row?.counterparty_public_key || row?.source_public_key)),
-      ...networkRows.map((row: any) => operationCounterpartyKey(row, normalizeKey(ctx.walletPublicKey || ''))),
+      ...networkRows.map((row: any) => operationCounterpartyKey(row, this.ownPublicKeyForOperation(row, scope.publicKeys))),
     ];
     const profiles = await this.resolveCounterpartyProfiles(destinationKeys, ctx.sessionId, ctx.userId);
 
@@ -635,7 +855,6 @@ export class TransactionHistoryService {
         .flatMap((item: any) => [normalizeKey(item.payment_hash || ''), normalizeKey(item.id || '')])
         .filter(Boolean)
     );
-    const ownPublicKey = normalizeKey(ctx.walletPublicKey || '');
     const networkTransactions = networkRows
       .filter((row: any) => {
         const hash = normalizeKey(row?.transaction_hash || row?.transaction_hash_attr || '');
@@ -643,6 +862,7 @@ export class TransactionHistoryService {
         return (!hash || !knownNetworkIds.has(hash)) && (!id || !knownNetworkIds.has(id));
       })
       .map((row: any) => {
+        const ownPublicKey = this.ownPublicKeyForOperation(row, scope.publicKeys);
         const direction = operationDirection(row, ownPublicKey);
         const counterpartyKey = operationCounterpartyKey(row, ownPublicKey);
         const profile = profiles.get(counterpartyKey);
