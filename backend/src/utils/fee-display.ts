@@ -1,43 +1,12 @@
 type FeeDisplay = {
   display: string;
+  fee_xlm?: string;
   fee_usdc?: string;
   fee_brl?: string;
   source: string;
 };
 
 export const DEFAULT_NETWORK_FEE_XLM = '0.0000100';
-
-async function fetchBinancePrice(symbol: string): Promise<number | undefined> {
-  const timeoutMs = Number(process.env.BRL_USDC_QUOTE_TIMEOUT_MS || 8000);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
-
-  try {
-    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!response.ok) return undefined;
-
-    const payload = await response.json() as { price?: string };
-    const price = Number(String(payload?.price || '').trim());
-    return Number.isFinite(price) && price > 0 ? price : undefined;
-  } catch {
-    return undefined;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function fetchFirstBinancePrice(symbols: string[]): Promise<{ price?: number; symbol?: string }> {
-  for (const symbol of symbols) {
-    const price = await fetchBinancePrice(symbol);
-    if (price) return { price, symbol };
-  }
-  return {};
-}
 
 function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   if (!Number.isFinite(value) || value < 0) return `${currency} indisponivel`;
@@ -48,11 +17,6 @@ function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
   }
   const factor = 10 ** decimals;
   return `${currency} ${(Math.trunc(value * factor) / factor).toFixed(decimals)}`;
-}
-
-function configuredPositiveNumber(value: string | undefined): number {
-  const parsed = Number(String(value || '').replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 function buildFeeDisplay(feeBrl: number, feeUsdc: number): string {
@@ -72,32 +36,10 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
     };
   }
 
-  const xlmUsdQuote = await fetchFirstBinancePrice(['XLMUSDC', 'XLMUSDT']);
-  const brlSymbol = String(process.env.BRL_USDC_QUOTE_SYMBOL || 'USDCBRL').trim().toUpperCase();
-  const usdBrlQuote = await fetchFirstBinancePrice([brlSymbol, 'USDCBRL', 'USDTBRL']);
-
-  const xlmUsd = xlmUsdQuote.price || configuredPositiveNumber(process.env.XLM_USDC_FALLBACK_RATE);
-  const usdBrl = usdBrlQuote.price || configuredPositiveNumber(process.env.USD_BRL_FALLBACK_RATE);
-  if (xlmUsd <= 0) {
-    return {
-      display: '',
-      source: 'unavailable',
-    };
-  }
-  const feeUsdc = fee * xlmUsd;
-  const feeBrl = usdBrl > 0 ? feeUsdc * usdBrl : 0;
-  const sourceParts = [
-    xlmUsdQuote.symbol ? `binance:${xlmUsdQuote.symbol}` : 'fallback:XLMUSDC',
-    usdBrl > 0
-      ? (usdBrlQuote.symbol ? `binance:${usdBrlQuote.symbol}` : 'fallback:USDBRL')
-      : 'unavailable:USDBRL',
-  ];
-
   return {
-    display: buildFeeDisplay(feeBrl, feeUsdc),
-    fee_usdc: feeUsdc.toFixed(8),
-    fee_brl: feeBrl > 0 ? feeBrl.toFixed(8) : undefined,
-    source: sourceParts.join('/'),
+    display: `${fee.toFixed(7).replace(/\.?0+$/, '')} XLM`,
+    fee_xlm: fee.toFixed(7),
+    source: 'transaction_network_fee_xlm',
   };
 }
 
@@ -140,22 +82,18 @@ export function buildUnifiedFeeDisplay(input: {
   const platformAssetIsReal = platformAsset === 'BRL' || platformAsset === 'TESOURO';
   const platformApplied = isUsdcBrlPair && Number.isFinite(platformAmount) && platformAmount > 0 && (platformAsset === 'USDC' || platformAssetIsReal);
 
-  const impliedRate = totalUsdc > 0 && totalBrl > 0 ? totalBrl / totalUsdc : undefined;
-  const fallbackRate = configuredPositiveNumber(process.env.USD_BRL_FALLBACK_RATE);
-  const usdBrlRate = impliedRate && Number.isFinite(impliedRate) && impliedRate > 0 ? impliedRate : fallbackRate;
-
   if (platformApplied) {
     if (platformAsset === 'USDC') {
       totalUsdc += platformAmount;
-      if (usdBrlRate > 0) totalBrl += platformAmount * usdBrlRate;
     } else if (platformAssetIsReal) {
       totalBrl += platformAmount;
-      if (usdBrlRate > 0) totalUsdc += platformAmount / usdBrlRate;
     }
   }
 
+  const display = buildFeeDisplay(totalBrl, totalUsdc) || input.networkFee?.display || '';
+
   return {
-    display: buildFeeDisplay(totalBrl, totalUsdc),
+    display,
     fee_usdc: totalUsdc > 0 ? totalUsdc.toFixed(8) : undefined,
     fee_brl: totalBrl > 0 ? totalBrl.toFixed(8) : undefined,
     source: input.networkFee?.source || 'unavailable',

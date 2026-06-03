@@ -50,7 +50,7 @@ function rowToQuote(row: any): InternationalTransferQuote {
     total_fee: row.total_fee || { amount_brl_equivalent: '0', amount_usd_equivalent: '0' },
     expires_at: String(row.expires_at),
     quote_status: row.quote_status || 'ACTIVE',
-    quote_source: row.quote_source || 'configured_fallback_rate',
+    quote_source: row.quote_source || 'stellar_pathfinding',
     metadata: row.metadata || {},
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),

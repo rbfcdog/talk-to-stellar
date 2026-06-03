@@ -5,12 +5,6 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   },
 }));
 
-jest.mock('../src/api/services/fiat-rate.service', () => ({
-  FiatRateService: {
-    getUsdBrlRate: jest.fn(),
-  },
-}));
-
 jest.mock('../src/api/services/stellar.service', () => ({
   StellarService: {
     quoteStrictSendConversion: jest.fn(),
@@ -19,18 +13,16 @@ jest.mock('../src/api/services/stellar.service', () => ({
 
 import { ConversionRateMatrixService } from '../src/api/services/conversion-rate-matrix.service';
 import { BrlReferenceRateService } from '../src/api/services/brl-reference-rate.service';
-import { FiatRateService } from '../src/api/services/fiat-rate.service';
 import { StellarService } from '../src/api/services/stellar.service';
 
 const quoteBrlToUsdcMock = BrlReferenceRateService.quoteBrlToUsdc as jest.Mock;
 const quoteUsdcToBrlMock = BrlReferenceRateService.quoteUsdcToBrl as jest.Mock;
-const getUsdBrlRateMock = FiatRateService.getUsdBrlRate as jest.Mock;
 const quoteStrictSendConversionMock = StellarService.quoteStrictSendConversion as jest.Mock;
 
 function brlQuote(sourceAmount: string | number, direction: 'BRL_USDC' | 'USDC_BRL', brlPerUsdc = 5) {
   const amount = Number(sourceAmount);
   return {
-    source: 'configured_tesouro_asset',
+    source: 'transaction_values',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
@@ -65,17 +57,10 @@ describe('ConversionRateMatrixService', () => {
     process.env.CONVERSION_MATRIX_ASSETS = 'BRL,USDC,CETES,XLM';
     quoteBrlToUsdcMock.mockReset();
     quoteUsdcToBrlMock.mockReset();
-    getUsdBrlRateMock.mockReset();
     quoteStrictSendConversionMock.mockReset();
 
     quoteBrlToUsdcMock.mockImplementation((amount) => Promise.resolve(brlQuote(amount, 'BRL_USDC', 5)));
     quoteUsdcToBrlMock.mockImplementation((amount) => Promise.resolve(brlQuote(amount, 'USDC_BRL', 5)));
-    getUsdBrlRateMock.mockResolvedValue({
-      brlPerUsd: 5,
-      source: 'market:test:USD-BRL',
-      fetchedAt: '2026-06-02T12:00:00.000Z',
-      fallbackApplied: false,
-    });
 
     quoteStrictSendConversionMock.mockImplementation(({ sourceAsset, destAsset, sourceAmount }) => {
       const source = displayCode(sourceAsset.code);
@@ -124,21 +109,15 @@ describe('ConversionRateMatrixService', () => {
     expect(matrix.matrix.BRL.BRL.status).toBe('same_asset');
   });
 
-  it('uses a dynamic market fallback when the configured BRL/USDC path is rejected', async () => {
+  it('marks the pair unavailable when the transaction route quote is rejected', async () => {
     quoteBrlToUsdcMock.mockRejectedValueOnce(new Error('distorted testnet quote'));
-    getUsdBrlRateMock.mockResolvedValueOnce({
-      brlPerUsd: 5.25,
-      source: 'market:awesomeapi:USD-BRL',
-      fetchedAt: '2026-06-02T13:00:00.000Z',
-      fallbackApplied: false,
-    });
 
     const matrix = await ConversionRateMatrixService.buildMatrix({ assets: ['BRL', 'USDC'], sampleAmount: 100 });
 
     expect(matrix.cells).toHaveLength(4);
-    expect(matrix.matrix.BRL.USDC.status).toBe('fallback');
-    expect(matrix.matrix.BRL.USDC.source).toBe('market:awesomeapi:USD-BRL');
-    expect(matrix.matrix.BRL.USDC.rate).toBeCloseTo(1 / 5.25, 8);
-    expect(matrix.matrix.BRL.USDC.legs?.[0]).toContain('stellar_error:distorted testnet quote');
+    expect(matrix.matrix.BRL.USDC.status).toBe('unavailable');
+    expect(matrix.matrix.BRL.USDC.source).toBe('none');
+    expect(matrix.matrix.BRL.USDC.rate).toBeNull();
+    expect(matrix.matrix.BRL.USDC.error).toContain('distorted testnet quote');
   });
 });

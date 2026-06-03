@@ -32,7 +32,6 @@ export type SavingsIdentity = {
 };
 
 const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.035);
-const DEFAULT_USD_BRL_REFERENCE_RATE = 0;
 
 function comparisonMethodForRate(rate: number): string {
   const normalized = Number.isFinite(rate) && rate > 0 ? rate : 0.035;
@@ -56,7 +55,6 @@ export class EconomyEngineService {
     amount: unknown;
     assetCode: unknown;
     quote?: any;
-    fallbackUsdBrl?: number;
   }): number {
     const amount = toNumber(input.amount);
     const assetCode = String(input.assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
@@ -77,16 +75,6 @@ export class EconomyEngineService {
     }
     if (assetCode === destinationAsset && sourceIsReal && destinationAmount > 0 && sourceAmount > 0) {
       return amount * (sourceAmount / destinationAmount);
-    }
-
-    const fallback = Number(
-      input.fallbackUsdBrl ||
-      process.env.USD_BRL_FALLBACK_RATE ||
-      process.env.DEFAULT_USD_BRL_RATE ||
-      DEFAULT_USD_BRL_REFERENCE_RATE
-    );
-    if ((assetCode === 'USDC' || assetCode === 'USD') && Number.isFinite(fallback) && fallback > 0) {
-      return amount * fallback;
     }
 
     return 0;

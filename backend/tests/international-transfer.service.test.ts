@@ -77,7 +77,7 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const quoteService = new BrlUsdQuoteService({
       repository,
       quoteBrlToUsdc: async () => ({
-        source: 'configured_tesouro_asset',
+        source: 'transaction_values',
         symbol: 'USDC/BRL',
         brlPerUsdc: '5.60000000',
         usdcPerBrl: '0.17857143',
@@ -136,7 +136,7 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const quoteService = new BrlUsdQuoteService({
       repository,
       quoteBrlToUsdc: async () => ({
-        source: 'configured_tesouro_asset',
+        source: 'transaction_values',
         symbol: 'USDC/BRL',
         brlPerUsdc: '5.60000000',
         usdcPerBrl: '0.17857143',

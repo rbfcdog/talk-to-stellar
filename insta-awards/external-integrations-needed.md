@@ -496,50 +496,39 @@ TELEGRAM_NOTIFY_SECRET
 - Confirm `AGENT_INGEST_SECRET` matches backend.
 - Capture one Telegram chat if using Telegram as evidence.
 
-## P2: Market FX Reference APIs
+## Removed: Market FX Reference APIs
 
 ### Why it matters
 
-The code uses market USD/BRL references for quote sanity and fallback display.
-These APIs do not prove settlement, but they help prevent distorted testnet
-quotes from being presented as real rates.
+The conversion system no longer uses external market USD/BRL references for
+quote sanity, fallback display, receipts, or transaction execution. Rates are
+derived from the transaction route values themselves.
 
 ### Code evidence
 
-- `backend/src/api/services/fiat-rate.service.ts`
 - `backend/src/api/services/quote-rate-sanity.service.ts`
 - `backend/src/utils/fee-display.ts`
+- `backend/src/api/services/transaction-rate.service.ts`
 
 ### External APIs used
 
 ```text
-https://api.binance.com/api/v3/ticker/price
-https://economia.awesomeapi.com.br/json/last/USD-BRL
-https://open.er-api.com/v6/latest/USD
-https://api.exchangerate-api.com/v4/latest/USD
-https://api.coinbase.com/v2/exchange-rates
-https://api.frankfurter.dev/v1/latest
+None for conversion pricing.
 ```
 
 ### Relevant environment
 
 ```text
-BRL_USDC_QUOTE_SOURCE
-BRL_USDC_QUOTE_SYMBOL
-BRL_USDC_QUOTE_TIMEOUT_MS
+BRL_USDC_REFERENCE_SAMPLE_USDC
 USD_BRL_SANITY_MIN
 USD_BRL_SANITY_MAX
-USD_BRL_MAX_MARKET_DEVIATION_PCT
-ALLOW_USD_BRL_ENV_FALLBACK
-USD_BRL_FALLBACK_RATE
-DEFAULT_USD_BRL_RATE
 ```
 
 ### What is missing or needs verification
 
-- Ensure outbound internet access is available from backend deployment.
-- Keep static/env fallback disabled unless clearly labeled.
-- Capture quote source in final reviewer evidence.
+- Ensure every reviewer quote/receipt shows `source: transaction_values`.
+- If a route is unavailable, the product should show unavailable instead of inventing a rate.
+- Capture transaction route source/destination amounts in final reviewer evidence.
 
 ## P3: Twilio WhatsApp Fallback
 

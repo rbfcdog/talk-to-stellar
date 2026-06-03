@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.international_transfer_quotes (
   estimated_provider_fee JSONB NOT NULL DEFAULT '{}'::jsonb,
   total_fee JSONB NOT NULL DEFAULT '{}'::jsonb,
   quote_status TEXT NOT NULL DEFAULT 'ACTIVE',
-  quote_source TEXT NOT NULL DEFAULT 'configured_fallback_rate',
+  quote_source TEXT NOT NULL DEFAULT 'stellar_pathfinding',
   expires_at TIMESTAMPTZ NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

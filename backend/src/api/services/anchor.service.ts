@@ -28,7 +28,6 @@ import { EconomyEngineService } from './economy-engine.service';
 import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
-import { FiatRateService } from './fiat-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
 import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
@@ -349,43 +348,6 @@ function configuredEtherfuseOnRampFeeBps(): number {
   );
   if (!Number.isFinite(parsed) || parsed < 0) return 20;
   return Math.min(parsed, 1000);
-}
-
-function readConfiguredUsdBrlRate(): { brlPerUsd: number; source: string } | null {
-  for (const key of ['USD_BRL_FALLBACK_RATE', 'DEFAULT_USD_BRL_RATE']) {
-    const value = parseHumanAmountNumber(process.env[key]);
-    if (Number.isFinite(value) && value >= 3 && value <= 10) {
-      return { brlPerUsd: value, source: `env:${key}` };
-    }
-  }
-  return null;
-}
-
-async function resolveUsdBrlRateForRamp(): Promise<{ brlPerUsd: number; source: string }> {
-  try {
-    const quote = await FiatRateService.getUsdBrlRate();
-    if (quote.brlPerUsd >= 3 && quote.brlPerUsd <= 10) {
-      return { brlPerUsd: quote.brlPerUsd, source: quote.source };
-    }
-  } catch {
-    // Fall back to configured reference below. The caller logs the distorted route.
-  }
-
-  const configured = readConfiguredUsdBrlRate();
-  if (configured) return configured;
-  throw apiError('Não consegui validar a cotação USD/BRL para esta conversão. Tente novamente em alguns segundos.', 409);
-}
-
-function addPlatformFeeToUsdcSourceAmount(sourceAmount: string): string {
-  const platformFee = PlatformFeeService.calculateSpread({
-    sourceAmount,
-    sourceAssetCode: 'USDC',
-    destinationAssetCode: 'BRL',
-    mode: 'add_on_top',
-  });
-  const total = parseHumanAmountNumber(sourceAmount) +
-    (platformFee.enabled ? parseHumanAmountNumber(platformFee.feeAmount) : 0);
-  return toStellarAmount(total);
 }
 
 function formatDisplayAmount(value: unknown, assetCode: string): string {
@@ -1061,19 +1023,10 @@ export class AnchorService {
             sourceQuote: quote,
           };
         } catch (error) {
-          const rate = await resolveUsdBrlRateForRamp();
-          const baseSourceAmount = toStellarAmount(parseHumanAmountNumber(targetBrl) / rate.brlPerUsd);
-          const sourceAmount = addPlatformFeeToUsdcSourceAmount(baseSourceAmount);
-          console.warn(
-            `[ramp] Ignoring distorted testnet USDC/BRL strict-receive route; ` +
-            `using ${rate.source} reference for PIX target amount. ${debugErrorMessage(error)}`
+          throw apiError(
+            `Não consegui encontrar uma rota segura para entregar R$ ${targetBrl} a partir de USDC. ${debugErrorMessage(error)}`,
+            409,
           );
-          return {
-            sourceAmount,
-            targetBrl,
-            estimatedTargetBrl: targetBrl,
-            targetReceiveMode: true,
-          };
         }
       }
 
@@ -1101,9 +1054,10 @@ export class AnchorService {
         const referenceQuote = await BrlReferenceRateService.quoteUsdcToBrl(sourceAmount);
         estimatedTargetBrl = toStellarAmount(referenceQuote.destinationAmount);
       } catch (error) {
-        const rate = await resolveUsdBrlRateForRamp();
-        estimatedTargetBrl = toStellarAmount(parseHumanAmountNumber(sourceAmount) * rate.brlPerUsd);
-        console.warn(`[ramp] BRL/USDC path unavailable for off-ramp; using ${rate.source} reference: ${debugErrorMessage(error)}`);
+        throw apiError(
+          `Não consegui encontrar uma rota segura de USDC para reais agora. ${debugErrorMessage(error)}`,
+          409,
+        );
       }
     } else if (!isBrlSettlementAsset(input.sourceAsset)) {
       const estimated = EconomyEngineService.estimateAmountInBrl({

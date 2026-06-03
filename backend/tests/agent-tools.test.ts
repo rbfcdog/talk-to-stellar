@@ -11,7 +11,7 @@ const mockGetWalletConversionRules = jest.fn().mockResolvedValue([
 ]);
 const mockDisableConversionRule = jest.fn().mockResolvedValue(true);
 const mockGetReferenceRate = jest.fn().mockResolvedValue({
-  source: 'configured_tesouro_asset',
+  source: 'transaction_values',
   symbol: 'USDC/BRL',
   brlPerUsdc: '5.13000000',
   usdcPerBrl: '0.19493177',
@@ -21,7 +21,7 @@ const mockQuoteBrlToUsdc = jest.fn(async (amountBrl: string) => {
   const sourceAmount = Number(String(amountBrl).replace(',', '.'));
   const brlPerUsdc = 5.13;
   return {
-    source: 'configured_tesouro_asset',
+    source: 'transaction_values',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
@@ -37,7 +37,7 @@ const mockQuoteUsdcToBrl = jest.fn(async (amountUsdc: string) => {
   const sourceAmount = Number(String(amountUsdc).replace(',', '.'));
   const brlPerUsdc = 5.13;
   return {
-    source: 'configured_tesouro_asset',
+    source: 'transaction_values',
     symbol: 'USDC/BRL',
     brlPerUsdc: brlPerUsdc.toFixed(8),
     usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
@@ -49,13 +49,6 @@ const mockQuoteUsdcToBrl = jest.fn(async (amountUsdc: string) => {
     path: [],
   };
 });
-const mockGetUsdBrlRate = jest.fn().mockResolvedValue({
-  brlPerUsd: 5.13,
-  source: 'configured_tesouro_asset',
-  fetchedAt: '2026-05-15T12:00:00.000Z',
-  fallbackApplied: false,
-});
-
 jest.mock('../src/api/services/balance-alert.service', () => ({
   BalanceAlertService: {
     setAlertThreshold: mockSetAlertThreshold,
@@ -77,14 +70,6 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   },
 }));
 
-jest.mock('../src/api/services/fiat-rate.service', () => ({
-  FiatRateService: {
-    getUsdBrlRate: mockGetUsdBrlRate,
-    isSaneUsdBrlRate: jest.fn(() => true),
-    clearCacheForTests: jest.fn(),
-  },
-}));
-
 describe('Agent tool execution', () => {
   let executeTool: (toolName: string, toolInput: Record<string, any>) => Promise<string>;
   let supabaseMock: any;
@@ -103,8 +88,6 @@ describe('Agent tool execution', () => {
       json: async () => ({}),
     } as any);
     process.env.STELLAR_NETWORK = 'TESTNET';
-    process.env.USD_BRL_FALLBACK_RATE = '5.13';
-    process.env.XLM_USDC_FALLBACK_RATE = '0.1';
   });
 
   afterEach(() => {
@@ -244,11 +227,10 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.source).toBe('configured_tesouro_asset');
+    expect(parsed.source).toBe('transaction_values');
     expect(parsed.brl_per_usdc).toBe('5.13000000');
     expect(parsed.usdc_per_brl).toBe('0.19493177');
     expect(parsed.message).toContain('BRL da sua conta');
-    expect(mockGetUsdBrlRate).toHaveBeenCalledTimes(1);
   });
 
   it('executes get_conversion_preview with live backend quote data and real fee fields', async () => {
@@ -263,7 +245,6 @@ describe('Agent tool execution', () => {
     expect(parsed.fees.total_fee_brl).toBeGreaterThanOrEqual(0);
     expect(parsed.comparison.traditional_fee_brl).toBe(175);
     expect(parsed.message).toContain('Estimativa: R$ 5.000 -> US$ 974,66 líquido.');
-    expect(mockGetUsdBrlRate).toHaveBeenCalled();
   });
 
   it('shows a WhatsApp savings calculator with real conversion preview data and comparison fees', async () => {

@@ -173,10 +173,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Cotação usada:');
   });
 
-  it('does not invent BRL savings for USDC receipts without quote or configured USD/BRL fallback', async () => {
-    delete process.env.USD_BRL_FALLBACK_RATE;
-    delete process.env.DEFAULT_USD_BRL_RATE;
-
+  it('does not invent BRL savings for USDC receipts without transaction quote values', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
       sessionId: 'session-no-fallback',
@@ -195,9 +192,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('5.15');
   });
 
-  it('uses configured USD/BRL fallback for USDC receipt fee conversion instead of a hardcoded rate', async () => {
-    process.env.USD_BRL_FALLBACK_RATE = '6.25';
-
+  it('ignores configured USD/BRL fallback for USDC receipt fee conversion', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
       sessionId: 'session-configured-fallback',
@@ -241,7 +236,7 @@ describe('PaymentReceiptService', () => {
       },
     });
 
-    expect(receipt).toContain('Taxa: R$ 1.50 / US$ 0.30');
+    expect(receipt).toContain('Taxa: R$ 1.50 / US$ 0.27');
     expect(receipt).toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).toContain('Economia estimada: R$ 21.00 em relação a métodos tradicionais.');
   });
@@ -265,7 +260,6 @@ describe('PaymentReceiptService', () => {
   });
 
   it('uses the concise external callback for normal contact transfers', async () => {
-    process.env.USD_BRL_FALLBACK_RATE = '5';
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
         attempted: true,

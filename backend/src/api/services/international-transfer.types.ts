@@ -70,7 +70,7 @@ export type InternationalTransferQuote = {
   total_fee: TransferFeeBreakdown['total_fee'];
   expires_at: string;
   quote_status: QuoteStatus;
-  quote_source: 'stellar_pathfinding' | 'configured_fallback_rate';
+  quote_source: 'stellar_pathfinding';
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;

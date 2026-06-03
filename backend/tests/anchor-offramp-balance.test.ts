@@ -15,12 +15,6 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   },
 }));
 
-jest.mock('../src/api/services/fiat-rate.service', () => ({
-  FiatRateService: {
-    getUsdBrlRate: jest.fn(),
-  },
-}));
-
 describe('AnchorService off-ramp balance validation', () => {
   const originalEnv = { ...process.env };
 
@@ -48,12 +42,6 @@ describe('AnchorService off-ramp balance validation', () => {
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
     (BrlReferenceRateService.quoteUsdcToBrl as jest.Mock).mockResolvedValue({
       destinationAmount: '51300.0000000',
-    });
-    jest.requireMock('../src/api/services/fiat-rate.service').FiatRateService.getUsdBrlRate.mockResolvedValue({
-      brlPerUsd: 5.13,
-      source: 'market:test:USD-BRL',
-      fetchedAt: '2026-05-31T12:00:00.000Z',
-      fallbackApplied: false,
     });
   });
 
@@ -131,9 +119,9 @@ describe('AnchorService off-ramp balance validation', () => {
     expect(result.amount_tesouro).toBe('100.0000000');
   });
 
-  it('falls back to the market USD/BRL reference when USDC testnet liquidity is distorted for PIX target amount', async () => {
+  it('rejects PIX target amount when the USDC transaction quote is unavailable', async () => {
     (StellarService as any).quotePathPayment.mockRejectedValue(
-      new Error('strict-receive path quote: Cotação BRL/USDC da Stellar desvia 80% da referência USD/BRL de mercado')
+      new Error('strict-receive path quote unavailable')
     );
     jest.spyOn(AnchorService as any, 'createCustomerForSession').mockResolvedValue({
       customer: {
@@ -151,17 +139,13 @@ describe('AnchorService off-ramp balance validation', () => {
       },
     });
 
-    const result = await AnchorService.previewOffRampForSession({
+    await expect(AnchorService.previewOffRampForSession({
       session_id: 'session-1',
       session_token: 'token-1',
       amount: '100',
       target_brl: '100',
       source_asset_code: 'USDC',
       amount_currency: 'USDC',
-    });
-
-    expect(Number(result.source_amount)).toBeCloseTo(19.4931774, 6);
-    expect(result.target_brl).toBe('100');
-    expect(result.amount_tesouro).toBe('100.0000000');
+    })).rejects.toThrow(/Não consegui encontrar uma rota segura/);
   });
 });

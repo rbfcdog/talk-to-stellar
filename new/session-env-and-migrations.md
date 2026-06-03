@@ -170,9 +170,9 @@ ENABLE_USDC_DEFAULT_TRUSTLINE=false
 QUOTE_TTL_SECONDS=30
 TALKTOSTELLAR_SPREAD_BPS=30
 TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY=
-BRL_USDC_QUOTE_SOURCE=binance
-BRL_USDC_QUOTE_SYMBOL=USDCBRL
-BRL_USDC_QUOTE_TIMEOUT_MS=8000
+BRL_USDC_REFERENCE_SAMPLE_USDC=100
+USD_BRL_SANITY_MIN=3
+USD_BRL_SANITY_MAX=10
 
 # Assets visíveis. TESOURO e o asset real do produto para reais; nao use BRL aqui.
 ENABLE_TESOURO_ASSET=true
@@ -353,9 +353,9 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `QUOTE_TTL_SECONDS` | Backend | Tempo de validade de cotações antes de exigir nova cotação. |
 | `TALKTOSTELLAR_SPREAD_BPS` | Backend | Spread da plataforma em basis points. `30` = 0,30%. |
 | `TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY` | Backend | Conta treasury que recebe fee/spread quando configurada. |
-| `BRL_USDC_QUOTE_SOURCE` | Backend | Fonte de preço BRL/USDC; nesta sessão usada como `binance`. |
-| `BRL_USDC_QUOTE_SYMBOL` | Backend | Símbolo do par usado na fonte de preço, ex. `USDCBRL`. |
-| `BRL_USDC_QUOTE_TIMEOUT_MS` | Backend | Timeout para buscar cotação BRL/USDC. |
+| `BRL_USDC_REFERENCE_SAMPLE_USDC` | Backend | Amostra usada para derivar a referencia TESOURO/USDC pela propria rota de transacao. |
+| `USD_BRL_SANITY_MIN` | Backend | Menor cotacao TESOURO/USDC aceitavel para bloquear liquidez testnet quebrada. |
+| `USD_BRL_SANITY_MAX` | Backend | Maior cotacao TESOURO/USDC aceitavel para bloquear liquidez testnet quebrada. |
 
 ### Assets e TESOURO = Real
 

@@ -2,6 +2,7 @@ import { Asset } from '@stellar/stellar-sdk';
 import { server } from '../../config/stellar';
 import { getAssetIssuer, getTrustedPathAssetCodes, normalizeAssetCode, resolveConfiguredAsset } from '../../config/assets';
 import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
+import { TRANSACTION_RATE_SOURCE } from './transaction-rate.service';
 
 type AssetInput = {
   code: string;
@@ -15,7 +16,7 @@ type PathAsset = {
 };
 
 export type BrlReferenceQuote = {
-  source: 'configured_tesouro_asset';
+  source: typeof TRANSACTION_RATE_SOURCE;
   symbol: 'USDC/BRL';
   brlPerUsdc: string;
   usdcPerBrl: string;
@@ -135,7 +136,7 @@ export class BrlReferenceRateService {
     const usdcPerBrl = brlPerUsdc > 0 ? 1 / brlPerUsdc : 0;
 
     return {
-      source: 'configured_tesouro_asset',
+      source: TRANSACTION_RATE_SOURCE,
       symbol: 'USDC/BRL',
       brlPerUsdc: brlPerUsdc.toFixed(8),
       usdcPerBrl: usdcPerBrl.toFixed(8),
