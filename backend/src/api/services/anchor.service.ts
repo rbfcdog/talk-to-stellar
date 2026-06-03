@@ -1676,29 +1676,51 @@ export class AnchorService {
         ? 'BRL'
         : (record.finalAssetCode || 'BRL');
       const finalIsAnchorAsset = normalizeAssetCode(record.finalAssetCode) === 'TESOURO';
+      const desiredFinalAmount = coalesceString(record.desiredFinalAmount);
+      const desiredFinalAssetCode = normalizeAssetCode(record.desiredFinalAssetCode || record.finalAssetCode);
+      const pendingNonBrlFinalSettlement = Boolean(
+        !finalIsAnchorAsset &&
+        !coalesceString(record.finalAmount) &&
+        desiredFinalAmount &&
+        desiredFinalAssetCode === normalizeAssetCode(record.finalAssetCode)
+      );
       const destinationAmount = finalIsAnchorAsset
         ? coalesceString(record.finalAmount, record.destinationAmount)
-        : coalesceString(record.finalAmount);
+        : coalesceString(record.finalAmount, pendingNonBrlFinalSettlement ? desiredFinalAmount : '');
       if (!destinationAmount) return '';
       const settlementFinalAsset = settlementAssetCode(record.finalAssetCode || userFacingFinalAsset);
       let balanceContext = '';
-      try {
-        const balances = normalizeBalances(await StellarService.getAccountBalance(record.publicKey));
-        const updated = balances.find((balance) => (
-          normalizeAssetCode(balance.asset_code) === normalizeAssetCode(settlementFinalAsset) &&
-          (normalizeAssetCode(settlementFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(settlementFinalAsset, balance.asset_issuer))
-        ));
-        if (updated?.balance) {
-          balanceContext = ` Saldo atualizado: ${formatDisplayAmount(updated.balance, userFacingFinalAsset)}.`;
+      if (!pendingNonBrlFinalSettlement) {
+        try {
+          const balances = normalizeBalances(await StellarService.getAccountBalance(record.publicKey));
+          const updated = balances.find((balance) => (
+            normalizeAssetCode(balance.asset_code) === normalizeAssetCode(settlementFinalAsset) &&
+            (normalizeAssetCode(settlementFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(settlementFinalAsset, balance.asset_issuer))
+          ));
+          if (updated?.balance) {
+            balanceContext = ` Saldo atualizado: ${formatDisplayAmount(updated.balance, userFacingFinalAsset)}.`;
+          }
+        } catch (balanceError) {
+          console.warn('[ramp] Could not read updated balance for PIX receipt:', debugErrorMessage(balanceError));
         }
-      } catch (balanceError) {
-        console.warn('[ramp] Could not read updated balance for PIX receipt:', debugErrorMessage(balanceError));
       }
       const fee = receiptBrlFeeFromContext(
         record.operationContext,
         record.sourceAmountBrl,
         destinationAmount,
       );
+      const externalDeliveryText = pendingNonBrlFinalSettlement
+        ? [
+            'PIX confirmado com sucesso.',
+            `Valor pago: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
+            `Valor alvo: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
+            'Destino: sua conta TalkToStellar',
+            `Status: Conversão para ${userFacingFinalAsset} em processamento`,
+          ].join('\n')
+        : null;
+      const contextMessage = pendingNonBrlFinalSettlement
+        ? `PIX confirmado. Conversão para ${userFacingFinalAsset} em processamento para entregar ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} na sua conta.`
+        : `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`;
       return await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: record.sessionId,
@@ -1714,8 +1736,9 @@ export class AnchorService {
         feeDisplay: fee.feeDisplay || null,
         feeBrl: fee.feeBrl || null,
         quote: record.operationContext || null,
-        status: 'completed',
-        contextMessage: `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`,
+        status: pendingNonBrlFinalSettlement ? 'processing' : 'completed',
+        contextMessage,
+        externalDeliveryText,
       });
     } catch (error) {
       console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));
