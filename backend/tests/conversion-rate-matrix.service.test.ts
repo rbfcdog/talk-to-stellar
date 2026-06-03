@@ -101,12 +101,54 @@ describe('ConversionRateMatrixService', () => {
     expect(matrix.cells).toHaveLength(16);
     expect(matrix.summary.total_pairs).toBe(16);
     expect(matrix.summary.unavailable_pairs).toBe(0);
+    expect(matrix.summary.arbitrage_guarded_pairs).toBe(0);
     expect(matrix.matrix.BRL.USDC.rate).toBeCloseTo(0.2, 10);
     expect(matrix.matrix.USDC.BRL.rate).toBeCloseTo(5, 10);
     expect(matrix.matrix.XLM.CETES.status).toBe('synthetic');
     expect(matrix.matrix.XLM.CETES.bridge_asset_code).toBe('USDC');
     expect(matrix.matrix.XLM.CETES.rate).toBeCloseTo(2, 10);
     expect(matrix.matrix.BRL.BRL.status).toBe('same_asset');
+  });
+
+  it('clips reciprocal quotes that would allow direct round-trip arbitrage', async () => {
+    quoteStrictSendConversionMock.mockImplementation(({ sourceAsset, destAsset, sourceAmount }) => {
+      const source = displayCode(sourceAsset.code);
+      const destination = displayCode(destAsset.code);
+      const rates: Record<string, number> = {
+        'XLM->USDC': 0.2,
+        'USDC->XLM': 5,
+        'CETES->USDC': 0.5,
+        'USDC->CETES': 15,
+      };
+      const rate = rates[`${source}->${destination}`];
+      if (!rate) {
+        throw new Error(`No direct route for ${source}->${destination}`);
+      }
+      const amount = Number(sourceAmount);
+      return Promise.resolve({
+        sourceAsset,
+        destinationAsset: destAsset,
+        sourceAmount: amount.toFixed(7),
+        effectiveSourceAmount: amount.toFixed(7),
+        destinationAmount: (amount * rate).toFixed(7),
+        destinationMin: (amount * rate * 0.98).toFixed(7),
+        platformFee: { enabled: false, feeAmount: '0', feeAssetCode: source, feeBps: 30 },
+        networkFeeXlm: '0.0000100',
+        path: [],
+      });
+    });
+
+    const matrix = await ConversionRateMatrixService.buildMatrix();
+    const usdcToCetes = matrix.matrix.USDC.CETES;
+    const cetesToUsdc = matrix.matrix.CETES.USDC;
+    const roundTrip = Number(usdcToCetes.rate || 0) * Number(cetesToUsdc.rate || 0);
+
+    expect(matrix.summary.arbitrage_guarded_pairs).toBeGreaterThanOrEqual(1);
+    expect(matrix.summary.arbitrage_warnings.join('\n')).toContain('USDC/CETES');
+    expect(usdcToCetes.arbitrage_guard?.applied).toBe(true);
+    expect(cetesToUsdc.arbitrage_guard?.applied).toBe(true);
+    expect(usdcToCetes.arbitrage_guard?.original_round_trip_product).toBeCloseTo(7.5, 10);
+    expect(roundTrip).toBeLessThanOrEqual(matrix.summary.max_round_trip_product + 1e-8);
   });
 
   it('marks the pair unavailable when the transaction route quote is rejected', async () => {

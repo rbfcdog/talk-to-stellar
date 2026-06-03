@@ -2788,25 +2788,34 @@ async function executeGetAllPairQuotes(input: any): Promise<string> {
         };
       })
     ));
-    const routeHint = language === 'en' ? 'best route' : 'melhor rota';
     const lines = visiblePairs.map((pair) => {
       const forwardText = compactPairQuoteLeg(pair.forward, language);
       const reverseText = compactPairQuoteLeg(pair.reverse, language);
-      return `${pair.pair}: ${forwardText} | ${reverseText} (${routeHint})`;
+      return `${pair.pair}: ${forwardText} | ${reverseText}`;
     });
+    const guardCount = Number(matrixPayload.summary?.arbitrage_guarded_pairs || 0);
+    const guardMessage = guardCount > 0
+      ? (language === 'en'
+          ? `Checked for direct round-trip arbitrage; ${guardCount} pair(s) were adjusted to a fair reciprocal quote.`
+          : `Conferi arbitragem direta de ida e volta; ${guardCount} par(es) foram ajustados para uma cotação recíproca justa.`)
+      : (language === 'en'
+          ? 'Checked for direct round-trip arbitrage; no adjustment was needed.'
+          : 'Conferi arbitragem direta de ida e volta; nenhum ajuste foi necessário.');
 
     const message = language === 'en'
       ? [
-          `Current quotes by best route (${matrixPayload.network.toLowerCase()}):`,
+          `Current quotes (${matrixPayload.network.toLowerCase()}):`,
           ...lines,
+          guardMessage,
           `Generated at: ${matrixPayload.generated_at}.`,
-          'These are compact dynamic estimates for unique asset pairs. Nothing is executed without opening confirmation and entering PIN.',
+          'These are compact dynamic estimates for unique asset pairs using transaction quote values. Nothing is executed without opening confirmation and entering PIN.',
         ].join('\n')
       : [
-          `Cotações atuais pela melhor rota (${matrixPayload.network.toLowerCase()}):`,
+          `Cotações atuais (${matrixPayload.network.toLowerCase()}):`,
           ...lines,
+          guardMessage,
           `Gerado em: ${matrixPayload.generated_at}.`,
-          'Essas são estimativas dinâmicas compactas para pares únicos de ativos. Nada é executado sem abrir a confirmação e digitar o PIN.',
+          'Essas são estimativas dinâmicas compactas para pares únicos de ativos usando valores de cotação transacional. Nada é executado sem abrir a confirmação e digitar o PIN.',
         ].join('\n');
 
     return JSON.stringify({

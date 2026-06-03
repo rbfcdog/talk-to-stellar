@@ -28,6 +28,15 @@ export type ConversionRateCell = {
   };
   bridge_asset_code?: string;
   legs?: string[];
+  arbitrage_guard?: {
+    applied: true;
+    original_rate: number;
+    reciprocal_original_rate: number;
+    original_round_trip_product: number;
+    adjusted_round_trip_product: number;
+    max_round_trip_product: number;
+    method: 'reciprocal_pair_clip';
+  };
   error?: string;
 };
 
@@ -44,11 +53,16 @@ export type ConversionRateMatrix = {
     available_pairs: number;
     synthetic_pairs: number;
     unavailable_pairs: number;
+    arbitrage_guarded_pairs: number;
+    max_round_trip_product: number;
+    arbitrage_warnings: string[];
   };
 };
 
 const DEFAULT_MATRIX_ASSETS = ['BRL', 'USDC', 'CETES', 'XLM'];
 const DEFAULT_SAMPLE_AMOUNT = '100';
+const DEFAULT_MAX_ROUND_TRIP_PRODUCT = 1;
+const DEFAULT_ROUND_TRIP_CLIP_MARGIN = 0.000001;
 
 function toPositiveNumber(value: unknown): number {
   const parsed = Number(String(value ?? '').replace(',', '.'));
@@ -98,6 +112,22 @@ function sampleAmountForAsset(assetCode: string, override?: unknown): string {
 
 function pairKey(sourceAssetCode: string, destinationAssetCode: string): string {
   return `${sourceAssetCode}->${destinationAssetCode}`;
+}
+
+function maxRoundTripProduct(): number {
+  const configured = Number(process.env.CONVERSION_MATRIX_MAX_ROUND_TRIP_PRODUCT);
+  if (Number.isFinite(configured) && configured > 0 && configured <= 1) {
+    return configured;
+  }
+  return DEFAULT_MAX_ROUND_TRIP_PRODUCT;
+}
+
+function roundTripClipTarget(maxProduct: number): number {
+  const configuredMargin = Number(process.env.CONVERSION_MATRIX_ROUND_TRIP_CLIP_MARGIN);
+  const margin = Number.isFinite(configuredMargin) && configuredMargin >= 0 && configuredMargin < maxProduct
+    ? configuredMargin
+    : DEFAULT_ROUND_TRIP_CLIP_MARGIN;
+  return Math.max(0.000001, maxProduct - margin);
 }
 
 function isUsdcBrlPair(sourceAssetCode: string, destinationAssetCode: string): boolean {
@@ -268,6 +298,100 @@ function usableCell(cell?: ConversionRateCell): cell is ConversionRateCell {
   return Boolean(cell && cell.rate && cell.rate > 0 && cell.destination_amount && cell.status !== 'unavailable');
 }
 
+function withAdjustedRate(input: {
+  cell: ConversionRateCell;
+  adjustedRate: number;
+  reciprocalOriginalRate: number;
+  originalRoundTripProduct: number;
+  adjustedRoundTripProduct: number;
+  maxRoundTripProduct: number;
+}): ConversionRateCell {
+  const sourceAmount = toPositiveNumber(input.cell.sample_source_amount);
+  const adjustedRate = roundRate(input.adjustedRate);
+  const destinationAmount = compactAmount(sourceAmount * adjustedRate);
+
+  return {
+    ...input.cell,
+    destination_amount: destinationAmount,
+    rate: adjustedRate,
+    inverse_rate: adjustedRate > 0 ? roundRate(1 / adjustedRate) : null,
+    method: input.cell.method.includes('arbitrage_guarded')
+      ? input.cell.method
+      : `${input.cell.method}+arbitrage_guarded`,
+    arbitrage_guard: {
+      applied: true,
+      original_rate: roundRate(Number(input.cell.rate || 0)),
+      reciprocal_original_rate: roundRate(input.reciprocalOriginalRate),
+      original_round_trip_product: roundRate(input.originalRoundTripProduct),
+      adjusted_round_trip_product: roundRate(input.adjustedRoundTripProduct),
+      max_round_trip_product: roundRate(input.maxRoundTripProduct),
+      method: 'reciprocal_pair_clip',
+    },
+  };
+}
+
+function applyReciprocalArbitrageGuard(input: {
+  cells: ConversionRateCell[];
+  assets: string[];
+}): {
+  cells: ConversionRateCell[];
+  guardedPairs: number;
+  maxRoundTripProduct: number;
+  warnings: string[];
+} {
+  const maxProduct = maxRoundTripProduct();
+  const clipTarget = roundTripClipTarget(maxProduct);
+  const epsilon = 1e-8;
+  const byPair = new Map(input.cells.map((cell) => [cell.pair, cell]));
+  const adjusted = new Map<string, ConversionRateCell>();
+  const warnings: string[] = [];
+
+  for (let i = 0; i < input.assets.length; i += 1) {
+    for (let j = i + 1; j < input.assets.length; j += 1) {
+      const sourceAssetCode = input.assets[i];
+      const destinationAssetCode = input.assets[j];
+      const forward = byPair.get(pairKey(sourceAssetCode, destinationAssetCode));
+      const reverse = byPair.get(pairKey(destinationAssetCode, sourceAssetCode));
+      if (!usableCell(forward) || !usableCell(reverse)) continue;
+
+      const forwardRate = Number(forward.rate || 0);
+      const reverseRate = Number(reverse.rate || 0);
+      const roundTripProduct = forwardRate * reverseRate;
+      if (!Number.isFinite(roundTripProduct) || roundTripProduct <= maxProduct + epsilon) continue;
+
+      const scale = Math.sqrt(clipTarget / roundTripProduct);
+      const adjustedForwardRate = forwardRate * scale;
+      const adjustedReverseRate = reverseRate * scale;
+      const adjustedRoundTripProduct = adjustedForwardRate * adjustedReverseRate;
+
+      adjusted.set(forward.pair, withAdjustedRate({
+        cell: forward,
+        adjustedRate: adjustedForwardRate,
+        reciprocalOriginalRate: reverseRate,
+        originalRoundTripProduct: roundTripProduct,
+        adjustedRoundTripProduct,
+        maxRoundTripProduct: maxProduct,
+      }));
+      adjusted.set(reverse.pair, withAdjustedRate({
+        cell: reverse,
+        adjustedRate: adjustedReverseRate,
+        reciprocalOriginalRate: forwardRate,
+        originalRoundTripProduct: roundTripProduct,
+        adjustedRoundTripProduct,
+        maxRoundTripProduct: maxProduct,
+      }));
+      warnings.push(`${sourceAssetCode}/${destinationAssetCode}: round-trip ${roundRate(roundTripProduct)} clipped to ${roundRate(clipTarget)}`);
+    }
+  }
+
+  return {
+    cells: input.cells.map((cell) => adjusted.get(cell.pair) || cell),
+    guardedPairs: warnings.length,
+    maxRoundTripProduct: maxProduct,
+    warnings,
+  };
+}
+
 function synthesizeCell(input: {
   sourceAssetCode: string;
   destinationAssetCode: string;
@@ -350,9 +474,11 @@ export class ConversionRateMatrixService {
       return cell;
     });
 
+    const guarded = applyReciprocalArbitrageGuard({ cells: finalCells, assets });
+
     const matrix: Record<string, Record<string, ConversionRateCell>> = {};
     for (const asset of assets) matrix[asset] = {};
-    for (const cell of finalCells) {
+    for (const cell of guarded.cells) {
       matrix[cell.source_asset_code][cell.destination_asset_code] = cell;
     }
 
@@ -362,13 +488,16 @@ export class ConversionRateMatrixService {
       assets,
       generated_at: observedAt,
       sample_amounts: sampleAmounts,
-      cells: finalCells,
+      cells: guarded.cells,
       matrix,
       summary: {
-        total_pairs: finalCells.length,
-        available_pairs: finalCells.filter((cell) => ['available', 'same_asset', 'synthetic'].includes(cell.status)).length,
-        synthetic_pairs: finalCells.filter((cell) => cell.status === 'synthetic').length,
-        unavailable_pairs: finalCells.filter((cell) => cell.status === 'unavailable').length,
+        total_pairs: guarded.cells.length,
+        available_pairs: guarded.cells.filter((cell) => ['available', 'same_asset', 'synthetic'].includes(cell.status)).length,
+        synthetic_pairs: guarded.cells.filter((cell) => cell.status === 'synthetic').length,
+        unavailable_pairs: guarded.cells.filter((cell) => cell.status === 'unavailable').length,
+        arbitrage_guarded_pairs: guarded.guardedPairs,
+        max_round_trip_product: guarded.maxRoundTripProduct,
+        arbitrage_warnings: guarded.warnings,
       },
     };
   }
