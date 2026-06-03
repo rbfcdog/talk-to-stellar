@@ -766,11 +766,11 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             {confirmAvailable ? (
               <button onClick={onConfirm} disabled={!canConfirm}
                 className="flex-1 py-3 bg-tts-deep text-tts-surface font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition">
-                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar na DeFindex", "Confirm in DeFindex")}
+                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar investimento", "Confirm investment")}
               </button>
             ) : (
               <div className="flex-1 border border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-bold text-tts-gold">
-                <p>{blockedCode === "yield_account_setup_required" ? L("Ative a moeda antes de confirmar.", "Activate the currency before confirming.") : L("Confirmação DeFindex indisponível agora.", "DeFindex confirmation is unavailable right now.")}</p>
+                <p>{blockedCode === "yield_account_setup_required" ? L("Ative a moeda antes de confirmar.", "Activate the currency before confirming.") : L("Confirmação de investimento indisponível agora.", "Investment confirmation is unavailable right now.")}</p>
                 {blockedReason && <p className="mt-1 text-xs leading-5 text-tts-gold">{blockedReason}</p>}
               </div>
             )}

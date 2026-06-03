@@ -972,6 +972,18 @@ export default function CreateAccountClient({
       }
       className="max-w-md"
     >
+      <div className="rounded-xl border border-tts-gold/50 bg-tts-gold-bg px-4 py-3 text-sm leading-6 text-tts-deep">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-muted">
+          {L("Ambiente de teste", "Test environment")}
+        </p>
+        <p className="mt-1 font-medium">
+          {L(
+            "Esta conta usa testnet: é um ambiente para testar o produto com saldo sem valor real. Nenhum valor aqui representa dinheiro de verdade, depósito bancário ou garantia.",
+            "This account uses testnet: an environment to test the product with balances that have no real-world value. Nothing here represents real money, a bank deposit, or a guarantee.",
+          )}
+        </p>
+      </div>
+
       <div className="grid grid-cols-3 gap-2 rounded-xl border border-tts-border bg-tts-bg p-1.5 text-[11px]">
         {STEPS.map((step, index) => (
           <motion.div
